@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -34,45 +35,75 @@ type blobAccountTraverser struct {
 	p                pipeline.Pipeline
 	ctx              context.Context
 	containerPattern string
+	cachedContainers []string
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter func()
 }
 
-func (t *blobAccountTraverser) traverse(processor objectProcessor, filters []objectFilter) error {
-	marker := azblob.Marker{}
-	for marker.NotDone() {
-		resp, err := t.accountURL.ListContainersSegment(t.ctx, marker, azblob.ListContainersSegmentOptions{})
+func (t *blobAccountTraverser) isDirectory(isSource bool) bool {
+	return true // Returns true as account traversal is inherently folder-oriented and recursive.
+}
 
-		if err != nil {
-			return err
-		}
+func (t *blobAccountTraverser) listContainers() ([]string, error) {
+	// a nil list also returns 0
+	if len(t.cachedContainers) == 0 {
+		marker := azblob.Marker{}
+		cList := make([]string, 0)
 
-		for _, v := range resp.ContainerItems {
-			// Match a pattern for the container name and the container name only.
-			if t.containerPattern != "" {
-				if ok, err := containerNameMatchesPattern(v.Name, t.containerPattern); err != nil {
-					// Break if the pattern is invalid
-					return err
-				} else if !ok {
-					// Ignore the container if it doesn't match the pattern.
-					continue
-				}
-			}
-
-			containerURL := t.accountURL.NewContainerURL(v.Name).URL()
-			containerTraverser := newBlobTraverser(&containerURL, t.p, t.ctx, true, t.incrementEnumerationCounter)
-
-			middlemanProcessor := initContainerDecorator(v.Name, processor)
-
-			err = containerTraverser.traverse(middlemanProcessor, filters)
+		for marker.NotDone() {
+			resp, err := t.accountURL.ListContainersSegment(t.ctx, marker, azblob.ListContainersSegmentOptions{})
 
 			if err != nil {
-				return err
+				return nil, err
 			}
+
+			for _, v := range resp.ContainerItems {
+				// Match a pattern for the container name and the container name only.
+				if t.containerPattern != "" {
+					if ok, err := containerNameMatchesPattern(v.Name, t.containerPattern); err != nil {
+						// Break if the pattern is invalid
+						return nil, err
+					} else if !ok {
+						// Ignore the container if it doesn't match the pattern.
+						continue
+					}
+				}
+
+				cList = append(cList, v.Name)
+			}
+
+			marker = resp.NextMarker
 		}
 
-		marker = resp.NextMarker
+		t.cachedContainers = cList
+
+		return cList, nil
+	} else {
+		return t.cachedContainers, nil
+	}
+}
+
+func (t *blobAccountTraverser) traverse(processor objectProcessor, filters []objectFilter) error {
+	// listContainers will return the cached container list if containers have already been listed by this traverser.
+	cList, err := t.listContainers()
+
+	if err != nil {
+		return err
+	}
+
+	for _, v := range cList {
+		containerURL := t.accountURL.NewContainerURL(v).URL()
+		containerTraverser := newBlobTraverser(&containerURL, t.p, t.ctx, true, t.incrementEnumerationCounter)
+
+		middlemanProcessor := initContainerDecorator(v, processor)
+
+		err = containerTraverser.traverse(middlemanProcessor, filters)
+
+		if err != nil {
+			LogStdoutAndJobLog(fmt.Sprintf("failed to list blobs in container %s: %s", v, err))
+			continue
+		}
 	}
 
 	return nil

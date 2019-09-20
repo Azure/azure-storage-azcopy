@@ -43,7 +43,7 @@ const (
 	defaultS2SPreserveAccessTier     = true
 	defaultS2SGetPropertiesInBackend = true
 	defaultS2SSourceChangeValidation = true
-	debugMode                        = false // keep the debugMode temporarily, as merging happens frequently, and this might be useful for solving potential issue.
+	debugMode                        = true // keep the debugMode temporarily, as merging happens frequently, and this might be useful for solving potential issue.
 )
 
 var defaultS2SInvalideMetadataHandleOption = common.DefaultInvalidMetadataHandleOption
@@ -107,7 +107,7 @@ func validateS2STransfersAreScheduled(c *chk.C, srcDirName string, dstDirName st
 		unescapedDstDir, _ := url.PathUnescape(dstDirName)
 
 		srcRelativeFilePath = strings.Replace(srcRelativeFilePath, unescapedSrcDir, "", 1)
-		dstRelativeFilePath = strings.Replace(srcRelativeFilePath, unescapedDstDir, "", 1)
+		dstRelativeFilePath = strings.Replace(dstRelativeFilePath, unescapedDstDir, "", 1)
 
 		if debugMode {
 			fmt.Println("srcRelativeFilePath: ", srcRelativeFilePath)
@@ -264,10 +264,20 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
 	raw := getDefaultRawCopyInput(rawSrcS3BucketURL.String(), rawDstBlobServiceURLWithSAS.String())
 
-	// bucket should be resolved, and objects should be scheduled for transfer
+	// bucket should not be resolved, and objects should not be scheduled for transfer
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.NotNil)
-		c.Assert(err.Error(), StringIncludes, "some of the buckets have invalid names for Azure")
+
+		loggedError := false
+		log := glcm.(*mockedLifecycleManager).log
+		count := len(log)
+		for x := <-log; count > 0; count = len(log) {
+			if strings.Contains(x, "invalid name") {
+				loggedError = true
+			}
+		}
+
+		c.Assert(loggedError, chk.Equals, true)
 	})
 }
 
@@ -389,7 +399,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithObjectUsingSlashAsSuffi
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(validateObjectList))
 
-		validateS2STransfersAreScheduled(c, "", "", validateObjectList, mockedRPC)
+		validateS2STransfersAreScheduled(c, "", "/"+bucketName, validateObjectList, mockedRPC)
 	})
 }
 
@@ -560,7 +570,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerPreserveBlobTie
 		c.Assert(err, chk.IsNil)
 
 		validateS2STransfersAreScheduled(c,
-			srcContainerURL.String(), dstContainerURL.String(), []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
+			"", "/"+srcContainerName, []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
 
 		c.Assert(mockedRPC.transfers[0].BlobTier, chk.Equals, azblob.AccessTierCool)
 	})
@@ -597,7 +607,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerNoPreserveBlobT
 		c.Assert(err, chk.IsNil)
 
 		validateS2STransfersAreScheduled(c,
-			srcContainerURL.String(), dstContainerURL.String(), []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
+			"", "/"+srcContainerName, []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
 
 		c.Assert(mockedRPC.transfers[0].BlobTier, chk.Equals, azblob.AccessTierNone)
 	})

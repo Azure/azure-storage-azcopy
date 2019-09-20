@@ -20,6 +20,10 @@
 
 package common
 
+import (
+	"runtime"
+)
+
 type EnvironmentVariable struct {
 	Name         string
 	DefaultValue string
@@ -41,9 +45,17 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.DefaultServiceApiVersion(),
 	EEnvironmentVariable.ClientSecret(),
 	EEnvironmentVariable.CertificatePassword(),
+	EEnvironmentVariable.AutoTuneToCpu(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
+
+func (EnvironmentVariable) UserDir() EnvironmentVariable {
+	// Only used internally, not listed in the environment variables.
+	return EnvironmentVariable{
+		Name: IffString(runtime.GOOS == "windows", "USERPROFILE", "HOME"),
+	}
+}
 
 func (EnvironmentVariable) ClientSecret() EnvironmentVariable {
 	return EnvironmentVariable{
@@ -65,6 +77,14 @@ func (EnvironmentVariable) ConcurrencyValue() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_CONCURRENCY_VALUE",
 		Description: "Overrides how many HTTP connections work on transfers. By default, this number is determined based on the number of logical cores on the machine.",
+	}
+}
+
+// added in so that CPU usage detection can be disabled if advanced users feel it is causing tuning to be too conservative (i.e. not enough concurrency, due to detected CPU usage)
+func (EnvironmentVariable) AutoTuneToCpu() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_TUNE_TO_CPU",
+		Description: "Set to false to prevent AzCopy from taking CPU usage into account when auto-tuning its concurrency level (e.g. in the benchmark command).",
 	}
 }
 

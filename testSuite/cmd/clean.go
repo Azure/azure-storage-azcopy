@@ -448,8 +448,8 @@ func cleanS3Account(resourceURL string) {
 			// List all objects from a bucket-name with a matching prefix.
 			for object := range s3Client.ListObjectsV2(bucket.Name, "", true, context.Background().Done()) {
 				if object.Err != nil {
-					fmt.Printf("error listing the object from bucket %q, %v\n", bucket.Name, err)
-					os.Exit(1)
+					fmt.Printf("error listing the objects from bucket %q, %v\n", bucket.Name, err)
+					return
 				}
 				objectsCh <- object.Key
 			}

@@ -34,10 +34,6 @@ var _ = chk.Suite(&genericProcessorSuite{})
 
 type processorTestSuiteHelper struct{}
 
-func (s *genericProcessorSuite) SetUpTest(c *chk.C) {
-	c.Log("Still running tests... ", c.TestName())
-}
-
 // return a list of sample entities
 func (processorTestSuiteHelper) getSampleObjectList() []storedObject {
 	return []storedObject{
@@ -132,7 +128,7 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorSingleFile(c *chk.C) {
 		blobURL, filepath.Join(dstDirName, dstFileName), false, false, nil, nil)
 
 	// exercise the copy transfer processor
-	storedObject := newStoredObject(blobList[0], "", time.Now(), 0, nil, blobTypeNA)
+	storedObject := newStoredObject(blobList[0], "", time.Now(), 0, nil, blobTypeNA, "")
 	err := copyProcessor.scheduleCopyTransfer(storedObject)
 	c.Assert(err, chk.IsNil)
 

@@ -39,9 +39,9 @@ type ConfiguredInt struct {
 
 func (i *ConfiguredInt) GetDescription() string {
 	if i.IsUserSpecified {
-		return fmt.Sprintf("From %s environment variable", i.EnvVarName)
+		return fmt.Sprintf("Based on %s environment variable", i.EnvVarName)
 	} else {
-		return fmt.Sprintf("From %s. Set %s environment variable to override", i.DefaultSourceDesc, i.EnvVarName)
+		return fmt.Sprintf("Based on %s. Set %s environment variable to override", i.DefaultSourceDesc, i.EnvVarName)
 	}
 }
 
@@ -59,12 +59,45 @@ func tryNewConfiguredInt(envVar common.EnvironmentVariable) *ConfiguredInt {
 	return nil
 }
 
+// ConfiguredBool is a boolean which may be optionally configured by user through an environment variable
+type ConfiguredBool struct {
+	Value             bool
+	IsUserSpecified   bool
+	EnvVarName        string
+	DefaultSourceDesc string
+}
+
+func (b *ConfiguredBool) GetDescription() string {
+	if b.IsUserSpecified {
+		return fmt.Sprintf("Based on %s environment variable", b.EnvVarName)
+	} else {
+		return fmt.Sprintf("Based on %s. Set %s environment variable to true or false override", b.DefaultSourceDesc, b.EnvVarName)
+	}
+}
+
+// tryNewConfiguredBool populates a ConfiguredInt from an environment variable, or returns nil if env var is not set
+func tryNewConfiguredBool(envVar common.EnvironmentVariable) *ConfiguredBool {
+	override := common.GetLifecycleMgr().GetEnvironmentVariable(envVar)
+	if override != "" {
+		val, err := strconv.ParseBool(override)
+		if err != nil {
+			log.Fatalf("error parsing the env %s %q failed with error %v",
+				envVar.Name, override, err)
+		}
+		return &ConfiguredBool{bool(val), true, envVar.Name, ""}
+	}
+	return nil
+}
+
 // ConcurrencySettings stores the set of related numbers that govern concurrency levels in the STE
 type ConcurrencySettings struct {
 
-	// MainPoolSize is the size of the main goroutine pool that transfers the data
+	// InitialMainPoolSize is the initial size of the main goroutine pool that transfers the data
 	// (i.e. executes chunkfuncs)
-	MainPoolSize *ConfiguredInt
+	InitialMainPoolSize int
+
+	// MaxMainPoolSize is a number >= InitialMainPoolSize, representing max size we will grow the main pool to
+	MaxMainPoolSize *ConfiguredInt
 
 	// TransferInitiationPoolSize is the size of the auxiliary goroutine pool that initiates transfers
 	// (i.e. creates chunkfuncs)
@@ -81,6 +114,14 @@ type ConcurrencySettings struct {
 	// transfer initiation.
 	MaxOpenDownloadFiles int
 	// TODO: consider whether we should also use this (renamed to( MaxOpenFiles) for uploads, somehow (see command above). Is there any actual value in that? Maybe only highly handle-constrained Linux environments?
+
+	// CheckCpuWhenTuing determines whether CPU usage should be taken into account when auto-tuning
+	CheckCpuWhenTuing *ConfiguredBool
+}
+
+// AutoTuneMainPool says whether the main pool size should by dynamically tuned
+func (c ConcurrencySettings) AutoTuneMainPool() bool {
+	return c.MaxMainPoolSize.Value > c.InitialMainPoolSize
 }
 
 const defaultTransferInitiationPoolSize = 64
@@ -89,15 +130,16 @@ const concurrentFilesFloor = 32
 // NewConcurrencySettings gets concurrency settings by referring to the
 // environment variable AZCOPY_CONCURRENCY_VALUE (if set) and to properties of the
 // machine where we are running
-func NewConcurrencySettings(maxFileAndSocketHandles int) ConcurrencySettings {
+func NewConcurrencySettings(maxFileAndSocketHandles int, requestAutoTuneGRs bool) ConcurrencySettings {
 
-	initialMainPoolSize := getMainPoolSize(runtime.NumCPU())
-	maxMainPoolSize := initialMainPoolSize // one day we may compute a higher value for this, and dynamically grow the pool with this as a cap
+	initialMainPoolSize, maxMainPoolSize := getMainPoolSize(runtime.NumCPU(), requestAutoTuneGRs)
 
 	s := ConcurrencySettings{
-		MainPoolSize:               initialMainPoolSize,
+		InitialMainPoolSize:        initialMainPoolSize,
+		MaxMainPoolSize:            maxMainPoolSize,
 		TransferInitiationPoolSize: getTransferInitiationPoolSize(),
 		MaxOpenDownloadFiles:       getMaxOpenPayloadFiles(maxFileAndSocketHandles, maxMainPoolSize.Value),
+		CheckCpuWhenTuing:          getCheckCpuUsageWhenTuning(),
 	}
 
 	// Set the max idle connections that we allow. If there are any more idle connections
@@ -119,27 +161,51 @@ func NewConcurrencySettings(maxFileAndSocketHandles int) ConcurrencySettings {
 	return s
 }
 
-func getMainPoolSize(numOfCPUs int) *ConfiguredInt {
+func getMainPoolSize(numOfCPUs int, requestAutoTune bool) (initial int, max *ConfiguredInt) {
+
 	envVar := common.EEnvironmentVariable.ConcurrencyValue()
 
-	if c := tryNewConfiguredInt(envVar); c != nil {
-		return c
+	if common.GetLifecycleMgr().GetEnvironmentVariable(envVar) == "AUTO" {
+		// Allow user to force auto-tuning from the env var, even when not in benchmark mode
+		// Might be handy in some S2S cases, where we know that release 10.2.1 was using too few goroutines
+		// This feature will probably remain undocumented for at least one release cycle, while we consider
+		// whether to do more in this regard (e.g. make it the default behaviour)
+		requestAutoTune = true
+	} else if c := tryNewConfiguredInt(envVar); c != nil {
+		if requestAutoTune {
+			// Tell user that we can't actually auto tune, because configured value takes precedence
+			// This case happens when benchmarking with a fixed value from the env var
+			common.GetLifecycleMgr().Info(fmt.Sprintf("Cannot auto-tune concurrency because it is fixed by environment variable %s", envVar.Name))
+		}
+		return c.Value, c // initial and max are same, fixed to the env var
 	}
 
-	var value int
+	var initialValue int
 
-	if numOfCPUs <= 4 {
+	if requestAutoTune {
+		initialValue = 8 // deliberately start with a small initial value if we are auto-tuning.  If it's not small enough, then the auto tuning becomes
+		// sluggish since, every time it needs to tune downwards, it needs to let a lot of data (num connections * block size) get transmitted,
+		// and that is slow over very small links, e.g. 10 Mbps, and produces noticable time lag when downsizing the connection count.
+		// So we start small. (The alternatives, of using small chunk sizes or small file sizes just for the first 200 MB or so, were too hard to orchestrate within the existing app architecture)
+	} else if numOfCPUs <= 4 {
 		// fix the concurrency value for smaller machines
-		value = 32
+		initialValue = 32
 	} else if 16*numOfCPUs > 300 {
 		// for machines that are extremely powerful, fix to 300 (previously this was to avoid running out of file descriptors, but we have another solution to that now)
-		value = 300
+		initialValue = 300
 	} else {
 		// for moderately powerful machines, compute a reasonable number
-		value = 16 * numOfCPUs
+		initialValue = 16 * numOfCPUs
 	}
 
-	return &ConfiguredInt{value, false, envVar.Name, "number of CPUs"}
+	reason := "number of CPUs"
+	maxValue := initialValue
+	if requestAutoTune {
+		reason = "auto-tuning limit"
+		maxValue = 3000 // TODO: what should this be?  Testing indicates that this value is all we're ever likely to need, even in small-files cases
+	}
+
+	return initialValue, &ConfiguredInt{maxValue, false, envVar.Name, reason}
 }
 
 func getTransferInitiationPoolSize() *ConfiguredInt {
@@ -150,6 +216,15 @@ func getTransferInitiationPoolSize() *ConfiguredInt {
 	}
 
 	return &ConfiguredInt{defaultTransferInitiationPoolSize, false, envVar.Name, "hard-coded default"}
+}
+
+func getCheckCpuUsageWhenTuning() *ConfiguredBool {
+	envVar := common.EEnvironmentVariable.AutoTuneToCpu()
+	if c := tryNewConfiguredBool(envVar); c != nil {
+		return c
+	}
+
+	return &ConfiguredBool{true, false, envVar.Name, "hard-coded default"}
 }
 
 // getMaxOpenFiles finds a number of concurrently-openable files

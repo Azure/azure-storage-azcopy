@@ -22,7 +22,9 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/minio/minio-go"
 
@@ -36,6 +38,7 @@ import (
 type s3ServiceTraverser struct {
 	ctx           context.Context
 	bucketPattern string
+	cachedBuckets []string
 
 	s3URL    s3URLPartsExtension
 	s3Client *minio.Client
@@ -44,39 +47,75 @@ type s3ServiceTraverser struct {
 	incrementEnumerationCounter func()
 }
 
-func (t *s3ServiceTraverser) traverse(processor objectProcessor, filters []objectFilter) error {
-	if bucketInfo, err := t.s3Client.ListBuckets(); err == nil {
-		for _, v := range bucketInfo {
-			// Match a pattern for the bucket name and the bucket name only
-			if t.bucketPattern != "" {
-				if ok, err := containerNameMatchesPattern(v.Name, t.bucketPattern); err != nil {
-					// Break if the pattern is invalid
-					return err
-				} else if !ok {
-					// Ignore the bucket if it does not match the pattern
-					continue
+func (t *s3ServiceTraverser) isDirectory(isSource bool) bool {
+	return true // Returns true as account traversal is inherently folder-oriented and recursive.
+}
+
+func (t *s3ServiceTraverser) listContainers() ([]string, error) {
+	if len(t.cachedBuckets) == 0 {
+		bucketList := make([]string, 0)
+
+		if bucketInfo, err := t.s3Client.ListBuckets(); err == nil {
+			for _, v := range bucketInfo {
+				// Match a pattern for the bucket name and the bucket name only
+				if t.bucketPattern != "" {
+					if ok, err := containerNameMatchesPattern(v.Name, t.bucketPattern); err != nil {
+						// Break if the pattern is invalid
+						return nil, err
+					} else if !ok {
+						// Ignore the bucket if it does not match the pattern
+						continue
+					}
 				}
+
+				bucketList = append(bucketList, v.Name)
 			}
-
-			tmpS3URL := t.s3URL
-			tmpS3URL.BucketName = v.Name
-			urlResult := tmpS3URL.URL()
-			bucketTraverser, err := newS3Traverser(&urlResult, t.ctx, true, t.incrementEnumerationCounter)
-
-			if err != nil {
-				return err
-			}
-
-			middlemanProcessor := initContainerDecorator(v.Name, processor)
-
-			err = bucketTraverser.traverse(middlemanProcessor, filters)
-
-			if err != nil {
-				return err
-			}
+		} else {
+			return nil, err
 		}
+
+		t.cachedBuckets = bucketList
+		return bucketList, nil
 	} else {
+		return t.cachedBuckets, nil
+	}
+}
+
+func (t *s3ServiceTraverser) traverse(processor objectProcessor, filters []objectFilter) error {
+	bucketList, err := t.listContainers()
+
+	if err != nil {
 		return err
+	}
+
+	for _, v := range bucketList {
+		tmpS3URL := t.s3URL
+		tmpS3URL.BucketName = v
+		urlResult := tmpS3URL.URL()
+		bucketTraverser, err := newS3Traverser(&urlResult, t.ctx, true, t.incrementEnumerationCounter)
+
+		if err != nil {
+			return err
+		}
+
+		middlemanProcessor := initContainerDecorator(v, processor)
+
+		err = bucketTraverser.traverse(middlemanProcessor, filters)
+
+		if err != nil {
+			if strings.Contains(err.Error(), "301 response missing Location header") {
+				LogStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q , as it's not in the region specified by source URL", v))
+				continue
+			}
+
+			if strings.Contains(err.Error(), "cannot list objects, The specified bucket does not exist") {
+				LogStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q, as it does not exist.", v))
+				continue
+			}
+
+			LogStdoutAndJobLog(fmt.Sprintf("failed to list objects in bucket %s: %s", v, err))
+			continue
+		}
 	}
 
 	return nil
@@ -105,7 +144,6 @@ func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, incrementEnumer
 			CredentialType: common.ECredentialType.S3AccessKey(),
 			S3CredentialInfo: common.S3CredentialInfo{
 				Endpoint: t.s3URL.Endpoint,
-				Region:   t.s3URL.Region,
 			},
 		},
 		common.CredentialOpOptions{

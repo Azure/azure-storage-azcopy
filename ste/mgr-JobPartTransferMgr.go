@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -36,6 +37,8 @@ type IJobPartTransferMgr interface {
 	FileCountLimiter() common.CacheLimiter
 	StartJobXfer()
 	GetOverwriteOption() common.OverwriteOption
+	ShouldDecompress() bool
+	GetSourceCompressionType() (common.CompressionType, error)
 	ReportChunkDone(id common.ChunkID) (lastChunk bool, chunksDone uint32)
 	UnsafeReportChunkDone() (lastChunk bool, chunksDone uint32)
 	TransferStatus() common.TransferStatus
@@ -156,6 +159,28 @@ func (jptm *jobPartTransferMgr) StartJobXfer() {
 
 func (jptm *jobPartTransferMgr) GetOverwriteOption() common.OverwriteOption {
 	return jptm.jobPartMgr.GetOverwriteOption()
+}
+
+func (jptm *jobPartTransferMgr) ShouldDecompress() bool {
+	if jptm.jobPartMgr.AutoDecompress() {
+		ct, _ := jptm.GetSourceCompressionType()
+		return ct != common.ECompressionType.None()
+	}
+	return false
+}
+
+func (jptm *jobPartTransferMgr) GetSourceCompressionType() (common.CompressionType, error) {
+	encoding := jptm.Info().SrcHTTPHeaders.ContentEncoding
+	switch strings.ToLower(encoding) {
+	case "":
+		return common.ECompressionType.None(), nil
+	case "gzip":
+		return common.ECompressionType.GZip(), nil
+	case "deflate":
+		return common.ECompressionType.ZLib(), nil
+	default:
+		return common.ECompressionType.Unsupported(), fmt.Errorf("encoding type '%s' is not recognised as a supported encoding type for auto-decompression", encoding)
+	}
 }
 
 func (jptm *jobPartTransferMgr) Info() TransferInfo {
@@ -445,11 +470,8 @@ func (jptm *jobPartTransferMgr) FailActiveS2SCopyWithStatus(where string, err er
 func (jptm *jobPartTransferMgr) TempJudgeUploadOrCopy() (isUpload, isCopy bool) {
 	fromTo := jptm.FromTo()
 
-	fromIsLocal := fromTo.From() == common.ELocation.Local()
-	toIsLocal := fromTo.To() == common.ELocation.Local()
-
-	isUpload = fromIsLocal && !toIsLocal
-	isCopy = !fromIsLocal && !toIsLocal
+	isUpload = fromTo.IsUpload()
+	isCopy = fromTo.IsS2S()
 
 	return isUpload, isCopy
 }
@@ -488,7 +510,15 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 	//  consider redesign the lifecycle management in ste
 	if !jptm.WasCanceled() {
 		jptm.Cancel()
-		status, msg := ErrorEx{err}.ErrorCodeAndString()
+		serviceCode, status, msg := ErrorEx{err}.ErrorCodeAndString()
+
+		if serviceCode == common.CPK_ERROR_SERVICE_CODE {
+			cpkAccessFailureLogGLCM.Do(func() {
+				common.GetLifecycleMgr().Info("One or more transfers have failed because AzCopy currently does not support blobs encrypted with customer provided keys (CPK). " +
+					"If you wish to access CPK-encrypted blobs, we recommend using one of the Azure Storage SDKs to do so.")
+			})
+		}
+
 		requestID := ErrorEx{err}.MSRequestID()
 		fullMsg := fmt.Sprintf("%s. When %s. X-Ms-Request-Id: %s\n", msg, descriptionOfWhereErrorOccurred, requestID) // trailing \n to separate it better from any later, unrelated, log lines
 		jptm.logTransferError(typ, jptm.Info().Source, jptm.Info().Destination, fullMsg, status)
@@ -581,7 +611,7 @@ func (jptm *jobPartTransferMgr) LogSendError(source, destination, errorMsg strin
 }
 
 func (jptm *jobPartTransferMgr) LogError(resource, context string, err error) {
-	status, msg := ErrorEx{err}.ErrorCodeAndString()
+	_, status, msg := ErrorEx{err}.ErrorCodeAndString()
 	MSRequestID := ErrorEx{err}.MSRequestID()
 	jptm.Log(pipeline.LogError,
 		fmt.Sprintf("%s: %d: %s-%s. X-Ms-Request-Id:%s\n", common.URLStringExtension(resource).RedactSecretQueryParamForLogging(), status, context, msg, MSRequestID))

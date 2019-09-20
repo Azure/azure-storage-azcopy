@@ -27,11 +27,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -86,6 +86,7 @@ type rawCopyCmdArgs struct {
 	stripTopDir       bool
 	followSymlinks    bool
 	withSnapshots     bool
+	autoDecompress    bool
 	// forceWrite flag is used to define the User behavior
 	// to overwrite the existing blobs or not.
 	forceWrite string
@@ -108,7 +109,7 @@ type rawCopyCmdArgs struct {
 	blockBlobTier string
 	pageBlobTier  string
 	background    bool
-	output        string
+	output        string // TODO: Is this unused now? replaced with param at root level?
 	acl           string
 	logVerbosity  string
 	// list of blobTypes to exclude while enumerating the transfer
@@ -170,7 +171,15 @@ func blockSizeInBytes(rawBlockSizeInMiB float64) (uint32, error) {
 
 // validates and transform raw input into cooked input
 func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
-	cooked := cookedCopyCmdArgs{}
+	// generate a unique job ID
+	return raw.cookWithId(common.NewJobID())
+}
+
+func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, error) {
+
+	cooked := cookedCopyCmdArgs{
+		jobID: jobId,
+	}
 
 	fromTo, err := validateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
 	if err != nil {
@@ -190,6 +199,11 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	if err != nil {
 		return cooked, err
 	}
+	allowAutoDecompress := fromTo == common.EFromTo.BlobLocal() || fromTo == common.EFromTo.FileLocal()
+	if raw.autoDecompress && !allowAutoDecompress {
+		return cooked, errors.New("automatic decompression is only supported for downloads from Blob and Azure Files") // as at Sept 2019, our ADLS Gen 2 Swagger does not include content-encoding for directory (path) listings so we can't support it there
+	}
+	cooked.autoDecompress = raw.autoDecompress
 
 	// cooked.stripTopDir is effectively a workaround for the lack of wildcards in remote sources.
 	// Local, however, still supports wildcards, and thus needs its top directory stripped whenever a wildcard is used.
@@ -228,98 +242,54 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
-	// * -> Garbage, Local -> *, and * -> Local work under this implementation of list of files
-	if fromTo.To() == common.ELocation.Unknown() || cooked.fromTo.From() == common.ELocation.Local() || cooked.fromTo.To() == common.ELocation.Local() {
-		// This handles both list-of-files and include-path as a list enumerator.
-		// This saves us time because we know *exactly* what we're looking for right off the bat.
-		// Note that exclude-path is handled as a filter unlike include-path.
+	// Everything uses the new implementation of list-of-files now.
+	// This handles both list-of-files and include-path as a list enumerator.
+	// This saves us time because we know *exactly* what we're looking for right off the bat.
+	// Note that exclude-path is handled as a filter unlike include-path.
 
-		if (len(raw.include) > 0 || len(raw.exclude) > 0) && cooked.fromTo == common.EFromTo.BlobFSTrash() {
-			return cooked, fmt.Errorf("include/exclude flags are not supported for this destination")
-		}
+	if (len(raw.include) > 0 || len(raw.exclude) > 0) && cooked.fromTo == common.EFromTo.BlobFSTrash() {
+		return cooked, fmt.Errorf("include/exclude flags are not supported for this destination")
+	}
 
-		// unbuffered so this reads as we need it to rather than all at once in bulk
-		listChan := make(chan string)
-		var f *os.File
+	// unbuffered so this reads as we need it to rather than all at once in bulk
+	listChan := make(chan string)
+	var f *os.File
 
-		if raw.listOfFilesToCopy != "" {
-			f, err = os.Open(raw.listOfFilesToCopy)
+	if raw.listOfFilesToCopy != "" {
+		f, err = os.Open(raw.listOfFilesToCopy)
 
-			if err != nil {
-				return cooked, fmt.Errorf("cannot open %s file passed with the list-of-file flag", raw.listOfFilesToCopy)
-			}
-		}
-
-		go func() {
-			defer close(listChan)
-
-			if f != nil {
-				scanner := bufio.NewScanner(f)
-				for scanner.Scan() {
-					v := scanner.Text()
-					listChan <- v
-				}
-			}
-
-			// This occurs much earlier than the other include or exclude filters. It would be preferable to move them closer later on in the refactor.
-			includePathList := raw.parsePatterns(raw.includePath)
-
-			for _, v := range includePathList {
-				listChan <- v
-			}
-		}()
-
-		// A combined implementation reduces the amount of code duplication present.
-		// However, it _does_ increase the amount of code-intertwining present.
-		if raw.listOfFilesToCopy != "" && raw.includePath != "" {
-			return cooked, errors.New("cannot combine list of files and include path")
-		}
-
-		if raw.listOfFilesToCopy != "" || raw.includePath != "" {
-			cooked.listOfFilesChannel = listChan
-		}
-	} else if len(raw.listOfFilesToCopy) > 0 {
-		// TODO remove this legacy implementation after copy enumerator refactoring
-
-		// User can provide either listOfFilesToCopy or include since listOFFiles mentions
-		// file names to include explicitly and include file may mention the pattern.
-		// This could conflict enumerating the files to queue up for transfer.
-		if len(raw.listOfFilesToCopy) > 0 && len(raw.legacyInclude) > 0 {
-			return cooked, fmt.Errorf("both list-of-files and include flag were provided." +
-				"Only one of them is allowed at a time")
-		}
-
-		// If the user provided the list of files explicitly to be copied, then parse the argument
-		// The user passes the location of json file which will have the list of files to be copied.
-		// The "json file" is chosen as input because there is limit on the number of characters that
-		// can be supplied with the argument, but Storage Explorer folks requirements was not to impose
-		// any limit on the number of files that can be copied.
-
-		jsonFile, err := os.Open(raw.listOfFilesToCopy)
 		if err != nil {
 			return cooked, fmt.Errorf("cannot open %s file passed with the list-of-file flag", raw.listOfFilesToCopy)
 		}
-		// read opened json file as a byte array.
-		jsonBytes, err := ioutil.ReadAll(jsonFile)
-		if err != nil {
-			return cooked, fmt.Errorf("error %s read %s file passed with the list-of-file flag", err.Error(), raw.listOfFilesToCopy)
-		}
-		var files common.ListOfFiles
-		err = json.Unmarshal(jsonBytes, &files)
-		if err != nil {
-			return cooked, fmt.Errorf("error %s unmarshalling the contents of %s file passed with the list-of-file flag", err.Error(), raw.listOfFilesToCopy)
-		}
-		for _, file := range files.Files {
-			// If split of the include string leads to an empty string
-			// not include that string
-			if len(file) == 0 {
-				continue
+	}
+
+	go func() {
+		defer close(listChan)
+
+		if f != nil {
+			scanner := bufio.NewScanner(f)
+			for scanner.Scan() {
+				v := scanner.Text()
+				listChan <- v
 			}
-			// replace the OS path separator in includePath string with AZCOPY_PATH_SEPARATOR
-			// this replacement is done to handle the windows file paths where path separator "\\"
-			filePath := strings.Replace(file, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-			cooked.listOfFilesToCopy = append(cooked.listOfFilesToCopy, filePath)
 		}
+
+		// This occurs much earlier than the other include or exclude filters. It would be preferable to move them closer later on in the refactor.
+		includePathList := raw.parsePatterns(raw.includePath)
+
+		for _, v := range includePathList {
+			listChan <- v
+		}
+	}()
+
+	// A combined implementation reduces the amount of code duplication present.
+	// However, it _does_ increase the amount of code-intertwining present.
+	if raw.listOfFilesToCopy != "" && raw.includePath != "" {
+		return cooked, errors.New("cannot combine list of files and include path")
+	}
+
+	if raw.listOfFilesToCopy != "" || raw.includePath != "" {
+		cooked.listOfFilesChannel = listChan
 	}
 
 	// TODO: When further in the refactor, just check this against a map
@@ -376,6 +346,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 
+	if cooked.contentType != "" {
+		cooked.noGuessMimeType = true // As specified in the help text, noGuessMimeType is inferred here.
+	}
+
 	cooked.putMd5 = raw.putMd5
 	err = cooked.md5ValidationOption.Parse(raw.md5ValidationOption)
 	if err != nil {
@@ -391,9 +365,6 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	if cooked.isRedirection() {
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
-
-	// generate a unique job ID
-	cooked.jobID = common.NewJobID()
 
 	// check for the flag value relative to fromTo location type
 	// Example1: for Local to Blob, preserve-last-modified-time flag should not be set to true
@@ -542,9 +513,19 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	return cooked, nil
 }
 
+// When other commands use the copy command arguments to cook cook, set the blobType to None and validation option
+// else parsing the arguments will fail.
+func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
+	raw.blobType = common.EBlobType.Detect().String()
+	raw.blockBlobTier = common.EBlockBlobTier.None().String()
+	raw.pageBlobTier = common.EPageBlobTier.None().String()
+	raw.md5ValidationOption = common.DefaultHashValidationOption.String()
+	raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
+	raw.forceWrite = common.EOverwriteOption.True().String()
+}
+
 func validatePutMd5(putMd5 bool, fromTo common.FromTo) error {
-	isUpload := fromTo.From() == common.ELocation.Local() && fromTo.To().IsRemote()
-	if putMd5 && !isUpload {
+	if putMd5 && !fromTo.IsUpload() {
 		return fmt.Errorf("put-md5 is set but the job is not an upload")
 	}
 	return nil
@@ -552,8 +533,7 @@ func validatePutMd5(putMd5 bool, fromTo common.FromTo) error {
 
 func validateMd5Option(option common.HashValidationOption, fromTo common.FromTo) error {
 	hasMd5Validation := option != common.DefaultHashValidationOption
-	isDownload := fromTo.To() == common.ELocation.Local()
-	if hasMd5Validation && !isDownload {
+	if hasMd5Validation && !fromTo.IsDownload() {
 		return fmt.Errorf("check-md5 is set but the job is not a download")
 	}
 	return nil
@@ -588,6 +568,7 @@ type cookedCopyCmdArgs struct {
 	followSymlinks     bool
 	withSnapshots      bool
 	forceWrite         common.OverwriteOption
+	autoDecompress     bool
 
 	// options from flags
 	blockSize uint32
@@ -649,6 +630,13 @@ type cookedCopyCmdArgs struct {
 	s2sSourceChangeValidation bool
 	// specify how user wants to handle invalid metadata.
 	s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption
+
+	// followup/cleanup properties are NOT available on resume, and so should not be used for jobs that may be resumed
+	// TODO: consider find a way to enforce that, or else to allow them to be preserved. Initially, they are just for benchmark jobs, so not a problem immediately because those jobs can't be resumed, by design.
+	followupJobArgs   *cookedCopyCmdArgs
+	priorJobExitCode  *common.ExitCode
+	isCleanupJob      bool // triggers abbreviated status reporting, since we don't want full reporting for cleanup jobs
+	cleanupJobMessage string
 }
 
 func (cca *cookedCopyCmdArgs) isRedirection() bool {
@@ -797,6 +785,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		JobID:           cca.jobID,
 		FromTo:          cca.fromTo,
 		ForceWrite:      cca.forceWrite,
+		AutoDecompress:  cca.autoDecompress,
 		Priority:        common.EJobPriority.Normal(),
 		LogLevel:        cca.logVerbosity,
 		Include:         cca.legacyInclude,
@@ -841,6 +830,10 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 		jobPartOrder.SourceRoot = cleanLocalPath(getPathBeforeFirstWildcard(tmpSrc))
 		cca.source = cleanLocalPath(tmpSrc)
+
+	case common.ELocation.Benchmark():
+		// noop
+
 	case common.ELocation.Blob():
 		fromUrl, err := url.Parse(cca.source)
 		if err != nil {
@@ -853,10 +846,15 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		bUrl := blobParts.URL()
 		cca.source = bUrl.String()
 
-		// set the clean source root for S2S
-		if cca.fromTo.To() != common.ELocation.Local() {
-			bUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(bUrl.Path)
+		// set the clean source root
+		if strings.Contains(blobParts.ContainerName, "*") {
+			if blobParts.BlobName != "" {
+				return errors.New("cannot combine a wildcarded container name and blob path")
+			}
+
+			blobParts.ContainerName = ""
 		}
+		bUrl = blobParts.URL()
 		jobPartOrder.SourceRoot = bUrl.String()
 	case common.ELocation.File():
 		fromUrl, err := url.Parse(cca.source)
@@ -873,10 +871,15 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		fUrl := fileParts.URL()
 		cca.source = fUrl.String()
 
-		// set the clean source root for S2S
-		if cca.fromTo.To() != common.ELocation.Local() {
-			fUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(fUrl.Path)
+		// set the clean source root
+		if strings.Contains(fileParts.ShareName, "*") {
+			if fileParts.DirectoryOrFilePath != "" {
+				return errors.New("cannot combine a wildcarded share name and file path")
+			}
+
+			fileParts.ShareName = ""
 		}
+		fUrl = fileParts.URL()
 		jobPartOrder.SourceRoot = fUrl.String()
 
 	case common.ELocation.BlobFS():
@@ -892,11 +895,15 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		cca.source = bfsUrl.String() // this escapes spaces in the source
 
 		// set the clean source root
-		jobPartOrder.SourceRoot = bfsUrl.String()
+		if strings.Contains(bfsParts.FileSystemName, "*") {
+			if bfsParts.DirectoryOrFilePath != "" {
+				return errors.New("cannot combine a wildcarded filesystem name and file path")
+			}
 
-	case common.ELocation.Local():
-		cca.source = cleanLocalPath(cca.source)
-		jobPartOrder.SourceRoot, _ = gCopyUtil.getRootPathWithoutWildCards(cca.source)
+			bfsParts.FileSystemName = ""
+		}
+		bfsUrl = bfsParts.URL()
+		jobPartOrder.SourceRoot = bfsUrl.String()
 
 	case common.ELocation.S3():
 		fromURL, err := url.Parse(cca.source)
@@ -910,9 +917,20 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		cca.source = fromURL.String()
 
 		// set the clean source root
-		fromURL.Path, _ = gCopyUtil.getRootPathWithoutWildCards(fromURL.Path)
-		jobPartOrder.SourceRoot = fromURL.String()
+		s3URLParts, err := common.NewS3URLParts(*fromURL)
+		if err != nil {
+			return err
+		}
 
+		if strings.Contains(s3URLParts.BucketName, "*") {
+			if s3URLParts.ObjectKey != "" {
+				return errors.New("cannot combine a wildcarded bucket name and object key")
+			}
+
+			s3URLParts.BucketName = ""
+		}
+		*fromURL = s3URLParts.URL()
+		jobPartOrder.SourceRoot = fromURL.String()
 	default:
 		jobPartOrder.SourceRoot, _ = gCopyUtil.getRootPathWithoutWildCards(cca.source)
 	}
@@ -976,7 +994,14 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		common.EFromTo.LocalFile(),
 		common.EFromTo.BlobLocal(),
 		common.EFromTo.FileLocal(),
-		common.EFromTo.BlobFSLocal():
+		common.EFromTo.BlobFSLocal(),
+		common.EFromTo.BlobBlob(),
+		common.EFromTo.FileBlob(),
+		common.EFromTo.S3Blob(),
+		common.EFromTo.BenchmarkBlob(),
+		common.EFromTo.BenchmarkBlobFS(),
+		common.EFromTo.BenchmarkFile():
+
 		var e *copyEnumerator
 		e, err = cca.initEnumerator(jobPartOrder, ctx)
 		if err != nil {
@@ -1003,28 +1028,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 		return err
 
-	case common.EFromTo.BlobBlob():
-		e := copyS2SMigrationBlobEnumerator{
-			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
-				CopyJobPartOrderRequest: jobPartOrder,
-			},
-		}
-		err = e.enumerate(cca)
-	case common.EFromTo.FileBlob():
-		e := copyS2SMigrationFileEnumerator{
-			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
-				CopyJobPartOrderRequest: jobPartOrder,
-			},
-		}
-		err = e.enumerate(cca)
-	case common.EFromTo.S3Blob():
-		e := copyS2SMigrationS3Enumerator{ // S3 enumerator for S2S copy.
-			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
-				CopyJobPartOrderRequest: jobPartOrder,
-			},
-		}
-		err = e.enumerate(cca)
-
 	// TODO: Hide the File to Blob direction temporarily, as service support on-going.
 	// case common.EFromTo.FileBlob():
 	// 	e := copyFileToNEnumerator(jobPartOrder)
@@ -1034,7 +1037,11 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	if err != nil {
-		return fmt.Errorf("cannot start job due to error: %s.\n", err)
+		if err == NothingToRemoveError || err == NothingScheduledError {
+			return err // don't wrap it with anything that uses the word "error"
+		} else {
+			return fmt.Errorf("cannot start job due to error: %s.\n", err)
+		}
 	}
 
 	return nil
@@ -1045,7 +1052,13 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 // if blocking is specified to false, then another goroutine spawns and wait out the job
 func (cca *cookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
-	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s/%s.log", azcopyLogPathFolder, cca.jobID)))
+	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(),
+		fmt.Sprintf("%s%s%s.log",
+			azcopyLogPathFolder,
+			common.OS_PATH_SEPARATOR,
+			cca.jobID),
+		cca.isCleanupJob,
+		cca.cleanupJobMessage))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -1087,29 +1100,71 @@ func (cca *cookedCopyCmdArgs) Cancel(lcm common.LifecycleMgr) {
 	}
 }
 
+func (cca *cookedCopyCmdArgs) hasFollowup() bool {
+	return cca.followupJobArgs != nil
+}
+
+func (cca *cookedCopyCmdArgs) launchFollowup(priorJobExitCode common.ExitCode) {
+	go func() {
+		glcm.AllowReinitiateProgressReporting()
+		cca.followupJobArgs.priorJobExitCode = &priorJobExitCode
+		err := cca.followupJobArgs.process()
+		if err == NothingToRemoveError {
+			glcm.Info("Cleanup completed (nothing needed to be deleted)")
+			glcm.Exit(nil, common.EExitCode.Success())
+		} else if err != nil {
+			glcm.Error("failed to perform followup/cleanup job due to error: " + err.Error())
+		}
+		glcm.SurrenderControl()
+	}()
+}
+
+func (cca *cookedCopyCmdArgs) getSuccessExitCode() common.ExitCode {
+	if cca.priorJobExitCode != nil {
+		return *cca.priorJobExitCode // in a chain of jobs our best case outcome is whatever the predecessor(s) finished with
+	} else {
+		return common.EExitCode.Success()
+	}
+}
+
 func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// fetch a job status
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
+	summary.IsCleanupJob = cca.isCleanupJob // only FE knows this, so we can only set it here
+	cleanupStatusString := fmt.Sprintf("Cleanup %v/%v", summary.TransfersCompleted, summary.TotalTransfers)
+
 	jobDone := summary.JobStatus.IsJobDone()
 
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
 	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 
 	if jobDone {
-		exitCode := common.EExitCode.Success()
+		exitCode := cca.getSuccessExitCode()
 		if summary.TransfersFailed > 0 {
 			exitCode = common.EExitCode.Error()
 		}
 
-		lcm.Exit(func(format common.OutputFormat) string {
+		builder := func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
 				jsonOutput, err := json.Marshal(summary)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
+				screenStats, logStats := formatExtraStats(cca.fromTo, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
+
 				output := fmt.Sprintf(
-					"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nTotalBytesTransferred: %v\nFinal Job Status: %v\n",
+					`
+
+Job %s summary
+Elapsed Time (Minutes): %v
+Total Number Of Transfers: %v
+Number of Transfers Completed: %v
+Number of Transfers Failed: %v
+Number of Transfers Skipped: %v
+TotalBytesTransferred: %v
+Final Job Status: %v%s%s
+`,
 					summary.JobID.String(),
 					ste.ToFixed(duration.Minutes(), 4),
 					summary.TotalTransfers,
@@ -1117,15 +1172,31 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 					summary.TransfersFailed,
 					summary.TransfersSkipped,
 					summary.TotalBytesTransferred,
-					summary.JobStatus)
+					summary.JobStatus,
+					screenStats,
+					formatPerfAdvice(summary.PerformanceAdvice))
 
+				// abbreviated output for cleanup jobs
+				if cca.isCleanupJob {
+					output = fmt.Sprintf("%s: %s)", cleanupStatusString, summary.JobStatus)
+				}
+
+				// log to job log
 				jobMan, exists := ste.JobsAdmin.JobMgr(summary.JobID)
 				if exists {
-					jobMan.Log(pipeline.LogInfo, output)
+					jobMan.Log(pipeline.LogInfo, logStats+"\n"+output)
 				}
 				return output
 			}
-		}, exitCode)
+		}
+
+		if cca.hasFollowup() {
+			lcm.Exit(builder, common.EExitCode.NoExit()) // leave the app running to process the followup
+			cca.launchFollowup(exitCode)
+			lcm.SurrenderControl() // the followup job will run on its own goroutines
+		} else {
+			lcm.Exit(builder, exitCode)
+		}
 	}
 
 	var computeThroughput = func() float64 {
@@ -1146,6 +1217,11 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			common.PanicIfErr(err)
 			return string(jsonOutput)
 		} else {
+			// abbreviated output for cleanup jobs
+			if cca.isCleanupJob {
+				return cleanupStatusString
+			}
+
 			// if json is not needed, then we generate a message that goes nicely on the same line
 			// display a scanning keyword if the job is not completely ordered
 			var scanningString = " (scanning...)"
@@ -1161,7 +1237,8 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			}
 
 			// indicate whether constrained by disk or not
-			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration)
+			isBenchmark := cca.fromTo.From() == common.ELocation.Benchmark()
+			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, isBenchmark)
 
 			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
 				summary.PercentComplete,
@@ -1173,16 +1250,64 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	})
 }
 
+func formatPerfAdvice(advice []common.PerformanceAdvice) string {
+	if len(advice) == 0 {
+		return ""
+	}
+	b := strings.Builder{}
+	b.WriteString("\n\n") // two newlines to separate the perf results from everything else
+	b.WriteString("Performance benchmark results: \n")
+	b.WriteString("Note: " + common.BenchmarkPreviewNotice + "\n")
+	for _, a := range advice {
+		b.WriteString("\n")
+		pri := "Main"
+		if !a.PriorityAdvice {
+			pri = "Additional"
+		}
+		b.WriteString(pri + " Result:\n")
+		b.WriteString("  Code:   " + a.Code + "\n")
+		b.WriteString("  Desc:   " + a.Title + "\n")
+		b.WriteString("  Reason: " + a.Reason + "\n")
+	}
+	b.WriteString("\n")
+	b.WriteString(common.BenchmarkFinalDisclaimer)
+	if runtime.GOOS == "linux" {
+		b.WriteString(common.BenchmarkLinuxExtraDisclaimer)
+	}
+	return b.String()
+}
+
+// format extra stats to include in the log.  If benchmarking, also output them on screen (but not to screen in normal
+// usage because too cluttered)
+func formatExtraStats(fromTo common.FromTo, avgIOPS int, avgE2EMilliseconds int, networkErrorPercent float32, serverBusyPercent float32) (screenStats, logStats string) {
+	logStats = fmt.Sprintf(
+		`
+
+Diagnostic stats:
+IOPS: %v
+End-to-end ms per request: %v
+Network Errors: %.2f%%
+Server Busy: %.2f%%`,
+		avgIOPS, avgE2EMilliseconds, networkErrorPercent, serverBusyPercent)
+
+	if fromTo.From() == common.ELocation.Benchmark() {
+		screenStats = logStats
+		logStats = "" // since will display in the screen stats, and they get logged too
+	}
+
+	return
+}
+
 // Is disk speed looking like a constraint on throughput?  Ignore the first little-while,
 // to give an (arbitrary) amount of time for things to reach steady-state.
-func getPerfDisplayText(perfDiagnosticStrings []string, constraint common.PerfConstraint, durationOfJob time.Duration) (perfString string, diskString string) {
+func getPerfDisplayText(perfDiagnosticStrings []string, constraint common.PerfConstraint, durationOfJob time.Duration, isBench bool) (perfString string, diskString string) {
 	perfString = ""
 	if shouldDisplayPerfStates() {
 		perfString = "[States: " + strings.Join(perfDiagnosticStrings, ", ") + "], "
 	}
 
-	haveBeenRunningLongEnoughToStabilize := durationOfJob.Seconds() > 30 // this duration is an arbitrary guestimate
-	if constraint != common.EPerfConstraint.Unknown() && haveBeenRunningLongEnoughToStabilize {
+	haveBeenRunningLongEnoughToStabilize := durationOfJob.Seconds() > 30                                    // this duration is an arbitrary guestimate
+	if constraint != common.EPerfConstraint.Unknown() && haveBeenRunningLongEnoughToStabilize && !isBench { // don't display when benchmarking, because we got some spurious slow "disk" constraint reports there - which would be confusing given there is no disk in release 1 of benchmarking
 		diskString = fmt.Sprintf(" (%s may be limiting speed)", constraint)
 	} else {
 		diskString = ""
@@ -1273,6 +1398,7 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "defines the location of json which has the list of only files to be copied")
 	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude-pattern", "", "exclude these files when copying. Support use of *.")
 	cpCmd.PersistentFlags().StringVar(&raw.forceWrite, "overwrite", "true", "defines whether to overwrite the conflicting files at the destination. Could be set to true, false, or prompt.")
+	cpCmd.PersistentFlags().BoolVar(&raw.autoDecompress, "decompress", false, "automatically decompress files when downloading, if their content-encoding indicates that they are compressed. The supported content-encoding values are 'gzip' and 'deflate'.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system.")
 	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS.")
 	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "", "optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from Container / Account. Use of "+

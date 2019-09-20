@@ -45,7 +45,9 @@ type LifecycleMgr interface {
 	Prompt(message string, details PromptDetails) ResponseOption // ask the user a question(after erasing the progress), then return the response
 	SurrenderControl()                                           // give up control, this should never return
 	InitiateProgressReporting(WorkController)                    // start writing progress with another routine
+	AllowReinitiateProgressReporting()                           // allow re-initiation of progress reporting for followup job
 	GetEnvironmentVariable(EnvironmentVariable) string           // get the environment variable or its default value
+	ClearEnvironmentVariable(EnvironmentVariable)                // clears the environment variable
 	SetOutputFormat(OutputFormat)                                // change the output format of the entire application
 }
 
@@ -63,6 +65,10 @@ type lifecycleMgr struct {
 	logSanitizer   pipeline.LogSanitizer
 }
 
+func (lcm *lifecycleMgr) ClearEnvironmentVariable(variable EnvironmentVariable) {
+	_ = os.Setenv(variable.Name, "")
+}
+
 func (lcm *lifecycleMgr) SetOutputFormat(format OutputFormat) {
 	lcm.outputFormat = format
 }
@@ -72,7 +78,7 @@ func (lcm *lifecycleMgr) checkAndStartCPUProfiling() {
 	// the value AZCOPY_PROFILE_CPU indicates the path to save CPU profiling data.
 	// e.g. export AZCOPY_PROFILE_CPU="cpu.prof"
 	// For more details, please refer to https://golang.org/pkg/runtime/pprof/
-	cpuProfilePath := os.Getenv("AZCOPY_PROFILE_CPU")
+	cpuProfilePath := lcm.GetEnvironmentVariable(EEnvironmentVariable.ProfileCPU())
 	if cpuProfilePath != "" {
 		lcm.Info(fmt.Sprintf("pprof start CPU profiling, and saving profiling data to: %q", cpuProfilePath))
 		f, err := os.Create(cpuProfilePath)
@@ -95,7 +101,7 @@ func (lcm *lifecycleMgr) checkAndTriggerMemoryProfiling() {
 	// the value AZCOPY_PROFILE_MEM indicates the path to save memory profiling data.
 	// e.g. export AZCOPY_PROFILE_MEM="mem.prof"
 	// For more details, please refer to https://golang.org/pkg/runtime/pprof/
-	memProfilePath := os.Getenv("AZCOPY_PROFILE_MEM")
+	memProfilePath := lcm.GetEnvironmentVariable(EEnvironmentVariable.ProfileMemory())
 	if memProfilePath != "" {
 		lcm.Info(fmt.Sprintf("pprof start memory profiling, and saving profiling data to: %q", memProfilePath))
 		f, err := os.Create(memProfilePath)
@@ -191,12 +197,14 @@ func (lcm *lifecycleMgr) Error(msg string) {
 	lcm.SurrenderControl()
 }
 
-func (lcm *lifecycleMgr) Exit(o OutputBuilder, exitCode ExitCode) {
-	// Check if need to do memory profiling, and do memory profiling accordingly before azcopy exits.
-	lcm.checkAndTriggerMemoryProfiling()
+func (lcm *lifecycleMgr) Exit(o OutputBuilder, applicationExitCode ExitCode) {
+	if applicationExitCode != EExitCode.NoExit() {
+		// Check if need to do memory profiling, and do memory profiling accordingly before azcopy exits.
+		lcm.checkAndTriggerMemoryProfiling()
 
-	// Check if there is ongoing CPU profiling, and stop CPU profiling.
-	lcm.checkAndStopCPUProfiling()
+		// Check if there is ongoing CPU profiling, and stop CPU profiling.
+		lcm.checkAndStopCPUProfiling()
+	}
 
 	messageContent := ""
 	if o != nil {
@@ -205,12 +213,14 @@ func (lcm *lifecycleMgr) Exit(o OutputBuilder, exitCode ExitCode) {
 
 	lcm.msgQueue <- outputMessage{
 		msgContent: messageContent,
-		msgType:    eOutputMessageType.Exit(),
-		exitCode:   exitCode,
+		msgType:    eOutputMessageType.EndOfJob(),
+		exitCode:   applicationExitCode,
 	}
 
-	// stall forever until the success message is printed and program exits
-	lcm.SurrenderControl()
+	if applicationExitCode != EExitCode.NoExit() {
+		// stall forever until the success message is printed and program exits
+		lcm.SurrenderControl()
+	}
 }
 
 // this is used by commands that wish to stall forever to wait for the operations to complete
@@ -237,10 +247,10 @@ func (lcm *lifecycleMgr) processOutputMessage() {
 }
 
 func (lcm *lifecycleMgr) processNoneOutput(msgToOutput outputMessage) {
-	if msgToOutput.msgType == eOutputMessageType.Exit() {
-		os.Exit(int(msgToOutput.exitCode))
-	} else if msgToOutput.msgType == eOutputMessageType.Error() {
+	if msgToOutput.msgType == eOutputMessageType.Error() {
 		os.Exit(int(EExitCode.Error()))
+	} else if msgToOutput.shouldExitProcess() {
+		os.Exit(int(msgToOutput.exitCode))
 	}
 
 	// ignore all other outputs
@@ -256,7 +266,7 @@ func (lcm *lifecycleMgr) processJSONOutput(msgToOutput outputMessage) {
 		msgToOutput.promptDetails)))
 
 	// exit if needed
-	if msgType == eOutputMessageType.Exit() || msgType == eOutputMessageType.Error() {
+	if msgToOutput.shouldExitProcess() {
 		os.Exit(int(msgToOutput.exitCode))
 	} else if msgType == eOutputMessageType.Prompt() {
 		// read the response to the prompt and send it back through the channel
@@ -276,13 +286,15 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 	}
 
 	switch msgToOutput.msgType {
-	case eOutputMessageType.Error(), eOutputMessageType.Exit():
+	case eOutputMessageType.Error(), eOutputMessageType.EndOfJob():
 		// simply print and quit
 		// if no message is intended, avoid adding new lines
 		if msgToOutput.msgContent != "" {
 			fmt.Println("\n" + msgToOutput.msgContent)
 		}
-		os.Exit(int(msgToOutput.exitCode))
+		if msgToOutput.shouldExitProcess() {
+			os.Exit(int(msgToOutput.exitCode))
+		}
 
 	case eOutputMessageType.Progress():
 		fmt.Print("\r")                   // return carriage back to start
@@ -339,6 +351,12 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 type WorkController interface {
 	Cancel(mgr LifecycleMgr)               // handle to cancel the work
 	ReportProgressOrExit(mgr LifecycleMgr) // print the progress status, optionally exit the application if work is done
+}
+
+// AllowReinitiateProgressReporting must be called before running an cleanup job, to allow the initiation of that job's
+// progress reporting to begin
+func (lcm *lifecycleMgr) AllowReinitiateProgressReporting() {
+	atomic.StoreInt32(&lcm.waitEverCalled, 0)
 }
 
 // isInteractive indicates whether the application was spawned by an actual user on the command

@@ -27,6 +27,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -592,6 +593,10 @@ func validateDownloadTransfersAreScheduled(c *chk.C, sourcePrefix string, destin
 	validateCopyTransfersAreScheduled(c, true, false, sourcePrefix, destinationPrefix, expectedTransfers, mockedRPC)
 }
 
+func validateS2SSyncTransfersAreScheduled(c *chk.C, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
+	validateCopyTransfersAreScheduled(c, true, true, sourcePrefix, destinationPrefix, expectedTransfers, mockedRPC)
+}
+
 func validateCopyTransfersAreScheduled(c *chk.C, isSrcEncoded bool, isDstEncoded bool, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
 	// validate that the right number of transfers were scheduled
 	c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedTransfers))
@@ -604,6 +609,20 @@ func validateCopyTransfersAreScheduled(c *chk.C, isSrcEncoded bool, isDstEncoded
 
 		if isSrcEncoded {
 			srcRelativeFilePath, _ = url.PathUnescape(srcRelativeFilePath)
+
+			if runtime.GOOS == "windows" {
+				// Decode unsafe dst characters on windows
+				pathParts := strings.Split(dstRelativeFilePath, "/")
+				invalidChars := `<>\/:"|?*` + string(0x00)
+
+				for _, c := range strings.Split(invalidChars, "") {
+					for k, p := range pathParts {
+						pathParts[k] = strings.ReplaceAll(p, url.PathEscape(c), c)
+					}
+				}
+
+				dstRelativeFilePath = strings.Join(pathParts, "/")
+			}
 		}
 
 		if isDstEncoded {

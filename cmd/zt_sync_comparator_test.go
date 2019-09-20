@@ -29,10 +29,6 @@ type syncComparatorSuite struct{}
 
 var _ = chk.Suite(&syncComparatorSuite{})
 
-func (s *syncComparatorSuite) SetUpTest(c *chk.C) {
-	c.Log("Still running tests... ", c.TestName())
-}
-
 func (s *syncComparatorSuite) TestSyncSourceComparator(c *chk.C) {
 	dummyCopyScheduler := dummyProcessor{}
 	srcMD5 := []byte{'s'}

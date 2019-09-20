@@ -43,6 +43,24 @@ type s3Traverser struct {
 	incrementEnumerationCounter func()
 }
 
+func (t *s3Traverser) isDirectory(isSource bool) bool {
+	// Do a basic syntax check
+	isDirDirect := !t.s3URLParts.IsObjectSyntactically() && (t.s3URLParts.IsDirectorySyntactically() || t.s3URLParts.IsBucketSyntactically())
+
+	// S3 can convert directories and objects sharing names as well.
+	if !isSource {
+		return isDirDirect
+	}
+
+	_, err := t.s3Client.StatObject(t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
+
+	if err != nil {
+		return true
+	}
+
+	return false
+}
+
 func (t *s3Traverser) traverse(processor objectProcessor, filters []objectFilter) (err error) {
 	// Check if resource is a single object.
 	if t.s3URLParts.IsObjectSyntactically() && !t.s3URLParts.IsDirectorySyntactically() && !t.s3URLParts.IsBucketSyntactically() {
@@ -63,7 +81,8 @@ func (t *s3Traverser) traverse(processor objectProcessor, filters []objectFilter
 					oi.LastModified,
 					oi.Size,
 					nil,
-					blobTypeNA),
+					blobTypeNA,
+					t.s3URLParts.BucketName),
 				processor)
 
 			if err != nil {
@@ -97,7 +116,14 @@ func (t *s3Traverser) traverse(processor objectProcessor, filters []objectFilter
 		objectPath := strings.Split(objectInfo.Key, "/")
 		objectName := objectPath[len(objectPath)-1]
 
+		// re-join the unescaped path.
 		relativePath := strings.TrimPrefix(objectInfo.Key, searchPrefix)
+
+		if strings.HasSuffix(relativePath, "/") {
+			// If a file has a suffix of /, it's still treated as a folder.
+			// Thus, akin to the old code. skip it.
+			continue
+		}
 
 		err = processIfPassedFilters(filters,
 			newStoredObject(
@@ -106,7 +132,8 @@ func (t *s3Traverser) traverse(processor objectProcessor, filters []objectFilter
 				objectInfo.LastModified,
 				objectInfo.Size,
 				nil,
-				blobTypeNA),
+				blobTypeNA,
+				t.s3URLParts.BucketName),
 			processor)
 
 		if err != nil {

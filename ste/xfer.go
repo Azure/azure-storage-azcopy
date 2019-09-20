@@ -23,6 +23,7 @@ package ste
 import (
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -49,6 +50,10 @@ const DownloadMaxRetryDelay = time.Second * 60
 
 // pacer related
 const PacerTimeToWaitInMs = 50
+
+// CPK logging related.
+// Sync.Once is used so we only log a CPK error once and prevent gumming up stdout
+var cpkAccessFailureLogGLCM sync.Once
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -126,6 +131,8 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		switch sourceType {
 		case common.ELocation.Local():
 			return newLocalSourceInfoProvider
+		case common.ELocation.Benchmark():
+			return newBenchmarkSourceInfoProvider
 		case common.ELocation.Blob():
 			return newBlobSourceInfoProvider
 		case common.ELocation.File():

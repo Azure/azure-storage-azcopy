@@ -10,10 +10,6 @@ type localTraverserTestSuite struct{}
 
 var _ = chk.Suite(&localTraverserTestSuite{})
 
-func (s *localTraverserTestSuite) SetUpTest(c *chk.C) {
-	c.Log("Still running tests... ", c.TestName())
-}
-
 func (s *localTraverserTestSuite) TestCleanLocalPath(c *chk.C) {
 	testCases := map[string]string{
 		"/user/foo/bar":    "/user/foo/bar", // regular unix path with no change
