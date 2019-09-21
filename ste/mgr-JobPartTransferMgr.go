@@ -329,9 +329,17 @@ func (jptm *jobPartTransferMgr) ReportChunkDone(id common.ChunkID) (lastChunk bo
 
 	// track progress
 	if jptm.TransferStatus() > 0 {
-		n := int64(jptm.Info().BlockSize) // TODO: this is just an assumption/approximation (since last one in each file will be different). Maybe add Length into chunkID one day, and use that...
-		atomic.AddInt64(&jptm.atomicSuccessfulBytes, n)
-		JobsAdmin.AddSuccessfulBytesInActiveFiles(n)
+		info := jptm.Info()
+		successBytesDelta := common.AtomicMorphInt64(&jptm.atomicSuccessfulBytes, func(old int64) (new int64, delta interface{}) {
+			new = old + int64(info.BlockSize) // assume we just completed a full block
+			if new > info.SourceSize {        // but if that assumption gives over-counts total bytes in blob, make a correction
+				new = info.SourceSize // (we do it this way because we don't have the actual chunk size available to us here)
+			}
+			delta = new - old
+			return
+		}).(int64)
+
+		JobsAdmin.AddSuccessfulBytesInActiveFiles(successBytesDelta)
 	}
 
 	// Do our actual processing
