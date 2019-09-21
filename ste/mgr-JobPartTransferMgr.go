@@ -120,7 +120,7 @@ type jobPartTransferMgr struct {
 
 	// how many bytes have been successfully transferred
 	// (hard to infer from atomicChunksDone because that counts both successes and failures)
-	atomicSuccessfulBytes uint64
+	atomicSuccessfulBytes int64
 
 	jobPartMgr          IJobPartMgr // Refers to the "owning" Job Part
 	jobPartPlanTransfer *JobPartPlanTransfer
@@ -329,8 +329,8 @@ func (jptm *jobPartTransferMgr) ReportChunkDone(id common.ChunkID) (lastChunk bo
 
 	// track progress
 	if jptm.TransferStatus() > 0 {
-		n := uint64(jptm.Info().BlockSize) // TODO: this is just an assumption/approximation (since last one in each file will be different). Maybe add Length into chunkID one day, and use that...
-		atomic.AddUint64(&jptm.atomicSuccessfulBytes, n)
+		n := int64(jptm.Info().BlockSize) // TODO: this is just an assumption/approximation (since last one in each file will be different). Maybe add Length into chunkID one day, and use that...
+		atomic.AddInt64(&jptm.atomicSuccessfulBytes, n)
 		JobsAdmin.AddSuccessfulBytesInActiveFiles(n)
 	}
 
@@ -339,7 +339,7 @@ func (jptm *jobPartTransferMgr) ReportChunkDone(id common.ChunkID) (lastChunk bo
 	lastChunk = chunksDone == jptm.numChunks
 	if lastChunk {
 		jptm.runActionAfterLastChunk()
-		JobsAdmin.AddSuccessfulBytesInActiveFiles(-atomic.LoadUint64(&jptm.atomicSuccessfulBytes)) // subtract our bytes from the active files bytes, because we are done now
+		JobsAdmin.AddSuccessfulBytesInActiveFiles(-atomic.LoadInt64(&jptm.atomicSuccessfulBytes)) // subtract our bytes from the active files bytes, because we are done now
 	}
 	return lastChunk, chunksDone
 }
