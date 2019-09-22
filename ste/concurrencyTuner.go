@@ -155,6 +155,7 @@ func (t *autoConcurrencyTuner) worker() {
 	sawHighMultiGbps := false
 	probeHigherRegardless := false
 	dontBackoffRegardless := false
+	multiplierReductionCount := 0
 	lastReason := concurrencyReasonNone
 
 	// get initial baseline throughput
@@ -214,6 +215,15 @@ func (t *autoConcurrencyTuner) worker() {
 
 			// reduce multiplier to probe more slowly on the next iteration
 			multiplier = 1 + (multiplier-1)/slowdownFactor
+
+			// bump multiplier up until its at least enough to influence the connection count by 1
+			// (but, to make sure our algorithm terminates, only do this once)
+			multiplierReductionCount++
+			if multiplierReductionCount == 1 {
+				for int(multiplier*concurrency) == int(concurrency) {
+					multiplier += 0.05
+				}
+			}
 
 			if multiplier < minMulitplier {
 				break // no point in tuning any more

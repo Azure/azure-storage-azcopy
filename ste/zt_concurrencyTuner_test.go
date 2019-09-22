@@ -40,9 +40,11 @@ func (s *concurrencyTunerSuite) noMax() int {
 	return math.MaxInt32
 }
 
-func (s *concurrencyTunerSuite) TestConcurrencyTuner_LowBandwidth(c *chk.C) {
+func (s *concurrencyTunerSuite) TestConcurrencyTuner_LowBW(c *chk.C) {
 	steps := []tunerStep{
-		{16, concurrencyReasonInitial, 100, false},
+		{4, concurrencyReasonInitial, 40, false},
+		{8, concurrencyReasonSeeking, 80, false},
+		{16, concurrencyReasonSeeking, 100, false},
 		{32, concurrencyReasonSeeking, 100, false},
 		{16, concurrencyReasonBackoff, 100, false},
 		{19, concurrencyReasonSeeking, 100, false},
@@ -53,9 +55,24 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_LowBandwidth(c *chk.C) {
 
 }
 
+func (s *concurrencyTunerSuite) TestConcurrencyTuner_VeryLowBandwidth(c *chk.C) {
+	steps := []tunerStep{
+		{4, concurrencyReasonInitial, 10, false},
+		{8, concurrencyReasonSeeking, 11, false},
+		{4, concurrencyReasonBackoff, 10, false},
+		{5, concurrencyReasonSeeking, 10, false},
+		{4, concurrencyReasonAtOptimum, 10, false},
+		{4, concurrencyReasonFinished, 10, false}}
+
+	s.runTest(c, steps, s.noMax(), true, false)
+
+}
+
 func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidth_PlentyOfCpu(c *chk.C) {
 	steps := []tunerStep{
-		{16, concurrencyReasonInitial, 1000, false},
+		{4, concurrencyReasonInitial, 400, false},
+		{8, concurrencyReasonSeeking, 800, false},
+		{16, concurrencyReasonSeeking, 1000, false},
 		{32, concurrencyReasonSeeking, 3000, false},
 		{64, concurrencyReasonSeeking, 6000, false},
 		{128, concurrencyReasonSeeking, 12000, false},
@@ -72,7 +89,9 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidth_PlentyOfCpu(c
 
 func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidth_ConstrainedCpu(c *chk.C) {
 	steps := []tunerStep{
-		{16, concurrencyReasonInitial, 1000, false},
+		{4, concurrencyReasonInitial, 400, false},
+		{8, concurrencyReasonSeeking, 800, false},
+		{16, concurrencyReasonSeeking, 1000, false},
 		{32, concurrencyReasonSeeking, 3000, false},
 		{64, concurrencyReasonSeeking, 6000, false},
 		{128, concurrencyReasonSeeking, 12000, true}, // high CPU doesn't stop it probing higher, but does change the final status
@@ -89,7 +108,9 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidth_ConstrainedCp
 
 func (s *concurrencyTunerSuite) TestConcurrencyTuner_CapMaxConcurrency(c *chk.C) {
 	steps := []tunerStep{
-		{16, concurrencyReasonInitial, 1000, false},
+		{4, concurrencyReasonInitial, 400, false},
+		{8, concurrencyReasonSeeking, 800, false},
+		{16, concurrencyReasonSeeking, 1000, false},
 		{32, concurrencyReasonSeeking, 2000, false},
 		{64, concurrencyReasonSeeking, 4000, false},
 		{100, concurrencyReasonHitMax, 8000, false}, // NOT "at optimum"
@@ -101,7 +122,9 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_CapMaxConcurrency(c *chk.C)
 
 func (s *concurrencyTunerSuite) TestConcurrencyTuner_OptimalValueNotNearStandardSteps(c *chk.C) {
 	steps := []tunerStep{
-		{16, concurrencyReasonInitial, 100, false},
+		{4, concurrencyReasonInitial, 200, false},
+		{8, concurrencyReasonSeeking, 400, false},
+		{16, concurrencyReasonSeeking, 800, false},
 		{32, concurrencyReasonSeeking, 1000, false},
 		{64, concurrencyReasonSeeking, 2000, false},
 		{128, concurrencyReasonSeeking, 5000, false},
@@ -122,7 +145,9 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_OptimalValueNotNearStandard
 
 func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidthWorkaround_AppliesWhenBenchmarking(c *chk.C) {
 	steps := []tunerStep{
-		{16, concurrencyReasonInitial, 4000, false},
+		{4, concurrencyReasonInitial, 1000, false},
+		{8, concurrencyReasonSeeking, 2000, false},
+		{16, concurrencyReasonSeeking, 4000, false},
 		{32, concurrencyReasonSeeking, 10900, false},
 		{64, concurrencyReasonSeeking, 11100, false},  // this would cause backoff if not for workaround
 		{128, concurrencyReasonSeeking, 11600, false}, // instead it tries higher...
@@ -134,7 +159,9 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidthWorkaround_App
 
 func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidthWorkaround_DoesntApplyWhenNotBenchmarking(c *chk.C) {
 	steps := []tunerStep{
-		{16, concurrencyReasonInitial, 4000, false},
+		{4, concurrencyReasonInitial, 1000, false},
+		{8, concurrencyReasonSeeking, 2000, false},
+		{16, concurrencyReasonSeeking, 4000, false},
 		{32, concurrencyReasonSeeking, 10900, false},
 		{64, concurrencyReasonSeeking, 11100, false},
 		{32, concurrencyReasonBackoff, 11600, false},
@@ -145,7 +172,9 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidthWorkaround_Doe
 
 func (s *concurrencyTunerSuite) TestConcurrencyTuner__HighBandwidthWorkaround_StaysHighIfSeesRetries(c *chk.C) {
 	steps := []tunerStep{
-		{16, concurrencyReasonInitial, 4000, false},
+		{4, concurrencyReasonInitial, 1000, false},
+		{8, concurrencyReasonSeeking, 2000, false},
+		{16, concurrencyReasonSeeking, 4000, false},
 		{32, concurrencyReasonSeeking, 10900, false},
 		{64, concurrencyReasonSeeking, 11100, false},    // this would cause backoff if not for workaround
 		{128, concurrencyReasonSeeking, 11600, false},   // instead it tries higher...
@@ -156,7 +185,7 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner__HighBandwidthWorkaround_St
 }
 
 func (s *concurrencyTunerSuite) runTest(c *chk.C, steps []tunerStep, maxConcurrency int, isBenchmarking bool, simulateRetries bool) {
-	t := NewAutoConcurrencyTuner(16, maxConcurrency, isBenchmarking)
+	t := NewAutoConcurrencyTuner(4, maxConcurrency, isBenchmarking)
 	observedMbps := -1 // there's no observation at first
 	observedHighCpu := false
 
