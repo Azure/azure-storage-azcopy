@@ -139,15 +139,14 @@ const (
 )
 
 func (t *autoConcurrencyTuner) worker() {
-	const initialMultiplier = 2
+	const standardMultiplier = 2
+	const boostedMultiplier = standardMultiplier * 2
+	const topOfBoostZone = 256 // boosted multiplier applies up to this many connections
 	const slowdownFactor = 5
 	const minMulitplier = 1.19 // really this is 1.2, but use a little less to make the floating point comparisons robust
-	fudgeFactor := float32(0.3)
-	if t.isBenchmarking {
-		fudgeFactor = 0.2 // make this even lower (more aggressive in terms of concurrency) if benchmarking
-	}
+	const fudgeFactor = 0.2
 
-	multiplier := float32(initialMultiplier)
+	multiplier := float32(boostedMultiplier)
 	concurrency := float32(t.initialConcurrency)
 	atMax := false
 	highCpu := false
@@ -163,6 +162,10 @@ func (t *autoConcurrencyTuner) worker() {
 
 	for { // todo, add the conditions here
 		rateChangeReason := concurrencyReasonSeeking
+
+		if concurrency >= topOfBoostZone && multiplier > standardMultiplier {
+			multiplier = standardMultiplier // don't use boosted multiplier for ever
+		}
 
 		// enforce a ceiling
 		atMax = concurrency*multiplier > float32(t.maxConcurrency)
@@ -196,7 +199,7 @@ func (t *autoConcurrencyTuner) worker() {
 
 			// Workaround for variable throughput when targeting 20 Gbps account limit (concurrency around 64 didn't seem to give stable throughput in some tests)
 			// TODO: review this, and look for root cause/better solution
-			probeHigherRegardless = sawHighMultiGbps && concurrency >= 32 && concurrency < 128 && multiplier == initialMultiplier
+			probeHigherRegardless = sawHighMultiGbps && concurrency >= 32 && concurrency < 128 && multiplier >= standardMultiplier
 		}
 
 		// decide what to do based on the measurement
@@ -214,12 +217,16 @@ func (t *autoConcurrencyTuner) worker() {
 			concurrency = concurrency / multiplier
 
 			// reduce multiplier to probe more slowly on the next iteration
-			multiplier = 1 + (multiplier-1)/slowdownFactor
+			if multiplier > standardMultiplier {
+				multiplier = standardMultiplier // just back off from our "boosted" multiplier
+			} else {
+				multiplier = 1 + (multiplier-1)/slowdownFactor // back off to a much smaller multiplier
+			}
 
 			// bump multiplier up until its at least enough to influence the connection count by 1
-			// (but, to make sure our algorithm terminates, only do this once)
+			// (but, to make sure our algorithm terminates, limit how much we do this)
 			multiplierReductionCount++
-			if multiplierReductionCount == 1 {
+			if multiplierReductionCount <= 2 {
 				for int(multiplier*concurrency) == int(concurrency) {
 					multiplier += 0.05
 				}
