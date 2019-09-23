@@ -98,6 +98,7 @@
 1. On Windows, downloading a filename with characters not supported by the operating system will
    result in those characters being URL-encoded to construct a Windows-compatible filename. The
    encoding process is reversed if the file is uploaded. 
+1.  Uploading a single file to ADLS Gen 2 works now.
      
 
 ## Version 10.2.1
