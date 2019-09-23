@@ -74,16 +74,29 @@ func (t *s3Traverser) traverse(processor objectProcessor, filters []objectFilter
 		// Otherwise, treat it as a directory.
 		// According to IsDirectorySyntactically, objects and folders can share names
 		if err == nil {
+			storedObject := newStoredObject(
+				objectName,
+				"",
+				oi.LastModified,
+				oi.Size,
+				nil,
+				blobTypeNA,
+				t.s3URLParts.BucketName)
+
+			// We had to statObject anyway, get ALL the info.
+			oie := common.ObjectInfoExtension{ObjectInfo: oi}
+
+			storedObject.contentType = oi.ContentType
+			storedObject.md5 = oie.ContentMD5()
+			storedObject.cacheControl = oie.CacheControl()
+			storedObject.contentLanguage = oie.ContentLanguage()
+			storedObject.contentDisposition = oie.ContentDisposition()
+			storedObject.contentEncoding = oie.ContentEncoding()
+			storedObject.Metadata = oie.NewCommonMetadata()
+
 			err = processIfPassedFilters(
 				filters,
-				newStoredObject(
-					objectName,
-					"",
-					oi.LastModified,
-					oi.Size,
-					nil,
-					blobTypeNA,
-					t.s3URLParts.BucketName),
+				storedObject,
 				processor)
 
 			if err != nil {
@@ -144,6 +157,7 @@ func (t *s3Traverser) traverse(processor objectProcessor, filters []objectFilter
 
 			oie := common.ObjectInfoExtension{ObjectInfo: oi}
 
+			storedObject.contentType = oi.ContentType
 			storedObject.md5 = oie.ContentMD5()
 			storedObject.cacheControl = oie.CacheControl()
 			storedObject.contentLanguage = oie.ContentLanguage()
