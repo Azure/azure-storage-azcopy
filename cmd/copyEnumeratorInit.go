@@ -50,7 +50,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	getRemoteProperties := (cca.fromTo.From().IsRemote() && !cca.fromTo.To().IsRemote()) || // If download, we still need LMT and MD5 from files.
 		(cca.fromTo.From() == common.ELocation.File() && cca.fromTo.To().IsRemote() && cca.s2sSourceChangeValidation) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties anyway (according to the old code)
 		(cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() && cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend) // If S2S and
-	jobPartOrder.S2SGetPropertiesInBackend = !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
+	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
 	jobPartOrder.S2SSourceChangeValidation = cca.s2sSourceChangeValidation
 	jobPartOrder.S2SDestLengthValidation = cca.CheckLength
 
