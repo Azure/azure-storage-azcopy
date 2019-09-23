@@ -21,8 +21,6 @@
 package ste
 
 import (
-	"fmt"
-
 	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	chk "gopkg.in/check.v1"
@@ -34,7 +32,7 @@ var _ = chk.Suite(&pageBlobFromURLSuite{})
 
 func (s *pageBlobFromURLSuite) TestRangeWorthTransferring(c *chk.C) {
 	// Arrange
-	copier := urlToPageBlobCopier{}
+	copier := pageRangeOptimizer{}
 	copier.srcPageList = &azblob.PageList{
 		PageRange: []azblob.PageRange{
 			{Start: 512, End: 1023},
@@ -54,7 +52,6 @@ func (s *pageBlobFromURLSuite) TestRangeWorthTransferring(c *chk.C) {
 
 	// Action & Assert
 	for testRange, expectedResult := range testCases {
-		fmt.Println(testRange)
 		doesContainData := copier.doesRangeContainData(testRange)
 		c.Assert(doesContainData, chk.Equals, expectedResult)
 	}

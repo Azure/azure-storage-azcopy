@@ -31,7 +31,7 @@ import (
 type downloader interface {
 
 	// Prologue does any necessary first-time setup
-	Prologue(jptm IJobPartTransferMgr)
+	Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline)
 
 	// GenerateDownloadFunc returns a func() that will download the specified portion of the remote file into dstFile
 	// Instead of taking destination file as a parameter, it takes a helper that will write to the file. That keeps details of

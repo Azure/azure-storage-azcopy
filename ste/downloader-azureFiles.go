@@ -36,7 +36,7 @@ func newAzureFilesDownloader() downloader {
 	return &azureFilesDownloader{}
 }
 
-func (bd *azureFilesDownloader) Prologue(_ IJobPartTransferMgr) {
+func (bd *azureFilesDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
 	// noop
 }
 

@@ -33,8 +33,8 @@ import (
 type urlToPageBlobCopier struct {
 	pageBlobSenderBase
 
-	srcURL      url.URL
-	srcPageList *azblob.PageList
+	srcURL             url.URL
+	pageRangeOptimizer *pageRangeOptimizer // nil if src is not a page blob
 }
 
 func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
@@ -44,21 +44,15 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipe
 	}
 
 	destBlobTier := azblob.AccessTierNone
-	var srcPageList *azblob.PageList
+	var pageRangeOptimizer *pageRangeOptimizer
 	if blobSrcInfoProvider, ok := srcInfoProvider.(IBlobSourceInfoProvider); ok {
 		if blobSrcInfoProvider.BlobType() == azblob.BlobPageBlob {
 			// if the source is page blob, preserve source's blob tier.
 			destBlobTier = blobSrcInfoProvider.BlobTier()
 
 			// also get the page ranges so that we can skip the empty parts at the expense of one HTTP request
-			srcPageBlobURL := azblob.NewPageBlobURL(*srcURL, p)
-			ctx := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-
-			// ignore the error, since according to the REST API documentation:
-			// in a highly fragmented page blob with a large number of writes,
-			// a Get Page Ranges request can fail due to an internal server timeout.
-			// thus, if the page blob is not sparse, it's ok for it to fail
-			srcPageList, _ = srcPageBlobURL.GetPageRanges(ctx, 0, 0, azblob.BlobAccessConditions{})
+			pageRangeOptimizer = newPageRangeOptimizer(azblob.NewPageBlobURL(*srcURL, p),
+				context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion))
 		}
 	}
 
@@ -70,7 +64,15 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipe
 	return &urlToPageBlobCopier{
 		pageBlobSenderBase: *senderBase,
 		srcURL:             *srcURL,
-		srcPageList:        srcPageList}, nil
+		pageRangeOptimizer: pageRangeOptimizer}, nil
+}
+
+func (c *urlToPageBlobCopier) Prologue(ps common.PrologueState) {
+	c.pageBlobSenderBase.Prologue(ps)
+
+	if c.pageRangeOptimizer != nil {
+		c.pageRangeOptimizer.fetchPages()
+	}
 }
 
 // Returns a chunk-func for blob copies
@@ -83,7 +85,8 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		}
 
 		// if there's no data at the source, skip this chunk
-		if !c.doesRangeContainData(azblob.PageRange{Start: id.OffsetInFile(), End: id.OffsetInFile() + adjustedChunkSize - 1}) {
+		if c.pageRangeOptimizer != nil && !c.pageRangeOptimizer.doesRangeContainData(
+			azblob.PageRange{Start: id.OffsetInFile(), End: id.OffsetInFile() + adjustedChunkSize - 1}) {
 			return
 		}
 
@@ -127,15 +130,42 @@ func (c *urlToPageBlobCopier) GetDestinationLength() (int64, error) {
 	return properties.ContentLength(), nil
 }
 
+// isolate the logic to fetch page ranges for a page blob, and check whether a given range has data
+// for two purposes:
+//	1. capture the necessary info to do so, so that fetchPages can be invoked anywhere
+//  2. open to extending the logic, which could be re-used for both download and s2s scenarios
+type pageRangeOptimizer struct {
+	srcPageBlobURL azblob.PageBlobURL
+	ctx            context.Context
+	srcPageList    *azblob.PageList // nil if src is not a page blob, or it was not possible to get a response
+}
+
+func newPageRangeOptimizer(srcPageBlobURL azblob.PageBlobURL, ctx context.Context) *pageRangeOptimizer {
+	return &pageRangeOptimizer{srcPageBlobURL: srcPageBlobURL, ctx: ctx}
+}
+
+func (p *pageRangeOptimizer) fetchPages() {
+	// according to the REST API documentation:
+	// in a highly fragmented page blob with a large number of writes,
+	// a Get Page Ranges request can fail due to an internal server timeout.
+	// thus, if the page blob is not sparse, it's ok for it to fail
+	// TODO follow up with the service folks to confirm the scale at which the timeouts occur
+	// TODO perhaps we need to add more logic here to optimize for more cases
+	pageList, err := p.srcPageBlobURL.GetPageRanges(p.ctx, 0, 0, azblob.BlobAccessConditions{})
+	if err == nil {
+		p.srcPageList = pageList
+	}
+}
+
 // check whether a particular given range is worth transferring, i.e. whether there's data at the source
-func (c *urlToPageBlobCopier) doesRangeContainData(givenRange azblob.PageRange) bool {
+func (p *pageRangeOptimizer) doesRangeContainData(givenRange azblob.PageRange) bool {
 	// if we have no page list stored, then assume there's data everywhere
-	if c.srcPageList == nil {
+	if p.srcPageList == nil {
 		return true
 	}
 
 	// note that the page list is ordered in increasing order (in terms of position)
-	for _, srcRange := range c.srcPageList.PageRange {
+	for _, srcRange := range p.srcPageList.PageRange {
 		if givenRange.End < srcRange.Start {
 			// case 1: due to the nature of the list (it's sorted), if we've reached such a srcRange
 			// we've checked all the appropriate srcRange already and haven't found any overlapping srcRange
