@@ -1393,7 +1393,7 @@ func init() {
 	// To achieve better performance and at same time have good control for overall go routine numbers, getting property in ste is introduced,
 	// so properties can be get in parallel, at same time no additional go routines are created for this specific job.
 	// The usage of this hidden flag is to provide fallback to traditional behavior, when service supports returning full properties during list.
-	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true, "get S3 objects' or Azure files' properties in backend. ")
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true, "get S3 objects' or Azure files' properties in backend, if properties need to be accessed. Properties need to be accessed if s2s-preserve-properties is true, and in certain other cases where we need the properties for modification time checks or MD5 checks")
 
 	// permanently hidden
 	// Hide the list-of-files flag since it is implemented only for Storage Explorer.
