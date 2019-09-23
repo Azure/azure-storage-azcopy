@@ -272,9 +272,7 @@ func initResourceTraverser(resource string, location common.Location, ctx *conte
 			return nil, errors.New("a valid credential and context must be supplied to create a blobFS traverser")
 		}
 
-		if credential.CredentialType != common.ECredentialType.SharedKey() {
-			recommendHttpsIfNecessary(*resourceURL)
-		}
+		recommendHttpsIfNecessary(*resourceURL)
 
 		bfsURL := azbfs.NewBfsURLParts(*resourceURL)
 
