@@ -161,6 +161,8 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 	scheduleSendChunks(jptm, info.Source, srcFile, srcSize, s, sourceFileFactory, srcInfoProvider)
 }
 
+var jobCancelledLocalPrefetchErr = errors.New("job was cancelled; Pre-fetching stopped")
+
 // Schedule all the send chunks.
 // For upload, we force preload of each chunk to memory, and we wait (block)
 // here if the amount of preloaded data gets excessive. That's OK to do,
@@ -205,16 +207,20 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 		}
 
 		if srcInfoProvider.IsLocal() {
-			// create reader and prefetch the data into it
-			chunkReader = createPopulatedChunkReader(jptm, sourceFileFactory, id, adjustedChunkSize, srcFile)
-
-			// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
-			prefetchErr = chunkReader.BlockingPrefetch(srcFile, false)
-			if prefetchErr == nil {
-				chunkReader.WriteBufferTo(md5Hasher)
-				ps = chunkReader.GetPrologueState()
+			if jptm.WasCanceled() {
+				prefetchErr = jobCancelledLocalPrefetchErr
 			} else {
-				safeToUseHash = false // because we've missed a chunk
+				// create reader and prefetch the data into it
+				chunkReader = createPopulatedChunkReader(jptm, sourceFileFactory, id, adjustedChunkSize, srcFile)
+
+				// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
+				prefetchErr = chunkReader.BlockingPrefetch(srcFile, false)
+				if prefetchErr == nil {
+					chunkReader.WriteBufferTo(md5Hasher)
+					ps = chunkReader.GetPrologueState()
+				} else {
+					safeToUseHash = false // because we've missed a chunk
+				}
 			}
 		}
 
@@ -286,8 +292,6 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.Epilogue())
 	defer jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
-
-	fmt.Println(jptm.WasCanceled())
 
 	if jptm.TransferStatus() > 0 && !jptm.WasCanceled() {
 		if _, isS2SCopier := s.(s2sCopier); sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation) {
