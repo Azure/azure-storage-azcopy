@@ -24,14 +24,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-
-	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
@@ -74,36 +71,22 @@ func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []strin
 	return
 }
 
-// given a valid URL, parse out the SAS portion
-func (raw *rawSyncCmdArgs) separateSasFromURL(rawURL string) (cleanURL string, sas string) {
-	fromUrl, _ := url.Parse(rawURL)
-
-	// TODO add support for other service URLs
-	blobParts := azblob.NewBlobURLParts(*fromUrl)
-	sas = blobParts.SAS.Encode()
-
-	// get clean URL without SAS
-	blobParts.SAS = azblob.SASQueryParameters{}
-	bUrl := blobParts.URL()
-	cleanURL = bUrl.String()
-
-	return
-}
-
 // validates and transform raw input into cooked input
 func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked := cookedSyncCmdArgs{}
 
+	// this if statement ladder remains instead of being separated to help determine valid combinations for sync
+	// consider making a map of valid source/dest combos and consolidating this to generic source/dest setups, akin to the lower if statement
 	cooked.fromTo = inferFromTo(raw.src, raw.dst)
 	if cooked.fromTo == common.EFromTo.Unknown() {
 		return cooked, fmt.Errorf("Unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
 	} else if cooked.fromTo == common.EFromTo.LocalBlob() {
-		cooked.destination, cooked.destinationSAS = raw.separateSasFromURL(raw.dst)
+		cooked.destination, cooked.destinationSAS, _ = SplitAuthTokenFromResource(raw.dst, cooked.fromTo.To())
 	} else if cooked.fromTo == common.EFromTo.BlobLocal() {
-		cooked.source, cooked.sourceSAS = raw.separateSasFromURL(raw.src)
+		cooked.source, cooked.sourceSAS, _ = SplitAuthTokenFromResource(raw.src, cooked.fromTo.From())
 	} else if cooked.fromTo == common.EFromTo.BlobBlob() {
-		cooked.source, cooked.sourceSAS = raw.separateSasFromURL(raw.src)
-		cooked.destination, cooked.destinationSAS = raw.separateSasFromURL(raw.dst)
+		cooked.destination, cooked.destinationSAS, _ = SplitAuthTokenFromResource(raw.dst, cooked.fromTo.To())
+		cooked.source, cooked.sourceSAS, _ = SplitAuthTokenFromResource(raw.src, cooked.fromTo.From())
 	} else {
 		return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, cooked.fromTo)
 	}
