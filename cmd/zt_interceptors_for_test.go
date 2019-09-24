@@ -23,7 +23,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -76,10 +75,6 @@ func (i *interceptor) reset() {
 // this lifecycle manager substitute does not perform any action
 type mockedLifecycleManager struct {
 	log chan string
-}
-
-func (m *mockedLifecycleManager) GetTaskWaitGroup() *sync.WaitGroup {
-	return &sync.WaitGroup{} // Return an empty waitgroup; Only used in ste
 }
 
 func (*mockedLifecycleManager) Progress(common.OutputBuilder) {}

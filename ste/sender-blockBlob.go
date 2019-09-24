@@ -167,8 +167,6 @@ func (s *blockBlobSenderBase) Epilogue() {
 func (s *blockBlobSenderBase) Cleanup() {
 	jptm := s.jptm
 
-	fmt.Println(jptm.TransferStatus())
-
 	// Cleanup
 	if jptm.TransferStatus() <= 0 || jptm.WasCanceled() { // TODO: <=0 or <0?
 		// If the transfer status value < 0, then transfer failed with some failure

@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -51,7 +50,6 @@ type LifecycleMgr interface {
 	GetEnvironmentVariable(EnvironmentVariable) string           // get the environment variable or its default value
 	ClearEnvironmentVariable(EnvironmentVariable)                // clears the environment variable
 	SetOutputFormat(OutputFormat)                                // change the output format of the entire application
-	GetTaskWaitGroup() *sync.WaitGroup                           // get the task wait group. Use it to tally new JobPartTransferMgrs and their finishes. Wait on it when we try to exit.
 }
 
 func GetLifecycleMgr() LifecycleMgr {
@@ -67,10 +65,6 @@ type lifecycleMgr struct {
 	waitEverCalled int32
 	outputFormat   OutputFormat
 	logSanitizer   pipeline.LogSanitizer
-}
-
-func (lcm *lifecycleMgr) GetTaskWaitGroup() *sync.WaitGroup {
-	return &lcm.taskWaitGroup
 }
 
 func (lcm *lifecycleMgr) ClearEnvironmentVariable(variable EnvironmentVariable) {
@@ -388,8 +382,8 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 		signal.Notify(lcm.cancelChannel, os.Interrupt, os.Kill)
 
 		go func() {
-			time.Sleep(time.Second * 5)
-			lcm.cancelChannel <- syscall.SIGINT
+			// time.Sleep(time.Second * 1)
+			// lcm.Info("WAHOO SUICIDE!")
 		}()
 
 		for {
