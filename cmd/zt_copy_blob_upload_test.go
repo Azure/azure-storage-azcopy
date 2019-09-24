@@ -41,7 +41,8 @@ func (s *cmdIntegrationSuite) TestIncludeDir(c *chk.C) {
 		"sub/filea",
 		"sub/fileb",
 		"sub/filec",
-		"sub/somethingelse/subsub/filex",
+		"sub/somethingelse/subsub/filex", // should not be included because sub/subsub is not contiguous here
+		"othersub/sub/subsub/filey",      // should not be included because sub/subsub is not at root here
 		"sub/subsub/filea",
 		"sub/subsub/fileb",
 		"sub/subsub/filec",
@@ -65,7 +66,7 @@ func (s *cmdIntegrationSuite) TestIncludeDir(c *chk.C) {
 
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 3)
 		// trim / and /folder/ off
-		validateDownloadTransfersAreScheduled(c, "/", "/"+filepath.Base(dirPath)+"/", files[7:], mockedRPC)
+		validateDownloadTransfersAreScheduled(c, "/", "/"+filepath.Base(dirPath)+"/", files[8:], mockedRPC)
 	})
 }
 
@@ -81,7 +82,8 @@ func (s *cmdIntegrationSuite) TestExcludeDir(c *chk.C) {
 		"sub/filea",
 		"sub/fileb",
 		"sub/filec",
-		"sub/somethingelse/subsub/filex",
+		"sub/somethingelse/subsub/filex", // should not be excluded, since sub/subsub is not contiguous here
+		"othersub/sub/subsub/filey",      // should not be excluded, since sub/subsub is not a root level here
 		"sub/subsub/filea",
 		"sub/subsub/fileb",
 		"sub/subsub/filec",
@@ -103,9 +105,9 @@ func (s *cmdIntegrationSuite) TestExcludeDir(c *chk.C) {
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 7)
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 8)
 		// Trim / and /folder/ off
-		validateDownloadTransfersAreScheduled(c, "/", "/"+filepath.Base(dirPath)+"/", files[:7], mockedRPC)
+		validateDownloadTransfersAreScheduled(c, "/", "/"+filepath.Base(dirPath)+"/", files[:8], mockedRPC)
 	})
 }
 
