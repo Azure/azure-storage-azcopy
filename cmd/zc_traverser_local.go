@@ -315,13 +315,18 @@ func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, inc
 }
 
 func cleanLocalPath(localPath string) string {
-	normalizedPath := path.Clean(consolidatePathSeparators(localPath))
+	localPathSeparator := common.DeterminePathSeparator(localPath)
+	// path.Clean only likes /, and will only handle /. So, we consolidate it to /.
+	// it will do absolutely nothing with \.
+	normalizedPath := path.Clean(strings.ReplaceAll(localPath, localPathSeparator, common.AZCOPY_PATH_SEPARATOR_STRING))
+	// return normalizedPath path separator.
+	normalizedPath = strings.ReplaceAll(normalizedPath, common.AZCOPY_PATH_SEPARATOR_STRING, localPathSeparator)
 
-	// detect if we are targeting a drive (ex: either C:\ or C:)
-	// note that on windows there must be a slash in order to target the root drive properly
-	// otherwise we'd point to the path from where AzCopy is running (if AzCopy is running from the same drive)
-	if len(localPath) == 3 && (strings.HasSuffix(localPath, `:\`) || strings.HasSuffix(localPath, ":/")) ||
-		len(localPath) == 2 && strings.HasSuffix(localPath, ":") {
+	if strings.HasPrefix(localPath, `\\`) || strings.HasPrefix(localPath, `//`) { // path.Clean steals the first / from the // or \\ prefix.
+		// return the \ we stole from the UNC path.
+		normalizedPath = localPathSeparator + normalizedPath
+	} else if len(localPath) == 3 && (strings.HasSuffix(localPath, `:\`) || strings.HasSuffix(localPath, ":/")) ||
+		len(localPath) == 2 && strings.HasSuffix(localPath, ":") { // path.Clean steals the last / from C:\, C:/, and does not add one for C:
 		normalizedPath += common.OS_PATH_SEPARATOR
 	}
 

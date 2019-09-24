@@ -159,15 +159,14 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 	if listofFilesChannel != nil {
 		sas := ""
 		if location.IsRemote() {
-			srcURL, err := url.Parse(source)
+			// note to future self: this will cause a merge conflict.
+			// rename source to resource and delete this comment.
+			var err error
+			source, sas, err = SplitAuthTokenFromResource(source, location)
 
 			if err != nil {
 				return nil, err
 			}
-
-			sas = srcURL.RawQuery
-			srcURL.RawQuery = ""
-			source = srcURL.String()
 		}
 
 		output = newListTraverser(source, sas, location, credential, ctx, recursive, toFollow, listofFilesChannel, incrementEnumerationCounter)
