@@ -29,6 +29,44 @@ import (
 	"strings"
 )
 
+func (s *cmdIntegrationSuite) TestIncludeDirSimple(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	files := []string{
+		"filea",
+		"fileb",
+		"filec",
+		"other/sub/subsub/filey", // should not be included because sub/subsub is not at root here
+		"other2/sub",             // ditto
+		"sub/filea",
+		"sub/fileb",
+		"sub/child/filec",
+	}
+
+	dirPath := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dirPath)
+	scenarioHelper{}.generateLocalFilesFromList(c, dirPath, files)
+
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultRawCopyInput(dirPath, rawBlobURLWithSAS.String())
+	raw.recursive = true
+	raw.includePath = "sub"
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 3)
+		// trim / and /folder/ off
+		validateDownloadTransfersAreScheduled(c, "/", "/"+filepath.Base(dirPath)+"/", files[5:], mockedRPC)
+	})
+}
+
 func (s *cmdIntegrationSuite) TestIncludeDir(c *chk.C) {
 	bsu := getBSU()
 	containerURL, containerName := createNewContainer(c, bsu)
@@ -108,6 +146,43 @@ func (s *cmdIntegrationSuite) TestExcludeDir(c *chk.C) {
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 8)
 		// Trim / and /folder/ off
 		validateDownloadTransfersAreScheduled(c, "/", "/"+filepath.Base(dirPath)+"/", files[:8], mockedRPC)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestIncludeAndExcludeDir(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	files := []string{
+		"xyz/aaa",
+		"xyz/def", // should be included, because although we are excluding "def", here it is not at the root
+		"def",     // should be excluded because here it is at root
+		"filea",
+		"fileb",
+		"filec",
+	}
+
+	dirPath := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dirPath)
+	scenarioHelper{}.generateLocalFilesFromList(c, dirPath, files)
+
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultRawCopyInput(dirPath, rawBlobURLWithSAS.String())
+	raw.recursive = true
+	raw.includePath = "xyz"
+	raw.excludePath = "def"
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		// Trim / and /folder/ off
+		validateDownloadTransfersAreScheduled(c, "/", "/"+filepath.Base(dirPath)+"/", files[:1], mockedRPC)
 	})
 }
 
