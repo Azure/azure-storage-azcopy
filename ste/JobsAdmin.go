@@ -103,6 +103,8 @@ var JobsAdmin interface {
 	common.ILoggerCloser
 
 	CurrentMainPoolSize() int
+
+	RequestTuneSlowly()
 }
 
 func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targetRateInMegaBitsPerSec int64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {
@@ -151,19 +153,19 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 	}
 
 	ja := &jobsAdmin{
-		concurrency:              concurrency,
-		logger:                   common.NewAppLogger(pipeline.LogInfo, azcopyLogPathFolder),
-		jobIDToJobMgr:            newJobIDToJobMgr(),
-		logDir:                   azcopyLogPathFolder,
-		planDir:                  azcopyJobPlanFolder,
-		pacer:                    pacer,
-		slicePool:                common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
-		cacheLimiter:             common.NewCacheLimiter(maxRamBytesToUse),
-		fileCountLimiter:         common.NewCacheLimiter(int64(concurrency.MaxOpenDownloadFiles)),
-		cpuMonitor:               cpuMon,
-		appCtx:                   appCtx,
-		commandLineMbpsCap:       targetRateInMegaBitsPerSec,
-		provideBenchmarkResults:  providePerfAdvice,
+		concurrency:             concurrency,
+		logger:                  common.NewAppLogger(pipeline.LogInfo, azcopyLogPathFolder),
+		jobIDToJobMgr:           newJobIDToJobMgr(),
+		logDir:                  azcopyLogPathFolder,
+		planDir:                 azcopyJobPlanFolder,
+		pacer:                   pacer,
+		slicePool:               common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
+		cacheLimiter:            common.NewCacheLimiter(maxRamBytesToUse),
+		fileCountLimiter:        common.NewCacheLimiter(int64(concurrency.MaxOpenDownloadFiles)),
+		cpuMonitor:              cpuMon,
+		appCtx:                  appCtx,
+		commandLineMbpsCap:      targetRateInMegaBitsPerSec,
+		provideBenchmarkResults: providePerfAdvice,
 		coordinatorChannels: CoordinatorChannels{
 			partsChannel:     partsCh,
 			normalTransferCh: normalTransferCh,
@@ -180,6 +182,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 			entryNotificationCh: make(chan struct{}),
 			exitNotificationCh:  make(chan struct{}),
 			scalebackRequestCh:  make(chan struct{}),
+			requestSlowTuneCh:   make(chan struct{}),
 		},
 		workaroundJobLoggingChannel: make(chan string, 1000), // workaround to support logging from JobsAdmin
 	}
@@ -325,9 +328,6 @@ func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 	lastBytesOnWire := int64(0)
 	lastBytesTime := time.Now()
 	hasHadTimeToStablize := false
-	// TODO: these monitoring intervals are good for uploads (which is all we do in benchmarking now) but
-	//   they're not good for downloads, where throughput can be more variable in the short term.  Consider detecting direction
-	//  (hard to do in JobsAdmin tho...) and increasing these intervals if downloading.
 	initialMonitoringInterval := time.Duration(4 * time.Second)
 	expandedMonitoringInterval := time.Duration(8 * time.Second)
 	throughputMonitoringInterval := initialMonitoringInterval
@@ -361,6 +361,10 @@ func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 			// worker has exited
 			actualConcurrency--
 			atomic.StoreInt32(&ja.atomicCurrentMainPoolSize, int32(actualConcurrency))
+		case <-ja.poolSizingChannels.requestSlowTuneCh:
+			// we've been asked to tune more slowly
+			// TODO: confirm we don't need this: expandedMonitoringInterval *= 2
+			throughputMonitoringInterval = expandedMonitoringInterval
 		case <-time.After(throughputMonitoringInterval):
 			if actualConcurrency == targetConcurrency { // scalebacks can take time. Don't want to do any tuning if actual is not yet aligned to target
 				bytesOnWire := ja.BytesOverWire()
@@ -383,6 +387,17 @@ func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 				lastBytesTime = time.Now()
 			}
 		}
+	}
+}
+
+// RequestTuneSlowly is used to ask for a slower rate of auto-concurrency tuning.
+// Necessary because if there's a download or S2S transfer going on, we need to measure throughputs over longer intervals to make
+// the auto tuning work.
+func (ja *jobsAdmin) RequestTuneSlowly() {
+	select {
+	case ja.poolSizingChannels.requestSlowTuneCh <- struct{}{}:
+	default:
+		return // channel already full, so don't need to add our signal there too, it already has one
 	}
 }
 
@@ -499,6 +514,7 @@ type poolSizingChannels struct {
 	entryNotificationCh chan struct{}
 	exitNotificationCh  chan struct{}
 	scalebackRequestCh  chan struct{}
+	requestSlowTuneCh   chan struct{}
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
