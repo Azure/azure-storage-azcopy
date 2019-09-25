@@ -384,6 +384,7 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 		for {
 			select {
 			case <-lcm.cancelChannel:
+				lcm.Info("Cancellation requested. Beginning clean shutdown...")
 				jc.Cancel(lcm)
 			default:
 				jc.ReportProgressOrExit(lcm)
