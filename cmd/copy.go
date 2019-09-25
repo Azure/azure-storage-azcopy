@@ -819,8 +819,13 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// Strip the SAS from the source and destination whenever there is SAS exists in URL.
 	// Note: SAS could exists in source of S2S copy, even if the credential type is OAuth for destination.
 	cca.source, cca.sourceSAS, err = SplitAuthTokenFromResource(cca.source, from)
+
+	if err != nil {
+		return err
+	}
+
 	jobPartOrder.SourceSAS = cca.sourceSAS
-	jobPartOrder.SourceRoot = cca.source
+	jobPartOrder.SourceRoot, err = GetResourceRoot(cca.source, from)
 
 	if err != nil {
 		return err

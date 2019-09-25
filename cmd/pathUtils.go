@@ -111,12 +111,95 @@ func determineLocationLevel(location string, locationType common.Location, sourc
 
 // ----- ROOT PATH GRABBING -----
 
+// GetResourceRoot should eliminate wildcards and error out in invalid scenarios. This is intended for the jobPartOrder.SourceRoot.
+func GetResourceRoot(resource string, location common.Location) (resourceBase string, err error) {
+	// Don't error-check this until we are in a supported environment
+	resourceURL, err := url.Parse(resource)
+
+	if location.IsRemote() && err != nil {
+		return resource, err
+	}
+
+	// todo: reduce code-duplicateyness, maybe?
+	switch location {
+	case common.ELocation.Unknown(),
+		common.ELocation.Benchmark(): // do nothing
+		return resource, nil
+	case common.ELocation.Local():
+		return cleanLocalPath(getPathBeforeFirstWildcard(resource)), nil
+
+	//noinspection GoNilness
+	case common.ELocation.Blob():
+		bURLParts := azblob.NewBlobURLParts(*resourceURL)
+
+		if bURLParts.ContainerName == "" || strings.Contains(bURLParts.ContainerName, "*") {
+			if bURLParts.BlobName != "" {
+				return resource, errors.New("cannot combine account-level traversal and specific blob names.")
+			}
+
+			bURLParts.ContainerName = ""
+		}
+
+		bURL := bURLParts.URL()
+		return bURL.String(), nil
+
+	//noinspection GoNilness
+	case common.ELocation.File():
+		bURLParts := azfile.NewFileURLParts(*resourceURL)
+
+		if bURLParts.ShareName == "" || strings.Contains(bURLParts.ShareName, "*") {
+			if bURLParts.DirectoryOrFilePath != "" {
+				return resource, errors.New("cannot combine account-level traversal and specific file/folder names.")
+			}
+
+			bURLParts.ShareName = ""
+		}
+
+		bURL := bURLParts.URL()
+		return bURL.String(), nil
+
+	//noinspection GoNilness
+	case common.ELocation.BlobFS():
+		bURLParts := azfile.NewFileURLParts(*resourceURL)
+
+		if bURLParts.ShareName == "" || strings.Contains(bURLParts.ShareName, "*") {
+			if bURLParts.DirectoryOrFilePath != "" {
+				return resource, errors.New("cannot combine account-level traversal and specific file/folder names.")
+			}
+
+			bURLParts.ShareName = ""
+		}
+
+		bURL := bURLParts.URL()
+		return bURL.String(), nil
+
+	// noinspection GoNilness
+	case common.ELocation.S3():
+		s3URLParts, err := common.NewS3URLParts(*resourceURL)
+		common.PanicIfErr(err)
+
+		if s3URLParts.BucketName == "" || strings.Contains(s3URLParts.BucketName, "*") {
+			if s3URLParts.ObjectKey != "" {
+				return resource, errors.New("cannot combine account-level traversal and specific object names")
+			}
+
+			s3URLParts.BucketName = ""
+		}
+
+		s3URL := s3URLParts.URL()
+		return s3URL.String(), nil
+	default:
+		panic(fmt.Sprintf("Location %s is missing from GetResourceRoot", location))
+	}
+}
+
 // resourceBase will always be returned regardless of the location.
 // resourceToken will be separated and returned depending on the location.
 func SplitAuthTokenFromResource(resource string, location common.Location) (resourceBase, resourceToken string, err error) {
 	switch location {
-	case common.ELocation.Local(),
-		common.ELocation.S3(),
+	case common.ELocation.Local():
+		return cleanLocalPath(common.ToExtendedPath(resource)), "", nil
+	case common.ELocation.S3(),
 		common.ELocation.Benchmark(), // cover for benchmark as we generate data for that
 		common.ELocation.Unknown():   // cover for unknown as we treat that as garbage
 		// Local and S3 don't feature URL-embedded tokens

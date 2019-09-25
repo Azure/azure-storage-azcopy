@@ -78,15 +78,20 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	// this if statement ladder remains instead of being separated to help determine valid combinations for sync
 	// consider making a map of valid source/dest combos and consolidating this to generic source/dest setups, akin to the lower if statement
 	cooked.fromTo = inferFromTo(raw.src, raw.dst)
+	var err error
 	if cooked.fromTo == common.EFromTo.Unknown() {
 		return cooked, fmt.Errorf("Unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
 	} else if cooked.fromTo == common.EFromTo.LocalBlob() {
-		cooked.destination, cooked.destinationSAS, _ = SplitAuthTokenFromResource(raw.dst, cooked.fromTo.To())
+		cooked.destination, cooked.destinationSAS, err = SplitAuthTokenFromResource(raw.dst, cooked.fromTo.To())
+		common.PanicIfErr(err)
 	} else if cooked.fromTo == common.EFromTo.BlobLocal() {
-		cooked.source, cooked.sourceSAS, _ = SplitAuthTokenFromResource(raw.src, cooked.fromTo.From())
+		cooked.source, cooked.sourceSAS, err = SplitAuthTokenFromResource(raw.src, cooked.fromTo.From())
+		common.PanicIfErr(err)
 	} else if cooked.fromTo == common.EFromTo.BlobBlob() {
-		cooked.destination, cooked.destinationSAS, _ = SplitAuthTokenFromResource(raw.dst, cooked.fromTo.To())
-		cooked.source, cooked.sourceSAS, _ = SplitAuthTokenFromResource(raw.src, cooked.fromTo.From())
+		cooked.destination, cooked.destinationSAS, err = SplitAuthTokenFromResource(raw.dst, cooked.fromTo.To())
+		common.PanicIfErr(err)
+		cooked.source, cooked.sourceSAS, err = SplitAuthTokenFromResource(raw.src, cooked.fromTo.From())
+		common.PanicIfErr(err)
 	} else {
 		return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, cooked.fromTo)
 	}
@@ -103,7 +108,6 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	// generate a new job ID
 	cooked.jobID = common.NewJobID()
 
-	var err error
 	cooked.blockSize, err = blockSizeInBytes(raw.blockSizeMB)
 	if err != nil {
 		return cooked, err
