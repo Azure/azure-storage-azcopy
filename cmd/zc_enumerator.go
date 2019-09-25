@@ -174,7 +174,7 @@ func initResourceTraverser(resource string, location common.Location, ctx *conte
 			// note to future self: this will cause a merge conflict.
 			// rename source to resource and delete this comment.
 			var err error
-			resource, sas, err = SplitAuthTokenFromResource(source, location)
+			resource, sas, err = SplitAuthTokenFromResource(resource, location)
 
 			if err != nil {
 				return nil, err
