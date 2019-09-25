@@ -19,6 +19,9 @@
    including directory and filenames).
    The new parameters have behaviour that is better defined in complex situations (such as
    recursion).  The `*` wildcard is supported in the pattern parameters, but _not_ in the path ones.
+1. The `remove` command now removes blobs that have snapshots (the blob and all the snapshots are
+   removed). Previously there was a bug where it would hang if snaphots existed, but now it will
+   delete all of them.
 1. There have been two breaking changes to the JSON output that is produced if you request
    JSON-formatted output. The `sync` command's output in JSON has changed for consistency reasons,
    and the final message type, for `copy` and `sync` has changed its name from `Exit` to `EndOfJob`.
