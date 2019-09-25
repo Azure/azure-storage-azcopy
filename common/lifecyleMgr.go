@@ -58,7 +58,6 @@ func GetLifecycleMgr() LifecycleMgr {
 
 // single point of control for all outputs
 type lifecycleMgr struct {
-	taskWaitGroup  sync.WaitGroup // Keep tabs on all running tasks. If an exit or error is called, wait for this.
 	msgQueue       chan outputMessage
 	progressCache  string // useful for keeping job progress on the last line
 	cancelChannel  chan os.Signal
@@ -236,12 +235,6 @@ func (lcm *lifecycleMgr) processOutputMessage() {
 	// and pass them onto the right handler based on the output format
 	for {
 		msgToPrint := <-lcm.msgQueue
-
-		// These are exit conditions.
-		// TODO: Await all jobs finished signal.
-		if msgToPrint.shouldExitProcess() {
-			lcm.taskWaitGroup.Wait()
-		}
 
 		switch lcm.outputFormat {
 		case EOutputFormat.Json():
