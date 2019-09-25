@@ -201,6 +201,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		dstRelPath := cca.makeEscapedRelativePath(false, isDestDir, object)
 
 		transfer := common.NewCopyTransfer(
+			cca.autoDecompress && cca.fromTo.IsDownload(),
 			srcRelPath, dstRelPath,
 			object.lastModifiedTime,
 			object.size,

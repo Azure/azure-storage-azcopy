@@ -28,6 +28,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -125,18 +126,29 @@ func initContainerDecorator(containerName string, processor objectProcessor) obj
 }
 
 const accountTraversalInherentlyRecursiveError = "account copies are an inherently recursive operation, and thus --recursive is required"
+const httpsRecommendedNotice = "NOTE: HTTP is in use for one or more location(s). The use of HTTP is not recommended due to security concerns."
+
+var httpsRecommendationOnce sync.Once
+
+func recommendHttpsIfNecessary(url url.URL) {
+	if strings.EqualFold(url.Scheme, "http") {
+		httpsRecommendationOnce.Do(func() {
+			glcm.Info(httpsRecommendedNotice)
+		})
+	}
+}
 
 // source, location, recursive, and incrementEnumerationCounter are always required.
 // ctx, pipeline are only required for remote resources.
 // followSymlinks is only required for local resources (defaults to false)
 // errorOnDirWOutRecursive is used by copy.
-func initResourceTraverser(source string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel chan string, recursive bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
+func initResourceTraverser(resource string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel chan string, recursive bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
 	var output resourceTraverser
 	var p *pipeline.Pipeline
 
-	// Clean up the source if it's a local path
+	// Clean up the resource if it's a local path
 	if location == common.ELocation.Local() {
-		source = cleanLocalPath(source)
+		resource = cleanLocalPath(resource)
 	}
 
 	// Initialize the pipeline if creds and ctx is provided
@@ -162,25 +174,25 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			// note to future self: this will cause a merge conflict.
 			// rename source to resource and delete this comment.
 			var err error
-			source, sas, err = SplitAuthTokenFromResource(source, location)
+			resource, sas, err = SplitAuthTokenFromResource(source, location)
 
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		output = newListTraverser(source, sas, location, credential, ctx, recursive, toFollow, listofFilesChannel, incrementEnumerationCounter)
+		output = newListTraverser(resource, sas, location, credential, ctx, recursive, toFollow, listofFilesChannel, incrementEnumerationCounter)
 		return output, nil
 	}
 
 	switch location {
 	case common.ELocation.Local():
-		_, err := os.Stat(source)
+		_, err := os.Stat(resource)
 
 		// If wildcard is present and this isn't an existing file/folder, glob and feed the globbed list into a list enum.
-		if strings.Index(source, "*") != -1 && err != nil {
-			basePath := getPathBeforeFirstWildcard(source)
-			matches, err := filepath.Glob(source)
+		if strings.Index(resource, "*") != -1 && err != nil {
+			basePath := getPathBeforeFirstWildcard(resource)
+			matches, err := filepath.Glob(resource)
 
 			if err != nil {
 				return nil, fmt.Errorf("failed to glob: %s", err)
@@ -197,26 +209,28 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 
 			output = newListTraverser(cleanLocalPath(basePath), "", location, nil, nil, recursive, toFollow, globChan, incrementEnumerationCounter)
 		} else {
-			output = newLocalTraverser(source, recursive, toFollow, incrementEnumerationCounter)
+			output = newLocalTraverser(resource, recursive, toFollow, incrementEnumerationCounter)
 		}
 	case common.ELocation.Benchmark():
-		ben, err := newBenchmarkTraverser(source, incrementEnumerationCounter)
+		ben, err := newBenchmarkTraverser(resource, incrementEnumerationCounter)
 		if err != nil {
 			return nil, err
 		}
 		output = ben
 
 	case common.ELocation.Blob():
-		sourceURL, err := url.Parse(source)
+		resourceURL, err := url.Parse(resource)
 		if err != nil {
 			return nil, err
 		}
+
+		recommendHttpsIfNecessary(*resourceURL)
 
 		if ctx == nil || p == nil {
 			return nil, errors.New("a valid credential and context must be supplied to create a blob traverser")
 		}
 
-		burl := azblob.NewBlobURLParts(*sourceURL)
+		burl := azblob.NewBlobURLParts(*resourceURL)
 
 		if burl.ContainerName == "" || strings.Contains(burl.ContainerName, "*") {
 
@@ -224,42 +238,48 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output = newBlobAccountTraverser(sourceURL, *p, *ctx, incrementEnumerationCounter)
+			output = newBlobAccountTraverser(resourceURL, *p, *ctx, incrementEnumerationCounter)
 		} else {
-			output = newBlobTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
 		}
 	case common.ELocation.File():
-		sourceURL, err := url.Parse(source)
+		resourceURL, err := url.Parse(resource)
 		if err != nil {
 			return nil, err
 		}
+
+		recommendHttpsIfNecessary(*resourceURL)
 
 		if ctx == nil || p == nil {
 			return nil, errors.New("a valid credential and context must be supplied to create a file traverser")
 		}
 
-		furl := azfile.NewFileURLParts(*sourceURL)
+		furl := azfile.NewFileURLParts(*resourceURL)
 
 		if furl.ShareName == "" || strings.Contains(furl.ShareName, "*") {
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output = newFileAccountTraverser(sourceURL, *p, *ctx, incrementEnumerationCounter)
+			output = newFileAccountTraverser(resourceURL, *p, *ctx, incrementEnumerationCounter)
 		} else {
-			output = newFileTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+			output = newFileTraverser(resourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
 		}
 	case common.ELocation.BlobFS():
-		sourceURL, err := url.Parse(source)
+		resourceURL, err := url.Parse(resource)
 		if err != nil {
 			return nil, err
 		}
 
-		if ctx == nil || p == nil {
+		// check if credential is also nil here (would never trigger) to tame syntax highlighting.
+		// As a precondition to pipeline p, credential must not be nil anyway.
+		if ctx == nil || p == nil || credential == nil {
 			return nil, errors.New("a valid credential and context must be supplied to create a blobFS traverser")
 		}
 
-		bfsURL := azbfs.NewBfsURLParts(*sourceURL)
+		recommendHttpsIfNecessary(*resourceURL)
+
+		bfsURL := azbfs.NewBfsURLParts(*resourceURL)
 
 		if bfsURL.FileSystemName == "" || strings.Contains(bfsURL.FileSystemName, "*") {
 			// TODO service traverser
@@ -268,17 +288,19 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output = newBlobFSAccountTraverser(sourceURL, *p, *ctx, incrementEnumerationCounter)
+			output = newBlobFSAccountTraverser(resourceURL, *p, *ctx, incrementEnumerationCounter)
 		} else {
-			output = newBlobFSTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+			output = newBlobFSTraverser(resourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
 		}
 	case common.ELocation.S3():
-		sourceURL, err := url.Parse(source)
+		resourceURL, err := url.Parse(resource)
 		if err != nil {
 			return nil, err
 		}
 
-		s3URLParts, err := common.NewS3URLParts(*sourceURL)
+		recommendHttpsIfNecessary(*resourceURL)
+
+		s3URLParts, err := common.NewS3URLParts(*resourceURL)
 		if err != nil {
 			return nil, err
 		}
@@ -294,13 +316,13 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output, err = newS3ServiceTraverser(sourceURL, *ctx, incrementEnumerationCounter)
+			output, err = newS3ServiceTraverser(resourceURL, *ctx, incrementEnumerationCounter)
 
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			output, err = newS3Traverser(sourceURL, *ctx, recursive, incrementEnumerationCounter)
+			output, err = newS3Traverser(resourceURL, *ctx, recursive, incrementEnumerationCounter)
 
 			if err != nil {
 				return nil, err
@@ -311,7 +333,7 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 	}
 
 	if output == nil {
-		return nil, errors.New("sanity check: somehow didn't spawn a traverser")
+		panic("sanity check: somehow didn't spawn a traverser")
 	}
 
 	return output, nil

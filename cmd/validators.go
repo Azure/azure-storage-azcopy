@@ -110,11 +110,11 @@ func inferArgumentLocation(arg string) common.Location {
 	if arg == pipeLocation {
 		return common.ELocation.Pipe()
 	}
-	if startsWith(arg, "https") {
+	if startsWith(arg, "http") {
 		// Let's try to parse the argument as a URL
 		u, err := url.Parse(arg)
 		// NOTE: sometimes, a local path can also be parsed as a url. To avoid thinking it's a URL, check Scheme, Host, and Path
-		if err == nil && u.Scheme != "" || u.Host != "" || u.Path != "" {
+		if err == nil && u.Scheme != "" && u.Host != "" {
 			// Is the argument a URL to blob storage?
 			switch host := strings.ToLower(u.Host); true {
 			// Azure Stack does not have the core.windows.net
@@ -132,15 +132,7 @@ func inferArgumentLocation(arg string) common.Location {
 				return common.ELocation.S3()
 			}
 		}
-	} else {
-		// If we successfully get the argument's file stats, then we'll infer that this argument is a local file
-		//_, err := os.Stat(arg)
-		//if err != nil && !os.IsNotExist(err){
-		//	return ELocation.Unknown()
-		//}
-
-		return common.ELocation.Local()
 	}
 
-	return common.ELocation.Unknown()
+	return common.ELocation.Local()
 }

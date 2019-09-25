@@ -36,15 +36,6 @@ type decompressingWriter struct {
 const decompressingWriterCopyBufferSize = 256 * 1024 // 1/4 the size that we usually write to disk with (elsewhere in codebase). 1/4 to try to keep mem usage a bit lower, without going so small as to compromize perf
 var decompressingWriterBufferPool = NewMultiSizeSlicePool(decompressingWriterCopyBufferSize)
 
-var ECompressionType = CompressionType(0)
-
-type CompressionType uint8
-
-func (CompressionType) None() CompressionType        { return CompressionType(0) }
-func (CompressionType) ZLib() CompressionType        { return CompressionType(1) }
-func (CompressionType) GZip() CompressionType        { return CompressionType(2) }
-func (CompressionType) Unsupported() CompressionType { return CompressionType(255) }
-
 // NewDecompressingWriter returns a WriteCloser which decompresses the data
 // that is written to it, before passing the decompressed data on to a final destination
 func NewDecompressingWriter(destination io.WriteCloser, ct CompressionType) io.WriteCloser {
