@@ -126,7 +126,7 @@ func initContainerDecorator(containerName string, processor objectProcessor) obj
 }
 
 const accountTraversalInherentlyRecursiveError = "account copies are an inherently recursive operation, and thus --recursive is required"
-const httpsRecommendedNotice = "NOTE: HTTP is in use for one or more location(s). The use of HTTP is not recommended due to security concerns." // TODO: I had some trouble figuring out this wording. Any ideas?
+const httpsRecommendedNotice = "NOTE: HTTP is in use for one or more location(s). The use of HTTP is not recommended due to security concerns."
 
 var httpsRecommendationOnce sync.Once
 
