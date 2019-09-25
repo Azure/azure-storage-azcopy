@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
