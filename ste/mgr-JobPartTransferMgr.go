@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -171,16 +170,7 @@ func (jptm *jobPartTransferMgr) ShouldDecompress() bool {
 
 func (jptm *jobPartTransferMgr) GetSourceCompressionType() (common.CompressionType, error) {
 	encoding := jptm.Info().SrcHTTPHeaders.ContentEncoding
-	switch strings.ToLower(encoding) {
-	case "":
-		return common.ECompressionType.None(), nil
-	case "gzip":
-		return common.ECompressionType.GZip(), nil
-	case "deflate":
-		return common.ECompressionType.ZLib(), nil
-	default:
-		return common.ECompressionType.Unsupported(), fmt.Errorf("encoding type '%s' is not recognised as a supported encoding type for auto-decompression", encoding)
-	}
+	return common.GetCompressionType(encoding)
 }
 
 func (jptm *jobPartTransferMgr) Info() TransferInfo {
