@@ -43,12 +43,14 @@ func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		jptm.ReportTransferDone()
 	}
 
-	_, err := srcBlobURL.Delete(jptm.Context(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+	// TODO confirm whether we should add a new flag to allow user to specify whether snapshots should be removed
+	_, err := srcBlobURL.Delete(jptm.Context(), azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
 	if err != nil {
 		// If the delete failed with err 404, i.e resource not found, then mark the transfer as success.
 		if strErr, ok := err.(azblob.StorageError); ok {
 			if strErr.Response().StatusCode == http.StatusNotFound {
 				transferDone(common.ETransferStatus.Success(), nil)
+				return
 			}
 			// If the status code was 403, it means there was an authentication error and we exit.
 			// User can resume the job if completely ordered with a new sas.
@@ -57,9 +59,10 @@ func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 				jptm.Log(pipeline.LogError, errMsg)
 				common.GetLifecycleMgr().Error(errMsg)
 			}
-		} else {
-			transferDone(common.ETransferStatus.Failed(), err)
 		}
+
+		// in all other cases, make the transfer as failed
+		transferDone(common.ETransferStatus.Failed(), err)
 	} else {
 		transferDone(common.ETransferStatus.Success(), nil)
 	}
