@@ -101,7 +101,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc) (err error) {
 			}
 
 			computedRelativePath := strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(queueItem.fullPath))
-			computedRelativePath = cleanLocalPath(filepath.Join(queueItem.relativeBase, computedRelativePath))
+			computedRelativePath = cleanLocalPath(common.GenerateFullPath(queueItem.relativeBase, computedRelativePath))
 			computedRelativePath = strings.TrimPrefix(computedRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 			if fileInfo.Mode()&os.ModeSymlink != 0 {
@@ -131,7 +131,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc) (err error) {
 						relativeBase: computedRelativePath,
 					})
 				} else {
-					glcm.Info(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, filepath.Join(fullPath, computedRelativePath)))
+					glcm.Info(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
 				}
 				return nil
 			} else {
@@ -151,10 +151,10 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc) (err error) {
 
 				if _, ok := seenPaths[result]; !ok {
 					seenPaths[result] = true
-					return walkFunc(filepath.Join(fullPath, computedRelativePath), fileInfo, fileError)
+					return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
 				} else {
 					// Output resulting path of symlink and symlink source
-					glcm.Info(fmt.Sprintf("Ignored already seen file located at %s (found at %s)", filePath, filepath.Join(fullPath, computedRelativePath)))
+					glcm.Info(fmt.Sprintf("Ignored already seen file located at %s (found at %s)", filePath, common.GenerateFullPath(fullPath, computedRelativePath)))
 					return nil
 				}
 			}
@@ -202,7 +202,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 
 				relPath := strings.TrimPrefix(strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(t.fullPath)), common.DeterminePathSeparator(t.fullPath))
 				if !t.followSymlinks && fileInfo.Mode()&os.ModeSymlink != 0 {
-					glcm.Info(fmt.Sprintf("Skipping over symlink at %s because --follow-symlinks is false", filepath.Join(t.fullPath, relPath)))
+					glcm.Info(fmt.Sprintf("Skipping over symlink at %s because --follow-symlinks is false", common.GenerateFullPath(t.fullPath, relPath)))
 					return nil
 				}
 
@@ -244,7 +244,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 						continue
 					} else {
 						// Because this only goes one layer deep, we can just append the filename to fullPath and resolve with it.
-						symlinkPath := filepath.Join(t.fullPath, singleFile.Name())
+						symlinkPath := common.GenerateFullPath(t.fullPath, singleFile.Name())
 						// Evaluate the symlink
 						result, err := filepath.EvalSymlinks(symlinkPath)
 
