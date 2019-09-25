@@ -256,13 +256,25 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		}
 	}
 
+	// Prepare UTF-8 byte order marker
+	utf8BOM := string([]byte{0xEF, 0xBB, 0xBF})
+
 	go func() {
 		defer close(listChan)
 
 		if f != nil {
 			scanner := bufio.NewScanner(f)
+			checkBOM := false
 			for scanner.Scan() {
 				v := scanner.Text()
+
+				// Yes, the UTF-8 BOM has valid characters (butwhytho*10)
+				// Check it on the first line and remove it if necessary.
+				if !checkBOM {
+					v = strings.TrimPrefix(v, utf8BOM)
+					checkBOM = true
+				}
+
 				// empty strings should be ignored, otherwise the source root itself is selected
 				if len(v) > 0 {
 					listChan <- v
