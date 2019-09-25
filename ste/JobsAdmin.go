@@ -91,7 +91,7 @@ var JobsAdmin interface {
 	// returns the current value of bytesOverWire.
 	BytesOverWire() int64
 
-	AddSuccessfulBytesInActiveFiles(n uint64)
+	AddSuccessfulBytesInActiveFiles(n int64)
 
 	// returns number of bytes successfully transferred in transfers that are currently in progress
 	SuccessfulBytesInActiveFiles() uint64
@@ -587,12 +587,16 @@ func (ja *jobsAdmin) BytesOverWire() int64 {
 	return ja.pacer.GetTotalTraffic()
 }
 
-func (ja *jobsAdmin) AddSuccessfulBytesInActiveFiles(n uint64) {
-	atomic.AddInt64(&ja.atomicSuccessfulBytesInActiveFiles, int64(n))
+func (ja *jobsAdmin) AddSuccessfulBytesInActiveFiles(n int64) {
+	atomic.AddInt64(&ja.atomicSuccessfulBytesInActiveFiles, n)
 }
 
 func (ja *jobsAdmin) SuccessfulBytesInActiveFiles() uint64 {
-	return uint64(atomic.LoadInt64(&ja.atomicSuccessfulBytesInActiveFiles))
+	n := atomic.LoadInt64(&ja.atomicSuccessfulBytesInActiveFiles)
+	if n < 0 {
+		n = 0 // should never happen, but would result in nasty over/underflow if it did
+	}
+	return uint64(n)
 }
 
 func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string) bool {
