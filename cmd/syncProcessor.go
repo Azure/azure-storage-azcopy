@@ -26,7 +26,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"path/filepath"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
