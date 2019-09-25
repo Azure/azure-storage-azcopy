@@ -263,7 +263,10 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 			scanner := bufio.NewScanner(f)
 			for scanner.Scan() {
 				v := scanner.Text()
-				listChan <- v
+				// empty strings should be ignored, otherwise the source root itself is selected
+				if len(v) > 0 {
+					listChan <- v
+				}
 			}
 		}
 
@@ -271,7 +274,10 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		includePathList := raw.parsePatterns(raw.includePath)
 
 		for _, v := range includePathList {
-			listChan <- v
+			// empty strings should be ignored, otherwise the source root itself is selected
+			if len(v) > 0 {
+				listChan <- v
+			}
 		}
 	}()
 
@@ -1353,7 +1359,7 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "defines the location of json which has the list of only files to be copied")
 	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "exclude these files when copying. Support use of *.")
 	cpCmd.PersistentFlags().StringVar(&raw.forceWrite, "overwrite", "true", "defines whether to overwrite the conflicting files at the destination. Could be set to true, false, or prompt.")
-	cpCmd.PersistentFlags().BoolVar(&raw.autoDecompress, "decompress", false, "automatically decompress files when downloading, if their content-encoding indicates that they are compressed. The supported content-encoding values are 'gzip' and 'deflate'.")
+	cpCmd.PersistentFlags().BoolVar(&raw.autoDecompress, "decompress", false, "automatically decompress files when downloading, if their content-encoding indicates that they are compressed. The supported content-encoding values are 'gzip' and 'deflate'. File extensions of '.gz'/'.gzip' or '.zz' aren't necessary, but will be removed if present.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system.")
 	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS.")
 	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "", "optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from Container / Account. Use of "+

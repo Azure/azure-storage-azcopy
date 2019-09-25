@@ -49,6 +49,7 @@ func DeleteFilePrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		if strErr, ok := err.(azfile.StorageError); ok {
 			if strErr.Response().StatusCode == http.StatusNotFound {
 				transferDone(common.ETransferStatus.Success(), nil)
+				return
 			}
 			// If the status code was 403, it means there was an authentication error and we exit.
 			// User can resume the job if completely ordered with a new sas.
@@ -57,9 +58,8 @@ func DeleteFilePrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 				jptm.Log(pipeline.LogError, errMsg)
 				common.GetLifecycleMgr().Error(errMsg)
 			}
-		} else {
-			transferDone(common.ETransferStatus.Failed(), err)
 		}
+		transferDone(common.ETransferStatus.Failed(), err)
 	} else {
 		transferDone(common.ETransferStatus.Success(), nil)
 	}
