@@ -381,11 +381,6 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 		// cancelChannel will be notified when os receives os.Interrupt and os.Kill signals
 		signal.Notify(lcm.cancelChannel, os.Interrupt, os.Kill)
 
-		go func() {
-			// time.Sleep(time.Second * 1)
-			// lcm.Info("WAHOO SUICIDE!")
-		}()
-
 		for {
 			select {
 			case <-lcm.cancelChannel:
