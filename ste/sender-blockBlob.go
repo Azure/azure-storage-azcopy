@@ -176,6 +176,8 @@ func (s *blockBlobSenderBase) Cleanup() {
 		defer cancelFn()
 		if jptm.WasCanceled() {
 			// If we cancelled, check if the blob exists.
+			// (We could try to be fancy here, and skip this for single-block blobs that were uploaded with putBLOB,
+			// but better to keep it simple and consistent and avoid coupling this to putListNeed)
 			_, err := s.destBlockBlobURL.GetProperties(deletionContext, azblob.BlobAccessConditions{})
 
 			// If it does NOT exist, attempt to delete it.
