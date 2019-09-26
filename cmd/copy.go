@@ -184,10 +184,24 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 
 	cooked.fromTo = fromTo
 
-	// copy&transform flags to type-safety
 	cooked.stripTopDir = raw.stripTopDir
+
+	// Check if source has a trailing wildcard on a URL
+	if fromTo.From().IsRemote() {
+		// Because local already handles wildcards via a list traverser, we should only handle the trailing wildcard --strip-top-dir inference remotely.
+		// To avoid getting trapped by parsing a URL and losing a sense of which *s are real, strip the SAS token in a """unsafe""" way.
+		splitURL := strings.Split(cooked.source, "?")
+		if strings.HasSuffix(splitURL[0], "/*") { // Ignore %2A
+			cooked.stripTopDir = true
+			splitURL[0] = strings.TrimSuffix(splitURL[0], "/*")
+			cooked.source = strings.Join(splitURL, "?")
+		}
+	}
+
 	cooked.recursive = raw.recursive
 	cooked.followSymlinks = raw.followSymlinks
+
+	// copy&transform flags to type-safety
 	err = cooked.forceWrite.Parse(raw.forceWrite)
 	if err != nil {
 		return cooked, err
@@ -268,8 +282,9 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 			for scanner.Scan() {
 				v := scanner.Text()
 
-				// Yes, the UTF-8 BOM has valid characters (butwhytho*10)
-				// Check it on the first line and remove it if necessary.
+				// Check if the UTF-8 BOM is on the first line and remove it if necessary.
+				// Note that the UTF-8 BOM can be present on the same line feed as the first line of actual data, so just use TrimPrefix.
+				// If the line feed were separate, the empty string would be skipped later.
 				if !checkBOM {
 					v = strings.TrimPrefix(v, utf8BOM)
 					checkBOM = true
