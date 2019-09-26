@@ -199,9 +199,19 @@ func SplitAuthTokenFromResource(resource string, location common.Location) (reso
 	switch location {
 	case common.ELocation.Local():
 		return cleanLocalPath(common.ToExtendedPath(resource)), "", nil
-	case common.ELocation.S3(),
-		common.ELocation.Benchmark(), // cover for benchmark as we generate data for that
-		common.ELocation.Unknown():   // cover for unknown as we treat that as garbage
+	case common.ELocation.S3():
+		// Encoding +s as %20 (space) is important in S3 URLs as this is unsupported in Azure (but %20 can still be used as a space in S3 URLs)
+		var baseURL *url.URL
+		baseURL, err = url.Parse(resource)
+
+		if err != nil {
+			return resource, "", err
+		}
+
+		*baseURL = common.URLExtension{URL: *baseURL}.URLWithPlusDecodedInPath()
+		return baseURL.String(), "", nil
+	case common.ELocation.Benchmark(), // cover for benchmark as we generate data for that
+		common.ELocation.Unknown(): // cover for unknown as we treat that as garbage
 		// Local and S3 don't feature URL-embedded tokens
 		return resource, "", nil
 

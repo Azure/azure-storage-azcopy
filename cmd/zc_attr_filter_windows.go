@@ -22,9 +22,10 @@ package cmd
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type attrFilter struct {
@@ -39,9 +40,8 @@ func (f *attrFilter) doesSupportThisOS() (msg string, supported bool) {
 	return
 }
 
-// TODO: review handling of filename for long path support
 func (f *attrFilter) doesPass(storedObject storedObject) bool {
-	fileName := filepath.Join(f.filePath, storedObject.relativePath)
+	fileName := common.GenerateFullPath(f.filePath, storedObject.relativePath)
 	lpFileName, _ := syscall.UTF16PtrFromString(fileName)
 	attributes, err := syscall.GetFileAttributes(lpFileName)
 
