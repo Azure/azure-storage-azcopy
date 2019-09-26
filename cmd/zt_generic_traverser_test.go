@@ -30,6 +30,7 @@ import (
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/minio/minio-go"
 	chk "gopkg.in/check.v1"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
@@ -40,6 +41,120 @@ import (
 type genericTraverserSuite struct{}
 
 var _ = chk.Suite(&genericTraverserSuite{})
+
+// GetProperties tests.
+// GetProperties does not exist on Blob, as the properties come in the list call.
+// While BlobFS could get properties in the future, it's currently disabled as BFS source S2S isn't set up right now, and likely won't be.
+func (s *genericTraverserSuite) TestFilesGetProperties(c *chk.C) {
+	fsu := getFSU()
+	share, shareName := createNewShare(c, fsu)
+	fileName := generateAzureFileName()
+
+	headers := azfile.FileHTTPHeaders{
+		ContentType:        "text/random",
+		ContentEncoding:    "testEncoding",
+		ContentLanguage:    "en-US",
+		ContentDisposition: "testDisposition",
+		CacheControl:       "testCacheControl",
+	}
+
+	scenarioHelper{}.generateAzureFilesFromList(c, share, []string{fileName})
+	_, err := share.NewRootDirectoryURL().NewFileURL(fileName).SetHTTPHeaders(ctx, headers)
+	c.Assert(err, chk.IsNil)
+	shareURL := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
+
+	pipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
+	// first test reading from the share itself
+	traverser := newFileTraverser(&shareURL, pipeline, ctx, false, true, func() {})
+
+	// embed the check into the processor for ease of use
+	seenContentType := false
+	processor := func(object storedObject) error {
+		// test all attributes
+		c.Assert(object.contentType, chk.Equals, headers.ContentType)
+		c.Assert(object.contentEncoding, chk.Equals, headers.ContentEncoding)
+		c.Assert(object.contentLanguage, chk.Equals, headers.ContentLanguage)
+		c.Assert(object.contentDisposition, chk.Equals, headers.ContentDisposition)
+		c.Assert(object.cacheControl, chk.Equals, headers.CacheControl)
+		seenContentType = true
+		return nil
+	}
+
+	err = traverser.traverse(processor, nil)
+	c.Assert(err, chk.IsNil)
+	c.Assert(seenContentType, chk.Equals, true)
+
+	// then test reading from the filename exactly, because that's a different codepath.
+	seenContentType = false
+	fileURL := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, fileName)
+	traverser = newFileTraverser(&fileURL, pipeline, ctx, false, true, func() {})
+
+	err = traverser.traverse(processor, nil)
+	c.Assert(err, chk.IsNil)
+	c.Assert(seenContentType, chk.Equals, true)
+}
+
+func (s *genericTraverserSuite) TestS3GetProperties(c *chk.C) {
+	client, err := createS3ClientWithMinio(createS3ResOptions{})
+
+	if err != nil {
+		// TODO: Alter all tests that use S3 credentials to just skip instead of failing
+		//       This is useful for local testing, when we don't want to have to sift through errors related to S3 clients not being created
+		//       Just so that we can test locally without interrupting CI.
+		c.Skip("S3-based tests will not be ran as no credentials were supplied.")
+		return // make syntax highlighting happy
+	}
+
+	headers := minio.PutObjectOptions{
+		ContentType:        "text/random",
+		ContentEncoding:    "testEncoding",
+		ContentLanguage:    "en-US",
+		ContentDisposition: "testDisposition",
+		CacheControl:       "testCacheControl",
+	}
+
+	bucketName := generateBucketName()
+	objectName := generateObjectName()
+	err = client.MakeBucket(bucketName, "")
+	defer deleteBucket(c, client, bucketName, false)
+	c.Assert(err, chk.IsNil)
+
+	_, err = client.PutObjectWithContext(ctx, bucketName, objectName, strings.NewReader(objectDefaultData), int64(len(objectDefaultData)), headers)
+	c.Assert(err, chk.IsNil)
+
+	// First test against the bucket
+	s3BucketURL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName)
+
+	traverser, err := newS3Traverser(&s3BucketURL, ctx, false, true, func() {})
+	c.Assert(err, chk.IsNil)
+
+	// Embed the check into the processor for ease of use
+	seenContentType := false
+	processor := func(object storedObject) error {
+		// test all attributes
+		c.Assert(object.contentType, chk.Equals, headers.ContentType)
+		c.Assert(object.contentEncoding, chk.Equals, headers.ContentEncoding)
+		c.Assert(object.contentLanguage, chk.Equals, headers.ContentLanguage)
+		c.Assert(object.contentDisposition, chk.Equals, headers.ContentDisposition)
+		c.Assert(object.cacheControl, chk.Equals, headers.CacheControl)
+		seenContentType = true
+		return nil
+	}
+
+	err = traverser.traverse(processor, nil)
+	c.Assert(err, chk.IsNil)
+	c.Assert(seenContentType, chk.Equals, true)
+
+	// Then, test against the object itself because that's a different codepath.
+	seenContentType = false
+	s3ObjectURL := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, objectName)
+	traverser, err = newS3Traverser(&s3ObjectURL, ctx, false, true, func() {})
+	c.Assert(err, chk.IsNil)
+
+	err = traverser.traverse(processor, nil)
+	c.Assert(err, chk.IsNil)
+	c.Assert(seenContentType, chk.Equals, true)
+}
 
 // Test follow symlink functionality
 func (s *genericTraverserSuite) TestWalkWithSymlinks(c *chk.C) {
@@ -246,6 +361,9 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 		c.Assert(localDummyProcessor.record[0].relativePath, chk.Equals, blobDummyProcessor.record[0].relativePath)
 
 		// Azure File cannot handle names with '/' in them
+		// TODO: Construct a directory URL and then build a file URL atop it in order to solve this portion of the test.
+		//  We shouldn't be excluding things the traverser is actually capable of doing.
+		//  Fix within scenarioHelper.generateAzureFilesFromList, since that's what causes the fail.
 		if !strings.Contains(storedObjectName, "/") {
 			// set up the Azure Share with a single file
 			fileList := []string{storedObjectName}
@@ -254,7 +372,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 			// construct an Azure file traverser
 			filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 			rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, fileList[0])
-			azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, false, func() {})
+			azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, false, false, func() {})
 
 			// invoke the file traversal with a dummy processor
 			fileDummyProcessor := dummyProcessor{}
@@ -291,7 +409,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 
 		// construct a s3 traverser
 		url := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, storedObjectName)
-		S3Traverser, err := newS3Traverser(&url, ctx, false, func() {})
+		S3Traverser, err := newS3Traverser(&url, ctx, false, false, func() {})
 		c.Assert(err, chk.IsNil)
 
 		s3DummyProcessor := dummyProcessor{}
@@ -366,7 +484,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		// construct an Azure File traverser
 		filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 		rawFileURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
-		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, func() {})
+		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, false, func() {})
 
 		// invoke the file traversal with a dummy processor
 		fileDummyProcessor := dummyProcessor{}
@@ -386,7 +504,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 
 		// construct and run a S3 traverser
 		rawS3URL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName)
-		S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, func() {})
+		S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, false, func() {})
 		c.Assert(err, chk.IsNil)
 		s3DummyProcessor := dummyProcessor{}
 		err = S3Traverser.traverse(s3DummyProcessor.process, nil)
@@ -475,7 +593,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		// construct an Azure File traverser
 		filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 		rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, virDirName)
-		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, func() {})
+		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, false, func() {})
 
 		// invoke the file traversal with a dummy processor
 		fileDummyProcessor := dummyProcessor{}
@@ -495,7 +613,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		// construct and run a S3 traverser
 		// directory object keys always end with / in S3
 		rawS3URL := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, virDirName+"/")
-		S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, func() {})
+		S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, false, func() {})
 		c.Assert(err, chk.IsNil)
 		s3DummyProcessor := dummyProcessor{}
 		err = S3Traverser.traverse(s3DummyProcessor.process, nil)

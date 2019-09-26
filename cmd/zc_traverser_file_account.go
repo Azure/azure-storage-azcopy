@@ -31,11 +31,12 @@ import (
 
 // Enumerates an entire files account, looking into each matching share as it goes
 type fileAccountTraverser struct {
-	accountURL   azfile.ServiceURL
-	p            pipeline.Pipeline
-	ctx          context.Context
-	sharePattern string
-	cachedShares []string
+	accountURL    azfile.ServiceURL
+	p             pipeline.Pipeline
+	ctx           context.Context
+	sharePattern  string
+	cachedShares  []string
+	getProperties bool
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter func()
@@ -92,7 +93,7 @@ func (t *fileAccountTraverser) traverse(processor objectProcessor, filters []obj
 
 	for _, v := range shareList {
 		shareURL := t.accountURL.NewShareURL(v).URL()
-		shareTraverser := newFileTraverser(&shareURL, t.p, t.ctx, true, t.incrementEnumerationCounter)
+		shareTraverser := newFileTraverser(&shareURL, t.p, t.ctx, true, t.getProperties, t.incrementEnumerationCounter)
 
 		middlemanProcessor := initContainerDecorator(v, processor)
 
@@ -107,7 +108,7 @@ func (t *fileAccountTraverser) traverse(processor objectProcessor, filters []obj
 	return nil
 }
 
-func newFileAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, incrementEnumerationCounter func()) (t *fileAccountTraverser) {
+func newFileAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, getProperties bool, incrementEnumerationCounter func()) (t *fileAccountTraverser) {
 	fURLparts := azfile.NewFileURLParts(*rawURL)
 	sPattern := fURLparts.ShareName
 
@@ -115,6 +116,6 @@ func newFileAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.C
 		fURLparts.ShareName = ""
 	}
 
-	t = &fileAccountTraverser{p: p, ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter, accountURL: azfile.NewServiceURL(fURLparts.URL(), p), sharePattern: sPattern}
+	t = &fileAccountTraverser{p: p, ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter, accountURL: azfile.NewServiceURL(fURLparts.URL(), p), sharePattern: sPattern, getProperties: getProperties}
 	return
 }

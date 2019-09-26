@@ -142,7 +142,7 @@ func recommendHttpsIfNecessary(url url.URL) {
 // ctx, pipeline are only required for remote resources.
 // followSymlinks is only required for local resources (defaults to false)
 // errorOnDirWOutRecursive is used by copy.
-func initResourceTraverser(resource string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel chan string, recursive bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
+func initResourceTraverser(resource string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel chan string, recursive, getProperties bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
 	var output resourceTraverser
 	var p *pipeline.Pipeline
 
@@ -181,7 +181,7 @@ func initResourceTraverser(resource string, location common.Location, ctx *conte
 			}
 		}
 
-		output = newListTraverser(resource, sas, location, credential, ctx, recursive, toFollow, listofFilesChannel, incrementEnumerationCounter)
+		output = newListTraverser(resource, sas, location, credential, ctx, recursive, toFollow, getProperties, listofFilesChannel, incrementEnumerationCounter)
 		return output, nil
 	}
 
@@ -207,7 +207,7 @@ func initResourceTraverser(resource string, location common.Location, ctx *conte
 				}
 			}()
 
-			output = newListTraverser(cleanLocalPath(basePath), "", location, nil, nil, recursive, toFollow, globChan, incrementEnumerationCounter)
+			output = newListTraverser(cleanLocalPath(basePath), "", location, nil, nil, recursive, toFollow, getProperties, globChan, incrementEnumerationCounter)
 		} else {
 			output = newLocalTraverser(resource, recursive, toFollow, incrementEnumerationCounter)
 		}
@@ -260,10 +260,10 @@ func initResourceTraverser(resource string, location common.Location, ctx *conte
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-
-			output = newFileAccountTraverser(resourceURL, *p, *ctx, incrementEnumerationCounter)
+      
+			output = newFileAccountTraverser(resourceURL, *p, *ctx, getProperties, incrementEnumerationCounter)
 		} else {
-			output = newFileTraverser(resourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+			output = newFileTraverser(resourceURL, *p, *ctx, recursive, getProperties, incrementEnumerationCounter)
 		}
 	case common.ELocation.BlobFS():
 		resourceURL, err := url.Parse(resource)
@@ -316,13 +316,13 @@ func initResourceTraverser(resource string, location common.Location, ctx *conte
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output, err = newS3ServiceTraverser(resourceURL, *ctx, incrementEnumerationCounter)
+			output, err = newS3ServiceTraverser(resourceURL, *ctx, getProperties, incrementEnumerationCounter)
 
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			output, err = newS3Traverser(resourceURL, *ctx, recursive, incrementEnumerationCounter)
+			output, err = newS3Traverser(resourceURL, *ctx, recursive, getProperties, incrementEnumerationCounter)
 
 			if err != nil {
 				return nil, err

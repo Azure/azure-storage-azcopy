@@ -174,7 +174,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 	// construct a file account traverser
 	filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 	rawFSU := scenarioHelper{}.getRawFileServiceURLWithSAS(c)
-	fileAccountTraverser := newFileAccountTraverser(&rawFSU, filePipeline, ctx, func() {})
+	fileAccountTraverser := newFileAccountTraverser(&rawFSU, filePipeline, ctx, false, func() {})
 
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}
@@ -185,7 +185,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 	if testS3 {
 		// construct a s3 service traverser
 		accountURL := scenarioHelper{}.getRawS3AccountURL(c, "")
-		s3ServiceTraverser, err := newS3ServiceTraverser(&accountURL, ctx, func() {})
+		s3ServiceTraverser, err := newS3ServiceTraverser(&accountURL, ctx, false, func() {})
 		c.Assert(err, chk.IsNil)
 
 		// invoke the s3 service traversal with a dummy processor
@@ -319,7 +319,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 	rawFSU := scenarioHelper{}.getRawFileServiceURLWithSAS(c)
 	rawFSU.Path = "/objectmatch*" // set the container name to contain a wildcard
-	fileAccountTraverser := newFileAccountTraverser(&rawFSU, filePipeline, ctx, func() {})
+	fileAccountTraverser := newFileAccountTraverser(&rawFSU, filePipeline, ctx, false, func() {})
 
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}
@@ -344,7 +344,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 		accountURL.BucketName = "objectmatch*" // set the container name to contain a wildcard
 
 		urlOut := accountURL.URL()
-		s3ServiceTraverser, err := newS3ServiceTraverser(&urlOut, ctx, func() {})
+		s3ServiceTraverser, err := newS3ServiceTraverser(&urlOut, ctx, false, func() {})
 		c.Assert(err, chk.IsNil)
 
 		// invoke the s3 service traversal with a dummy processor
