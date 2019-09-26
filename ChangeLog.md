@@ -70,6 +70,14 @@
 
 ### Bug fixes
 
+1. When an AzCopy job is cancelled with CTRL-C, any partially-updated files are now deleted from
+   the destination. Previous releases of AzCopy v10 would just immediately exit, leaving destination files
+   potentially containing an unknown mix of old and new data. E.g. if uploading a new version of a file
+   over top of an old version, cancellation could result in the file being left with some parts
+   containing old data, and some containing new data. This issue affected downloads to local disk and
+   uploads to Azure Files, ADLS Gen 2, page blobs and append blobs. It did not affect transfers to block
+   blobs. (See next bug fix below for block blobs.)
+1. (****TBC say something about when we do and don't delete block blobs****)
 1. Long pathnames (over 260 characters) are now supported everywhere on Windows, including on UNC
    shares.
 1. When supplying a `--content-type` on the command line it's no longer necessary to also specify
@@ -87,7 +95,6 @@
 1. If AzCopy can't check whether it's up to date, it will no longer hang. (Previously, it could hang
    if its version check URL, https://aka.ms/azcopyv10-version-metadata, was unreachable due to
    network routing restrictions.)  
-1. (TBC: cleanup of in-flight files is improved after a cancellation (CTRL-C))
 1. High concurrency values are supported (e.g. over 1000 connections). While these values are seldom
    needed, they are occasionally useful - e.g. for service-to-service transfer of files around 1 MB
    in size.
