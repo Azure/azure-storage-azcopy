@@ -331,9 +331,11 @@ func (jm *jobMgr) setDirection(fromTo common.FromTo) {
 	}
 	if fromTo.IsDownload() {
 		jm.atomicTransferDirection.AtomicStore(common.ETransferDirection.Download())
+		JobsAdmin.RequestTuneSlowly()
 	}
 	if fromTo.IsS2S() {
 		jm.atomicTransferDirection.AtomicStore(common.ETransferDirection.S2SCopy())
+		JobsAdmin.RequestTuneSlowly()
 	}
 }
 

@@ -43,7 +43,19 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource")
 	}
 
-	traverser, err = initResourceTraverser(src, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, func() {})
+	// Infer on download so that we get LMT and MD5 on files download
+	// On S2S transfers the following rules apply:
+	// If preserve properties is enabled, but get properties in backend is disabled, turn it on
+	// If source change validation is enabled on files to remote, turn it on (consider a separate flag entirely?)
+	getRemoteProperties := (cca.fromTo.From() == common.ELocation.File() && !cca.fromTo.To().IsRemote()) || // If download, we still need LMT and MD5 from files.
+		(cca.fromTo.From() == common.ELocation.File() && cca.fromTo.To().IsRemote() && cca.s2sSourceChangeValidation) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties anyway (according to the old code)
+		(cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() && cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
+	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
+	jobPartOrder.S2SSourceChangeValidation = cca.s2sSourceChangeValidation
+	jobPartOrder.S2SDestLengthValidation = cca.CheckLength
+	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
+
+	traverser, err = initResourceTraverser(src, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, func() {})
 
 	if err != nil {
 		return nil, err
@@ -201,6 +213,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		dstRelPath := cca.makeEscapedRelativePath(false, isDestDir, object)
 
 		transfer := common.NewCopyTransfer(
+			cca.autoDecompress && cca.fromTo.IsDownload(),
 			srcRelPath, dstRelPath,
 			object.lastModifiedTime,
 			object.size,
@@ -237,7 +250,7 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst string, ctx *context.Context) 
 		return false
 	}
 
-	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, func() {})
+	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, func() {})
 
 	if err != nil {
 		return false
