@@ -68,14 +68,11 @@ type rawCopyCmdArgs struct {
 	fromTo string
 	//blobUrlForRedirection string
 
-	// TODO remove after refactoring
-	legacyInclude string
-	legacyExclude string
 	// new include/exclude only apply to file names
 	// implemented for remove (and sync) only
 	include               string
 	exclude               string
-	includePath           string
+	includePath           string // NOTE: This gets handled like list-of-files! It may LOOK like a bug, but it is not.
 	excludePath           string
 	includeFileAttributes string
 	excludeFileAttributes string
@@ -85,7 +82,6 @@ type rawCopyCmdArgs struct {
 	recursive         bool
 	stripTopDir       bool
 	followSymlinks    bool
-	withSnapshots     bool
 	autoDecompress    bool
 	// forceWrite flag is used to define the User behavior
 	// to overwrite the existing blobs or not.
@@ -108,9 +104,7 @@ type rawCopyCmdArgs struct {
 	blobType      string
 	blockBlobTier string
 	pageBlobTier  string
-	background    bool
 	output        string // TODO: Is this unused now? replaced with param at root level?
-	acl           string
 	logVerbosity  string
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType string
@@ -194,7 +188,6 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	cooked.stripTopDir = raw.stripTopDir
 	cooked.recursive = raw.recursive
 	cooked.followSymlinks = raw.followSymlinks
-	cooked.withSnapshots = raw.withSnapshots
 	err = cooked.forceWrite.Parse(raw.forceWrite)
 	if err != nil {
 		return cooked, err
@@ -263,13 +256,25 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		}
 	}
 
+	// Prepare UTF-8 byte order marker
+	utf8BOM := string([]byte{0xEF, 0xBB, 0xBF})
+
 	go func() {
 		defer close(listChan)
 
 		if f != nil {
 			scanner := bufio.NewScanner(f)
+			checkBOM := false
 			for scanner.Scan() {
 				v := scanner.Text()
+
+				// Yes, the UTF-8 BOM has valid characters (butwhytho*10)
+				// Check it on the first line and remove it if necessary.
+				if !checkBOM {
+					v = strings.TrimPrefix(v, utf8BOM)
+					checkBOM = true
+				}
+
 				// empty strings should be ignored, otherwise the source root itself is selected
 				if len(v) > 0 {
 					listChan <- v
@@ -298,51 +303,6 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		cooked.listOfFilesChannel = listChan
 	}
 
-	// TODO: When further in the refactor, just check this against a map
-	if cooked.fromTo.From() != common.ELocation.Local() && cooked.fromTo.To() != common.ELocation.Local() {
-		// initialize the include map which contains the list of files to be included
-		// parse the string passed in include flag
-		// more than one file are expected to be separated by ';'
-		cooked.legacyInclude = make(map[string]int)
-		if len(raw.legacyInclude) > 0 {
-			files := strings.Split(raw.legacyInclude, ";")
-			for index := range files {
-				// If split of the include string leads to an empty string
-				// not include that string
-				if len(files[index]) == 0 {
-					continue
-				}
-				// replace the OS path separator in includePath string with AZCOPY_PATH_SEPARATOR
-				// this replacement is done to handle the windows file paths where path separator "\\"
-				includePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-				cooked.legacyInclude[includePath] = index
-			}
-		}
-
-		// initialize the exclude map which contains the list of files to be excluded
-		// parse the string passed in exclude flag
-		// more than one file are expected to be separated by ';'
-		cooked.legacyExclude = make(map[string]int)
-		if len(raw.legacyExclude) > 0 {
-			files := strings.Split(raw.legacyExclude, ";")
-			for index := range files {
-				// If split of the include string leads to an empty string
-				// not include that string
-				if len(files[index]) == 0 {
-					continue
-				}
-				// replace the OS path separator in excludePath string with AZCOPY_PATH_SEPARATOR
-				// this replacement is done to handle the windows file paths where path separator "\\"
-				excludePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-				cooked.legacyExclude[excludePath] = index
-			}
-		}
-	} else {
-		// I do not like this implementation whatsoever, but just for now, we need to circumvent the legacy include and excludes.
-		raw.include = raw.legacyInclude
-		raw.exclude = raw.legacyExclude
-	}
-
 	cooked.metadata = raw.metadata
 	cooked.contentType = raw.contentType
 	cooked.contentEncoding = raw.contentEncoding
@@ -364,9 +324,6 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 
 	cooked.CheckLength = raw.CheckLength
 
-	cooked.background = raw.background
-	cooked.acl = raw.acl
-
 	// if redirection is triggered, avoid printing any output
 	if cooked.isRedirection() {
 		glcm.SetOutputFormat(common.EOutputFormat.None())
@@ -379,6 +336,25 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	case common.EFromTo.LocalBlobFS():
 		if cooked.blobType != common.EBlobType.Detect() {
 			return cooked, fmt.Errorf("blob-type is not supported on ADLS Gen 2")
+		}
+		if cooked.preserveLastModifiedTime {
+			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading")
+		}
+		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
+			cooked.pageBlobTier != common.EPageBlobTier.None() {
+			return cooked, fmt.Errorf("blob-tier is not supported while uploading to ADLS Gen 2")
+		}
+		if cooked.s2sPreserveProperties {
+			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while uploading")
+		}
+		if cooked.s2sPreserveAccessTier {
+			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while uploading")
+		}
+		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
+			return cooked, fmt.Errorf("s2s-handle-invalid-metadata is not supported while uploading")
+		}
+		if cooked.s2sSourceChangeValidation {
+			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
 		}
 	case common.EFromTo.LocalBlob():
 		if cooked.preserveLastModifiedTime {
@@ -420,7 +396,8 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 			return cooked, fmt.Errorf("blob-type is not supported on Azure File")
 		}
 	case common.EFromTo.BlobLocal(),
-		common.EFromTo.FileLocal():
+		common.EFromTo.FileLocal(),
+		common.EFromTo.BlobFSLocal():
 		if cooked.followSymlinks {
 			return cooked, fmt.Errorf("follow-symlinks flag is not supported while downloading")
 		}
@@ -554,25 +531,20 @@ type cookedCopyCmdArgs struct {
 	destinationSAS string
 	fromTo         common.FromTo
 
-	// TODO remove after refactoring
-	legacyInclude map[string]int
-	legacyExclude map[string]int
 	// new include/exclude only apply to file names
 	// implemented for remove (and sync) only
+	// includePathPatterns are handled like a list-of-files. Do not panic. This is not a bug that it is not present here.
 	includePatterns       []string
-	includePathPatterns   []string
 	excludePatterns       []string
 	excludePathPatterns   []string
 	includeFileAttributes []string
 	excludeFileAttributes []string
 
 	// filters from flags
-	listOfFilesToCopy  []string
-	listOfFilesChannel chan string // We make it a pointer so we can check if it exists w/o reading from it & tack things onto it if necessary.
+	listOfFilesChannel chan string // Channels are nullable.
 	recursive          bool
 	stripTopDir        bool
 	followSymlinks     bool
-	withSnapshots      bool
 	forceWrite         common.OverwriteOption
 	autoDecompress     bool
 
@@ -594,8 +566,6 @@ type cookedCopyCmdArgs struct {
 	putMd5                   bool
 	md5ValidationOption      common.HashValidationOption
 	CheckLength              bool
-	background               bool
-	acl                      string
 	logVerbosity             common.LogLevel
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
@@ -794,8 +764,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		AutoDecompress:  cca.autoDecompress,
 		Priority:        common.EJobPriority.Normal(),
 		LogLevel:        cca.logVerbosity,
-		Include:         cca.legacyInclude,
-		Exclude:         cca.legacyExclude,
 		ExcludeBlobType: cca.excludeBlobType,
 		BlobAttributes: common.BlobTransferAttributes{
 			BlobType:                 cca.blobType,
@@ -1393,8 +1361,7 @@ func init() {
 	// filters change which files get transferred
 	cpCmd.PersistentFlags().BoolVar(&raw.stripTopDir, "strip-top-dir", false, "strip the source's root folder from the destination path, akin to \"cp dir/*\". E.g. sourcedir/subdir1/file1 copies to subdir1/file1 on destination; whereas without --strip-top-dir, it copies to sourcedir/subdir1/file1. May be used with and without --recursive. Without --recursive, just copies files under the folder but does not recurse into sub-directories")
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when uploading from local file system.")
-	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "include the snapshots. Only valid when the source is blobs.")
-	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include-pattern", "", "only include these files when copying. "+
+	cpCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "only include these files when copying. "+
 		"Support use of *. Files should be separated with ';'.")
 	cpCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "only include these paths when copying. "+
 		"Does not support using wildcards. Checks relative path prefix. ex. myFolder;myFolder/subDirName/file.pdf")
@@ -1402,7 +1369,7 @@ func init() {
 		"Does not support using wildcards. Checks relative path prefix. ex. myFolder;myFolder/subDirName/file.pdf")
 	// This flag is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "defines the location of json which has the list of only files to be copied")
-	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude-pattern", "", "exclude these files when copying. Support use of *.")
+	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "exclude these files when copying. Support use of *.")
 	cpCmd.PersistentFlags().StringVar(&raw.forceWrite, "overwrite", "true", "defines whether to overwrite the conflicting files at the destination. Could be set to true, false, or prompt.")
 	cpCmd.PersistentFlags().BoolVar(&raw.autoDecompress, "decompress", false, "automatically decompress files when downloading, if their content-encoding indicates that they are compressed. The supported content-encoding values are 'gzip' and 'deflate'. File extensions of '.gz'/'.gzip' or '.zz' aren't necessary, but will be removed if present.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system.")
@@ -1426,9 +1393,6 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. (By default the hash is NOT created.) Only available when uploading.")
 	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "check-md5", common.DefaultHashValidationOption.String(), "specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing.")
 
-	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation.")
-	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
-
 	cpCmd.PersistentFlags().BoolVar(&raw.CheckLength, "check-length", true, "Check the length of a file on the destination after the transfer. If there is a mismatch between source and destination, fail the transfer.")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveProperties, "s2s-preserve-properties", true, "preserve full properties during service to service copy. "+
 		"For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files, to preserve full properties AzCopy needs to send one additional request per object/file.")
@@ -1447,18 +1411,12 @@ func init() {
 	// To achieve better performance and at same time have good control for overall go routine numbers, getting property in ste is introduced,
 	// so properties can be get in parallel, at same time no additional go routines are created for this specific job.
 	// The usage of this hidden flag is to provide fallback to traditional behavior, when service supports returning full properties during list.
-	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true, "get S3 objects' or Azure files' properties in backend. ")
-
-	// not implemented
-	cpCmd.PersistentFlags().MarkHidden("acl")
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true, "get S3 objects' or Azure files' properties in backend, if properties need to be accessed. Properties need to be accessed if s2s-preserve-properties is true, and in certain other cases where we need the properties for modification time checks or MD5 checks")
 
 	// permanently hidden
 	// Hide the list-of-files flag since it is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().MarkHidden("list-of-files")
-	cpCmd.PersistentFlags().MarkHidden("with-snapshots")
-	cpCmd.PersistentFlags().MarkHidden("background-op")
 	cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
-	cpCmd.PersistentFlags().MarkHidden("with-snapshots") // TODO this flag is not supported right now
 
 	// Hide the flush-threshold flag since it is implemented only for CI.
 	cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on ADLS gen 2")
