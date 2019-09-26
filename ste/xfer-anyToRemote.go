@@ -226,6 +226,11 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 
 		// If this is the the very first chunk, do special init steps
 		if startIndex == 0 {
+			// Tell jptm that, from this moment on, it should assume that the destination has been modified
+			// (Some prologues will modify it, some won't; but it safest and clearest to set the flag here.)
+			// (Nothing before here should modify the destination.)
+			jptm.SetDestinationIsModified()
+
 			// Run prologue before first chunk is scheduled.
 			// If file is not local, we'll get no leading bytes, but we still run the prologue in case
 			// there's other initialization to do in the sender.
@@ -295,7 +300,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.Epilogue())
 	defer jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 
-	if jptm.TransferStatus() > 0 && !jptm.WasCanceled() {
+	if jptm.IsLive() {
 		if _, isS2SCopier := s.(s2sCopier); sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation) {
 			// Check the source to see if it was changed during transfer. If it was, mark the transfer as failed.
 			lmt, err := sip.GetLastModifiedTime()
@@ -310,7 +315,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 
 	s.Epilogue() // Perform service-specific cleanup before jptm cleanup. Some services may actually require setup to make the file actually appear.
 
-	if info.DestLengthValidation {
+	if jptm.IsLive() && info.DestLengthValidation {
 		if s2sc, isS2SCopier := s.(s2sCopier); isS2SCopier { // TODO: Implement this for upload and download?
 			destLength, err := s2sc.GetDestinationLength()
 
@@ -326,8 +331,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 
 	s.Cleanup() // Perform jptm cleanup.
 
-	// TODO: finalize and wrap in functions whether 0 is included or excluded in status comparisons
-	if jptm.TransferStatus() == 0 {
+	if jptm.TransferStatusIgnoringCancellation() == 0 {
 		panic("think we're finished but status is notStarted")
 	}
 
@@ -339,7 +343,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 	// it is entirely possible that all the chunks were finished, but then by the time we get to this line
 	// the context is canceled. In this case, a completely transferred file would not be marked "completed".
 	// it's definitely a case that we should be aware of, but given how rare it is, and how low the impact (the user can just resume), we don't have to do anything more to it atm.
-	if jptm.TransferStatus() > 0 && !jptm.WasCanceled() {
+	if jptm.IsLive() {
 		// We know all chunks are done (because this routine was called)
 		// and we know the transfer didn't fail (because just checked its status above and made sure the context was not canceled),
 		// so it must have succeeded. So make sure its not left "in progress" state

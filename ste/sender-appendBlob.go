@@ -150,12 +150,12 @@ func (s *appendBlobSenderBase) Epilogue() {
 func (s *appendBlobSenderBase) Cleanup() {
 	jptm := s.jptm
 	// Cleanup
-	if jptm.TransferStatus() <= 0 || jptm.WasCanceled() { // TODO: <=0 or <0?
-		// If the transfer status value < 0, then transfer failed with some failure
-		// there is a possibility that some uncommitted blocks will be there
+	if jptm.IsDeadInflight() {
+		// There is a possibility that some uncommitted blocks will be there
 		// Delete the uncommitted blobs
-		// TODO: should we really do this deletion?  What if we are in an overwrite-existing-blob
-		//    situation. Deletion has very different semantics then, compared to not deleting.
+		// TODO: particularly, given that this is an APPEND blob, do we really need to delete it?  But if we don't delete it,
+		//   it will still be in an ambigous situation with regard to how much has been added to it.  Probably best to delete
+		//   to be consistent with other
 		deletionContext, cancelFunc := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancelFunc()
 		_, err := s.destAppendBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})

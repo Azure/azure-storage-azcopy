@@ -178,7 +178,7 @@ func (u *blobFSUploader) Epilogue() {
 	jptm := u.jptm
 
 	// flush
-	if jptm.TransferStatus() > 0 && !jptm.WasCanceled() {
+	if jptm.IsLive() {
 		ss := jptm.Info().SourceSize
 		md5Hash, ok := <-u.md5Channel
 		if ok {
@@ -205,9 +205,8 @@ func (u *blobFSUploader) Cleanup() {
 	jptm := u.jptm
 
 	// Cleanup if status is now failed
-	if jptm.TransferStatus() <= 0 {
-		// If the transfer status is less than or equal to 0
-		// then transfer was either failed or cancelled
+	if jptm.IsDeadInflight() {
+		// transfer was either failed or cancelled
 		// the file created in share needs to be deleted, since it's
 		// contents will be at an unknown stage of partial completeness
 		deletionContext, cancelFn := context.WithTimeout(context.Background(), 2*time.Minute)

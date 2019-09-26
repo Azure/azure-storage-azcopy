@@ -556,7 +556,6 @@ func (TransferStatus) SkippedFileAlreadyExists() TransferStatus { return Transfe
 func (ts TransferStatus) ShouldTransfer() bool {
 	return ts == ETransferStatus.NotStarted() || ts == ETransferStatus.Started()
 }
-func (ts TransferStatus) DidFail() bool { return ts < 0 }
 
 // Transfer is any of the three possible state (InProgress, Completer or Failed)
 func (TransferStatus) All() TransferStatus { return TransferStatus(math.MaxInt8) }

@@ -66,7 +66,7 @@ func (u *appendBlobUploader) Epilogue() {
 	jptm := u.jptm
 
 	// set content MD5 (only way to do this is to re-PUT all the headers, this time with the MD5 included)
-	if jptm.TransferStatus() > 0 {
+	if jptm.IsLive() {
 		tryPutMd5Hash(jptm, u.md5Channel, func(md5Hash []byte) error {
 			epilogueHeaders := u.headersToApply
 			epilogueHeaders.ContentMD5 = md5Hash

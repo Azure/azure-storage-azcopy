@@ -122,7 +122,7 @@ func (u *blockBlobUploader) Epilogue() {
 
 	shouldPutBlockList := getPutListNeed(&u.atomicPutListIndicator)
 
-	if jptm.TransferStatus() > 0 && shouldPutBlockList == putListNeeded {
+	if jptm.IsLive() && shouldPutBlockList == putListNeeded {
 
 		md5Hash, ok := <-u.md5Channel
 		if ok {
