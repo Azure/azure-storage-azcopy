@@ -175,29 +175,22 @@ func (s *blockBlobSenderBase) Cleanup() {
 		deletionContext, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancelFn()
 		if jptm.WasCanceled() {
-			// If we cancelled, check if the blob exists.
-			// (We could try to be fancy here, and skip this for single-block blobs that were uploaded with putBLOB,
-			// but better to keep it simple and consistent and avoid coupling this to putListNeed)
-			_, err := s.destBlockBlobURL.GetProperties(deletionContext, azblob.BlobAccessConditions{})
-
-			// If it does NOT exist, attempt to delete it.
-			// Require BlobNotFound. A valid SAS token will receive AuthorizationPermissionMismatch in the event it doesn't have read perms.
-			// Thus, if a SAS token had write and delete permissions, we wouldn't know any better than to just delete the blob if we didn't check what kind of error was present.
-			if stgErr, ok := err.(azblob.StorageError); ok && stgErr.ServiceCode() == azblob.ServiceCodeBlobNotFound {
+			// If we cancelled, and the only blocks that exist are uncommitted, then clean them up.
+			// This prevents customer paying for their storage for a week until they get garbage collected, and it
+			// also prevents any issues with "too many uncommitted blocks" if user tries to upload the blob again in future.
+			// But if there are committed blocks, leave them there (since they still safely represent the state before our job even started)
+			blockList, err := s.destBlockBlobURL.GetBlockList(deletionContext, azblob.BlockListAll, azblob.LeaseAccessConditions{})
+			hasUncommittedOnly := err == nil && len(blockList.CommittedBlocks) == 0 && len(blockList.UncommittedBlocks) > 0
+			if hasUncommittedOnly {
+				jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, "Deleting uncommitted destination blob due to cancellation")
 				// Delete can delete uncommitted blobs.
 				_, _ = s.destBlockBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 			}
 		} else {
+			// TODO: review (one last time) should we really do this?  Or should we just give better error messages on "too many uncommitted blocks" errors
+			jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, "Deleting destination blob due to failure")
 			_, _ = s.destBlockBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 		}
-
-		// TODO: question, is it OK to remoe this logging of failures (since there's no adverse effect of failure)
-		//  if stErr, ok := err.(azblob.StorageError); ok && stErr.Response().StatusCode != http.StatusNotFound {
-		// If the delete failed with Status Not Found, then it means there were no uncommitted blocks.
-		// Other errors report that uncommitted blocks are there
-		// bbu.jptm.LogError(bbu.blobURL.String(), "Deleting uncommitted blocks", err)
-		//  }
-
 	}
 }
 
