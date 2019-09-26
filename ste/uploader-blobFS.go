@@ -138,7 +138,7 @@ func (u *blobFSUploader) RemoteFileExists() (bool, error) {
 	return remoteObjectExists(u.fileURL.GetProperties(u.jptm.Context()))
 }
 
-func (u *blobFSUploader) Prologue(state common.PrologueState) {
+func (u *blobFSUploader) Prologue(state common.PrologueState) (destinationModified bool) {
 	jptm := u.jptm
 
 	u.flushThreshold = int64(u.chunkSize * ADLSFlushThreshold)
@@ -146,11 +146,13 @@ func (u *blobFSUploader) Prologue(state common.PrologueState) {
 	h := jptm.BfsDstData(state.LeadingBytes)
 	u.creationTimeHeaders = &h
 	// Create file with the source size
+	destinationModified = true
 	_, err := u.fileURL.Create(u.jptm.Context(), h) // note that "create" actually calls "create path"
 	if err != nil {
 		u.jptm.FailActiveUpload("Creating file", err)
 		return
 	}
+	return
 }
 
 func (u *blobFSUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {

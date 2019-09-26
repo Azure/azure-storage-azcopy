@@ -428,13 +428,16 @@ func (jptm *jobPartTransferMgr) SetErrorCode(errorCode int32) {
 func (jptm *jobPartTransferMgr) Cancel()           { jptm.cancel() }
 func (jptm *jobPartTransferMgr) WasCanceled() bool { return jptm.ctx.Err() != nil }
 
-// SetStarted records that work has actually started
+// SetDestinationIsModified tells the jptm that it should consider the destination to have been modified
 func (jptm *jobPartTransferMgr) SetDestinationIsModified() {
-	atomic.StoreUint32(&jptm.atomicDestModifiedIndicator, 1)
+	old := atomic.SwapUint32(&jptm.atomicDestModifiedIndicator, 1)
 	// TODO: one day it might be cleaner to simply transition the TransferStatus
 	//   from NotStarted to Started here. However, that's potentially a non-trivial change
 	//   because the default is currently (2019) "Started".  So the NotStarted state is never used.
 	//   Starting to use it would require analysis and testing that we don't have time for right now.
+	if old == 0 {
+		jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, "destination modified flag is set to true")
+	}
 }
 
 func (jptm *jobPartTransferMgr) hasStartedWork() bool {

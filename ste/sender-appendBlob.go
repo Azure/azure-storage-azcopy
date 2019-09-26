@@ -129,18 +129,20 @@ func (s *appendBlobSenderBase) generateAppendBlockToRemoteFunc(id common.ChunkID
 	})
 }
 
-func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) {
+func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
 	if ps.CanInferContentType() {
 		// sometimes, specifically when reading local files, we have more info
 		// about the file type at this time than what we had before
 		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
 	}
 
+	destinationModified = true
 	_, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{})
 	if err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}
+	return
 }
 
 func (s *appendBlobSenderBase) Epilogue() {

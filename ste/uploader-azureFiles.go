@@ -97,9 +97,11 @@ func (u *azureFilesUploader) RemoteFileExists() (bool, error) {
 	return remoteObjectExists(u.fileURL.GetProperties(u.jptm.Context()))
 }
 
-func (u *azureFilesUploader) Prologue(state common.PrologueState) {
+func (u *azureFilesUploader) Prologue(state common.PrologueState) (destinationModified bool) {
 	jptm := u.jptm
 	info := jptm.Info()
+
+	destinationModified = true
 
 	// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
 	err := CreateParentDirToRoot(jptm.Context(), u.fileURL, u.pipeline)
@@ -118,6 +120,8 @@ func (u *azureFilesUploader) Prologue(state common.PrologueState) {
 
 	// Save headers to re-use, with same values, in epilogue
 	u.creationTimeHeaders = &fileHTTPHeaders
+
+	return
 }
 
 func (u *azureFilesUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {

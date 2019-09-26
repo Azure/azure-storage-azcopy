@@ -226,15 +226,13 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 
 		// If this is the the very first chunk, do special init steps
 		if startIndex == 0 {
-			// Tell jptm that, from this moment on, it should assume that the destination has been modified
-			// (Some prologues will modify it, some won't; but it safest and clearest to set the flag here.)
-			// (Nothing before here should modify the destination.)
-			jptm.SetDestinationIsModified()
-
 			// Run prologue before first chunk is scheduled.
 			// If file is not local, we'll get no leading bytes, but we still run the prologue in case
 			// there's other initialization to do in the sender.
-			s.Prologue(ps)
+			modified := s.Prologue(ps)
+			if modified {
+				jptm.SetDestinationIsModified()
+			}
 		}
 
 		// schedule the chunk job/msg
