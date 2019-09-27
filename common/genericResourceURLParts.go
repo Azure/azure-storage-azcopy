@@ -47,6 +47,22 @@ func NewGenericResourceURLParts(resourceURL url.URL, location Location) GenericR
 	return g
 }
 
+func (g GenericResourceURLParts) GetContainerName() string {
+	switch g.location {
+	case ELocation.Blob():
+		return g.blobURLParts.ContainerName
+	case ELocation.File():
+		return g.fileURLParts.ShareName
+	case ELocation.BlobFS():
+		return g.bfsURLParts.FileSystemName
+	case ELocation.S3():
+		return g.s3URLParts.BucketName
+
+	default:
+		panic(fmt.Sprintf("%s is an invalid location for GenericResourceURLParts", g.location))
+	}
+}
+
 func (g GenericResourceURLParts) GetObjectName() string {
 	switch g.location {
 	case ELocation.Blob():
