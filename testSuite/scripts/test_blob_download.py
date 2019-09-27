@@ -10,6 +10,31 @@ import unittest
 
 class Blob_Download_User_Scenario(unittest.TestCase):
 
+    # test_download_1kb_blob_to_null verifies that a 1kb blob can be downloaded to null and the md5 can be checked successfully
+    def test_download_1kb_blob_to_null(self):
+        # create file of size 1kb
+        filename = "test_1kb_blob_upload_download_null.txt"
+        file_path = util.create_test_file(filename, 1024)
+
+        # upload 1kb using azcopy
+        src = file_path
+        dst = util.test_container_url
+        result = util.Command("copy").add_arguments(src).add_arguments(dst). \
+            add_flags("log-level", "info").add_flags("put-md5", "true").execute_azcopy_copy_command()
+        self.assertTrue(result)
+
+        # verify the uploaded blob
+        resource_url = util.get_resource_sas(filename)
+        result = util.Command("testBlob").add_arguments(file_path).add_arguments(resource_url).execute_azcopy_verify()
+        self.assertTrue(result)
+
+        # downloading the uploaded blob to devnull
+        # note we have no tests to verify the success of check-md5. TODO: remove this when fault induction is introduced
+        src = util.get_resource_sas(filename)
+        dst = os.devnull
+        result = util.Command("copy").add_arguments(src).add_arguments(dst).add_flags("log-level", "info"). \
+            add_flags("check-md5", "FailIfDifferentOrMissing")
+
     # test_download_1kb_blob verifies the download of 1Kb blob using azcopy.
     def test_download_1kb_blob(self):
         # create file of size 1KB.
