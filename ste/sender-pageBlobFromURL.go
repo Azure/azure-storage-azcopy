@@ -50,7 +50,7 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipe
 			// if the source is page blob, preserve source's blob tier.
 			destBlobTier = blobSrcInfoProvider.BlobTier()
 
-			// also get the page ranges so that we can skip the empty parts at the expense of one HTTP request
+			// capture the necessary info so that we can perform optimizations later
 			pageRangeOptimizer = newPageRangeOptimizer(azblob.NewPageBlobURL(*srcURL, p),
 				context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion))
 		}

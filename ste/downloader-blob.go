@@ -72,8 +72,7 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 		if bd.pageRangeOptimizer != nil && !bd.pageRangeOptimizer.doesRangeContainData(
 			azblob.PageRange{Start: id.OffsetInFile(), End: id.OffsetInFile() + length - 1}) {
 
-			// TODO confirm this is the right wait reason
-			jptm.LogChunkStatus(id, common.EWaitReason.Body())
+			// queue an empty chunk
 			err := destWriter.EnqueueChunk(jptm.Context(), id, length, dummyReader{}, false)
 			if err != nil {
 				jptm.FailActiveDownload("Enqueuing chunk", err)

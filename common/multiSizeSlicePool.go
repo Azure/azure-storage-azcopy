@@ -157,17 +157,17 @@ func (mp *multiSizeSlicePool) RentSlice(desiredSize uint32) []byte {
 
 	// try to get a pooled slice
 	if typedSlice := pool.Get(); typedSlice != nil {
-		// Capacity will be equal to maxCapInSlot.
-		// Here we set len to the exact desired size that was requested
+		// clear out the entire slice up to the capacity
+		// a zero-ing-out loop written in the right form in Go, will be automatically turned into a call to memclr,
+		// which is an optimized Go runtime routine written in assembler
+		// more info here: https://github.com/golang/go/commit/f03c9202c43e0abb130669852082117ca50aa9b1
+		typedSlice = typedSlice[0:maxCapInSlot]
+		for i := range typedSlice {
+			typedSlice[i] = 0
+		}
+
+		// here we set len to the exact desired size that was requested
 		typedSlice = typedSlice[0:desiredSize]
-		// We do not zero out the content of the slice, so it will still have the content it had
-		// the previous time it was used (before it was returned to the pool)
-		// Why don't we zero it out? Because there would be some performance cost to doing so.
-		// So instead, we rely on the caller to user io.ReadFull or similar, to fully populate the
-		// returned slice (up to its len) with their own data.
-		// A possible alternative would be to change this to return bytes.Buffers instead of slices.
-		// That would require changes to the usage of the returned objects too, since they are Readers/Writers not slices.
-		// TODO: Question: are we happy with leaving this as it is?
 		return typedSlice
 	}
 
