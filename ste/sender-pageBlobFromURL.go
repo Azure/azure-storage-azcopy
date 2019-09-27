@@ -23,6 +23,7 @@ package ste
 import (
 	"context"
 	"net/url"
+	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -145,6 +146,13 @@ func newPageRangeOptimizer(srcPageBlobURL azblob.PageBlobURL, ctx context.Contex
 }
 
 func (p *pageRangeOptimizer) fetchPages() {
+	// don't fetch page blob list if optimizations are not desired,
+	// the lack of page list indicates that there's data everywhere
+	if !strings.EqualFold(common.GetLifecycleMgr().GetEnvironmentVariable(
+		common.EEnvironmentVariable.OptimizeSparsePageBlobTransfers()), "true") {
+		return
+	}
+
 	// according to the REST API documentation:
 	// in a highly fragmented page blob with a large number of writes,
 	// a Get Page Ranges request can fail due to an internal server timeout.
