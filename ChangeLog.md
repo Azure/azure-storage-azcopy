@@ -5,15 +5,17 @@
 
 ### Breaking changes
 
-1. (TBC based on outcome of backslash escape vs --strip-top-dir)  The `*` character is no longer supported as a wildcard in URLs.  (It
-   remains supported in local file paths.)
-   1. The one execption is that `/*` is still allowed at the very end of the "path" section of a
+1. The `*` character is no longer supported as a wildcard in URLs, except for the two exceptions
+   noted below. It remains supported in local file paths.
+   1. The first execption is that `/*` is still allowed at the very end of the "path" section of a
       URL. This is illustrated by the difference between these two source URLs:
       `https://account/container/virtual?SAS` and 
       `https://account/container/virtualDir/*?SAS`.  The former copies the virtual directory
       `virtualDir` by creating a folder of that name at the destination.  The latter copies the
-      _contents_ of `virtual` dir directly into the target without creating a folder named "virtualDir".
-   1. If you need to refer a literal `*` in the name of a blob, e.g. for a blob named "*", escape it with a backslash as `\*`
+      _contents_ of `virtual` dir directly into the target without creating a folder named
+      "virtualDir".'
+   1. The second exception is when you are transferring multiple _whole_ containers (or S3 buckets). You can
+      use * as a wildcard in the container or bucket name. 
 1. The `--include` and `--exclude` parameters have been replaced by `--include-pattern` and
    `--exclude-pattern` (for filenames) and `--include-path` and `--exclude-path` (for paths,
    including directory and filenames).
@@ -66,7 +68,11 @@
    should not be modified.  It does not affect the number of HTTP connections, which is still
    controlled by `AZCOPY_CONCURRENCY_VALUE`.
 1. The values of key environment variables are listed at the start of the log file.
-1. An official 32-bit build is now released, in addition to the usual 64-bit builds. (TBC: For which OS's?)
+1. An official 32-bit build is now released, in addition to the usual 64-bit builds. (TBC: For which
+   OS's?)
+1. If you need to refer a literal `*` in the name of a blob or Azure Files file, e.g. for a blob
+   named "*", escape the * using standard URL escaping. To do this, replace the * with the following
+   character sequence: %2A 
 
 ### Bug fixes
 
