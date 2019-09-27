@@ -182,6 +182,10 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	cooked.source = raw.src
 	cooked.destination = raw.dst
 
+	if strings.EqualFold(cooked.destination, common.Dev_Null) && runtime.GOOS == "windows" {
+		cooked.destination = common.Dev_Null // map all capitalizations of "NUL"/"nul" to one because (on Windows) they all mean the same thing
+	}
+
 	cooked.fromTo = fromTo
 
 	// copy&transform flags to type-safety
@@ -951,14 +955,16 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		bfsUrl := bfsParts.URL()
 		cca.destination = bfsUrl.String() // this escapes spaces in the destination
 	case common.ELocation.Local():
-		var result string
-		result, err = filepath.Abs(cca.destination)
+		if cca.destination != common.Dev_Null { // don't mess at all with this special marker
+			var result string
+			result, err = filepath.Abs(cca.destination)
 
-		if err != nil {
-			return err
+			if err != nil {
+				return err
+			}
+
+			cca.destination = cleanLocalPath(result)
 		}
-
-		cca.destination = cleanLocalPath(result)
 	}
 
 	// set the root destination after it's been cleaned
