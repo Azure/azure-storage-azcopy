@@ -77,7 +77,7 @@ func (t *blobTraverser) getPropertiesIfSingleBlob() (*azblob.BlobGetPropertiesRe
 	return nil, false, blobPropertiesErr
 }
 
-func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilter) (err error) {
+func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
 	blobUrlParts := azblob.NewBlobURLParts(*t.rawURL)
 	util := copyHandlerUtil{}
 
@@ -100,6 +100,7 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 		}
 
 		storedObject := newStoredObject(
+			preprocessor,
 			getObjectNameOnly(blobUrlParts.BlobName),
 			"",
 			blobProperties.LastModified(),
@@ -165,6 +166,7 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 			}
 
 			storedObject := newStoredObject(
+				preprocessor,
 				getObjectNameOnly(blobInfo.Name),
 				relativePath,
 				blobInfo.Properties.LastModified,

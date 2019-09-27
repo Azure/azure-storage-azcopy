@@ -163,7 +163,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc) (err error) {
 	return
 }
 
-func (t *localTraverser) traverse(processor objectProcessor, filters []objectFilter) (err error) {
+func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 
 	if err != nil {
@@ -178,6 +178,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 
 		return processIfPassedFilters(filters,
 			newStoredObject(
+				preprocessor,
 				singleFileInfo.Name(),
 				"",
 				singleFileInfo.ModTime(),
@@ -212,6 +213,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 
 				return processIfPassedFilters(filters,
 					newStoredObject(
+						preprocessor,
 						fileInfo.Name(),
 						strings.ReplaceAll(relPath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
 						fileInfo.ModTime(),
@@ -278,6 +280,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 
 				err := processIfPassedFilters(filters,
 					newStoredObject(
+						preprocessor,
 						singleFile.Name(),
 						strings.ReplaceAll(relativePath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
 						singleFile.ModTime(),

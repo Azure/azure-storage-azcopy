@@ -83,7 +83,7 @@ func (t *fileAccountTraverser) listContainers() ([]string, error) {
 	}
 }
 
-func (t *fileAccountTraverser) traverse(processor objectProcessor, filters []objectFilter) error {
+func (t *fileAccountTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) error {
 	// listContainers will return the cached share list if shares have already been listed by this traverser.
 	shareList, err := t.listContainers()
 
@@ -95,9 +95,9 @@ func (t *fileAccountTraverser) traverse(processor objectProcessor, filters []obj
 		shareURL := t.accountURL.NewShareURL(v).URL()
 		shareTraverser := newFileTraverser(&shareURL, t.p, t.ctx, true, t.getProperties, t.incrementEnumerationCounter)
 
-		middlemanProcessor := initContainerDecorator(v, processor)
+		preprocessor = preprocessor.FollowedBy(newContainerDecorator(v))
 
-		err = shareTraverser.traverse(middlemanProcessor, filters)
+		err = shareTraverser.traverse(preprocessor, processor, filters)
 
 		if err != nil {
 			LogStdoutAndJobLog(fmt.Sprintf("failed to list files in share %s: %s", v, err))
