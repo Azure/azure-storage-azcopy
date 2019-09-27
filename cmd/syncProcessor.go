@@ -55,11 +55,12 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int)
 			PutMd5:                   cca.putMd5,
 			MD5ValidationOption:      cca.md5ValidationOption,
 			BlockSizeInBytes:         cca.blockSize},
-		ForceWrite:                common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
-		LogLevel:                  cca.logVerbosity,
-		S2SSourceChangeValidation: true,
-		S2SDestLengthValidation:   true,
-		S2SGetPropertiesInBackend: true,
+		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
+		LogLevel:                       cca.logVerbosity,
+		S2SSourceChangeValidation:      true,
+		S2SDestLengthValidation:        true,
+		S2SGetPropertiesInBackend:      true,
+		S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
 	}
 
 	reportFirstPart := func() { cca.setFirstPartOrdered() }

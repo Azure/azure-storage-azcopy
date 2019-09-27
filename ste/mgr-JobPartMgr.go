@@ -12,8 +12,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	// there is a bug in Goland where this dependency kept getting deleted with goimport
-	// it appears that this does not happen when an alias is in place
 	autoProxy "github.com/mattn/go-ieproxy"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"

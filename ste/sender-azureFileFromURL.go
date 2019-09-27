@@ -73,6 +73,4 @@ func (u *urlToAzureFileCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 	})
 }
 
-func (u *urlToAzureFileCopier) Epilogue() {
-	// TODO replicate the source properties
-}
+func (u *urlToAzureFileCopier) Epilogue() {}
