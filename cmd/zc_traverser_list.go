@@ -78,6 +78,9 @@ func (l *listTraverser) traverse(processor objectProcessor, filters []objectFilt
 			return processor(object)
 		}
 
+		// The child traversers handle filters.
+		// Thus, --include-path xyz;abc --exclude-path def will actually exclude directory xyz/def and abc/def.
+		// If we're not satisfied with this, we need to make child traversers aware they are a part of a meta traverser.
 		err = childTraverser.traverse(preProcessor, filters)
 		if err != nil {
 			glcm.Info(fmt.Sprintf("Skipping %s as it cannot be scanned due to error: %s", childPath, err))

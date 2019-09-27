@@ -27,6 +27,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
@@ -43,7 +44,7 @@ func newLocalTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (*localTrav
 		fullPath = cca.destination
 	}
 
-	if strings.ContainsAny(fullPath, "*?") {
+	if strings.ContainsAny(strings.TrimPrefix(fullPath, common.EXTENDED_PATH_PREFIX), "*?") {
 		return nil, errors.New("illegal local path, no pattern matching allowed for sync command")
 	}
 

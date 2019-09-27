@@ -26,7 +26,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"path/filepath"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -40,8 +39,8 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int)
 		JobID:           cca.jobID,
 		CommandString:   cca.commandString,
 		FromTo:          cca.fromTo,
-		SourceRoot:      replacePathSeparators(cca.source),
-		DestinationRoot: replacePathSeparators(cca.destination),
+		SourceRoot:      consolidatePathSeparators(cca.source),
+		DestinationRoot: consolidatePathSeparators(cca.destination),
 
 		// authentication related
 		CredentialInfo: cca.credentialInfo,
@@ -171,7 +170,7 @@ type localFileDeleter struct {
 
 func (l *localFileDeleter) deleteFile(object storedObject) error {
 	glcm.Info("Deleting extra file: " + object.relativePath)
-	return os.Remove(filepath.Join(l.rootPath, object.relativePath))
+	return os.Remove(common.GenerateFullPath(l.rootPath, object.relativePath))
 }
 
 func newSyncBlobDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor, error) {

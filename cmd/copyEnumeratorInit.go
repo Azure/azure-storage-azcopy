@@ -324,7 +324,7 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName, dstWithSAS strin
 	// We only need to create "containers" on local and blob.
 	switch cca.fromTo.To() {
 	case common.ELocation.Local():
-		err = os.MkdirAll(filepath.Join(cca.destination, containerName), os.ModeDir|os.ModePerm)
+		err = os.MkdirAll(common.GenerateFullPath(cca.destination, containerName), os.ModeDir|os.ModePerm)
 	case common.ELocation.Blob():
 		accountRoot, err := GetAccountRoot(dstWithSAS, cca.fromTo.To())
 

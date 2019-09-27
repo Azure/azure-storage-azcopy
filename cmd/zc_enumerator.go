@@ -169,14 +169,19 @@ func initResourceTraverser(resource string, location common.Location, ctx *conte
 
 	// Feed list of files channel into new list traverser, separate SAS.
 	if listofFilesChannel != nil {
-		splitsrc := strings.Split(resource, "?")
 		sas := ""
+		if location.IsRemote() {
+			// note to future self: this will cause a merge conflict.
+			// rename source to resource and delete this comment.
+			var err error
+			resource, sas, err = SplitAuthTokenFromResource(resource, location)
 
-		if len(splitsrc) > 1 {
-			sas = splitsrc[1]
+			if err != nil {
+				return nil, err
+			}
 		}
 
-		output = newListTraverser(splitsrc[0], sas, location, credential, ctx, recursive, toFollow, getProperties, listofFilesChannel, incrementEnumerationCounter)
+		output = newListTraverser(resource, sas, location, credential, ctx, recursive, toFollow, getProperties, listofFilesChannel, incrementEnumerationCounter)
 		return output, nil
 	}
 
@@ -198,7 +203,7 @@ func initResourceTraverser(resource string, location common.Location, ctx *conte
 			go func() {
 				defer close(globChan)
 				for _, v := range matches {
-					globChan <- strings.TrimPrefix(strings.ReplaceAll(v, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING), basePath)
+					globChan <- strings.TrimPrefix(v, basePath)
 				}
 			}()
 

@@ -24,18 +24,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
-	"net/url"
-	"strings"
-
-	"sync/atomic"
-
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/spf13/cobra"
 )
@@ -75,46 +71,43 @@ func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []strin
 	return
 }
 
-// given a valid URL, parse out the SAS portion
-func (raw *rawSyncCmdArgs) separateSasFromURL(rawURL string) (cleanURL string, sas string) {
-	fromUrl, _ := url.Parse(rawURL)
-
-	// TODO add support for other service URLs
-	blobParts := azblob.NewBlobURLParts(*fromUrl)
-	sas = blobParts.SAS.Encode()
-
-	// get clean URL without SAS
-	blobParts.SAS = azblob.SASQueryParameters{}
-	bUrl := blobParts.URL()
-	cleanURL = bUrl.String()
-
-	return
-}
-
 // validates and transform raw input into cooked input
 func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked := cookedSyncCmdArgs{}
 
+	// this if statement ladder remains instead of being separated to help determine valid combinations for sync
+	// consider making a map of valid source/dest combos and consolidating this to generic source/dest setups, akin to the lower if statement
 	cooked.fromTo = inferFromTo(raw.src, raw.dst)
+	var err error
 	if cooked.fromTo == common.EFromTo.Unknown() {
 		return cooked, fmt.Errorf("Unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
 	} else if cooked.fromTo == common.EFromTo.LocalBlob() {
-		cooked.source = cleanLocalPath(raw.src)
-		cooked.destination, cooked.destinationSAS = raw.separateSasFromURL(raw.dst)
+		cooked.destination, cooked.destinationSAS, err = SplitAuthTokenFromResource(raw.dst, cooked.fromTo.To())
+		common.PanicIfErr(err)
 	} else if cooked.fromTo == common.EFromTo.BlobLocal() {
-		cooked.source, cooked.sourceSAS = raw.separateSasFromURL(raw.src)
-		cooked.destination = cleanLocalPath(raw.dst)
+		cooked.source, cooked.sourceSAS, err = SplitAuthTokenFromResource(raw.src, cooked.fromTo.From())
+		common.PanicIfErr(err)
 	} else if cooked.fromTo == common.EFromTo.BlobBlob() {
-		cooked.source, cooked.sourceSAS = raw.separateSasFromURL(raw.src)
-		cooked.destination, cooked.destinationSAS = raw.separateSasFromURL(raw.dst)
+		cooked.destination, cooked.destinationSAS, err = SplitAuthTokenFromResource(raw.dst, cooked.fromTo.To())
+		common.PanicIfErr(err)
+		cooked.source, cooked.sourceSAS, err = SplitAuthTokenFromResource(raw.src, cooked.fromTo.From())
+		common.PanicIfErr(err)
 	} else {
 		return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, cooked.fromTo)
+	}
+
+	// Do this check seperately so we don't end up with a bunch of code duplication when new src/dsts are added
+	if cooked.fromTo.From() == common.ELocation.Local() {
+		cooked.source = cleanLocalPath(raw.src)
+		cooked.source = common.ToExtendedPath(cooked.source)
+	} else if cooked.fromTo.To() == common.ELocation.Local() {
+		cooked.destination = cleanLocalPath(raw.dst)
+		cooked.destination = common.ToExtendedPath(cooked.destination)
 	}
 
 	// generate a new job ID
 	cooked.jobID = common.NewJobID()
 
-	var err error
 	cooked.blockSize, err = blockSizeInBytes(raw.blockSizeMB)
 	if err != nil {
 		return cooked, err
