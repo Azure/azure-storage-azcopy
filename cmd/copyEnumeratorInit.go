@@ -402,6 +402,11 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 		return path
 	}
 
+	// write straight to /dev/null, do not determine a indirect path
+	if !source && cca.destination == common.Dev_Null {
+		return "" // ignore path encode rules
+	}
+
 	// source is a EXACT path to the file.
 	if object.relativePath == "" {
 		// If we're finding an object from the source, it returns "" if it's already got it.

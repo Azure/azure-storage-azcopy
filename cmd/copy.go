@@ -324,7 +324,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 
 	cooked.CheckLength = raw.CheckLength
 	// length of devnull will be 0, thus this will always fail unless downloading an empty file
-	if cooked.destination == os.DevNull {
+	if cooked.destination == common.Dev_Null {
 		cooked.CheckLength = false
 	}
 

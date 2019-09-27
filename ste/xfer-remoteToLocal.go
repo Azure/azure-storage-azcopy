@@ -289,7 +289,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 		dl.Epilogue() // it can release resources here
 
 		// secondary sanity check to ensure devnull doesn't get checked
-		if info.DestLengthValidation && info.Destination != os.DevNull {
+		if info.DestLengthValidation && info.Destination != common.Dev_Null {
 			fi, err := os.Stat(info.Destination)
 
 			if err != nil {
