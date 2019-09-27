@@ -76,11 +76,16 @@ Download a single file with a SAS using piping (block blobs only):
 Download an entire directory with a SAS:
   - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" "/path/to/dir" --recursive=true
 
+A note about wildcards in URLs:
+
+The only usage of a wildcard in a URL that is supported is the final, trailing /*, and in the container name when not specifying a blob name.
+If you happen to use the character * in the name of a blob, please manually encode it to %2A to avoid it being treated as a wildcard character.
+
 Download a set of files with a SAS using wildcards:
-  - azcopy cp "https://[account].blob.core.windows.net/[container]/foo*?[SAS]" "/path/to/dir"
+  - azcopy cp "https://[account].blob.core.windows.net/[container]/*?[SAS]" "/path/to/dir"
 
 Download files and directories with a SAS using wildcards:
-  - azcopy cp "https://[account].blob.core.windows.net/[container]/foo*?[SAS]" "/path/to/dir" --recursive=true
+  - azcopy cp "https://[account].blob.core.windows.net/[container]/*?[SAS]" "/path/to/dir" --recursive=true
 
 Copy a single blob with SAS to another blob with SAS:
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"

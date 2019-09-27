@@ -80,7 +80,6 @@ type rawCopyCmdArgs struct {
 	// filters from flags
 	listOfFilesToCopy string
 	recursive         bool
-	stripTopDir       bool
 	followSymlinks    bool
 	autoDecompress    bool
 	// forceWrite flag is used to define the User behavior
@@ -183,8 +182,6 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	cooked.destination = raw.dst
 
 	cooked.fromTo = fromTo
-
-	cooked.stripTopDir = raw.stripTopDir
 
 	// Check if source has a trailing wildcard on a URL
 	if fromTo.From().IsRemote() {
@@ -1400,7 +1397,6 @@ func init() {
 	rootCmd.AddCommand(cpCmd)
 
 	// filters change which files get transferred
-	cpCmd.PersistentFlags().BoolVar(&raw.stripTopDir, "strip-top-dir", false, "strip the source's root folder from the destination path, akin to \"cp dir/*\". E.g. sourcedir/subdir1/file1 copies to subdir1/file1 on destination; whereas without --strip-top-dir, it copies to sourcedir/subdir1/file1. May be used with and without --recursive. Without --recursive, just copies files under the folder but does not recurse into sub-directories")
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when uploading from local file system.")
 	cpCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "only include these files when copying. "+
 		"Support use of *. Files should be separated with ';'.")

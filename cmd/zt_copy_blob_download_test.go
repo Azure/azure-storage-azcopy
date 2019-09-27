@@ -422,9 +422,9 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithPattern(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawContainerURLWithSAS.Path += "/*" // imply strip-top-dir
 	raw := getDefaultCopyRawInput(rawContainerURLWithSAS.String(), dstDirName)
 	raw.recursive = true
-	raw.stripTopDir = true
 	raw.include = "*.pdf"
 
 	runCopyAndVerify(c, raw, func(err error) {
