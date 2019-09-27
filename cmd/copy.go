@@ -191,11 +191,37 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		// Because local already handles wildcards via a list traverser, we should only handle the trailing wildcard --strip-top-dir inference remotely.
 		// To avoid getting trapped by parsing a URL and losing a sense of which *s are real, strip the SAS token in a """unsafe""" way.
 		splitURL := strings.Split(cooked.source, "?")
-		if strings.HasSuffix(splitURL[0], "/*") { // Ignore %2A
-			cooked.stripTopDir = true
-			splitURL[0] = strings.TrimSuffix(splitURL[0], "/*")
-			cooked.source = strings.Join(splitURL, "?")
+
+		// replace %2A with %00 (NULL).
+		// Azure storage doesn't support NULL, so nobody has any reason to ever do this
+		// Thus, %00 is our magic number. Understandably, this is an exception to how we handle wildcards, but this isn't a user-facing exception
+		splitURL[0] = strings.ReplaceAll(splitURL[0], "%2A", "%00")
+
+		sourceURL, err := url.Parse(splitURL[0])
+
+		if err != nil {
+			return cooked, fmt.Errorf("failed to encode %s as URL; %s", strings.ReplaceAll(splitURL[0], "%00", "%2A"), err)
 		}
+
+		// Catch trailing wildcard in object name
+		// Ignore wildcard in container name, as that is handled by initResourceTraverser -> AccountTraverser
+		genericResourceURLParts := common.NewGenericResourceURLParts(*sourceURL, fromTo.From())
+
+		// Infer stripTopDir, trim suffix so we can traverse properly
+		if strings.HasSuffix(genericResourceURLParts.GetObjectName(), "/*") || genericResourceURLParts.GetObjectName() == "*" {
+			genericResourceURLParts.SetObjectName(strings.TrimSuffix(genericResourceURLParts.GetObjectName(), "*"))
+			cooked.stripTopDir = true
+		}
+
+		// Check for other *s, error out and explain the usage
+		if strings.Contains(genericResourceURLParts.GetObjectName(), "*") {
+			return cooked, errors.New("cannot use wildcards in URL except in trailing \"/*\". If you wish to use * in your URL, manually encode it to %2A")
+		}
+
+		// drop URL back to string and replace our magic number
+		splitURL[0] = strings.ReplaceAll(genericResourceURLParts.String(), "%00", "%2A")
+		// re-combine underlying string
+		cooked.source = strings.Join(splitURL, "?")
 	}
 
 	cooked.recursive = raw.recursive

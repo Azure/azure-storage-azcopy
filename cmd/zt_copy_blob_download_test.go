@@ -31,6 +31,132 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
+func (s *cmdIntegrationSuite) TestInferredStripTopDirDownload(c *chk.C) {
+	bsu := getBSU()
+	cURL, cName := createNewContainer(c, bsu)
+
+	blobNames := []string{
+		"*", // File name that we want to retain compatibility with
+		"testFile",
+		"DoYouPronounceItDataOrData",
+		"sub*dir/Help I cannot so much into computer",
+	}
+
+	// ----- TEST # 1: Test inferred as false by using escaped * -----
+
+	// set up container name
+	scenarioHelper{}.generateBlobsFromList(c, cURL, blobNames, blockBlobDefaultData)
+
+	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+
+	rawContainerURL := scenarioHelper{}.getRawContainerURLWithSAS(c, cName)
+
+	// Don't add /* while still in URL form-- it will get improperly encoded, and azcopy will ignore it.
+	rawContainerString := rawContainerURL.String()
+	rawContainerStringSplit := strings.Split(rawContainerString, "?")
+	rawContainerStringSplit[0] += "/%2A"
+	// now in theory: https://ciblobaccount.blob.core.windows.net/container/%2A
+	// %2A is set to magic number %00 and not stripped
+	// striptopdir should not be set
+
+	// re join strings and create raw input
+	raw := getDefaultRawCopyInput(strings.Join(rawContainerStringSplit, "?"), dstDirName)
+	raw.recursive = false // default recursive is true in testing framework
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// Test inference of striptopdir
+	cooked, err := raw.cook()
+	c.Assert(err, chk.IsNil)
+	c.Assert(cooked.stripTopDir, chk.Equals, false)
+
+	// Test and ensure only one file is being downloaded
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+	})
+
+	// ----- TEST # 2: Test inferred as true by using unescaped * -----
+
+	rawContainerStringSplit = strings.Split(rawContainerString, "?")
+	rawContainerStringSplit[0] += "/*"
+	// now in theory: https://ciblobaccount.blob.core.windows.net/container/*
+	// * is not set to magic number %00, * gets stripped
+	// striptopdir should be set.
+
+	// re join strings and create raw input
+	raw = getDefaultRawCopyInput(strings.Join(rawContainerStringSplit, "?"), dstDirName)
+	raw.recursive = false // default recursive is true in testing framework
+
+	// reset RPC
+	mockedRPC.reset()
+
+	// Test inference of striptopdir
+	cooked, err = raw.cook()
+	c.Assert(err, chk.IsNil)
+	c.Assert(cooked.stripTopDir, chk.Equals, true)
+
+	// Test and ensure only 3 files get scheduled, nothing under the sub-directory
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 3)
+	})
+
+	// ----- TEST # 3: Attempt to use the * in the folder name without encoding ----
+
+	rawContainerStringSplit = strings.Split(rawContainerString, "?")
+	rawContainerStringSplit[0] += "/sub*dir/*"
+	// now in theory: https://ciblobaccount.blob.core.windows.net/container/sub*dir/*
+	// *s are not replaced with magic number %00
+	// should error out due to extra * in dir name
+
+	// reset RPC
+	mockedRPC.reset()
+
+	// re join strings and create raw input
+	raw = getDefaultRawCopyInput(strings.Join(rawContainerStringSplit, "?"), dstDirName)
+	raw.recursive = false // default recursive is true in testing framework
+
+	// test error
+	cooked, err = raw.cook()
+	c.Assert(err, chk.NotNil)
+	c.Assert(err.Error(), StringIncludes, "cannot use wildcards")
+
+	// no actual test needed-- this is where the error lives.
+
+	// ----- TEST # 4: Encode %2A in the folder name and still use stripTopDir ----
+
+	rawContainerStringSplit = strings.Split(rawContainerString, "?")
+	rawContainerStringSplit[0] += "/sub%2Adir/*"
+	// now in theory: https://ciblobaccount.blob.core.windows.net/container/sub%2Adir/*
+	// %2A is replaced with magic number %00
+	// should not error out; striptopdir should be true
+
+	// reset RPC
+	mockedRPC.reset()
+
+	// re join strings and create raw input
+	raw = getDefaultRawCopyInput(strings.Join(rawContainerStringSplit, "?"), dstDirName)
+	raw.recursive = false // default recursive is true in testing framework
+
+	// test cook
+	cooked, err = raw.cook()
+	c.Assert(err, chk.IsNil)
+	c.Assert(cooked.stripTopDir, chk.Equals, true)
+
+	// Test and ensure only one file got scheduled
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+	})
+}
+
 // Test downloading the entire account.
 func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
 	bsu := getBSU()
