@@ -36,7 +36,7 @@ func newBlobFSDownloader() downloader {
 	return &blobFSDownloader{}
 }
 
-func (bd *blobFSDownloader) Prologue(_ IJobPartTransferMgr) {
+func (bd *blobFSDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
 	// noop
 }
 

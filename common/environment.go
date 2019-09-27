@@ -95,6 +95,14 @@ func (EnvironmentVariable) TransferInitiationPoolSize() EnvironmentVariable {
 	}
 }
 
+func (EnvironmentVariable) OptimizeSparsePageBlobTransfers() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_OPTIMIZE_SPARSE_PAGE_BLOB",
+		Description:  "Provide a knob to disable the optimizations in case they cause customers any unforeseen issue. Set to any other value than 'true' to disable.",
+		DefaultValue: "true",
+	}
+}
+
 func (EnvironmentVariable) LogLocation() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_LOG_LOCATION",
