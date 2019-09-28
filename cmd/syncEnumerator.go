@@ -99,7 +99,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		// in this scenario, the local disk (source) is scanned/indexed first
 		// then the destination is scanned and filtered based on what the destination contains
 		// we do the local one first because it is assumed that local file systems will be faster to enumerate than remote resources
-		destinationCleaner, err := newSyncBlobDeleteProcessor(cca)
+		destinationCleaner, err := newSyncDeleteProcessor(cca)
 		if err != nil {
 			return nil, fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
 		}
@@ -138,8 +138,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			// since only then can we know which local files definitely don't exist remotely
 			var deleteScheduler objectProcessor
 			switch cca.fromTo.To() {
-			case common.ELocation.Blob():
-				deleter, err := newSyncBlobDeleteProcessor(cca)
+			case common.ELocation.Blob(), common.ELocation.File():
+				deleter, err := newSyncDeleteProcessor(cca)
 				if err != nil {
 					return err
 				}
