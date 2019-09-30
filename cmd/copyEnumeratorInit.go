@@ -20,6 +20,12 @@ import (
 func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) (*copyEnumerator, error) {
 	var traverser resourceTraverser
 
+	// Warn about AWS S3 -> Blob being in preview
+	// Don't bother checking To if S3 is the from-- We do not support anything other than S3->Azure at the moment, regarding S3
+	if cca.fromTo.From() == common.ELocation.S3() {
+		glcm.Info("AWS S3 to Azure Blob copy is currently in preview. Validate the copy operation carefully before removing your data at source.")
+	}
+
 	dst, err := appendSASIfNecessary(cca.destination, cca.destinationSAS)
 	if err != nil {
 		return nil, err
