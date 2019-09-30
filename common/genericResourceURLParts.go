@@ -11,10 +11,7 @@ import (
 )
 
 // GenericResourceURLParts is intended to be a generic solution to code duplication when using *URLParts
-// TODO: Consider returning to a "common" package structure for our SDKs
-//       (or, if we don't want to rely on a common package, create one that unifies URLParts and such into interfaces)
-//       The experience of trying to avoid code dupe is frankly quite poor and tends to result in more code dupe.
-// TODO #2: Use this to reduce code dupe in the cca.Source and jobPartOrder.Source setups
+// TODO: Use this to reduce code dupe in the cca.Source and jobPartOrder.Source setups
 // Currently this just contains generic functions for what we *need*. This isn't an overarching, perfect implementation.
 // The above suggestion would be preferable to continuing to expand this (due to 4x code dupe for every function)-- it's just a bridge over a LARGE gap for now.
 type GenericResourceURLParts struct {

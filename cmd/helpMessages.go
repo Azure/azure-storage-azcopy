@@ -81,11 +81,14 @@ A note about wildcards in URLs:
 The only usage of a wildcard in a URL that is supported is the final, trailing /*, and in the container name when not specifying a blob name.
 If you happen to use the character * in the name of a blob, please manually encode it to %2A to avoid it being treated as a wildcard character.
 
-Download a set of files with a SAS using wildcards:
-  - azcopy cp "https://[account].blob.core.windows.net/[container]/*?[SAS]" "/path/to/dir"
+Download the contents of a folder directly to the destination (rather than under a sub-directory):
+ - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/folder]/*?[SAS]" "/path/to/dir"
 
-Download files and directories with a SAS using wildcards:
-  - azcopy cp "https://[account].blob.core.windows.net/[container]/*?[SAS]" "/path/to/dir" --recursive=true
+Download an entire storage account at once
+ - azcopy cp "https://[srcaccount].blob.core.windows.net/" "/path/to/dir" --recursive
+
+Download an entire storage account at once with a wildcarded container name
+ - azcopy cp "https://[srcaccount].blob.core.windows.net/[container*name]" "/path/to/dir" --recursive
 
 Copy a single blob with SAS to another blob with SAS:
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"

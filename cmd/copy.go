@@ -176,9 +176,11 @@ func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Lo
 	// To avoid getting trapped by parsing a URL and losing a sense of which *s are real, strip the SAS token in a """unsafe""" way.
 	splitURL := strings.Split(result, "?")
 
-	// replace %2A with %00 (NULL).
-	// Azure storage doesn't support NULL, so nobody has any reason to ever do this
-	// Thus, %00 is our magic number. Understandably, this is an exception to how we handle wildcards, but this isn't a user-facing exception
+	// If we parse the URL now, we'll have no concept of whether a * was encoded or unencoded.
+	// This is important because we treat unencoded *s as wildcards, and %2A (encoded *) as literal stars.
+	// So, replace any and all instances of (raw) %2A with %00 (NULL), so we can distinguish these later down the pipeline.
+	// Azure storage doesn't support NULL, so nobody has any reason to ever intentionally place a %00 in their URLs.
+	// Thus, %00 is our magic number. Understandably, this is an exception to how we handle wildcards, but this isn't a user-facing exception.
 	splitURL[0] = strings.ReplaceAll(splitURL[0], "%2A", "%00")
 
 	sourceURL, err := url.Parse(splitURL[0])
