@@ -188,7 +188,7 @@ func (p *xferStatsPolicy) Do(ctx context.Context, request pipeline.Request) (pip
 				p.stats.tunerInterface.recordRetry() // always tell the tuner
 				if p.stats.IsStarted() {             // but only count it here, if we have started
 					// To find out why the server was busy we need to look at the response
-					responseBodyText := p.transparentlyReadBody(rr)
+					responseBodyText := transparentlyReadBody(rr)
 					p.stats.recordRetry(responseBodyText)
 				}
 			}
@@ -201,11 +201,12 @@ func (p *xferStatsPolicy) Do(ctx context.Context, request pipeline.Request) (pip
 // transparentlyReadBody reads the response body, and then (because body is read-once-only) replaces it with
 // a new body that will return the same content to anyone else who reads it.
 // This looks like a fairly common approach in Go, e.g. https://stackoverflow.com/a/23077519
-func (p *xferStatsPolicy) transparentlyReadBody(r *http.Response) string {
+// Our implementation here returns a string, so is only sensible for bodies that we know to be short - e.g. bodies of error responses.
+func transparentlyReadBody(r *http.Response) string {
 	if r.Body == http.NoBody {
 		return ""
 	}
-	buf, _ := ioutil.ReadAll(r.Body)                // responses are short fragments of XML after 503 status, so safe to read all
+	buf, _ := ioutil.ReadAll(r.Body)                // error responses are short fragments of XML, so safe to read all
 	_ = r.Body.Close()                              // must close the real body
 	r.Body = ioutil.NopCloser(bytes.NewReader(buf)) // replace it with something that will read the same data we just read
 
