@@ -120,7 +120,6 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 
 				// We need to omit some properties if we don't get properties
 				// TODO: make it so we can (and must) call newStoredOBject here.
-				//     Reviewers: don't pass this if I have not fixed this when you review!!!
 				storedObject := storedObject{
 					name:          getObjectNameOnly(fileInfo.Name),
 					relativePath:  relativePath,
