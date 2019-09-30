@@ -51,7 +51,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
 		relPaths = append(relPaths, relPath)
 		return nil
 	}
-	err = blobTraverser.traverse(processor, []objectFilter{})
+	err = blobTraverser.traverse(noPreProccessor, processor, []objectFilter{})
 	c.Assert(err, chk.IsNil)
 
 	// set up a destination
@@ -99,7 +99,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
 		relPaths = append(relPaths, relPath)
 		return nil
 	}
-	err = blobTraverser.traverse(processor, []objectFilter{})
+	err = blobTraverser.traverse(noPreProccessor, processor, []objectFilter{})
 	c.Assert(err, chk.IsNil)
 
 	// set up a destination

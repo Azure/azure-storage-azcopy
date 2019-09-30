@@ -180,9 +180,9 @@ func (s *cmdIntegrationSuite) TestIncludeAndExcludeDir(c *chk.C) {
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
 		// Trim / and /folder/ off
-		validateDownloadTransfersAreScheduled(c, "/", "/"+filepath.Base(dirPath)+"/", files[:1], mockedRPC)
+		validateDownloadTransfersAreScheduled(c, "/", "/"+filepath.Base(dirPath)+"/", files[:2], mockedRPC)
 	})
 }
 
