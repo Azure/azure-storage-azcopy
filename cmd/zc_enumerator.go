@@ -364,10 +364,14 @@ func appendSASIfNecessary(rawURL string, sasToken string) (string, error) {
 // given a storedObject, process it accordingly. Used for the "real work" of, say, creating a copyTransfer from the object
 type objectProcessor func(storedObject storedObject) error
 
+// TODO: consider making objectMorpher an interface, not a func, and having newStoredObject take an array of them, instead of just one
+//   Might be easier to debug
 // modifies a storedObject, but does NOT process it.  Used for modifications, such as pre-pending a parent path
 type objectMorpher func(storedObject *storedObject)
 
-// FollowedBy returns a new objectMorpher, which performs the action of existing followed by the action of additional
+// FollowedBy returns a new objectMorpher, which performs the action of existing followed by the action of additional.
+// Use this so that we always chain pre-processors, never replace them (this is so we avoid making any assumptions about
+// whether an old processor actually does anything)
 func (existing objectMorpher) FollowedBy(additional objectMorpher) objectMorpher {
 	switch {
 	case existing == nil:
