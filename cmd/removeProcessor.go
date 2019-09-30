@@ -40,7 +40,11 @@ func newRemoveTransferProcessor(cca *cookedCopyCmdArgs, numOfTransfersPerPart in
 		LogLevel: cca.logVerbosity,
 	}
 
-	reportFirstPart := func() { cca.waitUntilJobCompletion(false) }
+	reportFirstPart := func(jobStarted bool) {
+		if jobStarted {
+			cca.waitUntilJobCompletion(false)
+		}
+	}
 	reportFinalPart := func() { cca.isEnumerationComplete = true }
 
 	shouldEncodeSource := cca.fromTo.From().IsRemote()
