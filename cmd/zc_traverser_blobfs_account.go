@@ -107,9 +107,9 @@ func (t *BlobFSAccountTraverser) traverse(preprocessor objectMorpher, processor 
 		fileSystemURL := t.accountURL.NewFileSystemURL(v).URL()
 		fileSystemTraverser := newBlobFSTraverser(&fileSystemURL, t.p, t.ctx, true, t.incrementEnumerationCounter)
 
-		preprocessor = preprocessor.FollowedBy(newContainerDecorator(v))
+		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
-		err = fileSystemTraverser.traverse(preprocessor, processor, filters)
+		err = fileSystemTraverser.traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
 			LogStdoutAndJobLog(fmt.Sprintf("failed to list files in filesystem %s: %s", v, err))

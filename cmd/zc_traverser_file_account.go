@@ -95,9 +95,9 @@ func (t *fileAccountTraverser) traverse(preprocessor objectMorpher, processor ob
 		shareURL := t.accountURL.NewShareURL(v).URL()
 		shareTraverser := newFileTraverser(&shareURL, t.p, t.ctx, true, t.getProperties, t.incrementEnumerationCounter)
 
-		preprocessor = preprocessor.FollowedBy(newContainerDecorator(v))
+		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
-		err = shareTraverser.traverse(preprocessor, processor, filters)
+		err = shareTraverser.traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
 			LogStdoutAndJobLog(fmt.Sprintf("failed to list files in share %s: %s", v, err))

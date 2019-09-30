@@ -99,9 +99,9 @@ func (t *s3ServiceTraverser) traverse(preprocessor objectMorpher, processor obje
 			return err
 		}
 
-		preprocessor = preprocessor.FollowedBy(newContainerDecorator(v))
+		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
-		err = bucketTraverser.traverse(preprocessor, processor, filters)
+		err = bucketTraverser.traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
 			if strings.Contains(err.Error(), "301 response missing Location header") {

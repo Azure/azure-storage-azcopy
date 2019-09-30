@@ -96,9 +96,9 @@ func (t *blobAccountTraverser) traverse(preprocessor objectMorpher, processor ob
 		containerURL := t.accountURL.NewContainerURL(v).URL()
 		containerTraverser := newBlobTraverser(&containerURL, t.p, t.ctx, true, t.incrementEnumerationCounter)
 
-		preprocessor = preprocessor.FollowedBy(newContainerDecorator(v))
+		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
-		err = containerTraverser.traverse(preprocessor, processor, filters)
+		err = containerTraverser.traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
 			LogStdoutAndJobLog(fmt.Sprintf("failed to list blobs in container %s: %s", v, err))

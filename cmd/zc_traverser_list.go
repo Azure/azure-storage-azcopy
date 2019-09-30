@@ -76,9 +76,9 @@ func (l *listTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		childPreProcessor := func(object *storedObject) {
 			object.relativePath = common.GenerateFullPath(childPath, object.relativePath)
 		}
-		preprocessor = preprocessor.FollowedBy(childPreProcessor) // always chain pre-processors, never replace them (this is so we avoid making any assumptions about whether an old processor actually exists)
+		preProcessorForThisChild := preprocessor.FollowedBy(childPreProcessor) // always chain pre-processors, never replace them (this is so we avoid making any assumptions about whether an old processor actually exists)
 
-		err = childTraverser.traverse(preprocessor, processor, filters)
+		err = childTraverser.traverse(preProcessorForThisChild, processor, filters)
 		if err != nil {
 			glcm.Info(fmt.Sprintf("Skipping %s as it cannot be scanned due to error: %s", childPath, err))
 		}
