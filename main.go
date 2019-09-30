@@ -22,6 +22,7 @@ package main
 
 import (
 	"log"
+	"math/rand"
 	"os"
 	"path"
 	"runtime"
@@ -38,6 +39,8 @@ var glcm = common.GetLifecycleMgr()
 
 func main() {
 	pipeline.SetLogSanitizer(common.NewAzCopyLogSanitizer()) // make sure ForceLog logs get secrets redacted
+
+	rand.Seed(time.Now().UnixNano()) // make sure our random numbers actually are random (but remember, use crypto/rand for anything where strong/reliable randomness is required
 
 	// note: azcopyAppPathFolder is the default location for all AzCopy data (logs, job plans, oauth token on Windows)
 	// but both logs and job plans can be put elsewhere as they can become very large
