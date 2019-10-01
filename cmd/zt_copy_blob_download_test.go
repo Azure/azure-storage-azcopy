@@ -422,8 +422,10 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithPattern(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	rawContainerURLWithSAS.Path += "/*" // imply strip-top-dir
-	raw := getDefaultCopyRawInput(rawContainerURLWithSAS.String(), dstDirName)
+	urlString := rawContainerURLWithSAS.String()
+	// imply strip-top-dir (without the /* getting escaped by the line above)
+	urlString = strings.Replace(urlString, "?", "/*?", -1) // TODO: find a better way to do this in our tests
+	raw := getDefaultCopyRawInput(urlString, dstDirName)
 	raw.recursive = true
 	raw.include = "*.pdf"
 
