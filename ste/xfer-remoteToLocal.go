@@ -169,7 +169,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 		sourceMd5Exists)
 
 	// step 5c: run prologue in downloader (here it can, for example, create things that will require cleanup in the epilogue)
-	dl.Prologue(jptm)
+	dl.Prologue(jptm, p)
 
 	// step 5d: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
@@ -291,7 +291,8 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 	if dl != nil {
 		dl.Epilogue() // it can release resources here
 
-		if jptm.IsLive() && info.DestLengthValidation {
+		// secondary sanity check to ensure devnull doesn't get checked
+		if jptm.IsLive() && info.DestLengthValidation && info.Destination != common.Dev_Null {
 			fi, err := os.Stat(info.Destination)
 
 			if err != nil {

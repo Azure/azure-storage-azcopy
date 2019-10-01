@@ -76,11 +76,19 @@ Download a single file with a SAS using piping (block blobs only):
 Download an entire directory with a SAS:
   - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" "/path/to/dir" --recursive=true
 
-Download a set of files with a SAS using wildcards:
-  - azcopy cp "https://[account].blob.core.windows.net/[container]/foo*?[SAS]" "/path/to/dir"
+A note about wildcards in URLs:
 
-Download files and directories with a SAS using wildcards:
-  - azcopy cp "https://[account].blob.core.windows.net/[container]/foo*?[SAS]" "/path/to/dir" --recursive=true
+The only usage of a wildcard in a URL that is supported is the final, trailing /*, and in the container name when not specifying a blob name.
+If you happen to use the character * in the name of a blob, please manually encode it to %2A to avoid it being treated as a wildcard character.
+
+Download the contents of a folder directly to the destination (rather than under a sub-directory):
+ - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/folder]/*?[SAS]" "/path/to/dir"
+
+Download an entire storage account at once
+ - azcopy cp "https://[srcaccount].blob.core.windows.net/" "/path/to/dir" --recursive
+
+Download an entire storage account at once with a wildcarded container name
+ - azcopy cp "https://[srcaccount].blob.core.windows.net/[container*name]" "/path/to/dir" --recursive
 
 Copy a single blob with SAS to another blob with SAS:
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
@@ -269,6 +277,7 @@ const syncCmdLongDescription = `
 Replicate a source to a destination location. The last modified times are used for comparison, the file is skipped if the last modified time in the destination is more recent. The supported pairs are:
   - local <-> Azure Blob (either SAS or OAuth authentication can be used)
   - Azure Blob <-> Azure Blob (Source must include a SAS or is publicly accessible; either SAS or OAuth authentication can be used for destination)
+  - Azure File <-> Azure File (Source must include a SAS or is publicly accessible; SAS authentication should be used for destination)
 
 Please note that the sync command differs from the copy command in several ways:
   0. The recursive flag is on by default.
@@ -317,6 +326,9 @@ Sync a virtual directory:
 
 Sync a virtual directory sharing the same name as a blob (add a trailing slash to the path in order to disambiguate):
   - azcopy sync "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]/?[SAS]" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]/" --recursive=true
+
+Sync an Azure File directory (same syntax as Blob):
+  - azcopy sync "https://[account].file.core.windows.net/[share]/[path/to/dir]?[SAS]" "https://[account].file.core.windows.net/[share]/[path/to/dir]" --recursive=true
 
 Note: if include/exclude flags are used together, only files matching the include patterns would be looked at, but those matching the exclude patterns would be always be ignored.
 `

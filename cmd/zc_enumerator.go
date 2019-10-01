@@ -85,8 +85,8 @@ func (storedObject *storedObject) isMoreRecentThan(storedObject2 storedObject) b
 }
 
 // a constructor is used so that in case the storedObject has to change, the callers would get a compilation error
-func newStoredObject(name string, relativePath string, lmt time.Time, size int64, md5 []byte, blobType azblob.BlobType, containerName string) storedObject {
-	return storedObject{
+func newStoredObject(morpher objectMorpher, name string, relativePath string, lmt time.Time, size int64, md5 []byte, blobType azblob.BlobType, containerName string) storedObject {
+	obj := storedObject{
 		name:             name,
 		relativePath:     relativePath,
 		lastModifiedTime: lmt,
@@ -95,12 +95,19 @@ func newStoredObject(name string, relativePath string, lmt time.Time, size int64
 		blobType:         blobType,
 		containerName:    containerName,
 	}
+
+	// in some cases we may be supplied with a func that will perform some modification on the basic object
+	if morpher != nil {
+		morpher(&obj)
+	}
+
+	return obj
 }
 
 // capable of traversing a structured resource like container or local directory
 // pass each storedObject to the given objectProcessor if it passes all the filters
 type resourceTraverser interface {
-	traverse(processor objectProcessor, filters []objectFilter) error
+	traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) error
 	isDirectory(isSource bool) bool
 	// isDirectory has an isSource flag for a single exception to blob.
 	// Blob should ONLY check remote if it's a source.
@@ -118,10 +125,10 @@ func containerNameMatchesPattern(containerName, pattern string) (bool, error) {
 	return filepath.Match(pattern, containerName)
 }
 
-func initContainerDecorator(containerName string, processor objectProcessor) objectProcessor {
-	return func(object storedObject) error {
+// newContainerDecorator constructs an objectMorpher that adds the given container name to storedObjects
+func newContainerDecorator(containerName string) objectMorpher {
+	return func(object *storedObject) {
 		object.containerName = containerName
-		return processor(object)
 	}
 }
 
@@ -169,14 +176,19 @@ func initResourceTraverser(resource string, location common.Location, ctx *conte
 
 	// Feed list of files channel into new list traverser, separate SAS.
 	if listofFilesChannel != nil {
-		splitsrc := strings.Split(resource, "?")
 		sas := ""
+		if location.IsRemote() {
+			// note to future self: this will cause a merge conflict.
+			// rename source to resource and delete this comment.
+			var err error
+			resource, sas, err = SplitAuthTokenFromResource(resource, location)
 
-		if len(splitsrc) > 1 {
-			sas = splitsrc[1]
+			if err != nil {
+				return nil, err
+			}
 		}
 
-		output = newListTraverser(splitsrc[0], sas, location, credential, ctx, recursive, toFollow, getProperties, listofFilesChannel, incrementEnumerationCounter)
+		output = newListTraverser(resource, sas, location, credential, ctx, recursive, toFollow, getProperties, listofFilesChannel, incrementEnumerationCounter)
 		return output, nil
 	}
 
@@ -198,7 +210,7 @@ func initResourceTraverser(resource string, location common.Location, ctx *conte
 			go func() {
 				defer close(globChan)
 				for _, v := range matches {
-					globChan <- strings.TrimPrefix(strings.ReplaceAll(v, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING), basePath)
+					globChan <- strings.TrimPrefix(v, basePath)
 				}
 			}()
 
@@ -255,7 +267,7 @@ func initResourceTraverser(resource string, location common.Location, ctx *conte
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-      
+
 			output = newFileAccountTraverser(resourceURL, *p, *ctx, getProperties, incrementEnumerationCounter)
 		} else {
 			output = newFileTraverser(resourceURL, *p, *ctx, recursive, getProperties, incrementEnumerationCounter)
@@ -349,8 +361,35 @@ func appendSASIfNecessary(rawURL string, sasToken string) (string, error) {
 	return rawURL, nil
 }
 
-// given a storedObject, process it accordingly
+// given a storedObject, process it accordingly. Used for the "real work" of, say, creating a copyTransfer from the object
 type objectProcessor func(storedObject storedObject) error
+
+// TODO: consider making objectMorpher an interface, not a func, and having newStoredObject take an array of them, instead of just one
+//   Might be easier to debug
+// modifies a storedObject, but does NOT process it.  Used for modifications, such as pre-pending a parent path
+type objectMorpher func(storedObject *storedObject)
+
+// FollowedBy returns a new objectMorpher, which performs the action of existing followed by the action of additional.
+// Use this so that we always chain pre-processors, never replace them (this is so we avoid making any assumptions about
+// whether an old processor actually does anything)
+func (existing objectMorpher) FollowedBy(additional objectMorpher) objectMorpher {
+	switch {
+	case existing == nil:
+		return additional
+	case additional == nil:
+		return existing
+	default:
+		return func(obj *storedObject) {
+			existing(obj)
+			additional(obj)
+		}
+	}
+}
+
+// noPreProcessor is used at the top level, when we start traversal because at that point we have no morphing to apply
+// Morphing only becomes necessary as we drill down through a tree of nested traversers, at which point the children
+// add their morphers with FollowedBy()
+var noPreProccessor objectMorpher = nil
 
 // given a storedObject, verify if it satisfies the defined conditions
 // if yes, return true
@@ -398,7 +437,7 @@ func newSyncEnumerator(primaryTraverser, secondaryTraverser resourceTraverser, i
 
 func (e *syncEnumerator) enumerate() (err error) {
 	// enumerate the primary resource and build lookup map
-	err = e.primaryTraverser.traverse(e.objectIndexer.store, e.filters)
+	err = e.primaryTraverser.traverse(noPreProccessor, e.objectIndexer.store, e.filters)
 	if err != nil {
 		return
 	}
@@ -407,7 +446,7 @@ func (e *syncEnumerator) enumerate() (err error) {
 	// they will be passed to the object comparator
 	// which can process given objects based on what's already indexed
 	// note: transferring can start while scanning is ongoing
-	err = e.secondaryTraverser.traverse(e.objectComparator, e.filters)
+	err = e.secondaryTraverser.traverse(noPreProccessor, e.objectComparator, e.filters)
 	if err != nil {
 		return
 	}
@@ -451,7 +490,7 @@ func LogStdoutAndJobLog(toLog string) {
 }
 
 func (e *copyEnumerator) enumerate() (err error) {
-	err = e.traverser.traverse(e.objectDispatcher, e.filters)
+	err = e.traverser.traverse(noPreProccessor, e.objectDispatcher, e.filters)
 	if err != nil {
 		return
 	}

@@ -30,7 +30,6 @@ import (
 	"math"
 	"net/url"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -38,10 +37,8 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 )
@@ -80,7 +77,6 @@ type rawCopyCmdArgs struct {
 	// filters from flags
 	listOfFilesToCopy string
 	recursive         bool
-	stripTopDir       bool
 	followSymlinks    bool
 	autoDecompress    bool
 	// forceWrite flag is used to define the User behavior
@@ -169,6 +165,57 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	return raw.cookWithId(common.NewJobID())
 }
 
+// returns result of stripping and if striptopdir is enabled
+// if nothing happens, the original source is returned
+func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Location) (result string, stripTopDir bool, err error) {
+	result = raw.src
+	// Because local already handles wildcards via a list traverser, we should only handle the trailing wildcard --strip-top-dir inference remotely.
+	// To avoid getting trapped by parsing a URL and losing a sense of which *s are real, strip the SAS token in a """unsafe""" way.
+	splitURL := strings.Split(result, "?")
+
+	// If we parse the URL now, we'll have no concept of whether a * was encoded or unencoded.
+	// This is important because we treat unencoded *s as wildcards, and %2A (encoded *) as literal stars.
+	// So, replace any and all instances of (raw) %2A with %00 (NULL), so we can distinguish these later down the pipeline.
+	// Azure storage doesn't support NULL, so nobody has any reason to ever intentionally place a %00 in their URLs.
+	// Thus, %00 is our magic number. Understandably, this is an exception to how we handle wildcards, but this isn't a user-facing exception.
+	splitURL[0] = strings.ReplaceAll(splitURL[0], "%2A", "%00")
+
+	sourceURL, err := url.Parse(splitURL[0])
+
+	if err != nil {
+		err = fmt.Errorf("failed to encode %s as URL; %s", strings.ReplaceAll(splitURL[0], "%00", "%2A"), err)
+		return
+	}
+
+	// Catch trailing wildcard in object name
+	// Ignore wildcard in container name, as that is handled by initResourceTraverser -> AccountTraverser
+	genericResourceURLParts := common.NewGenericResourceURLParts(*sourceURL, location)
+
+	if cName := genericResourceURLParts.GetContainerName(); (strings.Contains(cName, "*") || cName == "") && genericResourceURLParts.GetObjectName() != "" {
+		err = errors.New("cannot combine a specific object name with an account-level search")
+		return
+	}
+
+	// Infer stripTopDir, trim suffix so we can traverse properly
+	if strings.HasSuffix(genericResourceURLParts.GetObjectName(), "/*") || genericResourceURLParts.GetObjectName() == "*" {
+		genericResourceURLParts.SetObjectName(strings.TrimSuffix(genericResourceURLParts.GetObjectName(), "*"))
+		stripTopDir = true
+	}
+
+	// Check for other *s, error out and explain the usage
+	if strings.Contains(genericResourceURLParts.GetObjectName(), "*") {
+		err = errors.New("cannot use wildcards in the path section of the URL except in trailing \"/*\". If you wish to use * in your URL, manually encode it to %2A")
+		return
+	}
+
+	splitURL[0] = strings.ReplaceAll(genericResourceURLParts.String(), "%00", "%2A")
+	// drop URL back to string and replace our magic number
+	// re-combine underlying string
+	result = strings.Join(splitURL, "?")
+
+	return
+}
+
 func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, error) {
 
 	cooked := cookedCopyCmdArgs{
@@ -182,12 +229,25 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	cooked.source = raw.src
 	cooked.destination = raw.dst
 
+	if strings.EqualFold(cooked.destination, common.Dev_Null) && runtime.GOOS == "windows" {
+		cooked.destination = common.Dev_Null // map all capitalizations of "NUL"/"nul" to one because (on Windows) they all mean the same thing
+	}
+
 	cooked.fromTo = fromTo
 
-	// copy&transform flags to type-safety
-	cooked.stripTopDir = raw.stripTopDir
+	// Check if source has a trailing wildcard on a URL
+	if fromTo.From().IsRemote() {
+		cooked.source, cooked.stripTopDir, err = raw.stripTrailingWildcardOnRemoteSource(fromTo.From())
+
+		if err != nil {
+			return cooked, err
+		}
+	}
+
 	cooked.recursive = raw.recursive
 	cooked.followSymlinks = raw.followSymlinks
+
+	// copy&transform flags to type-safety
 	err = cooked.forceWrite.Parse(raw.forceWrite)
 	if err != nil {
 		return cooked, err
@@ -268,8 +328,9 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 			for scanner.Scan() {
 				v := scanner.Text()
 
-				// Yes, the UTF-8 BOM has valid characters (butwhytho*10)
-				// Check it on the first line and remove it if necessary.
+				// Check if the UTF-8 BOM is on the first line and remove it if necessary.
+				// Note that the UTF-8 BOM can be present on the same line feed as the first line of actual data, so just use TrimPrefix.
+				// If the line feed were separate, the empty string would be skipped later.
 				if !checkBOM {
 					v = strings.TrimPrefix(v, utf8BOM)
 					checkBOM = true
@@ -323,6 +384,10 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	}
 
 	cooked.CheckLength = raw.CheckLength
+	// length of devnull will be 0, thus this will always fail unless downloading an empty file
+	if cooked.destination == common.Dev_Null {
+		cooked.CheckLength = false
+	}
 
 	// if redirection is triggered, avoid printing any output
 	if cooked.isRedirection() {
@@ -790,175 +855,31 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		CredentialInfo: cca.credentialInfo,
 	}
 
-	// TODO remove this copy pasted code during refactoring
 	from := cca.fromTo.From()
 	to := cca.fromTo.To()
+
 	// Strip the SAS from the source and destination whenever there is SAS exists in URL.
 	// Note: SAS could exists in source of S2S copy, even if the credential type is OAuth for destination.
-	switch from {
-	case common.ELocation.Local():
-		tmpSrc, err := filepath.Abs(cca.source)
-		if err != nil {
-			return fmt.Errorf("couldn't get absolute path of the source location %s. Failed with errror %s", cca.source, err.Error())
-		}
+	cca.source, cca.sourceSAS, err = SplitAuthTokenFromResource(cca.source, from)
 
-		jobPartOrder.SourceRoot = cleanLocalPath(getPathBeforeFirstWildcard(tmpSrc))
-		cca.source = cleanLocalPath(tmpSrc)
-
-	case common.ELocation.Benchmark():
-		// noop
-
-	case common.ELocation.Blob():
-		fromUrl, err := url.Parse(cca.source)
-		if err != nil {
-			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
-		}
-		blobParts := azblob.NewBlobURLParts(*fromUrl)
-		cca.sourceSAS = blobParts.SAS.Encode()
-		jobPartOrder.SourceSAS = cca.sourceSAS
-		blobParts.SAS = azblob.SASQueryParameters{}
-		bUrl := blobParts.URL()
-		cca.source = bUrl.String()
-
-		// set the clean source root
-		if strings.Contains(blobParts.ContainerName, "*") {
-			if blobParts.BlobName != "" {
-				return errors.New("cannot combine a wildcarded container name and blob path")
-			}
-
-			blobParts.ContainerName = ""
-		}
-		bUrl = blobParts.URL()
-		jobPartOrder.SourceRoot = bUrl.String()
-	case common.ELocation.File():
-		fromUrl, err := url.Parse(cca.source)
-		if err != nil {
-			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
-		}
-		fileParts := azfile.NewFileURLParts(*fromUrl)
-		cca.sourceSAS = fileParts.SAS.Encode()
-		if cca.sourceSAS == "" {
-			return fmt.Errorf("azure files only supports SAS token authentication")
-		}
-		jobPartOrder.SourceSAS = cca.sourceSAS
-		fileParts.SAS = azfile.SASQueryParameters{}
-		fUrl := fileParts.URL()
-		cca.source = fUrl.String()
-
-		// set the clean source root
-		if strings.Contains(fileParts.ShareName, "*") {
-			if fileParts.DirectoryOrFilePath != "" {
-				return errors.New("cannot combine a wildcarded share name and file path")
-			}
-
-			fileParts.ShareName = ""
-		}
-		fUrl = fileParts.URL()
-		jobPartOrder.SourceRoot = fUrl.String()
-
-	case common.ELocation.BlobFS():
-		fromUrl, err := url.Parse(cca.source)
-		if err != nil {
-			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
-		}
-		bfsParts := azbfs.NewBfsURLParts(*fromUrl)
-		cca.sourceSAS = bfsParts.SAS.Encode()
-		jobPartOrder.SourceSAS = cca.sourceSAS
-		bfsParts.SAS = azbfs.SASQueryParameters{}
-		bfsUrl := bfsParts.URL()
-		cca.source = bfsUrl.String() // this escapes spaces in the source
-
-		// set the clean source root
-		if strings.Contains(bfsParts.FileSystemName, "*") {
-			if bfsParts.DirectoryOrFilePath != "" {
-				return errors.New("cannot combine a wildcarded filesystem name and file path")
-			}
-
-			bfsParts.FileSystemName = ""
-		}
-		bfsUrl = bfsParts.URL()
-		jobPartOrder.SourceRoot = bfsUrl.String()
-
-	case common.ELocation.S3():
-		fromURL, err := url.Parse(cca.source)
-		if err != nil {
-			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromURL.String(), err.Error())
-		}
-
-		// S3 management console encode ' '(space) as '+', which is not supported by Azure resources.
-		// To support URL from S3 managment console, azcopy decode '+' as ' '(space).
-		*fromURL = common.URLExtension{URL: *fromURL}.URLWithPlusDecodedInPath()
-		cca.source = fromURL.String()
-
-		// set the clean source root
-		s3URLParts, err := common.NewS3URLParts(*fromURL)
-		if err != nil {
-			return err
-		}
-
-		if strings.Contains(s3URLParts.BucketName, "*") {
-			if s3URLParts.ObjectKey != "" {
-				return errors.New("cannot combine a wildcarded bucket name and object key")
-			}
-
-			s3URLParts.BucketName = ""
-		}
-		*fromURL = s3URLParts.URL()
-		jobPartOrder.SourceRoot = fromURL.String()
-	default:
-		jobPartOrder.SourceRoot, _ = gCopyUtil.getRootPathWithoutWildCards(cca.source)
+	if err != nil {
+		return err
 	}
 
-	switch to {
-	case common.ELocation.Blob():
-		toUrl, err := url.Parse(cca.destination)
-		if err != nil {
-			return fmt.Errorf("error parsing the destination url %s. Failed with error %s", toUrl.String(), err.Error())
-		}
-		blobParts := azblob.NewBlobURLParts(*toUrl)
-		cca.destinationSAS = blobParts.SAS.Encode()
-		jobPartOrder.DestinationSAS = cca.destinationSAS
-		blobParts.SAS = azblob.SASQueryParameters{}
-		bUrl := blobParts.URL()
-		cca.destination = bUrl.String()
-	case common.ELocation.File():
-		toUrl, err := url.Parse(cca.destination)
-		if err != nil {
-			return fmt.Errorf("error parsing the destination url %s. Failed with error %s", toUrl.String(), err.Error())
-		}
-		fileParts := azfile.NewFileURLParts(*toUrl)
-		cca.destinationSAS = fileParts.SAS.Encode()
-		if cca.destinationSAS == "" {
-			return fmt.Errorf("azure files only supports SAS token authentication")
-		}
-		jobPartOrder.DestinationSAS = cca.destinationSAS
-		fileParts.SAS = azfile.SASQueryParameters{}
-		fUrl := fileParts.URL()
-		cca.destination = fUrl.String()
-	case common.ELocation.BlobFS():
-		toUrl, err := url.Parse(cca.destination)
-		if err != nil {
-			return fmt.Errorf("error parsing the destination url %s. Failed with error %s", toUrl.String(), err.Error())
-		}
-		bfsParts := azbfs.NewBfsURLParts(*toUrl)
-		cca.destinationSAS = bfsParts.SAS.Encode()
-		jobPartOrder.DestinationSAS = cca.destinationSAS
-		bfsParts.SAS = azbfs.SASQueryParameters{}
-		bfsUrl := bfsParts.URL()
-		cca.destination = bfsUrl.String() // this escapes spaces in the destination
-	case common.ELocation.Local():
-		var result string
-		result, err = filepath.Abs(cca.destination)
+	jobPartOrder.SourceSAS = cca.sourceSAS
+	jobPartOrder.SourceRoot, err = GetResourceRoot(cca.source, from)
 
-		if err != nil {
-			return err
-		}
-
-		cca.destination = cleanLocalPath(result)
+	if err != nil {
+		return err
 	}
 
-	// set the root destination after it's been cleaned
+	cca.destination, cca.destinationSAS, err = SplitAuthTokenFromResource(cca.destination, to)
+	jobPartOrder.DestinationSAS = cca.destinationSAS
 	jobPartOrder.DestinationRoot = cca.destination
+
+	if err != nil {
+		return err
+	}
 
 	// depending on the source and destination type, we process the cp command differently
 	// Create enumerator and do enumerating
@@ -1359,7 +1280,6 @@ func init() {
 	rootCmd.AddCommand(cpCmd)
 
 	// filters change which files get transferred
-	cpCmd.PersistentFlags().BoolVar(&raw.stripTopDir, "strip-top-dir", false, "strip the source's root folder from the destination path, akin to \"cp dir/*\". E.g. sourcedir/subdir1/file1 copies to subdir1/file1 on destination; whereas without --strip-top-dir, it copies to sourcedir/subdir1/file1. May be used with and without --recursive. Without --recursive, just copies files under the folder but does not recurse into sub-directories")
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when uploading from local file system.")
 	cpCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "only include these files when copying. "+
 		"Support use of *. Files should be separated with ';'.")

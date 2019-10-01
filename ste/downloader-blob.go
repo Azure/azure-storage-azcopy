@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"context"
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -34,6 +35,9 @@ type blobDownloader struct {
 	// Using a automatic pacer here lets us find the right rate for this particular page blob, at which
 	// we won't be trying to move the faster than the Service wants us to.
 	filePacer autopacer
+
+	// used to avoid downloading zero ranges of page blobs
+	pageRangeOptimizer *pageRangeOptimizer
 }
 
 func newBlobDownloader() downloader {
@@ -43,11 +47,16 @@ func newBlobDownloader() downloader {
 
 }
 
-func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr) {
+func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
 	if jptm.Info().SrcBlobType == azblob.BlobPageBlob {
 		// page blobs need a file-specific pacer
 		// See comments in uploader-pageBlob for the reasons, since the same reasons apply are are explained there
 		bd.filePacer = newPageBlobAutoPacer(pageBlobInitialBytesPerSecond, jptm.Info().BlockSize, false, jptm.(common.ILogger))
+
+		u, _ := url.Parse(jptm.Info().Source)
+		bd.pageRangeOptimizer = newPageRangeOptimizer(azblob.NewPageBlobURL(*u, srcPipeline),
+			context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion))
+		bd.pageRangeOptimizer.fetchPages()
 	}
 }
 
@@ -58,6 +67,18 @@ func (bd *blobDownloader) Epilogue() {
 // Returns a chunk-func for blob downloads
 func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
+
+		// If the range does not contain any data, write out empty data to disk without performing download
+		if bd.pageRangeOptimizer != nil && !bd.pageRangeOptimizer.doesRangeContainData(
+			azblob.PageRange{Start: id.OffsetInFile(), End: id.OffsetInFile() + length - 1}) {
+
+			// queue an empty chunk
+			err := destWriter.EnqueueChunk(jptm.Context(), id, length, dummyReader{}, false)
+			if err != nil {
+				jptm.FailActiveDownload("Enqueuing chunk", err)
+			}
+			return
+		}
 
 		// Control rate of data movement (since page blobs can effectively have per-blob throughput limits)
 		// Note that this level of control here is specific to the individual page blob, and is additional
@@ -109,4 +130,10 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 			return
 		}
 	})
+}
+
+type dummyReader struct{}
+
+func (dummyReader) Read(p []byte) (n int, err error) {
+	return len(p), nil
 }

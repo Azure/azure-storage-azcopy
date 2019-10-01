@@ -32,15 +32,16 @@ func (s *localTraverserTestSuite) TestCleanLocalPathForWindows(c *chk.C) {
 		c.Skip("not running since the test applies to Windows only")
 	}
 
+	// Paths on Windows get consolidated to backwards-slash typically.
 	testCases := map[string]string{
-		`C:\foo\bar`:  `C:/foo/bar`, // regular windows path with no change
-		`C:\foo\bar\`: `C:/foo/bar`, // regular windows path with extra slash
-		`.\foo\bar`:   `foo/bar`,    // relative windows path
-		`..\foo\bar`:  `../foo/bar`, // relative windows path with parent dir
-		`foo\bar`:     `foo/bar`,    // shorthand relative windows path
-		`\\foo\bar\`:  `//foo/bar`,  // network share
-		`C:\`:         `C:/`,        // special case, the slash after colon is actually required
-		`D:`:          `D:/`,        // special case, the slash after colon is actually required
+		`C:\foo\bar`:  `C:\foo\bar`, // regular windows path with no change
+		`C:\foo\bar\`: `C:\foo\bar`, // regular windows path with extra slash
+		`.\foo\bar`:   `foo\bar`,    // relative windows path
+		`..\foo\bar`:  `..\foo\bar`, // relative windows path with parent dir
+		`foo\bar`:     `foo\bar`,    // shorthand relative windows path
+		`\\foo\bar\`:  `\\foo\bar`,  // network share
+		`C:\`:         `C:\`,        // special case, the slash after colon is actually required
+		`D:`:          `D:\`,        // special case, the slash after colon is actually required
 	}
 
 	for orig, expected := range testCases {

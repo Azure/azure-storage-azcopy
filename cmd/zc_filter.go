@@ -25,6 +25,8 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // Design explanation:
@@ -66,7 +68,9 @@ func (f *excludeFilter) doesPass(storedObject storedObject) bool {
 
 	if f.targetsPath {
 		// Don't actually support patterns here.
-		matched = strings.HasPrefix(storedObject.relativePath, f.pattern)
+		// Isolate the path separator
+		pattern := strings.ReplaceAll(f.pattern, common.AZCOPY_PATH_SEPARATOR_STRING, common.DeterminePathSeparator(storedObject.relativePath))
+		matched = strings.HasPrefix(storedObject.relativePath, pattern)
 	} else {
 		var err error
 		matched, err = path.Match(f.pattern, storedObject.name)

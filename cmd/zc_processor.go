@@ -40,13 +40,13 @@ type copyTransferProcessor struct {
 	shouldEscapeDestinationObjectName bool
 
 	// handles for progress tracking
-	reportFirstPartDispatched func()
+	reportFirstPartDispatched func(jobStarted bool)
 	reportFinalPartDispatched func()
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
 	source string, destination string, shouldEscapeSourceObjectName bool, shouldEscapeDestinationObjectName bool,
-	reportFirstPartDispatched func(), reportFinalPartDispatched func()) *copyTransferProcessor {
+	reportFirstPartDispatched func(bool), reportFinalPartDispatched func()) *copyTransferProcessor {
 	return &copyTransferProcessor{
 		numOfTransfersPerPart:             numOfTransfersPerPart,
 		copyJobTemplate:                   copyJobTemplate,
@@ -124,7 +124,7 @@ func (s *copyTransferProcessor) sendPartToSte() common.CopyJobPartOrderResponse 
 
 	// if the current part order sent to ste is 0, then alert the progress reporting routine
 	if s.copyJobTemplate.PartNum == 0 && s.reportFirstPartDispatched != nil {
-		s.reportFirstPartDispatched()
+		s.reportFirstPartDispatched(resp.JobStarted)
 	}
 
 	return resp

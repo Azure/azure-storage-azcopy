@@ -71,7 +71,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 
 	// compute chunk count
 	chunkSize := transferInfo.BlockSize
-	// If the given chunk Size for the Job is invalild for page blob or greater than maximum page size,
+	// If the given chunk Size for the Job is invalid for page blob or greater than maximum page size,
 	// then set chunkSize as maximum pageSize.
 	chunkSize = common.Iffuint32(
 		chunkSize > common.DefaultPageBlobChunkSize || (chunkSize%azblob.PageBlobPageBytes != 0),

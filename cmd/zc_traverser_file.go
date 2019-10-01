@@ -60,7 +60,7 @@ func (t *fileTraverser) getPropertiesIfSingleFile() (*azfile.FileGetPropertiesRe
 	return nil, false
 }
 
-func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilter) (err error) {
+func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
 	targetURLParts := azfile.NewFileURLParts(*t.rawURL)
 
 	// if not pointing to a share, check if we are pointing to a single file
@@ -69,6 +69,7 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 		fileProperties, isFile := t.getPropertiesIfSingleFile()
 		if isFile {
 			storedObject := newStoredObject(
+				preprocessor,
 				getObjectNameOnly(targetURLParts.DirectoryOrFilePath),
 				"",
 				fileProperties.LastModified(),
@@ -118,11 +119,15 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 				relativePath = strings.TrimPrefix(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 				// We need to omit some properties if we don't get properties
+				// TODO: make it so we can (and must) call newStoredOBject here.
 				storedObject := storedObject{
 					name:          getObjectNameOnly(fileInfo.Name),
 					relativePath:  relativePath,
 					size:          fileInfo.Properties.ContentLength,
 					containerName: targetURLParts.ShareName,
+				}
+				if preprocessor != nil { // TODO ******** REMOVE THIS ONCE USE newStoredOBject, above *******
+					preprocessor(&storedObject)
 				}
 
 				// Only get the properties if we're told to

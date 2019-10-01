@@ -47,7 +47,7 @@ func (t *benchmarkTraverser) isDirectory(bool) bool {
 	return true
 }
 
-func (t *benchmarkTraverser) traverse(processor objectProcessor, filters []objectFilter) (err error) {
+func (t *benchmarkTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
 	if len(filters) > 0 {
 		panic("filters not expected or supported in benchmark traverser") // but we still call processIfPassedFilters below, for consistency with other traversers
 	}
@@ -62,6 +62,7 @@ func (t *benchmarkTraverser) traverse(processor objectProcessor, filters []objec
 		}
 
 		err = processIfPassedFilters(filters, newStoredObject(
+			preprocessor,
 			name,
 			relativePath,
 			common.BenchmarkLmt,

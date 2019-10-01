@@ -3,7 +3,7 @@ module github.com/Azure/azure-storage-azcopy
 require (
 	github.com/Azure/azure-pipeline-go v0.2.1
 	github.com/Azure/azure-storage-blob-go v0.7.0
-	github.com/Azure/azure-storage-file-go v0.5.0
+	github.com/Azure/azure-storage-file-go v0.6.0
 	github.com/Azure/go-autorest v10.15.2+incompatible
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
 	github.com/cpuguy83/go-md2man v1.0.10 // indirect
@@ -13,7 +13,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/jiacfan/keychain v0.0.0-20180920053336-f2c902a3d807
 	github.com/jiacfan/keyctl v0.3.1
-	github.com/mattn/go-ieproxy v0.0.0-20190702010315-6dee0af9227d
+	github.com/mattn/go-ieproxy v0.0.0-20190610004146-91bb50d98149
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/pkg/errors v0.8.1
@@ -29,3 +29,5 @@ require (
 	gopkg.in/ini.v1 v1.42.0 // indirect
 	gopkg.in/yaml.v2 v2.2.2 // indirect
 )
+
+go 1.13

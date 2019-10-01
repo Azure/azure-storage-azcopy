@@ -62,7 +62,7 @@ func (t *s3Traverser) isDirectory(isSource bool) bool {
 	return false
 }
 
-func (t *s3Traverser) traverse(processor objectProcessor, filters []objectFilter) (err error) {
+func (t *s3Traverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
 	// Check if resource is a single object.
 	if t.s3URLParts.IsObjectSyntactically() && !t.s3URLParts.IsDirectorySyntactically() && !t.s3URLParts.IsBucketSyntactically() {
 		objectPath := strings.Split(t.s3URLParts.ObjectKey, "/")
@@ -75,6 +75,7 @@ func (t *s3Traverser) traverse(processor objectProcessor, filters []objectFilter
 		// According to IsDirectorySyntactically, objects and folders can share names
 		if err == nil {
 			storedObject := newStoredObject(
+				preprocessor,
 				objectName,
 				"",
 				oi.LastModified,
@@ -140,6 +141,7 @@ func (t *s3Traverser) traverse(processor objectProcessor, filters []objectFilter
 		}
 
 		storedObject := newStoredObject(
+			preprocessor,
 			objectName,
 			relativePath,
 			objectInfo.LastModified,

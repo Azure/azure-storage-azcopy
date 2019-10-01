@@ -7,24 +7,14 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/pkg/errors"
 
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
-func getPathBeforeFirstWildcard(path string) string {
-	if strings.Index(path, "*") == -1 {
-		return path
-	}
-
-	firstWCIndex := strings.Index(path, "*")
-	result := replacePathSeparators(path[:firstWCIndex])
-	lastSepIndex := strings.LastIndex(result, "/")
-	result = result[:lastSepIndex+1]
-
-	return result
-}
-
+// ----- LOCATION LEVEL HANDLING -----
 type LocationLevel uint8
 
 var ELocationLevel LocationLevel = 0
@@ -119,8 +109,189 @@ func determineLocationLevel(location string, locationType common.Location, sourc
 	}
 }
 
-// Both of the below functions only really do one thing at the moment.
+// ----- ROOT PATH GRABBING -----
+
+// GetResourceRoot should eliminate wildcards and error out in invalid scenarios. This is intended for the jobPartOrder.SourceRoot.
+func GetResourceRoot(resource string, location common.Location) (resourceBase string, err error) {
+	// Don't error-check this until we are in a supported environment
+	resourceURL, err := url.Parse(resource)
+
+	if location.IsRemote() && err != nil {
+		return resource, err
+	}
+
+	// todo: reduce code-duplicateyness, maybe?
+	switch location {
+	case common.ELocation.Unknown(),
+		common.ELocation.Benchmark(): // do nothing
+		return resource, nil
+	case common.ELocation.Local():
+		return cleanLocalPath(getPathBeforeFirstWildcard(resource)), nil
+
+	//noinspection GoNilness
+	case common.ELocation.Blob():
+		bURLParts := azblob.NewBlobURLParts(*resourceURL)
+
+		if bURLParts.ContainerName == "" || strings.Contains(bURLParts.ContainerName, "*") {
+			if bURLParts.BlobName != "" {
+				return resource, errors.New("cannot combine account-level traversal and specific blob names.")
+			}
+
+			bURLParts.ContainerName = ""
+		}
+
+		bURL := bURLParts.URL()
+		return bURL.String(), nil
+
+	//noinspection GoNilness
+	case common.ELocation.File():
+		bURLParts := azfile.NewFileURLParts(*resourceURL)
+
+		if bURLParts.ShareName == "" || strings.Contains(bURLParts.ShareName, "*") {
+			if bURLParts.DirectoryOrFilePath != "" {
+				return resource, errors.New("cannot combine account-level traversal and specific file/folder names.")
+			}
+
+			bURLParts.ShareName = ""
+		}
+
+		bURL := bURLParts.URL()
+		return bURL.String(), nil
+
+	//noinspection GoNilness
+	case common.ELocation.BlobFS():
+		bURLParts := azfile.NewFileURLParts(*resourceURL)
+
+		if bURLParts.ShareName == "" || strings.Contains(bURLParts.ShareName, "*") {
+			if bURLParts.DirectoryOrFilePath != "" {
+				return resource, errors.New("cannot combine account-level traversal and specific file/folder names.")
+			}
+
+			bURLParts.ShareName = ""
+		}
+
+		bURL := bURLParts.URL()
+		return bURL.String(), nil
+
+	// noinspection GoNilness
+	case common.ELocation.S3():
+		s3URLParts, err := common.NewS3URLParts(*resourceURL)
+		common.PanicIfErr(err)
+
+		if s3URLParts.BucketName == "" || strings.Contains(s3URLParts.BucketName, "*") {
+			if s3URLParts.ObjectKey != "" {
+				return resource, errors.New("cannot combine account-level traversal and specific object names")
+			}
+
+			s3URLParts.BucketName = ""
+		}
+
+		s3URL := s3URLParts.URL()
+		return s3URL.String(), nil
+	default:
+		panic(fmt.Sprintf("Location %s is missing from GetResourceRoot", location))
+	}
+}
+
+// resourceBase will always be returned regardless of the location.
+// resourceToken will be separated and returned depending on the location.
+func SplitAuthTokenFromResource(resource string, location common.Location) (resourceBase, resourceToken string, err error) {
+	switch location {
+	case common.ELocation.Local():
+		if resource == common.Dev_Null {
+			return resource, "", nil // don't mess with the special dev-null path, at all
+		}
+		return cleanLocalPath(common.ToExtendedPath(resource)), "", nil
+	case common.ELocation.S3():
+		// Encoding +s as %20 (space) is important in S3 URLs as this is unsupported in Azure (but %20 can still be used as a space in S3 URLs)
+		var baseURL *url.URL
+		baseURL, err = url.Parse(resource)
+
+		if err != nil {
+			return resource, "", err
+		}
+
+		*baseURL = common.URLExtension{URL: *baseURL}.URLWithPlusDecodedInPath()
+		return baseURL.String(), "", nil
+	case common.ELocation.Benchmark(), // cover for benchmark as we generate data for that
+		common.ELocation.Unknown(): // cover for unknown as we treat that as garbage
+		// Local and S3 don't feature URL-embedded tokens
+		return resource, "", nil
+
+	// Use resource-specific APIs that all mostly do the same thing, just on the off-chance they end up doing something slightly different in the future.
+	// TODO: make GetAccountRoot and GetContainerName use their own specific APIs as well. It's _unlikely_ at best that the URL format will change drastically.
+	//       but just on the off-chance that it does, I'd prefer if AzCopy could adapt adequately as soon as the SDK catches the change
+	//       We've already seen a similar thing happen with Blob SAS tokens and the introduction of User Delegation Keys.
+	//       It's not a breaking change to the way SAS tokens work, but a pretty major addition.
+	// TODO: Find a clever way to reduce code duplication in here. Especially the URL parsing.
+	case common.ELocation.Blob():
+		var baseURL *url.URL // Do not shadow err for clean return statement
+		baseURL, err = url.Parse(resource)
+
+		if err != nil {
+			return resource, "", err
+		}
+
+		bURLParts := azblob.NewBlobURLParts(*baseURL)
+		resourceToken = bURLParts.SAS.Encode()
+		bURLParts.SAS = azblob.SASQueryParameters{} // clear the SAS token and drop the raw, base URL
+		blobURL := bURLParts.URL()                  // Can't call .String() on .URL() because Go can't take the pointer of a function's return
+		resourceBase = blobURL.String()
+		return
+	case common.ELocation.File():
+		var baseURL *url.URL // Do not shadow err for clean return statement
+		baseURL, err = url.Parse(resource)
+
+		if err != nil {
+			return resource, "", err
+		}
+
+		fURLParts := azfile.NewFileURLParts(*baseURL)
+		resourceToken = fURLParts.SAS.Encode()
+		if resourceToken == "" {
+			// Azure Files only supports the use of SAS tokens currently
+			// Azure Files ALSO can't be a public resource
+			// Therefore, it is safe to error here if no SAS token is present, as neither a source nor a destination could safely not have a SAS token.
+			return resource, "", errors.New("azure files only supports the use of SAS token authentication")
+		}
+		fURLParts.SAS = azfile.SASQueryParameters{} // clear the SAS token and drop the raw, base URL
+		fileURL := fURLParts.URL()                  // Can't call .String() on .URL() because Go can't take the pointer of a function's return
+		resourceBase = fileURL.String()
+		return
+	case common.ELocation.BlobFS():
+		var baseURL *url.URL // Do not shadow err for clean return statement
+		baseURL, err = url.Parse(resource)
+
+		if err != nil {
+			return resource, "", err
+		}
+
+		bfsURLParts := azbfs.NewBfsURLParts(*baseURL)
+		resourceToken = bfsURLParts.SAS.Encode()
+		bfsURLParts.SAS = azbfs.SASQueryParameters{}
+		bfsURL := bfsURLParts.URL() // Can't call .String() on .URL() because Go can't take the pointer of a function's return
+		resourceBase = bfsURL.String()
+		return
+	default:
+		panic(fmt.Sprintf("One or more location(s) may be missing from SplitAuthTokenFromResource. Location: %s", location))
+	}
+}
+
+// All of the below functions only really do one thing at the moment.
 // They've been separated from copyEnumeratorInit.go in order to make the code more maintainable, should we want more destinations in the future.
+func getPathBeforeFirstWildcard(path string) string {
+	if strings.Index(path, "*") == -1 {
+		return path
+	}
+
+	firstWCIndex := strings.Index(path, "*")
+	result := consolidatePathSeparators(path[:firstWCIndex])
+	lastSepIndex := strings.LastIndex(result, common.DeterminePathSeparator(path))
+	result = result[:lastSepIndex+1]
+
+	return result
+}
+
 func GetAccountRoot(path string, location common.Location) (string, error) {
 	switch location {
 	case common.ELocation.Local():
