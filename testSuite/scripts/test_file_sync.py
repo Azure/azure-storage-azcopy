@@ -29,11 +29,11 @@ class File_Sync_User_Scenario(unittest.TestCase):
         self.assertTrue(result)
 
         # verifying the sync worked, both remote source and destination should be identical to the local source
-        result = util.Command("testFile").add_arguments(content_file_path_dst).add_arguments(
+        result = util.Command("testFile").add_arguments(content_file_path_src).add_arguments(
             remote_src_file_path).execute_azcopy_verify()
         self.assertTrue(result)
         result = util.Command("testFile").add_arguments(content_file_path_src).add_arguments(
-            remote_src_file_path).execute_azcopy_verify()
+            remote_dst_file_path).execute_azcopy_verify()
         self.assertTrue(result)
 
     def test_sync_entire_dir_to_dir(self):
