@@ -36,7 +36,7 @@ var randomDataBytePool = NewMultiSizeSlicePool(randomSliceLength)
 func NewRandomDataGenerator(length int64) CloseableReaderAt {
 	r := &randomDataGenerator{
 		length:    length,
-		randGen:   rand.New(rand.NewSource(rand.Int63())),
+		randGen:   rand.New(rand.NewSource(rand.Int63())), // create new rand source, seeded from global one, so that after seeding we never lock the global one
 		randBytes: randomDataBytePool.RentSlice(randomSliceLength),
 		randMu:    &sync.Mutex{}}
 

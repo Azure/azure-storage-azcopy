@@ -14,6 +14,7 @@ from test_service_to_service_copy import *
 from test_blobfs_download_SAS import *
 from test_blobfs_upload_SAS import *
 from test_autodetect_blob_type import *
+from test_file_sync import *
 import glob, os
 import configparser
 import platform
@@ -183,6 +184,7 @@ def main():
 
     test_class_to_run = [BlobPipingTests,
                          Blob_Sync_User_Scenario,
+                         File_Sync_User_Scenario,
                          Block_Upload_User_Scenarios,
                          Blob_Download_User_Scenario,
                          PageBlob_Upload_User_Scenarios,

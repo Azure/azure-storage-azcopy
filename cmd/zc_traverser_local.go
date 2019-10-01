@@ -101,7 +101,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc) (err error) {
 			}
 
 			computedRelativePath := strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(queueItem.fullPath))
-			computedRelativePath = cleanLocalPath(filepath.Join(queueItem.relativeBase, computedRelativePath))
+			computedRelativePath = cleanLocalPath(common.GenerateFullPath(queueItem.relativeBase, computedRelativePath))
 			computedRelativePath = strings.TrimPrefix(computedRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 			if fileInfo.Mode()&os.ModeSymlink != 0 {
@@ -131,7 +131,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc) (err error) {
 						relativeBase: computedRelativePath,
 					})
 				} else {
-					glcm.Info(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, filepath.Join(fullPath, computedRelativePath)))
+					glcm.Info(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
 				}
 				return nil
 			} else {
@@ -151,10 +151,10 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc) (err error) {
 
 				if _, ok := seenPaths[result]; !ok {
 					seenPaths[result] = true
-					return walkFunc(filepath.Join(fullPath, computedRelativePath), fileInfo, fileError)
+					return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
 				} else {
 					// Output resulting path of symlink and symlink source
-					glcm.Info(fmt.Sprintf("Ignored already seen file located at %s (found at %s)", filePath, filepath.Join(fullPath, computedRelativePath)))
+					glcm.Info(fmt.Sprintf("Ignored already seen file located at %s (found at %s)", filePath, common.GenerateFullPath(fullPath, computedRelativePath)))
 					return nil
 				}
 			}
@@ -163,7 +163,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc) (err error) {
 	return
 }
 
-func (t *localTraverser) traverse(processor objectProcessor, filters []objectFilter) (err error) {
+func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 
 	if err != nil {
@@ -178,6 +178,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 
 		return processIfPassedFilters(filters,
 			newStoredObject(
+				preprocessor,
 				singleFileInfo.Name(),
 				"",
 				singleFileInfo.ModTime(),
@@ -200,9 +201,9 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 					return nil
 				}
 
-				relPath := strings.TrimPrefix(strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(t.fullPath)), "/")
+				relPath := strings.TrimPrefix(strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(t.fullPath)), common.DeterminePathSeparator(t.fullPath))
 				if !t.followSymlinks && fileInfo.Mode()&os.ModeSymlink != 0 {
-					glcm.Info(fmt.Sprintf("Skipping over symlink at %s because --follow-symlinks is false", filepath.Join(t.fullPath, relPath)))
+					glcm.Info(fmt.Sprintf("Skipping over symlink at %s because --follow-symlinks is false", common.GenerateFullPath(t.fullPath, relPath)))
 					return nil
 				}
 
@@ -212,8 +213,9 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 
 				return processIfPassedFilters(filters,
 					newStoredObject(
+						preprocessor,
 						fileInfo.Name(),
-						relPath,
+						strings.ReplaceAll(relPath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
 						fileInfo.ModTime(),
 						fileInfo.Size(),
 						nil, // Local MD5s are taken in the STE
@@ -244,7 +246,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 						continue
 					} else {
 						// Because this only goes one layer deep, we can just append the filename to fullPath and resolve with it.
-						symlinkPath := filepath.Join(t.fullPath, singleFile.Name())
+						symlinkPath := common.GenerateFullPath(t.fullPath, singleFile.Name())
 						// Evaluate the symlink
 						result, err := filepath.EvalSymlinks(symlinkPath)
 
@@ -278,8 +280,9 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 
 				err := processIfPassedFilters(filters,
 					newStoredObject(
+						preprocessor,
 						singleFile.Name(),
-						relativePath,
+						strings.ReplaceAll(relativePath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
 						singleFile.ModTime(),
 						singleFile.Size(),
 						nil, // Local MD5s are taken in the STE
@@ -298,12 +301,11 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 	return
 }
 
-func replacePathSeparators(path string) string {
-	if os.PathSeparator != common.AZCOPY_PATH_SEPARATOR_CHAR {
-		return strings.Replace(path, string(os.PathSeparator), common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-	} else {
-		return path
-	}
+// Replace azcopy path separators (/) with the OS path separator
+func consolidatePathSeparators(path string) string {
+	pathSep := common.DeterminePathSeparator(path)
+
+	return strings.ReplaceAll(path, common.AZCOPY_PATH_SEPARATOR_STRING, pathSep)
 }
 
 func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter func()) *localTraverser {
@@ -316,18 +318,19 @@ func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, inc
 }
 
 func cleanLocalPath(localPath string) string {
-	normalizedPath := path.Clean(replacePathSeparators(localPath))
+	localPathSeparator := common.DeterminePathSeparator(localPath)
+	// path.Clean only likes /, and will only handle /. So, we consolidate it to /.
+	// it will do absolutely nothing with \.
+	normalizedPath := path.Clean(strings.ReplaceAll(localPath, localPathSeparator, common.AZCOPY_PATH_SEPARATOR_STRING))
+	// return normalizedPath path separator.
+	normalizedPath = strings.ReplaceAll(normalizedPath, common.AZCOPY_PATH_SEPARATOR_STRING, localPathSeparator)
 
-	// detect if we are targeting a network share
-	if strings.HasPrefix(localPath, "//") || strings.HasPrefix(localPath, `\\`) {
-		// if yes, we have trimmed away one of the leading slashes, so add it back
-		normalizedPath = common.AZCOPY_PATH_SEPARATOR_STRING + normalizedPath
+	if strings.HasPrefix(localPath, `\\`) || strings.HasPrefix(localPath, `//`) { // path.Clean steals the first / from the // or \\ prefix.
+		// return the \ we stole from the UNC path.
+		normalizedPath = localPathSeparator + normalizedPath
 	} else if len(localPath) == 3 && (strings.HasSuffix(localPath, `:\`) || strings.HasSuffix(localPath, ":/")) ||
-		len(localPath) == 2 && strings.HasSuffix(localPath, ":") {
-		// detect if we are targeting a drive (ex: either C:\ or C:)
-		// note that on windows there must be a slash in order to target the root drive properly
-		// otherwise we'd point to the path from where AzCopy is running (if AzCopy is running from the same drive)
-		normalizedPath += common.AZCOPY_PATH_SEPARATOR_STRING
+		len(localPath) == 2 && strings.HasSuffix(localPath, ":") { // path.Clean steals the last / from C:\, C:/, and does not add one for C:
+		normalizedPath += common.OS_PATH_SEPARATOR
 	}
 
 	return normalizedPath

@@ -73,6 +73,11 @@ func init() {
 				panic(fmt.Errorf("fail to parse resource type %q, %v", resourceTypeStr, err))
 			}
 
+			var md5 []byte
+			if contentMD5 != "" {
+				md5 = []byte(contentMD5)
+			}
+
 			switch serviceType {
 			case EServiceType.Blob():
 				switch resourceType {
@@ -88,7 +93,7 @@ func init() {
 							ContentDisposition: contentDisposition,
 							ContentEncoding:    contentEncoding,
 							ContentLanguage:    contentLanguage,
-							ContentMD5:         []byte(contentMD5),
+							ContentMD5:         md5,
 							CacheControl:       cacheControl,
 						})
 				default:
@@ -108,7 +113,7 @@ func init() {
 							ContentDisposition: contentDisposition,
 							ContentEncoding:    contentEncoding,
 							ContentLanguage:    contentLanguage,
-							ContentMD5:         []byte(contentMD5),
+							ContentMD5:         md5,
 							CacheControl:       cacheControl,
 						})
 				default:

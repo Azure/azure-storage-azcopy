@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -52,7 +51,6 @@ func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer
 // this is done to avoid hitting the same partition continuously in an append only pattern
 // TODO this should probably be removed after the high throughput block blob feature is implemented on the service side
 func shuffleTransfers(transfers []common.CopyTransfer) {
-	rand.Seed(time.Now().UnixNano())
 	rand.Shuffle(len(transfers), func(i, j int) { transfers[i], transfers[j] = transfers[j], transfers[i] })
 }
 

@@ -45,6 +45,8 @@ const (
 	AZCOPY_PATH_SEPARATOR_STRING = "/"
 	AZCOPY_PATH_SEPARATOR_CHAR   = '/'
 	OS_PATH_SEPARATOR            = string(os.PathSeparator)
+	EXTENDED_PATH_PREFIX         = `\\?\`
+	EXTENDED_UNC_PATH_PREFIX     = `\\?\UNC`
 	Dev_Null                     = os.DevNull
 
 	//  this is the perm that AzCopy has used throughout its preview.  So, while we considered relaxing it to 0666
@@ -427,6 +429,8 @@ func (FromTo) LocalBlobFS() FromTo { return FromTo(fromToValue(ELocation.Local()
 func (FromTo) BlobFSLocal() FromTo { return FromTo(fromToValue(ELocation.BlobFS(), ELocation.Local())) }
 func (FromTo) BlobBlob() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.Blob())) }
 func (FromTo) FileBlob() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.Blob())) }
+func (FromTo) BlobFile() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.File())) }
+func (FromTo) FileFile() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.File())) }
 func (FromTo) S3Blob() FromTo      { return FromTo(fromToValue(ELocation.S3(), ELocation.Blob())) }
 
 // todo: to we really want these?  Starts to look like a bit of a combinatorial explosion

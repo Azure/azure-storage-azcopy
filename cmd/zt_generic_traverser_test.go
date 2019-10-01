@@ -80,7 +80,7 @@ func (s *genericTraverserSuite) TestFilesGetProperties(c *chk.C) {
 		return nil
 	}
 
-	err = traverser.traverse(processor, nil)
+	err = traverser.traverse(noPreProccessor, processor, nil)
 	c.Assert(err, chk.IsNil)
 	c.Assert(seenContentType, chk.Equals, true)
 
@@ -89,7 +89,7 @@ func (s *genericTraverserSuite) TestFilesGetProperties(c *chk.C) {
 	fileURL := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, fileName)
 	traverser = newFileTraverser(&fileURL, pipeline, ctx, false, true, func() {})
 
-	err = traverser.traverse(processor, nil)
+	err = traverser.traverse(noPreProccessor, processor, nil)
 	c.Assert(err, chk.IsNil)
 	c.Assert(seenContentType, chk.Equals, true)
 }
@@ -141,7 +141,7 @@ func (s *genericTraverserSuite) TestS3GetProperties(c *chk.C) {
 		return nil
 	}
 
-	err = traverser.traverse(processor, nil)
+	err = traverser.traverse(noPreProccessor, processor, nil)
 	c.Assert(err, chk.IsNil)
 	c.Assert(seenContentType, chk.Equals, true)
 
@@ -151,7 +151,7 @@ func (s *genericTraverserSuite) TestS3GetProperties(c *chk.C) {
 	traverser, err = newS3Traverser(&s3ObjectURL, ctx, false, true, func() {})
 	c.Assert(err, chk.IsNil)
 
-	err = traverser.traverse(processor, nil)
+	err = traverser.traverse(noPreProccessor, processor, nil)
 	c.Assert(err, chk.IsNil)
 	c.Assert(seenContentType, chk.Equals, true)
 }
@@ -340,7 +340,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 
 		// invoke the local traversal with a dummy processor
 		localDummyProcessor := dummyProcessor{}
-		err := localTraverser.traverse(localDummyProcessor.process, nil)
+		err := localTraverser.traverse(noPreProccessor, localDummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
 		c.Assert(len(localDummyProcessor.record), chk.Equals, 1)
 
@@ -352,7 +352,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 
 		// invoke the blob traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
-		err = blobTraverser.traverse(blobDummyProcessor.process, nil)
+		err = blobTraverser.traverse(noPreProccessor, blobDummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
 		c.Assert(len(blobDummyProcessor.record), chk.Equals, 1)
 
@@ -376,7 +376,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 
 			// invoke the file traversal with a dummy processor
 			fileDummyProcessor := dummyProcessor{}
-			err = azureFileTraverser.traverse(fileDummyProcessor.process, nil)
+			err = azureFileTraverser.traverse(noPreProccessor, fileDummyProcessor.process, nil)
 			c.Assert(err, chk.IsNil)
 			c.Assert(len(fileDummyProcessor.record), chk.Equals, 1)
 
@@ -396,7 +396,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 
 		// Construct and run a dummy processor for bfs
 		bfsDummyProcessor := dummyProcessor{}
-		err = bfsTraverser.traverse(bfsDummyProcessor.process, nil)
+		err = bfsTraverser.traverse(noPreProccessor, bfsDummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
 		c.Assert(len(bfsDummyProcessor.record), chk.Equals, 1)
 
@@ -413,7 +413,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 		c.Assert(err, chk.IsNil)
 
 		s3DummyProcessor := dummyProcessor{}
-		err = S3Traverser.traverse(s3DummyProcessor.process, nil)
+		err = S3Traverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
 		c.Assert(len(s3DummyProcessor.record), chk.Equals, 1)
 
@@ -467,7 +467,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		// invoke the local traversal with an indexer
 		// so that the results are indexed for easy validation
 		localIndexer := newObjectIndexer()
-		err := localTraverser.traverse(localIndexer.store, nil)
+		err := localTraverser.traverse(noPreProccessor, localIndexer.store, nil)
 		c.Assert(err, chk.IsNil)
 
 		// construct a blob traverser
@@ -478,7 +478,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 
 		// invoke the local traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
-		err = blobTraverser.traverse(blobDummyProcessor.process, nil)
+		err = blobTraverser.traverse(noPreProccessor, blobDummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
 
 		// construct an Azure File traverser
@@ -488,7 +488,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 
 		// invoke the file traversal with a dummy processor
 		fileDummyProcessor := dummyProcessor{}
-		err = azureFileTraverser.traverse(fileDummyProcessor.process, nil)
+		err = azureFileTraverser.traverse(noPreProccessor, fileDummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
 
 		// construct a directory URL and pipeline
@@ -499,7 +499,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		// construct and run a FS traverser
 		bfsTraverser := newBlobFSTraverser(&rawFilesystemURL, bfsPipeline, ctx, isRecursiveOn, func() {})
 		bfsDummyProcessor := dummyProcessor{}
-		err = bfsTraverser.traverse(bfsDummyProcessor.process, nil)
+		err = bfsTraverser.traverse(noPreProccessor, bfsDummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
 
 		// construct and run a S3 traverser
@@ -507,7 +507,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, false, func() {})
 		c.Assert(err, chk.IsNil)
 		s3DummyProcessor := dummyProcessor{}
-		err = S3Traverser.traverse(s3DummyProcessor.process, nil)
+		err = S3Traverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
 
 		// make sure the results are the same
@@ -576,7 +576,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		// invoke the local traversal with an indexer
 		// so that the results are indexed for easy validation
 		localIndexer := newObjectIndexer()
-		err := localTraverser.traverse(localIndexer.store, nil)
+		err := localTraverser.traverse(noPreProccessor, localIndexer.store, nil)
 		c.Assert(err, chk.IsNil)
 
 		// construct a blob traverser
@@ -587,7 +587,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 
 		// invoke the local traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
-		err = blobTraverser.traverse(blobDummyProcessor.process, nil)
+		err = blobTraverser.traverse(noPreProccessor, blobDummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
 
 		// construct an Azure File traverser
@@ -597,7 +597,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 
 		// invoke the file traversal with a dummy processor
 		fileDummyProcessor := dummyProcessor{}
-		err = azureFileTraverser.traverse(fileDummyProcessor.process, nil)
+		err = azureFileTraverser.traverse(noPreProccessor, fileDummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
 
 		// construct a filesystem URL & pipeline
@@ -608,7 +608,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		// construct and run a FS traverser
 		bfsTraverser := newBlobFSTraverser(&rawFilesystemURL, bfsPipeline, ctx, isRecursiveOn, func() {})
 		bfsDummyProcessor := dummyProcessor{}
-		err = bfsTraverser.traverse(bfsDummyProcessor.process, nil)
+		err = bfsTraverser.traverse(noPreProccessor, bfsDummyProcessor.process, nil)
 
 		// construct and run a S3 traverser
 		// directory object keys always end with / in S3
@@ -616,7 +616,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, false, func() {})
 		c.Assert(err, chk.IsNil)
 		s3DummyProcessor := dummyProcessor{}
-		err = S3Traverser.traverse(s3DummyProcessor.process, nil)
+		err = S3Traverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
 
 		// make sure the results are the same

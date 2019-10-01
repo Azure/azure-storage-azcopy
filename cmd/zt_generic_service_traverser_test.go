@@ -60,7 +60,7 @@ func (s *genericTraverserSuite) TestBlobFSServiceTraverserWithManyObjects(c *chk
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
-	err := localTraverser.traverse(localIndexer.store, nil)
+	err := localTraverser.traverse(noPreProccessor, localIndexer.store, nil)
 	c.Assert(err, chk.IsNil)
 
 	// construct a blob account traverser
@@ -70,7 +70,7 @@ func (s *genericTraverserSuite) TestBlobFSServiceTraverserWithManyObjects(c *chk
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}
-	err = blobAccountTraverser.traverse(blobDummyProcessor.process, nil)
+	err = blobAccountTraverser.traverse(noPreProccessor, blobDummyProcessor.process, nil)
 	c.Assert(err, chk.IsNil)
 
 	c.Assert(len(blobDummyProcessor.record), chk.Equals, len(localIndexer.indexMap)*len(containerList))
@@ -158,7 +158,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
-	err = localTraverser.traverse(localIndexer.store, nil)
+	err = localTraverser.traverse(noPreProccessor, localIndexer.store, nil)
 	c.Assert(err, chk.IsNil)
 
 	// construct a blob account traverser
@@ -168,7 +168,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}
-	err = blobAccountTraverser.traverse(blobDummyProcessor.process, nil)
+	err = blobAccountTraverser.traverse(noPreProccessor, blobDummyProcessor.process, nil)
 	c.Assert(err, chk.IsNil)
 
 	// construct a file account traverser
@@ -178,7 +178,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}
-	err = fileAccountTraverser.traverse(fileDummyProcessor.process, nil)
+	err = fileAccountTraverser.traverse(noPreProccessor, fileDummyProcessor.process, nil)
 	c.Assert(err, chk.IsNil)
 
 	var s3DummyProcessor dummyProcessor
@@ -190,7 +190,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 
 		// invoke the s3 service traversal with a dummy processor
 		s3DummyProcessor = dummyProcessor{}
-		err = s3ServiceTraverser.traverse(s3DummyProcessor.process, nil)
+		err = s3ServiceTraverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
 	}
 
@@ -301,7 +301,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
-	err = localTraverser.traverse(localIndexer.store, nil)
+	err = localTraverser.traverse(noPreProccessor, localIndexer.store, nil)
 	c.Assert(err, chk.IsNil)
 
 	// construct a blob account traverser
@@ -312,7 +312,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}
-	err = blobAccountTraverser.traverse(blobDummyProcessor.process, nil)
+	err = blobAccountTraverser.traverse(noPreProccessor, blobDummyProcessor.process, nil)
 	c.Assert(err, chk.IsNil)
 
 	// construct a file account traverser
@@ -323,7 +323,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}
-	err = fileAccountTraverser.traverse(fileDummyProcessor.process, nil)
+	err = fileAccountTraverser.traverse(noPreProccessor, fileDummyProcessor.process, nil)
 	c.Assert(err, chk.IsNil)
 
 	// construct a ADLS account traverser
@@ -334,7 +334,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 
 	// invoke the blobFS account traversal with a dummy processor
 	bfsDummyProcessor := dummyProcessor{}
-	err = bfsAccountTraverser.traverse(bfsDummyProcessor.process, nil)
+	err = bfsAccountTraverser.traverse(noPreProccessor, bfsDummyProcessor.process, nil)
 
 	var s3DummyProcessor dummyProcessor
 	if testS3 {
@@ -349,7 +349,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 
 		// invoke the s3 service traversal with a dummy processor
 		s3DummyProcessor = dummyProcessor{}
-		err = s3ServiceTraverser.traverse(s3DummyProcessor.process, nil)
+		err = s3ServiceTraverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
 	}
 

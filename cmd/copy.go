@@ -30,7 +30,6 @@ import (
 	"math"
 	"net/url"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -38,10 +37,8 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 )
@@ -798,177 +795,31 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		CredentialInfo: cca.credentialInfo,
 	}
 
-	// TODO remove this copy pasted code during refactoring
 	from := cca.fromTo.From()
 	to := cca.fromTo.To()
+
 	// Strip the SAS from the source and destination whenever there is SAS exists in URL.
 	// Note: SAS could exists in source of S2S copy, even if the credential type is OAuth for destination.
-	switch from {
-	case common.ELocation.Local():
-		tmpSrc, err := filepath.Abs(cca.source)
-		if err != nil {
-			return fmt.Errorf("couldn't get absolute path of the source location %s. Failed with errror %s", cca.source, err.Error())
-		}
+	cca.source, cca.sourceSAS, err = SplitAuthTokenFromResource(cca.source, from)
 
-		jobPartOrder.SourceRoot = cleanLocalPath(getPathBeforeFirstWildcard(tmpSrc))
-		cca.source = cleanLocalPath(tmpSrc)
-
-	case common.ELocation.Benchmark():
-		// noop
-
-	case common.ELocation.Blob():
-		fromUrl, err := url.Parse(cca.source)
-		if err != nil {
-			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
-		}
-		blobParts := azblob.NewBlobURLParts(*fromUrl)
-		cca.sourceSAS = blobParts.SAS.Encode()
-		jobPartOrder.SourceSAS = cca.sourceSAS
-		blobParts.SAS = azblob.SASQueryParameters{}
-		bUrl := blobParts.URL()
-		cca.source = bUrl.String()
-
-		// set the clean source root
-		if strings.Contains(blobParts.ContainerName, "*") {
-			if blobParts.BlobName != "" {
-				return errors.New("cannot combine a wildcarded container name and blob path")
-			}
-
-			blobParts.ContainerName = ""
-		}
-		bUrl = blobParts.URL()
-		jobPartOrder.SourceRoot = bUrl.String()
-	case common.ELocation.File():
-		fromUrl, err := url.Parse(cca.source)
-		if err != nil {
-			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
-		}
-		fileParts := azfile.NewFileURLParts(*fromUrl)
-		cca.sourceSAS = fileParts.SAS.Encode()
-		if cca.sourceSAS == "" {
-			return fmt.Errorf("azure files only supports SAS token authentication")
-		}
-		jobPartOrder.SourceSAS = cca.sourceSAS
-		fileParts.SAS = azfile.SASQueryParameters{}
-		fUrl := fileParts.URL()
-		cca.source = fUrl.String()
-
-		// set the clean source root
-		if strings.Contains(fileParts.ShareName, "*") {
-			if fileParts.DirectoryOrFilePath != "" {
-				return errors.New("cannot combine a wildcarded share name and file path")
-			}
-
-			fileParts.ShareName = ""
-		}
-		fUrl = fileParts.URL()
-		jobPartOrder.SourceRoot = fUrl.String()
-
-	case common.ELocation.BlobFS():
-		fromUrl, err := url.Parse(cca.source)
-		if err != nil {
-			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
-		}
-		bfsParts := azbfs.NewBfsURLParts(*fromUrl)
-		cca.sourceSAS = bfsParts.SAS.Encode()
-		jobPartOrder.SourceSAS = cca.sourceSAS
-		bfsParts.SAS = azbfs.SASQueryParameters{}
-		bfsUrl := bfsParts.URL()
-		cca.source = bfsUrl.String() // this escapes spaces in the source
-
-		// set the clean source root
-		if strings.Contains(bfsParts.FileSystemName, "*") {
-			if bfsParts.DirectoryOrFilePath != "" {
-				return errors.New("cannot combine a wildcarded filesystem name and file path")
-			}
-
-			bfsParts.FileSystemName = ""
-		}
-		bfsUrl = bfsParts.URL()
-		jobPartOrder.SourceRoot = bfsUrl.String()
-
-	case common.ELocation.S3():
-		fromURL, err := url.Parse(cca.source)
-		if err != nil {
-			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromURL.String(), err.Error())
-		}
-
-		// S3 management console encode ' '(space) as '+', which is not supported by Azure resources.
-		// To support URL from S3 managment console, azcopy decode '+' as ' '(space).
-		*fromURL = common.URLExtension{URL: *fromURL}.URLWithPlusDecodedInPath()
-		cca.source = fromURL.String()
-
-		// set the clean source root
-		s3URLParts, err := common.NewS3URLParts(*fromURL)
-		if err != nil {
-			return err
-		}
-
-		if strings.Contains(s3URLParts.BucketName, "*") {
-			if s3URLParts.ObjectKey != "" {
-				return errors.New("cannot combine a wildcarded bucket name and object key")
-			}
-
-			s3URLParts.BucketName = ""
-		}
-		*fromURL = s3URLParts.URL()
-		jobPartOrder.SourceRoot = fromURL.String()
-	default:
-		jobPartOrder.SourceRoot, _ = gCopyUtil.getRootPathWithoutWildCards(cca.source)
+	if err != nil {
+		return err
 	}
 
-	switch to {
-	case common.ELocation.Blob():
-		toUrl, err := url.Parse(cca.destination)
-		if err != nil {
-			return fmt.Errorf("error parsing the destination url %s. Failed with error %s", toUrl.String(), err.Error())
-		}
-		blobParts := azblob.NewBlobURLParts(*toUrl)
-		cca.destinationSAS = blobParts.SAS.Encode()
-		jobPartOrder.DestinationSAS = cca.destinationSAS
-		blobParts.SAS = azblob.SASQueryParameters{}
-		bUrl := blobParts.URL()
-		cca.destination = bUrl.String()
-	case common.ELocation.File():
-		toUrl, err := url.Parse(cca.destination)
-		if err != nil {
-			return fmt.Errorf("error parsing the destination url %s. Failed with error %s", toUrl.String(), err.Error())
-		}
-		fileParts := azfile.NewFileURLParts(*toUrl)
-		cca.destinationSAS = fileParts.SAS.Encode()
-		if cca.destinationSAS == "" {
-			return fmt.Errorf("azure files only supports SAS token authentication")
-		}
-		jobPartOrder.DestinationSAS = cca.destinationSAS
-		fileParts.SAS = azfile.SASQueryParameters{}
-		fUrl := fileParts.URL()
-		cca.destination = fUrl.String()
-	case common.ELocation.BlobFS():
-		toUrl, err := url.Parse(cca.destination)
-		if err != nil {
-			return fmt.Errorf("error parsing the destination url %s. Failed with error %s", toUrl.String(), err.Error())
-		}
-		bfsParts := azbfs.NewBfsURLParts(*toUrl)
-		cca.destinationSAS = bfsParts.SAS.Encode()
-		jobPartOrder.DestinationSAS = cca.destinationSAS
-		bfsParts.SAS = azbfs.SASQueryParameters{}
-		bfsUrl := bfsParts.URL()
-		cca.destination = bfsUrl.String() // this escapes spaces in the destination
-	case common.ELocation.Local():
-		if cca.destination != common.Dev_Null { // don't mess at all with this special marker
-			var result string
-			result, err = filepath.Abs(cca.destination)
+	jobPartOrder.SourceSAS = cca.sourceSAS
+	jobPartOrder.SourceRoot, err = GetResourceRoot(cca.source, from)
 
-			if err != nil {
-				return err
-			}
-
-			cca.destination = cleanLocalPath(result)
-		}
+	if err != nil {
+		return err
 	}
 
-	// set the root destination after it's been cleaned
+	cca.destination, cca.destinationSAS, err = SplitAuthTokenFromResource(cca.destination, to)
+	jobPartOrder.DestinationSAS = cca.destinationSAS
 	jobPartOrder.DestinationRoot = cca.destination
+
+	if err != nil {
+		return err
+	}
 
 	// depending on the source and destination type, we process the cp command differently
 	// Create enumerator and do enumerating

@@ -82,7 +82,7 @@ func (t *s3ServiceTraverser) listContainers() ([]string, error) {
 	}
 }
 
-func (t *s3ServiceTraverser) traverse(processor objectProcessor, filters []objectFilter) error {
+func (t *s3ServiceTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) error {
 	bucketList, err := t.listContainers()
 
 	if err != nil {
@@ -99,9 +99,9 @@ func (t *s3ServiceTraverser) traverse(processor objectProcessor, filters []objec
 			return err
 		}
 
-		middlemanProcessor := initContainerDecorator(v, processor)
+		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
-		err = bucketTraverser.traverse(middlemanProcessor, filters)
+		err = bucketTraverser.traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
 			if strings.Contains(err.Error(), "301 response missing Location header") {

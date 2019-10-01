@@ -3,7 +3,6 @@ package ste
 import (
 	"context"
 	"fmt"
-	"github.com/mattn/go-ieproxy"
 	"mime"
 	"net"
 	"net/http"
@@ -13,13 +12,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/sync/semaphore"
+	autoProxy "github.com/mattn/go-ieproxy"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	"golang.org/x/sync/semaphore"
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
@@ -85,7 +85,7 @@ func NewVersionPolicyFactory() pipeline.Factory {
 func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
-			Proxy: ieproxy.GetProxyFunc(),
+			Proxy: autoProxy.GetProxyFunc(),
 			DialContext: newDialRateLimiter(&net.Dialer{
 				Timeout:   30 * time.Second,
 				KeepAlive: 30 * time.Second,
@@ -452,7 +452,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	var statsAccForSip *pipelineNetworkStats = nil // we don'nt accumulate stats on the source info provider
 
 	// Create source info provider's pipeline for S2S copy.
-	if fromTo == common.EFromTo.BlobBlob() {
+	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() {
 		jpm.sourceProviderPipeline = NewBlobPipeline(
 			azblob.NewAnonymousCredential(),
 			azblob.PipelineOptions{
@@ -466,7 +466,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.jobMgr.HttpClient(),
 			statsAccForSip)
 	}
-	if fromTo == common.EFromTo.FileBlob() {
+	if fromTo == common.EFromTo.FileBlob() || fromTo == common.EFromTo.FileFile() {
 		jpm.sourceProviderPipeline = NewFilePipeline(
 			azfile.NewAnonymousCredential(),
 			azfile.PipelineOptions{
@@ -523,7 +523,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.jobMgr.HttpClient(),
 			jpm.jobMgr.PipelineNetworkStats())
 	// Create pipeline for Azure File.
-	case common.EFromTo.FileTrash(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile(), common.EFromTo.BenchmarkFile():
+	case common.EFromTo.FileTrash(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile(), common.EFromTo.BenchmarkFile(),
+		common.EFromTo.FileFile(), common.EFromTo.BlobFile():
 		jpm.pipeline = NewFilePipeline(
 			azfile.NewAnonymousCredential(),
 			azfile.PipelineOptions{

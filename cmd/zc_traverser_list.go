@@ -45,7 +45,7 @@ func (l *listTraverser) isDirectory(bool) bool {
 
 // To kill the traverser, close() the channel under it.
 // Behavior demonstrated: https://play.golang.org/p/OYdvLmNWgwO
-func (l *listTraverser) traverse(processor objectProcessor, filters []objectFilter) (err error) {
+func (l *listTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
 	// read a channel until it closes to get a list of objects
 	childPath, ok := <-l.listReader
 	for ; ok; childPath, ok = <-l.listReader {
@@ -73,12 +73,12 @@ func (l *listTraverser) traverse(processor objectProcessor, filters []objectFilt
 		// case 2: child2 is a directory, and it has items under it such as child2/grandchild1
 		//         the relative path returned by the child traverser would be "grandchild1"
 		//         it should be "child2/grandchild1" instead
-		preProcessor := func(object storedObject) error {
+		childPreProcessor := func(object *storedObject) {
 			object.relativePath = common.GenerateFullPath(childPath, object.relativePath)
-			return processor(object)
 		}
+		preProcessorForThisChild := preprocessor.FollowedBy(childPreProcessor)
 
-		err = childTraverser.traverse(preProcessor, filters)
+		err = childTraverser.traverse(preProcessorForThisChild, processor, filters)
 		if err != nil {
 			glcm.Info(fmt.Sprintf("Skipping %s as it cannot be scanned due to error: %s", childPath, err))
 		}

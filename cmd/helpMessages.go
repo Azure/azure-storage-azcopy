@@ -269,6 +269,7 @@ const syncCmdLongDescription = `
 Replicate a source to a destination location. The last modified times are used for comparison, the file is skipped if the last modified time in the destination is more recent. The supported pairs are:
   - local <-> Azure Blob (either SAS or OAuth authentication can be used)
   - Azure Blob <-> Azure Blob (Source must include a SAS or is publicly accessible; either SAS or OAuth authentication can be used for destination)
+  - Azure File <-> Azure File (Source must include a SAS or is publicly accessible; SAS authentication should be used for destination)
 
 Please note that the sync command differs from the copy command in several ways:
   0. The recursive flag is on by default.
@@ -317,6 +318,9 @@ Sync a virtual directory:
 
 Sync a virtual directory sharing the same name as a blob (add a trailing slash to the path in order to disambiguate):
   - azcopy sync "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]/?[SAS]" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]/" --recursive=true
+
+Sync an Azure File directory (same syntax as Blob):
+  - azcopy sync "https://[account].file.core.windows.net/[share]/[path/to/dir]?[SAS]" "https://[account].file.core.windows.net/[share]/[path/to/dir]" --recursive=true
 
 Note: if include/exclude flags are used together, only files matching the include patterns would be looked at, but those matching the exclude patterns would be always be ignored.
 `

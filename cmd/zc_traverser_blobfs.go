@@ -82,12 +82,13 @@ func (_ *blobFSTraverser) parseLMT(t string) time.Time {
 	return out
 }
 
-func (t *blobFSTraverser) traverse(processor objectProcessor, filters []objectFilter) (err error) {
+func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
 	bfsURLParts := azbfs.NewBfsURLParts(*t.rawURL)
 
 	pathProperties, isFile, _ := t.getPropertiesIfSingleFile()
 	if isFile {
 		storedObject := newStoredObject(
+			preprocessor,
 			getObjectNameOnly(bfsURLParts.DirectoryOrFilePath),
 			"",
 			t.parseLMT(pathProperties.LastModified()),
@@ -131,6 +132,7 @@ func (t *blobFSTraverser) traverse(processor objectProcessor, filters []objectFi
 		for _, v := range dlr.Paths {
 			if v.IsDirectory == nil {
 				storedObject := newStoredObject(
+					preprocessor,
 					getObjectNameOnly(*v.Name),
 					strings.TrimPrefix(*v.Name, searchPrefix),
 					v.LastModifiedTime(),

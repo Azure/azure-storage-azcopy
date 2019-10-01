@@ -30,7 +30,7 @@ func newRemoveTransferProcessor(cca *cookedCopyCmdArgs, numOfTransfersPerPart in
 		JobID:         cca.jobID,
 		CommandString: cca.commandString,
 		FromTo:        cca.fromTo,
-		SourceRoot:    replacePathSeparators(cca.source),
+		SourceRoot:    consolidatePathSeparators(cca.source),
 
 		// authentication related
 		CredentialInfo: cca.credentialInfo,
@@ -40,7 +40,11 @@ func newRemoveTransferProcessor(cca *cookedCopyCmdArgs, numOfTransfersPerPart in
 		LogLevel: cca.logVerbosity,
 	}
 
-	reportFirstPart := func() { cca.waitUntilJobCompletion(false) }
+	reportFirstPart := func(jobStarted bool) {
+		if jobStarted {
+			cca.waitUntilJobCompletion(false)
+		}
+	}
 	reportFinalPart := func() { cca.isEnumerationComplete = true }
 
 	shouldEncodeSource := cca.fromTo.From().IsRemote()
