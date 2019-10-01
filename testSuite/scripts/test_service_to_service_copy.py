@@ -731,7 +731,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             srcFileURL = util.get_object_without_sas(srcBucketURL, filename)
         else:
             srcFileURL = util.get_object_sas(srcBucketURL, filename)
-        src_dir_url = srcFileURL.replace(filename, "")
+        src_dir_url = srcFileURL.replace(filename, "*")
 
         # Upload file.
         self.util_upload_to_src(file_path, srcType, srcFileURL, False)
@@ -739,11 +739,11 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         # Copy file using azcopy from srcURL to destURL
         if recursive:
             result = util.Command("copy").add_arguments(src_dir_url).add_arguments(dstBucketURL). \
-                add_flags("log-level", "info").add_flags("recursive", "true").add_flags("strip-top-dir", "true"). \
+                add_flags("log-level", "info").add_flags("recursive", "true"). \
                 execute_azcopy_copy_command()
         else:
             result = util.Command("copy").add_arguments(src_dir_url).add_arguments(dstBucketURL). \
-                add_flags("log-level", "info").add_flags("strip-top-dir", "true").execute_azcopy_copy_command()
+                add_flags("log-level", "info").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # Downloading the copied files for validation
@@ -842,21 +842,21 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         self.util_upload_to_src(src_dir_path, srcType, srcBucketURL, True)
         
         if srcType == "S3":
-            src_dir_url = util.get_object_without_sas(srcBucketURL, src_dir_name)
+            src_dir_url = util.get_object_without_sas(srcBucketURL, src_dir_name + "/*")
         else:
-            src_dir_url = util.get_object_sas(srcBucketURL, src_dir_name)
+            src_dir_url = util.get_object_sas(srcBucketURL, src_dir_name + "/*")
 
         dstDirURL = util.get_object_sas(dstBucketURL, src_dir_name)
         if recursive:
             # Copy files using azcopy from srcURL to destURL
             result = util.Command("copy").add_arguments(src_dir_url).add_arguments(dstDirURL). \
-                add_flags("log-level", "info").add_flags("recursive", "true").add_flags("strip-top-dir", "true"). \
+                add_flags("log-level", "info").add_flags("recursive", "true"). \
                 execute_azcopy_copy_command()
             self.assertTrue(result)
         else:
             # Copy files using azcopy from srcURL to destURL
             result = util.Command("copy").add_arguments(src_dir_url).add_arguments(dstDirURL). \
-                add_flags("log-level", "info").add_flags("strip-top-dir", "true").execute_azcopy_copy_command()
+                add_flags("log-level", "info").execute_azcopy_copy_command()
             self.assertTrue(result) 
 
         # Downloading the copied files for validation

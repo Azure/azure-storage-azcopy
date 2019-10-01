@@ -59,6 +59,7 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
 
         # downloading the uploaded file
         src = util.get_resource_sas_from_share(filename)
+        src_wildcard = util.get_resource_sas_from_share("*")
         dest = util.test_directory_path + "/test_upload_download_1kb_file_wildcard_all_files_dir"
         try:
             if os.path.exists(dest) and os.path.isdir(dest):
@@ -68,8 +69,8 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
         finally:
             os.makedirs(dest)
 
-        result = util.Command("copy").add_arguments(src).add_arguments(dest). \
-            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("strip-top-dir", "true"). \
+        result = util.Command("copy").add_arguments(src_wildcard).add_arguments(dest). \
+            add_flags("log-level", "info").add_flags("include-pattern", filename.replace("wildcard", "*")). \
             execute_azcopy_copy_command()
         self.assertTrue(result)
 
