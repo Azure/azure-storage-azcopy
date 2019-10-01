@@ -73,8 +73,9 @@ jobs:
           # -timeout 40m as our tests typically run between 10-15m and I'd rather have some headroom. (updated to 40 min 1 Oct 2019, was 25)
           # Race detection parameter, -race, removed, 1 Oct 2019, to bring down execution time
           # Also removed -cover, since we are not currently using the output of that from automated builds
+          # Check.v = verbose with gocheck
           set -e
-          go test -timeout 40m -short -v ./cmd ./common ./ste ./azbfs
+          go test -timeout 40m -short ./cmd ./common ./ste ./azbfs "-check.v" 
           GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
         name: 'Run_unit_tests'
         env:
