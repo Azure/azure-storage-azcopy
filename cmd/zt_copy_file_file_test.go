@@ -54,6 +54,29 @@ func (s *cmdIntegrationSuite) TestFileCopyS2SWithSingleFile(c *chk.C) {
 			validateS2STransfersAreScheduled(c, "", "", []string{""}, mockedRPC)
 		})
 	}
+
+	for _, fileName := range []string{"singlefileisbest", "打麻将.txt", "%4509%4254$85140&"} {
+		// No need to generate files since we already have them
+
+		// set up interceptor
+		mockedRPC := interceptor{}
+		Rpc = mockedRPC.intercept
+		mockedRPC.init()
+
+		// construct the raw input to simulate user input
+		srcFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, srcShareName, fileName)
+		dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
+		raw := getDefaultCopyRawInput(srcFileURLWithSAS.String(), dstShareURLWithSAS.String())
+
+		runCopyAndVerify(c, raw, func(err error) {
+			c.Assert(err, chk.IsNil)
+
+			// put the filename in the destination dir name
+			// this is because validateS2STransfersAreScheduled dislikes when the relative paths differ
+			// In this case, the relative path should absolutely differ. (explicit file path -> implicit)
+			validateS2STransfersAreScheduled(c, "", "/" + strings.ReplaceAll(fileName, "%", "%25"), []string{""}, mockedRPC)
+		})
+	}
 }
 
 // regular share->share copy
@@ -96,7 +119,7 @@ func (s *cmdIntegrationSuite) TestFileCopyS2SWithShares(c *chk.C) {
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.NotNil)
 		// make sure the failure was due to the recursive flag
-		c.Assert(strings.Contains(err.Error(), "recursive"), chk.Equals, true)
+		c.Assert(err.Error(), StringContains, "recursive")
 	})
 }
 

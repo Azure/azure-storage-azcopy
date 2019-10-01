@@ -125,7 +125,7 @@ func (s *cmdIntegrationSuite) TestInferredStripTopDirDownload(c *chk.C) {
 	// test error
 	cooked, err = raw.cook()
 	c.Assert(err, chk.NotNil)
-	c.Assert(err.Error(), StringIncludes, "cannot use wildcards")
+	c.Assert(err.Error(), StringContains, "cannot use wildcards")
 
 	// no actual test needed-- this is where the error lives.
 

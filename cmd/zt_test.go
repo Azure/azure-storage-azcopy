@@ -548,15 +548,6 @@ func getAlternateFSU() (azfile.ServiceURL, error) {
 	return azfile.NewServiceURL(*fsURL, pipeline), nil
 }
 
-func createNewShare(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
-	share, name = getShareURL(c, fsu)
-
-	cResp, err := share.Create(ctx, nil, 0)
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
-	return share, name
-}
-
 func deleteShare(c *chk.C, share azfile.ShareURL) {
 	_, err := share.Delete(ctx, azfile.DeleteSnapshotsOptionInclude)
 	c.Assert(err, chk.IsNil)
@@ -707,19 +698,19 @@ func getAdlsServiceURLWithSAS(c *chk.C, credential azbfs.SharedKeyCredential) az
 	return azbfs.NewServiceURL(*fullURL, azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{}))
 }
 
-// check.v1 style "StringIncludes" checker
+// check.v1 style "StringContains" checker
 
-type stringIncludesChecker struct {
+type stringContainsChecker struct {
 	*chk.CheckerInfo
 }
 
-var StringIncludes = &stringIncludesChecker{
-	&chk.CheckerInfo{Name: "StringIncludes", Params: []string{"obtained", "expected to find"}},
+var StringContains = &stringContainsChecker{
+	&chk.CheckerInfo{Name: "StringContains", Params: []string{"obtained", "expected to find"}},
 }
 
-func (checker *stringIncludesChecker) Check(params []interface{}, names []string) (result bool, error string) {
+func (checker *stringContainsChecker) Check(params []interface{}, names []string) (result bool, error string) {
 	if len(params) < 2 {
-		return false, "StringIncludes requires two parameters"
+		return false, "StringContains requires two parameters"
 	} // Ignore extra parameters
 
 	// Assert that params[0] and params[1] are strings
