@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	chk "gopkg.in/check.v1"
@@ -196,10 +197,16 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 
 	records := append(blobDummyProcessor.record, fileDummyProcessor.record...)
 
-	c.Assert(len(blobDummyProcessor.record), chk.Equals, len(localIndexer.indexMap)*len(containerList))
-	c.Assert(len(fileDummyProcessor.record), chk.Equals, len(localIndexer.indexMap)*len(containerList))
+	c.Assert(len(blobDummyProcessor.record), chk.Equals, len(localIndexer.indexMap)*len(containerList), chk.Commentf("Checking count for blob"))
+	for _, debugDump := range fileDummyProcessor.record {
+		fmt.Println("Files has" + debugDump.relativePath + " " + debugDump.name)
+	}
+	c.Assert(len(fileDummyProcessor.record), chk.Equals, len(localIndexer.indexMap)*len(containerList), chk.Commentf("Checking count for Files"))
 	if testS3 {
-		c.Assert(len(s3DummyProcessor.record), chk.Equals, len(localIndexer.indexMap)*len(containerList))
+		for _, debugDump := range s3DummyProcessor.record {
+			fmt.Println("S3 has" + debugDump.relativePath + " " + debugDump.name)
+		}
+		c.Assert(len(s3DummyProcessor.record), chk.Equals, len(localIndexer.indexMap)*len(containerList), chk.Commentf("Checking count for S3"))
 		records = append(records, s3DummyProcessor.record...)
 	}
 
