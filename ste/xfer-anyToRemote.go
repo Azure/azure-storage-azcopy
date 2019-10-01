@@ -161,6 +161,8 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 	scheduleSendChunks(jptm, info.Source, srcFile, srcSize, s, sourceFileFactory, srcInfoProvider)
 }
 
+var jobCancelledLocalPrefetchErr = errors.New("job was cancelled; Pre-fetching stopped")
+
 // Schedule all the send chunks.
 // For upload, we force preload of each chunk to memory, and we wait (block)
 // here if the amount of preloaded data gets excessive. That's OK to do,
@@ -205,16 +207,20 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 		}
 
 		if srcInfoProvider.IsLocal() {
-			// create reader and prefetch the data into it
-			chunkReader = createPopulatedChunkReader(jptm, sourceFileFactory, id, adjustedChunkSize, srcFile)
-
-			// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
-			prefetchErr = chunkReader.BlockingPrefetch(srcFile, false)
-			if prefetchErr == nil {
-				chunkReader.WriteBufferTo(md5Hasher)
-				ps = chunkReader.GetPrologueState()
+			if jptm.WasCanceled() {
+				prefetchErr = jobCancelledLocalPrefetchErr
 			} else {
-				safeToUseHash = false // because we've missed a chunk
+				// create reader and prefetch the data into it
+				chunkReader = createPopulatedChunkReader(jptm, sourceFileFactory, id, adjustedChunkSize, srcFile)
+
+				// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
+				prefetchErr = chunkReader.BlockingPrefetch(srcFile, false)
+				if prefetchErr == nil {
+					chunkReader.WriteBufferTo(md5Hasher)
+					ps = chunkReader.GetPrologueState()
+				} else {
+					safeToUseHash = false // because we've missed a chunk
+				}
 			}
 		}
 
@@ -223,7 +229,10 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 			// Run prologue before first chunk is scheduled.
 			// If file is not local, we'll get no leading bytes, but we still run the prologue in case
 			// there's other initialization to do in the sender.
-			s.Prologue(ps)
+			modified := s.Prologue(ps)
+			if modified {
+				jptm.SetDestinationIsModified()
+			}
 		}
 
 		// schedule the chunk job/msg
@@ -234,7 +243,9 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 			if prefetchErr == nil {
 				cf = s.(uploader).GenerateUploadFunc(id, chunkIDCount, chunkReader, isWholeFile)
 			} else {
-				_ = chunkReader.Close()
+				if chunkReader != nil {
+					_ = chunkReader.Close()
+				}
 				// Our jptm logic currently requires us to schedule every chunk, even if we know there's an error,
 				// so we schedule a func that will just fail with the given error
 				cf = createSendToRemoteChunkFunc(jptm, id, func() { jptm.FailActiveSend("chunk data read", prefetchErr) })
@@ -287,7 +298,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.Epilogue())
 	defer jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 
-	if jptm.TransferStatus() > 0 {
+	if jptm.IsLive() {
 		if _, isS2SCopier := s.(s2sCopier); sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation) {
 			// Check the source to see if it was changed during transfer. If it was, mark the transfer as failed.
 			lmt, err := sip.GetLastModifiedTime()
@@ -302,7 +313,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 
 	s.Epilogue() // Perform service-specific cleanup before jptm cleanup. Some services may actually require setup to make the file actually appear.
 
-	if info.DestLengthValidation {
+	if jptm.IsLive() && info.DestLengthValidation {
 		if s2sc, isS2SCopier := s.(s2sCopier); isS2SCopier { // TODO: Implement this for upload and download?
 			destLength, err := s2sc.GetDestinationLength()
 
@@ -318,8 +329,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 
 	s.Cleanup() // Perform jptm cleanup.
 
-	// TODO: finalize and wrap in functions whether 0 is included or excluded in status comparisons
-	if jptm.TransferStatus() == 0 {
+	if jptm.TransferStatusIgnoringCancellation() == 0 {
 		panic("think we're finished but status is notStarted")
 	}
 
@@ -331,7 +341,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 	// it is entirely possible that all the chunks were finished, but then by the time we get to this line
 	// the context is canceled. In this case, a completely transferred file would not be marked "completed".
 	// it's definitely a case that we should be aware of, but given how rare it is, and how low the impact (the user can just resume), we don't have to do anything more to it atm.
-	if jptm.TransferStatus() > 0 && !jptm.WasCanceled() {
+	if jptm.IsLive() {
 		// We know all chunks are done (because this routine was called)
 		// and we know the transfer didn't fail (because just checked its status above and made sure the context was not canceled),
 		// so it must have succeeded. So make sure its not left "in progress" state

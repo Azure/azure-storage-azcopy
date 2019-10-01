@@ -73,7 +73,10 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 		}
 	}
 
-	// step 4a: special handling for empty files
+	// step 4a: mark destination as modified before we take our first action there (which is to create the destination file)
+	jptm.SetDestinationIsModified()
+
+	// step 4b: special handling for empty files
 	if fileSize == 0 {
 		err := createEmptyFile(info.Destination)
 		if err != nil {
@@ -84,7 +87,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 		return
 	}
 
-	// step 4b: normal file creation when source has content
+	// step 4c: normal file creation when source has content
 	writeThrough := false
 	// TODO: consider cases where we might set it to true. It might give more predictable and understandable disk throughput.
 	//    But can't be used in the cases shown in the if statement below (one of which is only pseudocode, at this stage)
@@ -268,7 +271,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 		}
 
 		// Check MD5 (but only if file was fully flushed and saved - else no point and may not have actualAsSaved hash anyway)
-		if !jptm.TransferStatus().DidFail() {
+		if jptm.IsLive() {
 			comparison := md5Comparer{
 				expected:         info.SrcHTTPHeaders.ContentMD5, // the MD5 that came back from Service when we enumerated the source
 				actualAsSaved:    md5OfFileAsWritten,
@@ -289,7 +292,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 		dl.Epilogue() // it can release resources here
 
 		// secondary sanity check to ensure devnull doesn't get checked
-		if info.DestLengthValidation && info.Destination != common.Dev_Null {
+		if jptm.IsLive() && info.DestLengthValidation && info.Destination != common.Dev_Null {
 			fi, err := os.Stat(info.Destination)
 
 			if err != nil {
@@ -303,7 +306,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 	}
 
 	// Preserve modified time
-	if !jptm.TransferStatus().DidFail() {
+	if jptm.IsLive() {
 		// TODO: the old version of this code did NOT consider it an error to be unable to set the modification date/time
 		// TODO: ...So I have preserved that behavior here.
 		// TODO: question: But is that correct?
@@ -323,16 +326,17 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 	// if was an intentional cancel, the status is still "in progress", so we are still counting it as pending
 	// we leave these transfer status alone
 	// in case of errors, the status was already set, so we don't need to do anything here either
-	if jptm.TransferStatus() <= 0 || jptm.WasCanceled() {
+	if jptm.IsDeadInflight() || jptm.IsDeadBeforeStart() {
 		// If failed, log and delete the "bad" local file
 		// If the current transfer status value is less than or equal to 0
 		// then transfer either failed or was cancelled
-		// TODO: question: is it right that 0 (not started) is _included_ here? It was included in the previous version of this code.
 		if jptm.ShouldLog(pipeline.LogDebug) {
 			jptm.Log(pipeline.LogDebug, " Finalizing Transfer Cancellation/Failure")
 		}
-		// the file created locally should be deleted
-		tryDeleteFile(info, jptm)
+		if jptm.IsDeadInflight() {
+			// the file created locally should be deleted
+			tryDeleteFile(info, jptm)
+		}
 	} else {
 		// We know all chunks are done (because this routine was called)
 		// and we know the transfer didn't fail (because just checked its status above),

@@ -92,7 +92,7 @@ func (*mockedLifecycleManager) Prompt(message string, details common.PromptDetai
 func (*mockedLifecycleManager) Exit(common.OutputBuilder, common.ExitCode)      {}
 func (*mockedLifecycleManager) Error(string)                                    {}
 func (*mockedLifecycleManager) SurrenderControl()                               {}
-func (mockedLifecycleManager) AllowReinitiateProgressReporting()                        {}
+func (mockedLifecycleManager) AllowReinitiateProgressReporting()                {}
 func (*mockedLifecycleManager) InitiateProgressReporting(common.WorkController) {}
 func (*mockedLifecycleManager) ClearEnvironmentVariable(env common.EnvironmentVariable) {
 	_ = os.Setenv(env.Name, "")

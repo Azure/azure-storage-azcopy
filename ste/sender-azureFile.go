@@ -108,9 +108,11 @@ func (u *azureFileSenderBase) RemoteFileExists() (bool, error) {
 	return remoteObjectExists(u.fileURL.GetProperties(u.ctx))
 }
 
-func (u *azureFileSenderBase) Prologue(state common.PrologueState) {
+func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationModified bool) {
 	jptm := u.jptm
 	info := jptm.Info()
+
+	destinationModified = true
 
 	// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
 	err := AzureFileParentDirCreator{}.CreateParentDirToRoot(u.ctx, u.fileURL, u.pipeline)
@@ -131,15 +133,16 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) {
 		jptm.FailActiveUpload("Creating file", err)
 		return
 	}
+
+	return
 }
 
 func (u *azureFileSenderBase) Cleanup() {
 	jptm := u.jptm
 
 	// Cleanup
-	if jptm.TransferStatus() <= 0 {
-		// If the transfer status is less than or equal to 0
-		// then transfer was either failed or cancelled
+	if jptm.IsDeadInflight() {
+		// transfer was either failed or cancelled
 		// the file created in share needs to be deleted, since it's
 		// contents will be at an unknown stage of partial completeness
 		deletionContext, cancelFn := context.WithTimeout(context.Background(), 2*time.Minute)

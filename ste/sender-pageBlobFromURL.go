@@ -68,12 +68,14 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipe
 		pageRangeOptimizer: pageRangeOptimizer}, nil
 }
 
-func (c *urlToPageBlobCopier) Prologue(ps common.PrologueState) {
-	c.pageBlobSenderBase.Prologue(ps)
+func (c *urlToPageBlobCopier) Prologue(ps common.PrologueState) (destinationModified bool) {
+	destinationModified = c.pageBlobSenderBase.Prologue(ps)
 
 	if c.pageRangeOptimizer != nil {
 		c.pageRangeOptimizer.fetchPages()
 	}
+
+	return
 }
 
 // Returns a chunk-func for blob copies

@@ -387,6 +387,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 		// Each transfer gets its own context (so any chunk can cancel the whole transfer) based off the job's context
 		transferCtx, transferCancel := context.WithCancel(jobCtx)
+		// Initialize a job part transfer manager
 		jptm := &jobPartTransferMgr{
 			jobPartMgr:          jpm,
 			jobPartPlanTransfer: jppt,

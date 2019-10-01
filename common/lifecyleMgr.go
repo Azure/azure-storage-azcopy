@@ -233,7 +233,9 @@ func (lcm *lifecycleMgr) processOutputMessage() {
 	// this function constantly pulls out message to output
 	// and pass them onto the right handler based on the output format
 	for {
-		switch msgToPrint := <-lcm.msgQueue; lcm.outputFormat {
+		msgToPrint := <-lcm.msgQueue
+
+		switch lcm.outputFormat {
 		case EOutputFormat.Json():
 			lcm.processJSONOutput(msgToPrint)
 		case EOutputFormat.Text():
@@ -374,6 +376,7 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 		for {
 			select {
 			case <-lcm.cancelChannel:
+				lcm.Info("Cancellation requested. Beginning clean shutdown...")
 				jc.Cancel(lcm)
 			default:
 				jc.ReportProgressOrExit(lcm)

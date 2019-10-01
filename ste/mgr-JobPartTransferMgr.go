@@ -40,7 +40,7 @@ type IJobPartTransferMgr interface {
 	GetSourceCompressionType() (common.CompressionType, error)
 	ReportChunkDone(id common.ChunkID) (lastChunk bool, chunksDone uint32)
 	UnsafeReportChunkDone() (lastChunk bool, chunksDone uint32)
-	TransferStatus() common.TransferStatus
+	TransferStatusIgnoringCancellation() common.TransferStatus
 	SetStatus(status common.TransferStatus)
 	SetErrorCode(errorCode int32)
 	SetNumberOfChunks(numChunks uint32)
@@ -48,8 +48,12 @@ type IJobPartTransferMgr interface {
 	ReportTransferDone() uint32
 	RescheduleTransfer()
 	ScheduleChunks(chunkFunc chunkFunc)
+	SetDestinationIsModified()
 	Cancel()
 	WasCanceled() bool
+	IsLive() bool
+	IsDeadBeforeStart() bool
+	IsDeadInflight() bool
 	// TODO: added for debugging purpose. remove later
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
@@ -119,6 +123,9 @@ type jobPartTransferMgr struct {
 
 	// used defensively to protect against accidental double counting
 	atomicCompletionIndicator uint32
+
+	// used to show whether we have started doing things that may affect the destination
+	atomicDestModifiedIndicator uint32
 
 	// how many bytes have been successfully transferred
 	// (hard to infer from atomicChunksDone because that counts both successes and failures)
@@ -343,7 +350,7 @@ func (jptm *jobPartTransferMgr) ReportChunkDone(id common.ChunkID) (lastChunk bo
 	id.SetCompletionNotificationSent()
 
 	// track progress
-	if jptm.TransferStatus() > 0 {
+	if jptm.IsLive() {
 		info := jptm.Info()
 		successBytesDelta := common.AtomicMorphInt64(&jptm.atomicSuccessfulBytes, func(old int64) (new int64, delta interface{}) {
 			new = old + int64(info.BlockSize) // assume we just completed a full block
@@ -379,13 +386,15 @@ func (jptm *jobPartTransferMgr) UnsafeReportChunkDone() (lastChunk bool, chunksD
 // makes it easier to create DRY epilogue code.)
 func (jptm *jobPartTransferMgr) runActionAfterLastChunk() {
 	if jptm.actionAfterLastChunk != nil {
-		jptm.actionAfterLastChunk()
-		jptm.actionAfterLastChunk = nil // make sure it can't be run again, since epilogue methods are not expected to be idempotent
+		jptm.actionAfterLastChunk()     // Call the final action first,
+		jptm.actionAfterLastChunk = nil // make sure it can't be run again, since epilogue methods are not expected to be idempotent,
 	}
 }
 
-//
-func (jptm *jobPartTransferMgr) TransferStatus() common.TransferStatus {
+// TransferStatusIgnoringCancellation is the raw transfer status. Generally should use
+// IsFailedOrCancelled or IsLive instead of this routine because they take cancellation into
+// account
+func (jptm *jobPartTransferMgr) TransferStatusIgnoringCancellation() common.TransferStatus {
 	return jptm.jobPartPlanTransfer.TransferStatus()
 }
 
@@ -416,6 +425,49 @@ func (jptm *jobPartTransferMgr) SetErrorCode(errorCode int32) {
 
 func (jptm *jobPartTransferMgr) Cancel()           { jptm.cancel() }
 func (jptm *jobPartTransferMgr) WasCanceled() bool { return jptm.ctx.Err() != nil }
+
+// SetDestinationIsModified tells the jptm that it should consider the destination to have been modified
+func (jptm *jobPartTransferMgr) SetDestinationIsModified() {
+	old := atomic.SwapUint32(&jptm.atomicDestModifiedIndicator, 1)
+	// TODO: one day it might be cleaner to simply transition the TransferStatus
+	//   from NotStarted to Started here. However, that's potentially a non-trivial change
+	//   because the default is currently (2019) "Started".  So the NotStarted state is never used.
+	//   Starting to use it would require analysis and testing that we don't have time for right now.
+	if old == 0 {
+		jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, "destination modified flag is set to true")
+	}
+}
+
+func (jptm *jobPartTransferMgr) hasStartedWork() bool {
+	return atomic.LoadUint32(&jptm.atomicDestModifiedIndicator) == 1
+}
+
+// isDead covers all non-successful outcomes. It is necessary because
+// the raw status values do not reflect possible cancellation.
+// Do not call directly. Use IsDeadBeforeStart or IsDeadInflight
+// instead because they usually require different handling
+func (jptm *jobPartTransferMgr) isDead() bool {
+	return jptm.TransferStatusIgnoringCancellation() < 0 || jptm.WasCanceled()
+}
+
+// IsDeadBeforeStart is true for transfers that fail or are cancelled before any action is taken
+// that may affect the destination.
+func (jptm *jobPartTransferMgr) IsDeadBeforeStart() bool {
+	return jptm.isDead() && !jptm.hasStartedWork()
+}
+
+// IsDeadInflight is true for transfers that fail or are cancelled after they have
+// (or may have) manipulated the destination
+func (jptm *jobPartTransferMgr) IsDeadInflight() bool {
+	return jptm.isDead() && jptm.hasStartedWork()
+}
+
+// IsLive is the inverse of isDead.  It doesn't mean "success", just means "not failed yet"
+// (e.g. something still in progress will return true from IsLive.)
+func (jptm *jobPartTransferMgr) IsLive() bool {
+	return !jptm.isDead()
+}
+
 func (jptm *jobPartTransferMgr) ShouldLog(level pipeline.LogLevel) bool {
 	return jptm.jobPartMgr.ShouldLog(level)
 }

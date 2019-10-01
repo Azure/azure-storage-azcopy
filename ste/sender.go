@@ -46,7 +46,8 @@ type ISenderBase interface {
 	// Implementation should do any initialization that is necessary - e.g.
 	// creating the remote file for those destinations that require an explicit
 	// creation step.
-	Prologue(state common.PrologueState)
+	// Implementations MUST return true if they may have modified the destination (i.e. false should only be returned if you KNOW you have not)
+	Prologue(state common.PrologueState) (destinationModified bool)
 
 	// Epilogue will be called automatically once we know all the chunk funcs have been processed.
 	// This should handle any service-specific cleanup.
@@ -153,6 +154,12 @@ func createChunkFunc(setDoneStatusOnExit bool, jptm IJobPartTransferMgr, id comm
 				defer jptm.LogChunkStatus(id, common.EWaitReason.ChunkDone())
 			}
 		}
+
+		// tell the jptm that the destination should be assumed to have been modified
+		// (this is necessary for those cases where the prologue does not modify the dest, so the flag will not have been set at prologue time)
+		// It's idempotent, so we call it every time rather than, say, test OffsetInFile and assume that id.OffsetInFile == 0 will always run first.
+		jptm.SetDestinationIsModified()
+
 		// END standard prefix
 
 		body()
