@@ -29,6 +29,10 @@ import (
 	"strings"
 )
 
+func (s *cmdIntegrationSuite) TestTempForceFailure(c *chk.C) {
+	c.Assert(0, chk.Equals, 1)
+}
+
 func (s *cmdIntegrationSuite) TestIncludeDirSimple(c *chk.C) {
 	bsu := getBSU()
 	containerURL, containerName := createNewContainer(c, bsu)
