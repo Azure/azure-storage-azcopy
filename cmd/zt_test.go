@@ -73,6 +73,12 @@ const (
 	defaultBlobFSFileSizeInBytes = 1000
 )
 
+func skipIfShort(c *chk.C) {
+	if testing.Short() { // reads the go test flag called: -short
+		c.Skip("Running -short suite")
+	}
+}
+
 // This function generates an entity name by concatenating the passed prefix,
 // the name of the test requesting the entity name, and the minute, second, and nanoseconds of the call.
 // This should make it easy to associate the entities with their test, uniquely identify

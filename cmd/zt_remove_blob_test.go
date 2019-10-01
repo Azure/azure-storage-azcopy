@@ -254,6 +254,8 @@ func (s *cmdIntegrationSuite) TestRemoveWithIncludeAndExcludeFlag(c *chk.C) {
 
 // note: list-of-files flag is used
 func (s *cmdIntegrationSuite) TestRemoveListOfBlobsAndVirtualDirs(c *chk.C) {
+	skipIfShort(c)
+
 	bsu := getBSU()
 	vdirName := "megadir"
 

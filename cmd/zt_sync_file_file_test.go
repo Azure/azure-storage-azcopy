@@ -31,6 +31,8 @@ import (
 
 // regular file->file sync
 func (s *cmdIntegrationSuite) TestFileSyncS2SWithSingleFile(c *chk.C) {
+	skipIfShort(c)
+
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
@@ -76,6 +78,8 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithSingleFile(c *chk.C) {
 
 // regular share->share sync but destination is empty, so everything has to be transferred
 func (s *cmdIntegrationSuite) TestFileSyncS2SWithEmptyDestination(c *chk.C) {
+	skipIfShort(c)
+
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
@@ -122,6 +126,8 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithEmptyDestination(c *chk.C) {
 
 // regular share->share sync but destination is identical to the source, transfers are scheduled based on lmt
 func (s *cmdIntegrationSuite) TestFileSyncS2SWithIdenticalDestination(c *chk.C) {
+	skipIfShort(c)
+
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
@@ -163,6 +169,7 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithIdenticalDestination(c *chk.C) 
 }
 
 // regular share->share sync where destination is missing some files from source, and also has some extra files
+// include this test even if running short test suite, because it covers a lot
 func (s *cmdIntegrationSuite) TestFileSyncS2SWithMismatchedDestination(c *chk.C) {
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
@@ -216,6 +223,8 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithMismatchedDestination(c *chk.C)
 
 // include flag limits the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestFileSyncS2SWithIncludeFlag(c *chk.C) {
+	skipIfShort(c)
+
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
@@ -251,6 +260,8 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithIncludeFlag(c *chk.C) {
 
 // exclude flag limits the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestFileSyncS2SWithExcludeFlag(c *chk.C) {
+	skipIfShort(c)
+
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
@@ -285,6 +296,7 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithExcludeFlag(c *chk.C) {
 }
 
 // include and exclude flag can work together to limit the scope of source/destination comparison
+// Include this one even if running short test suite, since it covers a lot
 func (s *cmdIntegrationSuite) TestFileSyncS2SWithIncludeAndExcludeFlag(c *chk.C) {
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
@@ -328,6 +340,8 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithIncludeAndExcludeFlag(c *chk.C)
 
 // validate the bug fix for this scenario
 func (s *cmdIntegrationSuite) TestFileSyncS2SWithMissingDestination(c *chk.C) {
+	skipIfShort(c)
+
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
@@ -362,6 +376,8 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithMissingDestination(c *chk.C) {
 
 // there is a type mismatch between the source and destination
 func (s *cmdIntegrationSuite) TestFileSyncS2SMismatchShareAndFile(c *chk.C) {
+	skipIfShort(c)
+
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
@@ -408,6 +424,8 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SMismatchShareAndFile(c *chk.C) {
 
 // share <-> dir sync
 func (s *cmdIntegrationSuite) TestFileSyncS2SShareAndEmptyDir(c *chk.C) {
+	skipIfShort(c)
+
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
@@ -458,6 +476,8 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SShareAndEmptyDir(c *chk.C) {
 
 // regular dir -> dir sync
 func (s *cmdIntegrationSuite) TestFileSyncS2SBetweenDirs(c *chk.C) {
+	skipIfShort(c)
+
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
