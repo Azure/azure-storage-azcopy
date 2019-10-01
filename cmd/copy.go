@@ -179,6 +179,10 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	cooked.source = raw.src
 	cooked.destination = raw.dst
 
+	if strings.EqualFold(cooked.destination, common.Dev_Null) && runtime.GOOS == "windows" {
+		cooked.destination = common.Dev_Null // map all capitalizations of "NUL"/"nul" to one because (on Windows) they all mean the same thing
+	}
+
 	cooked.fromTo = fromTo
 
 	// copy&transform flags to type-safety
@@ -320,6 +324,10 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	}
 
 	cooked.CheckLength = raw.CheckLength
+	// length of devnull will be 0, thus this will always fail unless downloading an empty file
+	if cooked.destination == common.Dev_Null {
+		cooked.CheckLength = false
+	}
 
 	// if redirection is triggered, avoid printing any output
 	if cooked.isRedirection() {
