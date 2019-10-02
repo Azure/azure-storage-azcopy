@@ -21,10 +21,65 @@
 package cmd
 
 import (
+	"fmt"
 	"strings"
 
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
 )
+
+// TestBlobAccountCopyToFileShareS2S actually ends up testing the entire account->container scenario as that is not dependent on destination or source.
+func (s *cmdIntegrationSuite) TestBlobAccountCopyToFileShareS2S(c *chk.C) {
+	bsu := getBSU()
+	fsu := getFSU()
+
+	// Ensure no containers with similar naming schemes exist
+	cleanBlobAccount(c, bsu)
+
+	containerSources := map[string]azblob.ContainerURL{}
+	expectedTransfers := make([]string, 0)
+
+	for k := range make([]bool, 5) {
+		name := generateName(fmt.Sprintf("blobacc-file%dcontainer", k), 63)
+
+		// create the container
+		containerSources[name] = bsu.NewContainerURL(name)
+		_, err := containerSources[name].Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
+		c.Assert(err, chk.IsNil)
+
+		// Generate the remote scenario
+		fileNames := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerSources[name], "")
+		fileNames = scenarioHelper{}.addPrefix(fileNames, name+"/")
+		expectedTransfers = append(expectedTransfers, fileNames...)
+
+		// Prepare to delete all 5 containers
+		//noinspection GoDeferInLoop
+		defer deleteContainer(c, containerSources[name])
+	}
+
+	// generate destination share
+	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	defer deleteShare(c, dstShareURL)
+
+	// initialize mocked RPC
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// generate raw input
+	blobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
+	blobServiceURLWithSAS.Path = "/blobacc-file*container*" // wildcard the container name
+	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
+	raw := getDefaultRawCopyInput(blobServiceURLWithSAS.String(), dstShareURLWithSAS.String())
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedTransfers))
+
+		validateS2STransfersAreScheduled(c, "/", "/", expectedTransfers, mockedRPC)
+	})
+}
 
 // TestBlobCopyToFileS2SImplicitDstShare uses a service-level URL on the destination to implicitly create the destination share.
 func (s *cmdIntegrationSuite) TestBlobCopyToFileS2SImplicitDstShare(c *chk.C) {

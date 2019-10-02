@@ -89,6 +89,16 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, err
 	}
 
+	// Disallow list-of-files and include-path on service-level traversal due to a major bug
+	// TODO: Fix the bug.
+	//       Two primary issues exist with the list-of-files implementation:
+	//       1) Account name doesn't get trimmed from the path
+	//       2) List-of-files is not considered an account traverser; therefore containers don't get made.
+	//       Resolve these two issues and service-level list-of-files/include-path will work
+	if cca.listOfFilesChannel != nil && srcLevel == ELocationLevel.Service() {
+		return nil, errors.New("cannot combine list-of-files or include-path with account traversal")
+	}
+
 	if srcLevel == ELocationLevel.Object() && dstLevel == ELocationLevel.Service() {
 		return nil, errors.New("cannot transfer individual files/folders to the root of a service. Add a container or directory to the destination URL")
 	}

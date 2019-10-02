@@ -438,6 +438,14 @@ func (scenarioHelper) shaveOffPrefix(list []string, prefix string) []string {
 	return cleanList
 }
 
+func (scenarioHelper) addPrefix(list []string, prefix string) []string {
+	modifiedList := make([]string, len(list))
+	for i, item := range list {
+		modifiedList[i] = prefix + item
+	}
+	return modifiedList
+}
+
 func (scenarioHelper) getRawContainerURLWithSAS(c *chk.C, containerName string) url.URL {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
