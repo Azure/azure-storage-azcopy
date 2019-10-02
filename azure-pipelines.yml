@@ -70,11 +70,10 @@ jobs:
       - script: |
           # run unit test and build executable
           # the set -e line is needed so that the unit tests failure would cause the job to fail properly
-          # -timeout 40m as our tests typically run between 10-15m and I'd rather have some headroom. (updated to 40 min 1 Oct 2019, was 25)
-          # Race detection parameter, -race, removed, 1 Oct 2019, to bring down execution time
-          # Also removed -cover, since we are not currently using the output of that from automated builds
+          # -timeout 25m as our tests typically run between 10-15m and I'd rather have some headroom.
+	  # "-check.v" (must be after package list) outputs timings
           set -e
-          go test -timeout 40m -short -v ./cmd ./common ./ste ./azbfs "-check.v" 
+          go test -timeout 25m -race -short -cover ./cmd ./common ./ste ./azbfs "-check.v" 
           GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
         name: 'Run_unit_tests'
         env:
