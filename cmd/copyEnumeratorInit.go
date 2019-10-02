@@ -191,7 +191,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		if object.containerName != "" {
 			// set up the destination container name.
 			cName := dstContainerName
-			if cName == "" {
+			// if a destination container name is not specified OR copying service to container/folder, append the src container name.
+			if cName == "" || (srcLevel == ELocationLevel.Service() && dstLevel > ELocationLevel.Service()) {
 				cName, err = containerResolver.ResolveName(object.containerName)
 
 				if err != nil {

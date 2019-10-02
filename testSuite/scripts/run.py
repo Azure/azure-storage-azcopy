@@ -115,9 +115,9 @@ def init():
             check_env_not_exist('SHARE_SAS_URL') or check_env_not_exist('PREMIUM_CONTAINER_SAS_URL') or \
             check_env_not_exist('FILESYSTEM_URL') or check_env_not_exist('FILESYSTEM_SAS_URL') or \
             check_env_not_exist('ACCOUNT_NAME') or check_env_not_exist('ACCOUNT_KEY') or \
-            check_env_not_exist('AZCOPY_OAUTH_TOKEN_INFO') or \
-            check_env_not_exist('S2S_SRC_BLOB_ACCOUNT_SAS_URL') or check_env_not_exist('S2S_DST_BLOB_ACCOUNT_SAS_URL') or \
-            check_env_not_exist('S2S_SRC_FILE_ACCOUNT_SAS_URL') or check_env_not_exist('S2S_SRC_S3_SERVICE_URL'):
+            check_env_not_exist('AZCOPY_OAUTH_TOKEN_INFO') or check_env_not_exist('S2S_DST_FILE_ACCOUNT_SAS_URL') or \
+            check_env_not_exist('S2S_SRC_BLOB_ACCOUNT_SAS_URL') or check_env_not_exist('S2S_DST_BLOB_ACCOUNT_SAS_URL') \
+            or check_env_not_exist('S2S_SRC_FILE_ACCOUNT_SAS_URL') or check_env_not_exist('S2S_SRC_S3_SERVICE_URL'):
         parse_config_file_set_env()
 
     # Get the environment variables value
@@ -157,14 +157,15 @@ def init():
     s2s_src_file_account_url = os.environ.get('S2S_SRC_FILE_ACCOUNT_SAS_URL')
     s2s_src_s3_service_url = os.environ.get('S2S_SRC_S3_SERVICE_URL')
 
-    # get the s2s copy dest blob account url
+    # get the s2s copy dest account URLs
     s2s_dst_blob_account_url = os.environ.get('S2S_DST_BLOB_ACCOUNT_SAS_URL')
+    s2s_dst_file_account_url = os.environ.get('S2S_DST_FILE_ACCOUNT_SAS_URL')
 
     # deleting the log files.
     cleanup()
 
     if not util.initialize_test_suite(test_dir_path, container_sas, container_oauth, container_oauth_validate, share_sas_url, premium_container_sas,
-                                      filesystem_url, filesystem_sas_url, s2s_src_blob_account_url, s2s_src_file_account_url, s2s_src_s3_service_url, s2s_dst_blob_account_url, azcopy_exec_location, test_suite_exec_location):
+                                      filesystem_url, filesystem_sas_url, s2s_src_blob_account_url, s2s_src_file_account_url, s2s_src_s3_service_url, s2s_dst_blob_account_url, s2s_dst_file_account_url, azcopy_exec_location, test_suite_exec_location):
         print("failed to initialize the test suite with given user input")
         return
     else:
