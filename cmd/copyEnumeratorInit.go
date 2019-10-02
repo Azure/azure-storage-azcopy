@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
@@ -328,6 +329,7 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName, dstWithSAS strin
 
 	// Because the only use-cases for createDstContainer will be on service-level S2S and service-level download
 	// We only need to create "containers" on local and blob.
+	// TODO: Reduce code dupe somehow
 	switch cca.fromTo.To() {
 	case common.ELocation.Local():
 		err = os.MkdirAll(common.GenerateFullPath(cca.destination, containerName), os.ModeDir|os.ModePerm)
@@ -361,6 +363,41 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName, dstWithSAS strin
 		} else {
 			return err
 		}
+	case common.ELocation.File():
+		// Grab the account root and parse it as a URL
+		accountRoot, err := GetAccountRoot(dstWithSAS, cca.fromTo.To())
+
+		if err != nil {
+			return err
+		}
+
+		dstURL, err := url.Parse(accountRoot)
+
+		if err != nil {
+			return err
+		}
+
+		fsu := azfile.NewServiceURL(*dstURL, dstPipeline)
+		shareURL := fsu.NewShareURL(containerName)
+		_, err = shareURL.GetProperties(ctx)
+
+		if err == nil {
+			return err
+		}
+
+		// Create a destination share with the default service quota
+		// TODO: Create a flag for the quota
+		_, err = shareURL.Create(ctx, azfile.Metadata{}, 0)
+
+		if stgErr, ok := err.(azfile.StorageError); ok {
+			if stgErr.ServiceCode() != azfile.ServiceCodeShareAlreadyExists {
+				return err
+			}
+		} else {
+			return err
+		}
+	default:
+		panic(fmt.Sprintf("cannot create a destination container at location %s.", cca.fromTo.To()))
 	}
 
 	return

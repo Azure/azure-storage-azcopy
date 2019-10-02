@@ -21,13 +21,54 @@
 package cmd
 
 import (
-	chk "gopkg.in/check.v1"
 	"strings"
+
+	chk "gopkg.in/check.v1"
 )
 
-func (s *cmdIntegrationSuite) TestBlobCopyToFileS2SWithSingleFile(c *chk.C) {
-	fsu := getFSU()
+// TestBlobCopyToFileS2SImplicitDstShare uses a service-level URL on the destination to implicitly create the destination share.
+func (s *cmdIntegrationSuite) TestBlobCopyToFileS2SImplicitDstShare(c *chk.C) {
 	bsu := getBSU()
+	fsu := getFSU()
+
+	// create source container
+	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, srcContainerURL)
+
+	// prepare a destination container URL to be deleted.
+	dstShareURL := fsu.NewShareURL(srcContainerName)
+	defer deleteShare(c, dstShareURL)
+
+	// create a scenario on the source container
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, srcContainerURL, "blobFileImplicitDest")
+	c.Assert(len(fileList), chk.Not(chk.Equals), 0) // Ensure that at least one blob is present
+
+	// initialize the mocked RPC
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// Create raw arguments
+	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
+	dstServiceURLWithSAS := scenarioHelper{}.getRawFileServiceURLWithSAS(c)
+	raw := getDefaultRawCopyInput(srcContainerURLWithSAS.String(), dstServiceURLWithSAS.String())
+	// recursive is enabled by default
+
+	// run the copy, check the container, and check the transfer success.
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil) // Check there was no error
+
+		_, err = dstShareURL.GetProperties(ctx)
+		c.Assert(err, chk.IsNil) // Ensure the destination share exists
+
+		// Ensure the transfers were scheduled
+		validateS2STransfersAreScheduled(c, "/", "/"+srcContainerName+"/", fileList, mockedRPC)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestBlobCopyToFileS2SWithSingleFile(c *chk.C) {
+	bsu := getBSU()
+	fsu := getFSU()
 
 	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
 	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
@@ -76,7 +117,7 @@ func (s *cmdIntegrationSuite) TestBlobCopyToFileS2SWithSingleFile(c *chk.C) {
 			// put the filename in the destination dir name
 			// this is because validateS2STransfersAreScheduled dislikes when the relative paths differ
 			// In this case, the relative path should absolutely differ. (explicit file path -> implicit)
-			validateS2STransfersAreScheduled(c, "", "/" + strings.ReplaceAll(fileName, "%", "%25"), []string{""}, mockedRPC)
+			validateS2STransfersAreScheduled(c, "", "/"+strings.ReplaceAll(fileName, "%", "%25"), []string{""}, mockedRPC)
 		})
 	}
 }
@@ -276,7 +317,7 @@ func (s *cmdIntegrationSuite) TestBlobToFileCopyS2SIncludeExcludeMix(c *chk.C) {
 		"subdir/whywouldyouincludeme.jpeg",
 		"subdir/exactName",
 	}
-	toInclude := []string {
+	toInclude := []string{
 		fileList[0],
 		fileList[1],
 		fileList[5],
@@ -319,7 +360,7 @@ func (s *cmdIntegrationSuite) TestBlobToFileCopyS2SWithDirectory(c *chk.C) {
 
 	// create source scenario
 	dirName := "copyme"
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, srcContainerURL, dirName + "/")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, srcContainerURL, dirName+"/")
 	c.Assert(len(fileList), chk.Not(chk.Equals), 0)
 
 	// initialize mocked RPC
@@ -338,6 +379,6 @@ func (s *cmdIntegrationSuite) TestBlobToFileCopyS2SWithDirectory(c *chk.C) {
 	expectedList := scenarioHelper{}.shaveOffPrefix(fileList, dirName+"/")
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateS2STransfersAreScheduled(c, "/", "/" + dirName + "/", expectedList, mockedRPC)
+		validateS2STransfersAreScheduled(c, "/", "/"+dirName+"/", expectedList, mockedRPC)
 	})
 }
