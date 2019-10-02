@@ -23,6 +23,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -75,6 +77,22 @@ func (i *interceptor) reset() {
 // this lifecycle manager substitute does not perform any action
 type mockedLifecycleManager struct {
 	log chan string
+}
+
+func (m *mockedLifecycleManager) logContainsText(text string, timeout time.Duration) bool {
+
+	timeoutCh := time.After(timeout)
+
+	for {
+		select {
+		case x := <-m.log:
+			if strings.Contains(x, text) {
+				return true
+			}
+		case <-timeoutCh:
+			return false // don't wait for ever.  Have to use timeout because we don't have notion of orderly closure of log in tests, at least not as at Oct 2019
+		}
+	}
 }
 
 func (*mockedLifecycleManager) Progress(common.OutputBuilder) {}
