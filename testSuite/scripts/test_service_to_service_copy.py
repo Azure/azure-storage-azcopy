@@ -165,20 +165,21 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
 
     ##################################
     # Test from blob to file copy
+    # Note: tests go from dst blob to src file to avoid the extra config-- Ze's suggestion
     ##################################
     def test_copy_single_1kb_file_from_blob_to_file(self):
-        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_blob_file)
-        dst_share_url = util.get_object_sas(util.test_s2s_dst_file_account_url, self.bucket_name_blob_file)
+        src_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_blob_file)
+        dst_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_blob_file)
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_share_url, "File", 1)
 
     def test_copy_10_files_from_blob_container_to_file_share(self):
-        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_blob_file)
-        dst_share_url = util.get_object_sas(util.test_s2s_dst_file_account_url, self.bucket_name_blob_file)
+        src_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_blob_file)
+        dst_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_blob_file)
         self.util_test_copy_n_files_from_x_bucket_to_x_bucket(src_container_url, "Blob", dst_share_url, "File", 10, 1)
 
     def test_copy_file_from_blob_to_file_properties_and_metadata(self):
-        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_blob_file)
-        dst_share_url = util.get_object_sas(util.test_s2s_dst_file_account_url, self.bucket_name_blob_file)
+        src_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_blob_file)
+        dst_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_blob_file)
         self.util_test_copy_single_file_from_x_to_x_propertyandmetadata(src_container_url, "Blob", dst_share_url, "File", True)
 
     # not testing implicit container creation (w/out a container name in the dst) as that's tested by the FE tests

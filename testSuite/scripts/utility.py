@@ -139,7 +139,7 @@ def clean_test_filesystem(fileSystemURLStr):
 
 # initialize_test_suite initializes the setup for executing test cases.
 def initialize_test_suite(test_dir_path, container_sas, container_oauth, container_oauth_validate, share_sas_url, premium_container_sas, filesystem_url, filesystem_sas_url,
-                          s2s_src_blob_account_url, s2s_src_file_account_url, s2s_src_s3_service_url, s2s_dst_blob_account_url, s2s_dst_file_account_url, azcopy_exec_location, test_suite_exec_location):
+                          s2s_src_blob_account_url, s2s_src_file_account_url, s2s_src_s3_service_url, s2s_dst_blob_account_url, azcopy_exec_location, test_suite_exec_location):
     # test_directory_path is global variable holding the location of test directory to execute all the test cases.
     # contents are created, copied, uploaded and downloaded to and from this test directory only
     global test_directory_path
@@ -176,7 +176,6 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
     global test_s2s_src_blob_account_url
     global test_s2s_dst_blob_account_url
     global test_s2s_src_file_account_url
-    global test_s2s_dst_file_account_url
     global test_s2s_src_s3_service_url
 
     # creating a test_directory in the location given by user.
@@ -256,10 +255,6 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
     test_s2s_dst_blob_account_url = s2s_dst_blob_account_url
     if not clean_test_blob_account(test_s2s_dst_blob_account_url):
         print("failed to clean s2s blob destination account.")
-
-    test_s2s_dst_file_account_url = s2s_dst_blob_account_url
-    if not clean_test_file_account(test_s2s_dst_file_account_url):
-        print("failed to clean s2s file destination account.")
 
     test_s2s_src_s3_service_url = s2s_src_s3_service_url
     if not clean_test_s3_account(test_s2s_src_s3_service_url):
