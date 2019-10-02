@@ -38,7 +38,7 @@
 ### New features
 
 1. `sync` is supported from Blob Storage to Blob Storage, and from Azure Files to Azure Files.
-1. `copy` is supported from Azure Files to Azure Files, and (TBC?) from Blob Storage to Azure Files.
+1. `copy` is supported from Azure Files to Azure Files, and from Blob Storage to Azure Files.
 1. Percent complete is displayed as each job runs.
 1. VHD files are auto-detected as page blobs.
 1. A new benchmark mode allows quick and easy performance benchmarking of your network connection to
@@ -68,10 +68,10 @@
    should not be modified.  It does not affect the number of HTTP connections, which is still
    controlled by `AZCOPY_CONCURRENCY_VALUE`.
 1. The values of key environment variables are listed at the start of the log file.
-1. An official 32-bit build is now released, in addition to the usual 64-bit builds. (TBC: For which
-   OS's?)
+1. An official Windows 32-bit build is now released, in addition to the usual 64-bit builds for
+   Linux, Mac and Windows.
 1. If you need to refer a literal `*` in the name of a blob or Azure Files file, e.g. for a blob
-   named "*", escape the * using standard URL escaping. To do this, replace the * with the following
+   named "\*", escape the `*` using standard URL escaping. To do this, replace the `*` with the following
    character sequence: %2A 
 
 ### Bug fixes
@@ -81,9 +81,10 @@
    potentially containing an unknown mix of old and new data. E.g. if uploading a new version of a file
    over top of an old version, cancellation could result in the file being left with some parts
    containing old data, and some containing new data. This issue affected downloads to local disk and
-   uploads to Azure Files, ADLS Gen 2, page blobs and append blobs. It did not affect transfers to block
-   blobs. (See next bug fix below for block blobs.)
-1. (****TBC say something about when we do and don't delete block blobs****)
+   uploads to Azure Files, ADLS Gen 2, page blobs and append blobs. The bug did not affect transfers to block
+   blobs.
+1. If a transfer to a brand-new block blob is cancelled before it completes, the uncommitted blocks are now cleaned up
+   immediately. Previous versions would leave them, for automatic garbage collection to delete 7 days later.
 1. Long pathnames (over 260 characters) are now supported everywhere on Windows, including on UNC
    shares.
 1. When supplying a `--content-type` on the command line it's no longer necessary to also specify
