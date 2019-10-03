@@ -78,7 +78,10 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 
 	// step 4b: special handling for empty files
 	if fileSize == 0 {
-		err := createEmptyFile(info.Destination)
+		err := jptm.WaitUntilLockDestination(jptm.Context())
+		if err == nil {
+			err = createEmptyFile(info.Destination)
+		}
 		if err != nil {
 			jptm.LogDownloadError(info.Source, info.Destination, "Empty File Creation error "+err.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
