@@ -30,6 +30,17 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 1)
 
+    # s2s-detect-source-changed is only present for S2S transfers, and thus only needs the one test.
+    def test_copy_single_1kb_file_from_blob_to_blob_fail_lmt(self):
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        # First, verify that checkLMT passes
+        self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 1,
+                                                    checkLMT="pass")
+        # Then, introduce a fault in the LMT checking process to fail the transfer
+        self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 1,
+                                                    checkLMT="fail")
+
     def test_copy_single_512b_file_from_page_to_block_blob(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
@@ -760,12 +771,15 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         result = util.Command("copy").add_arguments(dstFileURL).add_arguments(local_validate_dest). \
             add_flags("log-level", "info")
 
+        # tell azcopy to check the LMT and possibly introduce a fault with the LMT to fail the transfer
         if checkLMT == "pass":
             result.add_flags("s2s-detect-source-changed", "True")
         elif checkLMT == "fail":
+            # enable debug mode
+            os.environ['AZCOPY_DEBUG_MODE'] = 'on'
             result.add_flags("s2s-detect-source-changed", "True")
-            # Poison the well
-            result.add_flags("supply-invalid-lmt", "False")
+            # introduce a fault in the LMT to fail the transfer
+            result.add_flags("supply-invalid-lmt", "True")
 
         result = result.execute_azcopy_copy_command()
         self.assertTrue(result)
@@ -776,6 +790,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             # Do not expect a failure
             self.assertTrue(result)
         else:
+            # disable debug mode for future tests
+            os.environ['AZCOPY_DEBUG_MODE'] = 'off'
             # Expect a failure caused by supply-invalid-lmt
             self.assertFalse(result)
 

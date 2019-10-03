@@ -35,6 +35,85 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         result = util.Command("copy").add_arguments(src).add_arguments(dst).add_flags("log-level", "info"). \
             add_flags("check-md5", "FailIfDifferentOrMissing")
 
+    # Only two tests on length check need to be ran to ensure it works:
+    # 1) remoteToLocal (this test)
+    # 2) anyToRemote
+    def test_download_1kb_blob_faulty_length(self):
+        # create file of size 1kb
+        filename = "test_1kb_blob_download_faulty_length.txt"
+        file_path = util.create_test_file(filename, 1024)
+
+        # upload 1kb using azcopy
+        src = file_path
+        dst = util.test_container_url
+        result = util.Command("copy").add_arguments(src).add_flags(dst). \
+            add_flags("log-level", "info").execute_azcopy_copy_command()
+        self.assertTrue(result)
+
+        # verify the uploaded blob to ensure nothing went wrong with the transfer
+        resource_url = util.get_resource_sas(filename)
+        result = util.Command("testBlob").add_arguments(file_path).add_arguments(resource_url).execute_azcopy_verify()
+        self.assertTrue(result)
+
+        # download the blob with length check on
+        # length check is on by default, but as a sanity check, it is explicit here.
+        result = util.Command("copy").add_arguments(resource_url).add_arguments(file_path). \
+            add_flags("log-level", "info").add_flags("check-length", "true").execute_azcopy_copy_command()
+        self.assertTrue(result)
+
+        # enable debug mode temporarily
+        os.environ['AZCOPY_DEBUG_MODE'] = 'on'
+
+        # try to download and introduce a faulty length
+        # if this command fails, it verifies that check-length works on remoteToLocal scenarios.
+        result = util.Command("copy").add_arguments(resource_url).add_arguments(file_path). \
+            add_flags("log-level", "info").add_flags("check-length", "true"). \
+            add_flags("supply-invalid-length", "true").execute_azcopy_copy_command()
+        self.assertFalse(result)
+
+        # disable debug mode so other tests don't accidentally fail
+        os.environ['AZCOPY_DEBUG_MODE'] = 'off'
+
+    # check-md5 only has to be verified on download as S2S does not feature a md5 check feature
+    def test_download_1kb_blob_faulty_md5(self):
+        # create file of size 1kb
+        filename = "test_1kb_blob_upload_download_faulty_md5.txt"
+        file_path = util.create_test_file(filename, 1024)
+
+        # upload 1kb using azcopy
+        src = file_path
+        dst = util.test_container_url
+        result = util.Command("copy").add_arguments(src).add_flags(dst). \
+            add_flags("log-level", "info").add_flags("put-md5", "true").execute_azcopy_copy_command()
+        self.assertTrue(result)
+
+        # verify the uploaded blob (and its md5) so that we know that check-md5 on azcopy isn't the issue
+        # if the prior command doesn't upload correctly
+        resource_url = util.get_resource_sas(filename)
+        result = util.Command("testBlob").add_arguments(file_path).add_arguments(resource_url). \
+            add_flags("check-content-md5", "true").execute_azcopy_verify()
+        self.assertTrue(result)
+
+        # verify azcopy's check-md5 flag passes the files
+        # download to devnull as that's how we do a standard MD5 check
+        result = util.Command("copy").add_arguments(resource_url).add_arguments(os.devnull). \
+            add_flags("log-level", "info").add_flags("check-md5", "FailIfDifferentOrMissing"). \
+            execute_azcopy_copy_command()
+        self.assertTrue(result)
+
+        # enable debug mode temporarily
+        os.environ['AZCOPY_DEBUG_MODE'] = 'on'
+
+        # try to download and introduce a faulty MD5
+        # download to devnull as that's how we do a standard MD5 check
+        result = util.Command("copy").add_arguments(resource_url).add_arguments(os.devnull). \
+            add_flags("log-level", "info").add_flags("check-md5", "FailIfDifferentOrMissing"). \
+            add_flags("supply-invalid-md5", "true").execute_azcopy_copy_command()
+        self.assertFalse(result)  # if this fails, it verifies check-md5 works fine
+
+        # disable debug mode so other tests don't accidentally fail
+        os.environ['AZCOPY_DEBUG_MODE'] = 'off'
+
     # test_download_1kb_blob verifies the download of 1Kb blob using azcopy.
     def test_download_1kb_blob(self):
         # create file of size 1KB.

@@ -8,7 +8,11 @@ import utility as util
 
 class Block_Upload_User_Scenarios(unittest.TestCase):
 
-    def util_test_1kb_blob_upload(self, use_oauth_session=False):
+    # checkLength has 3 states: "", "pass", and "fail".
+    # if "pass" or "" (because check-length is default on), check the length expecting success.
+    # "pass" just explicitly sets check-length to true.
+    # if "fail", check the length, introducing a fault, expecting failure.
+    def util_test_1kb_blob_upload(self, use_oauth_session=False, checkLength=""):
         # Creating a single File Of size 1 KB
         filename = "test1KB.txt"
         file_path = util.create_test_file(filename, 1024)
@@ -23,7 +27,17 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             dest_validate = util.get_resource_from_oauth_container_validate(filename)
 
         result = util.Command("copy").add_arguments(src).add_arguments(dest). \
-            add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+            add_flags("log-level", "info").add_flags("recursive", "true")
+
+        if checkLength == "pass":
+            result.add_flags("check-length", "true")
+        elif checkLength == "fail":
+            # enable debug mode
+            os.environ['AZCOPY_DEBUG_MODE'] = 'on'
+            # explicitly set check-length and introduce a fault
+            result.add_flags("check-length", "true").add_flags("supply-invalid-length", "true")
+
+        result = result.execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # Verifying the uploaded blob.
@@ -36,6 +50,15 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
     def test_1kb_blob_upload_with_sas(self):
         #Test the case with SAS
         self.util_test_1kb_blob_upload()
+
+    # Only two tests on length check need to be ran to ensure it works:
+    # 1) remoteToLocal
+    # 2) anyToRemote (this test)
+    def test_1kb_blob_upload_with_sas_fail_length(self):
+        # first, pass checking the length.
+        self.util_test_1kb_blob_upload(checkLength="pass")
+        # then, fail it to ensure checklength works
+        self.util_test_1kb_blob_upload(checkLength="fail")
 
     def test_1kb_blob_upload_with_oauth(self):
         #Test the case with OAuth
