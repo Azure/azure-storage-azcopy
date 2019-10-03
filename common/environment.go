@@ -22,8 +22,6 @@ package common
 
 import (
 	"runtime"
-
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 type EnvironmentVariable struct {
