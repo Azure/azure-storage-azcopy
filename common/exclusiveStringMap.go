@@ -40,7 +40,7 @@ func NewExclusiveStringMap(caseSensitive bool) *ExclusiveStringMap {
 	}
 }
 
-var exclusiveStringMapCollision = errors.New("exclusive string map collision")
+var exclusiveStringMapCollisionError = errors.New("exclusive string map collision")
 
 // Add succeeds if and only if key is not currently in the map
 func (e *ExclusiveStringMap) Add(key string) error {
@@ -51,7 +51,7 @@ func (e *ExclusiveStringMap) Add(key string) error {
 
 	_, alreadyThere := e.m[key]
 	if alreadyThere {
-		return exclusiveStringMapCollision
+		return exclusiveStringMapCollisionError
 	}
 	e.m[key] = struct{}{}
 	return nil
