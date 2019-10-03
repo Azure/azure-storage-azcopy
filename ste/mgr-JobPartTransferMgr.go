@@ -317,7 +317,8 @@ func (jptm *jobPartTransferMgr) UnlockDestination() {
 }
 
 func (jptm *jobPartTransferMgr) useFileCountLimiter() bool {
-	return jptm.FromTo().IsDownload() // count-based limits are only applied for download a present
+	ft := jptm.FromTo()    // TODO: consider changing isDownload (and co) to have struct receiver instead of pointer receiver, so don't need variable like this
+	return ft.IsDownload() // count-based limits are only applied for download a present
 }
 
 func (jptm *jobPartTransferMgr) RescheduleTransfer() {
