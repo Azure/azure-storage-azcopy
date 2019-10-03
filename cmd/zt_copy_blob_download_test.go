@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -422,8 +423,9 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithPattern(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	rawContainerURLWithSAS.Path += "/*" // imply strip-top-dir
-	raw := getDefaultCopyRawInput(rawContainerURLWithSAS.String(), dstDirName)
+	rawContainerURLWithSAS.Path = path.Join(rawContainerURLWithSAS.Path, string([]byte{0x00}))
+	containerString := strings.ReplaceAll(rawContainerURLWithSAS.String(), "%00", "*")
+	raw := getDefaultCopyRawInput(containerString, dstDirName)
 	raw.recursive = true
 	raw.include = "*.pdf"
 
