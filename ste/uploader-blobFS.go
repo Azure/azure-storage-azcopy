@@ -227,5 +227,9 @@ func (u *blobFSUploader) GetDestinationLength() (int64, error) {
 		return -1, err
 	}
 
+	if SupplyInvalidDstLength {
+		return prop.ContentLength() + 5, nil
+	}
+
 	return prop.ContentLength(), nil
 }

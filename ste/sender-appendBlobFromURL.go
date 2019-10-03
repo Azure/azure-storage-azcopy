@@ -82,5 +82,9 @@ func (c *urlToAppendBlobCopier) GetDestinationLength() (int64, error) {
 		return -1, err
 	}
 
+	if SupplyInvalidDstLength {
+		return properties.ContentLength() + 5, nil
+	}
+
 	return properties.ContentLength(), nil
 }

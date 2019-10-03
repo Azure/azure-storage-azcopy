@@ -125,6 +125,10 @@ type rawCopyCmdArgs struct {
 	// specify how user wants to handle invalid metadata.
 	s2sInvalidMetadataHandleOption string
 
+	introduceMD5Fault bool
+	introduceLMTFault bool
+	introduceLenFault bool
+
 	// internal override to enforce strip-top-dir
 	internalOverrideStripTopDir bool
 }
@@ -227,6 +231,12 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 
 	cooked := cookedCopyCmdArgs{
 		jobID: jobId,
+	}
+
+	if strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AzcopyDebugMode())) == "on" {
+		ste.SupplyInvalidDstLength = raw.introduceLenFault
+		ste.SupplyInvalidMD5 = raw.introduceMD5Fault
+		ste.SupplyInvalidSrcTimeCheck = raw.introduceLMTFault
 	}
 
 	fromTo, err := validateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
@@ -1421,6 +1431,12 @@ func init() {
 	// Hide the flush-threshold flag since it is implemented only for CI.
 	cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on accounts that have a hierarchical namespace.")
 	cpCmd.PersistentFlags().MarkHidden("flush-threshold")
-	cpCmd.PersistentFlags().BoolVar(&ste.SupplyInvalidSrcTimeCheck, "supply-invalid-lmt", false, "Have SIP hand off an invalid LMT to fail a transfer intentionally")
+
+	// Hide the fault induction flags as they are only implemented for CI purposes.
+	cpCmd.PersistentFlags().BoolVar(&raw.introduceLMTFault, "supply-invalid-lmt", false, "Have SIP hand off an invalid LMT to fail a transfer intentionally. In order to use this flag, please set AZCOPY_DEBUG_MODE to \"on\"")
 	cpCmd.PersistentFlags().MarkHidden("supply-invalid-lmt")
+	cpCmd.PersistentFlags().BoolVar(&raw.introduceMD5Fault, "supply-invalid-md5", false, "Intentionally damage the MD5 taken from the local file to fail a transfer. In order to use this flag, please set AZCOPY_DEBUG_MODE to \"on\"")
+	cpCmd.PersistentFlags().MarkHidden("supply-invalid-md5")
+	cpCmd.PersistentFlags().BoolVar(&raw.introduceLenFault, "supply-invalid-length", false, "Intentionally provide a false destination length to fail the transfer. In order to use this flag, please set AZCOPY_DEBUG_MODE to \"on\"")
+	cpCmd.PersistentFlags().MarkHidden("supply-invalid-length")
 }

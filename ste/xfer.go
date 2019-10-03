@@ -40,6 +40,8 @@ const UploadMaxRetryDelay = time.Second * 60
 
 var ADLSFlushThreshold uint32 = 7500  // The # of blocks to flush at a time-- Implemented only for CI.
 var SupplyInvalidSrcTimeCheck = false // Intentionally return a false src LMT to fail a transfer-- Implemented only for CI.
+var SupplyInvalidMD5 = false          // Intentionally return a false local MD5 to fail a transfer-- Implemented only for CI.
+var SupplyInvalidDstLength = false    // Intentionally return a false destination length to fail a transfer-- implemented only for CI.
 
 // download related
 const MaxRetryPerDownloadBody = 5

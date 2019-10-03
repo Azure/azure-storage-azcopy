@@ -22,6 +22,8 @@ package common
 
 import (
 	"runtime"
+
+	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 type EnvironmentVariable struct {
@@ -180,6 +182,7 @@ func (EnvironmentVariable) AwsSessionToken() EnvironmentVariable {
 // OAuthTokenInfo is only used for internal integration.
 func (EnvironmentVariable) OAuthTokenInfo() EnvironmentVariable {
 	return EnvironmentVariable{Name: "AZCOPY_OAUTH_TOKEN_INFO"}
+	azfile.NewShareURL()
 }
 
 // CredentialType is only used for internal integration.
@@ -192,5 +195,13 @@ func (EnvironmentVariable) DefaultServiceApiVersion() EnvironmentVariable {
 		Name:         "AZCOPY_DEFAULT_SERVICE_API_VERSION",
 		DefaultValue: "2018-03-28",
 		Description:  "Overrides the service API version so that AzCopy could accommodate custom environments such as Azure Stack.",
+	}
+}
+
+func (EnvironmentVariable) AzcopyDebugMode() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_DEBUG_MODE",
+		DefaultValue: "off",
+		Description:  "Enables the use of flags that intentionally cause transfer failures. (\"on\" = enabled)",
 	}
 }
