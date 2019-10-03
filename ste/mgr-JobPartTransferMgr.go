@@ -35,6 +35,7 @@ type IJobPartTransferMgr interface {
 	CacheLimiter() common.CacheLimiter
 	WaitUntilLockDestination(ctx context.Context) error
 	UnlockDestination()
+	HoldsDestinationLock() bool
 	StartJobXfer()
 	GetOverwriteOption() common.OverwriteOption
 	ShouldDecompress() bool
@@ -127,6 +128,9 @@ type jobPartTransferMgr struct {
 
 	// used to show whether we have started doing things that may affect the destination
 	atomicDestModifiedIndicator uint32
+
+	// used to show whether THIS jptm holds the destination lock
+	atomicDestLockHeldIndicator uint32
 
 	// how many bytes have been successfully transferred
 	// (hard to infer from atomicChunksDone because that counts both successes and failures)
@@ -301,19 +305,30 @@ func (jptm *jobPartTransferMgr) WaitUntilLockDestination(ctx context.Context) er
 	}
 
 	err := jptm.jobPartMgr.ExclusiveDestinationMap().Add(jptm.Info().Destination)
-
-	if err != nil && jptm.useFileCountLimiter() {
-		jptm.jobPartMgr.FileCountLimiter().Remove(1) // since we are about to say that acquiring the "lock" failed
+	if err == nil {
+		atomic.StoreUint32(&jptm.atomicDestLockHeldIndicator, 1) // THIS jptm owns the dest lock (not some other jptm processing an file with the same name, and thereby preventing us from doing so)
+	} else {
+		if jptm.useFileCountLimiter() {
+			jptm.jobPartMgr.FileCountLimiter().Remove(1) // since we are about to say that acquiring the "lock" failed
+		}
 	}
 
 	return err
 }
 
 func (jptm *jobPartTransferMgr) UnlockDestination() {
-	jptm.jobPartMgr.ExclusiveDestinationMap().Remove(jptm.Info().Destination)
-	if jptm.useFileCountLimiter() {
-		jptm.jobPartMgr.FileCountLimiter().Remove(1)
+	didHaveLock := atomic.CompareAndSwapUint32(&jptm.atomicDestLockHeldIndicator, 1, 0) // set to 0, but only if it is currently 1. Return true if changed
+	// only unlock if THIS jptm actually had the lock. (So that we don't make unwanted removals from fileCountLimiter)
+	if didHaveLock {
+		jptm.jobPartMgr.ExclusiveDestinationMap().Remove(jptm.Info().Destination)
+		if jptm.useFileCountLimiter() {
+			jptm.jobPartMgr.FileCountLimiter().Remove(1)
+		}
 	}
+}
+
+func (jptm *jobPartTransferMgr) HoldsDestinationLock() bool {
+	return atomic.LoadUint32(&jptm.atomicDestLockHeldIndicator) == 1
 }
 
 func (jptm *jobPartTransferMgr) useFileCountLimiter() bool {
