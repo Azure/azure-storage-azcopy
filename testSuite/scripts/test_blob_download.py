@@ -20,7 +20,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         src = file_path
         dst = util.test_container_url
         result = util.Command("copy").add_arguments(src).add_arguments(dst). \
-            add_flags("log-level", "info").add_flags("put-md5", "true").execute_azcopy_copy_command()
+            add_flags("log-level", "info").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # verify the uploaded blob
@@ -32,8 +32,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         # note we have no tests to verify the success of check-md5. TODO: remove this when fault induction is introduced
         src = util.get_resource_sas(filename)
         dst = os.devnull
-        result = util.Command("copy").add_arguments(src).add_arguments(dst).add_flags("log-level", "info"). \
-            add_flags("check-md5", "FailIfDifferentOrMissing")
+        result = util.Command("copy").add_arguments(src).add_arguments(dst).add_flags("log-level", "info")
 
     # test_download_1kb_blob verifies the download of 1Kb blob using azcopy.
     def test_download_1kb_blob(self):
