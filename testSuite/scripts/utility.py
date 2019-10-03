@@ -7,6 +7,7 @@ import shlex
 import uuid
 import random
 import json
+import traceback
 from pathlib import Path
 from collections import namedtuple
 
@@ -92,7 +93,7 @@ class Command(object):
 
     # api executes the azcopy validator to verify the azcopy operation.
     def execute_azcopy_verify(self):
-        print("Verified: " + self.loggable_string())  # dump list of verified commands, for analysis of test coverage
+        print("Verified: " + self.get_test_name() + ": " + self.loggable_string())  # dump list of verified commands, for analysis of test coverage
         return verify_operation(self.string())
 
     # api executes the clean command to delete the blob/container/file/share contents.
@@ -110,6 +111,12 @@ class Command(object):
     # api executes the testSuite's upload command to upload(prepare) data to source URL.
     def execute_testsuite_upload(self):
         return verify_operation(self.string())
+
+    def get_test_name(self):
+        for line in traceback.format_stack():
+            if line.strip().startswith("test_"):
+                return line.strip()
+        return "unknown_test"
 
 # processes oauth command according to swtiches
 def process_oauth_command(
