@@ -77,6 +77,7 @@ type IJobMgr interface {
 	ChunkStatusLogger() common.ChunkStatusLogger
 	HttpClient() *http.Client
 	PipelineNetworkStats() *pipelineNetworkStats
+	ExclusiveDestinationMap() *common.ExclusiveStringMap
 	getOverwritePrompter() *overwritePrompter
 	common.ILoggerCloser
 }
@@ -87,12 +88,13 @@ func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID 
 	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
 	enableChunkLogOutput := level.ToPipelineLogLevel() == pipeline.LogDebug
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
-		httpClient:           NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
-		logger:               common.NewJobLogger(jobID, level, appLogger, logFileFolder),
-		chunkStatusLogger:    common.NewChunkStatusLogger(jobID, cpuMon, logFileFolder, enableChunkLogOutput),
-		concurrency:          concurrency,
-		overwritePrompter:    newOverwritePrompter(),
-		pipelineNetworkStats: newPipelineNetworkStats(JobsAdmin.(*jobsAdmin).concurrencyTuner), // let the stats coordinate with the concurrency tuner
+		httpClient:              NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
+		logger:                  common.NewJobLogger(jobID, level, appLogger, logFileFolder),
+		chunkStatusLogger:       common.NewChunkStatusLogger(jobID, cpuMon, logFileFolder, enableChunkLogOutput),
+		concurrency:             concurrency,
+		overwritePrompter:       newOverwritePrompter(),
+		pipelineNetworkStats:    newPipelineNetworkStats(JobsAdmin.(*jobsAdmin).concurrencyTuner), // let the stats coordinate with the concurrency tuner
+		exclusiveDestinationMap: common.NewExclusiveStringMap(runtime.GOOS == "linux"),
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
 	jm.logJobsAdminMessages()
@@ -166,6 +168,8 @@ type jobMgr struct {
 	ctx                  context.Context
 	cancel               context.CancelFunc
 	pipelineNetworkStats *pipelineNetworkStats
+
+	exclusiveDestinationMap *common.ExclusiveStringMap
 
 	// Share the same HTTP Client across all job parts, so that the we maximize re-use of
 	// its internal connection pool
@@ -345,6 +349,10 @@ func (jm *jobMgr) HttpClient() *http.Client {
 
 func (jm *jobMgr) PipelineNetworkStats() *pipelineNetworkStats {
 	return jm.pipelineNetworkStats
+}
+
+func (jm *jobMgr) ExclusiveDestinationMap() *common.ExclusiveStringMap {
+	return jm.exclusiveDestinationMap
 }
 
 // SetIncludeExclude sets the include / exclude list of transfers

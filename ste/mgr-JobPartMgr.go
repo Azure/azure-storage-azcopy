@@ -46,6 +46,7 @@ type IJobPartMgr interface {
 	SlicePool() common.ByteSlicePooler
 	CacheLimiter() common.CacheLimiter
 	FileCountLimiter() common.CacheLimiter
+	ExclusiveDestinationMap() *common.ExclusiveStringMap
 	ChunkStatusLogger() common.ChunkStatusLogger
 	common.ILogger
 	SourceProviderPipeline() pipeline.Pipeline
@@ -559,6 +560,10 @@ func (jpm *jobPartMgr) CacheLimiter() common.CacheLimiter {
 
 func (jpm *jobPartMgr) FileCountLimiter() common.CacheLimiter {
 	return jpm.fileCountLimiter
+}
+
+func (jpm *jobPartMgr) ExclusiveDestinationMap() *common.ExclusiveStringMap {
+	return jpm.jobMgr.ExclusiveDestinationMap()
 }
 
 func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {

@@ -141,6 +141,18 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 		}
 	}
 
+	// step 5a: lock the destination
+	// (is safe to do it relatively early here, before we run the prologue, because its just a internal lock, within the app)
+	// But must be after all of the early returns that are above here (since
+	// if we succeed here, we need to know the epilogue will definitely run to unlock later)
+	err = jptm.WaitUntilLockDestination(jptm.Context())
+	if err != nil {
+		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
+	}
+
 	// *****
 	// Error-handling rules change here.
 	// ABOVE this point, we end the transfer using the code as shown above
@@ -153,7 +165,7 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 	//   eventually reach numChunks, since we have no better short-term alternative.
 	// ******
 
-	// step 5: tell jptm what to expect, and how to clean up at the end
+	// step 5b: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
 	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupSendToRemote(jptm, s, srcInfoProvider) })
 
@@ -328,6 +340,8 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 	}
 
 	s.Cleanup() // Perform jptm cleanup.
+
+	jptm.UnlockDestination()
 
 	if jptm.TransferStatusIgnoringCancellation() == 0 {
 		panic("think we're finished but status is notStarted")

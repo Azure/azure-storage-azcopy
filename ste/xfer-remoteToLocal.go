@@ -105,7 +105,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 		epilogueWithCleanupDownload(jptm, dl, nil, forceReleaseFileCount, nil)
 	}
 	// block until we can safely use a file handle	// TODO: it might be nice if this happened inside chunkedFileWriter, when first chunk needs to be saved,
-	err := jptm.FileCountLimiter().WaitUntilAdd(jptm.Context(), 1, func() bool { return true })
+	err := jptm.WaitUntilLockDestination(jptm.Context())
 	if err != nil {
 		failFileCreation(err, false)
 		return
@@ -262,7 +262,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 		// wait until all received chunks are flushed out
 		md5OfFileAsWritten, flushError := cw.Flush(jptm.Context())
 		closeErr := activeDstFile.Close() // always try to close if, even if flush failed
-		jptm.FileCountLimiter().Remove(1) // always release it from our count, no matter what happened
+		jptm.UnlockDestination()          // always release it from our count, no matter what happened
 		if flushError != nil {
 			jptm.FailActiveDownload("Flushing file", flushError)
 		}
@@ -284,7 +284,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 		}
 	} else {
 		if forceReleaseFileCount {
-			jptm.FileCountLimiter().Remove(1) // special case, for we we failed after adding it to count, but before making an actual file
+			jptm.UnlockDestination() // special case, for we we failed after adding it to count, but before making an actual file
 		}
 	}
 
