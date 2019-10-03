@@ -55,6 +55,22 @@ class Command(object):
                 command += " --" + key + "=" + '"' + str(value) + '"'
         return command
 
+    # like string but with source and dest trimmed down, for readability and SAS removal, while still
+    def loggable_string(self):
+        command = self.command_type
+        if len(self.args) > 0:
+            for arg in self.args:
+                if (len(arg) > 0):
+                    # add '"' at start and end of each argument.
+                    arg = str.replace(arg, "?", "/")
+                    loggable_arg = str.split(arg, "/")[2:4] if str.startswith(arg, "h") else arg[:5]
+                    command += " " + '"' + loggable_arg + '"'
+            # iterating through all the values in dict and combining them.
+        if len(self.flags) > 0:
+            for key, value in self.flags.items():
+                command += " --" + key + "=" + '"' + str(value) + '"'
+        return command
+
     # this api is used to execute a azcopy copy command.
     # by default, command execute a upload command.
     # return true or false for success or failure of command.
@@ -76,6 +92,7 @@ class Command(object):
 
     # api executes the azcopy validator to verify the azcopy operation.
     def execute_azcopy_verify(self):
+        print("Verified: " + self.loggable_string())  # dump list of verified commands, for analysis of test coverage
         return verify_operation(self.string())
 
     # api executes the clean command to delete the blob/container/file/share contents.
