@@ -108,6 +108,8 @@ def clean_test_blob_account(account):
     return True
 
 def clean_test_s3_account(account):
+    if os.environ['S3_TESTS_OFF'] != '':
+        return True
     result = Command("clean").add_arguments(account).add_flags("serviceType", "S3").add_flags("resourceType", "Account").execute_azcopy_clean()
     if not result:
         print("error cleaning the S3 account.")
