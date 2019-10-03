@@ -183,7 +183,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		S2SGetPropertiesInBackend:      order.S2SGetPropertiesInBackend,
 		S2SSourceChangeValidation:      order.S2SSourceChangeValidation,
 		S2SInvalidMetadataHandleOption: order.S2SInvalidMetadataHandleOption,
-		S2SDestLengthValidation:        order.S2SDestLengthValidation,
+		DestLengthValidation:           order.DestLengthValidation,
 		atomicJobStatus:                common.EJobStatus.InProgress(), // We default to InProgress
 	}
 
