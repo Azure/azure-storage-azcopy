@@ -23,6 +23,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	chk "gopkg.in/check.v1"
 )
@@ -46,7 +47,10 @@ func (s *loadCmdTestSuite) TestParsingRawArgs(c *chk.C) {
 	c.Assert(err, chk.IsNil)
 
 	// validate the straightforward args
-	c.Assert(cooked.src, chk.Equals, raw.src)
+	cleanedSrc, err := filepath.Abs(raw.src)
+	c.Assert(err, chk.IsNil)
+
+	c.Assert(cooked.src, chk.Equals, cleanedSrc)
 	c.Assert(cooked.newSession, chk.Equals, raw.newSession)
 	c.Assert(cooked.statePath, chk.Equals, raw.statePath)
 

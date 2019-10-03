@@ -23,8 +23,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -65,7 +63,7 @@ func (i *interceptor) intercept(cmd common.RpcCmd, request interface{}, response
 func (i *interceptor) init() {
 	// mock out the lifecycle manager so that it can no longer terminate the application
 	glcm = &mockedLifecycleManager{
-		log: make(chan string, 5000),
+		infoLog: make(chan string, 5000),
 	}
 }
 
@@ -76,39 +74,40 @@ func (i *interceptor) reset() {
 
 // this lifecycle manager substitute does not perform any action
 type mockedLifecycleManager struct {
-	log chan string
+	infoLog     chan string
+	errorLog    chan string
+	progressLog chan string
+	exitLog     chan string
 }
 
-func (m *mockedLifecycleManager) logContainsText(text string, timeout time.Duration) bool {
-
-	timeoutCh := time.After(timeout)
-
-	for {
-		select {
-		case x := <-m.log:
-			if strings.Contains(x, text) {
-				return true
-			}
-		case <-timeoutCh:
-			return false // don't wait for ever.  Have to use timeout because we don't have notion of orderly closure of log in tests, at least not as at Oct 2019
-		}
+func (m *mockedLifecycleManager) Progress(o common.OutputBuilder) {
+	select {
+	case m.progressLog <- o(common.EOutputFormat.Text()):
+	default:
 	}
 }
-
-func (*mockedLifecycleManager) Progress(common.OutputBuilder) {}
-func (*mockedLifecycleManager) Init(common.OutputBuilder)     {}
+func (*mockedLifecycleManager) Init(common.OutputBuilder) {}
 func (m *mockedLifecycleManager) Info(msg string) {
-	fmt.Println(msg)
 	select {
-	case m.log <- msg:
+	case m.infoLog <- msg:
 	default:
 	}
 }
 func (*mockedLifecycleManager) Prompt(message string, details common.PromptDetails) common.ResponseOption {
 	return common.EResponseOption.Default()
 }
-func (*mockedLifecycleManager) Exit(common.OutputBuilder, common.ExitCode)      {}
-func (*mockedLifecycleManager) Error(string)                                    {}
+func (m *mockedLifecycleManager) Exit(o common.OutputBuilder, e common.ExitCode) {
+	select {
+	case m.exitLog <- o(common.EOutputFormat.Text()):
+	default:
+	}
+}
+func (m *mockedLifecycleManager) Error(msg string) {
+	select {
+	case m.errorLog <- msg:
+	default:
+	}
+}
 func (*mockedLifecycleManager) SurrenderControl()                               {}
 func (mockedLifecycleManager) AllowReinitiateProgressReporting()                {}
 func (*mockedLifecycleManager) InitiateProgressReporting(common.WorkController) {}
@@ -123,6 +122,16 @@ func (*mockedLifecycleManager) GetEnvironmentVariable(env common.EnvironmentVari
 	return value
 }
 func (*mockedLifecycleManager) SetOutputFormat(common.OutputFormat) {}
+
+func (*mockedLifecycleManager) GatherAllLogs(channel chan string) (result []string) {
+	close(channel)
+	for line := range channel {
+		fmt.Println(line)
+		result = append(result, line)
+	}
+
+	return
+}
 
 type dummyProcessor struct {
 	record []storedObject

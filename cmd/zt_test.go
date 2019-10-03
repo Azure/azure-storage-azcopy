@@ -49,7 +49,8 @@ func Test(t *testing.T) { chk.TestingT(t) }
 
 type cmdIntegrationSuite struct{}
 
-var _ = chk.Suite(&cmdIntegrationSuite{})
+// NOTE: disabled on this branch only, to speed up CI
+//var _ = chk.Suite(&cmdIntegrationSuite{})
 var ctx = context.Background()
 
 const (

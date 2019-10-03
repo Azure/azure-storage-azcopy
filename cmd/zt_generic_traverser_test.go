@@ -30,7 +30,7 @@ import (
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
-	"github.com/minio/minio-go"
+	minio "github.com/minio/minio-go"
 	chk "gopkg.in/check.v1"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
@@ -40,7 +40,8 @@ import (
 
 type genericTraverserSuite struct{}
 
-var _ = chk.Suite(&genericTraverserSuite{})
+// NOTE: disabled on this branch only, to speed up CI
+//var _ = chk.Suite(&genericTraverserSuite{})
 
 // On Windows, if you don't hold adequate permissions to create a symlink, tests regarding symlinks will fail.
 // This is arguably annoying to dig through, therefore, we cleanly skip the test.
