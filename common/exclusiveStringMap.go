@@ -40,7 +40,7 @@ func NewExclusiveStringMap(caseSensitive bool) *ExclusiveStringMap {
 	}
 }
 
-var exclusiveStringMapCollisionError = errors.New("exclusive string map collision")
+var exclusiveStringMapCollisionError = errors.New("cannot simultaneously send two files to same destination name")
 
 // Add succeeds if and only if key is not currently in the map
 func (e *ExclusiveStringMap) Add(key string) error {
