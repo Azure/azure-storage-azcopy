@@ -49,6 +49,11 @@ const (
 var defaultS2SInvalideMetadataHandleOption = common.DefaultInvalidMetadataHandleOption
 
 func (s *cmdIntegrationSuite) SetUpSuite(c *chk.C) {
+	// skip cleaning up the S3 account when not necessary
+	if isS3Disabled() {
+		return
+	}
+
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 
 	// If S3 credentials aren't supplied, we're probably only trying to run Azure tests.

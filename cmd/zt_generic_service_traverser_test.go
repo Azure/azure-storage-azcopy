@@ -90,7 +90,8 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 	fsu := getFSU()
 	testS3 := false // Only test S3 if credentials are present.
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	if err == nil {
+	// disable S3 testing
+	if err == nil && !isS3Disabled() {
 		testS3 = true
 	} else {
 		c.Log("WARNING: Service level traverser is NOT testing S3")
@@ -219,7 +220,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	bfssu := GetBFSSU()
 	testS3 := false // Only test S3 if credentials are present.
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	if err == nil {
+	if err == nil && !isS3Disabled() {
 		testS3 = true
 	} else {
 		c.Log("WARNING: Service level traverser is NOT testing S3")
