@@ -339,7 +339,9 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 		}
 	}
 
-	s.Cleanup() // Perform jptm cleanup.
+	if jptm.HoldsDestinationLock() { // TODO consider add test of jptm.IsDeadInflight here, so we can remove that from inside all the cleanup methods
+		s.Cleanup() // Perform jptm cleanup, if THIS jptm has the lock on the destination
+	}
 
 	jptm.UnlockDestination()
 
