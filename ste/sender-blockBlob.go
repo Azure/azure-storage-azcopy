@@ -125,6 +125,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 
 	s.muBlockIDs.Lock()
 	blockIDs := s.blockIDs
+	s.blockIDs = nil // so we know for sure that only this routine has access after we release the lock (nothing else should need it now, since we're in the epilogue. Nil-ing here is just being defensive)
 	s.muBlockIDs.Unlock()
 	shouldPutBlockList := getPutListNeed(&s.atomicPutListIndicator)
 	if shouldPutBlockList == putListNeedUnknown && !jptm.WasCanceled() {

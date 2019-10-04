@@ -291,8 +291,8 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 	if dl != nil {
 		dl.Epilogue() // it can release resources here
 
-		// secondary sanity check to ensure devnull doesn't get checked
-		if jptm.IsLive() && info.DestLengthValidation && info.Destination != common.Dev_Null {
+		// check length if enabled (except for dev null and decompression case, where that's impossible)
+		if jptm.IsLive() && info.DestLengthValidation && info.Destination != common.Dev_Null && !jptm.ShouldDecompress() {
 			fi, err := os.Stat(info.Destination)
 
 			if err != nil {

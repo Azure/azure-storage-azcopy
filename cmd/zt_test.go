@@ -73,6 +73,17 @@ const (
 	defaultBlobFSFileSizeInBytes = 1000
 )
 
+// if S3_TESTS_OFF is set at all, S3 tests are disabled.
+func isS3Disabled() bool {
+	return strings.ToLower(os.Getenv("S3_TESTS_OFF")) != ""
+}
+
+func skipIfS3Disabled(c *chk.C) {
+	if isS3Disabled() {
+		c.Skip("S3 testing is disabled for this unit test suite run.")
+	}
+}
+
 // This function generates an entity name by concatenating the passed prefix,
 // the name of the test requesting the entity name, and the minute, second, and nanoseconds of the call.
 // This should make it easy to associate the entities with their test, uniquely identify
@@ -391,6 +402,10 @@ type createS3ResOptions struct {
 }
 
 func createS3ClientWithMinio(o createS3ResOptions) (*minio.Client, error) {
+	if isS3Disabled() {
+		return nil, errors.New("s3 testing is disabled")
+	}
+
 	accessKeyID := os.Getenv("AWS_ACCESS_KEY_ID")
 	secretAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
 
