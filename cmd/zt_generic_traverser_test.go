@@ -42,6 +42,17 @@ type genericTraverserSuite struct{}
 
 var _ = chk.Suite(&genericTraverserSuite{})
 
+// On Windows, if you don't hold adequate permissions to create a symlink, tests regarding symlinks will fail.
+// This is arguably annoying to dig through, therefore, we cleanly skip the test.
+func trySymlink(src, dst string, c *chk.C) {
+	if err := os.Symlink(src, dst); err != nil {
+		if strings.Contains(err.Error(), "A required privilege is not held by the client") {
+			c.Skip("client lacks required privilege to create symlinks; symlinks will not be tested")
+		}
+		c.Error(err)
+	}
+}
+
 // GetProperties tests.
 // GetProperties does not exist on Blob, as the properties come in the list call.
 // While BlobFS could get properties in the future, it's currently disabled as BFS source S2S isn't set up right now, and likely won't be.
@@ -95,6 +106,7 @@ func (s *genericTraverserSuite) TestFilesGetProperties(c *chk.C) {
 }
 
 func (s *genericTraverserSuite) TestS3GetProperties(c *chk.C) {
+	skipIfS3Disabled(c)
 	client, err := createS3ClientWithMinio(createS3ResOptions{})
 
 	if err != nil {
@@ -167,7 +179,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks(c *chk.C) {
 
 	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, fileNames)
 	scenarioHelper{}.generateLocalFilesFromList(c, symlinkTmpDir, fileNames)
-	c.Assert(os.Symlink(symlinkTmpDir, filepath.Join(tmpDir, "so long and thanks for all the fish")), chk.IsNil)
+	trySymlink(symlinkTmpDir, filepath.Join(tmpDir, "so long and thanks for all the fish"), c)
 
 	fileCount := 0
 	c.Assert(WalkWithSymlinks(tmpDir, func(path string, fi os.FileInfo, err error) error {
@@ -192,7 +204,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksBreakLoop(c *chk.C) {
 	defer os.RemoveAll(tmpDir)
 
 	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, fileNames)
-	c.Assert(os.Symlink(tmpDir, filepath.Join(tmpDir, "spinloop")), chk.IsNil)
+	trySymlink(tmpDir, filepath.Join(tmpDir, "spinloop"), c)
 
 	// Only 3 files should ever be found.
 	// This is because the symlink links back to the root dir
@@ -221,7 +233,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksDedupe(c *chk.C) {
 
 	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, fileNames)
 	scenarioHelper{}.generateLocalFilesFromList(c, symlinkTmpDir, fileNames)
-	c.Assert(os.Symlink(symlinkTmpDir, filepath.Join(tmpDir, "symlinkdir")), chk.IsNil)
+	trySymlink(symlinkTmpDir, filepath.Join(tmpDir, "symlinkdir"), c)
 
 	// Only 6 files should ever be found.
 	// 3 in the root dir, 3 in subdir, then symlinkdir should be ignored because it's been seen.
@@ -251,9 +263,9 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksMultitarget(c *chk.C) {
 
 	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, fileNames)
 	scenarioHelper{}.generateLocalFilesFromList(c, symlinkTmpDir, fileNames)
-	c.Assert(os.Symlink(symlinkTmpDir, filepath.Join(tmpDir, "so long and thanks for all the fish")), chk.IsNil)
-	c.Assert(os.Symlink(symlinkTmpDir, filepath.Join(tmpDir, "extradir")), chk.IsNil)
-	c.Assert(os.Symlink(filepath.Join(tmpDir, "extradir"), filepath.Join(tmpDir, "linktolink")), chk.IsNil)
+	trySymlink(symlinkTmpDir, filepath.Join(tmpDir, "so long and thanks for all the fish"), c)
+	trySymlink(symlinkTmpDir, filepath.Join(tmpDir, "extradir"), c)
+	trySymlink(filepath.Join(tmpDir, "extradir"), filepath.Join(tmpDir, "linktolink"), c)
 
 	fileCount := 0
 	c.Assert(WalkWithSymlinks(tmpDir, func(path string, fi os.FileInfo, err error) error {
@@ -284,8 +296,8 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksToParentAndChild(c *chk.C) {
 
 	scenarioHelper{}.generateLocalFilesFromList(c, root2, fileNames)
 	scenarioHelper{}.generateLocalFilesFromList(c, child, fileNames)
-	c.Assert(os.Symlink(root2, filepath.Join(root1, "toroot")), chk.IsNil)
-	c.Assert(os.Symlink(child, filepath.Join(root1, "tochild")), chk.IsNil)
+	trySymlink(root2, filepath.Join(root1, "toroot"), c)
+	trySymlink(child, filepath.Join(root1, "tochild"), c)
 
 	fileCount := 0
 	c.Assert(WalkWithSymlinks(root1, func(path string, fi os.FileInfo, err error) error {
@@ -319,9 +331,13 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 	defer deleteFilesystem(c, filesystemURL)
 
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
-	bucketName := createNewBucket(c, s3Client, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName, true)
+	s3Enabled := err == nil && !isS3Disabled()
+	var bucketName string
+
+	if s3Enabled {
+		bucketName = createNewBucket(c, s3Client, createS3ResOptions{})
+		defer deleteBucket(c, s3Client, bucketName, true)
+	}
 
 	// test two scenarios, either blob is at the root virtual dir, or inside sub virtual dirs
 	for _, storedObjectName := range []string{"sub1/sub2/singleblobisbest", "nosubsingleblob", "满汉全席.txt"} {
@@ -403,22 +419,24 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 		c.Assert(localDummyProcessor.record[0].relativePath, chk.Equals, bfsDummyProcessor.record[0].relativePath)
 		c.Assert(localDummyProcessor.record[0].name, chk.Equals, bfsDummyProcessor.record[0].name)
 
-		// set up the bucket with a single file
-		s3List := []string{storedObjectName}
-		scenarioHelper{}.generateObjects(c, s3Client, bucketName, s3List)
+		if s3Enabled {
+			// set up the bucket with a single file
+			s3List := []string{storedObjectName}
+			scenarioHelper{}.generateObjects(c, s3Client, bucketName, s3List)
 
-		// construct a s3 traverser
-		url := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, storedObjectName)
-		S3Traverser, err := newS3Traverser(&url, ctx, false, false, func() {})
-		c.Assert(err, chk.IsNil)
+			// construct a s3 traverser
+			s3DummyProcessor := dummyProcessor{}
+			url := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, storedObjectName)
+			S3Traverser, err := newS3Traverser(&url, ctx, false, false, func() {})
+			c.Assert(err, chk.IsNil)
 
-		s3DummyProcessor := dummyProcessor{}
-		err = S3Traverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
-		c.Assert(err, chk.IsNil)
-		c.Assert(len(s3DummyProcessor.record), chk.Equals, 1)
+			err = S3Traverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
+			c.Assert(err, chk.IsNil)
+			c.Assert(len(s3DummyProcessor.record), chk.Equals, 1)
 
-		c.Assert(localDummyProcessor.record[0].relativePath, chk.Equals, s3DummyProcessor.record[0].relativePath)
-		c.Assert(localDummyProcessor.record[0].name, chk.Equals, s3DummyProcessor.record[0].name)
+			c.Assert(localDummyProcessor.record[0].relativePath, chk.Equals, s3DummyProcessor.record[0].relativePath)
+			c.Assert(localDummyProcessor.record[0].name, chk.Equals, s3DummyProcessor.record[0].name)
+		}
 	}
 }
 
@@ -438,9 +456,12 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 	defer deleteFilesystem(c, filesystemURL)
 
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
-	bucketName := createNewBucket(c, s3Client, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName, true)
+	s3Enabled := err == nil && !isS3Disabled() // are creds supplied, and is S3 enabled
+	var bucketName string
+	if s3Enabled {
+		bucketName = createNewBucket(c, s3Client, createS3ResOptions{})
+		defer deleteBucket(c, s3Client, bucketName, true)
+	}
 
 	// set up the container with numerous blobs
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
@@ -452,8 +473,10 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 	// set up a filesystem with the same files
 	scenarioHelper{}.generateBFSPathsFromList(c, filesystemURL, fileList)
 
-	// set up a bucket with the same files
-	scenarioHelper{}.generateObjects(c, s3Client, bucketName, fileList)
+	if s3Enabled {
+		// set up a bucket with the same files
+		scenarioHelper{}.generateObjects(c, s3Client, bucketName, fileList)
+	}
 
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(dstDirName)
@@ -502,19 +525,26 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		err = bfsTraverser.traverse(noPreProccessor, bfsDummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
 
-		// construct and run a S3 traverser
-		rawS3URL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName)
-		S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, false, func() {})
-		c.Assert(err, chk.IsNil)
 		s3DummyProcessor := dummyProcessor{}
-		err = S3Traverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
-		c.Assert(err, chk.IsNil)
+		if s3Enabled {
+			// construct and run a S3 traverser
+			rawS3URL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName)
+			S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, false, func() {})
+			c.Assert(err, chk.IsNil)
+			err = S3Traverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
+			c.Assert(err, chk.IsNil)
+		}
 
 		// make sure the results are the same
 		c.Assert(len(blobDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
 		c.Assert(len(fileDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
 		c.Assert(len(bfsDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
-		c.Assert(len(s3DummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
+
+		if s3Enabled {
+			c.Assert(len(s3DummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
+		}
+
+		// if s3dummyprocessor is empty, it's A-OK because no records will be tested
 		for _, storedObject := range append(append(append(blobDummyProcessor.record, fileDummyProcessor.record...), bfsDummyProcessor.record...), s3DummyProcessor.record...) {
 			correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
 
@@ -544,9 +574,12 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 	defer deleteFilesystem(c, filesystemURL)
 
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
-	bucketName := createNewBucket(c, s3Client, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName, true)
+	s3Enabled := err == nil && !isS3Disabled()
+	var bucketName string
+	if s3Enabled {
+		bucketName = createNewBucket(c, s3Client, createS3ResOptions{})
+		defer deleteBucket(c, s3Client, bucketName, true)
+	}
 
 	// set up the container with numerous blobs
 	virDirName := "virdir"
@@ -559,8 +592,11 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 	// set up the filesystem with the same files
 	scenarioHelper{}.generateBFSPathsFromList(c, filesystemURL, fileList)
 
-	// Set up the bucket with the same files
-	scenarioHelper{}.generateObjects(c, s3Client, bucketName, fileList)
+	if s3Enabled {
+		// Set up the bucket with the same files
+		scenarioHelper{}.generateObjects(c, s3Client, bucketName, fileList)
+	}
+
 	time.Sleep(time.Second * 2) // Ensure the objects' LMTs are in the past
 
 	// set up the destination with a folder that have the exact same files
@@ -610,20 +646,25 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		bfsDummyProcessor := dummyProcessor{}
 		err = bfsTraverser.traverse(noPreProccessor, bfsDummyProcessor.process, nil)
 
-		// construct and run a S3 traverser
-		// directory object keys always end with / in S3
-		rawS3URL := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, virDirName+"/")
-		S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, false, func() {})
-		c.Assert(err, chk.IsNil)
 		s3DummyProcessor := dummyProcessor{}
-		err = S3Traverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
-		c.Assert(err, chk.IsNil)
+		if s3Enabled {
+			// construct and run a S3 traverser
+			// directory object keys always end with / in S3
+			rawS3URL := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, virDirName+"/")
+			S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, false, func() {})
+			c.Assert(err, chk.IsNil)
+			err = S3Traverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
+			c.Assert(err, chk.IsNil)
+
+			// check that the results are the same length
+			c.Assert(len(s3DummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
+		}
 
 		// make sure the results are the same
 		c.Assert(len(blobDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
 		c.Assert(len(fileDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
 		c.Assert(len(bfsDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
-		c.Assert(len(s3DummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
+		// if s3 testing is disabled the s3 dummy processors' records will be empty. This is OK for appending. Nothing will happen.
 		for _, storedObject := range append(append(append(blobDummyProcessor.record, fileDummyProcessor.record...), bfsDummyProcessor.record...), s3DummyProcessor.record...) {
 			correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
 
