@@ -43,7 +43,7 @@ On Windows, MIME types are extracted from the registry. This feature can be turn
 
 ` + environmentVariableNotice
 
-const copyCmdExample = `Upload a single file by using OAuth authentication. If you have not yet logged into AzCopy, please use azcopy login command before you run the following command.
+const copyCmdExample = `Upload a single file by using OAuth authentication. If you have not yet logged into AzCopy, please run the azcopy login command before you run the following command.
 
   - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]"
 
@@ -73,7 +73,7 @@ Upload files and directories by using a SAS token and wildcard (*) characters:
 
   - azcopy cp "/path/*foo/*bar*" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
 
-Download a single file by using OAuth authentication. If you have not yet logged into AzCopy, please use azcopy login command before you run the following command.
+Download a single file by using OAuth authentication. If you have not yet logged into AzCopy, please run the azcopy login command before you run the following command.
 
   - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]" "/path/to/file.txt"
 
@@ -92,8 +92,8 @@ Download an entire directory by using a SAS token:
 A note about using a wildcard character (*) in URLs:
 
 There's only two supported ways to use a wildcard character in a URL. 
-You can use one just after the final forward slash (/) of a URL to obtain all of the files in a directory. 
-You can also use one in the name of a container as long as the URL refers only to a container and not to a blob.   
+- You can use one just after the final forward slash (/) of a URL. This copies all of the files in a directory directly to the destination without placing them into a subdirectory. 
+- You can also use one in the name of a container as long as the URL refers only to a container and not to a blob. You can use this approach to obtain files from a subset of containers. 
 
 Download the contents of a directory without copying the containing directory itself.
  
@@ -103,7 +103,7 @@ Download an entire storage account.
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/" "/path/to/dir" --recursive
 
-Download an entire storage account by using a wildcard symbol (*) in the container name.
+Download a subset of containers within a storage account by using a wildcard symbol (*) in the container name.
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container*name]" "/path/to/dir" --recursive
 
@@ -111,7 +111,7 @@ Copy a single blob to another blob by using a SAS token.
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
 
-Copy a single blob to another blob by using a SAS token and an OAuth token. If you log into AzCopy by using the azcopy login command, the destination account doesn't need a SAS token. 
+Copy a single blob to another blob by using a SAS token and an OAuth token. You have to use a SAS token at the end of the source account URL, but the destination account doesn't need one if you log into AzCopy by using the azcopy login command. 
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]"
 
@@ -140,6 +140,10 @@ Copy all buckets to Blob Storage from Amazon Web Services (AWS) by using an acce
 Copy all buckets to Blob Storage from an Amazon Web Services (AWS) region by using an access key and a SAS token. First, set the environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for AWS S3 source.
  
   - azcopy cp "https://s3-[region].amazonaws.com/" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
+
+Copy a subset of buckets by using a wildcard symbol (*) in the bucket name. Like the previous examples, you'll need an access key and a SAS token. Make sure to set the environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for AWS S3 source.
+
+  - azcopy cp "https://s3.amazonaws.com/[bucket*name]/" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
 `
 
 // ===================================== ENV COMMAND ===================================== //
@@ -237,7 +241,7 @@ Set the environment variable AZCOPY_SPA_CLIENT_SECRET to the client secret for s
 
    - azcopy login --service-principal
 
-Log in as a service principal by using a certificate and a password:
+Log in as a service principal by using a certificate and it's password:
 Set the environment variable AZCOPY_SPA_CERT_PASSWORD to the certificate's password for cert based service principal auth
 
    - azcopy login --service-principal --certificate-path /path/to/my/cert
@@ -315,11 +319,10 @@ The last modified times are used for comparison. The file is skipped if the last
 
 The sync command differs from the copy command in several ways:
 
-  1. The recursive flag is on by default.
+  1. Sync can copy directories without the recursive flag, but it will not sync subdirectories.
   2. The source and destination should not contain patterns (For example: * or ?).
-  3. The include and exclude flags can be a list of patterns matching to the file names. Please refer to the example section for illustration.
-  4. If there are files and blobs at the destination that are not present at the source, the user is prompted to delete them. You can use the corresponding flags to silence the prompt to automatically answer the deletion question.
-  5. When syncing between virtual directories, add a trailing slash to the path (refer to examples) if there's a blob with the same name as one of the virtual directories.
+  3. The include-pattern and exclude-pattern flags can be a list of patterns matching to the file names. Please refer to the example section for illustration.
+  4. When syncing between virtual directories, add a trailing slash to the path (refer to examples) if there's a blob with the same name as one of the virtual directories.
 
 Advanced:
 
