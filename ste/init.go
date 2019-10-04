@@ -437,7 +437,8 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 						Dst:            dst,
 						TransferStatus: common.ETransferStatus.Failed(),
 						ErrorCode:      jppt.ErrorCode()}) // TODO: Optimize
-			case common.ETransferStatus.SkippedFileAlreadyExists():
+			case common.ETransferStatus.SkippedFileAlreadyExists(),
+				common.ETransferStatus.SkippedBlobHasSnapshots():
 				js.TransfersSkipped++
 				// getting the source and destination for skipped transfer at position - index
 				src, dst := jpp.TransferSrcDstStrings(t)
@@ -508,7 +509,6 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 			js.TransfersCompleted > 0)
 
 		js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped)
-
 
 	}
 
