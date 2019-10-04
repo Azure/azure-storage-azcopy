@@ -278,17 +278,20 @@ func (jptm *jobPartTransferMgr) FileCountLimiter() common.CacheLimiter {
 // WaitUntilLockDestination does two things. It respects any limit that may be in place on the number of
 // active destination files (by blocking until we are under the max count), and it
 // registers the destination as "locked" in our internal map. The reason we
-// lock internally like this is:
-// (a) it is desirable to have some kind of locking because there are (very rare) edge cases where
-// we may map two source files to one destination.  This can happen any time we mutate the destination name
-// (since when doing such mutation we can't and don't check whether we are also transferring another file with the name
-// that is already equal to the result of that mutation).  We have chosen to lock only for the duration of the writing
+// lock internally in map like this is:
+// (a) it is desirable to have some kind of locking because there are  edge cases where
+// we may map two source files to one destination. This can happen in two situations: 1. when we move data from a
+// case sensitive file system to a case insensitive one (and two source files map to the same destination).
+// And 2. in the occasions where we mutate the destination name (since when doing such mutation we can't and don't check
+// whether we are also transferring another file with a name that is already equal to the result of that mutation).
+// We have chosen to lock only for the duration of the writing
 // to the destination because we don't wait to maintain a huge dictionary of all files in the job and
 // this much locking is enough to prevent data from both sources getting MIXED TOGETHER in the one file. It's not enough
 // to prevent one source file completely overwriting the other at the destination... but that's a much more tolerable
 // form of "corruption" than actually ending up with data from two sources in one file - which is what we can get if
 // we don't have this lock. AND
 // (b) Linux file locking is not consistently implemented, so it seems cleaner not to rely on OS file locking to accomplish (a)
+// (and we need (a) on Linux for case (ii) below).
 //
 // As at Oct 2019, cases where we mutate destination names are
 // (i)  when destination is Windows or Azure Files, and source contains characters unsupported at the destination
