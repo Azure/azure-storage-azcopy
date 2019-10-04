@@ -33,8 +33,9 @@ func (o RequestLogOptions) defaults() RequestLogOptions {
 	return o
 }
 
-// NewRequestLogPolicyFactory creates a RequestLogPolicyFactory object configured using the specified options.
-func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
+// NewRequestLogPolicyFactory_Deprecated creates a RequestLogPolicyFactory object configured using the specified options.
+// Deprecated because we are moving to centralize everything on the one logging policy in STE
+func NewRequestLogPolicyFactory_Deprecated(o RequestLogOptions) pipeline.Factory {
 	o = o.defaults() // Force defaults to be calculated
 	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
 		// These variables are per-policy; shared by multiple calls to Do
