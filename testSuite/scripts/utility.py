@@ -63,7 +63,7 @@ class Command(object):
                 if (len(arg) > 0):
                     # add '"' at start and end of each argument.
                     arg = str.replace(arg, "?", "/")
-                    loggable_arg = str.split(arg, "/")[2:4] if str.startswith(arg, "h") else arg[:5]
+                    loggable_arg = str.join("", arg.split("/")[2:4]) if arg.startswith("h") else arg[:5]
                     command += " " + '"' + loggable_arg + '"'
             # iterating through all the values in dict and combining them.
         if len(self.flags) > 0:
