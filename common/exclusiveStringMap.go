@@ -32,11 +32,17 @@ type ExclusiveStringMap struct {
 	caseSensitive bool
 }
 
-func NewExclusiveStringMap(caseSensitive bool) *ExclusiveStringMap {
+func NewExclusiveStringMap(fromTo FromTo, goos string) *ExclusiveStringMap {
+
+	caseInsenstiveDownload := fromTo.IsDownload() && (goos == "windows" || goos == "darwin") // download to case insensitive OS
+	caseSensitiveToRemote := fromTo.To() == ELocation.File()                                 // upload to Windows-like cloud file system
+	insensitive := caseInsenstiveDownload || caseSensitiveToRemote
+	sensitive := !insensitive
+
 	return &ExclusiveStringMap{
 		lock:          &sync.Mutex{},
 		m:             make(map[string]struct{}),
-		caseSensitive: caseSensitive,
+		caseSensitive: sensitive,
 	}
 }
 

@@ -258,8 +258,9 @@ type jobPartMgr struct {
 
 	slicePool common.ByteSlicePooler
 
-	cacheLimiter     common.CacheLimiter
-	fileCountLimiter common.CacheLimiter
+	cacheLimiter            common.CacheLimiter
+	fileCountLimiter        common.CacheLimiter
+	exclusiveDestinationMap *common.ExclusiveStringMap
 
 	pipeline pipeline.Pipeline // ordered list of Factory objects and an object implementing the HTTPSender interface
 
@@ -563,7 +564,7 @@ func (jpm *jobPartMgr) FileCountLimiter() common.CacheLimiter {
 }
 
 func (jpm *jobPartMgr) ExclusiveDestinationMap() *common.ExclusiveStringMap {
-	return jpm.jobMgr.ExclusiveDestinationMap()
+	return jpm.exclusiveDestinationMap
 }
 
 func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {

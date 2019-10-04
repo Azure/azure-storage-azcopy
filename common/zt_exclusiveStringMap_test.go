@@ -42,7 +42,7 @@ func (s *exclusiveStringMapSuite) TestExclusiveStringMap(c *chk.C) {
 	}
 
 	// case sensitive
-	m = NewExclusiveStringMap(true)
+	m = NewExclusiveStringMap(EFromTo.BlobLocal(), "linux")
 	addShouldWork("cat")
 	addShouldWork("dog")
 	addShouldWork("doG")
@@ -51,11 +51,26 @@ func (s *exclusiveStringMapSuite) TestExclusiveStringMap(c *chk.C) {
 	addShouldWork("dog")
 
 	// case insensitive
-	m = NewExclusiveStringMap(false)
+	m = NewExclusiveStringMap(EFromTo.BlobLocal(), "windows")
 	addShouldWork("cat")
 	addShouldWork("dog")
 	addShouldErrorOut("doG") // collision
 	m.Remove("dog")          // remove and try again
 	addShouldWork("doG")
 
+}
+
+func (s *exclusiveStringMapSuite) TestChooseRightCaseSensitivity(c *chk.C) {
+	test := func(fromTo FromTo, goos string, shouldBeSensitive bool) {
+		m := NewExclusiveStringMap(fromTo, goos)
+		c.Assert(m.caseSensitive, chk.Equals, shouldBeSensitive)
+	}
+
+	test(EFromTo.BlobLocal(), "linux", true)
+	test(EFromTo.BlobLocal(), "windows", false)
+	test(EFromTo.BlobLocal(), "darwin", false) // default MacOS behaviour is case INsensitive, so assume we are running under that default
+
+	test(EFromTo.LocalFile(), "linux", false) // anything ToFile should be INsensitive
+	test(EFromTo.BlobFile(), "linux", false)  // anything ToFile should be INsensitive
+	test(EFromTo.BlobBlob(), "windows", true)
 }
