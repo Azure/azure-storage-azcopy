@@ -43,7 +43,7 @@ const (
 	defaultS2SPreserveAccessTier     = true
 	defaultS2SGetPropertiesInBackend = true
 	defaultS2SSourceChangeValidation = true
-	debugMode                        = true // keep the debugMode temporarily, as merging happens frequently, and this might be useful for solving potential issue.
+	debugMode                        = false // keep the debugMode temporarily, as merging happens frequently, and this might be useful for solving potential issue.
 )
 
 var defaultS2SInvalideMetadataHandleOption = common.DefaultInvalidMetadataHandleOption
@@ -987,7 +987,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromSingleAzureFileToBlobContainer(c *c
 	bsu := getBSU()
 	fsu := getFSU()
 
-	srcShareURL, srcShareName := createNewShare(c, fsu)
+	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
 	defer deleteShare(c, srcShareURL)
 	c.Assert(srcShareURL, chk.NotNil)
 
