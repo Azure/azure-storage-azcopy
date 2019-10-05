@@ -58,8 +58,6 @@ class File_Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             add_flags("is-object-dir", "true").execute_azcopy_verify()
         self.assertTrue(result)
 
-        # the src folder is under the destination folder due to how copy works
-        remote_dst_content_dir_path = util.get_resource_sas_from_share(content_dir_name_dst + "/" + content_dir_name_src)
-        result = util.Command("testFile").add_arguments(content_dir_path_src).add_arguments(remote_dst_content_dir_path). \
+        result = util.Command("testFile").add_arguments(content_dir_path_src).add_arguments(remote_dst_dir_path). \
             add_flags("is-object-dir", "true").execute_azcopy_verify()
         self.assertTrue(result)
