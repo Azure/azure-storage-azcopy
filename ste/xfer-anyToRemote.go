@@ -326,16 +326,15 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 	s.Epilogue() // Perform service-specific cleanup before jptm cleanup. Some services may actually require setup to make the file actually appear.
 
 	if jptm.IsLive() && info.DestLengthValidation {
-		if s2sc, isS2SCopier := s.(s2sCopier); isS2SCopier { // TODO: Implement this for upload and download?
-			destLength, err := s2sc.GetDestinationLength()
+		_, isS2SCopier := s.(s2sCopier)
+		destLength, err := s.GetDestinationLength()
 
-			if err != nil {
-				jptm.FailActiveSend("S2S Length check: Get destination length", err)
-			}
+		if err != nil {
+			jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", err)
+		}
 
-			if destLength != jptm.Info().SourceSize {
-				jptm.FailActiveSend("S2S Length check", errors.New("destination length does not match source length"))
-			}
+		if destLength != jptm.Info().SourceSize {
+			jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check", errors.New("destination length does not match source length"))
 		}
 	}
 
