@@ -33,7 +33,9 @@ type IJobPartTransferMgr interface {
 	Context() context.Context
 	SlicePool() common.ByteSlicePooler
 	CacheLimiter() common.CacheLimiter
-	FileCountLimiter() common.CacheLimiter
+	WaitUntilLockDestination(ctx context.Context) error
+	UnlockDestination()
+	HoldsDestinationLock() bool
 	StartJobXfer()
 	GetOverwriteOption() common.OverwriteOption
 	ShouldDecompress() bool
@@ -129,6 +131,10 @@ type jobPartTransferMgr struct {
 
 	// used to show whether we have started doing things that may affect the destination
 	atomicDestModifiedIndicator uint32
+
+	// used to show whether THIS jptm holds the destination lock
+	atomicDestLockHeldIndicator uint32
+
 
 	jobPartMgr          IJobPartMgr // Refers to the "owning" Job Part
 	jobPartPlanTransfer *JobPartPlanTransfer
@@ -267,6 +273,70 @@ func (jptm *jobPartTransferMgr) CacheLimiter() common.CacheLimiter {
 
 func (jptm *jobPartTransferMgr) FileCountLimiter() common.CacheLimiter {
 	return jptm.jobPartMgr.FileCountLimiter()
+}
+
+// WaitUntilLockDestination does two things. It respects any limit that may be in place on the number of
+// active destination files (by blocking until we are under the max count), and it
+// registers the destination as "locked" in our internal map. The reason we
+// lock internally in map like this is:
+// (a) it is desirable to have some kind of locking because there are  edge cases where
+// we may map two source files to one destination. This can happen in two situations: 1. when we move data from a
+// case sensitive file system to a case insensitive one (and two source files map to the same destination).
+// And 2. in the occasions where we mutate the destination name (since when doing such mutation we can't and don't check
+// whether we are also transferring another file with a name that is already equal to the result of that mutation).
+// We have chosen to lock only for the duration of the writing
+// to the destination because we don't wait to maintain a huge dictionary of all files in the job and
+// this much locking is enough to prevent data from both sources getting MIXED TOGETHER in the one file. It's not enough
+// to prevent one source file completely overwriting the other at the destination... but that's a much more tolerable
+// form of "corruption" than actually ending up with data from two sources in one file - which is what we can get if
+// we don't have this lock. AND
+// (b) Linux file locking is not consistently implemented, so it seems cleaner not to rely on OS file locking to accomplish (a)
+// (and we need (a) on Linux for case (ii) below).
+//
+// As at Oct 2019, cases where we mutate destination names are
+// (i)  when destination is Windows or Azure Files, and source contains characters unsupported at the destination
+// (ii) when downloading with --decompress and there are two files that differ only in an extension that will will strip
+//      e.g. foo.txt and foo.txt.gz (if we decompress the latter, we'll strip the extension and the names will collide)
+// (iii) For completeness, there's also bucket->container name resolution when copying from S3, but that is not expected to ever
+//      create collisions, since it already takes steps to prevent them.
+func (jptm *jobPartTransferMgr) WaitUntilLockDestination(ctx context.Context) error {
+	if jptm.useFileCountLimiter() {
+		err := jptm.jobPartMgr.FileCountLimiter().WaitUntilAdd(ctx, 1, func() bool { return true })
+		if err != nil {
+			return err
+		}
+	}
+
+	err := jptm.jobPartMgr.ExclusiveDestinationMap().Add(jptm.Info().Destination)
+	if err == nil {
+		atomic.StoreUint32(&jptm.atomicDestLockHeldIndicator, 1) // THIS jptm owns the dest lock (not some other jptm processing an file with the same name, and thereby preventing us from doing so)
+	} else {
+		if jptm.useFileCountLimiter() {
+			jptm.jobPartMgr.FileCountLimiter().Remove(1) // since we are about to say that acquiring the "lock" failed
+		}
+	}
+
+	return err
+}
+
+func (jptm *jobPartTransferMgr) UnlockDestination() {
+	didHaveLock := atomic.CompareAndSwapUint32(&jptm.atomicDestLockHeldIndicator, 1, 0) // set to 0, but only if it is currently 1. Return true if changed
+	// only unlock if THIS jptm actually had the lock. (So that we don't make unwanted removals from fileCountLimiter)
+	if didHaveLock {
+		jptm.jobPartMgr.ExclusiveDestinationMap().Remove(jptm.Info().Destination)
+		if jptm.useFileCountLimiter() {
+			jptm.jobPartMgr.FileCountLimiter().Remove(1)
+		}
+	}
+}
+
+func (jptm *jobPartTransferMgr) HoldsDestinationLock() bool {
+	return atomic.LoadUint32(&jptm.atomicDestLockHeldIndicator) == 1
+}
+
+func (jptm *jobPartTransferMgr) useFileCountLimiter() bool {
+	ft := jptm.FromTo()    // TODO: consider changing isDownload (and co) to have struct receiver instead of pointer receiver, so don't need variable like this
+	return ft.IsDownload() // count-based limits are only applied for download a present
 }
 
 func (jptm *jobPartTransferMgr) RescheduleTransfer() {
