@@ -1069,7 +1069,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         self.assertTrue(result)
 
         # TODO: test different targets according to dstType
-        validateCmd = util.Command("testBlob").add_arguments(local_validate_dest).add_arguments(dstFileURL).add_flags("no-guess-mime-type", "true")
+        testCmdName = "testBlob" if dstType.lower() == "blob" else "testFile"
+        validateCmd = util.Command(testCmdName).add_arguments(local_validate_dest).add_arguments(dstFileURL).add_flags("no-guess-mime-type", "true")
 
         if preserveProperties == True:
             validateCmd.add_flags("metadata", "author=jiac;viewport=width;description=test file"). \

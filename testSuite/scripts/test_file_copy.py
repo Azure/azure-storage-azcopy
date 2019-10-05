@@ -57,7 +57,6 @@ class File_Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         result = util.Command("testFile").add_arguments(content_dir_path_src).add_arguments(remote_src_dir_path). \
             add_flags("is-object-dir", "true").execute_azcopy_verify()
         self.assertTrue(result)
-
         result = util.Command("testFile").add_arguments(content_dir_path_src).add_arguments(remote_dst_dir_path). \
             add_flags("is-object-dir", "true").execute_azcopy_verify()
         self.assertTrue(result)
