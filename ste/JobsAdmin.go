@@ -472,9 +472,9 @@ func (ja *jobsAdmin) transferProcessor(workerID int) {
 // The coordinator uses this to manage all the running jobs and their job parts.
 type jobsAdmin struct {
 	atomicSuccessfulBytesInActiveFiles int64
-	atomicCurrentMainPoolSize          int32
 	atomicBytesTransferredWhileTuning  int64
 	atomicTuningEndSeconds             int64
+	atomicCurrentMainPoolSize          int32 // align 64 bit integers for 32 bit arch
 	concurrency                        ConcurrencySettings
 	logger                             common.ILoggerCloser
 	jobIDToJobMgr                      jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo

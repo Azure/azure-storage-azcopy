@@ -70,7 +70,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// Ensure we're only copying from a directory with a trailing wildcard or recursive.
 	isSourceDir := traverser.isDirectory(true)
 	if isSourceDir && !cca.recursive && !cca.stripTopDir {
-		return nil, errors.New("cannot use directory as source without --recursive or --strip-top-dir")
+		return nil, errors.New("cannot use directory as source without --recursive or a trailing wildcard (/*)")
 	}
 
 	// Check if the destination is a directory so we can correctly decide where our files land

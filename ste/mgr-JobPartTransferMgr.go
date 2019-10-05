@@ -117,6 +117,9 @@ type chunkFunc func(int)
 
 // jobPartTransferMgr represents the runtime information for a Job Part's transfer
 type jobPartTransferMgr struct {
+	// how many bytes have been successfully transferred
+	// (hard to infer from atomicChunksDone because that counts both successes and failures)
+	atomicSuccessfulBytes int64
 
 	// NumberOfChunksDone represents the number of chunks of a transfer
 	// which are either completed or failed.
@@ -132,9 +135,6 @@ type jobPartTransferMgr struct {
 	// used to show whether THIS jptm holds the destination lock
 	atomicDestLockHeldIndicator uint32
 
-	// how many bytes have been successfully transferred
-	// (hard to infer from atomicChunksDone because that counts both successes and failures)
-	atomicSuccessfulBytes int64
 
 	jobPartMgr          IJobPartMgr // Refers to the "owning" Job Part
 	jobPartPlanTransfer *JobPartPlanTransfer
