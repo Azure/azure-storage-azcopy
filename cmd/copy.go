@@ -382,6 +382,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	if err != nil {
 		return cooked, err
 	}
+	globalBlobFSMd5ValidationOption = cooked.md5ValidationOption // workaround, to avoid having to pass this all the way through the chain of methods in enumeration, just for one weird and (presumably) temporary workaround
 
 	cooked.CheckLength = raw.CheckLength
 	// length of devnull will be 0, thus this will always fail unless downloading an empty file
