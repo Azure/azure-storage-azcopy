@@ -26,7 +26,7 @@ Copies source data to a destination location. The supported directions are:
   - Azure Blob (SAS or public) -> Azure Blob (SAS or OAuth authentication)
   - Azure Blob (SAS or public) -> Azure Files (SAS)
   - Azure Files (SAS) -> Azure Files (SAS)
-  - Azure Files (SAS) -> Azure Block Blob (SAS or OAuth authentication)
+  - Azure Files (SAS) -> Azure Blob (SAS or OAuth authentication)
   - AWS S3 (Access Key) -> Azure Block Blob (SAS or OAuth authentication)
 
 Please refer to the examples for more information.
