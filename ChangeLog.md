@@ -87,6 +87,10 @@
    immediately. Previous versions would leave them, for automatic garbage collection to delete 7 days later.
 1. Long pathnames (over 260 characters) are now supported everywhere on Windows, including on UNC
    shares.
+1. Safety is improved in the rare cases where two source files correspond to just one destination file. This can happen
+   when transferring to a case-insensitive destination, when the new `--decompress` flag removes an extension but
+   there's already a file without the extension, and in very rare cases related to escaping of filenames with illegal
+   characters. The bug fix ensures that the single resulting file contains data from only _one_ of the source files.
 1. When supplying a `--content-type` on the command line it's no longer necessary to also specify
    `--no-guess-mime-type`.
 1. There is now no hard-coded limit on the number of files that can be processed by the `sync`
