@@ -4,7 +4,7 @@ import unittest
 import utility as util
 
 
-class File_Copy_User_Scenario(unittest.TestCase):
+class File_Service_2_Service_Copy_User_Scenario(unittest.TestCase):
 
     def test_copy_single_file_to_file(self):
         content_file_name_src = "test_1kb_file_copy_src.txt"
@@ -48,8 +48,8 @@ class File_Copy_User_Scenario(unittest.TestCase):
         # copy to destination
         remote_src_dir_path = util.get_resource_sas_from_share(content_dir_name_src)
         remote_dst_dir_path = util.get_resource_sas_from_share(content_dir_name_dst)
-        result = util.Command("copy").add_arguments(remote_src_dir_path).add_arguments(remote_dst_dir_path)\
-            .add_flags("log-level", "info").add_flags("recursive", "true").add_flags("strip-top-dir", "true")\
+        result = util.Command("copy").add_arguments(util.get_resource_sas_from_share(content_dir_name_src+"/*"))\
+            .add_arguments(remote_dst_dir_path).add_flags("log-level", "info").add_flags("recursive", "true")\
             .execute_azcopy_copy_command()
         self.assertTrue(result)
 

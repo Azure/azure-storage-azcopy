@@ -184,7 +184,7 @@ def main():
     init()
 
     test_class_to_run = [BlobPipingTests,
-                         File_Copy_User_Scenario,
+                         File_Service_2_Service_Copy_User_Scenario,
                          Blob_Sync_User_Scenario,
                          File_Sync_User_Scenario,
                          Block_Upload_User_Scenarios,
