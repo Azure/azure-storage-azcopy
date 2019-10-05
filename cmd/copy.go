@@ -499,8 +499,8 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		if cooked.followSymlinks {
 			return cooked, fmt.Errorf("follow-symlinks flag is not supported while copying from service to service")
 		}
-		// blob type is not supported if we are not doing blob -> blob
-		if cooked.blobType != common.EBlobType.Detect() && cooked.fromTo != common.EFromTo.BlobBlob() {
+		// blob type is not supported if destination is not blob
+		if cooked.blobType != common.EBlobType.Detect() && cooked.fromTo.To() != common.ELocation.Blob() {
 			return cooked, fmt.Errorf("blob-type is not supported for the scenario (%s)", cooked.fromTo.String())
 		}
 		// Disabling blob tier override, when copying block -> block blob or page -> page blob, blob tier will be kept,
