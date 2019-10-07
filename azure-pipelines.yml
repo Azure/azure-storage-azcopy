@@ -61,7 +61,9 @@ jobs:
         inputs:
           version: '1.12'
       - script: |
-          pip install azure-storage-blob==12.0.0b2
+          pip install azure-storage-blob==12.0.0b3
+          # the recent release 1.0.0b4 has a breaking change
+          pip install azure-core==1.0.0b3
           # acquire the mutex before running live tests to avoid conflicts
           python ./tool_distributed_mutex.py lock "$(MUTEX_URL)"
           # set the variable to indicate that the mutex was actually acquired
