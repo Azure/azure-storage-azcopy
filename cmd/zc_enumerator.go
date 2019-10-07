@@ -186,6 +186,13 @@ func initResourceTraverser(resource string, location common.Location, ctx *conte
 			if err != nil {
 				return nil, err
 			}
+		} else {
+			// First, ignore all escaped stars. Stars can be valid characters on many platforms.
+			tmpResource := strings.ReplaceAll(resource, `\*`, ``)
+			// check for remaining stars. We can't combine list traversers, and wildcarded list traversal occurs below.
+			if strings.Contains(tmpResource, "*") {
+				return nil, errors.New("cannot combine local wildcards with include-path or list-of-files")
+			}
 		}
 
 		output = newListTraverser(resource, sas, location, credential, ctx, recursive, toFollow, getProperties, listofFilesChannel, incrementEnumerationCounter)
