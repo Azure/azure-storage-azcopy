@@ -208,8 +208,8 @@ func cleanShare(shareURLStr string) {
 
 	_, err = shareURL.Delete(context.Background(), azfile.DeleteSnapshotsOptionInclude)
 	if err != nil {
-		sErr := err.(azfile.StorageError)
-		if sErr != nil && sErr.Response().StatusCode != http.StatusNotFound {
+		sErr, sErrOk := err.(azfile.StorageError)
+		if sErrOk && sErr.Response().StatusCode != http.StatusNotFound {
 			fmt.Fprintf(os.Stdout, "error deleting the share for clean share, error '%v'\n", err)
 			os.Exit(1)
 		}
