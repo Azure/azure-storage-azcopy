@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -300,6 +301,10 @@ func (jptm *jobPartTransferMgr) FileCountLimiter() common.CacheLimiter {
 // (iii) For completeness, there's also bucket->container name resolution when copying from S3, but that is not expected to ever
 //      create collisions, since it already takes steps to prevent them.
 func (jptm *jobPartTransferMgr) WaitUntilLockDestination(ctx context.Context) error {
+	if strings.EqualFold(jptm.Info().Destination, common.Dev_Null) {
+		return nil // nothing to lock
+	}
+
 	if jptm.useFileCountLimiter() {
 		err := jptm.jobPartMgr.FileCountLimiter().WaitUntilAdd(ctx, 1, func() bool { return true })
 		if err != nil {
