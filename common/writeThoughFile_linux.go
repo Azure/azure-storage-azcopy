@@ -30,10 +30,7 @@ func CreateFileOfSize(destinationPath string, fileSize int64) (*os.File, error) 
 }
 
 func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int64, writeThrough bool) (*os.File, error) {
-	err := CreateParentDirectoryIfNotExist(destinationPath)
-	if err != nil {
-		return nil, err
-	}
+	CreateParentDirectoryIfNotExist(destinationPath)
 
 	flags := os.O_RDWR | os.O_CREATE | os.O_TRUNC
 	if writeThrough {

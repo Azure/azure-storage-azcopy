@@ -359,10 +359,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 
 // create an empty file and its parent directories, without any content
 func createEmptyFile(destinationPath string) error {
-	err := common.CreateParentDirectoryIfNotExist(destinationPath)
-	if err != nil {
-		return err
-	}
+	common.CreateParentDirectoryIfNotExist(destinationPath)
 	f, err := os.OpenFile(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, common.DEFAULT_FILE_PERM)
 	if err != nil {
 		return err

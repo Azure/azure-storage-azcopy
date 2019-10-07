@@ -32,10 +32,7 @@ func CreateFileOfSize(destinationPath string, fileSize int64) (*os.File, error) 
 }
 
 func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int64, writeThrough bool) (*os.File, error) {
-	err := CreateParentDirectoryIfNotExist(destinationPath)
-	if err != nil {
-		return nil, err
-	}
+	CreateParentDirectoryIfNotExist(destinationPath)
 	// TODO: currently writeThrough is ignored here on darwin. Review, and use it if we have an implementation we are comfortable with
 	// A quick internet search returned conflicting opinions on whether MacOS suppose O_SYNC or uses a different flag with the same meaning.
 	// If different with same meaning, can we just use O_SYNC here?  That's what we need to find out before implementing.

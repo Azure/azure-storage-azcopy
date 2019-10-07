@@ -25,18 +25,11 @@ import (
 	"strings"
 )
 
-func CreateParentDirectoryIfNotExist(destinationPath string) error {
+func CreateParentDirectoryIfNotExist(destinationPath string) {
 	// check if parent directory exists
 	parentDirectory := destinationPath[:strings.LastIndex(destinationPath, DeterminePathSeparator(destinationPath))]
-	_, err := os.Stat(parentDirectory)
-	// if the parent directory does not exist, create it and all its parents
-	if os.IsNotExist(err) {
-		err = os.MkdirAll(parentDirectory, os.ModePerm)
-		if err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
-	}
-	return nil
+
+	// No need to error check if the mkdir failed.
+	// Potentially, if C: or whatever came through here, an error would pop out the other end anyway.
+	_ = os.MkdirAll(parentDirectory, os.ModePerm)
 }

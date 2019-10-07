@@ -326,10 +326,12 @@ func cleanLocalPath(localPath string) string {
 	normalizedPath = strings.ReplaceAll(normalizedPath, common.AZCOPY_PATH_SEPARATOR_STRING, localPathSeparator)
 
 	if strings.HasPrefix(localPath, `\\`) || strings.HasPrefix(localPath, `//`) { // path.Clean steals the first / from the // or \\ prefix.
-		// return the \ we stole from the UNC path.
+		// return the \ we stole from the UNC/extended path.
 		normalizedPath = localPathSeparator + normalizedPath
-	} else if len(localPath) == 3 && (strings.HasSuffix(localPath, `:\`) || strings.HasSuffix(localPath, ":/")) ||
-		len(localPath) == 2 && strings.HasSuffix(localPath, ":") { // path.Clean steals the last / from C:\, C:/, and does not add one for C:
+	}
+
+	if len(strings.TrimPrefix(localPath, common.EXTENDED_PATH_PREFIX)) == 3 && (strings.HasSuffix(localPath, `:\`) || strings.HasSuffix(localPath, ":/")) ||
+		len(strings.TrimPrefix(localPath, common.EXTENDED_PATH_PREFIX)) == 2 && strings.HasSuffix(localPath, ":") { // path.Clean steals the last / from C:\, C:/, and does not add one for C:
 		normalizedPath += common.OS_PATH_SEPARATOR
 	}
 
