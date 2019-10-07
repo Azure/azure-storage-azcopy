@@ -55,6 +55,8 @@ class BlobFs_Upload_OAuth_User_Scenarios(unittest.TestCase):
         # create test file of size 64MB
         filename = "test_uneven_multiflush_64MB_file.txt"
         file_path = util.create_test_file(filename, 64*1024*1024)
+        # enable debug mode
+        os.environ['AZCOPY_DEBUG_MODE'] = 'on'
         # Upload the file using AzCopy @ 1MB blocks, 15 block flushes (5 flushes, 4 15 blocks, 1 4 blocks)
         cmd = util.Command("copy").add_arguments(file_path).add_arguments(util.test_bfs_account_url). \
             add_flags("block-size-mb", "1").add_flags("flush-threshold", "15").add_flags("log-level", "Info")
@@ -63,6 +65,8 @@ class BlobFs_Upload_OAuth_User_Scenarios(unittest.TestCase):
             "LocalBlobFS" if explicitFromTo else "")
         result = cmd.execute_azcopy_copy_command()
         self.assertTrue(result)
+        # disable debug mode for future tests
+        os.environ['AZCOPY_DEBUG_MODE'] = 'off'
 
         # Validate the file uploaded
         fileUrl = util.test_bfs_account_url + filename
@@ -75,6 +79,8 @@ class BlobFs_Upload_OAuth_User_Scenarios(unittest.TestCase):
         # create test file of size 64MB
         filename = "test_even_multiflush_64MB_file.txt"
         file_path = util.create_test_file(filename, 64 * 1024 * 1024)
+        # enable debug mode
+        os.environ['AZCOPY_DEBUG_MODE'] = 'on'
         # Upload the file using AzCopy @ 1MB blocks, 16 block flushes (4 16 block flushes)
         cmd = util.Command("copy").add_arguments(file_path).add_arguments(util.test_bfs_account_url). \
             add_flags("block-size-mb", "1").add_flags("flush-threshold", "16").add_flags("log-level", "Info")
@@ -83,6 +89,8 @@ class BlobFs_Upload_OAuth_User_Scenarios(unittest.TestCase):
             "LocalBlobFS" if explicitFromTo else "")
         result = cmd.execute_azcopy_copy_command()
         self.assertTrue(result)
+        # disable debug mode for future tests
+        os.environ['AZCOPY_DEBUG_MODE'] = 'off'
 
         # Validate the file uploaded
         fileUrl = util.test_bfs_account_url + filename
