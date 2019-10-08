@@ -21,15 +21,33 @@
 package common
 
 import (
+	"fmt"
 	"os"
+	"regexp"
 	"strings"
 )
 
-func CreateParentDirectoryIfNotExist(destinationPath string) {
-	// check if parent directory exists
+// The regex doesn't require a / on the ending, it just requires something similar to the following
+// C:
+// C:/
+// //myShare
+// //myShare/
+// demonstrated at: https://regexr.com/4mf6l
+var rootDriveRegex = regexp.MustCompile(`(^[A-Z]:\/?$)`)
+var rootShareRegex = regexp.MustCompile(`(^\/\/[^\/]*\/?$)`)
+
+func CreateParentDirectoryIfNotExist(destinationPath string) error {
+	// find the parent directory
 	parentDirectory := destinationPath[:strings.LastIndex(destinationPath, DeterminePathSeparator(destinationPath))]
 
-	// No need to error check if the mkdir failed.
-	// Potentially, if C: or whatever came through here, an error would pop out the other end anyway.
-	_ = os.MkdirAll(parentDirectory, os.ModePerm)
+	// If we're pointing at the root of a drive, don't try because it won't work.
+	if shortParentDir := strings.ReplaceAll(ToShortPath(parentDirectory), OS_PATH_SEPARATOR, AZCOPY_PATH_SEPARATOR_STRING); rootDriveRegex.MatchString(shortParentDir) || rootShareRegex.MatchString(shortParentDir) || strings.EqualFold(shortParentDir, "/") {
+		return nil
+	} else {
+		fmt.Println(shortParentDir)
+	}
+
+	// try to create the root directory
+	err := os.MkdirAll(parentDirectory, os.ModePerm)
+	return err
 }
