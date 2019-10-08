@@ -325,13 +325,14 @@ func cleanLocalPath(localPath string) string {
 	// return normalizedPath path separator.
 	normalizedPath = strings.ReplaceAll(normalizedPath, common.AZCOPY_PATH_SEPARATOR_STRING, localPathSeparator)
 
-	if strings.HasPrefix(localPath, `\\`) || strings.HasPrefix(localPath, `//`) { // path.Clean steals the first / from the // or \\ prefix.
+	// path.Clean steals the first / from the // or \\ prefix.
+	if strings.HasPrefix(localPath, `\\`) || strings.HasPrefix(localPath, `//`) {
 		// return the \ we stole from the UNC/extended path.
 		normalizedPath = localPathSeparator + normalizedPath
 	}
 
-	if len(strings.TrimPrefix(localPath, common.EXTENDED_PATH_PREFIX)) == 3 && (strings.HasSuffix(localPath, `:\`) || strings.HasSuffix(localPath, ":/")) ||
-		len(strings.TrimPrefix(localPath, common.EXTENDED_PATH_PREFIX)) == 2 && strings.HasSuffix(localPath, ":") { // path.Clean steals the last / from C:\, C:/, and does not add one for C:
+	// path.Clean steals the last / from C:\, C:/, and does not add one for C:
+	if common.RootDriveRegex.MatchString(strings.ReplaceAll(common.ToShortPath(normalizedPath), common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING)) {
 		normalizedPath += common.OS_PATH_SEPARATOR
 	}
 
