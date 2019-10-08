@@ -34,7 +34,7 @@ func CreateFileOfSize(destinationPath string, fileSize int64) (*os.File, error) 
 func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int64, writeThrough bool) (*os.File, error) {
 	err := CreateParentDirectoryIfNotExist(destinationPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// TODO: currently writeThrough is ignored here on darwin. Review, and use it if we have an implementation we are comfortable with
