@@ -99,7 +99,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, errors.New("cannot combine list-of-files or include-path with account traversal")
 	}
 
-	if srcLevel == ELocationLevel.Object() && dstLevel == ELocationLevel.Service() {
+	if (srcLevel == ELocationLevel.Object() || cca.fromTo.From().IsLocal()) && dstLevel == ELocationLevel.Service() {
 		return nil, errors.New("cannot transfer individual files/folders to the root of a service. Add a container or directory to the destination URL")
 	}
 
