@@ -21,7 +21,6 @@
 package common
 
 import (
-	"fmt"
 	"os"
 	"regexp"
 	"strings"
@@ -43,8 +42,6 @@ func CreateParentDirectoryIfNotExist(destinationPath string) error {
 	// If we're pointing at the root of a drive, don't try because it won't work.
 	if shortParentDir := strings.ReplaceAll(ToShortPath(parentDirectory), OS_PATH_SEPARATOR, AZCOPY_PATH_SEPARATOR_STRING); RootDriveRegex.MatchString(shortParentDir) || RootShareRegex.MatchString(shortParentDir) || strings.EqualFold(shortParentDir, "/") {
 		return nil
-	} else {
-		fmt.Println(shortParentDir)
 	}
 
 	// try to create the root directory if the source does
