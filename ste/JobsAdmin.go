@@ -189,21 +189,23 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 	// create new context with the defaultService api version set as value to serviceAPIVersionOverride in the app context.
 	ja.appCtx = context.WithValue(ja.appCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
 
+	// create concurrency tuner...
+	// ... but don't spin up the main pool. That is done when
+	// the first piece of work actually arrives. Why do it then?
+	// So that we don't start tuning with no traffic to process, since doing so skews
+	// the tuning results and, in the worst case, leads to "completion" of tuning before any traffic has been sent.
+	ja.concurrencyTuner = ja.createConcurrencyTuner()
+
 	JobsAdmin = ja
 
 	// Spin up slice pool pruner
 	go ja.slicePoolPruneLoop()
 
-	// spin up a GR to co-ordinate dynamic sizing of the main pool
-	// It will automatically spin up the right number of chunk processors
-	ja.concurrencyTuner = ja.createConcurrencyTuner()
-	go ja.poolSizer(ja.concurrencyTuner)
-
 	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
 	// the Channel and schedules the transfers of that JobPart.
 	go ja.scheduleJobParts()
 
-	// In addition to the main pool, we spin up a separate set of workers to process initiation of transfers
+	// In addition to the main pool (which is governed ja.poolSizer), we spin up a separate set of workers to process initiation of transfers
 	// (so that transfer initiation can't starve out progress on already-scheduled chunks.
 	// (Not sure whether that can really happen, but this protects against it anyway.)
 	// Perhaps MORE importantly, doing this separately gives us more CONTROL over how we interact with the file system.
@@ -256,8 +258,16 @@ func (ja *jobsAdmin) QueueJobParts(jpm IJobPartMgr) {
 
 // 1 single goroutine runs this method and InitJobsAdmin  kicks that goroutine off.
 func (ja *jobsAdmin) scheduleJobParts() {
+	startedPoolSizer := false
 	for {
 		jobPart := <-ja.xferChannels.partsChannel
+
+		if !startedPoolSizer {
+			// spin up a GR to co-ordinate dynamic sizing of the main pool
+			// It will automatically spin up the right number of chunk processors
+			go ja.poolSizer(ja.concurrencyTuner)
+			startedPoolSizer = true
+		}
 		// If the job manager is not found for the JobId of JobPart
 		// taken from partsChannel
 		// there is an error in our code
@@ -334,10 +344,7 @@ func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 
 	// get initial pool size
 	targetConcurrency, reason := tuner.GetRecommendedConcurrency(-1, ja.cpuMonitor.CPUContentionExists())
-	go func() {
-		time.Sleep(initialMonitoringInterval / 2) // otherwise this message ends up as the very first output from AzCopy. Which looks strange
-		logConcurrency(targetConcurrency, reason)
-	}()
+	logConcurrency(targetConcurrency, reason)
 
 	// loop for ever, driving the actual concurrency towards the most up-to-date target
 	for {
