@@ -344,10 +344,7 @@ func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 
 	// get initial pool size
 	targetConcurrency, reason := tuner.GetRecommendedConcurrency(-1, ja.cpuMonitor.CPUContentionExists())
-	go func() {
-		time.Sleep(initialMonitoringInterval / 2) // otherwise this message ends up as the very first output from AzCopy. Which looks strange
-		logConcurrency(targetConcurrency, reason)
-	}()
+	logConcurrency(targetConcurrency, reason)
 
 	// loop for ever, driving the actual concurrency towards the most up-to-date target
 	for {
