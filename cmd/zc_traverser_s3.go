@@ -221,7 +221,7 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, recursive, getProperti
 func checkS3UrlType(s3URLParts common.S3URLParts) error {
 	if strings.EqualFold(s3URLParts.Host, "s3.amazonaws.com") {
 		return errors.New("this version of AzCopy does not support transferring from the 's3.amazonaws.com' URL. " +
-			"Please used a region-specific endpoint to transfer from one specific region. E.g. s3.us-east-1.amazonaws.com or a virtual-hosted reference to a single bucket")
+			"Please use a region-specific endpoint to transfer from one specific region. E.g. s3.us-east-1.amazonaws.com or a virtual-hosted reference to a single bucket")
 	}
 	return nil
 }
