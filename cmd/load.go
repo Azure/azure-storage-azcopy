@@ -27,6 +27,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net/url"
 	"os"
@@ -41,8 +42,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const clfsToolName = "CLFSLoad-1.0.11"
-const clfsToolMD5Hash = "b1ef468e6b8953044e421423558fe396"
+const clfsToolName = "CLFSLoad-1.0.15"
+const clfsToolMD5Hash = "339220fb92d866e700ceeb9922af69ca"
 
 //const clfsToolName = "clfsload-mock"
 //const clfsToolMD5Hash = "c9b050f29d271ad624a5732ca3795993"
@@ -59,13 +60,11 @@ type rawLoadCmdArgs struct {
 	statePath  string
 
 	// optional flags
-	dryRun               bool
-	dryRunGB             int
-	dryRunCount          int
 	compression          string
-	numConcurrentWorkers int
-	maxErrorsToTolerate  int
+	numConcurrentWorkers uint32
+	maxErrorsToTolerate  uint32
 	preserveHardlinks    bool
+	logLevel             string
 }
 
 func (raw rawLoadCmdArgs) cook() (cookedLoadCmdArgs, error) {
@@ -73,6 +72,10 @@ func (raw rawLoadCmdArgs) cook() (cookedLoadCmdArgs, error) {
 		src:        raw.src,
 		newSession: raw.newSession,
 		statePath:  raw.statePath,
+	}
+
+	if cooked.statePath == "" {
+		return cooked, errors.New("please specify a state-path")
 	}
 
 	// check the source exists
@@ -102,16 +105,36 @@ func (raw rawLoadCmdArgs) cook() (cookedLoadCmdArgs, error) {
 	cooked.dstContainer = blobURLParts.ContainerName
 	cooked.dstSAS = blobURLParts.SAS.Encode()
 
+	// pass along the optional flags
+	cooked.optionalFlags = []string{
+		fmt.Sprintf("--compression=%s", raw.compression),
+		fmt.Sprintf("--preserve_hardlinks=%v", common.Iffint32(raw.preserveHardlinks, 1, 0)),
+		fmt.Sprintf("--log_level=%s", raw.logLevel),
+	}
+
+	if raw.numConcurrentWorkers > 0 {
+		cooked.optionalFlags = append(cooked.optionalFlags, fmt.Sprintf("--worker_thread_count=%v", raw.numConcurrentWorkers))
+	}
+
+	if raw.maxErrorsToTolerate > 0 {
+		cooked.optionalFlags = append(cooked.optionalFlags, fmt.Sprintf("--retry_errors=%v", raw.maxErrorsToTolerate))
+	}
+
+	if raw.newSession {
+		cooked.optionalFlags = append(cooked.optionalFlags, "--new")
+	}
+
 	return cooked, nil
 }
 
 type cookedLoadCmdArgs struct {
-	src          string
-	dstAccount   string
-	dstContainer string
-	dstSAS       string
-	newSession   bool
-	statePath    string
+	src           string
+	dstAccount    string
+	dstContainer  string
+	dstSAS        string
+	newSession    bool
+	statePath     string
+	optionalFlags []string
 }
 
 // loadCmd represents the load command
@@ -162,22 +185,20 @@ Load an entire directory with a SAS:
 			cooked.dstContainer,
 			cooked.dstSAS,
 			"--azcopy",
+			"--dry_run",
+			"--retry_errors=1",
 		}
-
-		if cooked.newSession {
-			argsToInvokeExtension = append(argsToInvokeExtension, "--new")
-		}
+		argsToInvokeExtension = append(argsToInvokeExtension, cooked.optionalFlags...)
 
 		glcm.Info("Invoking the CLFSLoad Extension located at: " + clfsToolPath)
 		clfscmd := exec.Command(clfsToolPath, argsToInvokeExtension...)
 
 		// hook up the stdout of the sub-process to our processor
 		// stderr is piped directly
-		out, err := clfscmd.StderrPipe()
+		out, err := clfscmd.StdoutPipe()
 		if err != nil {
 			panic(err)
 		}
-		//clfscmd.Stderr = os.Stderr
 		clfsOutputParser := newClfsExtensionOutputParser(glcm)
 		go clfsOutputParser.startParsing(bufio.NewReader(out))
 
@@ -201,8 +222,13 @@ Load an entire directory with a SAS:
 
 func init() {
 	rootCmd.AddCommand(loadCmd)
-	loadCmd.PersistentFlags().BoolVar(&loadCmdRawInput.newSession, "new-session", true, "TODO")
-	loadCmd.PersistentFlags().StringVar(&loadCmdRawInput.statePath, "state-path", "", "TODO")
+	loadCmd.PersistentFlags().BoolVar(&loadCmdRawInput.newSession, "new-session", true, "start a new job rather than continuing an existing one whose tracking information is kept at --state-path.")
+	loadCmd.PersistentFlags().StringVar(&loadCmdRawInput.statePath, "state-path", "", "required path to a local directory for job state tracking. The path should point to an existing directory in order to resume a job.")
+	loadCmd.PersistentFlags().StringVar(&loadCmdRawInput.compression, "compression-type", "LZ4", "specify the compression type to use for the transfers.")
+	loadCmd.PersistentFlags().Uint32Var(&loadCmdRawInput.numConcurrentWorkers, "concurrency-count", 0, "override the number of parallel connections.")
+	loadCmd.PersistentFlags().Uint32Var(&loadCmdRawInput.maxErrorsToTolerate, "max-errors", 0, "specify the maximum number of transfer failures to tolerate. If enough errors occur, stop the job immediately.")
+	loadCmd.PersistentFlags().BoolVar(&loadCmdRawInput.preserveHardlinks, "preserve-hardlinks", false, "preserve hard links while performing local scanning.")
+	loadCmd.PersistentFlags().StringVar(&loadCmdRawInput.logLevel, "log-level", "INFO", "define the log verbosity for the log file, available levels: DEBUG, INFO, WARNING, ERROR.")
 }
 
 func getClfsExtensionPathAndVerifyHash(expectedHash string) (string, error) {

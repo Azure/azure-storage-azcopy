@@ -30,8 +30,29 @@ type clfsTestSuite struct{}
 
 var _ = chk.Suite(&clfsTestSuite{})
 
+func (s *clfsTestSuite) TestParsingInit(c *chk.C) {
+	sampleInfo := `AZCOPY-CONFIG:{"compression":"LZ4","new":true,"preserve_hardlinks":false,"version":"1.0.15"}`
+
+	// set up the mock lcm so that we can intercept the parsed message
+	mockedLcm := mockedLifecycleManager{infoLog: make(chan string, 50)}
+	parser := newClfsExtensionOutputParser(&mockedLcm)
+
+	// invoke the processing func
+	parser.processInitialization(sampleInfo)
+
+	// validate the parsed output
+	select {
+	case msg := <-mockedLcm.infoLog:
+		// just check that the version got printed, the other info are less important
+		c.Check(strings.Contains(msg, "1.0.15"), chk.Equals, true)
+	default:
+		// nothing parsed, disappointing
+		c.Fail()
+	}
+}
+
 func (s *clfsTestSuite) TestParsingInfo(c *chk.C) {
-	sampleInfo := "2019-10-01 23:34:13,753 INF compression LZ4 (1)"
+	sampleInfo := `AZCOPY-INFO:{"phase":"Init"}`
 
 	// set up the mock lcm so that we can intercept the parsed message
 	mockedLcm := mockedLifecycleManager{infoLog: make(chan string, 50)}
@@ -43,7 +64,7 @@ func (s *clfsTestSuite) TestParsingInfo(c *chk.C) {
 	// validate the parsed output
 	select {
 	case msg := <-mockedLcm.infoLog:
-		c.Check(msg, chk.Equals, "compression LZ4 (1)")
+		c.Check(strings.Contains(msg, "Init"), chk.Equals, true)
 	default:
 		// nothing parsed, disappointing
 		c.Fail()
@@ -122,101 +143,95 @@ Final Job Status: Completed
 
 // a very crude way of testing our parsing logic
 // TODO consider moving this string to a file or somewhere later
-const sampleOutput = `2019-10-01 23:34:12,620 INF CLFSLoad version 1.0.11
-2019-10-01 23:34:13,753 INF preserve_hardlinks 0
-2019-10-01 23:34:13,753 INF compression LZ4 (1)
-2019-10-01 23:34:13,940 INF begin phase transfer
-2019-10-01 23:34:14,009 INF transfer 0+0/8 elapsed=0.000000 recent(fps/mbps)=0.0/0.00 cumulative=0.0/0.00 db_queue_len=0/0.000 blobs=0 written=0 (dir/nondir=0/0) GB=0.000000
-AZCOPY:{"elapsed":0.00913548469543457,"files_completed_failed":0,"files_completed_success":0,"files_pending":null,"files_skipped":0,"files_total":null,"pct_complete":null,"phase":"Transfer","throughput_Mbps":0.0,"throughput_delta_secs":0.00913548469543457,"time_eta":null,"time_report":1569972854.0094466}
-2019-10-01 23:34:16,010 INF transfer 0+0/8 elapsed=2.000168 recent(fps/mbps)=58.0/210.87 cumulative=58.0/210.87 db_queue_len=1/0.014 blobs=202 written=116 (dir/nondir=2/114) GB=0.421780
-AZCOPY:{"elapsed":2.0093038082122803,"files_completed_failed":0,"files_completed_success":116,"files_pending":null,"files_skipped":0,"files_total":null,"pct_complete":null,"phase":"Transfer","throughput_Mbps":1727.466982878457,"throughput_delta_secs":2.0001683235168457,"time_eta":null,"time_report":1569972856.009615}
-2019-10-01 23:34:18,009 INF transfer 7+0/8 elapsed=4.000156 recent(fps/mbps)=48.5/263.91 cumulative=53.2/237.39 db_queue_len=1/0.014 blobs=367 written=213 (dir/nondir=25/188) GB=0.949602
-AZCOPY:{"elapsed":4.009291887283325,"files_completed_failed":0,"files_completed_success":213,"files_pending":null,"files_skipped":0,"files_total":null,"pct_complete":null,"phase":"Transfer","throughput_Mbps":3889.5945720349077,"throughput_delta_secs":1.999988079071045,"time_eta":null,"time_report":1569972858.009603}
-2019-10-01 23:34:20,010 INF transfer 7+0/8 elapsed=6.000211 recent(fps/mbps)=0.0/273.43 cumulative=35.5/249.40 db_queue_len=1/0.014 blobs=437 written=213 (dir/nondir=25/188) GB=1.496477
-AZCOPY:{"elapsed":6.0093467235565186,"files_completed_failed":0,"files_completed_success":213,"files_pending":null,"files_skipped":0,"files_total":null,"pct_complete":null,"phase":"Transfer","throughput_Mbps":6129.403331426832,"throughput_delta_secs":2.0000548362731934,"time_eta":null,"time_report":1569972860.0096579}
-2019-10-01 23:34:22,009 INF transfer 7+0/8 elapsed=8.000175 recent(fps/mbps)=0.0/285.16 cumulative=26.6/258.34 db_queue_len=1/0.014 blobs=510 written=213 (dir/nondir=25/188) GB=2.066790
-AZCOPY:{"elapsed":8.009310960769653,"files_completed_failed":0,"files_completed_success":213,"files_pending":null,"files_skipped":0,"files_total":null,"pct_complete":null,"phase":"Transfer","throughput_Mbps":8465.72276716412,"throughput_delta_secs":1.9999642372131348,"time_eta":null,"time_report":1569972862.009622}
-2019-10-01 23:34:24,010 INF transfer 7+0/8 elapsed=10.000193 recent(fps/mbps)=0.0/269.53 cumulative=21.3/260.58 db_queue_len=1/0.014 blobs=579 written=213 (dir/nondir=25/188) GB=2.605852
-AZCOPY:{"elapsed":10.009328842163086,"files_completed_failed":0,"files_completed_success":213,"files_pending":null,"files_skipped":0,"files_total":null,"pct_complete":null,"phase":"Transfer","throughput_Mbps":10673.475959933163,"throughput_delta_secs":2.0000178813934326,"time_eta":null,"time_report":1569972864.00964}
-2019-10-01 23:34:26,011 INF transfer 7+0/8 elapsed=12.000508 recent(fps/mbps)=0.0/265.58 cumulative=17.7/261.41 db_queue_len=1/0.014 blobs=647 written=213 (dir/nondir=25/188) GB=3.137102
-AZCOPY:{"elapsed":12.009643077850342,"files_completed_failed":0,"files_completed_success":213,"files_pending":null,"files_skipped":0,"files_total":null,"pct_complete":null,"phase":"Transfer","throughput_Mbps":12847.55280845147,"throughput_delta_secs":2.000314235687256,"time_eta":null,"time_report":1569972866.0099542}
-2019-10-01 23:34:28,010 INF transfer 7+0/8 elapsed=14.000225 recent(fps/mbps)=0.0/289.10 cumulative=15.2/265.37 db_queue_len=1/0.014 blobs=721 written=213 (dir/nondir=25/188) GB=3.715227
-AZCOPY:{"elapsed":14.009360074996948,"files_completed_failed":0,"files_completed_success":213,"files_pending":null,"files_skipped":0,"files_total":null,"pct_complete":null,"phase":"Transfer","throughput_Mbps":15219.72500104621,"throughput_delta_secs":1.9997169971466064,"time_eta":null,"time_report":1569972868.0096712}
-2019-10-01 23:34:29,376 INF transfer 8+0/8 elapsed=15.366947 recent(fps/mbps)=0.7/234.37 cumulative=13.9/262.61 db_queue_len=0/0.000 blobs=763 written=214 (dir/nondir=25/189) GB=4.035540
-2019-10-01 23:34:29,394 INF phase transfer complete, elapsed=15.384553
-2019-10-01 23:34:29,395 INF transfer 0+8/8 elapsed=15.384553 recent(fps/mbps)=0.0/0.00 cumulative=13.9/262.31 db_queue_len=0/0.000 blobs=763 written=214 (dir/nondir=25/189) GB=4.035540
+const sampleOutput = `2019-10-09 06:55:16,623 INF CLFSLoad version 1.0.15
+2019-10-09 06:55:17,561 INF begin phase init
+AZCOPY-INFO:{"phase":"Init"}
+2019-10-09 06:55:17,686 INF preserve_hardlinks 0
+2019-10-09 06:55:17,687 INF compression LZ4 (1)
+2019-10-09 06:55:17,824 INF azcopy:
+AZCOPY-CONFIG:{"compression":"LZ4","new":true,"preserve_hardlinks":false,"version":"1.0.15"}
+2019-10-09 06:55:17,826 INF perform dry run on ./test-data
+2019-10-09 06:55:17,830 INF dry run result count=87 GB=1.000718 elapsed=0.003576
+2019-10-09 06:55:17,870 INF begin phase transfer
+AZCOPY-INFO:{"phase":"Transfer"}
+2019-10-09 06:55:17,945 INF transfer 0+0/8 elapsed=0.000000 recent(fps/mbps)=0.0/0.00 cumulative=0.0/0.00 db_queue_len=0/0.000 blobs=0 written=0 (dir/nondir=0/0) (0.0%) GB=0.000000 (0.0%)
+AZCOPY:{"elapsed":0.009233713150024414,"files_completed_failed":0,"files_completed_success":0,"files_pending":87,"files_skipped":0,"files_total":87,"pct_complete":0.0,"phase":"Transfer","throughput_Mbps":0.0,"throughput_delta_secs":0.009233713150024414,"time_eta":null,"time_report":1570604117.9448159}
+2019-10-09 06:55:19,945 INF transfer 7+0/8 elapsed=2.000123 recent(fps/mbps)=43.0/211.28 cumulative=43.0/211.28 db_queue_len=1/0.008 blobs=151 written=86 (dir/nondir=2/84) (98.9%) GB=0.422593 (42.2%)
+AZCOPY:{"elapsed":2.0093564987182617,"files_completed_failed":0,"files_completed_success":86,"files_pending":1,"files_skipped":0,"files_total":87,"pct_complete":42.228963106750896,"phase":"Transfer","throughput_Mbps":1730.833497613517,"throughput_delta_secs":2.0001227855682373,"time_eta":null,"time_report":1570604119.9449387}
+2019-10-09 06:55:21,778 INF transfer 8+0/8 elapsed=3.833536 recent(fps/mbps)=0.5/315.33 cumulative=22.7/261.04 db_queue_len=0/0.000 blobs=226 written=87 (dir/nondir=2/85) (100.0%) GB=1.000718 (100.0%)
+2019-10-09 06:55:21,806 INF phase transfer complete, elapsed=3.861348
+2019-10-09 06:55:21,807 INF transfer 0+8/8 elapsed=3.861348 recent(fps/mbps)=0.5/310.62 cumulative=22.5/259.16 db_queue_len=0/0.000 blobs=226 written=87 (dir/nondir=2/85) (100.0%) GB=1.000718 (100.0%)
 stats:
-{'check_existing': 1,
- 'compress_blob': 762,
- 'count_dir': 25,
- 'count_nondir': 189,
- 'dbc_claim_miss': 84,
- 'dbc_upsert_toc_check': 78,
- 'dbc_upsert_toc_found': 78,
+{'check_existing': 2,
+ 'compress_blob': 226,
+ 'count_dir': 2,
+ 'count_nondir': 85,
+ 'dbc_claim_miss': 23,
  'error_count': 0,
  'fh_regenerate': 0,
- 'found_dir': 24,
- 'found_nondir': 189,
- 'gb_write': 4.035539889708161,
+ 'found_dir': 1,
+ 'found_nondir': 85,
+ 'gb_write': 1.0007177144289017,
  'idle': 17,
- 'wait': 84,
- 'write_blob_bytes': 33696649,
- 'write_blob_count': 763,
+ 'wait': 23,
+ 'write_blob_bytes': 4658622,
+ 'write_blob_count': 226,
  'write_blob_fastpath': 0,
- 'write_blob_secs': 43.1188223361969,
+ 'write_blob_secs': 11.67502760887146,
  'xfer_threads_busy_max': 1}
 timers:
 {'_count': 8,
- '_elapsed': 15.35014033317566,
- 'blob_compress': '3.073975086 (2.50%)',
- 'blob_write': '43.118822336 (35.11%)',
- 'dir_generate': '1.090559244 (0.89%)',
- 'dir_generate_update_state': '0.003031492 (0.00%)',
- 'dir_generate_writeback2': '0.010361433 (0.01%)',
- 'idle': '90.259510994 (73.50%)',
- 'read_entries': '0.000687599 (0.00%)',
- 'read_mt': '0.172951698 (0.14%)',
- 'read_st': '0.004790306 (0.00%)',
- 'work_item_claim': '0.026149988 (0.02%)',
- 'work_item_execute': '32.401925802 (26.39%)',
- 'work_item_wait': '90.247925520 (73.49%)',
- 'wps.directory_write': '1.500050545 (1.22%)',
- 'wps.writer.transfer': '29.463580847 (23.99%)',
- 'writing_dir': '1.533771753 (1.25%)',
- 'writing_nondir': '29.771774530 (24.24%)',
- 'writing_update_state': '0.015924931 (0.01%)'}
+ '_elapsed': 3.8199939727783203,
+ 'blob_compress': '1.223299026 (4.00%)',
+ 'blob_write': '11.675027609 (38.20%)',
+ 'dir_generate': '0.192975760 (0.63%)',
+ 'dir_generate_update_state': '0.000295401 (0.00%)',
+ 'dir_generate_writeback2': '0.000150204 (0.00%)',
+ 'idle': '21.273998022 (69.61%)',
+ 'read_entries': '0.000053167 (0.00%)',
+ 'read_mt': '0.095147610 (0.31%)',
+ 'read_st': '0.002938271 (0.01%)',
+ 'work_item_claim': '0.009269476 (0.03%)',
+ 'work_item_execute': '9.011045694 (29.49%)',
+ 'work_item_wait': '21.272152424 (69.61%)',
+ 'wps.directory_write': '0.073803186 (0.24%)',
+ 'wps.writer.transfer': '8.418346405 (27.55%)',
+ 'writing_dir': '0.081565619 (0.27%)',
+ 'writing_nondir': '8.733993769 (28.58%)',
+ 'writing_update_state': '0.006951332 (0.02%)'}
 DB stats:
 {'error_count_entity': 0,
- 'flush_count': 14,
- 'flush_seconds': 0.3016519546508789,
- 'flush_update_tobj_deferred': 16,
+ 'flush_count': 6,
+ 'flush_seconds': 0.08766508102416992,
+ 'flush_update_tobj_deferred': 1,
  'flush_upsert_tobj_slowpath': 0,
  'snap0_flush_count': 1,
- 'snap0_flush_seconds': 0.11725616455078125,
- 'snap1_flush_count': 13,
- 'snap1_flush_seconds': 0.18439579010009766,
- 'snap2_flush_count': 13,
- 'snap2_flush_seconds': 0.18439579010009766}
+ 'snap0_flush_seconds': 0.04831981658935547,
+ 'snap1_flush_count': 5,
+ 'snap1_flush_seconds': 0.03934526443481445,
+ 'snap2_flush_count': 0,
+ 'snap2_flush_seconds': 0.0}
 DB timers:
 {'_count': 0,
- '_elapsed': 15.454240083694458,
- 'flush': '0.301651955 (1.95%)',
- 'flush_01_compute_upsert': '0.003489971 (0.02%)',
- 'flush_02_upsert': '0.035498142 (0.23%)',
- 'flush_03_compute_update': '0.075634241 (0.49%)',
- 'flush_04_update': '0.016016245 (0.10%)',
- 'flush_06_flush': '0.000135183 (0.00%)',
- 'flush_07_update_state': '0.057182074 (0.37%)',
- 'flush_08_update_state_deferred': '0.000396729 (0.00%)',
- 'flush_09_flush': '0.013414860 (0.09%)',
- 'flush_10_reap': '0.080657005 (0.52%)',
- 'preclaim_more': '0.000114918 (0.00%)'}
-2019-10-01 23:34:29,429 INF begin phase finalize
-2019-10-01 23:34:30,363 INF all phases complete
-2019-10-01 23:34:30,425 INF CLFSLoad succeeded
-2019-10-01 23:34:30,439 INF azcopy:
-AZCOPY-FINAL:{"elapsed":18.100342273712158,"files_completed_success":25,"files_completed_failed":0,"files_skipped":0,"files_total":25,"final_job_status":"Completed","total_bytes_transferred":4333127962}
-2019-10-01 23:34:30,441 INF elapsed=18.100 GB=4.035540 count=214 11.823 files/sec 0.222954 GB/s`
+ '_elapsed': 3.9364240169525146,
+ 'flush': '0.087665081 (2.23%)',
+ 'flush_01_compute_upsert': '0.000585079 (0.01%)',
+ 'flush_02_upsert': '0.015451193 (0.39%)',
+ 'flush_03_compute_update': '0.011325836 (0.29%)',
+ 'flush_04_update': '0.004318476 (0.11%)',
+ 'flush_06_flush': '0.000125408 (0.00%)',
+ 'flush_07_update_state': '0.003791332 (0.10%)',
+ 'flush_08_update_state_deferred': '0.000058651 (0.00%)',
+ 'flush_09_flush': '0.019524574 (0.50%)',
+ 'flush_10_reap': '0.030148745 (0.77%)',
+ 'preclaim_more': '0.000038385 (0.00%)'}
+2019-10-09 06:55:21,835 INF begin phase finalize
+AZCOPY-INFO:{"phase":"Finalize"}
+2019-10-09 06:55:22,499 INF all phases complete
+2019-10-09 06:55:22,560 INF CLFSLoad succeeded
+2019-10-09 06:55:22,569 INF azcopy:
+AZCOPY-FINAL:{"elapsed":6.173717021942139,"files_completed_success":87,"files_completed_failed":0,"files_skipped":0,"files_total":87,"final_job_status":"Completed","total_bytes_transferred":1074512464}
+2019-10-09 06:55:22,572 INF elapsed=6.174 GB=1.000718 count=87 14.092 files/sec 0.162093 GB/s`
 
 func (s *clfsTestSuite) TestParsingSampleOutput(c *chk.C) {
 	// set up the mock lcm so that we can intercept the parsed message
@@ -243,10 +258,10 @@ func (s *clfsTestSuite) TestParsingSampleOutput(c *chk.C) {
 	c.Check(len(allExit), chk.Equals, 1)
 }
 
-const sampleErrorOutput = `2019-10-01 23:33:51,188 INF CLFSLoad version 1.0.11
-2019-10-01 23:33:51,744 ERR storage_account='zemaintest2' container='cfff' is not empty
-2019-10-01 23:33:51,786 INF azcopy:
-AZCOPY-FINAL:{"elapsed":1.5416233539581299,"files_completed_success":null,"files_completed_failed":null,"files_skipped":0,"files_total":null,"final_job_status":"Failed","total_bytes_transferred":null}`
+const sampleErrorOutput = `2019-10-09 07:34:05,205 INF CLFSLoad version 1.0.15
+2019-10-09 07:34:05,394 ERR storage_account='zemaintest' container='clfs' is not empty
+2019-10-09 07:34:05,434 INF azcopy:
+AZCOPY-FINAL:{"elapsed":0.715491533279419,"files_completed_success":null,"files_completed_failed":null,"files_skipped":0,"files_total":null,"final_job_status":"Failed","total_bytes_transferred":null}`
 
 func (s *clfsTestSuite) TestParsingSampleErrorOutput(c *chk.C) {
 	// set up the mock lcm so that we can intercept the parsed message
@@ -267,7 +282,7 @@ func (s *clfsTestSuite) TestParsingSampleErrorOutput(c *chk.C) {
 	allExit := mockedLcm.GatherAllLogs(mockedLcm.exitLog)
 
 	c.Check(len(allError), chk.Equals, 1)
-	c.Check(len(allInfo) > 0, chk.Equals, true)
+	c.Check(len(allInfo), chk.Equals, 0)
 	c.Check(len(allProgress), chk.Equals, 0)
 	c.Check(len(allExit), chk.Equals, 1)
 }

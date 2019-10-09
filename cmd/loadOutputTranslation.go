@@ -33,10 +33,11 @@ import (
 )
 
 const (
-	clfsInfoTag     = "INF"
-	clfsErrTag      = "ERR"
-	clfsProgressTag = "AZCOPY:"
-	clfsExitTag     = "AZCOPY-FINAL:"
+	clfsErrTag            = "ERR"
+	clfsInitializationTag = "AZCOPY-CONFIG:"
+	clfsInfoTag           = "AZCOPY-INFO:"
+	clfsProgressTag       = "AZCOPY:"
+	clfsExitTag           = "AZCOPY-FINAL:"
 )
 
 type clfsExtensionOutputParser struct {
@@ -56,14 +57,16 @@ func (c *clfsExtensionOutputParser) startParsing(reader io.Reader) {
 
 		if strings.Contains(line, clfsExitTag) {
 			c.processEndOfJob(line)
-		} else if strings.Contains(line, clfsProgressTag) {
-			c.processProgress(line)
+		} else if strings.Contains(line, clfsInitializationTag) {
+			c.processInitialization(line)
 		} else if strings.Contains(line, clfsInfoTag) {
 			c.processInfo(line)
+		} else if strings.Contains(line, clfsProgressTag) {
+			c.processProgress(line)
 		} else if strings.Contains(line, clfsErrTag) {
 			c.processError(line)
 		} else {
-			// ignore all other output
+			//ignore all other output
 			//c.lcm.Info("ignored: " + line)
 		}
 	}
@@ -75,13 +78,36 @@ func (c *clfsExtensionOutputParser) finishParsing() {
 	<-c.finishSignal
 }
 
-func (c *clfsExtensionOutputParser) processInfo(line string) {
-	parts := strings.Split(line, clfsInfoTag)
-	if len(parts) < 2 {
+func (c *clfsExtensionOutputParser) processInitialization(line string) {
+	cleanMessage := strings.TrimPrefix(line, clfsInitializationTag)
+
+	initInfo := clfsInitialization{}
+	err := json.Unmarshal([]byte(cleanMessage), &initInfo)
+	if err != nil {
+		// don't crash if these info are not critical and are only nice-to-have
 		return
 	}
 
-	c.lcm.Info(strings.TrimSpace(parts[1]))
+	c.lcm.Info(fmt.Sprintf("CLFSLoad Extension version: %s", initInfo.Version))
+	c.lcm.Info(fmt.Sprintf("CLFSLoad Extension configurations: compression type=%s, preserve hard links=%v",
+		initInfo.Compression, initInfo.PreserveHardLinks))
+
+	if initInfo.New {
+		c.lcm.Info("Starting a new job.")
+	}
+}
+
+func (c *clfsExtensionOutputParser) processInfo(line string) {
+	cleanMessage := strings.TrimPrefix(line, clfsInfoTag)
+
+	info := clfsInfo{}
+	err := json.Unmarshal([]byte(cleanMessage), &info)
+	if err != nil {
+		// don't crash if these info are not critical and are only nice-to-have
+		return
+	}
+
+	c.lcm.Info(fmt.Sprintf("%s phase has started.", info.Phase))
 }
 
 func (c *clfsExtensionOutputParser) processError(line string) {
@@ -107,7 +133,10 @@ func (c *clfsExtensionOutputParser) processProgress(line string) {
 		if format == common.EOutputFormat.Text() {
 			return progress.parseIntoString()
 		} else if format == common.EOutputFormat.Json() {
-
+			// re-marshal it the Go way
+			jsonOutput, err := json.Marshal(progress)
+			common.PanicIfErr(err)
+			return string(jsonOutput)
 		}
 
 		return ""
@@ -128,11 +157,25 @@ func (c *clfsExtensionOutputParser) processEndOfJob(line string) {
 		if format == common.EOutputFormat.Text() {
 			return summary.parseIntoString()
 		} else if format == common.EOutputFormat.Json() {
-
+			// re-marshal it the Go way
+			jsonOutput, err := json.Marshal(summary)
+			common.PanicIfErr(err)
+			return string(jsonOutput)
 		}
 
 		return ""
 	}, common.EExitCode.Success())
+}
+
+type clfsInitialization struct {
+	Version           string `json:"version"`
+	Compression       string `json:"compression"`
+	New               bool   `json:"new"`
+	PreserveHardLinks bool   `json:"preserve_hardlinks"`
+}
+
+type clfsInfo struct {
+	Phase string `json:"phase"`
 }
 
 type clfsProgress struct {
