@@ -877,6 +877,16 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	jobPartOrder.SourceSAS = cca.sourceSAS
 	jobPartOrder.SourceRoot, err = GetResourceRoot(cca.source, from)
 
+	// Stripping the trailing /* for local occurs much later than stripping the trailing /* for remote resources.
+	// TODO: Move these into the same place for maintainability.
+	if diff := strings.TrimPrefix(cca.source, jobPartOrder.SourceRoot); cca.fromTo.From().IsLocal() &&
+		diff == "*" || diff == common.OS_PATH_SEPARATOR+"*" || diff == common.AZCOPY_PATH_SEPARATOR_STRING+"*" {
+		// trim the /*
+		cca.source = jobPartOrder.SourceRoot
+		// set stripTopDir to true so that --list-of-files/--include-path play nice
+		cca.stripTopDir = true
+	}
+
 	if err != nil {
 		return err
 	}
