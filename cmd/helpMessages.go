@@ -321,11 +321,9 @@ The last modified times are used for comparison. The file is skipped if the last
 
 The sync command differs from the copy command in several ways:
 
-  1. Sync can copy directories without the recursive flag, but it will not sync subdirectories.
-  2. The source and destination should not contain patterns (For example: * or ?).
-  3. The include-pattern and exclude-pattern flags can be a list of patterns matching to the file names. Please refer to the example section for illustration.
-  4. When syncing between virtual directories, add a trailing slash to the path (refer to examples) if there's a blob with the same name as one of the virtual directories.
-  5. If the 'deleteDestination' flag is set to true or prompt, then sync will delete files and blobs at the destination that are not present at the source.
+  1. By default, the recursive flag is true and sync copies all subdirectories. Sync only copies the top-level files inside a directory if the recursive flag is false.
+  2. When syncing between virtual directories, add a trailing slash to the path (refer to examples) if there's a blob with the same name as one of the virtual directories.
+  3. If the 'deleteDestination' flag is set to true or prompt, then sync will delete files and blobs at the destination that are not present at the source.
 
 Advanced:
 
