@@ -13,6 +13,9 @@ from test_blob_sync import *
 from test_service_to_service_copy import *
 from test_blobfs_download_SAS import *
 from test_blobfs_upload_SAS import *
+from test_autodetect_blob_type import *
+from test_file_sync import *
+from test_file_copy import *
 import glob, os
 import configparser
 import platform
@@ -113,8 +116,8 @@ def init():
             check_env_not_exist('FILESYSTEM_URL') or check_env_not_exist('FILESYSTEM_SAS_URL') or \
             check_env_not_exist('ACCOUNT_NAME') or check_env_not_exist('ACCOUNT_KEY') or \
             check_env_not_exist('AZCOPY_OAUTH_TOKEN_INFO') or \
-            check_env_not_exist('S2S_SRC_BLOB_ACCOUNT_SAS_URL') or check_env_not_exist('S2S_DST_BLOB_ACCOUNT_SAS_URL') or \
-            check_env_not_exist('S2S_SRC_FILE_ACCOUNT_SAS_URL') or check_env_not_exist('S2S_SRC_S3_SERVICE_URL'):
+            check_env_not_exist('S2S_SRC_BLOB_ACCOUNT_SAS_URL') or check_env_not_exist('S2S_DST_BLOB_ACCOUNT_SAS_URL') \
+            or check_env_not_exist('S2S_SRC_FILE_ACCOUNT_SAS_URL') or check_env_not_exist('S2S_SRC_S3_SERVICE_URL'):
         parse_config_file_set_env()
 
     # Get the environment variables value
@@ -154,7 +157,7 @@ def init():
     s2s_src_file_account_url = os.environ.get('S2S_SRC_FILE_ACCOUNT_SAS_URL')
     s2s_src_s3_service_url = os.environ.get('S2S_SRC_S3_SERVICE_URL')
 
-    # get the s2s copy dest blob account url
+    # get the s2s copy dest account URLs
     s2s_dst_blob_account_url = os.environ.get('S2S_DST_BLOB_ACCOUNT_SAS_URL')
 
     # deleting the log files.
@@ -181,7 +184,9 @@ def main():
     init()
 
     test_class_to_run = [BlobPipingTests,
+                         File_Service_2_Service_Copy_User_Scenario,
                          Blob_Sync_User_Scenario,
+                         File_Sync_User_Scenario,
                          Block_Upload_User_Scenarios,
                          Blob_Download_User_Scenario,
                          PageBlob_Upload_User_Scenarios,
@@ -194,7 +199,8 @@ def main():
                          FileShare_Upload_User_Scenario,
                          BlobFs_Upload_ShareKey_User_Scenarios,
                          BlobFs_Download_SharedKey_User_Scenarios,
-                         Service_2_Service_Copy_User_Scenario]
+                         Service_2_Service_Copy_User_Scenario,
+                         Autodetect_Blob_Type_Scenario]
     suites_list = []
 
     loader = unittest.TestLoader()

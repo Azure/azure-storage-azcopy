@@ -23,12 +23,14 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
-	"io/ioutil"
-	"path/filepath"
-	"strings"
 )
 
 const (
@@ -49,6 +51,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 
 		// set up the destination as a single file
 		dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+		defer os.RemoveAll(dstDirName)
 		dstFileName := blobName
 		scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
 
@@ -94,6 +97,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithEmptyDestination(c *chk.C) {
 
 	// set up the destination with an empty folder
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -141,6 +145,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIdenticalDestination(c *chk.C)
 
 	// set up the destination with a folder that have the exact same files
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
 
 	// set up interceptor
@@ -182,6 +187,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithMismatchedDestination(c *chk.C
 
 	// set up the destination with a folder that have half of the files from source
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList[0:len(blobList)/2])
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, []string{"extraFile1.pdf, extraFile2.txt"})
 	expectedOutput := blobList[len(blobList)/2:] // the missing half of source files should be transferred
@@ -230,6 +236,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludeFlag(c *chk.C) {
 
 	// set up the destination with an empty folder
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -265,6 +272,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithExcludeFlag(c *chk.C) {
 
 	// set up the destination with an empty folder
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -306,6 +314,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludeAndExcludeFlag(c *chk.C
 
 	// set up the destination with an empty folder
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -336,7 +345,9 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithMissingDestination(c *chk.C) {
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// set up the destination as a missing folder
-	dstDirName := filepath.Join(scenarioHelper{}.generateLocalDirectory(c), "imbatman")
+	baseDirName := scenarioHelper{}.generateLocalDirectory(c)
+	dstDirName := filepath.Join(baseDirName, "imbatman")
+	defer os.RemoveAll(baseDirName)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -369,6 +380,7 @@ func (s *cmdIntegrationSuite) TestSyncMismatchContainerAndFile(c *chk.C) {
 
 	// set up the destination as a single file
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 	dstFileName := blobList[0]
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
 
@@ -415,6 +427,7 @@ func (s *cmdIntegrationSuite) TestSyncMismatchBlobAndDirectory(c *chk.C) {
 
 	// set up the destination as a directory
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -453,6 +466,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadADLSDirectoryTypeMismatch(c *chk.C
 
 	// set up the destination as a single file
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 	dstFileName := blobName
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, []string{blobName})
 
@@ -510,6 +524,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithADLSDirectory(c *chk.C) {
 
 	// set up the destination with an empty folder
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 
 	// set up interceptor
 	mockedRPC := interceptor{}

@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -48,33 +49,48 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 		jptm.ReportTransferDone()
 		return
 	}
-	// If the force Write flags is set to false
-	// then check the file exists locally or not.
-	// If it does, mark transfer as failed.
-	if !jptm.IsForceWriteTrue() {
+	// if the force Write flags is set to false or prompt
+	// then check the file exists at the remote location
+	// if it does, react accordingly
+	if jptm.GetOverwriteOption() != common.EOverwriteOption.True() {
 		_, err := os.Stat(info.Destination)
 		if err == nil {
-			// If the error is nil, then file exists locally and it doesn't need to be downloaded.
-			jptm.LogDownloadError(info.Source, info.Destination, "File already exists", 0)
-			// Mark the transfer as failed
-			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure()) // Deliberately not using BlobAlreadyExists, as was previously done in the old xfer-blobToLocal, since this is not blob-specific code, and its the local file we are talking about
-			jptm.ReportTransferDone()
-			return
+			// if the error is nil, then file exists locally
+			shouldOverwrite := false
+
+			// if necessary, prompt to confirm user's intent
+			if jptm.GetOverwriteOption() == common.EOverwriteOption.Prompt() {
+				shouldOverwrite = jptm.GetOverwritePrompter().shouldOverwrite(info.Destination)
+			}
+
+			if !shouldOverwrite {
+				// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
+				jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "File already exists, so will be skipped")
+				jptm.SetStatus(common.ETransferStatus.SkippedFileAlreadyExists())
+				jptm.ReportTransferDone()
+				return
+			}
 		}
 	}
 
-	// step 4a: special handling for empty files
+	// step 4a: mark destination as modified before we take our first action there (which is to create the destination file)
+	jptm.SetDestinationIsModified()
+
+	// step 4b: special handling for empty files
 	if fileSize == 0 {
-		err := createEmptyFile(info.Destination)
+		err := jptm.WaitUntilLockDestination(jptm.Context())
+		if err == nil {
+			err = createEmptyFile(info.Destination)
+		}
 		if err != nil {
 			jptm.LogDownloadError(info.Source, info.Destination, "Empty File Creation error "+err.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 		}
-		epilogueWithCleanupDownload(jptm, dl, nil, false, nil) // need standard epilogue, rather than a quick exit, so we can preserve modification dates
+		epilogueWithCleanupDownload(jptm, dl, nil, nil) // need standard epilogue, rather than a quick exit, so we can preserve modification dates
 		return
 	}
 
-	// step 4b: normal file creation when source has content
+	// step 4c: normal file creation when source has content
 	writeThrough := false
 	// TODO: consider cases where we might set it to true. It might give more predictable and understandable disk throughput.
 	//    But can't be used in the cases shown in the if statement below (one of which is only pseudocode, at this stage)
@@ -85,16 +101,16 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 	//        writeThrough = false
 	//    }
 
-	failFileCreation := func(err error, forceReleaseFileCount bool) {
+	failFileCreation := func(err error) {
 		jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		// use standard epilogue for consistency, but force release of file count (without an actual file) if necessary
-		epilogueWithCleanupDownload(jptm, dl, nil, forceReleaseFileCount, nil)
+		epilogueWithCleanupDownload(jptm, dl, nil, nil)
 	}
-	// block until we can safely use a file handle	// TODO: it might be nice if this happened inside chunkedFileWriter, when first chunk needs to be saved,
-	err := jptm.FileCountLimiter().WaitUntilAdd(jptm.Context(), 1, func() bool { return true })
+	// block until we can safely use a file handle
+	err := jptm.WaitUntilLockDestination(jptm.Context())
 	if err != nil {
-		failFileCreation(err, false)
+		failFileCreation(err)
 		return
 	}
 
@@ -103,10 +119,15 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 		// the user wants to discard the downloaded data
 		dstFile = devNullWriter{}
 	} else {
-		// normal scenario, create the destination file as expected
-		dstFile, err = common.CreateFileOfSizeWithWriteThroughOption(info.Destination, fileSize, writeThrough)
+		// Normal scenario, create the destination file as expected
+		// Use pseudo chunk id to alow our usual state tracking mechanism to keep count of how many
+		// file creations are running at any given instant, for perf diagnostics
+		pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
+		jptm.LogChunkStatus(pseudoId, common.EWaitReason.CreateLocalFile())
+		dstFile, err = createDestinationFile(jptm, info.Destination, fileSize, writeThrough)
+		jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 		if err != nil {
-			failFileCreation(err, true)
+			failFileCreation(err)
 			return
 		}
 	}
@@ -151,11 +172,11 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 		sourceMd5Exists)
 
 	// step 5c: run prologue in downloader (here it can, for example, create things that will require cleanup in the epilogue)
-	dl.Prologue(jptm)
+	dl.Prologue(jptm, p)
 
 	// step 5d: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
-	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupDownload(jptm, dl, dstFile, false, dstWriter) })
+	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupDownload(jptm, dl, dstFile, dstWriter) })
 
 	// step 6: go through the blob range and schedule download chunk jobs
 	// TODO: currently, the epilogue will only run if the number of completed chunks = numChunks.
@@ -199,9 +220,44 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 
 }
 
+func createDestinationFile(jptm IJobPartTransferMgr, destination string, size int64, writeThrough bool) (file io.WriteCloser, err error) {
+	ct := common.ECompressionType.None()
+	if jptm.ShouldDecompress() {
+		size = 0                                  // we don't know what the final size will be, so we can't pre-size it
+		ct, err = jptm.GetSourceCompressionType() // calls same decompression getter routine as the front-end does
+		if err != nil {                           // check this, and return error, before we create any disk file, since if we return err, then no cleanup of file will be required
+			return nil, err
+		}
+		// Why get the decompression type again here, when we already looked at it at enumeration time?
+		// Because we have better ability to report unsupported compression types here, with clear "transfer failed" handling,
+		// and we still need to set size to zero here, so relying on enumeration more wouldn't simply this code much, if at all.
+	}
+
+	var dstFile io.WriteCloser
+	dstFile, err = common.CreateFileOfSizeWithWriteThroughOption(destination, size, writeThrough)
+	if err != nil {
+		return nil, err
+	}
+	if jptm.ShouldDecompress() {
+		jptm.LogAtLevelForCurrentTransfer(pipeline.LogInfo, "will be decompressed from "+ct.String())
+
+		// wrap for automatic decompression
+		dstFile = common.NewDecompressingWriter(dstFile, ct)
+		// why don't we just let Go's network stack automatically decompress for us? Because
+		// 1. Then we can't check the MD5 hash (since logically, any stored hash should be the hash of the file that exists in Storage, i.e. the compressed one)
+		// 2. Then we can't pre-plan a certain number of fixed-size chunks (which is required by the way our architecture currently works).
+	}
+	return dstFile, nil
+}
+
 // complete epilogue. Handles both success and failure
-func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, activeDstFile io.WriteCloser, forceReleaseFileCount bool, cw common.ChunkedFileWriter) {
+func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, activeDstFile io.WriteCloser, cw common.ChunkedFileWriter) {
 	info := jptm.Info()
+
+	// allow our usual state tracking mechanism to keep count of how many epilogues are running at any given instant, for perf diagnostics
+	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
+	jptm.LogChunkStatus(pseudoId, common.EWaitReason.Epilogue())
+	defer jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 
 	haveNonEmptyFile := activeDstFile != nil
 	if haveNonEmptyFile {
@@ -209,7 +265,6 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 		// wait until all received chunks are flushed out
 		md5OfFileAsWritten, flushError := cw.Flush(jptm.Context())
 		closeErr := activeDstFile.Close() // always try to close if, even if flush failed
-		jptm.FileCountLimiter().Remove(1) // always release it from our count, no matter what happened
 		if flushError != nil {
 			jptm.FailActiveDownload("Flushing file", flushError)
 		}
@@ -218,7 +273,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 		}
 
 		// Check MD5 (but only if file was fully flushed and saved - else no point and may not have actualAsSaved hash anyway)
-		if !jptm.TransferStatus().DidFail() {
+		if jptm.IsLive() {
 			comparison := md5Comparer{
 				expected:         info.SrcHTTPHeaders.ContentMD5, // the MD5 that came back from Service when we enumerated the source
 				actualAsSaved:    md5OfFileAsWritten,
@@ -229,18 +284,27 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 				jptm.FailActiveDownload("Checking MD5 hash", err)
 			}
 		}
-	} else {
-		if forceReleaseFileCount {
-			jptm.FileCountLimiter().Remove(1) // special case, for we we failed after adding it to count, but before making an actual file
-		}
 	}
 
 	if dl != nil {
 		dl.Epilogue() // it can release resources here
+
+		// check length if enabled (except for dev null and decompression case, where that's impossible)
+		if jptm.IsLive() && info.DestLengthValidation && info.Destination != common.Dev_Null && !jptm.ShouldDecompress() {
+			fi, err := os.Stat(info.Destination)
+
+			if err != nil {
+				jptm.FailActiveDownload("Download length check", err)
+			}
+
+			if fi.Size() != info.SourceSize {
+				jptm.FailActiveDownload("Download length check", errors.New("destination length did not match source length"))
+			}
+		}
 	}
 
 	// Preserve modified time
-	if !jptm.TransferStatus().DidFail() {
+	if jptm.IsLive() {
 		// TODO: the old version of this code did NOT consider it an error to be unable to set the modification date/time
 		// TODO: ...So I have preserved that behavior here.
 		// TODO: question: But is that correct?
@@ -260,16 +324,17 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 	// if was an intentional cancel, the status is still "in progress", so we are still counting it as pending
 	// we leave these transfer status alone
 	// in case of errors, the status was already set, so we don't need to do anything here either
-	if jptm.TransferStatus() <= 0 || jptm.WasCanceled() {
+	if jptm.IsDeadInflight() || jptm.IsDeadBeforeStart() {
 		// If failed, log and delete the "bad" local file
 		// If the current transfer status value is less than or equal to 0
 		// then transfer either failed or was cancelled
-		// TODO: question: is it right that 0 (not started) is _included_ here? It was included in the previous version of this code.
 		if jptm.ShouldLog(pipeline.LogDebug) {
 			jptm.Log(pipeline.LogDebug, " Finalizing Transfer Cancellation/Failure")
 		}
-		// the file created locally should be deleted
-		tryDeleteFile(info, jptm)
+		if jptm.IsDeadInflight() && jptm.HoldsDestinationLock() {
+			// the file created locally should be deleted
+			tryDeleteFile(info, jptm)
+		}
 	} else {
 		// We know all chunks are done (because this routine was called)
 		// and we know the transfer didn't fail (because just checked its status above),
@@ -278,12 +343,15 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 
 		// Final logging
 		if jptm.ShouldLog(pipeline.LogInfo) { // TODO: question: can we remove these ShouldLogs?  Aren't they inside Log?
-			jptm.Log(pipeline.LogInfo, "DOWNLOAD SUCCESSFUL")
+			jptm.Log(pipeline.LogInfo, fmt.Sprintf("DOWNLOADSUCCESSFUL: %s", info.Destination))
 		}
 		if jptm.ShouldLog(pipeline.LogDebug) {
 			jptm.Log(pipeline.LogDebug, "Finalizing Transfer")
 		}
 	}
+
+	// must always do this, and do it last
+	jptm.UnlockDestination()
 
 	// successful or unsuccessful, it's definitely over
 	jptm.ReportTransferDone()

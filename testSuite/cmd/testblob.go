@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-pipeline-go/pipeline"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 
@@ -108,6 +110,21 @@ func init() {
 	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.CheckContentType, "check-content-type", false, "Validate content type.")
 }
 
+func verifyBlobType(url url.URL, ctx context.Context, p pipeline.Pipeline, intendedBlobType string) (bool, error) {
+	bURL := azblob.NewBlobURL(url, p)
+	pResp, err := bURL.GetProperties(ctx, azblob.BlobAccessConditions{})
+
+	if err != nil {
+		return false, err
+	}
+
+	if string(pResp.BlobType()) != intendedBlobType {
+		return false, fmt.Errorf("blob URL is not intended blob type %s, but instead %s", intendedBlobType, pResp.BlobType())
+	}
+
+	return true, nil
+}
+
 // verify the blob downloaded or uploaded.
 func verifyBlob(testBlobCmd TestBlobCommand) {
 	if testBlobCmd.BlobType == "PageBlob" {
@@ -148,7 +165,8 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 			RetryDelay:    ste.UploadRetryDelay,
 			MaxRetryDelay: ste.UploadMaxRetryDelay},
 		nil,
-		ste.NewAzcopyHTTPClient())
+		ste.NewAzcopyHTTPClient(0),
+		nil)
 	containerUrl := azblob.NewContainerURL(*sasUrl, p)
 
 	testCtx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, defaultServiceApiVersion)
@@ -269,7 +287,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 	// getting the shared access signature of the resource.
 	sourceURL, err := url.Parse(testBlobCmd.Subject)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("Error parsing the blob url source %s", testBlobCmd.Object))
+		fmt.Println("Error parsing the blob url source")
 		os.Exit(1)
 	}
 
@@ -287,9 +305,18 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 			RetryDelay:    ste.UploadRetryDelay,
 			MaxRetryDelay: ste.UploadMaxRetryDelay},
 		nil,
-		ste.NewAzcopyHTTPClient())
+		ste.NewAzcopyHTTPClient(0),
+		nil)
 
 	testCtx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, defaultServiceApiVersion)
+
+	isPage, err := verifyBlobType(*sourceURL, testCtx, p, "PageBlob")
+
+	if !isPage || err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
 	pageBlobUrl := azblob.NewPageBlobURL(*sourceURL, p)
 
 	// get the blob properties and check the blob tier.
@@ -433,7 +460,6 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 
 	// getting the shared access signature of the resource.
 	sourceSas := testBlobCmd.Subject
-	fmt.Println("source sas ", sourceSas)
 	sourceURL, err := url.Parse(sourceSas)
 	if err != nil {
 		fmt.Println(fmt.Sprintf("Error parsing the blob url source %s", testBlobCmd.Object))
@@ -454,9 +480,17 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 			RetryDelay:    ste.UploadRetryDelay,
 			MaxRetryDelay: ste.UploadMaxRetryDelay},
 		nil,
-		ste.NewAzcopyHTTPClient())
+		ste.NewAzcopyHTTPClient(0),
+		nil)
 
 	testCtx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, defaultServiceApiVersion)
+
+	isBlock, err := verifyBlobType(*sourceURL, testCtx, p, "BlockBlob")
+
+	if !isBlock || err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
 	blobUrl := azblob.NewBlobURL(*sourceURL, p)
 
@@ -616,9 +650,18 @@ func verifySingleAppendBlob(testBlobCmd TestBlobCommand) {
 			RetryDelay:    ste.UploadRetryDelay,
 			MaxRetryDelay: ste.UploadMaxRetryDelay},
 		nil,
-		ste.NewAzcopyHTTPClient())
+		ste.NewAzcopyHTTPClient(0),
+		nil)
 
 	testCtx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, defaultServiceApiVersion)
+
+	isAppend, err := verifyBlobType(*sourceURL, testCtx, p, "AppendBlob")
+
+	if !isAppend || err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
 	appendBlobURL := azblob.NewAppendBlobURL(*sourceURL, p)
 
 	// get the blob properties and check the blob tier.

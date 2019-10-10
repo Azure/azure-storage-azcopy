@@ -23,25 +23,26 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"os"
+	"path"
+
+	"github.com/Azure/azure-storage-file-go/azfile"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"net/url"
-	"os"
-	"path"
-	"path/filepath"
-	"strings"
 )
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
-func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int, isSingleFileSync bool) *copyTransferProcessor {
+func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int) *copyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:           cca.jobID,
 		CommandString:   cca.commandString,
 		FromTo:          cca.fromTo,
-		SourceRoot:      replacePathSeparators(cca.source),
-		DestinationRoot: replacePathSeparators(cca.destination),
+		SourceRoot:      consolidatePathSeparators(cca.source),
+		DestinationRoot: consolidatePathSeparators(cca.destination),
 
 		// authentication related
 		CredentialInfo: cca.credentialInfo,
@@ -54,21 +55,15 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 			PutMd5:                   cca.putMd5,
 			MD5ValidationOption:      cca.md5ValidationOption,
 			BlockSizeInBytes:         cca.blockSize},
-		ForceWrite: true, // once we decide to transfer for a sync operation, we overwrite the destination regardless
-		LogLevel:   cca.logVerbosity,
+		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
+		LogLevel:                       cca.logVerbosity,
+		S2SSourceChangeValidation:      true,
+		DestLengthValidation:           true,
+		S2SGetPropertiesInBackend:      true,
+		S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
 	}
 
-	if !isSingleFileSync {
-		if !strings.HasSuffix(copyJobTemplate.SourceRoot, common.AZCOPY_PATH_SEPARATOR_STRING) {
-			copyJobTemplate.SourceRoot += common.AZCOPY_PATH_SEPARATOR_STRING
-		}
-
-		if !strings.HasSuffix(copyJobTemplate.DestinationRoot, common.AZCOPY_PATH_SEPARATOR_STRING) {
-			copyJobTemplate.DestinationRoot += common.AZCOPY_PATH_SEPARATOR_STRING
-		}
-	}
-
-	reportFirstPart := func() { cca.setFirstPartOrdered() }
+	reportFirstPart := func(jobStarted bool) { cca.setFirstPartOrdered() } // for compatibility with the way sync has always worked, we don't check jobStarted here
 	reportFinalPart := func() { cca.isEnumerationComplete = true }
 
 	shouldEncodeSource := cca.fromTo.From().IsRemote()
@@ -125,21 +120,30 @@ func (d *interactiveDeleteProcessor) removeImmediately(object storedObject) (err
 
 func (d *interactiveDeleteProcessor) promptForConfirmation(object storedObject) (shouldDelete bool, keepPrompting bool) {
 	answer := glcm.Prompt(fmt.Sprintf("The %s '%s' does not exist at the source. "+
-		"Do you wish to delete it from the destination(%s)? "+
-		"[Y] Yes  [A] Yes to all  [N] No  [L] No to all  (default is N):",
-		d.objectTypeToDisplay, object.relativePath, d.objectLocationToDisplay))
+		"Do you wish to delete it from the destination(%s)?",
+		d.objectTypeToDisplay, object.relativePath, d.objectLocationToDisplay),
+		common.PromptDetails{
+			PromptType:   common.EPromptType.DeleteDestination(),
+			PromptTarget: object.relativePath,
+			ResponseOptions: []common.ResponseOption{
+				common.EResponseOption.Yes(),
+				common.EResponseOption.No(),
+				common.EResponseOption.YesForAll(),
+				common.EResponseOption.NoForAll()},
+		},
+	)
 
-	switch strings.ToLower(answer) {
-	case "y":
+	switch answer {
+	case common.EResponseOption.Yes():
 		// print nothing, since the deleter is expected to log the message when the delete happens
 		return true, true
-	case "a":
+	case common.EResponseOption.YesForAll():
 		glcm.Info(fmt.Sprintf("Confirmed. All the extra %ss will be deleted.", d.objectTypeToDisplay))
 		return true, false
-	case "n":
+	case common.EResponseOption.No():
 		glcm.Info(fmt.Sprintf("Keeping extra %s: %s", d.objectTypeToDisplay, object.relativePath))
 		return false, true
-	case "l":
+	case common.EResponseOption.NoForAll():
 		glcm.Info("No deletions will happen from now onwards.")
 		return false, false
 	default:
@@ -172,50 +176,60 @@ type localFileDeleter struct {
 
 func (l *localFileDeleter) deleteFile(object storedObject) error {
 	glcm.Info("Deleting extra file: " + object.relativePath)
-	return os.Remove(filepath.Join(l.rootPath, object.relativePath))
+	return os.Remove(common.GenerateFullPath(l.rootPath, object.relativePath))
 }
 
-func newSyncBlobDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor, error) {
+func newSyncDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor, error) {
 	rawURL, err := url.Parse(cca.destination)
 	if err != nil {
 		return nil, err
-	} else if err == nil && cca.destinationSAS != "" {
+	} else if cca.destinationSAS != "" {
 		copyHandlerUtil{}.appendQueryParamToUrl(rawURL, cca.destinationSAS)
 	}
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	p, err := createBlobPipeline(ctx, cca.credentialInfo)
+
+	p, err := initPipeline(ctx, cca.fromTo.To(), cca.credentialInfo)
 	if err != nil {
 		return nil, err
 	}
 
-	return newInteractiveDeleteProcessor(newBlobDeleter(rawURL, p, ctx).deleteBlob,
-		cca.deleteDestination, "blob", cca.destination, cca.incrementDeletionCount), nil
+	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, p, ctx, cca.fromTo.To()).delete,
+		cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount), nil
 }
 
-type blobDeleter struct {
-	rootURL *url.URL
-	p       pipeline.Pipeline
-	ctx     context.Context
+type remoteResourceDeleter struct {
+	rootURL        *url.URL
+	p              pipeline.Pipeline
+	ctx            context.Context
+	targetLocation common.Location
 }
 
-func newBlobDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx context.Context) *blobDeleter {
-	return &blobDeleter{
-		rootURL: rawRootURL,
-		p:       p,
-		ctx:     ctx,
+func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx context.Context, targetLocation common.Location) *remoteResourceDeleter {
+	return &remoteResourceDeleter{
+		rootURL:        rawRootURL,
+		p:              p,
+		ctx:            ctx,
+		targetLocation: targetLocation,
 	}
 }
 
-func (b *blobDeleter) deleteBlob(object storedObject) error {
-	glcm.Info("Deleting extra blob: " + object.relativePath)
-
-	// construct the blob URL using its relative path
-	// the rootURL could be pointing to a container, or a virtual directory
-	blobURLParts := azblob.NewBlobURLParts(*b.rootURL)
-	blobURLParts.BlobName = path.Join(blobURLParts.BlobName, object.relativePath)
-
-	blobURL := azblob.NewBlobURL(blobURLParts.URL(), b.p)
-	_, err := blobURL.Delete(b.ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
-	return err
+func (b *remoteResourceDeleter) delete(object storedObject) error {
+	glcm.Info("Deleting extra " + b.targetLocation.String() + ": " + object.relativePath)
+	switch b.targetLocation {
+	case common.ELocation.Blob():
+		blobURLParts := azblob.NewBlobURLParts(*b.rootURL)
+		blobURLParts.BlobName = path.Join(blobURLParts.BlobName, object.relativePath)
+		blobURL := azblob.NewBlobURL(blobURLParts.URL(), b.p)
+		_, err := blobURL.Delete(b.ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
+		return err
+	case common.ELocation.File():
+		fileURLParts := azfile.NewFileURLParts(*b.rootURL)
+		fileURLParts.DirectoryOrFilePath = path.Join(fileURLParts.DirectoryOrFilePath, object.relativePath)
+		fileURL := azfile.NewFileURL(fileURLParts.URL(), b.p)
+		_, err := fileURL.Delete(b.ctx)
+		return err
+	default:
+		panic("not implemented, check your code")
+	}
 }

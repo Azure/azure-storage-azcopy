@@ -94,8 +94,18 @@ func inferFromTo(src, dst string) common.FromTo {
 		return common.EFromTo.BlobBlob()
 	case srcLocation == common.ELocation.File() && dstLocation == common.ELocation.Blob():
 		return common.EFromTo.FileBlob()
+	case srcLocation == common.ELocation.Blob() && dstLocation == common.ELocation.File():
+		return common.EFromTo.BlobFile()
+	case srcLocation == common.ELocation.File() && dstLocation == common.ELocation.File():
+		return common.EFromTo.FileFile()
 	case srcLocation == common.ELocation.S3() && dstLocation == common.ELocation.Blob():
 		return common.EFromTo.S3Blob()
+	case srcLocation == common.ELocation.Benchmark() && dstLocation == common.ELocation.Blob():
+		return common.EFromTo.BenchmarkBlob()
+	case srcLocation == common.ELocation.Benchmark() && dstLocation == common.ELocation.File():
+		return common.EFromTo.BenchmarkFile()
+	case srcLocation == common.ELocation.Benchmark() && dstLocation == common.ELocation.BlobFS():
+		return common.EFromTo.BenchmarkBlobFS()
 	}
 	return common.EFromTo.Unknown()
 }
@@ -104,11 +114,11 @@ func inferArgumentLocation(arg string) common.Location {
 	if arg == pipeLocation {
 		return common.ELocation.Pipe()
 	}
-	if startsWith(arg, "https") {
+	if startsWith(arg, "http") {
 		// Let's try to parse the argument as a URL
 		u, err := url.Parse(arg)
 		// NOTE: sometimes, a local path can also be parsed as a url. To avoid thinking it's a URL, check Scheme, Host, and Path
-		if err == nil && u.Scheme != "" || u.Host != "" || u.Path != "" {
+		if err == nil && u.Scheme != "" && u.Host != "" {
 			// Is the argument a URL to blob storage?
 			switch host := strings.ToLower(u.Host); true {
 			// Azure Stack does not have the core.windows.net
@@ -118,21 +128,15 @@ func inferArgumentLocation(arg string) common.Location {
 				return common.ELocation.File()
 			case strings.Contains(host, ".dfs"):
 				return common.ELocation.BlobFS()
+			case strings.Contains(host, benchmarkSourceHost):
+				return common.ELocation.Benchmark()
 			}
 
 			if common.IsS3URL(*u) {
 				return common.ELocation.S3()
 			}
 		}
-	} else {
-		// If we successfully get the argument's file stats, then we'll infer that this argument is a local file
-		//_, err := os.Stat(arg)
-		//if err != nil && !os.IsNotExist(err){
-		//	return ELocation.Unknown()
-		//}
-
-		return common.ELocation.Local()
 	}
 
-	return common.ELocation.Unknown()
+	return common.ELocation.Local()
 }

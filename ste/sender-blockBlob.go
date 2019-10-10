@@ -30,8 +30,9 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type blockBlobSenderBase struct {
@@ -110,12 +111,13 @@ func (s *blockBlobSenderBase) RemoteFileExists() (bool, error) {
 	return remoteObjectExists(s.destBlockBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}))
 }
 
-func (s *blockBlobSenderBase) Prologue(ps common.PrologueState) {
+func (s *blockBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
 	if ps.CanInferContentType() {
 		// sometimes, specifically when reading local files, we have more info
 		// about the file type at this time than what we had before
 		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
 	}
+	return false
 }
 
 func (s *blockBlobSenderBase) Epilogue() {
@@ -123,6 +125,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 
 	s.muBlockIDs.Lock()
 	blockIDs := s.blockIDs
+	s.blockIDs = nil // so we know for sure that only this routine has access after we release the lock (nothing else should need it now, since we're in the epilogue. Nil-ing here is just being defensive)
 	s.muBlockIDs.Unlock()
 	shouldPutBlockList := getPutListNeed(&s.atomicPutListIndicator)
 	if shouldPutBlockList == putListNeedUnknown && !jptm.WasCanceled() {
@@ -131,46 +134,64 @@ func (s *blockBlobSenderBase) Epilogue() {
 	// TODO: finalize and wrap in functions whether 0 is included or excluded in status comparisons
 
 	// commit block list if necessary
-	if jptm.TransferStatus() > 0 && shouldPutBlockList == putListNeeded {
+	if jptm.IsLive() && shouldPutBlockList == putListNeeded {
 		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", blockIDs))
 
 		// commit the blocks.
 		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}); err != nil {
 			jptm.FailActiveSend("Committing block list", err)
-			// don't return, since need cleanup below
+			return
 		}
 	}
 
 	// Set tier
 	// GPv2 or Blob Storage is supported, GPv1 is not supported, can only set to blob without snapshot in active status.
 	// https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
-	if jptm.TransferStatus() > 0 && s.destBlobTier != azblob.AccessTierNone {
+	if jptm.IsLive() && s.destBlobTier != azblob.AccessTierNone {
 		// Set the latest service version from sdk as service version in the context.
 		ctxWithLatestServiceVersion := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
 		_, err := s.destBlockBlobURL.SetTier(ctxWithLatestServiceVersion, s.destBlobTier, azblob.LeaseAccessConditions{})
 		if err != nil {
+			if s.jptm.Info().S2SSrcBlobTier != azblob.AccessTierNone {
+				s.jptm.LogTransferInfo(pipeline.LogError, s.jptm.Info().Source, s.jptm.Info().Destination, "Failed to replicate blob tier at destination. Try transferring with the flag --s2s-preserve-access-tier=false")
+				s2sAccessTierFailureLogStdout.Do(func() {
+					glcm := common.GetLifecycleMgr()
+					glcm.Error("One or more blobs have failed blob tier replication at the destination. Try transferring with the flag --s2s-preserve-access-tier=false")
+				})
+			}
+
 			jptm.FailActiveSendWithStatus("Setting BlockBlob tier", err, common.ETransferStatus.BlobTierFailure())
-			// don't return, because need cleanup below
+			return
 		}
 	}
+}
+
+func (s *blockBlobSenderBase) Cleanup() {
+	jptm := s.jptm
 
 	// Cleanup
-	if jptm.TransferStatus() <= 0 { // TODO: <=0 or <0?
-		// If the transfer status value < 0, then transfer failed with some failure
+	if jptm.IsDeadInflight() {
 		// there is a possibility that some uncommitted blocks will be there
 		// Delete the uncommitted blobs
-		// TODO: should we really do this deletion?  What if we are in an overwrite-existing-blob
-		//    situation. Deletion has very different semantics then, compared to not deleting.
 		deletionContext, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancelFn()
-		_, _ = s.destBlockBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
-		// TODO: question, is it OK to remoe this logging of failures (since there's no adverse effect of failure)
-		//  if stErr, ok := err.(azblob.StorageError); ok && stErr.Response().StatusCode != http.StatusNotFound {
-		// If the delete failed with Status Not Found, then it means there were no uncommitted blocks.
-		// Other errors report that uncommitted blocks are there
-		// bbu.jptm.LogError(bbu.blobURL.String(), "Deleting uncommitted blocks", err)
-		//  }
-
+		if jptm.WasCanceled() {
+			// If we cancelled, and the only blocks that exist are uncommitted, then clean them up.
+			// This prevents customer paying for their storage for a week until they get garbage collected, and it
+			// also prevents any issues with "too many uncommitted blocks" if user tries to upload the blob again in future.
+			// But if there are committed blocks, leave them there (since they still safely represent the state before our job even started)
+			blockList, err := s.destBlockBlobURL.GetBlockList(deletionContext, azblob.BlockListAll, azblob.LeaseAccessConditions{})
+			hasUncommittedOnly := err == nil && len(blockList.CommittedBlocks) == 0 && len(blockList.UncommittedBlocks) > 0
+			if hasUncommittedOnly {
+				jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, "Deleting uncommitted destination blob due to cancellation")
+				// Delete can delete uncommitted blobs.
+				_, _ = s.destBlockBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+			}
+		} else {
+			// TODO: review (one last time) should we really do this?  Or should we just give better error messages on "too many uncommitted blocks" errors
+			jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, "Deleting destination blob due to failure")
+			_, _ = s.destBlockBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+		}
 	}
 }
 

@@ -41,15 +41,14 @@ func (c *RpcCmd) Parse(s string) error {
 
 // This struct represents the job info (a single part) to be sent to the storage engine
 type CopyJobPartOrderRequest struct {
-	Version     Version     // version of the azcopy
-	JobID       JobID       // Guid - job identifier
-	PartNum     PartNumber  // part number of the job
-	IsFinalPart bool        // to determine the final part for a specific job
-	ForceWrite  bool        // to determine if the existing needs to be overwritten or not. If set to true, existing blobs are overwritten
-	Priority    JobPriority // priority of the task
-	FromTo      FromTo
-	Include     map[string]int
-	Exclude     map[string]int
+	Version        Version         // version of azcopy
+	JobID          JobID           // Guid - job identifier
+	PartNum        PartNumber      // part number of the job
+	IsFinalPart    bool            // to determine the final part for a specific job
+	ForceWrite     OverwriteOption // to determine if the existing needs to be overwritten or not. If set to true, existing blobs are overwritten
+	AutoDecompress bool            // if true, source data with encodings that represent compression are automatically decompressed when downloading
+	Priority       JobPriority     // priority of the task
+	FromTo         FromTo
 	// list of blobTypes to exclude.
 	ExcludeBlobType []azblob.BlobType
 	SourceRoot      string
@@ -65,6 +64,7 @@ type CopyJobPartOrderRequest struct {
 
 	S2SGetPropertiesInBackend      bool
 	S2SSourceChangeValidation      bool
+	DestLengthValidation           bool
 	S2SInvalidMetadataHandleOption InvalidMetadataHandleOption
 }
 
@@ -82,8 +82,16 @@ type S3CredentialInfo struct {
 	Region   string
 }
 
+type CopyJobPartOrderErrorType string
+
+var ECopyJobPartOrderErrorType CopyJobPartOrderErrorType
+
+func (CopyJobPartOrderErrorType) NoTransfersScheduledErr() CopyJobPartOrderErrorType {
+	return CopyJobPartOrderErrorType("NoTransfersScheduledErr")
+}
+
 type CopyJobPartOrderResponse struct {
-	ErrorMsg   string
+	ErrorMsg   CopyJobPartOrderErrorType
 	JobStarted bool
 }
 
@@ -116,6 +124,7 @@ type JobIDDetails struct {
 	JobId         JobID
 	CommandString string
 	StartTime     int64
+	JobStatus     JobStatus
 }
 
 // ListJobsResponse represent the Job with JobId and
@@ -143,41 +152,42 @@ type ListJobSummaryResponse struct {
 	TransfersCompleted uint32
 	TransfersFailed    uint32
 	TransfersSkipped   uint32
-	BytesOverWire      uint64
-	// sum of the size of transfer completed successfully so far.
+
+	// includes bytes sent in retries (i.e. has double counting, if there are retries) and in failed transfers
+	BytesOverWire uint64
+
+	// does not include failed transfers or bytes sent in retries (i.e. no double counting). Includes successful transfers and transfers in progress
 	TotalBytesTransferred uint64
+
 	// sum of the total transfer enumerated so far.
 	TotalBytesEnumerated uint64
-	FailedTransfers      []TransferDetail
-	SkippedTransfers     []TransferDetail
-	PerfConstraint       PerfConstraint
-	PerfStrings          []string `json:"-"`
+	// sum of total bytes expected in the job (i.e. based on our current expectation of which files will be successful)
+	TotalBytesExpected uint64
+
+	PercentComplete float32
+
+	// Stats measured from the network pipeline
+	// Values are all-time values, for the duration of the job.
+	// Will be zero if read outside the process running the job (e.g. with 'jobs show' command)
+	AverageIOPS            int
+	AverageE2EMilliseconds int
+	ServerBusyPercentage   float32
+	NetworkErrorPercentage float32
+
+	FailedTransfers  []TransferDetail
+	SkippedTransfers []TransferDetail
+	PerfConstraint   PerfConstraint
+	PerfStrings      []string `json:"-"`
+
+	PerformanceAdvice []PerformanceAdvice
+	IsCleanupJob      bool
 }
 
-// represents the JobProgressPercentage Summary response for list command when requested the Job Progress Summary for given JobId
+// wraps the standard ListJobSummaryResponse with sync-specific stats
 type ListSyncJobSummaryResponse struct {
-	ErrorMsg  string
-	Timestamp time.Time `json:"-"`
-	JobID     JobID     `json:"-"`
-	// TODO: added for debugging purpose. remove later
-	ActiveConnections int64
-	// CompleteJobOrdered determines whether the Job has been completely ordered or not
-	CompleteJobOrdered       bool
-	JobStatus                JobStatus
-	CopyTotalTransfers       uint32
-	CopyTransfersCompleted   uint32
-	CopyTransfersFailed      uint32
-	BytesOverWire            uint64
+	ListJobSummaryResponse
 	DeleteTotalTransfers     uint32
 	DeleteTransfersCompleted uint32
-	DeleteTransfersFailed    uint32
-	FailedTransfers          []TransferDetail
-	PerfConstraint           PerfConstraint
-	PerfStrings              []string `json:"-"`
-	// sum of the size of transfer completed successfully so far.
-	TotalBytesTransferred uint64
-	// sum of the total transfer enumerated so far.
-	TotalBytesEnumerated uint64
 }
 
 type ListJobTransfersRequest struct {

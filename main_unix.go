@@ -27,6 +27,8 @@ import (
 	"os"
 	"path"
 	"syscall"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // ProcessOSSpecificInitialization changes the soft limit for file descriptor for process
@@ -69,7 +71,8 @@ func ProcessOSSpecificInitialization() (int, error) {
 // GetAzCopyAppPath returns the path of Azcopy folder in local appdata.
 // Azcopy folder in local appdata contains all the files created by azcopy locally.
 func GetAzCopyAppPath() string {
-	localAppData := os.Getenv("HOME")
+	lcm := common.GetLifecycleMgr()
+	localAppData := lcm.GetEnvironmentVariable(common.EEnvironmentVariable.UserDir())
 	azcopyAppDataFolder := path.Join(localAppData, ".azcopy")
 	if err := os.Mkdir(azcopyAppDataFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
 		return ""

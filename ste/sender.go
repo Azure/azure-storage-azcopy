@@ -24,6 +24,8 @@ import (
 	"errors"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/azblob"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
@@ -44,13 +46,22 @@ type ISenderBase interface {
 	// Implementation should do any initialization that is necessary - e.g.
 	// creating the remote file for those destinations that require an explicit
 	// creation step.
-	Prologue(state common.PrologueState)
+	// Implementations MUST return true if they may have modified the destination (i.e. false should only be returned if you KNOW you have not)
+	Prologue(state common.PrologueState) (destinationModified bool)
 
 	// Epilogue will be called automatically once we know all the chunk funcs have been processed.
+	// This should handle any service-specific cleanup.
+	// jptm cleanup is handled in Cleanup() now.
+	Epilogue()
+
+	// Cleanup will be called after epilogue.
 	// Implementation should interact with its jptm to do
 	// post-success processing if transfer has been successful so far,
 	// or post-failure processing otherwise.
-	Epilogue()
+	Cleanup()
+
+	// GetDestinationLength returns a integer containing the length of the file at the remote location
+	GetDestinationLength() (int64, error)
 }
 
 type senderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error)
@@ -143,8 +154,38 @@ func createChunkFunc(setDoneStatusOnExit bool, jptm IJobPartTransferMgr, id comm
 				defer jptm.LogChunkStatus(id, common.EWaitReason.ChunkDone())
 			}
 		}
+
+		// tell the jptm that the destination should be assumed to have been modified
+		// (this is necessary for those cases where the prologue does not modify the dest, so the flag will not have been set at prologue time)
+		// It's idempotent, so we call it every time rather than, say, test OffsetInFile and assume that id.OffsetInFile == 0 will always run first.
+		jptm.SetDestinationIsModified()
+
 		// END standard prefix
 
 		body()
+	}
+}
+
+// newBlobUploader detects blob type and creates a uploader manually
+func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
+	override := jptm.BlobTypeOverride()
+	intendedType := override.ToAzBlobType()
+
+	if override == common.EBlobType.Detect() {
+		intendedType = inferBlobType(jptm.Info().Source, azblob.BlobBlockBlob)
+		// jptm.LogTransferInfo(fmt.Sprintf("Autodetected %s blob type as %s.", jptm.Info().Source , intendedType))
+		// TODO: Log these? @JohnRusk and @zezha-msft this creates quite a bit of spam in the logs but is important info.
+		// TODO: Perhaps we should log it only if it isn't a block blob?
+	}
+
+	switch intendedType {
+	case azblob.BlobBlockBlob:
+		return newBlockBlobUploader(jptm, destination, p, pacer, sip)
+	case azblob.BlobPageBlob:
+		return newPageBlobUploader(jptm, destination, p, pacer, sip)
+	case azblob.BlobAppendBlob:
+		return newAppendBlobUploader(jptm, destination, p, pacer, sip)
+	default:
+		return newBlockBlobUploader(jptm, destination, p, pacer, sip) // If no blob type was inferred, assume block blob.
 	}
 }

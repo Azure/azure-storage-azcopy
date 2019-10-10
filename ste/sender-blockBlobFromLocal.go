@@ -24,8 +24,9 @@ import (
 	"bytes"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type blockBlobUploader struct {
@@ -121,16 +122,26 @@ func (u *blockBlobUploader) Epilogue() {
 
 	shouldPutBlockList := getPutListNeed(&u.atomicPutListIndicator)
 
-	if jptm.TransferStatus() > 0 && shouldPutBlockList == putListNeeded {
+	if jptm.IsLive() && shouldPutBlockList == putListNeeded {
 
 		md5Hash, ok := <-u.md5Channel
 		if ok {
 			u.headersToApply.ContentMD5 = md5Hash
 		} else {
 			jptm.FailActiveSend("Getting hash", errNoHash)
-			// don't return, since need cleanup below
+			return
 		}
 	}
 
 	u.blockBlobSenderBase.Epilogue()
+}
+
+func (u *blockBlobUploader) GetDestinationLength() (int64, error) {
+	prop, err := u.destBlockBlobURL.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{})
+
+	if err != nil {
+		return -1, err
+	}
+
+	return prop.ContentLength(), nil
 }

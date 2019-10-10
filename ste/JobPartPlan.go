@@ -14,7 +14,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 7
+const DataSchemaVersion common.Version = 9
 
 const (
 	CustomHeaderMaxBytes = 256
@@ -38,19 +38,20 @@ func (mmf *JobPartPlanMMF) Unmap() { (*common.MMF)(mmf).Unmap() }
 // JobPartPlanHeader represents the header of Job Part's memory-mapped file
 type JobPartPlanHeader struct {
 	// Once set, the following fields are constants; they should never be modified
-	Version               common.Version     // The version of data schema format of header; see the dataSchemaVersion constant
-	StartTime             int64              // The start time of this part
-	JobID                 common.JobID       // Job Part's JobID
-	PartNum               common.PartNumber  // Job Part's part number (0+)
-	SourceRootLength      uint16             // The length of the source root path
-	SourceRoot            [1000]byte         // The root directory of the source
-	DestinationRootLength uint16             // The length of the destination root path
-	DestinationRoot       [1000]byte         // The root directory of the destination
-	IsFinalPart           bool               // True if this is the Job's last part; else false
-	ForceWrite            bool               // True if the existing blobs needs to be overwritten.
-	Priority              common.JobPriority // The Job Part's priority
-	TTLAfterCompletion    uint32             // Time to live after completion is used to persists the file on disk of specified time after the completion of JobPartOrder
-	FromTo                common.FromTo      // The location of the transfer's source & destination
+	Version               common.Version         // The version of data schema format of header; see the dataSchemaVersion constant
+	StartTime             int64                  // The start time of this part
+	JobID                 common.JobID           // Job Part's JobID
+	PartNum               common.PartNumber      // Job Part's part number (0+)
+	SourceRootLength      uint16                 // The length of the source root path
+	SourceRoot            [1000]byte             // The root directory of the source
+	DestinationRootLength uint16                 // The length of the destination root path
+	DestinationRoot       [1000]byte             // The root directory of the destination
+	IsFinalPart           bool                   // True if this is the Job's last part; else false
+	ForceWrite            common.OverwriteOption // True if the existing blobs needs to be overwritten.
+	AutoDecompress        bool                   // if true, source data with encodings that represent compression are automatically decompressed when downloading
+	Priority              common.JobPriority     // The Job Part's priority
+	TTLAfterCompletion    uint32                 // Time to live after completion is used to persists the file on disk of specified time after the completion of JobPartOrder
+	FromTo                common.FromTo          // The location of the transfer's source & destination
 	CommandStringLength   uint32
 	NumTransfers          uint32              // The number of transfers in the Job part
 	LogLevel              common.LogLevel     // This Job Part's minimal log level
@@ -61,6 +62,8 @@ type JobPartPlanHeader struct {
 	S2SGetPropertiesInBackend bool
 	// S2SSourceChangeValidation represents whether user wants to check if source has changed after enumerating.
 	S2SSourceChangeValidation bool
+	// DestLengthValidation represents whether the user wants to check if the destination has a different content-length
+	DestLengthValidation bool
 	// S2SInvalidMetadataHandleOption represents how user wants to handle invalid metadata.
 	S2SInvalidMetadataHandleOption common.InvalidMetadataHandleOption
 
@@ -117,14 +120,16 @@ func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (sour
 	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) // Address of Job Part Plan + this transfer's src string offset
 	sh.Len = int(jppt.SrcLength)
 	sh.Cap = sh.Len
+	srcRelative := string(srcSlice)
 
 	dstSlice := []byte{}
 	sh = (*reflect.SliceHeader)(unsafe.Pointer(&dstSlice))
 	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) + uintptr(jppt.SrcLength) // Address of Job Part Plan + this transfer's src string offset + length of this transfer's src string
 	sh.Len = int(jppt.DstLength)
 	sh.Cap = sh.Len
+	dstRelative := string(dstSlice)
 
-	return srcRoot + string(srcSlice), dstRoot + string(dstSlice)
+	return common.GenerateFullPath(srcRoot, srcRelative), common.GenerateFullPath(dstRoot, dstRelative)
 }
 
 func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
@@ -140,13 +145,14 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
 // TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder
 // TODO: Refactor return type to an object
 func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType, blobTier azblob.AccessTierType,
-	s2sGetPropertiesInBackend bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption) {
+	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption) {
 	var err error
 	t := jpph.Transfer(transferIndex)
 
 	s2sGetPropertiesInBackend = jpph.S2SGetPropertiesInBackend
 	s2sSourceChangeValidation = jpph.S2SSourceChangeValidation
 	s2sInvalidMetadataHandleOption = jpph.S2SInvalidMetadataHandleOption
+	DestLengthValidation = jpph.DestLengthValidation
 
 	offset := t.SrcOffset + int64(t.SrcLength) + int64(t.DstLength)
 

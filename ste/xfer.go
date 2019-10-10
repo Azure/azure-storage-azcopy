@@ -21,10 +21,14 @@
 package ste
 
 import (
-	"fmt"
+	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/azblob"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
@@ -46,6 +50,10 @@ const DownloadMaxRetryDelay = time.Second * 60
 
 // pacer related
 const PacerTimeToWaitInMs = 50
+
+// CPK logging related.
+// Sync.Once is used so we only log a CPK error once and prevent gumming up stdout
+var cpkAccessFailureLogGLCM sync.Once
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -72,37 +80,98 @@ func parameterizeSend(targetFunction newJobXferWithSenderFactory, sf senderFacto
 
 // the xfer factory is generated based on the type of source and destination
 func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
-	switch fromTo {
-	case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
-		return parameterizeDownload(remoteToLocal, newBlobDownloader)
-	case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
-		switch blobType {
-		case common.EBlobType.None(),
-			common.EBlobType.BlockBlob():
-			return parameterizeSend(anyToRemote, newBlockBlobUploader, newLocalSourceInfoProvider)
-		case common.EBlobType.PageBlob():
-			return parameterizeSend(anyToRemote, newPageBlobUploader, newLocalSourceInfoProvider)
-		case common.EBlobType.AppendBlob():
-			return parameterizeSend(anyToRemote, newAppendBlobUploader, newLocalSourceInfoProvider)
+
+	const blobFSNotS2S = "blobFS not supported as S2S source"
+
+	//local helper functions
+
+	getDownloader := func(sourceType common.Location) downloaderFactory {
+		switch sourceType {
+		case common.ELocation.Blob():
+			return newBlobDownloader
+		case common.ELocation.File():
+			return newAzureFilesDownloader
+		case common.ELocation.BlobFS():
+			return newBlobFSDownloader
+		default:
+			panic("unexpected source type")
 		}
-	case common.EFromTo.BlobTrash():
-		return DeleteBlobPrologue
-	case common.EFromTo.FileLocal(): // download from Azure File to local file system
-		return parameterizeDownload(remoteToLocal, newAzureFilesDownloader)
-	case common.EFromTo.LocalFile(): // upload from local file system to Azure File
-		return parameterizeSend(anyToRemote, newAzureFilesUploader, newLocalSourceInfoProvider)
-	case common.EFromTo.FileTrash():
-		return DeleteFilePrologue
-	case common.EFromTo.LocalBlobFS():
-		return parameterizeSend(anyToRemote, newBlobFSUploader, newLocalSourceInfoProvider)
-	case common.EFromTo.BlobFSLocal():
-		return parameterizeDownload(remoteToLocal, newBlobFSDownloader)
-	case common.EFromTo.BlobBlob():
-		return parameterizeSend(anyToRemote, newURLToBlobCopier, newBlobSourceInfoProvider)
-	case common.EFromTo.FileBlob():
-		return parameterizeSend(anyToRemote, newURLToBlobCopier, newFileSourceInfoProvider)
-	case common.EFromTo.S3Blob():
-		return parameterizeSend(anyToRemote, newURLToBlobCopier, newS3SourceInfoProvider)
 	}
-	panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
+
+	getSenderFactory := func(fromTo common.FromTo) senderFactory {
+		isFromRemote := fromTo.From().IsRemote()
+		if isFromRemote {
+			// sending from remote = doing an S2S copy
+			switch fromTo.To() {
+			case common.ELocation.Blob(),
+				common.ELocation.S3():
+				return newURLToBlobCopier
+			case common.ELocation.File():
+				return newURLToAzureFileCopier
+			case common.ELocation.BlobFS():
+				panic(blobFSNotS2S)
+			default:
+				panic("unexpected target location type")
+			}
+		} else {
+			// we are uploading
+			switch fromTo.To() {
+			case common.ELocation.Blob():
+				return newBlobUploader
+			case common.ELocation.File():
+				return newAzureFilesUploader
+			case common.ELocation.BlobFS():
+				return newBlobFSUploader
+			default:
+				panic("unexpected target location type")
+			}
+		}
+	}
+
+	getSipFactory := func(sourceType common.Location) sourceInfoProviderFactory {
+		switch sourceType {
+		case common.ELocation.Local():
+			return newLocalSourceInfoProvider
+		case common.ELocation.Benchmark():
+			return newBenchmarkSourceInfoProvider
+		case common.ELocation.Blob():
+			return newBlobSourceInfoProvider
+		case common.ELocation.File():
+			return newFileSourceInfoProvider
+		case common.ELocation.BlobFS():
+			panic(blobFSNotS2S)
+		case common.ELocation.S3():
+			return newS3SourceInfoProvider
+		default:
+			panic("unexpected source type")
+		}
+	}
+
+	// main computeJobXfer logic
+	switch {
+	case fromTo == common.EFromTo.BlobTrash():
+		return DeleteBlobPrologue
+	case fromTo == common.EFromTo.FileTrash():
+		return DeleteFilePrologue
+	default:
+		if fromTo.IsDownload() {
+			return parameterizeDownload(remoteToLocal, getDownloader(fromTo.From()))
+		} else {
+			return parameterizeSend(anyToRemote, getSenderFactory(fromTo), getSipFactory(fromTo.From()))
+		}
+	}
+}
+
+var inferExtensions = map[string]azblob.BlobType{
+	".vhd":  azblob.BlobPageBlob,
+	".vhdx": azblob.BlobPageBlob,
+}
+
+// infers a blob type from the extension specified.
+func inferBlobType(filename string, defaultBlobType azblob.BlobType) azblob.BlobType {
+	if b, ok := inferExtensions[strings.ToLower(filepath.Ext(filename))]; ok {
+		return b
+	}
+
+	return defaultBlobType
 }

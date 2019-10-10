@@ -63,6 +63,9 @@ var DefaultTokenExpiryWithinThreshold = time.Minute * 10
 type UserOAuthTokenManager struct {
 	oauthClient *http.Client
 	credCache   *CredCache
+
+	// Stash the credential info as we delete the environment variable after reading it, and we need to get it multiple times.
+	stashedInfo *OAuthTokenInfo
 }
 
 // NewUserOAuthTokenManagerInstance creates a token manager instance.
@@ -103,6 +106,10 @@ func newAzcopyHTTPClient() *http.Client {
 // 2. Otherwise, try to get token from cache.
 // This method either successfully return token, or return error.
 func (uotm *UserOAuthTokenManager) GetTokenInfo(ctx context.Context) (*OAuthTokenInfo, error) {
+	if uotm.stashedInfo != nil {
+		return uotm.stashedInfo, nil
+	}
+
 	var tokenInfo *OAuthTokenInfo
 	var err error
 	if tokenInfo, err = uotm.getTokenInfoFromEnvVar(ctx); err == nil || !IsErrorEnvVarOAuthTokenInfoNotSet(err) {
@@ -120,6 +127,8 @@ func (uotm *UserOAuthTokenManager) GetTokenInfo(ctx context.Context) (*OAuthToke
 	if tokenInfo == nil || tokenInfo.IsEmpty() {
 		return nil, errors.New("invalid state, cannot get valid token info")
 	}
+
+	uotm.stashedInfo = tokenInfo
 
 	return tokenInfo, nil
 }
@@ -524,14 +533,17 @@ const EnvVarOAuthTokenInfo = "AZCOPY_OAUTH_TOKEN_INFO"
 // ErrorCodeEnvVarOAuthTokenInfoNotSet defines error code when environment variable AZCOPY_OAUTH_TOKEN_INFO is not set.
 const ErrorCodeEnvVarOAuthTokenInfoNotSet = "environment variable AZCOPY_OAUTH_TOKEN_INFO is not set"
 
+var stashedEnvOAuthTokenExists = false
+
 // EnvVarOAuthTokenInfoExists verifies if environment variable for OAuthTokenInfo is specified.
 // The method returns true if the environment variable is set.
 // Note: This is useful for only checking whether the env var exists, please use getTokenInfoFromEnvVar
 // directly in the case getting token info is necessary.
 func EnvVarOAuthTokenInfoExists() bool {
-	if os.Getenv(EnvVarOAuthTokenInfo) == "" {
+	if lcm.GetEnvironmentVariable(EEnvironmentVariable.OAuthTokenInfo()) == "" && !stashedEnvOAuthTokenExists {
 		return false
 	}
+	stashedEnvOAuthTokenExists = true
 	return true
 }
 
@@ -545,14 +557,14 @@ func IsErrorEnvVarOAuthTokenInfoNotSet(err error) bool {
 
 // getTokenInfoFromEnvVar gets token info from environment variable.
 func (uotm *UserOAuthTokenManager) getTokenInfoFromEnvVar(ctx context.Context) (*OAuthTokenInfo, error) {
-	rawToken := os.Getenv(EnvVarOAuthTokenInfo)
+	rawToken := lcm.GetEnvironmentVariable(EEnvironmentVariable.OAuthTokenInfo())
 	if rawToken == "" {
 		return nil, errors.New(ErrorCodeEnvVarOAuthTokenInfoNotSet)
 	}
 
 	// Remove the env var after successfully fetching once,
 	// in case of env var is further spreading into child processes unexpectly.
-	os.Setenv(EnvVarOAuthTokenInfo, "")
+	lcm.ClearEnvironmentVariable(EEnvironmentVariable.OAuthTokenInfo())
 
 	tokenInfo, err := jsonToTokenInfo([]byte(rawToken))
 	if err != nil {

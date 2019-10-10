@@ -36,7 +36,7 @@ import (
 const (
 	defaultLogVerbosityForCopy       = "WARNING"
 	defaultOutputFormatForCopy       = "text"
-	defaultBlobTypeForCopy           = "None"
+	defaultBlobTypeForCopy           = "Detect"
 	defaultBlockBlobTierForCopy      = "None"
 	defaultPageBlobTierForCopy       = "None"
 	defaultS2SPreserveProperties     = true
@@ -47,6 +47,24 @@ const (
 )
 
 var defaultS2SInvalideMetadataHandleOption = common.DefaultInvalidMetadataHandleOption
+
+func (s *cmdIntegrationSuite) SetUpSuite(c *chk.C) {
+	// skip cleaning up the S3 account when not necessary
+	if isS3Disabled() {
+		return
+	}
+
+	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
+
+	// If S3 credentials aren't supplied, we're probably only trying to run Azure tests.
+	// As such, gracefully return here instead of cancelling every test because we couldn't clean up S3.
+	if err != nil {
+		return
+	}
+
+	// Cleanup the source S3 account
+	cleanS3Account(c, s3Client)
+}
 
 func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 	return rawCopyCmdArgs{
@@ -64,6 +82,7 @@ func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 		s2sPreserveProperties:          defaultS2SPreserveProperties,
 		s2sSourceChangeValidation:      defaultS2SSourceChangeValidation,
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
+		forceWrite:                     common.EOverwriteOption.True().String(),
 	}
 }
 
@@ -93,7 +112,7 @@ func validateS2STransfersAreScheduled(c *chk.C, srcDirName string, dstDirName st
 		unescapedDstDir, _ := url.PathUnescape(dstDirName)
 
 		srcRelativeFilePath = strings.Replace(srcRelativeFilePath, unescapedSrcDir, "", 1)
-		dstRelativeFilePath = strings.Replace(srcRelativeFilePath, unescapedDstDir, "", 1)
+		dstRelativeFilePath = strings.Replace(dstRelativeFilePath, unescapedDstDir, "", 1)
 
 		if debugMode {
 			fmt.Println("srcRelativeFilePath: ", srcRelativeFilePath)
@@ -116,8 +135,11 @@ func printTransfers(ts []string) {
 }
 
 func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolved(c *chk.C) {
+	skipIfS3Disabled(c)
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		c.Skip("S3 client credentials not supplied")
+	}
 
 	invalidPrefix := "invalid---bucketname.for---azure"
 	resolvedPrefix := "invalid-3-bucketname-for-3-azure"
@@ -125,7 +147,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 	// Generate source bucket
 	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
 	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName)
+	defer deleteBucket(c, s3Client, bucketName, true)
 
 	objectList := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName, "", false)
 	c.Assert(len(objectList), chk.Not(chk.Equals), 0)
@@ -166,8 +188,11 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 }
 
 func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketNameNeedBeResolved(c *chk.C) {
+	skipIfS3Disabled(c)
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		c.Skip("S3 client credentials not supplied")
+	}
 
 	invalidPrefix := "invalid----bucketname.for-azure"
 	resolvedPrefix := "invalid-4-bucketname-for-azure"
@@ -175,7 +200,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketN
 	// Generate source bucket
 	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
 	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName)
+	defer deleteBucket(c, s3Client, bucketName, true)
 
 	objectList := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName, "", false)
 	c.Assert(len(objectList), chk.Not(chk.Equals), 0)
@@ -188,10 +213,8 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketN
 	// construct the raw input to simulate user input
 	rawSrcS3BucketURL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName) // Use default region
 	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
-	rawSrcS3BucketStrWithWirdcard := strings.Replace(rawSrcS3BucketURL.String(), invalidPrefix, "invalid*", 1)
+	rawSrcS3BucketStrWithWirdcard := strings.Replace(rawSrcS3BucketURL.String(), invalidPrefix, "invalid----*", 1)
 	raw := getDefaultRawCopyInput(rawSrcS3BucketStrWithWirdcard, rawDstBlobServiceURLWithSAS.String())
-
-	fmt.Println(raw.src)
 
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(c, raw, func(err error) {
@@ -221,8 +244,11 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketN
 // This is negative because generateBucketNameWithCustomizedPrefix will return a bucket name with length 63,
 // and resolving logic will resolve -- to -2- which means the length to be 64. This exceeds valid container name, so error will be returned.
 func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolvedNegative(c *chk.C) {
+	skipIfS3Disabled(c)
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		c.Skip("S3 client credentials not supplied")
+	}
 
 	invalidPrefix := "invalid.bucketname--for.azure"
 	// resolvedPrefix := "invalid-bucketname-2-for-azure"
@@ -230,7 +256,8 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 	// Generate source bucket
 	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
 	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName)
+
+	defer deleteBucket(c, s3Client, bucketName, true)
 
 	objectList := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName, "", false)
 	c.Assert(len(objectList), chk.Not(chk.Equals), 0)
@@ -245,22 +272,28 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
 	raw := getDefaultRawCopyInput(rawSrcS3BucketURL.String(), rawDstBlobServiceURLWithSAS.String())
 
-	// bucket should be resolved, and objects should be scheduled for transfer
+	// bucket should not be resolved, and objects should not be scheduled for transfer
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.NotNil)
-		c.Assert(strings.Contains(err.Error(), "the source bucket has invalid name for Azure"), chk.Equals, true)
+
+		loggedError := glcm.(*mockedLifecycleManager).logContainsText("invalid name", time.Second)
+
+		c.Assert(loggedError, chk.Equals, true)
 	})
 }
 
 // Copy from virtual directory to container, with normal encoding ' ' as ' '.
 func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithSpaceInSrcNotEncoded(c *chk.C) {
+	skipIfS3Disabled(c)
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		c.Skip("S3 client credentials not supplied")
+	}
 
 	// Generate source bucket
 	bucketName := generateBucketName()
 	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName)
+	defer deleteBucket(c, s3Client, bucketName, true)
 
 	dstContainerName := generateContainerName()
 
@@ -294,13 +327,16 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithSpaceInSrcNotEncoded(c 
 // '+' is handled in copy.go before extract the SourceRoot.
 // The scheduled transfer would be URL encoded no matter what's the raw source/destination provided by user.
 func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithSpaceInSrcEncodedAsPlus(c *chk.C) {
+	skipIfS3Disabled(c)
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		c.Skip("S3 client credentials not supplied")
+	}
 
 	// Generate source bucket
 	bucketName := generateBucketName()
 	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName)
+	defer deleteBucket(c, s3Client, bucketName, true)
 
 	dstContainerName := generateContainerName()
 
@@ -332,13 +368,16 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithSpaceInSrcEncodedAsPlus
 
 // By design, when source directory contains objects with suffix ‘/’, objects with suffix ‘/’ should be ignored.
 func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithObjectUsingSlashAsSuffix(c *chk.C) {
+	skipIfS3Disabled(c)
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		c.Skip("S3 client credentials not supplied")
+	}
 
 	// Generate source bucket
 	bucketName := generateBucketName()
 	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName)
+	defer deleteBucket(c, s3Client, bucketName, true)
 
 	dstContainerName := generateContainerName()
 
@@ -364,26 +403,26 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithObjectUsingSlashAsSuffi
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(validateObjectList))
 
-		validateS2STransfersAreScheduled(c, "", "", validateObjectList, mockedRPC)
+		validateS2STransfersAreScheduled(c, "", "/"+bucketName, validateObjectList, mockedRPC)
 	})
 }
 
 func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegionsAndListUseDefaultEndpoint(c *chk.C) {
+	skipIfS3Disabled(c)
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
-
-	// Cleanup the source S3 account
-	cleanS3Account(c, s3Client)
+	if err != nil {
+		c.Skip("S3 client credentials not supplied")
+	}
 
 	// Generate source bucket
 	bucketName1 := generateBucketNameWithCustomizedPrefix("default-region")
 	createNewBucketWithName(c, s3Client, bucketName1, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName1)
+	defer deleteBucket(c, s3Client, bucketName1, true)
 
 	bucketName2 := generateBucketNameWithCustomizedPrefix("us-west-2-region")
-	bucketRegion2 := "us-west-2"
+	bucketRegion2 := "us-west-1" // Use different region than other regional test to avoid conflicting
 	createNewBucketWithName(c, s3Client, bucketName2, createS3ResOptions{Location: bucketRegion2})
-	defer deleteBucket(c, s3Client, bucketName2)
+	defer deleteBucket(c, s3Client, bucketName2, true)
 
 	objectList1 := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName1, "", true)
 	c.Assert(len(objectList1), chk.Not(chk.Equals), 0)
@@ -412,23 +451,23 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegio
 }
 
 func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegionsAndListUseSpecificRegion(c *chk.C) {
+	skipIfS3Disabled(c)
 	specificRegion := "us-west-2"
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
-
-	// Cleanup the source S3 account
-	cleanS3Account(c, s3Client)
+	if err != nil {
+		c.Skip("S3 client credentials not supplied")
+	}
 
 	// Generate source bucket
 	bucketName1 := generateBucketNameWithCustomizedPrefix("default-region")
 	createNewBucketWithName(c, s3Client, bucketName1, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName1)
+	defer deleteBucket(c, s3Client, bucketName1, true)
 
 	bucketName2 := generateBucketNameWithCustomizedPrefix(specificRegion)
 	createNewBucketWithName(c, s3Client, bucketName2, createS3ResOptions{Location: specificRegion})
-	defer deleteBucket(c, s3Client, bucketName2)
+	defer deleteBucket(c, s3Client, bucketName2, true)
 
-	time.Sleep(60 * time.Second) // TODO: review and remove this, which was put here as a workaround to issues with buckets being reported as not existing
+	time.Sleep(30 * time.Second) // TODO: review and remove this, which was put here as a workaround to issues with buckets being reported as not existing
 
 	objectList1 := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName1, "", true)
 	c.Assert(len(objectList1), chk.Not(chk.Equals), 0)
@@ -455,13 +494,16 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegio
 }
 
 func (s *cmdIntegrationSuite) TestS2SCopyFromS3ObjectToBlobContainer(c *chk.C) {
+	skipIfS3Disabled(c)
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		c.Skip("S3 client credentials not supplied")
+	}
 
 	// Generate source bucket
 	bucketName := generateBucketName()
 	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName)
+	defer deleteBucket(c, s3Client, bucketName, true)
 
 	dstContainerName := generateContainerName()
 
@@ -535,7 +577,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerPreserveBlobTie
 		c.Assert(err, chk.IsNil)
 
 		validateS2STransfersAreScheduled(c,
-			srcContainerURL.String(), dstContainerURL.String(), []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
+			"", "/"+srcContainerName, []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
 
 		c.Assert(mockedRPC.transfers[0].BlobTier, chk.Equals, azblob.AccessTierCool)
 	})
@@ -572,7 +614,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerNoPreserveBlobT
 		c.Assert(err, chk.IsNil)
 
 		validateS2STransfersAreScheduled(c,
-			srcContainerURL.String(), dstContainerURL.String(), []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
+			"", "/"+srcContainerName, []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
 
 		c.Assert(mockedRPC.transfers[0].BlobTier, chk.Equals, azblob.AccessTierNone)
 	})
@@ -945,7 +987,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromSingleAzureFileToBlobContainer(c *c
 	bsu := getBSU()
 	fsu := getFSU()
 
-	srcShareURL, srcShareName := createNewShare(c, fsu)
+	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
 	defer deleteShare(c, srcShareURL)
 	c.Assert(srcShareURL, chk.NotNil)
 

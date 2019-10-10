@@ -27,11 +27,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
-
-	"path"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -91,13 +91,33 @@ var JobsAdmin interface {
 	// returns the current value of bytesOverWire.
 	BytesOverWire() int64
 
+	AddSuccessfulBytesInActiveFiles(n int64)
+
+	// returns number of bytes successfully transferred in transfers that are currently in progress
+	SuccessfulBytesInActiveFiles() uint64
+
+	MessagesForJobLog() <-chan string
+	LogToJobLog(msg string)
+
 	//DeleteJob(jobID common.JobID)
 	common.ILoggerCloser
+
+	CurrentMainPoolSize() int
+
+	RequestTuneSlowly()
 }
 
-func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrentFilesLimit int, targetRateInMegaBitsPerSec int64, azcopyAppPathFolder string, azcopyLogPathFolder string) {
+func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targetRateInMegaBitsPerSec int64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {
 	if JobsAdmin != nil {
 		panic("initJobsAdmin was already called once")
+	}
+
+	cpuMon := common.NewNullCpuMonitor()
+	// One day, we might monitor CPU as the app runs in all cases (and report CPU as possible constraint like we do with disk).
+	// But for now, we only monitor it when tuning the GR pool size.
+	if concurrency.AutoTuneMainPool() && concurrency.CheckCpuWhenTuing.Value {
+		// let our CPU monitor self-calibrate BEFORE we start doing any real work TODO: remove if we switch to gopsutil
+		cpuMon = common.NewCalibratedCpuUsageMonitor()
 	}
 
 	const channelSize = 100000
@@ -118,27 +138,7 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrent
 	normalTransferCh, normalChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
 	lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
 
-	// Create suicide channel which is used to scale back on the number of workers
-	suicideCh := make(chan SuicideJob, concurrentConnections)
-
-	planDir := path.Join(azcopyAppPathFolder, "plans")
-	if err := os.Mkdir(planDir, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
-		common.PanicIfErr(err)
-	}
-
-	// TODO: make ram usage configurable, with the following as just the default
-	// Decide on a max amount of RAM we are willing to use. This functions as a cap, and prevents excessive usage.
-	// There's no measure of physical RAM in the STD library, so we guestimate conservatively, based on  CPU count (logical, not phyiscal CPUs)
-	// Note that, as at Feb 2019, the multiSizeSlicePooler uses additional RAM, over this level, since it includes the cache of
-	// currently-unnused, re-useable slices, that is not tracked by cacheLimiter.
-	// Also, block sizes that are not powers of two result in extra usage over and above this limit. (E.g. 100 MB blocks each
-	// count 100 MB towards this limit, but actually consume 128 MB)
-	const gbToUsePerCpu = 0.5 // should be enough to support the amount of traffic 1 CPU can drive, and also less than the typical installed RAM-per-CPU
-	gbToUse := float32(runtime.NumCPU()) * gbToUsePerCpu
-	if gbToUse > 16 {
-		gbToUse = 16 // cap it. Even 6 is enough at 10 Gbps with standard 8MB chunk size, but we need allow extra here to help if larger blob block sizes are selected by user, since then we need more memory to get enough chunks to have enough network-level concurrency
-	}
-	maxRamBytesToUse := int64(gbToUse * 1024 * 1024 * 1024)
+	maxRamBytesToUse := getMaxRamForChunks()
 
 	// default to a pacer that doesn't actually control the rate
 	// (it just records total throughput, since for historical reasons we do that in the pacer)
@@ -153,15 +153,19 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrent
 	}
 
 	ja := &jobsAdmin{
-		logger:           common.NewAppLogger(pipeline.LogInfo, azcopyLogPathFolder),
-		jobIDToJobMgr:    newJobIDToJobMgr(),
-		logDir:           azcopyLogPathFolder,
-		planDir:          planDir,
-		pacer:            pacer,
-		slicePool:        common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
-		cacheLimiter:     common.NewCacheLimiter(maxRamBytesToUse),
-		fileCountLimiter: common.NewCacheLimiter(int64(concurrentFilesLimit)),
-		appCtx:           appCtx,
+		concurrency:             concurrency,
+		logger:                  common.NewAppLogger(pipeline.LogInfo, azcopyLogPathFolder),
+		jobIDToJobMgr:           newJobIDToJobMgr(),
+		logDir:                  azcopyLogPathFolder,
+		planDir:                 azcopyJobPlanFolder,
+		pacer:                   pacer,
+		slicePool:               common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
+		cacheLimiter:            common.NewCacheLimiter(maxRamBytesToUse),
+		fileCountLimiter:        common.NewCacheLimiter(int64(concurrency.MaxOpenDownloadFiles)),
+		cpuMonitor:              cpuMon,
+		appCtx:                  appCtx,
+		commandLineMbpsCap:      targetRateInMegaBitsPerSec,
+		provideBenchmarkResults: providePerfAdvice,
 		coordinatorChannels: CoordinatorChannels{
 			partsChannel:     partsCh,
 			normalTransferCh: normalTransferCh,
@@ -173,11 +177,24 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrent
 			lowTransferCh:    lowTransferCh,
 			normalChunckCh:   normalChunkCh,
 			lowChunkCh:       lowChunkCh,
-			suicideCh:        suicideCh,
 		},
+		poolSizingChannels: poolSizingChannels{ // all deliberately unbuffered, because pool sizer routine works in lock-step with these - processing them as they happen, never catching up on populated buffer later
+			entryNotificationCh: make(chan struct{}),
+			exitNotificationCh:  make(chan struct{}),
+			scalebackRequestCh:  make(chan struct{}),
+			requestSlowTuneCh:   make(chan struct{}),
+		},
+		workaroundJobLoggingChannel: make(chan string, 1000), // workaround to support logging from JobsAdmin
 	}
 	// create new context with the defaultService api version set as value to serviceAPIVersionOverride in the app context.
 	ja.appCtx = context.WithValue(ja.appCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
+
+	// create concurrency tuner...
+	// ... but don't spin up the main pool. That is done when
+	// the first piece of work actually arrives. Why do it then?
+	// So that we don't start tuning with no traffic to process, since doing so skews
+	// the tuning results and, in the worst case, leads to "completion" of tuning before any traffic has been sent.
+	ja.concurrencyTuner = ja.createConcurrencyTuner()
 
 	JobsAdmin = ja
 
@@ -187,20 +204,50 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrent
 	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
 	// the Channel and schedules the transfers of that JobPart.
 	go ja.scheduleJobParts()
-	// Spin up the desired number of executionEngine workers to process chunks
-	for cc := 0; cc < concurrentConnections; cc++ {
-		go ja.chunkProcessor(cc)
-	}
-	// Spin up a separate set of workers to process initiation of transfers (so that transfer initiation can't starve
-	// out progress on already-scheduled chunks. (Not sure whether that can really happen, but this protects against it
-	// anyway.)
+
+	// In addition to the main pool (which is governed ja.poolSizer), we spin up a separate set of workers to process initiation of transfers
+	// (so that transfer initiation can't starve out progress on already-scheduled chunks.
+	// (Not sure whether that can really happen, but this protects against it anyway.)
 	// Perhaps MORE importantly, doing this separately gives us more CONTROL over how we interact with the file system.
-	for cc := 0; cc < NumTransferInitiationRoutines; cc++ {
+	for cc := 0; cc < concurrency.TransferInitiationPoolSize.Value; cc++ {
 		go ja.transferProcessor(cc)
 	}
 }
 
-const NumTransferInitiationRoutines = 64 // TODO make this configurable
+// Decide on a max amount of RAM we are willing to use. This functions as a cap, and prevents excessive usage.
+// There's no measure of physical RAM in the STD library, so we guestimate conservatively, based on  CPU count (logical, not phyiscal CPUs)
+// Note that, as at Feb 2019, the multiSizeSlicePooler uses additional RAM, over this level, since it includes the cache of
+// currently-unnused, re-useable slices, that is not tracked by cacheLimiter.
+// Also, block sizes that are not powers of two result in extra usage over and above this limit. (E.g. 100 MB blocks each
+// count 100 MB towards this limit, but actually consume 128 MB)
+func getMaxRamForChunks() int64 {
+
+	// return the user-specified override value, if any
+	envVar := common.EEnvironmentVariable.BufferGB()
+	overrideString := common.GetLifecycleMgr().GetEnvironmentVariable(envVar)
+	if overrideString != "" {
+		overrideValue, err := strconv.ParseFloat(overrideString, 64)
+		if err != nil {
+			common.GetLifecycleMgr().Error(fmt.Sprintf("Cannot parse environment variable %s, due to error %s", envVar.Name, err))
+		} else {
+			return int64(overrideValue * 1024 * 1024 * 1024)
+		}
+	}
+
+	// else use a sensible default
+	// TODO maybe one day measure actual RAM available
+	const gbToUsePerCpu = 0.5 // should be enough to support the amount of traffic 1 CPU can drive, and also less than the typical installed RAM-per-CPU
+	maxTotalGB := float32(16) // Even 6 is enough at 10 Gbps with standard 8MB chunk size, but we need allow extra here to help if larger blob block sizes are selected by user, since then we need more memory to get enough chunks to have enough network-level concurrency
+	if strconv.IntSize == 32 {
+		maxTotalGB = 1 // 32-bit apps can only address 2 GB, and best to leave plenty for needs outside our cache (e.g. running the app itself)
+	}
+	gbToUse := float32(runtime.NumCPU()) * gbToUsePerCpu
+	if gbToUse > maxTotalGB {
+		gbToUse = maxTotalGB // cap it.
+	}
+	maxRamBytesToUse := int64(gbToUse * 1024 * 1024 * 1024)
+	return maxRamBytesToUse
+}
 
 // QueueJobParts puts the given JobPartManager into the partChannel
 // from where this JobPartMgr will be picked by a routine and
@@ -211,8 +258,16 @@ func (ja *jobsAdmin) QueueJobParts(jpm IJobPartMgr) {
 
 // 1 single goroutine runs this method and InitJobsAdmin  kicks that goroutine off.
 func (ja *jobsAdmin) scheduleJobParts() {
+	startedPoolSizer := false
 	for {
 		jobPart := <-ja.xferChannels.partsChannel
+
+		if !startedPoolSizer {
+			// spin up a GR to co-ordinate dynamic sizing of the main pool
+			// It will automatically spin up the right number of chunk processors
+			go ja.poolSizer(ja.concurrencyTuner)
+			startedPoolSizer = true
+		}
 		// If the job manager is not found for the JobId of JobPart
 		// taken from partsChannel
 		// there is an error in our code
@@ -227,13 +282,142 @@ func (ja *jobsAdmin) scheduleJobParts() {
 	}
 }
 
+func (ja *jobsAdmin) createConcurrencyTuner() ConcurrencyTuner {
+	if ja.concurrency.AutoTuneMainPool() {
+		t := NewAutoConcurrencyTuner(ja.concurrency.InitialMainPoolSize, ja.concurrency.MaxMainPoolSize.Value, ja.provideBenchmarkResults)
+		if !t.RequestCallbackWhenStable(func() { ja.recordTuningCompleted(true) }) {
+			panic("could not register tuning completion callback")
+		}
+		return t
+	} else {
+		ja.recordTuningCompleted(false)
+		return &nullConcurrencyTuner{fixedValue: ja.concurrency.InitialMainPoolSize}
+	}
+}
+
+func (ja *jobsAdmin) recordTuningCompleted(showOutput bool) {
+	// remember how many bytes were transferred during tuning, so we can exclude them from our post-tuning throughput calculations
+	atomic.StoreInt64(&ja.atomicBytesTransferredWhileTuning, ja.BytesOverWire())
+	atomic.StoreInt64(&ja.atomicTuningEndSeconds, time.Now().Unix())
+
+	if showOutput {
+		msg := "Automatic concurrency tuning completed."
+		if ja.provideBenchmarkResults {
+			msg += " Recording of performance stats will begin now."
+		}
+		common.GetLifecycleMgr().Info("")
+		common.GetLifecycleMgr().Info(msg)
+		if ja.provideBenchmarkResults {
+			common.GetLifecycleMgr().Info("")
+			common.GetLifecycleMgr().Info("*** After a minute or two, you may cancel the job with CTRL-C to trigger early analysis of the stats. ***")
+			common.GetLifecycleMgr().Info("*** You do not need to wait for whole job to finish.                                                  ***")
+		}
+		common.GetLifecycleMgr().Info("")
+		ja.LogToJobLog(msg)
+	}
+}
+
+// worker that sizes the chunkProcessor pool, dynamically if necessary
+func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
+
+	logConcurrency := func(targetConcurrency int, reason string) {
+		switch reason {
+		case concurrencyReasonNone,
+			concurrencyReasonFinished,
+			concurrencyReasonTunerDisabled:
+			return
+		default:
+			msg := fmt.Sprintf("Trying %d concurrent connections (%s)", targetConcurrency, reason)
+			common.GetLifecycleMgr().Info(msg)
+			ja.LogToJobLog(msg)
+		}
+	}
+
+	nextWorkerId := 0
+	actualConcurrency := 0
+	lastBytesOnWire := int64(0)
+	lastBytesTime := time.Now()
+	hasHadTimeToStablize := false
+	initialMonitoringInterval := time.Duration(4 * time.Second)
+	expandedMonitoringInterval := time.Duration(8 * time.Second)
+	throughputMonitoringInterval := initialMonitoringInterval
+
+	// get initial pool size
+	targetConcurrency, reason := tuner.GetRecommendedConcurrency(-1, ja.cpuMonitor.CPUContentionExists())
+	logConcurrency(targetConcurrency, reason)
+
+	// loop for ever, driving the actual concurrency towards the most up-to-date target
+	for {
+		// add or remove a worker if necessary
+		if actualConcurrency < targetConcurrency {
+			hasHadTimeToStablize = false
+			nextWorkerId++
+			go ja.chunkProcessor(nextWorkerId) // TODO: make sure this numbering is OK, even if we grow and shrink the pool (the id values don't matter right?)
+		} else if actualConcurrency > targetConcurrency {
+			hasHadTimeToStablize = false
+			ja.poolSizingChannels.scalebackRequestCh <- struct{}{}
+		}
+
+		// wait for something to happen (maybe ack from the worker of the change, else a timer interval)
+		select {
+		case <-ja.poolSizingChannels.entryNotificationCh:
+			// new worker has started
+			actualConcurrency++
+			atomic.StoreInt32(&ja.atomicCurrentMainPoolSize, int32(actualConcurrency))
+		case <-ja.poolSizingChannels.exitNotificationCh:
+			// worker has exited
+			actualConcurrency--
+			atomic.StoreInt32(&ja.atomicCurrentMainPoolSize, int32(actualConcurrency))
+		case <-ja.poolSizingChannels.requestSlowTuneCh:
+			// we've been asked to tune more slowly
+			// TODO: confirm we don't need this: expandedMonitoringInterval *= 2
+			throughputMonitoringInterval = expandedMonitoringInterval
+		case <-time.After(throughputMonitoringInterval):
+			if actualConcurrency == targetConcurrency { // scalebacks can take time. Don't want to do any tuning if actual is not yet aligned to target
+				bytesOnWire := ja.BytesOverWire()
+				if hasHadTimeToStablize {
+					// throughput has had time to stabilize since last change, so we can meaningfully measure and act on throughput
+					elapsedSeconds := time.Since(lastBytesTime).Seconds()
+					bytes := bytesOnWire - lastBytesOnWire
+					megabitsPerSec := (8 * float64(bytes) / elapsedSeconds) / (1000 * 1000)
+					if megabitsPerSec > 4000 {
+						throughputMonitoringInterval = expandedMonitoringInterval // start averaging throughputs over longer time period, since in some tests it takes a little longer to get a good average
+					}
+					targetConcurrency, reason = tuner.GetRecommendedConcurrency(int(megabitsPerSec), ja.cpuMonitor.CPUContentionExists())
+					logConcurrency(targetConcurrency, reason)
+				} else {
+					// we weren't in steady state before, but given that throughputMonitoringInterval has now elapsed,
+					// we'll deem that we are in steady state now (so can start measuring throughput from now)
+					hasHadTimeToStablize = true
+				}
+				lastBytesOnWire = bytesOnWire
+				lastBytesTime = time.Now()
+			}
+		}
+	}
+}
+
+// RequestTuneSlowly is used to ask for a slower rate of auto-concurrency tuning.
+// Necessary because if there's a download or S2S transfer going on, we need to measure throughputs over longer intervals to make
+// the auto tuning work.
+func (ja *jobsAdmin) RequestTuneSlowly() {
+	select {
+	case ja.poolSizingChannels.requestSlowTuneCh <- struct{}{}:
+	default:
+		return // channel already full, so don't need to add our signal there too, it already has one
+	}
+}
+
 // general purpose worker that reads in schedules chunk jobs, and executes chunk jobs
 func (ja *jobsAdmin) chunkProcessor(workerID int) {
+	ja.poolSizingChannels.entryNotificationCh <- struct{}{}                   // say we have started
+	defer func() { ja.poolSizingChannels.exitNotificationCh <- struct{}{} }() // say we have exited
+
 	for {
-		// We check for suicides first to shrink goroutine pool
+		// We check for scalebacks first to shrink goroutine pool
 		// Then, we check chunks: normal & low priority
 		select {
-		case <-ja.xferChannels.suicideCh: // note: as at Dec 2018, this channel is not (yet) used
+		case <-ja.poolSizingChannels.scalebackRequestCh:
 			return
 		default:
 			select {
@@ -274,7 +458,7 @@ func (ja *jobsAdmin) transferProcessor(workerID int) {
 	}
 
 	for {
-		// No suicide check here, because this routine runs only in a small number of goroutines, so no need to kill them off
+		// No scaleback check here, because this routine runs only in a small number of goroutines, so no need to kill them off
 		select {
 		case jptm := <-ja.xferChannels.normalTransferCh:
 			startTransfer(jptm)
@@ -294,18 +478,29 @@ func (ja *jobsAdmin) transferProcessor(workerID int) {
 // There will be only 1 instance of the jobsAdmin type.
 // The coordinator uses this to manage all the running jobs and their job parts.
 type jobsAdmin struct {
-	logger        common.ILoggerCloser
-	jobIDToJobMgr jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
+	atomicSuccessfulBytesInActiveFiles int64
+	atomicBytesTransferredWhileTuning  int64
+	atomicTuningEndSeconds             int64
+	atomicCurrentMainPoolSize          int32 // align 64 bit integers for 32 bit arch
+	concurrency                        ConcurrencySettings
+	logger                             common.ILoggerCloser
+	jobIDToJobMgr                      jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
 	// Other global state can be stored in more fields here...
-	logDir              string // Where log files are stored
-	planDir             string // Initialize to directory where Job Part Plans are stored
-	coordinatorChannels CoordinatorChannels
-	xferChannels        XferChannels
-	appCtx              context.Context
-	pacer               pacerAdmin
-	slicePool           common.ByteSlicePooler
-	cacheLimiter        common.CacheLimiter
-	fileCountLimiter    common.CacheLimiter
+	logDir                      string // Where log files are stored
+	planDir                     string // Initialize to directory where Job Part Plans are stored
+	coordinatorChannels         CoordinatorChannels
+	xferChannels                XferChannels
+	poolSizingChannels          poolSizingChannels
+	appCtx                      context.Context
+	pacer                       pacerAdmin
+	slicePool                   common.ByteSlicePooler
+	cacheLimiter                common.CacheLimiter
+	fileCountLimiter            common.CacheLimiter
+	workaroundJobLoggingChannel chan string
+	concurrencyTuner            ConcurrencyTuner
+	commandLineMbpsCap          int64
+	provideBenchmarkResults     bool
+	cpuMonitor                  common.CPUMonitor
 }
 
 type CoordinatorChannels struct {
@@ -320,10 +515,14 @@ type XferChannels struct {
 	lowTransferCh    <-chan IJobPartTransferMgr // Read-only
 	normalChunckCh   chan chunkFunc             // Read-write
 	lowChunkCh       chan chunkFunc             // Read-write
-	suicideCh        <-chan SuicideJob          // Read-only
 }
 
-type SuicideJob struct{}
+type poolSizingChannels struct {
+	entryNotificationCh chan struct{}
+	exitNotificationCh  chan struct{}
+	scalebackRequestCh  chan struct{}
+	requestSlowTuneCh   chan struct{}
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -363,7 +562,7 @@ func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
 		func() IJobMgr {
 			// Return existing or new IJobMgr to caller
-			return newJobMgr(ja.logger, jobID, ja.appCtx, level, commandString, ja.logDir)
+			return newJobMgr(ja.concurrency, ja.logger, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir)
 		})
 }
 
@@ -393,6 +592,18 @@ func (ja *jobsAdmin) ScheduleChunk(priority common.JobPriority, chunkFunc chunkF
 
 func (ja *jobsAdmin) BytesOverWire() int64 {
 	return ja.pacer.GetTotalTraffic()
+}
+
+func (ja *jobsAdmin) AddSuccessfulBytesInActiveFiles(n int64) {
+	atomic.AddInt64(&ja.atomicSuccessfulBytesInActiveFiles, n)
+}
+
+func (ja *jobsAdmin) SuccessfulBytesInActiveFiles() uint64 {
+	n := atomic.LoadInt64(&ja.atomicSuccessfulBytesInActiveFiles)
+	if n < 0 {
+		n = 0 // should never happen, but would result in nasty over/underflow if it did
+	}
+	return uint64(n)
 }
 
 func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string) bool {
@@ -500,6 +711,10 @@ func (ja *jobsAdmin) Log(level pipeline.LogLevel, msg string) { ja.logger.Log(le
 func (ja *jobsAdmin) Panic(err error)                         { ja.logger.Panic(err) }
 func (ja *jobsAdmin) CloseLog()                               { ja.logger.CloseLog() }
 
+func (ja *jobsAdmin) CurrentMainPoolSize() int {
+	return int(atomic.LoadInt32(&ja.atomicCurrentMainPoolSize))
+}
+
 func (ja *jobsAdmin) slicePoolPruneLoop() {
 	// if something in the pool has been unused for this long, we probably don't need it
 	const pruneInterval = 5 * time.Second
@@ -515,6 +730,22 @@ func (ja *jobsAdmin) slicePoolPruneLoop() {
 			break
 		}
 	}
+}
+
+// TODO: review or replace (or confirm to leave as is?)  Originally, JobAdmin couldn't use invidual job logs because there could
+// be several concurrent jobs running. That's not the case any more, so this is safe now, but it does't quite fit with the
+// architecture around it.
+func (ja *jobsAdmin) LogToJobLog(msg string) {
+	select {
+	case ja.workaroundJobLoggingChannel <- msg:
+		// done, we have passed it off to get logged
+	default:
+		// channel buffer is full, have to drop this message
+	}
+}
+
+func (ja *jobsAdmin) MessagesForJobLog() <-chan string {
+	return ja.workaroundJobLoggingChannel
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -584,63 +815,3 @@ func (j *jobIDToJobMgr) Iterate(write bool, f func(k common.JobID, v IJobMgr)) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/*func goroutinePoolTest() {
-	const maxGoroutines = 10
-	gp, die := &GoroutinePool{}, make(chan struct{}, maxGoroutines)
-	setConcurrency := func(desiredConcurrency int32) {
-		goroutinesToAdd := gp.Concurrency(desiredConcurrency)
-		for g := int32(0); g < goroutinesToAdd; g++ {
-			go worker(die)
-		}
-		for g := int32(0); g > goroutinesToAdd; g-- {
-			die <- struct{}{}
-		}
-	}
-
-	setConcurrency(2)
-	time.Sleep(10 * time.Second)
-
-	setConcurrency(10)
-	time.Sleep(10 * time.Second)
-
-	setConcurrency(1)
-	time.Sleep(10 * time.Second)
-
-	setConcurrency(0)
-	time.Sleep(30 * time.Second)
-}
-
-var goroutinesInPool int32
-
-func worker(die <-chan struct{}) {
-	atomic.AddInt32(&goroutinesInPool, 1)
-loop:
-	for {
-		fmt.Printf("Count #%d\n", atomic.LoadInt32(&goroutinesInPool))
-		select {
-		case <-die:
-			break loop
-		default:
-			time.Sleep(time.Second * 4)
-		}
-	}
-	fmt.Printf("Count %d\n", atomic.AddInt32(&goroutinesInPool, -1))
-}
-
-type GoroutinePool struct {
-	nocopy      common.NoCopy
-	concurrency int32
-}
-
-// Concurrency sets the desired concurrency and returns the number of goroutines that should be
-// added/removed to achieve the desired concurrency. If this method returns a positive number,
-// add the number of specified goroutines to the pool. If this method returns a negative number,
-// kill the number of specified goroutines from the pool.
-func (gp *GoroutinePool) Concurrency(concurrency int32) int32 {
-	if concurrency < 0 {
-		panic("concurrency must be >= 0")
-	}
-	gp.nocopy.Check()
-	return concurrency - atomic.SwapInt32(&gp.concurrency, concurrency)
-}*/

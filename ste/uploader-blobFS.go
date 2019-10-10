@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -77,7 +78,7 @@ func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.
 					// the default behavior of creating directory is overwrite, unless there is lease, or destination exists, and there is If-None-Match:"*".
 					// Check for overwrite flag correspondingly, if overwrite is true, and fail to recreate directory, report error.
 					// If overwrite is false, and fail to recreate directoroy, report directory already exists.
-					if !jptm.IsForceWriteTrue() {
+					if !jptm.GetOverwriteOption() {
 						if stgErr, ok := err.(azbfs.StorageError); ok && stgErr.Response().StatusCode == http.StatusConflict {
 							jptm.LogUploadError(info.Source, info.Destination, "Directory already exists ", 0)
 							// Mark the transfer as failed with ADLSGen2PathAlreadyExistsFailure
@@ -137,19 +138,21 @@ func (u *blobFSUploader) RemoteFileExists() (bool, error) {
 	return remoteObjectExists(u.fileURL.GetProperties(u.jptm.Context()))
 }
 
-func (u *blobFSUploader) Prologue(state common.PrologueState) {
+func (u *blobFSUploader) Prologue(state common.PrologueState) (destinationModified bool) {
 	jptm := u.jptm
 
-	u.flushThreshold = int64(u.chunkSize * ADLSFlushThreshold)
+	u.flushThreshold = int64(u.chunkSize) * int64(ADLSFlushThreshold)
 
 	h := jptm.BfsDstData(state.LeadingBytes)
 	u.creationTimeHeaders = &h
 	// Create file with the source size
+	destinationModified = true
 	_, err := u.fileURL.Create(u.jptm.Context(), h) // note that "create" actually calls "create path"
 	if err != nil {
 		u.jptm.FailActiveUpload("Creating file", err)
 		return
 	}
+	return
 }
 
 func (u *blobFSUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
@@ -165,7 +168,7 @@ func (u *blobFSUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32,
 		// upload the byte range represented by this chunk
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
-		_, err := u.fileURL.AppendData(jptm.Context(), id.OffsetInFile, body) // note: AppendData is really UpdatePath with "append" action
+		_, err := u.fileURL.AppendData(jptm.Context(), id.OffsetInFile(), body) // note: AppendData is really UpdatePath with "append" action
 		if err != nil {
 			jptm.FailActiveUpload("Uploading range", err)
 			return
@@ -177,7 +180,7 @@ func (u *blobFSUploader) Epilogue() {
 	jptm := u.jptm
 
 	// flush
-	if jptm.TransferStatus() > 0 {
+	if jptm.IsLive() {
 		ss := jptm.Info().SourceSize
 		md5Hash, ok := <-u.md5Channel
 		if ok {
@@ -198,11 +201,14 @@ func (u *blobFSUploader) Epilogue() {
 			jptm.FailActiveUpload("Getting hash", errNoHash) // don't return, since need cleanup below
 		}
 	}
+}
+
+func (u *blobFSUploader) Cleanup() {
+	jptm := u.jptm
 
 	// Cleanup if status is now failed
-	if jptm.TransferStatus() <= 0 {
-		// If the transfer status is less than or equal to 0
-		// then transfer was either failed or cancelled
+	if jptm.IsDeadInflight() {
+		// transfer was either failed or cancelled
 		// the file created in share needs to be deleted, since it's
 		// contents will be at an unknown stage of partial completeness
 		deletionContext, cancelFn := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -212,4 +218,14 @@ func (u *blobFSUploader) Epilogue() {
 			jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the (incomplete) file %s. Failed with error %s", u.fileURL.String(), err.Error()))
 		}
 	}
+}
+
+func (u *blobFSUploader) GetDestinationLength() (int64, error) {
+	prop, err := u.fileURL.GetProperties(u.jptm.Context())
+
+	if err != nil {
+		return -1, err
+	}
+
+	return prop.ContentLength(), nil
 }

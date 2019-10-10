@@ -23,20 +23,21 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/azbfs"
+	minio "github.com/minio/minio-go"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	chk "gopkg.in/check.v1"
-
-	"github.com/minio/minio-go"
 )
 
 const defaultFileSize = 1024
@@ -55,6 +56,23 @@ var specialNames = []string{
 	"お名前は何ですか",
 	"Adın ne",
 	"як вас звати",
+}
+
+// note: this is to emulate the list-of-files flag
+func (scenarioHelper) generateListOfFiles(c *chk.C, fileList []string) (path string) {
+	parentDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
+	c.Assert(err, chk.IsNil)
+
+	// create the file
+	path = common.GenerateFullPath(parentDirName, generateName("listy", 0))
+	err = os.MkdirAll(filepath.Dir(path), os.ModePerm)
+	c.Assert(err, chk.IsNil)
+
+	// pipe content into it
+	content := strings.Join(fileList, "\n")
+	err = ioutil.WriteFile(path, []byte(content), common.DEFAULT_FILE_PERM)
+	c.Assert(err, chk.IsNil)
+	return
 }
 
 func (scenarioHelper) generateLocalDirectory(c *chk.C) (dstDirName string) {
@@ -86,7 +104,7 @@ func (s scenarioHelper) generateLocalFilesFromList(c *chk.C, dirPath string, fil
 	}
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 }
 
 func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c *chk.C, dirPath string, prefix string) (fileList []string) {
@@ -108,7 +126,7 @@ func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c *chk.C, dirPath s
 	}
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 	return
 }
 
@@ -136,6 +154,28 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlob(c *chk.C, containerURL
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
+	time.Sleep(time.Millisecond * 1050)
+	return
+}
+
+func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(c *chk.C, filesystemURL azbfs.FileSystemURL, prefix string) (pathList []string) {
+	pathList = make([]string, 50)
+
+	for i := 0; i < 10; i++ {
+		_, pathName1 := createNewBfsFile(c, filesystemURL, prefix+"top")
+		_, pathName2 := createNewBfsFile(c, filesystemURL, prefix+"sub1/")
+		_, pathName3 := createNewBfsFile(c, filesystemURL, prefix+"sub2/")
+		_, pathName4 := createNewBfsFile(c, filesystemURL, prefix+"sub1/sub3/sub5")
+		_, pathName5 := createNewBfsFile(c, filesystemURL, prefix+specialNames[i])
+
+		pathList[5*i] = pathName1
+		pathList[5*i+1] = pathName2
+		pathList[5*i+2] = pathName3
+		pathList[5*i+3] = pathName4
+		pathList[5*i+4] = pathName5
+	}
+
+	// sleep a bit so that the paths' lmts are guaranteed to be in the past
 	time.Sleep(time.Millisecond * 1500)
 	return
 }
@@ -158,8 +198,47 @@ func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c *chk.C, shareUR
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 	return
+}
+
+func (s scenarioHelper) generateBlobContainersAndBlobsFromLists(c *chk.C, serviceURL azblob.ServiceURL, containerList []string, blobList []string, data string) {
+	for _, containerName := range containerList {
+		curl := serviceURL.NewContainerURL(containerName)
+		_, err := curl.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
+		c.Assert(err, chk.IsNil)
+
+		s.generateBlobsFromList(c, curl, blobList, data)
+	}
+}
+
+func (s scenarioHelper) generateFileSharesAndFilesFromLists(c *chk.C, serviceURL azfile.ServiceURL, shareList []string, fileList []string, data string) {
+	for _, shareName := range shareList {
+		surl := serviceURL.NewShareURL(shareName)
+		_, err := surl.Create(ctx, azfile.Metadata{}, 0)
+		c.Assert(err, chk.IsNil)
+
+		s.generateAzureFilesFromList(c, surl, fileList)
+	}
+}
+
+func (s scenarioHelper) generateFilesystemsAndFilesFromLists(c *chk.C, serviceURL azbfs.ServiceURL, fsList []string, fileList []string, data string) {
+	for _, filesystemName := range fsList {
+		fsURL := serviceURL.NewFileSystemURL(filesystemName)
+		_, err := fsURL.Create(ctx)
+		c.Assert(err, chk.IsNil)
+
+		s.generateBFSPathsFromList(c, fsURL, fileList)
+	}
+}
+
+func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c *chk.C, s3Client *minio.Client, bucketList []string, objectList []string, data string) {
+	for _, bucketName := range bucketList {
+		err := s3Client.MakeBucket(bucketName, "")
+		c.Assert(err, chk.IsNil)
+
+		s.generateObjects(c, s3Client, bucketName, objectList)
+	}
 }
 
 // create the demanded blobs
@@ -173,7 +252,7 @@ func (scenarioHelper) generateBlobsFromList(c *chk.C, containerURL azblob.Contai
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 }
 
 func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string) {
@@ -204,7 +283,7 @@ func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.Co
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 }
 
 func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string) {
@@ -231,7 +310,7 @@ func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 }
 
 func (scenarioHelper) generateBlockBlobWithAccessTier(c *chk.C, containerURL azblob.ContainerURL, blobName string, accessTier azblob.AccessTierType) {
@@ -264,7 +343,7 @@ func (scenarioHelper) generateFlatFiles(c *chk.C, shareURL azfile.ShareURL, file
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 }
 
 // make 50 objects with random names
@@ -300,7 +379,7 @@ func (scenarioHelper) generateCommonRemoteScenarioForS3(c *chk.C, client *minio.
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 	return
 }
 
@@ -319,7 +398,26 @@ func (scenarioHelper) generateAzureFilesFromList(c *chk.C, shareURL azfile.Share
 	}
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
+}
+
+func (scenarioHelper) generateBFSPathsFromList(c *chk.C, filesystemURL azbfs.FileSystemURL, fileList []string) {
+	for _, path := range fileList {
+		file := filesystemURL.NewRootDirectoryURL().NewFileURL(path)
+
+		// Create the file
+		cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+		c.Assert(err, chk.IsNil)
+		c.Assert(cResp.StatusCode(), chk.Equals, 201)
+
+		aResp, err := file.AppendData(ctx, 0, strings.NewReader(string(make([]byte, defaultBlobFSFileSizeInBytes))))
+		c.Assert(err, chk.IsNil)
+		c.Assert(aResp.StatusCode(), chk.Equals, 202)
+
+		fResp, err := file.FlushData(ctx, defaultBlobFSFileSizeInBytes, nil, azbfs.BlobFSHTTPHeaders{}, false, true)
+		c.Assert(err, chk.IsNil)
+		c.Assert(fResp.StatusCode(), chk.Equals, 200)
+	}
 }
 
 // Golang does not have sets, so we have to use a map to fulfill the same functionality
@@ -338,6 +436,14 @@ func (scenarioHelper) shaveOffPrefix(list []string, prefix string) []string {
 		cleanList[i] = strings.TrimPrefix(item, prefix)
 	}
 	return cleanList
+}
+
+func (scenarioHelper) addPrefix(list []string, prefix string) []string {
+	modifiedList := make([]string, len(list))
+	for i, item := range list {
+		modifiedList[i] = prefix + item
+	}
+	return modifiedList
 }
 
 func (scenarioHelper) getRawContainerURLWithSAS(c *chk.C, containerName string) url.URL {
@@ -362,7 +468,15 @@ func (scenarioHelper) getRawBlobServiceURLWithSAS(c *chk.C) url.URL {
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
 	c.Assert(err, chk.IsNil)
 
-	return getServiceURLWithSAS(c, *credential).URL()
+	return getBlobServiceURLWithSAS(c, *credential).URL()
+}
+
+func (scenarioHelper) getRawFileServiceURLWithSAS(c *chk.C) url.URL {
+	accountName, accountKey := getAccountAndKey()
+	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
+	c.Assert(err, chk.IsNil)
+
+	return getFileServiceURLWithSAS(c, *credential).URL()
 }
 
 func (scenarioHelper) getRawAdlsServiceURLWithSAS(c *chk.C) azbfs.ServiceURL {
@@ -467,7 +581,10 @@ func runSyncAndVerify(c *chk.C, raw rawSyncCmdArgs, verifier func(err error)) {
 func runCopyAndVerify(c *chk.C, raw rawCopyCmdArgs, verifier func(err error)) {
 	// the simulated user input should parse properly
 	cooked, err := raw.cook()
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		verifier(err)
+		return
+	}
 
 	// the enumeration ends when process() returns
 	err = cooked.process()
@@ -484,6 +601,10 @@ func validateDownloadTransfersAreScheduled(c *chk.C, sourcePrefix string, destin
 	validateCopyTransfersAreScheduled(c, true, false, sourcePrefix, destinationPrefix, expectedTransfers, mockedRPC)
 }
 
+func validateS2SSyncTransfersAreScheduled(c *chk.C, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
+	validateCopyTransfersAreScheduled(c, true, true, sourcePrefix, destinationPrefix, expectedTransfers, mockedRPC)
+}
+
 func validateCopyTransfersAreScheduled(c *chk.C, isSrcEncoded bool, isDstEncoded bool, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
 	// validate that the right number of transfers were scheduled
 	c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedTransfers))
@@ -496,6 +617,20 @@ func validateCopyTransfersAreScheduled(c *chk.C, isSrcEncoded bool, isDstEncoded
 
 		if isSrcEncoded {
 			srcRelativeFilePath, _ = url.PathUnescape(srcRelativeFilePath)
+
+			if runtime.GOOS == "windows" {
+				// Decode unsafe dst characters on windows
+				pathParts := strings.Split(dstRelativeFilePath, "/")
+				invalidChars := `<>\/:"|?*` + string(0x00)
+
+				for _, c := range strings.Split(invalidChars, "") {
+					for k, p := range pathParts {
+						pathParts[k] = strings.ReplaceAll(p, url.PathEscape(c), c)
+					}
+				}
+
+				dstRelativeFilePath = strings.Join(pathParts, "/")
+			}
 		}
 
 		if isDstEncoded {
@@ -549,11 +684,12 @@ func getDefaultCopyRawInput(src string, dst string) rawCopyCmdArgs {
 		src:                            src,
 		dst:                            dst,
 		logVerbosity:                   defaultLogVerbosityForSync,
-		blobType:                       common.EBlobType.None().String(),
+		blobType:                       common.EBlobType.Detect().String(),
 		blockBlobTier:                  common.EBlockBlobTier.None().String(),
 		pageBlobTier:                   common.EPageBlobTier.None().String(),
 		md5ValidationOption:            common.DefaultHashValidationOption.String(),
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
+		forceWrite:                     common.EOverwriteOption.True().String(),
 	}
 }
 
@@ -571,10 +707,11 @@ func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 		src:                            src,
 		fromTo:                         fromTo.String(),
 		logVerbosity:                   defaultLogVerbosityForSync,
-		blobType:                       common.EBlobType.None().String(),
+		blobType:                       common.EBlobType.Detect().String(),
 		blockBlobTier:                  common.EBlockBlobTier.None().String(),
 		pageBlobTier:                   common.EPageBlobTier.None().String(),
 		md5ValidationOption:            common.DefaultHashValidationOption.String(),
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
+		forceWrite:                     common.EOverwriteOption.True().String(),
 	}
 }

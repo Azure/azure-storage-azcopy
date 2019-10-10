@@ -22,11 +22,13 @@ package cmd
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
-	"path/filepath"
-	"strings"
 )
 
 // regular file->blob sync
@@ -38,6 +40,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 	for _, srcFileName := range []string{"singlefileisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the source as a single file
 		srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+		defer os.RemoveAll(srcDirName)
 		fileList := []string{srcFileName}
 		scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, fileList)
 
@@ -71,6 +74,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 		runSyncAndVerify(c, raw, func(err error) {
 			c.Assert(err, chk.IsNil)
 
+			// if source and destination already point to files, the relative path is an empty string ""
 			validateUploadTransfersAreScheduled(c, "", "", []string{""}, mockedRPC)
 		})
 	}
@@ -82,6 +86,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithEmptyDestination(c *chk.C) {
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirName)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
 
 	// set up an empty container
@@ -127,6 +132,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIdenticalDestination(c *chk.C) {
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirName)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
 
 	// set up an the container with the exact same files, but later lmts
@@ -168,6 +174,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithMismatchedDestination(c *chk.C) 
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirName)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
 
 	// set up an the container with half of the files, but later lmts
@@ -206,6 +213,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeFlag(c *chk.C) {
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirName)
 	scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
 
 	// add special files that we wish to include
@@ -239,6 +247,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeFlag(c *chk.C) {
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirName)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
 
 	// add special files that we wish to exclude
@@ -272,6 +281,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndExcludeFlag(c *chk.C) 
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirName)
 	scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
 
 	// add special files that we wish to include
@@ -312,6 +322,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithMissingDestination(c *chk.C) {
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirName)
 	scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
 
 	// set up the destination as an non-existent container

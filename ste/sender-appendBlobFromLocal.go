@@ -51,7 +51,7 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 		body := newPacedRequestBody(u.jptm.Context(), reader, u.pacer)
 		_, err := u.destAppendBlobURL.AppendBlock(u.jptm.Context(), body,
 			azblob.AppendBlobAccessConditions{
-				AppendPositionAccessConditions: azblob.AppendPositionAccessConditions{IfAppendPositionEqual: id.OffsetInFile},
+				AppendPositionAccessConditions: azblob.AppendPositionAccessConditions{IfAppendPositionEqual: id.OffsetInFile()},
 			}, nil)
 		if err != nil {
 			u.jptm.FailActiveUpload("Appending block", err)
@@ -66,7 +66,7 @@ func (u *appendBlobUploader) Epilogue() {
 	jptm := u.jptm
 
 	// set content MD5 (only way to do this is to re-PUT all the headers, this time with the MD5 included)
-	if jptm.TransferStatus() > 0 {
+	if jptm.IsLive() {
 		tryPutMd5Hash(jptm, u.md5Channel, func(md5Hash []byte) error {
 			epilogueHeaders := u.headersToApply
 			epilogueHeaders.ContentMD5 = md5Hash
@@ -76,4 +76,14 @@ func (u *appendBlobUploader) Epilogue() {
 	}
 
 	u.appendBlobSenderBase.Epilogue()
+}
+
+func (u *appendBlobUploader) GetDestinationLength() (int64, error) {
+	prop, err := u.destAppendBlobURL.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{})
+
+	if err != nil {
+		return -1, err
+	}
+
+	return prop.ContentLength(), nil
 }

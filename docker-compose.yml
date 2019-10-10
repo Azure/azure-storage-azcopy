@@ -1,9 +1,0 @@
-version: '3'
-services:
-  azure-storage-azcopy:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    volumes:
-    - .:${WORK_DIR}
-    working_dir: ${WORK_DIR}

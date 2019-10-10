@@ -26,9 +26,10 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"golang.org/x/sync/semaphore"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type appendBlobSenderBase struct {
@@ -128,29 +129,35 @@ func (s *appendBlobSenderBase) generateAppendBlockToRemoteFunc(id common.ChunkID
 	})
 }
 
-func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) {
+func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
 	if ps.CanInferContentType() {
 		// sometimes, specifically when reading local files, we have more info
 		// about the file type at this time than what we had before
 		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
 	}
 
+	destinationModified = true
 	_, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{})
 	if err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}
+	return
 }
 
 func (s *appendBlobSenderBase) Epilogue() {
+	// Empty function because you don't have to commit on an append blob
+}
+
+func (s *appendBlobSenderBase) Cleanup() {
 	jptm := s.jptm
 	// Cleanup
-	if jptm.TransferStatus() <= 0 { // TODO: <=0 or <0?
-		// If the transfer status value < 0, then transfer failed with some failure
-		// there is a possibility that some uncommitted blocks will be there
+	if jptm.IsDeadInflight() {
+		// There is a possibility that some uncommitted blocks will be there
 		// Delete the uncommitted blobs
-		// TODO: should we really do this deletion?  What if we are in an overwrite-existing-blob
-		//    situation. Deletion has very different semantics then, compared to not deleting.
+		// TODO: particularly, given that this is an APPEND blob, do we really need to delete it?  But if we don't delete it,
+		//   it will still be in an ambigous situation with regard to how much has been added to it.  Probably best to delete
+		//   to be consistent with other
 		deletionContext, cancelFunc := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancelFunc()
 		_, err := s.destAppendBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})

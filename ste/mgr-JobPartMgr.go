@@ -3,20 +3,23 @@ package ste
 import (
 	"context"
 	"fmt"
-	"github.com/mattn/go-ieproxy"
 	"mime"
 	"net"
 	"net/http"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	autoProxy "github.com/mattn/go-ieproxy"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	"golang.org/x/sync/semaphore"
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
@@ -26,7 +29,8 @@ type IJobPartMgr interface {
 	ScheduleTransfers(jobCtx context.Context)
 	StartJobXfer(jptm IJobPartTransferMgr)
 	ReportTransferDone() uint32
-	IsForceWriteTrue() bool
+	GetOverwriteOption() common.OverwriteOption
+	AutoDecompress() bool
 	ScheduleChunks(chunkFunc chunkFunc)
 	RescheduleTransfer(jptm IJobPartTransferMgr)
 	BlobTypeOverride() common.BlobType
@@ -42,9 +46,11 @@ type IJobPartMgr interface {
 	SlicePool() common.ByteSlicePooler
 	CacheLimiter() common.CacheLimiter
 	FileCountLimiter() common.CacheLimiter
+	ExclusiveDestinationMap() *common.ExclusiveStringMap
 	ChunkStatusLogger() common.ChunkStatusLogger
 	common.ILogger
 	SourceProviderPipeline() pipeline.Pipeline
+	getOverwritePrompter() *overwritePrompter
 }
 
 type serviceAPIVersionOverride struct{}
@@ -72,34 +78,22 @@ func NewVersionPolicyFactory() pipeline.Factory {
 	})
 }
 
-// Max number of idle connections per host, to be held in the connection pool inside HTTP client.
-// This use to be 1000, but each consumes a handle, and on Linux total file/network handle counts can be
-// tightly constrained, possibly to as low as 1024 in total. So we want a lower figure than 1000.
-// 500 ought to be enough because this figure is about pooling temporarily un-used connections.
-// Our max number of USED connections, at any one moment in time, is set by AZCOPY_CONCURRENCY_VALUE
-// which, as at Mar 2019, defaults to 300.  Because connections are constantly released and use by that pool
-// of 300 goroutines, its reasonable to assume that the total number of momentarily-
-// UNused connections will be much smaller than the number USED, i.e. much less than 300.  So this figure
-// we set here should be MORE than enough.
-const AzCopyMaxIdleConnsPerHost = 500
-
 // NewAzcopyHTTPClient creates a new HTTP client.
 // We must minimize use of this, and instead maximize re-use of the returned client object.
 // Why? Because that makes our connection pooling more efficient, and prevents us exhausting the
 // number of available network sockets on resource-constrained Linux systems. (E.g. when
 // 'ulimit -Hn' is low).
-func NewAzcopyHTTPClient() *http.Client {
+func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
-			Proxy: ieproxy.GetProxyFunc(),
-			// We use Dial instead of DialContext as DialContext has been reported to cause slower performance.
-			Dial /*Context*/ : (&net.Dialer{
+			Proxy: autoProxy.GetProxyFunc(),
+			DialContext: newDialRateLimiter(&net.Dialer{
 				Timeout:   30 * time.Second,
 				KeepAlive: 30 * time.Second,
 				DualStack: true,
-			}).Dial, /*Context*/
+			}).DialContext,
 			MaxIdleConns:           0, // No limit
-			MaxIdleConnsPerHost:    AzCopyMaxIdleConnsPerHost,
+			MaxIdleConnsPerHost:    maxIdleConns,
 			IdleConnTimeout:        180 * time.Second,
 			TLSHandshakeTimeout:    10 * time.Second,
 			ExpectContinueTimeout:  1 * time.Second,
@@ -110,6 +104,33 @@ func NewAzcopyHTTPClient() *http.Client {
 			//ExpectContinueTimeout:  time.Duration{},
 		},
 	}
+}
+
+// Prevents too many dials happening at once, because we've observed that that increases the thread
+// count in the app, to several times more than is actually necessary - presumably due to a blocking OS
+// call somewhere. It's tidier to avoid creating those excess OS threads.
+// Even our change from Dial (deprecated) to DialContext did not replicate the effect of dialRateLimiter.
+type dialRateLimiter struct {
+	dialer *net.Dialer
+	sem    *semaphore.Weighted
+}
+
+func newDialRateLimiter(dialer *net.Dialer) *dialRateLimiter {
+	const concurrentDialsPerCpu = 10 // exact value doesn't matter too much, but too low will be too slow, and too high will reduce the beneficial effect on thread count
+	return &dialRateLimiter{
+		dialer,
+		semaphore.NewWeighted(int64(concurrentDialsPerCpu * runtime.NumCPU())),
+	}
+}
+
+func (d *dialRateLimiter) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	err := d.sem.Acquire(context.Background(), 1)
+	if err != nil {
+		return nil, err
+	}
+	defer d.sem.Release(1)
+
+	return d.dialer.DialContext(ctx, network, address)
 }
 
 // newAzcopyHTTPClientFactory creates a HTTPClientPolicyFactory object that sends HTTP requests to a Go's default http.Client.
@@ -126,7 +147,7 @@ func newAzcopyHTTPClientFactory(pipelineHTTPClient *http.Client) pipeline.Factor
 }
 
 // NewBlobPipeline creates a Pipeline using the specified credentials and options.
-func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client) pipeline.Pipeline {
+func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client, statsAcc *pipelineNetworkStats) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -141,13 +162,14 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 		//NewPacerPolicyFactory(p),
 		NewVersionPolicyFactory(),
 		NewRequestLogPolicyFactory(RequestLogOptions{LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold}),
+		newXferStatsPolicyFactory(statsAcc),
 	}
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
 
 // NewBlobFSPipeline creates a pipeline for transfers to and from BlobFS Service
 // The blobFS operations currently in azcopy are supported by SharedKey Credentials
-func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client) pipeline.Pipeline {
+func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client, statsAcc *pipelineNetworkStats) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -163,13 +185,14 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 
 	f = append(f,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		azbfs.NewRequestLogPolicyFactory(o.RequestLog))
+		NewRequestLogPolicyFactory(RequestLogOptions{LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold}),
+		newXferStatsPolicyFactory(statsAcc))
 
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
 
 // NewFilePipeline creates a Pipeline using the specified credentials and options.
-func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client) pipeline.Pipeline {
+func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client, statsAcc *pipelineNetworkStats) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -182,7 +205,8 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		NewVersionPolicyFactory(),
-		azfile.NewRequestLogPolicyFactory(o.RequestLog),
+		NewRequestLogPolicyFactory(RequestLogOptions{LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold}),
+		newXferStatsPolicyFactory(statsAcc),
 	}
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
@@ -234,8 +258,9 @@ type jobPartMgr struct {
 
 	slicePool common.ByteSlicePooler
 
-	cacheLimiter     common.CacheLimiter
-	fileCountLimiter common.CacheLimiter
+	cacheLimiter            common.CacheLimiter
+	fileCountLimiter        common.CacheLimiter
+	exclusiveDestinationMap *common.ExclusiveStringMap
 
 	pipeline pipeline.Pipeline // ordered list of Factory objects and an object implementing the HTTPSender interface
 
@@ -248,6 +273,10 @@ type jobPartMgr struct {
 	// which are either completed or failed
 	// numberOfTransfersDone_doNotUse determines the final cancellation of JobPartOrder
 	atomicTransfersDone uint32
+}
+
+func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {
+	return jpm.jobMgr.getOverwritePrompter()
 }
 
 func (jpm *jobPartMgr) Plan() *JobPartPlanHeader { return jpm.planMMF.Plan() }
@@ -360,6 +389,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 		// Each transfer gets its own context (so any chunk can cancel the whole transfer) based off the job's context
 		transferCtx, transferCancel := context.WithCancel(jobCtx)
+		// Initialize a job part transfer manager
 		jptm := &jobPartTransferMgr{
 			jobPartMgr:          jpm,
 			jobPartPlanTransfer: jppt,
@@ -403,6 +433,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	userAgent := common.UserAgent
 	if fromTo.From() == common.ELocation.S3() {
 		userAgent = common.S3ImportUserAgent
+	} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
+		userAgent = common.BenchmarkUserAgent
 	}
 
 	credOption := common.CredentialOpOptions{
@@ -420,8 +452,10 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 		RetryDelay:    UploadRetryDelay,
 		MaxRetryDelay: UploadMaxRetryDelay}
 
+	var statsAccForSip *pipelineNetworkStats = nil // we don'nt accumulate stats on the source info provider
+
 	// Create source info provider's pipeline for S2S copy.
-	if fromTo == common.EFromTo.BlobBlob() {
+	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() {
 		jpm.sourceProviderPipeline = NewBlobPipeline(
 			azblob.NewAnonymousCredential(),
 			azblob.PipelineOptions{
@@ -432,9 +466,10 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			},
 			xferRetryOption,
 			jpm.pacer,
-			jpm.jobMgr.HttpClient())
+			jpm.jobMgr.HttpClient(),
+			statsAccForSip)
 	}
-	if fromTo == common.EFromTo.FileBlob() {
+	if fromTo == common.EFromTo.FileBlob() || fromTo == common.EFromTo.FileFile() {
 		jpm.sourceProviderPipeline = NewFilePipeline(
 			azfile.NewAnonymousCredential(),
 			azfile.PipelineOptions{
@@ -451,12 +486,13 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 				MaxRetryDelay: UploadMaxRetryDelay,
 			},
 			jpm.pacer,
-			jpm.jobMgr.HttpClient())
+			jpm.jobMgr.HttpClient(),
+			statsAccForSip)
 	}
 
 	// Create pipeline for data transfer.
 	switch fromTo {
-	case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(),
+	case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(), common.EFromTo.BenchmarkBlob(),
 		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob():
 		credential := common.CreateBlobCredential(ctx, credInfo, credOption)
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
@@ -470,9 +506,10 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			},
 			xferRetryOption,
 			jpm.pacer,
-			jpm.jobMgr.HttpClient())
+			jpm.jobMgr.HttpClient(),
+			jpm.jobMgr.PipelineNetworkStats())
 	// Create pipeline for Azure BlobFS.
-	case common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS():
+	case common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS(), common.EFromTo.BenchmarkBlobFS():
 		credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 
@@ -486,9 +523,11 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			},
 			xferRetryOption,
 			jpm.pacer,
-			jpm.jobMgr.HttpClient())
+			jpm.jobMgr.HttpClient(),
+			jpm.jobMgr.PipelineNetworkStats())
 	// Create pipeline for Azure File.
-	case common.EFromTo.FileTrash(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile():
+	case common.EFromTo.FileTrash(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile(), common.EFromTo.BenchmarkFile(),
+		common.EFromTo.FileFile(), common.EFromTo.BlobFile():
 		jpm.pipeline = NewFilePipeline(
 			azfile.NewAnonymousCredential(),
 			azfile.PipelineOptions{
@@ -505,7 +544,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 				MaxRetryDelay: UploadMaxRetryDelay,
 			},
 			jpm.pacer,
-			jpm.jobMgr.HttpClient())
+			jpm.jobMgr.HttpClient(),
+			jpm.jobMgr.PipelineNetworkStats())
 	default:
 		panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
 	}
@@ -523,12 +563,20 @@ func (jpm *jobPartMgr) FileCountLimiter() common.CacheLimiter {
 	return jpm.fileCountLimiter
 }
 
+func (jpm *jobPartMgr) ExclusiveDestinationMap() *common.ExclusiveStringMap {
+	return jpm.exclusiveDestinationMap
+}
+
 func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {
 	jpm.newJobXfer(jptm, jpm.pipeline, jpm.pacer)
 }
 
-func (jpm *jobPartMgr) IsForceWriteTrue() bool {
+func (jpm *jobPartMgr) GetOverwriteOption() common.OverwriteOption {
 	return jpm.Plan().ForceWrite
+}
+
+func (jpm *jobPartMgr) AutoDecompress() bool {
+	return jpm.Plan().AutoDecompress
 }
 
 func (jpm *jobPartMgr) blobDstData(fullFilePath string, dataFileToXfer []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {

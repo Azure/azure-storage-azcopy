@@ -29,8 +29,9 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type pageBlobSenderBase struct {
@@ -70,7 +71,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 
 	// compute chunk count
 	chunkSize := transferInfo.BlockSize
-	// If the given chunk Size for the Job is invalild for page blob or greater than maximum page size,
+	// If the given chunk Size for the Job is invalid for page blob or greater than maximum page size,
 	// then set chunkSize as maximum pageSize.
 	chunkSize = common.Iffuint32(
 		chunkSize > common.DefaultPageBlobChunkSize || (chunkSize%azblob.PageBlobPageBytes != 0),
@@ -141,7 +142,7 @@ func (s *pageBlobSenderBase) RemoteFileExists() (bool, error) {
 	return remoteObjectExists(s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}))
 }
 
-func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) {
+func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
 
 	// Create file pacer now.  Safe to create now, because we know that if Prologue is called the Epilogue will be to
 	// so we know that the pacer will be closed.  // TODO: consider re-factor xfer-anyToRemote so that epilogue is always called if uploader is constructed, and move this to constructor
@@ -168,6 +169,8 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) {
 
 		s.jptm.Log(pipeline.LogInfo, "Blob is managed disk import/export blob, so no Create call is required") // the blob always already exists
 		return
+	} else {
+		destinationModified = true
 	}
 
 	if ps.CanInferContentType() {
@@ -195,20 +198,32 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) {
 			// Set the latest service version from sdk as service version in the context.
 			ctxWithLatestServiceVersion := context.WithValue(s.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
 			if _, err := s.destPageBlobURL.SetTier(ctxWithLatestServiceVersion, s.destBlobTier, azblob.LeaseAccessConditions{}); err != nil {
+				if s.jptm.Info().S2SSrcBlobTier != azblob.AccessTierNone {
+					s.jptm.LogTransferInfo(pipeline.LogError, s.jptm.Info().Source, s.jptm.Info().Destination, "Failed to replicate blob tier at destination. Try transferring with the flag --s2s-preserve-access-tier=false")
+					s2sAccessTierFailureLogStdout.Do(func() {
+						glcm := common.GetLifecycleMgr()
+						glcm.Error("One or more blobs have failed blob tier replication at the destination. Try transferring with the flag --s2s-preserve-access-tier=false")
+					})
+				}
+
 				s.jptm.FailActiveSendWithStatus("Setting PageBlob tier ", err, common.ETransferStatus.BlobTierFailure())
 				return
 			}
 		}
 	}
+
+	return
 }
 
 func (s *pageBlobSenderBase) Epilogue() {
 	_ = s.filePacer.Close() // release resources
+}
 
+func (s *pageBlobSenderBase) Cleanup() {
 	jptm := s.jptm
 
 	// Cleanup
-	if jptm.TransferStatus() <= 0 { // TODO: <=0 or <0?
+	if jptm.IsDeadInflight() {
 		if s.isInManagedDiskImportExportAccount() {
 			// no deletion is possible. User just has to upload it again.
 		} else {

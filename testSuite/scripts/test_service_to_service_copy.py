@@ -17,6 +17,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
 
         # using different bucket_name to help to troubleshoot testing when checking real buckets
         self.bucket_name = util.get_resource_name(common_prefix + 'blobblob')
+        self.bucket_name_blob_file = util.get_resource_name(common_prefix + 'blobfile')
         self.bucket_name_file_blob = util.get_resource_name(common_prefix + 'fileblob')
         self.bucket_name_s3_blob = util.get_resource_name(common_prefix + 's3blob')
         self.bucket_name_block_append_page = util.get_resource_name(common_prefix + 'blockappendpage')
@@ -80,30 +81,30 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_n_files_from_x_bucket_to_x_bucket(src_container_url, "Blob", dst_container_url, "Blob")
 
-    def test_copy_file_from_blob_container_to_blob_container_wildcard_recursive(self):
+    def test_copy_file_from_blob_container_to_blob_container_strip_top_dir_recursive(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_container_url, "Blob", dst_container_url, "Blob", True)
+        self.util_test_copy_file_from_x_bucket_to_x_bucket_strip_top_dir(src_container_url, "Blob", dst_container_url, "Blob", True)
 
-    def test_copy_file_from_blob_container_to_blob_container_wildcard_non_recursive(self):
+    def test_copy_file_from_blob_container_to_blob_container_strip_top_dir_non_recursive(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_container_url, "Blob", dst_container_url, "Blob", False)
+        self.util_test_copy_file_from_x_bucket_to_x_bucket_strip_top_dir(src_container_url, "Blob", dst_container_url, "Blob", False)
     
     def test_copy_n_files_from_blob_dir_to_blob_dir(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_n_files_from_x_dir_to_x_dir(src_container_url, "Blob", dst_container_url, "Blob")
 
-    def test_copy_n_files_from_blob_dir_to_blob_dir_wildcard_recursive(self):
+    def test_copy_n_files_from_blob_dir_to_blob_dir_strip_top_dir_recursive(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-        self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_container_url, "Blob", dst_container_url, "Blob", True)
+        self.util_test_copy_n_files_from_x_dir_to_x_dir_strip_top_dir(src_container_url, "Blob", dst_container_url, "Blob", True)
 
-    def test_copy_n_files_from_blob_dir_to_blob_dir_wildcard_non_recursive(self):
+    def test_copy_n_files_from_blob_dir_to_blob_dir_strip_top_dir_non_recursive(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-        self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_container_url, "Blob", dst_container_url, "Blob", False)
+        self.util_test_copy_n_files_from_x_dir_to_x_dir_strip_top_dir(src_container_url, "Blob", dst_container_url, "Blob", False)
 
     def test_copy_files_from_blob_account_to_blob_account(self):
         self.util_test_copy_files_from_x_account_to_x_account(
@@ -162,6 +163,26 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         dst_container_url = util.get_object_without_sas(util.test_oauth_container_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 17 * 1024 * 1024, True)
 
+    ##################################
+    # Test from blob to file copy
+    # Note: tests go from dst blob to src file to avoid the extra config-- Ze's suggestion
+    ##################################
+    def test_copy_single_1kb_file_from_blob_to_file(self):
+        src_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_blob_file)
+        dst_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_blob_file)
+        self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_share_url, "File", 1)
+
+    def test_copy_10_files_from_blob_container_to_file_share(self):
+        src_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_blob_file)
+        dst_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_blob_file)
+        self.util_test_copy_n_files_from_x_bucket_to_x_bucket(src_container_url, "Blob", dst_share_url, "File", 10, 1)
+
+    def test_copy_file_from_blob_to_file_properties_and_metadata(self):
+        src_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_blob_file)
+        dst_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_blob_file)
+        self.util_test_copy_single_file_from_x_to_x_propertyandmetadata(src_container_url, "Blob", dst_share_url, "File", True)
+
+    # not testing implicit container creation (w/out a container name in the dst) as that's tested by the FE tests
 
     ##################################
     # Test from file to blob copy.
@@ -186,30 +207,30 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
         self.util_test_copy_n_files_from_x_bucket_to_x_bucket(src_share_url, "File", dst_container_url, "Blob")
 
-    def test_copy_file_from_file_share_to_blob_container_wildcard_recursive(self):
+    def test_copy_file_from_file_share_to_blob_container_strip_top_dir_recursive(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_share_url, "File", dst_container_url, "Blob", True)
+        self.util_test_copy_file_from_x_bucket_to_x_bucket_strip_top_dir(src_share_url, "File", dst_container_url, "Blob", True)
 
-    def test_copy_file_from_file_share_to_blob_container_wildcard_non_recursive(self):
+    def test_copy_file_from_file_share_to_blob_container_strip_top_dir_non_recursive(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_share_url, "File", dst_container_url, "Blob", False)
+        self.util_test_copy_file_from_x_bucket_to_x_bucket_strip_top_dir(src_share_url, "File", dst_container_url, "Blob", False)
     
     def test_copy_n_files_from_file_dir_to_blob_dir(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
         self.util_test_copy_n_files_from_x_dir_to_x_dir(src_share_url, "File", dst_container_url, "Blob")
 
-    def test_copy_n_files_from_file_dir_to_blob_dir_wildcard_recursive(self):
+    def test_copy_n_files_from_file_dir_to_blob_dir_strip_top_dir_recursive(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_share_url, "File", dst_container_url, "Blob", True)
+        self.util_test_copy_n_files_from_x_dir_to_x_dir_strip_top_dir(src_share_url, "File", dst_container_url, "Blob", True)
 
-    def test_copy_n_files_from_file_dir_to_blob_dir_wildcard_non_recursive(self):
+    def test_copy_n_files_from_file_dir_to_blob_dir_strip_top_dir_non_recursive(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_share_url, "File", dst_container_url, "Blob", False)
+        self.util_test_copy_n_files_from_x_dir_to_x_dir_strip_top_dir(src_share_url, "File", dst_container_url, "Blob", False)
 
     def test_copy_files_from_file_account_to_blob_account(self):
         self.util_test_copy_files_from_x_account_to_x_account(
@@ -281,55 +302,77 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
     # Test from S3 to blob copy.
     ##################################
     def test_copy_single_1kb_file_from_s3_to_blob(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_copy_single_file_from_x_to_x(src_bucket_url, "S3", dst_container_url, "Blob", 1)
 
     def test_copy_single_0kb_file_from_s3_to_blob(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_copy_single_file_from_x_to_x(src_bucket_url, "S3", dst_container_url, "Blob", 0)
 
     def test_copy_single_63mb_file_from_s3_to_blob(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_copy_single_file_from_x_to_x(src_bucket_url, "S3", dst_container_url, "Blob", 63 * 1024 * 1024)
 
     def test_copy_10_files_from_s3_bucket_to_blob_container(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_copy_n_files_from_x_bucket_to_x_bucket(src_bucket_url, "S3", dst_container_url, "Blob")
 
     def test_copy_10_files_from_s3_bucket_to_blob_account(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         self.util_test_copy_n_files_from_s3_bucket_to_blob_account(src_bucket_url, util.test_s2s_dst_blob_account_url)
 
-    def test_copy_file_from_s3_bucket_to_blob_container_wildcard_recursive(self):
+    def test_copy_file_from_s3_bucket_to_blob_container_strip_top_dir_recursive(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_bucket_url, "S3", dst_container_url, "Blob", True)
+        self.util_test_copy_file_from_x_bucket_to_x_bucket_strip_top_dir(src_bucket_url, "S3", dst_container_url, "Blob", True)
 
-    def test_copy_file_from_s3_bucket_to_blob_container_wildcard_non_recursive(self):
+    def test_copy_file_from_s3_bucket_to_blob_container_strip_top_dir_non_recursive(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_bucket_url, "S3", dst_container_url, "Blob", False)
+        self.util_test_copy_file_from_x_bucket_to_x_bucket_strip_top_dir(src_bucket_url, "S3", dst_container_url, "Blob", False)
     
     def test_copy_n_files_from_s3_dir_to_blob_dir(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_copy_n_files_from_x_dir_to_x_dir(src_bucket_url, "S3", dst_container_url, "Blob")
 
-    def test_copy_n_files_from_s3_dir_to_blob_dir_wildcard_recursive(self):
+    def test_copy_n_files_from_s3_dir_to_blob_dir_strip_top_dir_recursive(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_bucket_url, "S3", dst_container_url, "Blob", True)
+        self.util_test_copy_n_files_from_x_dir_to_x_dir_strip_top_dir(src_bucket_url, "S3", dst_container_url, "Blob", True)
 
-    def test_copy_n_files_from_s3_dir_to_blob_dir_wildcard_non_recursive(self):
+    def test_copy_n_files_from_s3_dir_to_blob_dir_strip_top_dir_non_recursive(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_bucket_url, "S3", dst_container_url, "Blob", False)
+        self.util_test_copy_n_files_from_x_dir_to_x_dir_strip_top_dir(src_bucket_url, "S3", dst_container_url, "Blob", False)
 
     def test_copy_files_from_s3_service_to_blob_account(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         self.util_test_copy_files_from_x_account_to_x_account(
             util.test_s2s_src_s3_service_url, 
             "S3", 
@@ -338,6 +381,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             self.bucket_name_s3_blob)
 
     def test_copy_single_file_from_s3_to_blob_propertyandmetadata(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_copy_single_file_from_x_to_x_propertyandmetadata(
@@ -347,6 +392,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             "Blob")
 
     def test_copy_single_file_from_s3_to_blob_no_preserve_propertyandmetadata(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_copy_single_file_from_x_to_x_propertyandmetadata(
@@ -357,6 +404,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             False)
     
     def test_copy_file_from_s3_bucket_to_blob_container_propertyandmetadata(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadata(
@@ -366,6 +415,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             "Blob")
 
     def test_copy_file_from_s3_bucket_to_blob_container_no_preserve_propertyandmetadata(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadata(
@@ -376,6 +427,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             False)
 
     def test_overwrite_copy_single_file_from_s3_to_blob(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_overwrite_copy_single_file_from_x_to_x(
@@ -387,6 +440,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             True)
 
     def test_non_overwrite_copy_single_file_from_s3_to_blob(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_overwrite_copy_single_file_from_x_to_x(
@@ -398,6 +453,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             False)
 
     def test_copy_single_file_from_s3_to_blob_with_url_encoded_slash_as_filename(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_copy_single_file_from_x_to_x(
@@ -410,6 +467,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             "%252F") #encoded name for %2F, as path will be decoded
 
     def test_copy_single_file_from_s3_to_blob_excludeinvalidmetadata(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         self.util_test_copy_single_file_from_s3_to_blob_handleinvalidmetadata(
             "", # By default it should be ExcludeIfInvalid
             "1abc=jiac;$%^=width;description=test file",
@@ -417,6 +476,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         )
 
     def test_copy_single_file_from_s3_to_blob_renameinvalidmetadata(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         self.util_test_copy_single_file_from_s3_to_blob_handleinvalidmetadata(
             "RenameIfInvalid", # By default it should be ExcludeIfInvalid
             "1abc=jiac;$%^=width;description=test file",
@@ -429,6 +490,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         invalidMetadataHandleOption,
         srcS3Metadata, 
         expectResolvedMetadata):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         srcBucketURL = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dstBucketURL = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         srcType = "S3"
@@ -510,17 +573,19 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
         blob_sizes = [0, 512, 1024, 4*1024*1024]
+        no_blob_tier = ""  # don't validate tier for page blobs
         for size in blob_sizes:
             self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
-                src_bucket_url, "Blob", dst_container_url, "Blob", size, "PageBlob", "", "", "", "PageBlob")
+                src_bucket_url, "Blob", dst_container_url, "Blob", size, "PageBlob", "", "", "", "PageBlob", no_blob_tier)
 
     def test_copy_single_file_from_appendblob_to_appendblob_from_source(self):
         src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
         blob_sizes = [0, 1, 8*1024*1024 - 1, 8 * 1024*1024, 8*1024*1024+1]
+        no_blob_tier = ""  # blob-level tiering is not available for append blobs
         for size in blob_sizes:
             self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
-                src_bucket_url, "Blob", dst_container_url, "Blob", size, "AppendBlob", "", "", "", "AppendBlob")    
+                src_bucket_url, "Blob", dst_container_url, "Blob", size, "AppendBlob", "", "", "", "AppendBlob", no_blob_tier)
 
     def test_copy_single_file_from_s3_object_to_blockblob_with_default_blobtier(self):
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_block_append_page)
@@ -712,7 +777,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         # util.Command("clean").add_arguments(dstBucketURL).add_flags("serviceType", dstType). \
         #     add_flags("resourceType", "Bucket").execute_azcopy_create()
 
-    def util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(
+    def util_test_copy_file_from_x_bucket_to_x_bucket_strip_top_dir(
         self,
         srcBucketURL,
         srcType,
@@ -725,28 +790,29 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         self.assertTrue(result)
 
         # create file.
-        filename = "copy_wildcard_file.txt"
+        filename = "copy_strip_top_dir_file.txt"
         file_path = util.create_test_file(filename, 1)
         if srcType == "S3":
             srcFileURL = util.get_object_without_sas(srcBucketURL, filename)
         else:
             srcFileURL = util.get_object_sas(srcBucketURL, filename)
-        srcFileWildcardURL = srcFileURL.replace(filename, "*")
+        src_dir_url = srcFileURL.replace(filename, "*")
 
         # Upload file.
         self.util_upload_to_src(file_path, srcType, srcFileURL, False)
 
         # Copy file using azcopy from srcURL to destURL
         if recursive:
-            result = util.Command("copy").add_arguments(srcFileWildcardURL).add_arguments(dstBucketURL). \
-                add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+            result = util.Command("copy").add_arguments(src_dir_url).add_arguments(dstBucketURL). \
+                add_flags("log-level", "info").add_flags("recursive", "true"). \
+                execute_azcopy_copy_command()
         else:
-            result = util.Command("copy").add_arguments(srcFileWildcardURL).add_arguments(dstBucketURL). \
+            result = util.Command("copy").add_arguments(src_dir_url).add_arguments(dstBucketURL). \
                 add_flags("log-level", "info").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # Downloading the copied files for validation
-        validate_dir_name = "validate_copy_file_from_%s_bucket_to_%s_bucket_wildcard_recursive_%s" % (srcType, dstType, recursive)
+        validate_dir_name = "validate_copy_file_from_%s_bucket_to_%s_bucket_strip_top_dir_recursive_%s" % (srcType, dstType, recursive)
         local_validate_dest = util.create_test_dir(validate_dir_name)
         dst_file_url = util.get_object_sas(dstBucketURL, filename)
         result = util.Command("copy").add_arguments(dst_file_url).add_arguments(local_validate_dest). \
@@ -773,7 +839,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         dstType,
         n=10,
         sizeInKB=1):
-        # create source bucket
+        # create source bucketa
         result = util.Command("create").add_arguments(srcBucketURL).add_flags("serviceType", srcType). \
             add_flags("resourceType", "Bucket").execute_azcopy_create()
         self.assertTrue(result)
@@ -805,6 +871,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
 
         # Verifying the downloaded blob
         # here is the special behavior need confirm
+        print(src_dir_path)
+        print(os.path.join(local_validate_dest, src_dir_name, src_dir_name))
         result = self.util_are_dir_trees_equal(src_dir_path, os.path.join(local_validate_dest, src_dir_name, src_dir_name))
         #result = self.util_are_dir_trees_equal(src_dir_path, local_validate_dest)
         self.assertTrue(result)
@@ -816,14 +884,14 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         # util.Command("clean").add_arguments(dstBucketURL).add_flags("serviceType", dstType). \
         #     add_flags("resourceType", "Bucket").execute_azcopy_create()
 
-    def util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(self,
-        srcBucketURL,
-        srcType,
-        dstBucketURL,
-        dstType,
-        n=10,
-        sizeInKB=1,
-        recursive=True):
+    def util_test_copy_n_files_from_x_dir_to_x_dir_strip_top_dir(self,
+                                                                 srcBucketURL,
+                                                                 srcType,
+                                                                 dstBucketURL,
+                                                                 dstType,
+                                                                 n=10,
+                                                                 sizeInKB=1,
+                                                                 recursive=True):
         # create source bucket
         result = util.Command("create").add_arguments(srcBucketURL).add_flags("serviceType", srcType). \
             add_flags("resourceType", "Bucket").execute_azcopy_create()
@@ -839,19 +907,20 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         self.util_upload_to_src(src_dir_path, srcType, srcBucketURL, True)
         
         if srcType == "S3":
-            srcDirWildcardURL = util.get_object_without_sas(srcBucketURL, src_dir_name+"/*")
+            src_dir_url = util.get_object_without_sas(srcBucketURL, src_dir_name + "/*")
         else:
-            srcDirWildcardURL = util.get_object_sas(srcBucketURL, src_dir_name+"/*")
+            src_dir_url = util.get_object_sas(srcBucketURL, src_dir_name + "/*")
 
         dstDirURL = util.get_object_sas(dstBucketURL, src_dir_name)
         if recursive:
             # Copy files using azcopy from srcURL to destURL
-            result = util.Command("copy").add_arguments(srcDirWildcardURL).add_arguments(dstDirURL). \
-                add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+            result = util.Command("copy").add_arguments(src_dir_url).add_arguments(dstDirURL). \
+                add_flags("log-level", "info").add_flags("recursive", "true"). \
+                execute_azcopy_copy_command()
             self.assertTrue(result)
         else:
             # Copy files using azcopy from srcURL to destURL
-            result = util.Command("copy").add_arguments(srcDirWildcardURL).add_arguments(dstDirURL). \
+            result = util.Command("copy").add_arguments(src_dir_url).add_arguments(dstDirURL). \
                 add_flags("log-level", "info").execute_azcopy_copy_command()
             self.assertTrue(result) 
 
@@ -1002,7 +1071,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         self.assertTrue(result)
 
         # TODO: test different targets according to dstType
-        validateCmd = util.Command("testBlob").add_arguments(local_validate_dest).add_arguments(dstFileURL).add_flags("no-guess-mime-type", "true")
+        testCmdName = "testBlob" if dstType.lower() == "blob" else "testFile"
+        validateCmd = util.Command(testCmdName).add_arguments(local_validate_dest).add_arguments(dstFileURL).add_flags("no-guess-mime-type", "true")
 
         if preserveProperties == True:
             validateCmd.add_flags("metadata", "author=jiac;viewport=width;description=test file"). \

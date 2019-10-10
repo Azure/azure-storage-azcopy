@@ -140,16 +140,18 @@ func init() {
 }
 
 func cleanContainer(container string) {
-
-	containerSas, err := url.Parse(container)
+	containerURLBase, err := url.Parse(container)
 
 	if err != nil {
 		fmt.Println("error parsing the container sas, ", err)
 		os.Exit(1)
 	}
 
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-	containerUrl := azblob.NewContainerURL(*containerSas, p)
+	p := createBlobPipeline(*containerURLBase)
+	containerUrl := azblob.NewContainerURL(*containerURLBase, p)
+
+	// Create the container. This will fail if it's already present but this saves us the pain of a container being missing for one reason or another.
+	_, _ = containerUrl.Create(context.Background(), azblob.Metadata{}, azblob.PublicAccessNone)
 
 	// perform a list blob
 	for marker := (azblob.Marker{}); marker.NotDone(); {
@@ -173,15 +175,15 @@ func cleanContainer(container string) {
 }
 
 func cleanBlob(blob string) {
-	blobSas, err := url.Parse(blob)
+	blobURLBase, err := url.Parse(blob)
 
 	if err != nil {
 		fmt.Println("error parsing the container sas ", err)
 		os.Exit(1)
 	}
 
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-	blobUrl := azblob.NewBlobURL(*blobSas, p)
+	p := createBlobPipeline(*blobURLBase)
+	blobUrl := azblob.NewBlobURL(*blobURLBase, p)
 
 	_, err = blobUrl.Delete(context.Background(), "include", azblob.BlobAccessConditions{})
 	if err != nil {
@@ -191,7 +193,6 @@ func cleanBlob(blob string) {
 }
 
 func cleanShare(shareURLStr string) {
-
 	u, err := url.Parse(shareURLStr)
 
 	if err != nil {
@@ -199,13 +200,16 @@ func cleanShare(shareURLStr string) {
 		os.Exit(1)
 	}
 
-	p := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
+	p := createFilePipeline(*u)
 	shareURL := azfile.NewShareURL(*u, p)
+
+	// Create the share. This will fail if it's already present but this saves us the pain of a container being missing for one reason or another.
+	_, _ = shareURL.Create(context.Background(), azfile.Metadata{}, 0)
 
 	_, err = shareURL.Delete(context.Background(), azfile.DeleteSnapshotsOptionInclude)
 	if err != nil {
-		sErr := err.(azfile.StorageError)
-		if sErr != nil && sErr.Response().StatusCode != http.StatusNotFound {
+		sErr, sErrOk := err.(azfile.StorageError)
+		if sErrOk && sErr.Response().StatusCode != http.StatusNotFound {
 			fmt.Fprintf(os.Stdout, "error deleting the share for clean share, error '%v'\n", err)
 			os.Exit(1)
 		}
@@ -229,7 +233,7 @@ func cleanFile(fileURLStr string) {
 		os.Exit(1)
 	}
 
-	p := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
+	p := createFilePipeline(*u)
 	fileURL := azfile.NewFileURL(*u, p)
 
 	_, err = fileURL.Delete(context.Background())
@@ -237,6 +241,52 @@ func cleanFile(fileURLStr string) {
 		fmt.Println("error deleting the file ", err)
 		os.Exit(1)
 	}
+}
+
+func createBlobPipeline(u url.URL) pipeline.Pipeline {
+	// Get name and key variables from environment.
+	name := os.Getenv("ACCOUNT_NAME")
+	key := os.Getenv("ACCOUNT_KEY")
+	blobURLParts := azblob.NewBlobURLParts(u)
+	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in the environment, and there is no SAS token present
+	if (name == "" && key == "") && blobURLParts.SAS.Encode() == "" {
+		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set, or a SAS token should be supplied before cleaning the file system")
+		os.Exit(1)
+	}
+	// create the pipeline, preferring SAS over account name/key
+	if blobURLParts.SAS.Encode() != "" {
+		return azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
+	}
+
+	c, err := azblob.NewSharedKeyCredential(name, key)
+	if err != nil {
+		fmt.Println("Failed to create shared key credential!")
+		os.Exit(1)
+	}
+	return azblob.NewPipeline(c, azblob.PipelineOptions{})
+}
+
+func createFilePipeline(u url.URL) pipeline.Pipeline {
+	name := os.Getenv("ACCOUNT_NAME")
+	key := os.Getenv("ACCOUNT_KEY")
+	fileURLParts := azfile.NewFileURLParts(u)
+	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in the environment, and there is no SAS token present
+	if (name == "" && key == "") && fileURLParts.SAS.Encode() == "" {
+		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set, or a SAS token should be supplied before cleaning the file system")
+		os.Exit(1)
+	}
+
+	// create the pipeline, preferring SAS over account name/key
+	if fileURLParts.SAS.Encode() != "" {
+		return azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
+	}
+
+	c, err := azfile.NewSharedKeyCredential(name, key)
+	if err != nil {
+		fmt.Println("Failed to create shared key credential!")
+		os.Exit(1)
+	}
+	return azfile.NewPipeline(c, azfile.PipelineOptions{})
 }
 
 func createBlobFSPipeline(u url.URL) pipeline.Pipeline {
@@ -268,14 +318,9 @@ func cleanFileSystem(fsURLStr string) {
 	}
 
 	fsURL := azbfs.NewFileSystemURL(*u, createBlobFSPipeline(*u))
-	_, err = fsURL.Delete(ctx)
-	if err != nil {
-		sErr := err.(azbfs.StorageError)
-		if sErr != nil && sErr.Response().StatusCode != http.StatusNotFound {
-			fmt.Println(fmt.Sprintf("error deleting the file system for cleaning, %v", err))
-			os.Exit(1)
-		}
-	}
+	// Instead of error checking the delete, error check the create.
+	// If the filesystem is deleted somehow, this recovers us from CI hell.
+	_, _ = fsURL.Delete(ctx)
 
 	// Sleep seconds to wait the share deletion got succeeded
 	time.Sleep(45 * time.Second)
@@ -305,15 +350,15 @@ func cleanBfsFile(fileURLStr string) {
 }
 
 func cleanBlobAccount(resourceURL string) {
-	accountSAS, err := url.Parse(resourceURL)
+	accountURLBase, err := url.Parse(resourceURL)
 
 	if err != nil {
 		fmt.Println("error parsing the account sas ", err)
 		os.Exit(1)
 	}
 
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-	accountURL := azblob.NewServiceURL(*accountSAS, p)
+	p := createBlobPipeline(*accountURLBase)
+	accountURL := azblob.NewServiceURL(*accountURLBase, p)
 
 	// perform a list account
 	for marker := (azblob.Marker{}); marker.NotDone(); {
@@ -336,15 +381,15 @@ func cleanBlobAccount(resourceURL string) {
 }
 
 func cleanFileAccount(resourceURL string) {
-	accountSAS, err := url.Parse(resourceURL)
+	accountURLBase, err := url.Parse(resourceURL)
 
 	if err != nil {
 		fmt.Println("error parsing the account sas ", err)
 		os.Exit(1)
 	}
 
-	p := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
-	accountURL := azfile.NewServiceURL(*accountSAS, p)
+	p := createFilePipeline(*accountURLBase)
+	accountURL := azfile.NewServiceURL(*accountURLBase, p)
 
 	// perform a list account
 	for marker := (azfile.Marker{}); marker.NotDone(); {
@@ -403,25 +448,19 @@ func cleanS3Account(resourceURL string) {
 			// List all objects from a bucket-name with a matching prefix.
 			for object := range s3Client.ListObjectsV2(bucket.Name, "", true, context.Background().Done()) {
 				if object.Err != nil {
-					fmt.Printf("error listing the object from bucket %q, %v\n", bucket.Name, err)
-					os.Exit(1)
+					fmt.Printf("error listing the objects from bucket %q, %v\n", bucket.Name, err)
+					return
 				}
 				objectsCh <- object.Key
 			}
 		}()
 
 		// List bucket, and delete all the objects in the bucket
-		errChn := s3Client.RemoveObjects(bucket.Name, objectsCh)
-
-		for err := range errChn {
-			fmt.Println("error remove objects from bucket, ", err)
-			os.Exit(1)
-		}
+		_ = s3Client.RemoveObjects(bucket.Name, objectsCh)
 
 		// Remove the bucket.
 		if err := s3Client.RemoveBucket(bucket.Name); err != nil {
 			fmt.Printf("error deleting the bucket %q from account, %v\n", bucket.Name, err)
-			os.Exit(1)
 		}
 	}
 }

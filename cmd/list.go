@@ -73,9 +73,9 @@ func init() {
 		},
 	}
 
-	listContainerCmd.PersistentFlags().BoolVar(&parameters.MachineReadable, "machine-readable", false, "Lists file sizes in bytes")
-	listContainerCmd.PersistentFlags().BoolVar(&parameters.RunningTally, "running-tally", false, "Counts the total number of files & their sizes")
-	listContainerCmd.PersistentFlags().BoolVar(&parameters.MegaUnits, "mega-units", false, "Displays units in orders of 1000, not 1024")
+	listContainerCmd.PersistentFlags().BoolVar(&parameters.MachineReadable, "machine-readable", false, "Lists file sizes in bytes.")
+	listContainerCmd.PersistentFlags().BoolVar(&parameters.RunningTally, "running-tally", false, "Counts the total number of files and their sizes.")
+	listContainerCmd.PersistentFlags().BoolVar(&parameters.MegaUnits, "mega-units", false, "Displays units in orders of 1000, not 1024.")
 
 	rootCmd.AddCommand(listContainerCmd)
 }
@@ -95,7 +95,7 @@ func HandleListContainerCommand(source string) (err error) {
 
 	credentialInfo := common.CredentialInfo{}
 	// Use source as resource URL, and it can be public access resource URL.
-	if credentialInfo.CredentialType, err = getBlobCredentialType(ctx, source, true, false); err != nil {
+	if credentialInfo.CredentialType, _, err = getBlobCredentialType(ctx, source, true, false); err != nil {
 		return err
 	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
 		// Message user that they are using Oauth token for authentication,

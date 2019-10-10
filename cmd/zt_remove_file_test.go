@@ -23,6 +23,7 @@ package cmd
 import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	chk "gopkg.in/check.v1"
+	"net/url"
 	"strings"
 )
 
@@ -248,5 +249,126 @@ func (s *cmdIntegrationSuite) TestRemoveFilesWithIncludeAndExcludeFlag(c *chk.C)
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		validateDownloadTransfersAreScheduled(c, "", "", filesToInclude, mockedRPC)
+	})
+}
+
+// note: list-of-files flag is used
+func (s *cmdIntegrationSuite) TestRemoveListOfFilesAndDirectories(c *chk.C) {
+	fsu := getFSU()
+	dirName := "megadir"
+
+	// set up the share with numerous files
+	shareURL, shareName := createNewAzureShare(c, fsu)
+	c.Assert(shareURL, chk.NotNil)
+	defer deleteShare(c, shareURL)
+	individualFilesList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, shareURL, "")
+	filesUnderTopDir := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, shareURL, dirName+"/")
+	fileList := append(individualFilesList, filesUnderTopDir...)
+	c.Assert(len(fileList), chk.Not(chk.Equals), 0)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
+	raw := getDefaultRemoveRawInput(rawShareURLWithSAS.String())
+	raw.recursive = true
+
+	// make the input for list-of-files
+	listOfFiles := append(individualFilesList, dirName)
+
+	// add some random files that don't actually exist
+	listOfFiles = append(listOfFiles, "WUTAMIDOING")
+	listOfFiles = append(listOfFiles, "DONTKNOW")
+	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(c, listOfFiles)
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(fileList))
+
+		// validate that the right transfers were sent
+		validateRemoveTransfersAreScheduled(c, true, fileList, mockedRPC)
+	})
+
+	// turn off recursive, this time only top files should be deleted
+	raw.recursive = false
+	mockedRPC.reset()
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(fileList))
+
+		for _, transfer := range mockedRPC.transfers {
+			source, err := url.PathUnescape(transfer.Source)
+			c.Assert(err, chk.IsNil)
+
+			// if the transfer is under the given dir, make sure only the top level files were scheduled
+			if strings.HasPrefix(source, dirName) {
+				trimmedSource := strings.TrimPrefix(source, dirName+"/")
+				c.Assert(strings.Contains(trimmedSource, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+			}
+		}
+	})
+}
+
+// include and exclude flag can work together to limit the scope of the delete
+func (s *cmdIntegrationSuite) TestRemoveListOfFilesWithIncludeAndExclude(c *chk.C) {
+	fsu := getFSU()
+	dirName := "megadir"
+
+	// set up the share with numerous files
+	shareURL, shareName := createNewAzureShare(c, fsu)
+	c.Assert(shareURL, chk.NotNil)
+	defer deleteShare(c, shareURL)
+	individualFilesList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, shareURL, "")
+	scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, shareURL, dirName+"/")
+
+	// add special files that we wish to include
+	filesToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
+	scenarioHelper{}.generateAzureFilesFromList(c, shareURL, filesToInclude)
+	includeString := "*.pdf;*.jpeg;exactName"
+
+	// add special files that we wish to exclude
+	// note that the excluded files also match the include string
+	filesToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
+	scenarioHelper{}.generateAzureFilesFromList(c, shareURL, filesToExclude)
+	excludeString := "so*;not*;exactName"
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
+	raw := getDefaultRemoveRawInput(rawShareURLWithSAS.String())
+	raw.recursive = true
+	raw.include = includeString
+	raw.exclude = excludeString
+
+	// make the input for list-of-files
+	listOfFiles := append(individualFilesList, dirName)
+
+	// add some random files that don't actually exist
+	listOfFiles = append(listOfFiles, "WUTAMIDOING")
+	listOfFiles = append(listOfFiles, "DONTKNOW")
+
+	// add files to both include and exclude
+	listOfFiles = append(listOfFiles, filesToInclude...)
+	listOfFiles = append(listOfFiles, filesToExclude...)
+	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(c, listOfFiles)
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(filesToInclude))
+
+		// validate that the right transfers were sent
+		validateRemoveTransfersAreScheduled(c, true, filesToInclude, mockedRPC)
 	})
 }

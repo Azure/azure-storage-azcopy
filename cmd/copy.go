@@ -21,27 +21,26 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"math"
-
 	"io"
+	"math"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
-	"io/ioutil"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/spf13/cobra"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
-	"github.com/spf13/cobra"
 )
 
 const pipingUploadParallelism = 5
@@ -66,22 +65,23 @@ type rawCopyCmdArgs struct {
 	fromTo string
 	//blobUrlForRedirection string
 
-	// TODO remove after refactoring
-	legacyInclude string
-	legacyExclude string
 	// new include/exclude only apply to file names
 	// implemented for remove (and sync) only
-	include string
-	exclude string
+	include               string
+	exclude               string
+	includePath           string // NOTE: This gets handled like list-of-files! It may LOOK like a bug, but it is not.
+	excludePath           string
+	includeFileAttributes string
+	excludeFileAttributes string
 
 	// filters from flags
 	listOfFilesToCopy string
 	recursive         bool
 	followSymlinks    bool
-	withSnapshots     bool
+	autoDecompress    bool
 	// forceWrite flag is used to define the User behavior
 	// to overwrite the existing blobs or not.
-	forceWrite bool
+	forceWrite string
 
 	// options from flags
 	blockSizeMB              float64
@@ -95,15 +95,13 @@ type rawCopyCmdArgs struct {
 	preserveLastModifiedTime bool
 	putMd5                   bool
 	md5ValidationOption      string
+	CheckLength              bool
 	// defines the type of the blob at the destination in case of upload / account to account copy
-	blobType        string
-	blockBlobTier   string
-	pageBlobTier    string
-	background      bool
-	output          string
-	acl             string
-	logVerbosity    string
-	cancelFromStdin bool
+	blobType      string
+	blockBlobTier string
+	pageBlobTier  string
+	output        string // TODO: Is this unused now? replaced with param at root level?
+	logVerbosity  string
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType string
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
@@ -122,6 +120,9 @@ type rawCopyCmdArgs struct {
 	s2sSourceChangeValidation bool
 	// specify how user wants to handle invalid metadata.
 	s2sInvalidMetadataHandleOption string
+
+	// internal override to enforce strip-top-dir
+	internalOverrideStripTopDir bool
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -163,7 +164,66 @@ func blockSizeInBytes(rawBlockSizeInMiB float64) (uint32, error) {
 
 // validates and transform raw input into cooked input
 func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
-	cooked := cookedCopyCmdArgs{}
+	// generate a unique job ID
+	return raw.cookWithId(common.NewJobID())
+}
+
+// returns result of stripping and if striptopdir is enabled
+// if nothing happens, the original source is returned
+func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Location) (result string, stripTopDir bool, err error) {
+	result = raw.src
+	// Because local already handles wildcards via a list traverser, we should only handle the trailing wildcard --strip-top-dir inference remotely.
+	// To avoid getting trapped by parsing a URL and losing a sense of which *s are real, strip the SAS token in a """unsafe""" way.
+	splitURL := strings.Split(result, "?")
+
+	// If we parse the URL now, we'll have no concept of whether a * was encoded or unencoded.
+	// This is important because we treat unencoded *s as wildcards, and %2A (encoded *) as literal stars.
+	// So, replace any and all instances of (raw) %2A with %00 (NULL), so we can distinguish these later down the pipeline.
+	// Azure storage doesn't support NULL, so nobody has any reason to ever intentionally place a %00 in their URLs.
+	// Thus, %00 is our magic number. Understandably, this is an exception to how we handle wildcards, but this isn't a user-facing exception.
+	splitURL[0] = strings.ReplaceAll(splitURL[0], "%2A", "%00")
+
+	sourceURL, err := url.Parse(splitURL[0])
+
+	if err != nil {
+		err = fmt.Errorf("failed to encode %s as URL; %s", strings.ReplaceAll(splitURL[0], "%00", "%2A"), err)
+		return
+	}
+
+	// Catch trailing wildcard in object name
+	// Ignore wildcard in container name, as that is handled by initResourceTraverser -> AccountTraverser
+	genericResourceURLParts := common.NewGenericResourceURLParts(*sourceURL, location)
+
+	if cName := genericResourceURLParts.GetContainerName(); (strings.Contains(cName, "*") || cName == "") && genericResourceURLParts.GetObjectName() != "" {
+		err = errors.New("cannot combine a specific object name with an account-level search")
+		return
+	}
+
+	// Infer stripTopDir, trim suffix so we can traverse properly
+	if strings.HasSuffix(genericResourceURLParts.GetObjectName(), "/*") || genericResourceURLParts.GetObjectName() == "*" {
+		genericResourceURLParts.SetObjectName(strings.TrimSuffix(genericResourceURLParts.GetObjectName(), "*"))
+		stripTopDir = true
+	}
+
+	// Check for other *s, error out and explain the usage
+	if strings.Contains(genericResourceURLParts.GetObjectName(), "*") {
+		err = errors.New("cannot use wildcards in the path section of the URL except in trailing \"/*\". If you wish to use * in your URL, manually encode it to %2A")
+		return
+	}
+
+	splitURL[0] = strings.ReplaceAll(genericResourceURLParts.String(), "%00", "%2A")
+	// drop URL back to string and replace our magic number
+	// re-combine underlying string
+	result = strings.Join(splitURL, "?")
+
+	return
+}
+
+func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, error) {
+
+	cooked := cookedCopyCmdArgs{
+		jobID: jobId,
+	}
 
 	fromTo, err := validateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
 	if err != nil {
@@ -172,13 +232,45 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.source = raw.src
 	cooked.destination = raw.dst
 
+	if strings.EqualFold(cooked.destination, common.Dev_Null) && runtime.GOOS == "windows" {
+		cooked.destination = common.Dev_Null // map all capitalizations of "NUL"/"nul" to one because (on Windows) they all mean the same thing
+	}
+
 	cooked.fromTo = fromTo
 
-	// copy&transform flags to type-safety
+	// Check if source has a trailing wildcard on a URL
+	if fromTo.From().IsRemote() {
+		cooked.source, cooked.stripTopDir, err = raw.stripTrailingWildcardOnRemoteSource(fromTo.From())
+
+		if err != nil {
+			return cooked, err
+		}
+	}
+
+	if raw.internalOverrideStripTopDir {
+		cooked.stripTopDir = true
+	}
+
 	cooked.recursive = raw.recursive
 	cooked.followSymlinks = raw.followSymlinks
-	cooked.withSnapshots = raw.withSnapshots
-	cooked.forceWrite = raw.forceWrite
+
+	// copy&transform flags to type-safety
+	err = cooked.forceWrite.Parse(raw.forceWrite)
+	if err != nil {
+		return cooked, err
+	}
+	allowAutoDecompress := fromTo == common.EFromTo.BlobLocal() || fromTo == common.EFromTo.FileLocal()
+	if raw.autoDecompress && !allowAutoDecompress {
+		return cooked, errors.New("automatic decompression is only supported for downloads from Blob and Azure Files") // as at Sept 2019, our ADLS Gen 2 Swagger does not include content-encoding for directory (path) listings so we can't support it there
+	}
+	cooked.autoDecompress = raw.autoDecompress
+
+	// cooked.stripTopDir is effectively a workaround for the lack of wildcards in remote sources.
+	// Local, however, still supports wildcards, and thus needs its top directory stripped whenever a wildcard is used.
+	// Thus, we check for wildcards and instruct the processor to strip the top dir later instead of repeatedly checking cca.source for wildcards.
+	if fromTo.From() == common.ELocation.Local() && strings.Contains(cooked.source, "*") {
+		cooked.stripTopDir = true
+	}
 
 	cooked.blockSize, err = blockSizeInBytes(raw.blockSizeMB)
 	if err != nil {
@@ -209,82 +301,94 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	if err != nil {
 		return cooked, err
 	}
-	// User can provide either listOfFilesToCopy or include since listOFFiles mentions
-	// file names to include explicitly and include file may mention the pattern.
-	// This could conflict enumerating the files to queue up for transfer.
-	if len(raw.listOfFilesToCopy) > 0 && len(raw.legacyInclude) > 0 {
-		return cooked, fmt.Errorf("user provided argument with both listOfFilesToCopy and include flag. Only one should be provided")
+
+	// Everything uses the new implementation of list-of-files now.
+	// This handles both list-of-files and include-path as a list enumerator.
+	// This saves us time because we know *exactly* what we're looking for right off the bat.
+	// Note that exclude-path is handled as a filter unlike include-path.
+
+	if (len(raw.include) > 0 || len(raw.exclude) > 0) && cooked.fromTo == common.EFromTo.BlobFSTrash() {
+		return cooked, fmt.Errorf("include/exclude flags are not supported for this destination")
 	}
 
-	// If the user provided the list of files explicitly to be copied, then parse the argument
-	// The user passes the location of json file which will have the list of files to be copied.
-	// The "json file" is chosen as input because there is limit on the number of characters that
-	// can be supplied with the argument, but Storage Explorer folks requirements was not to impose
-	// any limit on the number of files that can be copied.
-	if len(raw.listOfFilesToCopy) > 0 {
-		jsonFile, err := os.Open(raw.listOfFilesToCopy)
+	// unbuffered so this reads as we need it to rather than all at once in bulk
+	listChan := make(chan string)
+	var f *os.File
+
+	if raw.listOfFilesToCopy != "" {
+		f, err = os.Open(raw.listOfFilesToCopy)
+
 		if err != nil {
 			return cooked, fmt.Errorf("cannot open %s file passed with the list-of-file flag", raw.listOfFilesToCopy)
 		}
-		// read opened json file as a byte array.
-		jsonBytes, err := ioutil.ReadAll(jsonFile)
-		if err != nil {
-			return cooked, fmt.Errorf("error %s read %s file passed with the list-of-file flag", err.Error(), raw.listOfFilesToCopy)
-		}
-		var files common.ListOfFiles
-		err = json.Unmarshal(jsonBytes, &files)
-		if err != nil {
-			return cooked, fmt.Errorf("error %s unmarshalling the contents of %s file passed with the list-of-file flag", err.Error(), raw.listOfFilesToCopy)
-		}
-		for _, file := range files.Files {
-			// If split of the include string leads to an empty string
-			// not include that string
-			if len(file) == 0 {
-				continue
-			}
-			// replace the OS path separator in includePath string with AZCOPY_PATH_SEPARATOR
-			// this replacement is done to handle the windows file paths where path separator "\\"
-			filePath := strings.Replace(file, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-			cooked.listOfFilesToCopy = append(cooked.listOfFilesToCopy, filePath)
-		}
 	}
 
-	// initialize the include map which contains the list of files to be included
-	// parse the string passed in include flag
-	// more than one file are expected to be separated by ';'
-	cooked.legacyInclude = make(map[string]int)
-	if len(raw.legacyInclude) > 0 {
-		files := strings.Split(raw.legacyInclude, ";")
-		for index := range files {
-			// If split of the include string leads to an empty string
-			// not include that string
-			if len(files[index]) == 0 {
-				continue
+	// Prepare UTF-8 byte order marker
+	utf8BOM := string([]byte{0xEF, 0xBB, 0xBF})
+
+	go func() {
+		defer close(listChan)
+
+		if f != nil {
+			scanner := bufio.NewScanner(f)
+			checkBOM := false
+			headerLineNum := 0
+			firstLineIsCurlyBrace := false
+
+			for scanner.Scan() {
+				v := scanner.Text()
+
+				// Check if the UTF-8 BOM is on the first line and remove it if necessary.
+				// Note that the UTF-8 BOM can be present on the same line feed as the first line of actual data, so just use TrimPrefix.
+				// If the line feed were separate, the empty string would be skipped later.
+				if !checkBOM {
+					v = strings.TrimPrefix(v, utf8BOM)
+					checkBOM = true
+				}
+
+				// provide clear warning if user uses old (obsolete) format by mistake
+				if headerLineNum <= 1 {
+					cleanedLine := strings.Replace(strings.Replace(v, " ", "", -1), "\t", "", -1)
+					cleanedLine = strings.TrimSuffix(cleanedLine, "[") // don't care which line this is on, could be third line
+					if cleanedLine == "{" && headerLineNum == 0 {
+						firstLineIsCurlyBrace = true
+					} else {
+						const jsonStart = "{\"Files\":"
+						jsonStartNoBrace := strings.TrimPrefix(jsonStart, "{")
+						isJson := cleanedLine == jsonStart || firstLineIsCurlyBrace && cleanedLine == jsonStartNoBrace
+						if isJson {
+							glcm.Error("The format for list-of-files has changed. The old JSON format is no longer supported")
+						}
+					}
+					headerLineNum++
+				}
+
+				// empty strings should be ignored, otherwise the source root itself is selected
+				if len(v) > 0 {
+					listChan <- v
+				}
 			}
-			// replace the OS path separator in includePath string with AZCOPY_PATH_SEPARATOR
-			// this replacement is done to handle the windows file paths where path separator "\\"
-			includePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-			cooked.legacyInclude[includePath] = index
 		}
+
+		// This occurs much earlier than the other include or exclude filters. It would be preferable to move them closer later on in the refactor.
+		includePathList := raw.parsePatterns(raw.includePath)
+
+		for _, v := range includePathList {
+			// empty strings should be ignored, otherwise the source root itself is selected
+			if len(v) > 0 {
+				listChan <- v
+			}
+		}
+	}()
+
+	// A combined implementation reduces the amount of code duplication present.
+	// However, it _does_ increase the amount of code-intertwining present.
+	if raw.listOfFilesToCopy != "" && raw.includePath != "" {
+		return cooked, errors.New("cannot combine list of files and include path")
 	}
 
-	// initialize the exclude map which contains the list of files to be excluded
-	// parse the string passed in exclude flag
-	// more than one file are expected to be separated by ';'
-	cooked.legacyExclude = make(map[string]int)
-	if len(raw.legacyExclude) > 0 {
-		files := strings.Split(raw.legacyExclude, ";")
-		for index := range files {
-			// If split of the include string leads to an empty string
-			// not include that string
-			if len(files[index]) == 0 {
-				continue
-			}
-			// replace the OS path separator in excludePath string with AZCOPY_PATH_SEPARATOR
-			// this replacement is done to handle the windows file paths where path separator "\\"
-			excludePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-			cooked.legacyExclude[excludePath] = index
-		}
+	if raw.listOfFilesToCopy != "" || raw.includePath != "" {
+		cooked.listOfFilesChannel = listChan
 	}
 
 	cooked.metadata = raw.metadata
@@ -296,31 +400,54 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 
+	if cooked.contentType != "" {
+		cooked.noGuessMimeType = true // As specified in the help text, noGuessMimeType is inferred here.
+	}
+
 	cooked.putMd5 = raw.putMd5
 	err = cooked.md5ValidationOption.Parse(raw.md5ValidationOption)
 	if err != nil {
 		return cooked, err
 	}
+	globalBlobFSMd5ValidationOption = cooked.md5ValidationOption // workaround, to avoid having to pass this all the way through the chain of methods in enumeration, just for one weird and (presumably) temporary workaround
 
-	cooked.background = raw.background
-	cooked.acl = raw.acl
-	cooked.cancelFromStdin = raw.cancelFromStdin
+	cooked.CheckLength = raw.CheckLength
+	// length of devnull will be 0, thus this will always fail unless downloading an empty file
+	if cooked.destination == common.Dev_Null {
+		cooked.CheckLength = false
+	}
 
 	// if redirection is triggered, avoid printing any output
 	if cooked.isRedirection() {
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
 
-	// generate a unique job ID
-	cooked.jobID = common.NewJobID()
-
 	// check for the flag value relative to fromTo location type
 	// Example1: for Local to Blob, preserve-last-modified-time flag should not be set to true
 	// Example2: for Blob to Local, follow-symlinks, blob-tier flags should not be provided with values.
 	switch cooked.fromTo {
 	case common.EFromTo.LocalBlobFS():
-		if cooked.blobType != common.EBlobType.None() {
+		if cooked.blobType != common.EBlobType.Detect() {
 			return cooked, fmt.Errorf("blob-type is not supported on ADLS Gen 2")
+		}
+		if cooked.preserveLastModifiedTime {
+			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading")
+		}
+		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
+			cooked.pageBlobTier != common.EPageBlobTier.None() {
+			return cooked, fmt.Errorf("blob-tier is not supported while uploading to ADLS Gen 2")
+		}
+		if cooked.s2sPreserveProperties {
+			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while uploading")
+		}
+		if cooked.s2sPreserveAccessTier {
+			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while uploading")
+		}
+		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
+			return cooked, fmt.Errorf("s2s-handle-invalid-metadata is not supported while uploading")
+		}
+		if cooked.s2sSourceChangeValidation {
+			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
 		}
 	case common.EFromTo.LocalBlob():
 		if cooked.preserveLastModifiedTime {
@@ -358,8 +485,12 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		if cooked.s2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
 		}
+		if cooked.blobType != common.EBlobType.Detect() {
+			return cooked, fmt.Errorf("blob-type is not supported on Azure File")
+		}
 	case common.EFromTo.BlobLocal(),
-		common.EFromTo.FileLocal():
+		common.EFromTo.FileLocal(),
+		common.EFromTo.BlobFSLocal():
 		if cooked.followSymlinks {
 			return cooked, fmt.Errorf("follow-symlinks flag is not supported while downloading")
 		}
@@ -387,6 +518,8 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		}
 	case common.EFromTo.BlobBlob(),
 		common.EFromTo.FileBlob(),
+		common.EFromTo.FileFile(),
+		common.EFromTo.BlobFile(),
 		common.EFromTo.S3Blob():
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while copying from service to service")
@@ -394,14 +527,12 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		if cooked.followSymlinks {
 			return cooked, fmt.Errorf("follow-symlinks flag is not supported while copying from service to service")
 		}
+		// blob type is not supported if destination is not blob
+		if cooked.blobType != common.EBlobType.Detect() && cooked.fromTo.To() != common.ELocation.Blob() {
+			return cooked, fmt.Errorf("blob-type is not supported for the scenario (%s)", cooked.fromTo.String())
+		}
 		// Disabling blob tier override, when copying block -> block blob or page -> page blob, blob tier will be kept,
 		// For s3 and file, only hot block blob tier is supported.
-		if cooked.fromTo == common.EFromTo.FileBlob() && cooked.blobType != common.EBlobType.None() {
-			return cooked, fmt.Errorf("blob-type is not supported while copying from file to blob")
-		}
-		if cooked.fromTo == common.EFromTo.S3Blob() && cooked.blobType != common.EBlobType.None() {
-			return cooked, fmt.Errorf("blob-type is not supported while copying from s3 to blob")
-		}
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
 			return cooked, fmt.Errorf("blob-tier is not supported while copying from sevice to service")
@@ -447,13 +578,30 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// parse the filter patterns
 	cooked.includePatterns = raw.parsePatterns(raw.include)
 	cooked.excludePatterns = raw.parsePatterns(raw.exclude)
+	cooked.excludePathPatterns = raw.parsePatterns(raw.excludePath)
+
+	if (raw.includeFileAttributes != "" || raw.excludeFileAttributes != "") && fromTo.From() != common.ELocation.Local() {
+		return cooked, errors.New("cannot check file attributes on remote objects")
+	}
+	cooked.includeFileAttributes = raw.parsePatterns(raw.includeFileAttributes)
+	cooked.excludeFileAttributes = raw.parsePatterns(raw.excludeFileAttributes)
 
 	return cooked, nil
 }
 
+// When other commands use the copy command arguments to cook cook, set the blobType to None and validation option
+// else parsing the arguments will fail.
+func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
+	raw.blobType = common.EBlobType.Detect().String()
+	raw.blockBlobTier = common.EBlockBlobTier.None().String()
+	raw.pageBlobTier = common.EPageBlobTier.None().String()
+	raw.md5ValidationOption = common.DefaultHashValidationOption.String()
+	raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
+	raw.forceWrite = common.EOverwriteOption.True().String()
+}
+
 func validatePutMd5(putMd5 bool, fromTo common.FromTo) error {
-	isUpload := fromTo.From() == common.ELocation.Local() && fromTo.To().IsRemote()
-	if putMd5 && !isUpload {
+	if putMd5 && !fromTo.IsUpload() {
 		return fmt.Errorf("put-md5 is set but the job is not an upload")
 	}
 	return nil
@@ -461,8 +609,7 @@ func validatePutMd5(putMd5 bool, fromTo common.FromTo) error {
 
 func validateMd5Option(option common.HashValidationOption, fromTo common.FromTo) error {
 	hasMd5Validation := option != common.DefaultHashValidationOption
-	isDownload := fromTo.To() == common.ELocation.Local()
-	if hasMd5Validation && !isDownload {
+	if hasMd5Validation && !fromTo.IsDownload() {
 		return fmt.Errorf("check-md5 is set but the job is not a download")
 	}
 	return nil
@@ -477,20 +624,22 @@ type cookedCopyCmdArgs struct {
 	destinationSAS string
 	fromTo         common.FromTo
 
-	// TODO remove after refactoring
-	legacyInclude map[string]int
-	legacyExclude map[string]int
 	// new include/exclude only apply to file names
 	// implemented for remove (and sync) only
-	includePatterns []string
-	excludePatterns []string
+	// includePathPatterns are handled like a list-of-files. Do not panic. This is not a bug that it is not present here.
+	includePatterns       []string
+	excludePatterns       []string
+	excludePathPatterns   []string
+	includeFileAttributes []string
+	excludeFileAttributes []string
 
 	// filters from flags
-	listOfFilesToCopy []string
-	recursive         bool
-	followSymlinks    bool
-	withSnapshots     bool
-	forceWrite        bool
+	listOfFilesChannel chan string // Channels are nullable.
+	recursive          bool
+	stripTopDir        bool
+	followSymlinks     bool
+	forceWrite         common.OverwriteOption
+	autoDecompress     bool
 
 	// options from flags
 	blockSize uint32
@@ -509,10 +658,8 @@ type cookedCopyCmdArgs struct {
 	preserveLastModifiedTime bool
 	putMd5                   bool
 	md5ValidationOption      common.HashValidationOption
-	background               bool
-	acl                      string
+	CheckLength              bool
 	logVerbosity             common.LogLevel
-	cancelFromStdin          bool
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
 
@@ -552,6 +699,13 @@ type cookedCopyCmdArgs struct {
 	s2sSourceChangeValidation bool
 	// specify how user wants to handle invalid metadata.
 	s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption
+
+	// followup/cleanup properties are NOT available on resume, and so should not be used for jobs that may be resumed
+	// TODO: consider find a way to enforce that, or else to allow them to be preserved. Initially, they are just for benchmark jobs, so not a problem immediately because those jobs can't be resumed, by design.
+	followupJobArgs   *cookedCopyCmdArgs
+	priorJobExitCode  *common.ExitCode
+	isCleanupJob      bool // triggers abbreviated status reporting, since we don't want full reporting for cleanup jobs
+	cleanupJobMessage string
 }
 
 func (cca *cookedCopyCmdArgs) isRedirection() bool {
@@ -700,10 +854,9 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		JobID:           cca.jobID,
 		FromTo:          cca.fromTo,
 		ForceWrite:      cca.forceWrite,
+		AutoDecompress:  cca.autoDecompress,
 		Priority:        common.EJobPriority.Normal(),
 		LogLevel:        cca.logVerbosity,
-		Include:         cca.legacyInclude,
-		Exclude:         cca.legacyExclude,
 		ExcludeBlobType: cca.excludeBlobType,
 		BlobAttributes: common.BlobTransferAttributes{
 			BlobType:                 cca.blobType,
@@ -730,165 +883,78 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		CredentialInfo: cca.credentialInfo,
 	}
 
-	// TODO remove this copy pasted code during refactoring
 	from := cca.fromTo.From()
 	to := cca.fromTo.To()
+
 	// Strip the SAS from the source and destination whenever there is SAS exists in URL.
 	// Note: SAS could exists in source of S2S copy, even if the credential type is OAuth for destination.
-	switch from {
-	case common.ELocation.Blob():
-		fromUrl, err := url.Parse(cca.source)
-		if err != nil {
-			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
-		}
-		blobParts := azblob.NewBlobURLParts(*fromUrl)
-		cca.sourceSAS = blobParts.SAS.Encode()
-		jobPartOrder.SourceSAS = cca.sourceSAS
-		blobParts.SAS = azblob.SASQueryParameters{}
-		bUrl := blobParts.URL()
-		cca.source = bUrl.String()
+	cca.source, cca.sourceSAS, err = SplitAuthTokenFromResource(cca.source, from)
 
-		// set the clean source root
-		bUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(bUrl.Path)
-		jobPartOrder.SourceRoot = bUrl.String()
-
-	case common.ELocation.File():
-		fromUrl, err := url.Parse(cca.source)
-		if err != nil {
-			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
-		}
-		fileParts := azfile.NewFileURLParts(*fromUrl)
-		cca.sourceSAS = fileParts.SAS.Encode()
-		if cca.sourceSAS == "" {
-			return fmt.Errorf("azure files only supports SAS token authentication")
-		}
-		jobPartOrder.SourceSAS = cca.sourceSAS
-		fileParts.SAS = azfile.SASQueryParameters{}
-		fUrl := fileParts.URL()
-		cca.source = fUrl.String()
-
-		// set the clean source root
-		fUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(fUrl.Path)
-		jobPartOrder.SourceRoot = fUrl.String()
-
-	case common.ELocation.BlobFS():
-		fromUrl, err := url.Parse(cca.source)
-		if err != nil {
-			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
-		}
-		bfsParts := azbfs.NewBfsURLParts(*fromUrl)
-		cca.sourceSAS = bfsParts.SAS.Encode()
-		jobPartOrder.SourceSAS = cca.sourceSAS
-		bfsParts.SAS = azbfs.SASQueryParameters{}
-		bfsUrl := bfsParts.URL()
-		cca.source = bfsUrl.String() // this escapes spaces in the source
-
-		// set the clean source root
-		bfsUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(bfsUrl.Path)
-		jobPartOrder.SourceRoot = bfsUrl.String()
-
-	case common.ELocation.Local():
-		cca.source = cleanLocalPath(cca.source)
-		jobPartOrder.SourceRoot, _ = gCopyUtil.getRootPathWithoutWildCards(cca.source)
-
-	case common.ELocation.S3():
-		fromURL, err := url.Parse(cca.source)
-		if err != nil {
-			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromURL.String(), err.Error())
-		}
-
-		// S3 management console encode ' '(space) as '+', which is not supported by Azure resources.
-		// To support URL from S3 managment console, azcopy decode '+' as ' '(space).
-		*fromURL = common.URLExtension{URL: *fromURL}.URLWithPlusDecodedInPath()
-		cca.source = fromURL.String()
-
-		// set the clean source root
-		fromURL.Path, _ = gCopyUtil.getRootPathWithoutWildCards(fromURL.Path)
-		jobPartOrder.SourceRoot = fromURL.String()
-
-	default:
-		jobPartOrder.SourceRoot, _ = gCopyUtil.getRootPathWithoutWildCards(cca.source)
+	if err != nil {
+		return err
 	}
 
-	switch to {
-	case common.ELocation.Blob():
-		toUrl, err := url.Parse(cca.destination)
-		if err != nil {
-			return fmt.Errorf("error parsing the destination url %s. Failed with error %s", toUrl.String(), err.Error())
-		}
-		blobParts := azblob.NewBlobURLParts(*toUrl)
-		cca.destinationSAS = blobParts.SAS.Encode()
-		jobPartOrder.DestinationSAS = cca.destinationSAS
-		blobParts.SAS = azblob.SASQueryParameters{}
-		bUrl := blobParts.URL()
-		cca.destination = bUrl.String()
-	case common.ELocation.File():
-		toUrl, err := url.Parse(cca.destination)
-		if err != nil {
-			return fmt.Errorf("error parsing the destination url %s. Failed with error %s", toUrl.String(), err.Error())
-		}
-		fileParts := azfile.NewFileURLParts(*toUrl)
-		cca.destinationSAS = fileParts.SAS.Encode()
-		if cca.destinationSAS == "" {
-			return fmt.Errorf("azure files only supports SAS token authentication")
-		}
-		jobPartOrder.DestinationSAS = cca.destinationSAS
-		fileParts.SAS = azfile.SASQueryParameters{}
-		fUrl := fileParts.URL()
-		cca.destination = fUrl.String()
-	case common.ELocation.BlobFS():
-		toUrl, err := url.Parse(cca.destination)
-		if err != nil {
-			return fmt.Errorf("error parsing the destination url %s. Failed with error %s", toUrl.String(), err.Error())
-		}
-		bfsParts := azbfs.NewBfsURLParts(*toUrl)
-		cca.destinationSAS = bfsParts.SAS.Encode()
-		jobPartOrder.DestinationSAS = cca.destinationSAS
-		bfsParts.SAS = azbfs.SASQueryParameters{}
-		bfsUrl := bfsParts.URL()
-		cca.destination = bfsUrl.String() // this escapes spaces in the destination
-	case common.ELocation.Local():
-		cca.destination = cleanLocalPath(cca.destination)
+	jobPartOrder.SourceSAS = cca.sourceSAS
+	jobPartOrder.SourceRoot, err = GetResourceRoot(cca.source, from)
+
+	// Stripping the trailing /* for local occurs much later than stripping the trailing /* for remote resources.
+	// TODO: Move these into the same place for maintainability.
+	if diff := strings.TrimPrefix(cca.source, jobPartOrder.SourceRoot); cca.fromTo.From().IsLocal() &&
+		diff == "*" || diff == common.OS_PATH_SEPARATOR+"*" || diff == common.AZCOPY_PATH_SEPARATOR_STRING+"*" {
+		// trim the /*
+		cca.source = jobPartOrder.SourceRoot
+		// set stripTopDir to true so that --list-of-files/--include-path play nice
+		cca.stripTopDir = true
 	}
 
-	// set the root destination after it's been cleaned
+	if err != nil {
+		return err
+	}
+
+	cca.destination, cca.destinationSAS, err = SplitAuthTokenFromResource(cca.destination, to)
+	jobPartOrder.DestinationSAS = cca.destinationSAS
 	jobPartOrder.DestinationRoot = cca.destination
+
+	if err != nil {
+		return err
+	}
 
 	// depending on the source and destination type, we process the cp command differently
 	// Create enumerator and do enumerating
 	switch cca.fromTo {
-	case common.EFromTo.LocalBlob():
-		fallthrough
-	case common.EFromTo.LocalBlobFS():
-		fallthrough
-	case common.EFromTo.LocalFile():
-		e := copyUploadEnumerator(jobPartOrder)
-		err = e.enumerate(cca)
-	case common.EFromTo.BlobLocal():
-		e := copyDownloadBlobEnumerator(jobPartOrder)
-		err = e.enumerate(cca)
-	case common.EFromTo.FileLocal():
-		e := copyDownloadFileEnumerator(jobPartOrder)
-		err = e.enumerate(cca)
-	case common.EFromTo.BlobFSLocal():
-		e := copyDownloadBlobFSEnumerator(jobPartOrder)
-		err = e.enumerate(cca)
-	case common.EFromTo.BlobTrash():
-		e, createErr := newRemoveBlobEnumerator(cca)
+	case common.EFromTo.LocalBlob(),
+		common.EFromTo.LocalBlobFS(),
+		common.EFromTo.LocalFile(),
+		common.EFromTo.BlobLocal(),
+		common.EFromTo.FileLocal(),
+		common.EFromTo.BlobFSLocal(),
+		common.EFromTo.BlobBlob(),
+		common.EFromTo.FileBlob(),
+		common.EFromTo.FileFile(),
+		common.EFromTo.BlobFile(),
+		common.EFromTo.S3Blob(),
+		common.EFromTo.BenchmarkBlob(),
+		common.EFromTo.BenchmarkBlobFS(),
+		common.EFromTo.BenchmarkFile():
+
+		var e *copyEnumerator
+		e, err = cca.initEnumerator(jobPartOrder, ctx)
+		if err != nil {
+			return err
+		}
+
+		err = e.enumerate()
+	case common.EFromTo.BlobTrash(), common.EFromTo.FileTrash():
+		e, createErr := newRemoveEnumerator(cca)
 		if createErr != nil {
 			return createErr
 		}
 
 		err = e.enumerate()
-	case common.EFromTo.FileTrash():
-		e, createErr := newRemoveFileEnumerator(cca)
-		if createErr != nil {
-			return createErr
-		}
 
-		err = e.enumerate()
 	case common.EFromTo.BlobFSTrash():
-		msg, err := removeBfsResource(cca)
+		// TODO merge with BlobTrash case
+		msg, err := removeBfsResources(cca)
 		if err == nil {
 			glcm.Exit(func(format common.OutputFormat) string {
 				return msg
@@ -896,28 +962,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 
 		return err
-
-	case common.EFromTo.BlobBlob():
-		e := copyS2SMigrationBlobEnumerator{
-			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
-				CopyJobPartOrderRequest: jobPartOrder,
-			},
-		}
-		err = e.enumerate(cca)
-	case common.EFromTo.FileBlob():
-		e := copyS2SMigrationFileEnumerator{
-			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
-				CopyJobPartOrderRequest: jobPartOrder,
-			},
-		}
-		err = e.enumerate(cca)
-	case common.EFromTo.S3Blob():
-		e := copyS2SMigrationS3Enumerator{ // S3 enumerator for S2S copy.
-			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
-				CopyJobPartOrderRequest: jobPartOrder,
-			},
-		}
-		err = e.enumerate(cca)
 
 	// TODO: Hide the File to Blob direction temporarily, as service support on-going.
 	// case common.EFromTo.FileBlob():
@@ -928,7 +972,11 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	if err != nil {
-		return fmt.Errorf("cannot start job due to error: %s.\n", err)
+		if err == NothingToRemoveError || err == NothingScheduledError {
+			return err // don't wrap it with anything that uses the word "error"
+		} else {
+			return fmt.Errorf("cannot start job due to error: %s.\n", err)
+		}
 	}
 
 	return nil
@@ -939,7 +987,13 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 // if blocking is specified to false, then another goroutine spawns and wait out the job
 func (cca *cookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
-	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s/%s.log", azcopyLogPathFolder, cca.jobID)))
+	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(),
+		fmt.Sprintf("%s%s%s.log",
+			azcopyLogPathFolder,
+			common.OS_PATH_SEPARATOR,
+			cca.jobID),
+		cca.isCleanupJob,
+		cca.cleanupJobMessage))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -948,24 +1002,29 @@ func (cca *cookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 
 	// hand over control to the lifecycle manager if blocking
 	if blocking {
-		glcm.InitiateProgressReporting(cca, !cca.cancelFromStdin)
+		glcm.InitiateProgressReporting(cca)
 		glcm.SurrenderControl()
 	} else {
 		// non-blocking, return after spawning a go routine to watch the job
-		glcm.InitiateProgressReporting(cca, !cca.cancelFromStdin)
+		glcm.InitiateProgressReporting(cca)
 	}
 }
 
 func (cca *cookedCopyCmdArgs) Cancel(lcm common.LifecycleMgr) {
-	// prompt for confirmation, except when:
-	// 1. output is not in text format
-	// 2. azcopy was spawned by another process (cancelFromStdin indicates this)
-	// 3. enumeration is complete
-	if !(azcopyOutputFormat != common.EOutputFormat.Text() || cca.cancelFromStdin || cca.isEnumerationComplete) {
-		answer := lcm.Prompt("The source enumeration is not complete, cancelling the job at this point means it cannot be resumed. Please confirm with y/n: ")
+	// prompt for confirmation, except when enumeration is complete
+	if !cca.isEnumerationComplete {
+		answer := lcm.Prompt("The source enumeration is not complete, "+
+			"cancelling the job at this point means it cannot be resumed.",
+			common.PromptDetails{
+				PromptType: common.EPromptType.Cancel(),
+				ResponseOptions: []common.ResponseOption{
+					common.EResponseOption.Yes(),
+					common.EResponseOption.No(),
+				},
+			})
 
-		// read a line from stdin, if the answer is not yes, then abort cancel by returning
-		if !strings.EqualFold(answer, "y") {
+		if answer != common.EResponseOption.Yes() {
+			// user aborted cancel
 			return
 		}
 	}
@@ -976,29 +1035,71 @@ func (cca *cookedCopyCmdArgs) Cancel(lcm common.LifecycleMgr) {
 	}
 }
 
+func (cca *cookedCopyCmdArgs) hasFollowup() bool {
+	return cca.followupJobArgs != nil
+}
+
+func (cca *cookedCopyCmdArgs) launchFollowup(priorJobExitCode common.ExitCode) {
+	go func() {
+		glcm.AllowReinitiateProgressReporting()
+		cca.followupJobArgs.priorJobExitCode = &priorJobExitCode
+		err := cca.followupJobArgs.process()
+		if err == NothingToRemoveError {
+			glcm.Info("Cleanup completed (nothing needed to be deleted)")
+			glcm.Exit(nil, common.EExitCode.Success())
+		} else if err != nil {
+			glcm.Error("failed to perform followup/cleanup job due to error: " + err.Error())
+		}
+		glcm.SurrenderControl()
+	}()
+}
+
+func (cca *cookedCopyCmdArgs) getSuccessExitCode() common.ExitCode {
+	if cca.priorJobExitCode != nil {
+		return *cca.priorJobExitCode // in a chain of jobs our best case outcome is whatever the predecessor(s) finished with
+	} else {
+		return common.EExitCode.Success()
+	}
+}
+
 func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// fetch a job status
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
+	summary.IsCleanupJob = cca.isCleanupJob // only FE knows this, so we can only set it here
+	cleanupStatusString := fmt.Sprintf("Cleanup %v/%v", summary.TransfersCompleted, summary.TotalTransfers)
+
 	jobDone := summary.JobStatus.IsJobDone()
 
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
 	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 
 	if jobDone {
-		exitCode := common.EExitCode.Success()
+		exitCode := cca.getSuccessExitCode()
 		if summary.TransfersFailed > 0 {
 			exitCode = common.EExitCode.Error()
 		}
 
-		lcm.Exit(func(format common.OutputFormat) string {
+		builder := func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
 				jsonOutput, err := json.Marshal(summary)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
+				screenStats, logStats := formatExtraStats(cca.fromTo, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
+
 				output := fmt.Sprintf(
-					"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nTotalBytesTransferred: %v\nFinal Job Status: %v\n",
+					`
+
+Job %s summary
+Elapsed Time (Minutes): %v
+Total Number Of Transfers: %v
+Number of Transfers Completed: %v
+Number of Transfers Failed: %v
+Number of Transfers Skipped: %v
+TotalBytesTransferred: %v
+Final Job Status: %v%s%s
+`,
 					summary.JobID.String(),
 					ste.ToFixed(duration.Minutes(), 4),
 					summary.TotalTransfers,
@@ -1006,15 +1107,31 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 					summary.TransfersFailed,
 					summary.TransfersSkipped,
 					summary.TotalBytesTransferred,
-					summary.JobStatus)
+					summary.JobStatus,
+					screenStats,
+					formatPerfAdvice(summary.PerformanceAdvice))
 
+				// abbreviated output for cleanup jobs
+				if cca.isCleanupJob {
+					output = fmt.Sprintf("%s: %s)", cleanupStatusString, summary.JobStatus)
+				}
+
+				// log to job log
 				jobMan, exists := ste.JobsAdmin.JobMgr(summary.JobID)
 				if exists {
-					jobMan.Log(pipeline.LogInfo, output)
+					jobMan.Log(pipeline.LogInfo, logStats+"\n"+output)
 				}
 				return output
 			}
-		}, exitCode)
+		}
+
+		if cca.hasFollowup() {
+			lcm.Exit(builder, common.EExitCode.NoExit()) // leave the app running to process the followup
+			cca.launchFollowup(exitCode)
+			lcm.SurrenderControl() // the followup job will run on its own goroutines
+		} else {
+			lcm.Exit(builder, exitCode)
+		}
 	}
 
 	var computeThroughput = func() float64 {
@@ -1035,6 +1152,11 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			common.PanicIfErr(err)
 			return string(jsonOutput)
 		} else {
+			// abbreviated output for cleanup jobs
+			if cca.isCleanupJob {
+				return cleanupStatusString
+			}
+
 			// if json is not needed, then we generate a message that goes nicely on the same line
 			// display a scanning keyword if the job is not completely ordered
 			var scanningString = " (scanning...)"
@@ -1050,9 +1172,11 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			}
 
 			// indicate whether constrained by disk or not
-			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration)
+			isBenchmark := cca.fromTo.From() == common.ELocation.Benchmark()
+			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, isBenchmark)
 
-			return fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
+			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
+				summary.PercentComplete,
 				summary.TransfersCompleted,
 				summary.TransfersFailed,
 				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
@@ -1061,16 +1185,64 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	})
 }
 
+func formatPerfAdvice(advice []common.PerformanceAdvice) string {
+	if len(advice) == 0 {
+		return ""
+	}
+	b := strings.Builder{}
+	b.WriteString("\n\n") // two newlines to separate the perf results from everything else
+	b.WriteString("Performance benchmark results: \n")
+	b.WriteString("Note: " + common.BenchmarkPreviewNotice + "\n")
+	for _, a := range advice {
+		b.WriteString("\n")
+		pri := "Main"
+		if !a.PriorityAdvice {
+			pri = "Additional"
+		}
+		b.WriteString(pri + " Result:\n")
+		b.WriteString("  Code:   " + a.Code + "\n")
+		b.WriteString("  Desc:   " + a.Title + "\n")
+		b.WriteString("  Reason: " + a.Reason + "\n")
+	}
+	b.WriteString("\n")
+	b.WriteString(common.BenchmarkFinalDisclaimer)
+	if runtime.GOOS == "linux" {
+		b.WriteString(common.BenchmarkLinuxExtraDisclaimer)
+	}
+	return b.String()
+}
+
+// format extra stats to include in the log.  If benchmarking, also output them on screen (but not to screen in normal
+// usage because too cluttered)
+func formatExtraStats(fromTo common.FromTo, avgIOPS int, avgE2EMilliseconds int, networkErrorPercent float32, serverBusyPercent float32) (screenStats, logStats string) {
+	logStats = fmt.Sprintf(
+		`
+
+Diagnostic stats:
+IOPS: %v
+End-to-end ms per request: %v
+Network Errors: %.2f%%
+Server Busy: %.2f%%`,
+		avgIOPS, avgE2EMilliseconds, networkErrorPercent, serverBusyPercent)
+
+	if fromTo.From() == common.ELocation.Benchmark() {
+		screenStats = logStats
+		logStats = "" // since will display in the screen stats, and they get logged too
+	}
+
+	return
+}
+
 // Is disk speed looking like a constraint on throughput?  Ignore the first little-while,
 // to give an (arbitrary) amount of time for things to reach steady-state.
-func getPerfDisplayText(perfDiagnosticStrings []string, constraint common.PerfConstraint, durationOfJob time.Duration) (perfString string, diskString string) {
+func getPerfDisplayText(perfDiagnosticStrings []string, constraint common.PerfConstraint, durationOfJob time.Duration, isBench bool) (perfString string, diskString string) {
 	perfString = ""
 	if shouldDisplayPerfStates() {
 		perfString = "[States: " + strings.Join(perfDiagnosticStrings, ", ") + "], "
 	}
 
-	haveBeenRunningLongEnoughToStabilize := durationOfJob.Seconds() > 30 // this duration is an arbitrary guestimate
-	if constraint != common.EPerfConstraint.Unknown() && haveBeenRunningLongEnoughToStabilize {
+	haveBeenRunningLongEnoughToStabilize := durationOfJob.Seconds() > 30                                    // this duration is an arbitrary guestimate
+	if constraint != common.EPerfConstraint.Unknown() && haveBeenRunningLongEnoughToStabilize && !isBench { // don't display when benchmarking, because we got some spurious slow "disk" constraint reports there - which would be confusing given there is no disk in release 1 of benchmarking
 		diskString = fmt.Sprintf(" (%s may be limiting speed)", constraint)
 	} else {
 		diskString = ""
@@ -1148,48 +1320,49 @@ func init() {
 	rootCmd.AddCommand(cpCmd)
 
 	// filters change which files get transferred
-	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when uploading from local file system.")
-	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "include the snapshots. Only valid when the source is blobs.")
-	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "only include these files when copying. "+
-		"Support use of *. Files should be separated with ';'.")
+	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "Follow symbolic links when uploading from local file system.")
+	cpCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only these files when copying. "+
+		"This option supports wildcard characters (*). Separate files by using a ';'.")
+	cpCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "Include only these paths when copying. "+
+		"This option does not support wildcard characters (*). Checks relative path prefix (For example: myFolder;myFolder/subDirName/file.pdf).")
+	cpCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "Exclude these paths when copying. "+ // Currently, only exclude-path is supported alongside account traversal.
+		"This option does not support wildcard characters (*). Checks relative path prefix(For example: myFolder;myFolder/subDirName/file.pdf). When used in combination with account traversal, paths do not include the container name.")
 	// This flag is implemented only for Storage Explorer.
-	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "defines the location of json which has the list of only files to be copied")
-	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "exclude these files when copying. Support use of *.")
-	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true.")
-	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system.")
-	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS.")
-	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "", "optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from Container / Account. Use of "+
-		"this flag is not applicable for copying data from non azure-service to service. More than one blob should be separated by ';' ")
+	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "Defines the location of text file which has the list of only files to be copied.")
+	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude these files when copying. This option supports wildcard characters (*)")
+	cpCmd.PersistentFlags().StringVar(&raw.forceWrite, "overwrite", "true", "Overwrite the conflicting files and blobs at the destination if this flag is set to true. (default 'true') Possible values include 'true', 'false', and 'prompt'.")
+	cpCmd.PersistentFlags().BoolVar(&raw.autoDecompress, "decompress", false, "Automatically decompress files when downloading, if their content-encoding indicates that they are compressed. The supported content-encoding values are 'gzip' and 'deflate'. File extensions of '.gz'/'.gzip' or '.zz' aren't necessary, but will be removed if present.")
+	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Look into sub-directories recursively when uploading from local file system.")
+	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS.")
+	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "", "Optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from the container "+
+		"or the account. Use of this flag is not applicable for copying data from non azure-service to service. More than one blob should be separated by ';'. ")
 	// options change how the transfers are performed
-	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB) when uploading to/downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed - e.g. 0.25")
-	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs).")
-	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "None", "defines the type of blob at the destination. This is used in case of upload / account to account copy")
+	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage, and downloading from Azure Storage. The default value is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
+	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "Define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default 'INFO').")
+	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "Defines the type of blob at the destination. This is used for uploading blobs and when copying between accounts (default 'Detect'). Valid values include 'Detect', 'BlockBlob', 'PageBlob', and 'AppendBlob'. "+
+		"When copying between accounts, a value of 'Detect' causes AzCopy to use the type of source blob to determine the type of the destination blob. When uploading a file, 'Detect' determines if the file is a VHD or a VHDX file based on the file extension. If the file is ether a VHD or VHDX file, AzCopy treats the file as a page blob.")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier.")
-	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "upload page blob to Azure Storage using this blob tier.")
-	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "upload to Azure Storage with these key-value pairs as metadata.")
-	cpCmd.PersistentFlags().StringVar(&raw.contentType, "content-type", "", "specifies content type of the file. Implies no-guess-mime-type. Returned on download.")
-	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "", "set the content-encoding header. Returned on download.")
-	cpCmd.PersistentFlags().StringVar(&raw.contentDisposition, "content-disposition", "", "set the content-disposition header. Returned on download.")
-	cpCmd.PersistentFlags().StringVar(&raw.contentLanguage, "content-language", "", "set the content-language header. Returned on download.")
-	cpCmd.PersistentFlags().StringVar(&raw.cacheControl, "cache-control", "", "set the cache-control header. Returned on download.")
-	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "prevents AzCopy from detecting the content-type based on the extension/content of the file.")
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "only available when destination is file system.")
-	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. (By default the hash is NOT created.) Only available when uploading.")
-	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "check-md5", common.DefaultHashValidationOption.String(), "specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing.")
-
-	cpCmd.PersistentFlags().BoolVar(&raw.cancelFromStdin, "cancel-from-stdin", false, "true if user wants to cancel the process by passing 'cancel' "+
-		"to the standard input. This is mostly used when the application is spawned by another process.")
-	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation.")
-	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
-
-	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveProperties, "s2s-preserve-properties", true, "preserve full properties during service to service copy. "+
-		"For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files, to preserve full properties AzCopy needs to send one additional request per object/file.")
-	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true, "preserve access tier during service to service copy. "+
-		"please refer to https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers to ensure destination storage account supports setting access tier. "+
-		"In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false to bypass copying access tier. ")
-	cpCmd.PersistentFlags().BoolVar(&raw.s2sSourceChangeValidation, "s2s-detect-source-changed", false, "check if source has changed after enumerating. "+
-		"For S2S copy, as source is a remote resource, validating whether source has changed need additional request costs. ")
-	cpCmd.PersistentFlags().StringVar(&raw.s2sInvalidMetadataHandleOption, "s2s-handle-invalid-metadata", common.DefaultInvalidMetadataHandleOption.String(), "specifies how invalid metadata keys are handled. AvailabeOptions: ExcludeIfInvalid, FailIfInvalid, RenameIfInvalid.")
+	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "Upload page blob to Azure Storage using this blob tier. (default 'None').")
+	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Upload to Azure Storage with these key-value pairs as metadata.")
+	cpCmd.PersistentFlags().StringVar(&raw.contentType, "content-type", "", "Specifies the content type of the file. Implies no-guess-mime-type. Returned on download.")
+	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "", "Set the content-encoding header. Returned on download.")
+	cpCmd.PersistentFlags().StringVar(&raw.contentDisposition, "content-disposition", "", "Set the content-disposition header. Returned on download.")
+	cpCmd.PersistentFlags().StringVar(&raw.contentLanguage, "content-language", "", "Set the content-language header. Returned on download.")
+	cpCmd.PersistentFlags().StringVar(&raw.cacheControl, "cache-control", "", "Set the cache-control header. Returned on download.")
+	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "Prevents AzCopy from detecting the content-type based on the extension or content of the file.")
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
+	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob or file. (By default the hash is NOT created.) Only available when uploading.")
+	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "check-md5", common.DefaultHashValidationOption.String(), "Specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing. (default 'FailIfDifferent')")
+	cpCmd.PersistentFlags().StringVar(&raw.includeFileAttributes, "include-attributes", "", "(Windows only) Include files whose attributes match the attribute list. For example: A;S;R")
+	cpCmd.PersistentFlags().StringVar(&raw.excludeFileAttributes, "exclude-attributes", "", "(Windows only) Exclude files whose attributes match the attribute list. For example: A;S;R")
+	cpCmd.PersistentFlags().BoolVar(&raw.CheckLength, "check-length", true, "Check the length of a file on the destination after the transfer. If there is a mismatch between source and destination, the transfer is marked as failed.")
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveProperties, "s2s-preserve-properties", true, "Preserve full properties during service to service copy. "+
+		"For AWS S3 and Azure File non-single file source, the list operation doesn't return full properties of objects and files. To preserve full properties, AzCopy needs to send one additional request per object or file.")
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true, "Preserve access tier during service to service copy. "+
+		"Please refer to [Azure Blob storage: hot, cool, and archive access tiers](https://docs.microsoft.com/azure/storage/blobs/storage-blob-storage-tiers) to ensure destination storage account supports setting access tier. "+
+		"In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false to bypass copying access tier. (default true). ")
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sSourceChangeValidation, "s2s-detect-source-changed", false, "Check if source has changed after enumerating. ")
+	cpCmd.PersistentFlags().StringVar(&raw.s2sInvalidMetadataHandleOption, "s2s-handle-invalid-metadata", common.DefaultInvalidMetadataHandleOption.String(), "Specifies how invalid metadata keys are handled. Available options: ExcludeIfInvalid, FailIfInvalid, RenameIfInvalid. (default 'ExcludeIfInvalid').")
 
 	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
 	// right before transferring in ste(backend).
@@ -1199,22 +1372,14 @@ func init() {
 	// To achieve better performance and at same time have good control for overall go routine numbers, getting property in ste is introduced,
 	// so properties can be get in parallel, at same time no additional go routines are created for this specific job.
 	// The usage of this hidden flag is to provide fallback to traditional behavior, when service supports returning full properties during list.
-	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true, "get S3 objects' or Azure files' properties in backend. ")
-
-	// not implemented
-	cpCmd.PersistentFlags().MarkHidden("acl")
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true, "get S3 objects' or Azure files' properties in backend, if properties need to be accessed. Properties need to be accessed if s2s-preserve-properties is true, and in certain other cases where we need the properties for modification time checks or MD5 checks")
 
 	// permanently hidden
 	// Hide the list-of-files flag since it is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().MarkHidden("list-of-files")
-	cpCmd.PersistentFlags().MarkHidden("with-snapshots")
-	cpCmd.PersistentFlags().MarkHidden("include")
-	cpCmd.PersistentFlags().MarkHidden("background-op")
-	cpCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
 	cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
-	cpCmd.PersistentFlags().MarkHidden("with-snapshots") // TODO this flag is not supported right now
 
 	// Hide the flush-threshold flag since it is implemented only for CI.
-	cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on ADLS gen 2")
+	cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on accounts that have a hierarchical namespace.")
 	cpCmd.PersistentFlags().MarkHidden("flush-threshold")
 }

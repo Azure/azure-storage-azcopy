@@ -21,11 +21,232 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
-	chk "gopkg.in/check.v1"
+	"os"
+	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/Azure/azure-storage-blob-go/azblob"
+	chk "gopkg.in/check.v1"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
+
+func (s *cmdIntegrationSuite) TestInferredStripTopDirDownload(c *chk.C) {
+	bsu := getBSU()
+	cURL, cName := createNewContainer(c, bsu)
+
+	blobNames := []string{
+		"*", // File name that we want to retain compatibility with
+		"testFile",
+		"DoYouPronounceItDataOrData",
+		"sub*dir/Help I cannot so much into computer",
+	}
+
+	// ----- TEST # 1: Test inferred as false by using escaped * -----
+
+	// set up container name
+	scenarioHelper{}.generateBlobsFromList(c, cURL, blobNames, blockBlobDefaultData)
+
+	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+
+	rawContainerURL := scenarioHelper{}.getRawContainerURLWithSAS(c, cName)
+
+	// Don't add /* while still in URL form-- it will get improperly encoded, and azcopy will ignore it.
+	rawContainerString := rawContainerURL.String()
+	rawContainerStringSplit := strings.Split(rawContainerString, "?")
+	rawContainerStringSplit[0] += "/%2A"
+	// now in theory: https://ciblobaccount.blob.core.windows.net/container/%2A
+	// %2A is set to magic number %00 and not stripped
+	// striptopdir should not be set
+
+	// re join strings and create raw input
+	raw := getDefaultRawCopyInput(strings.Join(rawContainerStringSplit, "?"), dstDirName)
+	raw.recursive = false // default recursive is true in testing framework
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// Test inference of striptopdir
+	cooked, err := raw.cook()
+	c.Assert(err, chk.IsNil)
+	c.Assert(cooked.stripTopDir, chk.Equals, false)
+
+	// Test and ensure only one file is being downloaded
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+	})
+
+	// ----- TEST # 2: Test inferred as true by using unescaped * -----
+
+	rawContainerStringSplit = strings.Split(rawContainerString, "?")
+	rawContainerStringSplit[0] += "/*"
+	// now in theory: https://ciblobaccount.blob.core.windows.net/container/*
+	// * is not set to magic number %00, * gets stripped
+	// striptopdir should be set.
+
+	// re join strings and create raw input
+	raw = getDefaultRawCopyInput(strings.Join(rawContainerStringSplit, "?"), dstDirName)
+	raw.recursive = false // default recursive is true in testing framework
+
+	// reset RPC
+	mockedRPC.reset()
+
+	// Test inference of striptopdir
+	cooked, err = raw.cook()
+	c.Assert(err, chk.IsNil)
+	c.Assert(cooked.stripTopDir, chk.Equals, true)
+
+	// Test and ensure only 3 files get scheduled, nothing under the sub-directory
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 3)
+	})
+
+	// ----- TEST # 3: Attempt to use the * in the folder name without encoding ----
+
+	rawContainerStringSplit = strings.Split(rawContainerString, "?")
+	rawContainerStringSplit[0] += "/sub*dir/*"
+	// now in theory: https://ciblobaccount.blob.core.windows.net/container/sub*dir/*
+	// *s are not replaced with magic number %00
+	// should error out due to extra * in dir name
+
+	// reset RPC
+	mockedRPC.reset()
+
+	// re join strings and create raw input
+	raw = getDefaultRawCopyInput(strings.Join(rawContainerStringSplit, "?"), dstDirName)
+	raw.recursive = false // default recursive is true in testing framework
+
+	// test error
+	cooked, err = raw.cook()
+	c.Assert(err, chk.NotNil)
+	c.Assert(err.Error(), StringContains, "cannot use wildcards")
+
+	// no actual test needed-- this is where the error lives.
+
+	// ----- TEST # 4: Encode %2A in the folder name and still use stripTopDir ----
+
+	rawContainerStringSplit = strings.Split(rawContainerString, "?")
+	rawContainerStringSplit[0] += "/sub%2Adir/*"
+	// now in theory: https://ciblobaccount.blob.core.windows.net/container/sub%2Adir/*
+	// %2A is replaced with magic number %00
+	// should not error out; striptopdir should be true
+
+	// reset RPC
+	mockedRPC.reset()
+
+	// re join strings and create raw input
+	raw = getDefaultRawCopyInput(strings.Join(rawContainerStringSplit, "?"), dstDirName)
+	raw.recursive = false // default recursive is true in testing framework
+
+	// test cook
+	cooked, err = raw.cook()
+	c.Assert(err, chk.IsNil)
+	c.Assert(cooked.stripTopDir, chk.Equals, true)
+
+	// Test and ensure only one file got scheduled
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+	})
+}
+
+// Test downloading the entire account.
+func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
+	bsu := getBSU()
+	rawBSU := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
+	p, err := initPipeline(ctx, common.ELocation.Blob(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+	c.Assert(err, chk.IsNil)
+
+	// Just in case there are no existing containers...
+	curl, _ := createNewContainer(c, bsu)
+	scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, curl, "")
+
+	// Traverse the account ahead of time and determine the relative paths for testing.
+	relPaths := make([]string, 0) // Use a map for easy lookup
+	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, func() {})
+	processor := func(object storedObject) error {
+		// Append the container name to the relative path
+		relPath := "/" + object.containerName + "/" + object.relativePath
+		relPaths = append(relPaths, relPath)
+		return nil
+	}
+	err = blobTraverser.traverse(noPreProccessor, processor, []objectFilter{})
+	c.Assert(err, chk.IsNil)
+
+	// set up a destination
+	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	raw := getDefaultCopyRawInput(rawBSU.String(), dstDirName)
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		validateDownloadTransfersAreScheduled(c, "", "", relPaths, mockedRPC)
+	})
+}
+
+// Test downloading the entire account.
+func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
+	bsu := getBSU()
+	rawBSU := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
+	p, err := initPipeline(ctx, common.ELocation.Blob(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+	c.Assert(err, chk.IsNil)
+
+	// Create a unique container to be targeted.
+	cname := generateName("blah-unique-blah", 63)
+	curl := bsu.NewContainerURL(cname)
+	_, err = curl.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
+	c.Assert(err, chk.IsNil)
+	scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, curl, "")
+
+	// update the raw BSU to match the unique container name
+	rawBSU.Path = "/blah-unique-blah*"
+
+	// Traverse the account ahead of time and determine the relative paths for testing.
+	relPaths := make([]string, 0) // Use a map for easy lookup
+	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, func() {})
+	processor := func(object storedObject) error {
+		// Append the container name to the relative path
+		relPath := "/" + object.containerName + "/" + object.relativePath
+		relPaths = append(relPaths, relPath)
+		return nil
+	}
+	err = blobTraverser.traverse(noPreProccessor, processor, []objectFilter{})
+	c.Assert(err, chk.IsNil)
+
+	// set up a destination
+	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	raw := getDefaultCopyRawInput(rawBSU.String(), dstDirName)
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		validateDownloadTransfersAreScheduled(c, "", "", relPaths, mockedRPC)
+	})
+}
 
 // regular blob->local file download
 func (s *cmdIntegrationSuite) TestDownloadSingleBlobToFile(c *chk.C) {
@@ -41,6 +262,7 @@ func (s *cmdIntegrationSuite) TestDownloadSingleBlobToFile(c *chk.C) {
 
 		// set up the destination as a single file
 		dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+		defer os.RemoveAll(dstDirName)
 		dstFileName := "whatever"
 		scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
 
@@ -93,6 +315,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainer(c *chk.C) {
 
 	// set up the destination with an empty folder
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -138,6 +361,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobVirtualDirectory(c *chk.C) {
 
 	// set up the destination with an empty folder
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -190,6 +414,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithPattern(c *chk.C) {
 
 	// set up the destination with an empty folder
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -198,9 +423,11 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithPattern(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	rawContainerURLWithSAS.Path += "/*.pdf"
-	raw := getDefaultCopyRawInput(rawContainerURLWithSAS.String(), dstDirName)
+	rawContainerURLWithSAS.Path = path.Join(rawContainerURLWithSAS.Path, string([]byte{0x00}))
+	containerString := strings.ReplaceAll(rawContainerURLWithSAS.String(), "%00", "*")
+	raw := getDefaultCopyRawInput(containerString, dstDirName)
 	raw.recursive = true
+	raw.include = "*.pdf"
 
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)

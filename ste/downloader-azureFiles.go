@@ -25,8 +25,9 @@ import (
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-file-go/azfile"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type azureFilesDownloader struct{}
@@ -35,7 +36,7 @@ func newAzureFilesDownloader() downloader {
 	return &azureFilesDownloader{}
 }
 
-func (bd *azureFilesDownloader) Prologue(_ IJobPartTransferMgr) {
+func (bd *azureFilesDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
 	// noop
 }
 
@@ -56,7 +57,7 @@ func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, s
 		// wait until we get the headers back... but we have not yet read its whole body.
 		// The Download method encapsulates any retries that may be necessary to get to the point of receiving response headers.
 		jptm.LogChunkStatus(id, common.EWaitReason.HeaderResponse())
-		get, err := srcFileURL.Download(jptm.Context(), id.OffsetInFile, length, false)
+		get, err := srcFileURL.Download(jptm.Context(), id.OffsetInFile(), length, false)
 		if err != nil {
 			jptm.FailActiveDownload("Downloading response body", err) // cancel entire transfer because this chunk has failed
 			return

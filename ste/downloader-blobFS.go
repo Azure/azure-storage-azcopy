@@ -36,7 +36,7 @@ func newBlobFSDownloader() downloader {
 	return &blobFSDownloader{}
 }
 
-func (bd *blobFSDownloader) Prologue(_ IJobPartTransferMgr) {
+func (bd *blobFSDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
 	// noop
 }
 
@@ -57,7 +57,7 @@ func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPi
 		// wait until we get the headers back... but we have not yet read its whole body.
 		// The Download method encapsulates any retries that may be necessary to get to the point of receiving response headers.
 		jptm.LogChunkStatus(id, common.EWaitReason.HeaderResponse())
-		get, err := srcFileURL.Download(jptm.Context(), id.OffsetInFile, length)
+		get, err := srcFileURL.Download(jptm.Context(), id.OffsetInFile(), length)
 		if err != nil {
 			jptm.FailActiveDownload("Downloading response body", err) // cancel entire transfer because this chunk has failed
 			return

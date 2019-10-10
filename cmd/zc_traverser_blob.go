@@ -27,8 +27,10 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/pkg/errors"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // allow us to iterate through a path pointing to the blob endpoint
@@ -42,37 +44,86 @@ type blobTraverser struct {
 	incrementEnumerationCounter func()
 }
 
-func (t *blobTraverser) getPropertiesIfSingleBlob() (*azblob.BlobGetPropertiesResponse, bool) {
+func (t *blobTraverser) isDirectory(isSource bool) bool {
+	isDirDirect := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(t.rawURL)
+
+	// Skip the single blob check if we're checking a destination.
+	// This is an individual exception for blob because blob supports virtual directories and blobs sharing the same name.
+	if isDirDirect || !isSource {
+		return isDirDirect
+	}
+
+	_, isSingleBlob, err := t.getPropertiesIfSingleBlob()
+
+	if stgErr, ok := err.(azblob.StorageError); ok {
+		// We know for sure this is a single blob still, let it walk on through to the traverser.
+		if stgErr.ServiceCode() == common.CPK_ERROR_SERVICE_CODE {
+			return false
+		}
+	}
+
+	return !isSingleBlob
+}
+
+func (t *blobTraverser) getPropertiesIfSingleBlob() (*azblob.BlobGetPropertiesResponse, bool, error) {
 	blobURL := azblob.NewBlobURL(*t.rawURL, t.p)
 	blobProps, blobPropertiesErr := blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{})
 
 	// if there was no problem getting the properties, it means that we are looking at a single blob
 	if blobPropertiesErr == nil && !gCopyUtil.doesBlobRepresentAFolder(blobProps.NewMetadata()) {
-		return blobProps, true
+		return blobProps, true, blobPropertiesErr
 	}
 
-	return nil, false
+	return nil, false, blobPropertiesErr
 }
 
-func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilter) (err error) {
+func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
 	blobUrlParts := azblob.NewBlobURLParts(*t.rawURL)
 	util := copyHandlerUtil{}
 
 	// check if the url points to a single blob
-	blobProperties, isBlob := t.getPropertiesIfSingleBlob()
+	blobProperties, isBlob, propErr := t.getPropertiesIfSingleBlob()
+
+	if stgErr, ok := propErr.(azblob.StorageError); ok {
+		// Don't error out unless it's a CPK error just yet
+		// If it's a CPK error, we know it's a single blob and that we can't get the properties on it anyway.
+		if stgErr.ServiceCode() == common.CPK_ERROR_SERVICE_CODE {
+			return errors.New("this blob uses customer provided encryption keys (CPK). At the moment, AzCopy does not support CPK-encrypted blobs. " +
+				"If you wish to make use of this blob, we recommend using one of the Azure Storage SDKs")
+		}
+	}
+
 	if isBlob {
+		// sanity checking so highlighting doesn't highlight things we're not worried about.
+		if blobProperties == nil {
+			panic("isBlob should never be set if getting properties is an error")
+		}
+
 		storedObject := newStoredObject(
+			preprocessor,
 			getObjectNameOnly(blobUrlParts.BlobName),
-			"", // relative path makes no sense when the full path already points to the file
+			"",
 			blobProperties.LastModified(),
 			blobProperties.ContentLength(),
 			blobProperties.ContentMD5(),
 			blobProperties.BlobType(),
+			blobUrlParts.ContainerName,
 		)
+
+		storedObject.contentDisposition = blobProperties.ContentDisposition()
+		storedObject.cacheControl = blobProperties.CacheControl()
+		storedObject.contentLanguage = blobProperties.ContentLanguage()
+		storedObject.contentEncoding = blobProperties.ContentEncoding()
+		storedObject.contentType = blobProperties.ContentType()
+
+		// .NewMetadata() seems odd to call, but it does actually retrieve the metadata from the blob properties.
+		storedObject.Metadata = common.FromAzBlobMetadataToCommonMetadata(blobProperties.NewMetadata())
+		storedObject.blobAccessTier = azblob.AccessTierType(blobProperties.AccessTier())
 
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter()
 		}
+
 		return processIfPassedFilters(filters, storedObject, processor)
 	}
 
@@ -115,13 +166,25 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 			}
 
 			storedObject := newStoredObject(
+				preprocessor,
 				getObjectNameOnly(blobInfo.Name),
 				relativePath,
 				blobInfo.Properties.LastModified,
 				*blobInfo.Properties.ContentLength,
 				blobInfo.Properties.ContentMD5,
 				blobInfo.Properties.BlobType,
+				blobUrlParts.ContainerName,
 			)
+
+			storedObject.contentDisposition = common.IffStringNotNil(blobInfo.Properties.ContentDisposition, "")
+			storedObject.cacheControl = common.IffStringNotNil(blobInfo.Properties.CacheControl, "")
+			storedObject.contentLanguage = common.IffStringNotNil(blobInfo.Properties.ContentLanguage, "")
+			storedObject.contentEncoding = common.IffStringNotNil(blobInfo.Properties.ContentEncoding, "")
+			storedObject.contentType = common.IffStringNotNil(blobInfo.Properties.ContentType, "")
+
+			storedObject.Metadata = common.FromAzBlobMetadataToCommonMetadata(blobInfo.Metadata)
+
+			storedObject.blobAccessTier = blobInfo.Properties.AccessTier
 
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter()

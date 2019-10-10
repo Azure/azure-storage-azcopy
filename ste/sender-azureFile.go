@@ -1,4 +1,4 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+// Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,22 +29,28 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-file-go/azfile"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
-type azureFilesUploader struct {
-	jptm                IJobPartTransferMgr
-	fileURL             azfile.FileURL
-	chunkSize           uint32
-	numChunks           uint32
-	pipeline            pipeline.Pipeline
-	pacer               pacer
-	md5Channel          chan []byte
-	creationTimeHeaders *azfile.FileHTTPHeaders // pointer so default value, nil, is clearly "wrong" and can't be used by accident
+type azureFileSenderBase struct {
+	jptm      IJobPartTransferMgr
+	fileURL   azfile.FileURL
+	chunkSize uint32
+	numChunks uint32
+	pipeline  pipeline.Pipeline
+	pacer     pacer
+	ctx       context.Context
+	// Headers and other info that we will apply to the destination
+	// object. For S2S, these come from the source service.
+	// When sending local data, they are computed based on
+	// the properties of the local file
+	headersToApply  azfile.FileHTTPHeaders
+	metadataToApply azfile.Metadata
 }
 
-func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
+func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (*azureFileSenderBase, error) {
 
 	info := jptm.Info()
 
@@ -69,119 +75,101 @@ func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, p pipel
 		return nil, err
 	}
 
-	return &azureFilesUploader{
-		jptm:       jptm,
-		fileURL:    azfile.NewFileURL(*destURL, p),
-		chunkSize:  chunkSize,
-		numChunks:  numChunks,
-		pipeline:   p,
-		pacer:      pacer,
-		md5Channel: newMd5Channel(),
+	// due to the REST parity feature added in 2019-02-02, the File APIs are no longer backward compatible
+	// so we must use the latest SDK version to stay safe
+	ctx := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azfile.ServiceVersion)
+	props, err := sip.Properties()
+	if err != nil {
+		return nil, err
+	}
+
+	return &azureFileSenderBase{
+		jptm:            jptm,
+		fileURL:         azfile.NewFileURL(*destURL, p),
+		chunkSize:       chunkSize,
+		numChunks:       numChunks,
+		pipeline:        p,
+		pacer:           pacer,
+		ctx:             ctx,
+		headersToApply:  props.SrcHTTPHeaders.ToAzFileHTTPHeaders(),
+		metadataToApply: props.SrcMetadata.ToAzFileMetadata(),
 	}, nil
 }
 
-func (u *azureFilesUploader) ChunkSize() uint32 {
+func (u *azureFileSenderBase) ChunkSize() uint32 {
 	return u.chunkSize
 }
 
-func (u *azureFilesUploader) NumChunks() uint32 {
+func (u *azureFileSenderBase) NumChunks() uint32 {
 	return u.numChunks
 }
 
-func (u *azureFilesUploader) Md5Channel() chan<- []byte {
-	return u.md5Channel
+func (u *azureFileSenderBase) RemoteFileExists() (bool, error) {
+	return remoteObjectExists(u.fileURL.GetProperties(u.ctx))
 }
 
-func (u *azureFilesUploader) RemoteFileExists() (bool, error) {
-	return remoteObjectExists(u.fileURL.GetProperties(u.jptm.Context()))
-}
-
-func (u *azureFilesUploader) Prologue(state common.PrologueState) {
+func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationModified bool) {
 	jptm := u.jptm
 	info := jptm.Info()
 
+	destinationModified = true
+
 	// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
-	err := CreateParentDirToRoot(jptm.Context(), u.fileURL, u.pipeline)
+	err := AzureFileParentDirCreator{}.CreateParentDirToRoot(u.ctx, u.fileURL, u.pipeline)
 	if err != nil {
 		jptm.FailActiveUpload("Creating parent directory", err)
 		return
 	}
 
+	if state.CanInferContentType() {
+		// sometimes, specifically when reading local files, we have more info
+		// about the file type at this time than what we had before
+		u.headersToApply.ContentType = state.GetInferredContentType(u.jptm)
+	}
+
 	// Create Azure file with the source size
-	fileHTTPHeaders, metaData := jptm.FileDstData(state.LeadingBytes)
-	_, err = u.fileURL.Create(jptm.Context(), info.SourceSize, fileHTTPHeaders, metaData)
+	_, err = u.fileURL.Create(u.ctx, info.SourceSize, u.headersToApply, u.metadataToApply)
 	if err != nil {
 		jptm.FailActiveUpload("Creating file", err)
 		return
 	}
 
-	// Save headers to re-use, with same values, in epilogue
-	u.creationTimeHeaders = &fileHTTPHeaders
+	return
 }
 
-func (u *azureFilesUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
-
-	return createSendToRemoteChunkFunc(u.jptm, id, func() {
-		jptm := u.jptm
-
-		defer reader.Close() // In case of memory leak in sparse file case.
-
-		if jptm.Info().SourceSize == 0 {
-			// nothing to do, since this is a dummy chunk in a zero-size file, and the prologue will have done all the real work
-			return
-		}
-
-		if reader.HasPrefetchedEntirelyZeros() {
-			// for this destination type, there is no need to upload ranges than consist entirely of zeros
-			jptm.Log(pipeline.LogDebug,
-				fmt.Sprintf("Not uploading range from %d to %d,  all bytes are zero",
-					id.OffsetInFile, id.OffsetInFile+reader.Length()))
-			return
-		}
-
-		// upload the byte range represented by this chunk
-		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
-		_, err := u.fileURL.UploadRange(jptm.Context(), id.OffsetInFile, body, nil)
-		if err != nil {
-			jptm.FailActiveUpload("Uploading range", err)
-			return
-		}
-	})
-}
-
-func (u *azureFilesUploader) Epilogue() {
+func (u *azureFileSenderBase) Cleanup() {
 	jptm := u.jptm
 
-	// set content MD5 (only way to do this is to re-PUT all the headers, this time with the MD5 included)
-	if jptm.TransferStatus() > 0 {
-		tryPutMd5Hash(jptm, u.md5Channel, func(md5Hash []byte) error {
-			epilogueHeaders := *u.creationTimeHeaders
-			epilogueHeaders.ContentMD5 = md5Hash
-			_, err := u.fileURL.SetHTTPHeaders(jptm.Context(), epilogueHeaders)
-			return err
-		})
-	}
-
 	// Cleanup
-	if jptm.TransferStatus() <= 0 {
-		// If the transfer status is less than or equal to 0
-		// then transfer was either failed or cancelled
+	if jptm.IsDeadInflight() {
+		// transfer was either failed or cancelled
 		// the file created in share needs to be deleted, since it's
 		// contents will be at an unknown stage of partial completeness
 		deletionContext, cancelFn := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancelFn()
 		_, err := u.fileURL.Delete(deletionContext)
 		if err != nil {
-			// TODO: this was LogInfo, but inside a ShouldLog(LogError) if statement. Should I put it back that way?  It was not like that for blobFS
 			jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the (incomplete) file %s. Failed with error %s", u.fileURL.String(), err.Error()))
 		}
 	}
-
 }
 
+func (u *azureFileSenderBase) GetDestinationLength() (int64, error) {
+	prop, err := u.fileURL.GetProperties(u.ctx)
+
+	if err != nil {
+		return -1, err
+	}
+
+	return prop.ContentLength(), nil
+}
+
+// namespace for functions related to creating parent directories in Azure File
+// to avoid free floating global funcs
+type AzureFileParentDirCreator struct{}
+
 // getParentDirectoryURL gets parent directory URL of an Azure FileURL.
-func getParentDirectoryURL(fileURL azfile.FileURL, p pipeline.Pipeline) azfile.DirectoryURL {
+func (AzureFileParentDirCreator) getParentDirectoryURL(fileURL azfile.FileURL, p pipeline.Pipeline) azfile.DirectoryURL {
 	u := fileURL.URL()
 	u.Path = u.Path[:strings.LastIndex(u.Path, "/")]
 	return azfile.NewDirectoryURL(u, p)
@@ -190,10 +178,10 @@ func getParentDirectoryURL(fileURL azfile.FileURL, p pipeline.Pipeline) azfile.D
 // verifyAndHandleCreateErrors handles create errors, StatusConflict is ignored, as specific level directory could be existing.
 // Report http.StatusForbidden, as user should at least have read and write permission of the destination,
 // and there is no permission on directory level, i.e. create directory is a general permission for each level diretories for Azure file.
-func verifyAndHandleCreateErrors(err error) error {
+func (AzureFileParentDirCreator) verifyAndHandleCreateErrors(err error) error {
 	if err != nil {
-		sErr := err.(azfile.StorageError)
-		if sErr != nil && sErr.Response() != nil &&
+		sErr, sErrOk := err.(azfile.StorageError)
+		if sErrOk && sErr.Response() != nil &&
 			(sErr.Response().StatusCode == http.StatusConflict) { // Note the ServiceCode actually be AuthenticationFailure when share failed to be created, if want to create share as well.
 			return nil
 		}
@@ -204,23 +192,23 @@ func verifyAndHandleCreateErrors(err error) error {
 }
 
 // splitWithoutToken splits string with a given token, and returns splitted results without token.
-func splitWithoutToken(str string, token rune) []string {
+func (AzureFileParentDirCreator) splitWithoutToken(str string, token rune) []string {
 	return strings.FieldsFunc(str, func(c rune) bool {
 		return c == token
 	})
 }
 
 // CreateParentDirToRoot creates parent directories of the Azure file if file's parent directory doesn't exist.
-func CreateParentDirToRoot(ctx context.Context, fileURL azfile.FileURL, p pipeline.Pipeline) error {
-	dirURL := getParentDirectoryURL(fileURL, p)
+func (d AzureFileParentDirCreator) CreateParentDirToRoot(ctx context.Context, fileURL azfile.FileURL, p pipeline.Pipeline) error {
+	dirURL := d.getParentDirectoryURL(fileURL, p)
 	dirURLExtension := common.FileURLPartsExtension{FileURLParts: azfile.NewFileURLParts(dirURL.URL())}
 	// Check whether parent dir of the file exists.
 	if _, err := dirURL.GetProperties(ctx); err != nil {
-		if err.(azfile.StorageError) != nil && (err.(azfile.StorageError)).Response() != nil &&
-			(err.(azfile.StorageError).Response().StatusCode == http.StatusNotFound) { // At least need read and write permisson for destination
+		if stgErr, stgErrOk := err.(azfile.StorageError); stgErrOk && stgErr.Response() != nil &&
+			stgErr.Response().StatusCode == http.StatusNotFound { // At least need read and write permisson for destination
 			// File's parent directory doesn't exist, try to create the parent directories.
 			// Split directories as segments.
-			segments := splitWithoutToken(dirURLExtension.DirectoryOrFilePath, '/')
+			segments := d.splitWithoutToken(dirURLExtension.DirectoryOrFilePath, '/')
 
 			shareURL := azfile.NewShareURL(dirURLExtension.GetShareURL(), p)
 			curDirURL := shareURL.NewRootDirectoryURL() // Share directory should already exist, doesn't support creating share
@@ -228,7 +216,7 @@ func CreateParentDirToRoot(ctx context.Context, fileURL azfile.FileURL, p pipeli
 			for i := 0; i < len(segments); i++ {
 				curDirURL = curDirURL.NewDirectoryURL(segments[i])
 				_, err := curDirURL.Create(ctx, azfile.Metadata{})
-				if verifiedErr := verifyAndHandleCreateErrors(err); verifiedErr != nil {
+				if verifiedErr := d.verifyAndHandleCreateErrors(err); verifiedErr != nil {
 					return verifiedErr
 				}
 			}

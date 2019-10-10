@@ -21,131 +21,153 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
 
-// download implies transferring from a remote resource to the local disk
-// in this scenario, the destination is scanned/indexed first
-// then the source is scanned and filtered based on what the destination contains
-// we do the local one first because it is assumed that local file systems will be faster to enumerate than remote resources
-func newSyncDownloadEnumerator(cca *cookedSyncCmdArgs) (enumerator *syncEnumerator, err error) {
-	destinationTraverser, err := newLocalTraverserForSync(cca, false)
+func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *syncEnumerator, err error) {
+	src, err := appendSASIfNecessary(cca.source, cca.sourceSAS)
 	if err != nil {
 		return nil, err
 	}
 
-	sourceTraverser, err := newBlobTraverserForSync(cca, true)
+	dst, err := appendSASIfNecessary(cca.destination, cca.destinationSAS)
 	if err != nil {
 		return nil, err
 	}
 
-	// verify that the traversers are targeting the same type of resources
-	_, isSingleBlob := sourceTraverser.getPropertiesIfSingleBlob()
-	_, isSingleFile, _ := destinationTraverser.getInfoIfSingleFile()
-	if isSingleBlob != isSingleFile {
-		return nil, errors.New("sync must happen between source and destination of the same type: either blob <-> file, or container/virtual directory <-> local directory")
-	}
+	// TODO: enable symlink support in a future release after evaluating the implications
+	// GetProperties is enabled by default as sync supports both upload and download.
+	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
+	sourceTraverser, err := initResourceTraverser(src, cca.fromTo.From(), &ctx, &cca.credentialInfo,
+		nil, nil, cca.recursive, true, func() {
+			atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
+		})
 
-	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, isSingleBlob && isSingleFile)
-	includeFilters := buildIncludeFilters(cca.include)
-	excludeFilters := buildExcludeFilters(cca.exclude)
-
-	// set up the filters in the right order
-	filters := append(includeFilters, excludeFilters...)
-
-	// set up the comparator so that the source/destination can be compared
-	indexer := newObjectIndexer()
-	comparator := newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer)
-
-	finalize := func() error {
-		// remove the extra files at the destination that were not present at the source
-		// we can only know what needs to be deleted when we have FINISHED traversing the remote source
-		// since only then can we know which local files definitely don't exist remotely
-		deleteScheduler := newSyncLocalDeleteProcessor(cca)
-		err = indexer.traverse(deleteScheduler.removeImmediately, nil)
-		if err != nil {
-			return err
-		}
-
-		// let the deletions happen first
-		// otherwise if the final part is executed too quickly, we might quit before deletions could finish
-		jobInitiated, err := transferScheduler.dispatchFinalPart()
-		if err != nil {
-			return err
-		}
-
-		quitIfInSync(jobInitiated, cca.getDeletionCount() > 0, cca)
-		cca.setScanningComplete()
-		return nil
-	}
-
-	return newSyncEnumerator(destinationTraverser, sourceTraverser, indexer, filters,
-		comparator.processIfNecessary, finalize), nil
-}
-
-// upload implies transferring from a local disk to a remote resource
-// in this scenario, the local disk (source) is scanned/indexed first
-// then the destination is scanned and filtered based on what the destination contains
-// we do the local one first because it is assumed that local file systems will be faster to enumerate than remote resources
-func newSyncUploadEnumerator(cca *cookedSyncCmdArgs) (enumerator *syncEnumerator, err error) {
-	sourceTraverser, err := newLocalTraverserForSync(cca, true)
 	if err != nil {
 		return nil, err
 	}
 
-	destinationTraverser, err := newBlobTraverserForSync(cca, false)
+	// TODO: enable symlink support in a future release after evaluating the implications
+	// GetProperties is enabled by default as sync supports both upload and download.
+	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
+	destinationTraverser, err := initResourceTraverser(dst, cca.fromTo.To(), &ctx, &cca.credentialInfo,
+		nil, nil, cca.recursive, true, func() {
+			atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
+		})
 	if err != nil {
 		return nil, err
 	}
 
 	// verify that the traversers are targeting the same type of resources
-	_, isSingleBlob := destinationTraverser.getPropertiesIfSingleBlob()
-	_, isSingleFile, _ := sourceTraverser.getInfoIfSingleFile()
-	if isSingleBlob != isSingleFile {
-		return nil, errors.New("sync must happen between source and destination of the same type: either blob <-> file, or container/virtual directory <-> local directory")
+	if sourceTraverser.isDirectory(true) != destinationTraverser.isDirectory(true) {
+		return nil, errors.New("sync must happen between source and destination of the same type, e.g. either file <-> file, or directory/container <-> directory/container")
 	}
 
-	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, isSingleBlob && isSingleFile)
-	includeFilters := buildIncludeFilters(cca.include)
-	excludeFilters := buildExcludeFilters(cca.exclude)
+	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart)
 
 	// set up the filters in the right order
-	filters := append(includeFilters, excludeFilters...)
+	// Note: includeFilters and includeAttrFilters are ANDed
+	// They must both pass to get the file included
+	// Same rule applies to excludeFilters and excludeAttrFilters
+	filters := buildIncludeFilters(cca.include)
+	if cca.fromTo.From() == common.ELocation.Local() {
+		includeAttrFilters := buildAttrFilters(cca.includeFileAttributes, src, true)
+		filters = append(filters, includeAttrFilters...)
+	}
+
+	filters = append(filters, buildExcludeFilters(cca.exclude, false)...)
+	if cca.fromTo.From() == common.ELocation.Local() {
+		excludeAttrFilters := buildAttrFilters(cca.excludeFileAttributes, src, false)
+		filters = append(filters, excludeAttrFilters...)
+	}
 
 	// set up the comparator so that the source/destination can be compared
 	indexer := newObjectIndexer()
-	destinationCleaner, err := newSyncBlobDeleteProcessor(cca)
-	if err != nil {
-		return nil, fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
-	}
-	// when uploading, we can delete remote objects immediately, because as we traverse the remote location
-	// we ALREADY have available a complete map of everything that exists locally
-	// so as soon as we see a remote destination object we can know whether it exists in the local source
-	comparator := newSyncDestinationComparator(indexer, transferScheduler.scheduleCopyTransfer, destinationCleaner.removeImmediately)
+	var comparator objectProcessor
+	var finalize func() error
 
-	finalize := func() error {
-		// schedule every local file that doesn't exist at the destination
-		err = indexer.traverse(transferScheduler.scheduleCopyTransfer, filters)
+	switch cca.fromTo {
+	case common.EFromTo.LocalBlob():
+		// upload implies transferring from a local disk to a remote resource
+		// in this scenario, the local disk (source) is scanned/indexed first
+		// then the destination is scanned and filtered based on what the destination contains
+		// we do the local one first because it is assumed that local file systems will be faster to enumerate than remote resources
+		destinationCleaner, err := newSyncDeleteProcessor(cca)
 		if err != nil {
-			return err
+			return nil, fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
 		}
 
-		jobInitiated, err := transferScheduler.dispatchFinalPart()
-		if err != nil {
-			return err
+		// when uploading, we can delete remote objects immediately, because as we traverse the remote location
+		// we ALREADY have available a complete map of everything that exists locally
+		// so as soon as we see a remote destination object we can know whether it exists in the local source
+		comparator = newSyncDestinationComparator(indexer, transferScheduler.scheduleCopyTransfer, destinationCleaner.removeImmediately).processIfNecessary
+		finalize = func() error {
+			// schedule every local file that doesn't exist at the destination
+			err = indexer.traverse(transferScheduler.scheduleCopyTransfer, filters)
+			if err != nil {
+				return err
+			}
+
+			jobInitiated, err := transferScheduler.dispatchFinalPart()
+			// sync cleanly exits if nothing is scheduled.
+			if err != nil && err != NothingScheduledError {
+				return err
+			}
+
+			quitIfInSync(jobInitiated, cca.getDeletionCount() > 0, cca)
+			cca.setScanningComplete()
+			return nil
 		}
 
-		quitIfInSync(jobInitiated, cca.getDeletionCount() > 0, cca)
-		cca.setScanningComplete()
-		return nil
-	}
+		return newSyncEnumerator(sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize), nil
+	default:
+		// in all other cases (download and S2S), the destination is scanned/indexed first
+		// then the source is scanned and filtered based on what the destination contains
+		comparator = newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer).processIfNecessary
 
-	return newSyncEnumerator(sourceTraverser, destinationTraverser, indexer, filters,
-		comparator.processIfNecessary, finalize), nil
+		finalize = func() error {
+			// remove the extra files at the destination that were not present at the source
+			// we can only know what needs to be deleted when we have FINISHED traversing the remote source
+			// since only then can we know which local files definitely don't exist remotely
+			var deleteScheduler objectProcessor
+			switch cca.fromTo.To() {
+			case common.ELocation.Blob(), common.ELocation.File():
+				deleter, err := newSyncDeleteProcessor(cca)
+				if err != nil {
+					return err
+				}
+				deleteScheduler = deleter.removeImmediately
+			default:
+				deleteScheduler = newSyncLocalDeleteProcessor(cca).removeImmediately
+			}
+
+			err = indexer.traverse(deleteScheduler, nil)
+			if err != nil {
+				return err
+			}
+
+			// let the deletions happen first
+			// otherwise if the final part is executed too quickly, we might quit before deletions could finish
+			jobInitiated, err := transferScheduler.dispatchFinalPart()
+			// sync cleanly exits if nothing is scheduled.
+			if err != nil && err != NothingScheduledError {
+				return err
+			}
+
+			quitIfInSync(jobInitiated, cca.getDeletionCount() > 0, cca)
+			cca.setScanningComplete()
+			return nil
+		}
+
+		return newSyncEnumerator(destinationTraverser, sourceTraverser, indexer, filters, comparator, finalize), nil
+	}
 }
 
 func quitIfInSync(transferJobInitiated, anyDestinationFileDeleted bool, cca *cookedSyncCmdArgs) {

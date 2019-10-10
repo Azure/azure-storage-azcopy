@@ -56,7 +56,7 @@ type resumeJobController struct {
 // if blocking is specified to false, then another goroutine spawns and wait out the job
 func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
-	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s/%s.log", azcopyLogPathFolder, cca.jobID)))
+	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID), false, ""))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -65,11 +65,11 @@ func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
 
 	// hand over control to the lifecycle manager if blocking
 	if blocking {
-		glcm.InitiateProgressReporting(cca, true)
+		glcm.InitiateProgressReporting(cca)
 		glcm.SurrenderControl()
 	} else {
 		// non-blocking, return after spawning a go routine to watch the job
-		glcm.InitiateProgressReporting(cca, true)
+		glcm.InitiateProgressReporting(cca)
 	}
 }
 
@@ -80,6 +80,7 @@ func (cca *resumeJobController) Cancel(lcm common.LifecycleMgr) {
 	}
 }
 
+// TODO: can we combine this with the copy one (and the sync one?)
 func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// fetch a job status
 	var summary common.ListJobSummaryResponse
@@ -148,9 +149,10 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			}
 
 			// indicate whether constrained by disk or not
-			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration)
+			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, false)
 
-			return fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
+			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
+				summary.PercentComplete,
 				summary.TransfersCompleted,
 				summary.TransfersFailed,
 				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
@@ -194,8 +196,8 @@ func init() {
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.excludeTransfer, "exclude", "", "Filter: exclude these failed transfer(s) when resuming the job. "+
 		"Files should be separated by ';'.")
 	// oauth options
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.SourceSAS, "source-sas", "", "source sas of the source for given JobId")
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.DestinationSAS, "destination-sas", "", "destination sas of the destination for given JobId")
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.SourceSAS, "source-sas", "", "Source SAS token of the source for a given Job ID.")
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.DestinationSAS, "destination-sas", "", "destination SAS token of the destination for a given Job ID.")
 }
 
 type resumeCmdArgs struct {
@@ -256,6 +258,13 @@ func (rca resumeCmdArgs) process() error {
 		&getJobFromToResponse)
 	if getJobFromToResponse.ErrorMsg != "" {
 		glcm.Error(getJobFromToResponse.ErrorMsg)
+	}
+
+	if getJobFromToResponse.FromTo.From() == common.ELocation.Benchmark() ||
+		getJobFromToResponse.FromTo.To() == common.ELocation.Benchmark() {
+		// Doesn't make sense to resume a benchmark job.
+		// It's not tested, and wouldn't report progress correctly and wouldn't clean up after itself properly
+		return errors.New("resuming benchmark jobs is not supported")
 	}
 
 	ctx := context.TODO()

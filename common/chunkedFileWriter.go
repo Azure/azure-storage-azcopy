@@ -235,18 +235,18 @@ func (w *chunkedFileWriter) workerRoutine(ctx context.Context) {
 				w.successMd5 <- md5Hasher.Sum(nil)
 				return
 			}
-		case <-ctx.Done():
+		case <-ctx.Done(): // If cancelled out in the middle of enqueuing chunks OR processing chunks, they will both cleanly cancel out and we'll get back to here.
 			w.failureError <- ctx.Err()
 			return
 		}
 
 		// index the new chunk
-		unsavedChunksByFileOffset[newChunk.id.OffsetInFile] = newChunk
+		unsavedChunksByFileOffset[newChunk.id.OffsetInFile()] = newChunk
 		w.chunkLogger.LogChunkStatus(newChunk.id, EWaitReason.PriorChunk()) // may have to wait on prior chunks to arrive
 
 		// Process all chunks that we can
-		w.setStatusForContiguousAvailableChunks(unsavedChunksByFileOffset, nextOffsetToSave) // update states of those that have all their prior ones already here
-		err := w.sequentiallyProcessAvailableChunks(unsavedChunksByFileOffset, &nextOffsetToSave, md5Hasher)
+		w.setStatusForContiguousAvailableChunks(unsavedChunksByFileOffset, nextOffsetToSave, ctx) // update states of those that have all their prior ones already here
+		err := w.sequentiallyProcessAvailableChunks(unsavedChunksByFileOffset, &nextOffsetToSave, md5Hasher, ctx)
 		if err != nil {
 			w.failureError <- err
 			close(w.failureError) // must close because many goroutines may be calling the public methods, and all need to be able to tell there's been an error, even tho only one will get the actual error
@@ -257,8 +257,14 @@ func (w *chunkedFileWriter) workerRoutine(ctx context.Context) {
 
 // Hashes and saves available chunks that are sequential from nextOffsetToSave. Stops and returns as soon as it hits
 // a gap (i.e. the position of a chunk that hasn't arrived yet)
-func (w *chunkedFileWriter) sequentiallyProcessAvailableChunks(unsavedChunksByFileOffset map[int64]fileChunk, nextOffsetToSave *int64, md5Hasher hash.Hash) error {
+func (w *chunkedFileWriter) sequentiallyProcessAvailableChunks(unsavedChunksByFileOffset map[int64]fileChunk, nextOffsetToSave *int64, md5Hasher hash.Hash, ctx context.Context) error {
 	for {
+		select {
+		case <-ctx.Done():
+			return nil // Break out of the loop if cancelled. Done can be checked multiple times, so it's safe to not error out.
+		default:
+		}
+
 		// Look for next chunk in sequence
 		nextChunkInSequence, exists := unsavedChunksByFileOffset[*nextOffsetToSave]
 		if !exists {
@@ -277,8 +283,15 @@ func (w *chunkedFileWriter) sequentiallyProcessAvailableChunks(unsavedChunksByFi
 
 // Advances the status of chunks which are no longer waiting on missing predecessors, but are instead just waiting on
 // us to get around to (sequentially) saving them
-func (w *chunkedFileWriter) setStatusForContiguousAvailableChunks(unsavedChunksByFileOffset map[int64]fileChunk, nextOffsetToSave int64) {
+func (w *chunkedFileWriter) setStatusForContiguousAvailableChunks(unsavedChunksByFileOffset map[int64]fileChunk, nextOffsetToSave int64, ctx context.Context) {
 	for {
+		// Check for ctx.Done at the start of the loop, and cleanly return if it's done.
+		select {
+		case <-ctx.Done(): // Break out of the loop if cancelled. Done can be checked multiple times, so it's safe to not error out.
+			return
+		default: // do nothing if ctx.Done is empty
+		}
+
 		nextChunkInSequence, exists := unsavedChunksByFileOffset[nextOffsetToSave]
 		if !exists {
 			return //its not there yet, so no need to touch anything AFTER it. THEY are still waiting for prior chunk

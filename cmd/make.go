@@ -79,7 +79,7 @@ func (cma cookedMakeCmdArgs) getCredentialType(ctx context.Context) (credentialT
 		}
 	case common.ELocation.Blob():
 		// The resource URL cannot be public access URL, as it need delete permission.
-		credentialType, err = getBlobCredentialType(ctx, cma.resourceURL.String(), false, false)
+		credentialType, _, err = getBlobCredentialType(ctx, cma.resourceURL.String(), false, false)
 		if err != nil {
 			return common.ECredentialType.Unknown(), err
 		}
@@ -214,6 +214,6 @@ func init() {
 		},
 	}
 
-	makeCmd.PersistentFlags().Uint32Var(&rawArgs.quota, "quota-gb", 0, "specifies the maximum size of the share in gigabytes (GiB), 0 means you accept the file service's default quota.")
+	makeCmd.PersistentFlags().Uint32Var(&rawArgs.quota, "quota-gb", 0, "Specifies the maximum size of the share in gigabytes (GiB), 0 means you accept the file service's default quota.")
 	rootCmd.AddCommand(makeCmd)
 }

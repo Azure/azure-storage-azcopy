@@ -22,11 +22,14 @@ package cmd
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+
+	"github.com/Azure/azure-storage-file-go/azfile"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
-	"os"
-	"path/filepath"
 )
 
 type syncProcessorSuite struct{}
@@ -36,6 +39,7 @@ var _ = chk.Suite(&syncProcessorSuite{})
 func (s *syncProcessorSuite) TestLocalDeleter(c *chk.C) {
 	// set up the local file
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 	dstFileName := "extraFile.txt"
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, []string{dstFileName})
 
@@ -83,10 +87,11 @@ func (s *syncProcessorSuite) TestBlobDeleter(c *chk.C) {
 		destinationSAS:    parts.SAS.Encode(),
 		credentialInfo:    common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()},
 		deleteDestination: common.EDeleteDestination.True(),
+		fromTo:            common.EFromTo.LocalBlob(),
 	}
 
 	// set up the blob deleter
-	deleter, err := newSyncBlobDeleteProcessor(cca)
+	deleter, err := newSyncDeleteProcessor(cca)
 	c.Assert(err, chk.IsNil)
 
 	// exercise the deleter
@@ -95,5 +100,43 @@ func (s *syncProcessorSuite) TestBlobDeleter(c *chk.C) {
 
 	// validate that the blob was deleted
 	_, err = blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+	c.Assert(err, chk.NotNil)
+}
+
+func (s *syncProcessorSuite) TestFileDeleter(c *chk.C) {
+	fsu := getFSU()
+	fileName := "extraFile.pdf"
+
+	// set up the file to delete
+	shareURL, shareName := createNewAzureShare(c, fsu)
+	defer deleteShare(c, shareURL)
+	scenarioHelper{}.generateAzureFilesFromList(c, shareURL, []string{fileName})
+
+	// validate that the file exists
+	fileURL := shareURL.NewRootDirectoryURL().NewFileURL(fileName)
+	_, err := fileURL.GetProperties(context.Background())
+	c.Assert(err, chk.IsNil)
+
+	// construct the cooked input to simulate user input
+	rawShareSAS := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
+	parts := azfile.NewFileURLParts(rawShareSAS)
+	cca := &cookedSyncCmdArgs{
+		destination:       shareURL.String(),
+		destinationSAS:    parts.SAS.Encode(),
+		credentialInfo:    common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()},
+		deleteDestination: common.EDeleteDestination.True(),
+		fromTo:            common.EFromTo.FileFile(),
+	}
+
+	// set up the file deleter
+	deleter, err := newSyncDeleteProcessor(cca)
+	c.Assert(err, chk.IsNil)
+
+	// exercise the deleter
+	err = deleter.removeImmediately(storedObject{relativePath: fileName})
+	c.Assert(err, chk.IsNil)
+
+	// validate that the file was deleted
+	_, err = fileURL.GetProperties(context.Background())
 	c.Assert(err, chk.NotNil)
 }

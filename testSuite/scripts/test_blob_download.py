@@ -3,11 +3,37 @@ import os
 import shutil
 import time
 import urllib
+import urllib.parse as urlparse
 from collections import namedtuple
 import utility as util
 import unittest
 
 class Blob_Download_User_Scenario(unittest.TestCase):
+
+    # test_download_1kb_blob_to_null verifies that a 1kb blob can be downloaded to null and the md5 can be checked successfully
+    def test_download_1kb_blob_to_null(self):
+        # create file of size 1kb
+        filename = "test_1kb_blob_upload_download_null.txt"
+        file_path = util.create_test_file(filename, 1024)
+
+        # upload 1kb using azcopy
+        src = file_path
+        dst = util.test_container_url
+        result = util.Command("copy").add_arguments(src).add_arguments(dst). \
+            add_flags("log-level", "info").add_flags("put-md5", "true").execute_azcopy_copy_command()
+        self.assertTrue(result)
+
+        # verify the uploaded blob
+        resource_url = util.get_resource_sas(filename)
+        result = util.Command("testBlob").add_arguments(file_path).add_arguments(resource_url).execute_azcopy_verify()
+        self.assertTrue(result)
+
+        # downloading the uploaded blob to devnull
+        # note we have no tests to verify the success of check-md5. TODO: remove this when fault induction is introduced
+        src = util.get_resource_sas(filename)
+        dst = os.devnull
+        result = util.Command("copy").add_arguments(src).add_arguments(dst).add_flags("log-level", "info"). \
+            add_flags("check-md5", "FailIfDifferentOrMissing")
 
     # test_download_1kb_blob verifies the download of 1Kb blob using azcopy.
     def test_download_1kb_blob(self):
@@ -132,7 +158,8 @@ class Blob_Download_User_Scenario(unittest.TestCase):
 
     def test_blob_download_with_special_characters(self):
         filename_special_characters = "abc|>rd*"
-        resource_url = util.get_resource_sas(filename_special_characters)
+        # encode filename beforehand to avoid erroring out
+        resource_url = util.get_resource_sas(filename_special_characters.replace("*", "%2A"))
         # creating the file with random characters and with file name having special characters.
         result = util.Command("create").add_arguments(resource_url).add_flags("serviceType", "Blob").add_flags(
             "resourceType", "SingleFile").add_flags("blob-size", "1024").execute_azcopy_verify()
@@ -143,7 +170,10 @@ class Blob_Download_User_Scenario(unittest.TestCase):
             "log-level", "info").execute_azcopy_copy_command()
         self.assertTrue(result)
 
-        expected_filename = urllib.parse.quote_plus(filename_special_characters)
+        expected_filename = filename_special_characters
+        if os.name == "nt":
+            # Windows will encode special characters.
+            expected_filename = urllib.parse.quote_plus(filename_special_characters)
         # verify if the downloaded file exists or not.
         filepath = util.test_directory_path + "/" + expected_filename
         self.assertTrue(os.path.isfile(filepath))
@@ -264,10 +294,11 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         self.assertEquals(result, False)
 
         # create the resource sas
-        dir_sas_with_wildcard = util.get_resource_sas(dir_name + "/*")
+        dir_sas = util.get_resource_sas(dir_name + "/*")
         #download the directory
-        result = util.Command("copy").add_arguments(dir_sas_with_wildcard).add_arguments(dir_path).\
-                add_flags("log-level", "Info").add_flags("output-type","json").execute_azcopy_copy_command_get_output()
+        result = util.Command("copy").add_arguments(dir_sas).add_arguments(dir_path). \
+            add_flags("log-level", "Info").add_flags("output-type","json").\
+            execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
         try:
@@ -283,10 +314,11 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         self.assertEquals(x.TransfersFailed, 0)
 
         # create the resource sas
-        dir_sas_with_wildcard = util.get_resource_sas(dir_name + "/*/*.txt")
+        dir_sas = util.get_resource_sas(dir_name + "/sub_dir_download_wildcard_recursive_false_1/*")
+        result = util.Command("copy").add_arguments(dir_sas).add_arguments(dir_path).\
+            add_flags("log-level", "Info").add_flags("output-type","json").add_flags("include-pattern", "*.txt").\
+            execute_azcopy_copy_command_get_output()
         #download the directory
-        result = util.Command("copy").add_arguments(dir_sas_with_wildcard).add_arguments(dir_path). \
-            add_flags("log-level", "Info").add_flags("output-type","json").execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
         try:
@@ -333,7 +365,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         dir_sas_with_wildcard = util.get_resource_sas(dir_name + "/*")
         #download the directory
         result = util.Command("copy").add_arguments(dir_sas_with_wildcard).add_arguments(dir_path). \
-            add_flags("log-level", "Info").add_flags("output-type","json").add_flags("recursive","true").\
+            add_flags("log-level", "Info").add_flags("output-type", "json").add_flags("recursive", "true").\
             execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -350,11 +382,11 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         self.assertEquals(x.TransfersFailed, 0)
 
         # create the resource sas
-        dir_sas_with_wildcard = util.get_resource_sas(dir_name + "/*/*")
-        #download the directory
+        dir_sas_with_wildcard = util.get_resource_sas(dir_name + "/*")
+        # download the directory
         result = util.Command("copy").add_arguments(dir_sas_with_wildcard).add_arguments(dir_path). \
-            add_flags("log-level", "Info").add_flags("output-type","json") \
-            .add_flags("recursive", "true").execute_azcopy_copy_command_get_output()
+            add_flags("log-level", "Info").add_flags("output-type", "json").add_flags("recursive", "true").\
+            add_flags("include-path", "logs/;abc/").execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
         try:
@@ -362,12 +394,29 @@ class Blob_Download_User_Scenario(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        # since the wildcards '*/*' exists at the end of dir_name in the sas
+        # since the wildcards '*' exists at the end of dir_name in the sas
+        # include-path is set to logs/;abc/
         # and recursive is set to true, files immediately inside will not be downloaded
         # but files inside sub-dir logs and sub-dir inside logs i.e abc inside dir will be downloaded
         # Number of Expected Transfer should be 20
         self.assertEquals(x.TransfersCompleted, 20)
         self.assertEquals(x.TransfersFailed, 0)
+
+        # prepare testing paths
+        log_path = os.path.join(dir_path, "logs/")
+        abc_path = os.path.join(dir_path, "abc/")
+        log_url = util.get_resource_sas(dir_name + "/logs")
+        abc_url = util.get_resource_sas(dir_name + "/abc")
+
+        # Test log path
+        result = util.Command("testBlob").add_arguments(log_path).add_arguments(log_url).\
+            add_flags("is-object-dir", "true").execute_azcopy_verify()
+        self.assertTrue(result)
+
+        # test abc path
+        result = util.Command("testBlob").add_arguments(abc_path).add_arguments(abc_url)\
+            .add_flags("is-object-dir", "true").execute_azcopy_verify()
+        self.assertTrue(result)
 
         # This test validates the functionality if list-of-files flag.
     def test_blob_download_list_of_files_flag(self):
@@ -398,9 +447,8 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         self.assertTrue(result)
 
         #download the entire directory with list-of-files-flag
-        dict = {}
-        dict["Files"] = [dir_name]
-        filePath = util.create_json_file("testfile", dict)
+        list_of_files = [dir_name]
+        filePath = util.create_new_list_of_files("testfile", list_of_files)
         result = util.Command("copy").add_arguments(util.test_container_url).add_arguments(dir_path). \
             add_flags("log-level", "Info").add_flags("output-type","json").add_flags("recursive","true") \
             .add_flags("list-of-files", filePath).execute_azcopy_copy_command_get_output()
@@ -417,10 +465,9 @@ class Blob_Download_User_Scenario(unittest.TestCase):
 
         # create the resource sas
         dir_sas = util.get_resource_sas(dir_name)
-        #download the logs directory inside the dir
-        dict = {}
-        dict["Files"] = ["logs"]
-        filePath = util.create_json_file("testfile", dict)
+        # download the logs directory inside the dir
+        list_of_files = ["logs"]
+        filePath = util.create_new_list_of_files("testfile", list_of_files)
         result = util.Command("copy").add_arguments(dir_sas).add_arguments(dir_path). \
             add_flags("log-level", "Info").add_flags("output-type","json").add_flags("recursive","true"). \
             add_flags("list-of-files", filePath).execute_azcopy_copy_command_get_output()

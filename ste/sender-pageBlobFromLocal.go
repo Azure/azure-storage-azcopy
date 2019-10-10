@@ -63,7 +63,7 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 			// for this destination type, there is no need to upload ranges than consist entirely of zeros
 			jptm.Log(pipeline.LogDebug,
 				fmt.Sprintf("Not uploading range from %d to %d,  all bytes are zero",
-					id.OffsetInFile, id.OffsetInFile+reader.Length()))
+					id.OffsetInFile(), id.OffsetInFile()+reader.Length()))
 			return
 		}
 
@@ -79,7 +79,7 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
 		enrichedContext := withRetryNotification(jptm.Context(), u.filePacer)
-		_, err := u.destPageBlobURL.UploadPages(enrichedContext, id.OffsetInFile, body, azblob.PageBlobAccessConditions{}, nil)
+		_, err := u.destPageBlobURL.UploadPages(enrichedContext, id.OffsetInFile(), body, azblob.PageBlobAccessConditions{}, nil)
 		if err != nil {
 			jptm.FailActiveUpload("Uploading page", err)
 			return
@@ -91,7 +91,7 @@ func (u *pageBlobUploader) Epilogue() {
 	jptm := u.jptm
 
 	// set content MD5 (only way to do this is to re-PUT all the headers, this time with the MD5 included)
-	if jptm.TransferStatus() > 0 && !u.isInManagedDiskImportExportAccount() {
+	if jptm.IsLive() && !u.isInManagedDiskImportExportAccount() {
 		tryPutMd5Hash(jptm, u.md5Channel, func(md5Hash []byte) error {
 			epilogueHeaders := u.headersToApply
 			epilogueHeaders.ContentMD5 = md5Hash
@@ -101,4 +101,14 @@ func (u *pageBlobUploader) Epilogue() {
 	}
 
 	u.pageBlobSenderBase.Epilogue()
+}
+
+func (u *pageBlobUploader) GetDestinationLength() (int64, error) {
+	prop, err := u.destPageBlobURL.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{})
+
+	if err != nil {
+		return -1, err
+	}
+
+	return prop.ContentLength(), nil
 }

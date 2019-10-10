@@ -21,7 +21,9 @@
 package ste
 
 import (
+	"errors"
 	"fmt"
+	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -32,15 +34,11 @@ import (
 func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
 	srcInfoProvider := sip.(IRemoteSourceInfoProvider) // "downcast" to the type we know it really has
 
-	targetBlobType := azblob.BlobBlockBlob // By default use block blob as destination type
-
-	if blobSrcInfoProvider, ok := srcInfoProvider.(IBlobSourceInfoProvider); ok {
-		targetBlobType = blobSrcInfoProvider.BlobType()
-	}
+	var targetBlobType azblob.BlobType
 
 	blobTypeOverride := jptm.BlobTypeOverride() // BlobTypeOverride is copy info specified by user
 
-	if blobTypeOverride != common.EBlobType.None() {
+	if blobTypeOverride != common.EBlobType.Detect() { // If a blob type is explicitly specified, determine it.
 		targetBlobType = blobTypeOverride.ToAzBlobType()
 
 		if jptm.ShouldLog(pipeline.LogInfo) { // To save fmt.Sprintf
@@ -49,6 +47,25 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 				srcInfoProvider.RawSource(),
 				destination,
 				fmt.Sprintf("BlobType has been explictly set to %q for destination blob.", blobTypeOverride))
+		}
+	} else {
+		if blobSrcInfoProvider, ok := srcInfoProvider.(IBlobSourceInfoProvider); ok { // If source is a blob, detect the source blob type.
+			targetBlobType = blobSrcInfoProvider.BlobType()
+		} else { // If source is not a blob, infer the blob type from the extension.
+			srcURL, err := url.Parse(jptm.Info().Source)
+
+			// I don't think it would ever reach here if the source URL failed to parse, but this is a sanity check.
+			if err != nil {
+				return nil, errors.New(fmt.Sprintf("Failed to parse URL %s in scheduler. Check sanity.", jptm.Info().Source))
+			}
+
+			fileName := srcURL.Path
+
+			targetBlobType = inferBlobType(fileName, azblob.BlobBlockBlob)
+		}
+
+		if targetBlobType != azblob.BlobBlockBlob {
+			jptm.LogTransferInfo(pipeline.LogInfo, srcInfoProvider.RawSource(), destination, fmt.Sprintf("Autodetected %s blob type as %s.", jptm.Info().Source, targetBlobType))
 		}
 	}
 

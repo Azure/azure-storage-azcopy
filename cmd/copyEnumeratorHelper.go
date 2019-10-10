@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -52,7 +51,6 @@ func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer
 // this is done to avoid hitting the same partition continuously in an append only pattern
 // TODO this should probably be removed after the high throughput block blob feature is implemented on the service side
 func shuffleTransfers(transfers []common.CopyTransfer) {
-	rand.Seed(time.Now().UnixNano())
 	rand.Shuffle(len(transfers), func(i, j int) { transfers[i], transfers[j] = transfers[j], transfers[i] })
 }
 
@@ -65,6 +63,13 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *cookedCopyCmdArgs
 	Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
 
 	if !resp.JobStarted {
+		// Output the log location and such
+		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID), cca.isCleanupJob, cca.cleanupJobMessage))
+
+		if resp.ErrorMsg == common.ECopyJobPartOrderErrorType.NoTransfersScheduledErr() {
+			return NothingScheduledError
+		}
+
 		return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
 	}
 

@@ -53,7 +53,7 @@ func (s *genericFilterSuite) TestExcludeFilter(c *chk.C) {
 	// set up the filters
 	raw := rawSyncCmdArgs{}
 	excludePatternList := raw.parsePatterns("*.pdf;*.jpeg;exactName")
-	excludeFilterList := buildExcludeFilters(excludePatternList)
+	excludeFilterList := buildExcludeFilters(excludePatternList, false)
 
 	// test the positive cases
 	filesToPass := []string{"bla.pdfe", "fancy.jjpeg", "socool.png", "eexactName"}

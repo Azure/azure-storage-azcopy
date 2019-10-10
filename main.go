@@ -22,7 +22,10 @@ package main
 
 import (
 	"log"
+	"math/rand"
 	"os"
+	"path"
+	"runtime"
 	"runtime/debug"
 	"time"
 
@@ -37,18 +40,37 @@ var glcm = common.GetLifecycleMgr()
 func main() {
 	pipeline.SetLogSanitizer(common.NewAzCopyLogSanitizer()) // make sure ForceLog logs get secrets redacted
 
+	rand.Seed(time.Now().UnixNano()) // make sure our random numbers actually are random (but remember, use crypto/rand for anything where strong/reliable randomness is required
+
+	// note: azcopyAppPathFolder is the default location for all AzCopy data (logs, job plans, oauth token on Windows)
+	// but both logs and job plans can be put elsewhere as they can become very large
 	azcopyAppPathFolder := GetAzCopyAppPath()
+
+	// the user can optionally put the log files somewhere else
 	azcopyLogPathFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.LogLocation())
 	if azcopyLogPathFolder == "" {
 		azcopyLogPathFolder = azcopyAppPathFolder
 	}
+	if err := os.Mkdir(azcopyLogPathFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
+		common.PanicIfErr(err)
+	}
+
+	// the user can optionally put the plan files somewhere else
+	azcopyJobPlanFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.JobPlanLocation())
+	if azcopyJobPlanFolder == "" {
+		azcopyJobPlanFolder = path.Join(azcopyAppPathFolder, "plans")
+	}
+	if err := os.Mkdir(azcopyJobPlanFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
+		common.PanicIfErr(err)
+	}
 
 	// If insufficient arguments, show usage & terminate
 	if len(os.Args) == 1 {
-		cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder, 0)
+		cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder, azcopyJobPlanFolder, 0)
 		return
 	}
 
+	configureGoMaxProcs()
 	configureGC()
 
 	// Perform os specific initialization
@@ -57,7 +79,7 @@ func main() {
 		log.Fatalf("initialization failed: %v", err)
 	}
 
-	cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder, maxFileAndSocketHandles)
+	cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder, azcopyJobPlanFolder, maxFileAndSocketHandles)
 	glcm.Exit(nil, common.EExitCode.Success())
 }
 
@@ -69,4 +91,14 @@ func configureGC() {
 		time.Sleep(20 * time.Second) // wait a little, so that our initial pool of buffers can get allocated without heaps of (unnecessary) GC activity
 		debug.SetGCPercent(20)       // activate more aggressive/frequent GC than the default
 	}()
+}
+
+// Ensure we always have more than 1 OS thread running goroutines, since there are issues with having just 1.
+// (E.g. version check doesn't happen at login time, if have only one go proc. Not sure why that happens if have only one
+// proc. Is presumably due to the high CPU usage we see on login if only 1 CPU, even tho can't see any busy-wait in that code)
+func configureGoMaxProcs() {
+	isOnlyOne := runtime.GOMAXPROCS(0) == 1
+	if isOnlyOne {
+		runtime.GOMAXPROCS(2)
+	}
 }

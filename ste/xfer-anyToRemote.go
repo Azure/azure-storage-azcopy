@@ -25,11 +25,16 @@ import (
 	"errors"
 	"fmt"
 	"hash"
-	"os"
+	"net/url"
+	"strings"
+	"sync"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
+
+// This sync.Once is present to ensure we output information about a S2S access tier preservation failure to stdout once
+var s2sAccessTierFailureLogStdout sync.Once
 
 // anyToRemote handles all kinds of sender operations - both uploads from local files, and S2S copies
 func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
@@ -68,24 +73,36 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 		panic("must always schedule one chunk, even if file is empty") // this keeps our code structure simpler, by using a dummy chunk for empty files
 	}
 
-	// step 3: Check overwrite
-	// If the force Write flags is set to false
+	// step 3: check overwrite option
+	// if the force Write flags is set to false or prompt
 	// then check the file exists at the remote location
-	// If it does, mark transfer as failed.
-	if !jptm.IsForceWriteTrue() {
+	// if it does, react accordingly
+	if jptm.GetOverwriteOption() != common.EOverwriteOption.True() {
 		exists, existenceErr := s.RemoteFileExists()
 		if existenceErr != nil {
 			jptm.LogSendError(info.Source, info.Destination, "Could not check file existence. "+existenceErr.Error(), 0)
-			jptm.SetStatus(common.ETransferStatus.Failed()) // is a real failure, not just a FileAlreadyExists, in this case
+			jptm.SetStatus(common.ETransferStatus.Failed()) // is a real failure, not just a SkippedFileAlreadyExists, in this case
 			jptm.ReportTransferDone()
 			return
 		}
 		if exists {
-			// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
-			jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "File already exists, so will be skipped")
-			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure()) // TODO: question: is it OK to always use FileAlreadyExists here, instead of BlobAlreadyExists, even when saving to blob storage?  I.e. do we really need a different error for blobs?
-			jptm.ReportTransferDone()
-			return
+			shouldOverwrite := false
+
+			// if necessary, prompt to confirm user's intent
+			if jptm.GetOverwriteOption() == common.EOverwriteOption.Prompt() {
+				// remove the SAS before prompting the user
+				parsed, _ := url.Parse(info.Destination)
+				parsed.RawQuery = ""
+				shouldOverwrite = jptm.GetOverwritePrompter().shouldOverwrite(parsed.String())
+			}
+
+			if !shouldOverwrite {
+				// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
+				jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "File already exists, so will be skipped")
+				jptm.SetStatus(common.ETransferStatus.SkippedFileAlreadyExists())
+				jptm.ReportTransferDone()
+				return
+			}
 		}
 	}
 
@@ -93,9 +110,7 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 	var sourceFileFactory func() (common.CloseableReaderAt, error)
 	srcFile := (common.CloseableReaderAt)(nil)
 	if srcInfoProvider.IsLocal() {
-		sourceFileFactory = func() (common.CloseableReaderAt, error) {
-			return openSourceFile(info)
-		}
+		sourceFileFactory = srcInfoProvider.(ILocalSourceInfoProvider).OpenSourceFile // all local providers must implement this interface
 		srcFile, err = sourceFileFactory()
 		if err != nil {
 			jptm.LogSendError(info.Source, info.Destination, "Couldn't open source-"+err.Error(), 0)
@@ -126,6 +141,18 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 		}
 	}
 
+	// step 5a: lock the destination
+	// (is safe to do it relatively early here, before we run the prologue, because its just a internal lock, within the app)
+	// But must be after all of the early returns that are above here (since
+	// if we succeed here, we need to know the epilogue will definitely run to unlock later)
+	err = jptm.WaitUntilLockDestination(jptm.Context())
+	if err != nil {
+		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
+	}
+
 	// *****
 	// Error-handling rules change here.
 	// ABOVE this point, we end the transfer using the code as shown above
@@ -138,7 +165,7 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 	//   eventually reach numChunks, since we have no better short-term alternative.
 	// ******
 
-	// step 5: tell jptm what to expect, and how to clean up at the end
+	// step 5b: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
 	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupSendToRemote(jptm, s, srcInfoProvider) })
 
@@ -146,15 +173,7 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 	scheduleSendChunks(jptm, info.Source, srcFile, srcSize, s, sourceFileFactory, srcInfoProvider)
 }
 
-func openSourceFile(info TransferInfo) (common.CloseableReaderAt, error) {
-	if common.IsPlaceholderForRandomDataGenerator(info.Source) {
-		// Generate a "file" of random data. Useful for testing when you want really big files, but don't want
-		// to make them yourself
-		return common.NewRandomDataGenerator(info.SourceSize), nil
-	} else {
-		return os.Open(info.Source)
-	}
-}
+var jobCancelledLocalPrefetchErr = errors.New("job was cancelled; Pre-fetching stopped")
 
 // Schedule all the send chunks.
 // For upload, we force preload of each chunk to memory, and we wait (block)
@@ -200,16 +219,20 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 		}
 
 		if srcInfoProvider.IsLocal() {
-			// create reader and prefetch the data into it
-			chunkReader = createPopulatedChunkReader(jptm, sourceFileFactory, id, adjustedChunkSize, srcFile)
-
-			// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
-			prefetchErr = chunkReader.BlockingPrefetch(srcFile, false)
-			if prefetchErr == nil {
-				chunkReader.WriteBufferTo(md5Hasher)
-				ps = chunkReader.GetPrologueState()
+			if jptm.WasCanceled() {
+				prefetchErr = jobCancelledLocalPrefetchErr
 			} else {
-				safeToUseHash = false // because we've missed a chunk
+				// create reader and prefetch the data into it
+				chunkReader = createPopulatedChunkReader(jptm, sourceFileFactory, id, adjustedChunkSize, srcFile)
+
+				// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
+				prefetchErr = chunkReader.BlockingPrefetch(srcFile, false)
+				if prefetchErr == nil {
+					chunkReader.WriteBufferTo(md5Hasher)
+					ps = chunkReader.GetPrologueState()
+				} else {
+					safeToUseHash = false // because we've missed a chunk
+				}
 			}
 		}
 
@@ -218,7 +241,10 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 			// Run prologue before first chunk is scheduled.
 			// If file is not local, we'll get no leading bytes, but we still run the prologue in case
 			// there's other initialization to do in the sender.
-			s.Prologue(ps)
+			modified := s.Prologue(ps)
+			if modified {
+				jptm.SetDestinationIsModified()
+			}
 		}
 
 		// schedule the chunk job/msg
@@ -229,7 +255,9 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 			if prefetchErr == nil {
 				cf = s.(uploader).GenerateUploadFunc(id, chunkIDCount, chunkReader, isWholeFile)
 			} else {
-				_ = chunkReader.Close()
+				if chunkReader != nil {
+					_ = chunkReader.Close()
+				}
 				// Our jptm logic currently requires us to schedule every chunk, even if we know there's an error,
 				// so we schedule a func that will just fail with the given error
 				cf = createSendToRemoteChunkFunc(jptm, id, func() { jptm.FailActiveSend("chunk data read", prefetchErr) })
@@ -276,8 +304,14 @@ func isDummyChunkInEmptyFile(startIndex int64, fileSize int64) bool {
 
 // Complete epilogue. Handles both success and failure.
 func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, sip ISourceInfoProvider) {
-	if jptm.TransferStatus() > 0 {
-		if _, isS2SCopier := s.(s2sCopier); sip.IsLocal() || (isS2SCopier && jptm.Info().S2SSourceChangeValidation) {
+	info := jptm.Info()
+	// allow our usual state tracking mechanism to keep count of how many epilogues are running at any given instant, for perf diagnostics
+	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
+	jptm.LogChunkStatus(pseudoId, common.EWaitReason.Epilogue())
+	defer jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
+
+	if jptm.IsLive() {
+		if _, isS2SCopier := s.(s2sCopier); sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation) {
 			// Check the source to see if it was changed during transfer. If it was, mark the transfer as failed.
 			lmt, err := sip.GetLastModifiedTime()
 			if err != nil {
@@ -289,10 +323,28 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 		}
 	}
 
-	s.Epilogue()
+	s.Epilogue() // Perform service-specific cleanup before jptm cleanup. Some services may actually require setup to make the file actually appear.
 
-	// TODO: finalize and wrap in functions whether 0 is included or excluded in status comparisons
-	if jptm.TransferStatus() == 0 {
+	if jptm.IsLive() && info.DestLengthValidation {
+		_, isS2SCopier := s.(s2sCopier)
+		destLength, err := s.GetDestinationLength()
+
+		if err != nil {
+			jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", err)
+		}
+
+		if destLength != jptm.Info().SourceSize {
+			jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check", errors.New("destination length does not match source length"))
+		}
+	}
+
+	if jptm.HoldsDestinationLock() { // TODO consider add test of jptm.IsDeadInflight here, so we can remove that from inside all the cleanup methods
+		s.Cleanup() // Perform jptm cleanup, if THIS jptm has the lock on the destination
+	}
+
+	jptm.UnlockDestination()
+
+	if jptm.TransferStatusIgnoringCancellation() == 0 {
 		panic("think we're finished but status is notStarted")
 	}
 
@@ -304,7 +356,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 	// it is entirely possible that all the chunks were finished, but then by the time we get to this line
 	// the context is canceled. In this case, a completely transferred file would not be marked "completed".
 	// it's definitely a case that we should be aware of, but given how rare it is, and how low the impact (the user can just resume), we don't have to do anything more to it atm.
-	if jptm.TransferStatus() > 0 && !jptm.WasCanceled() {
+	if jptm.IsLive() {
 		// We know all chunks are done (because this routine was called)
 		// and we know the transfer didn't fail (because just checked its status above and made sure the context was not canceled),
 		// so it must have succeeded. So make sure its not left "in progress" state
@@ -313,9 +365,10 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 		// Final logging
 		if jptm.ShouldLog(pipeline.LogInfo) { // TODO: question: can we remove these ShouldLogs?  Aren't they inside Log?
 			if _, ok := s.(s2sCopier); ok {
-				jptm.Log(pipeline.LogInfo, "COPY SUCCESSFUL")
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("COPYSUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
 			} else if _, ok := s.(uploader); ok {
-				jptm.Log(pipeline.LogInfo, "UPLOAD SUCCESSFUL")
+				// Output relative path of file, includes file name.
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("UPLOADSUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
 			} else {
 				panic("invalid state: epilogueWithCleanupSendToRemote should be used by COPY and UPLOAD")
 			}

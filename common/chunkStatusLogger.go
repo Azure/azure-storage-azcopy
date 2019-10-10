@@ -23,6 +23,7 @@ package common
 import (
 	"bufio"
 	"fmt"
+	"math"
 	"os"
 	"path"
 	"sync/atomic"
@@ -32,7 +33,7 @@ import (
 // Identifies a chunk. Always create with NewChunkID
 type ChunkID struct {
 	Name         string
-	OffsetInFile int64
+	offsetInFile int64
 
 	// What is this chunk's progress currently waiting on?
 	// Must be a pointer, because the ChunkID itself is a struct.
@@ -51,6 +52,7 @@ type ChunkID struct {
 	// TODO: it's a bit odd having two pointers in a struct like this.  Review, maybe we should always work
 	//   with pointers to chunk ids, with nocopy?  If we do that, the two fields that are currently pointers
 	//   can become non-pointers
+	//   And maybe at that point, we would also put Length into chunkID, and use that in jptm.ReportChunkDone
 }
 
 func NewChunkID(name string, offsetInFile int64) ChunkID {
@@ -58,9 +60,20 @@ func NewChunkID(name string, offsetInFile int64) ChunkID {
 	zeroNotificationState := int32(0)
 	return ChunkID{
 		Name:                     name,
-		OffsetInFile:             offsetInFile,
+		offsetInFile:             offsetInFile,
 		waitReasonIndex:          &dummyWaitReasonIndex, // must initialize, so don't get nil pointer on usage
 		completionNotifiedToJptm: &zeroNotificationState,
+	}
+}
+
+func NewPseudoChunkIDForWholeFile(name string) ChunkID {
+	dummyWaitReasonIndex := int32(0)
+	alreadyNotifiedNotificationState := int32(1) // so that these can never be notified to jptm's (doing so would be an error, because they are not real chunks)
+	return ChunkID{
+		Name:                     name,
+		offsetInFile:             math.MinInt64,         // very negative, clearly not a real offset
+		waitReasonIndex:          &dummyWaitReasonIndex, // must initialize, so don't get nil pointer on usage
+		completionNotifiedToJptm: &alreadyNotifiedNotificationState,
 	}
 }
 
@@ -68,6 +81,17 @@ func (id ChunkID) SetCompletionNotificationSent() {
 	if atomic.SwapInt32(id.completionNotifiedToJptm, 1) != 0 {
 		panic("cannot complete the same chunk twice")
 	}
+}
+
+func (id ChunkID) OffsetInFile() int64 {
+	if id.offsetInFile < 0 {
+		panic("Attempt to get negative file offset") // protects us against any mis-use of "pseudo chunks" with negative offsets
+	}
+	return id.offsetInFile
+}
+
+func (id ChunkID) IsPseudoChunk() bool {
+	return id.offsetInFile < 0
 }
 
 var EWaitReason = WaitReason{0, ""}
@@ -80,23 +104,27 @@ type WaitReason struct {
 }
 
 // Head (below) has index between GB and Body, just so the ordering is numerical ascending during typical chunk lifetime for both upload and download
+// We use just the first letters of these when displaying perf states as we run (if enabled)
+// so try to keep the first letters unique (except for Done and Cancelled, which are not displayed, and so may duplicate the first letter of something else)
 func (WaitReason) Nothing() WaitReason              { return WaitReason{0, "Nothing"} }            // not waiting for anything
-func (WaitReason) RAMToSchedule() WaitReason        { return WaitReason{1, "RAM"} }                // waiting for enough RAM to schedule the chunk
-func (WaitReason) WorkerGR() WaitReason             { return WaitReason{2, "Worker"} }             // waiting for a goroutine to start running our chunkfunc
-func (WaitReason) FilePacer() WaitReason            { return WaitReason{3, "FilePacer"} }          // waiting until the file-level pacer says its OK to process another chunk
-func (WaitReason) HeaderResponse() WaitReason       { return WaitReason{4, "Head"} }               // waiting to finish downloading the HEAD
-func (WaitReason) Body() WaitReason                 { return WaitReason{5, "Body"} }               // waiting to finish sending/receiving the BODY
-func (WaitReason) BodyReReadDueToMem() WaitReason   { return WaitReason{6, "BodyReRead-LowRam"} }  //waiting to re-read the body after a forced-retry due to low RAM
-func (WaitReason) BodyReReadDueToSpeed() WaitReason { return WaitReason{7, "BodyReRead-TooSlow"} } // waiting to re-read the body after a forced-retry due to a slow chunk read (without low RAM)
-func (WaitReason) Sorting() WaitReason              { return WaitReason{8, "Sorting"} }            // waiting for the writer routine, in chunkedFileWriter, to pick up this chunk and sort it into sequence
-func (WaitReason) PriorChunk() WaitReason           { return WaitReason{9, "Prior"} }              // waiting on a prior chunk to arrive (before this one can be saved)
-func (WaitReason) QueueToWrite() WaitReason         { return WaitReason{10, "Queue"} }             // prior chunk has arrived, but is not yet written out to disk
-func (WaitReason) DiskIO() WaitReason               { return WaitReason{11, "DiskIO"} }            // waiting on disk read/write to complete
-func (WaitReason) S2SCopyOnWire() WaitReason        { return WaitReason{12, "S2SCopyOnWire"} }     // waiting for S2S copy on wire get finished. extra status used only by S2S copy
-func (WaitReason) ChunkDone() WaitReason            { return WaitReason{13, "Done"} }              // not waiting on anything. Chunk is done.
+func (WaitReason) CreateLocalFile() WaitReason      { return WaitReason{1, "CreateLocalFile"} }    // creating the local file
+func (WaitReason) RAMToSchedule() WaitReason        { return WaitReason{2, "RAM"} }                // waiting for enough RAM to schedule the chunk
+func (WaitReason) WorkerGR() WaitReason             { return WaitReason{3, "Worker"} }             // waiting for a goroutine to start running our chunkfunc
+func (WaitReason) FilePacer() WaitReason            { return WaitReason{4, "FilePacer"} }          // waiting until the file-level pacer says its OK to process another chunk
+func (WaitReason) HeaderResponse() WaitReason       { return WaitReason{5, "Head"} }               // waiting to finish downloading the HEAD
+func (WaitReason) Body() WaitReason                 { return WaitReason{6, "Body"} }               // waiting to finish sending/receiving the BODY
+func (WaitReason) BodyReReadDueToMem() WaitReason   { return WaitReason{7, "BodyReRead-LowRam"} }  //waiting to re-read the body after a forced-retry due to low RAM
+func (WaitReason) BodyReReadDueToSpeed() WaitReason { return WaitReason{8, "BodyReRead-TooSlow"} } // waiting to re-read the body after a forced-retry due to a slow chunk read (without low RAM)
+func (WaitReason) Sorting() WaitReason              { return WaitReason{9, "Sorting"} }            // waiting for the writer routine, in chunkedFileWriter, to pick up this chunk and sort it into sequence
+func (WaitReason) PriorChunk() WaitReason           { return WaitReason{10, "Prior"} }             // waiting on a prior chunk to arrive (before this one can be saved)
+func (WaitReason) QueueToWrite() WaitReason         { return WaitReason{11, "Queue"} }             // prior chunk has arrived, but is not yet written out to disk
+func (WaitReason) DiskIO() WaitReason               { return WaitReason{12, "DiskIO"} }            // waiting on disk read/write to complete
+func (WaitReason) S2SCopyOnWire() WaitReason        { return WaitReason{13, "S2SCopyOnWire"} }     // waiting for S2S copy on wire get finished. extra status used only by S2S copy
+func (WaitReason) Epilogue() WaitReason             { return WaitReason{14, "Epilogue"} }          // File-level epilogue processing (e.g. Commit block list, or other final operation on local or remote object (e.g. flush))
+func (WaitReason) ChunkDone() WaitReason            { return WaitReason{15, "Done"} }              // not waiting on anything. Chunk is done.
 // NOTE: when adding new statuses please renumber to make Cancelled numerically the last, to avoid
 // the need to also change numWaitReasons()
-func (WaitReason) Cancelled() WaitReason { return WaitReason{14, "Cancelled"} } // transfer was cancelled.  All chunks end with either Done or Cancelled.
+func (WaitReason) Cancelled() WaitReason { return WaitReason{16, "Cancelled"} } // transfer was cancelled.  All chunks end with either Done or Cancelled.
 
 // TODO: consider change the above so that they don't create new struct on every call?  Is that necessary/useful?
 //     Note: reason it's not using the normal enum approach, where it only has a number, is to try to optimize
@@ -124,6 +152,8 @@ var uploadWaitReasons = []WaitReason{
 
 	// This is the actual network activity
 	EWaitReason.Body(), // header is not separated out for uploads, so is implicitly included here
+
+	EWaitReason.Epilogue(),
 	// Plus Done/cancelled, which are not included here because not wanted for GetCounts
 }
 
@@ -131,6 +161,7 @@ var uploadWaitReasons = []WaitReason{
 // See comment on uploadWaitReasons for rationale.
 var downloadWaitReasons = []WaitReason{
 	// Done by the transfer initiation function (i.e. chunkfunc creation loop)
+	EWaitReason.CreateLocalFile(),
 	EWaitReason.RAMToSchedule(),
 
 	// Waiting for a work Goroutine to pick up the chunkfunc and execute it.
@@ -157,6 +188,8 @@ var downloadWaitReasons = []WaitReason{
 
 	// The actual disk write
 	EWaitReason.DiskIO(),
+
+	EWaitReason.Epilogue(),
 	// Plus Done/cancelled, which are not included here because not wanted for GetCounts
 }
 
@@ -170,6 +203,8 @@ var s2sCopyWaitReasons = []WaitReason{
 
 	// Start to send Put*FromURL, then S2S copy will start in service side, and Azcopy will wait the response which indicates copy get finished.
 	EWaitReason.S2SCopyOnWire(),
+
+	EWaitReason.Epilogue(),
 }
 
 func (wr WaitReason) String() string {
@@ -184,26 +219,33 @@ type ChunkStatusLogger interface {
 type ChunkStatusLoggerCloser interface {
 	ChunkStatusLogger
 	GetCounts(td TransferDirection) []chunkStatusCount
-	GetPrimaryPerfConstraint(td TransferDirection) PerfConstraint
+	GetPrimaryPerfConstraint(td TransferDirection, rc RetryCounter) PerfConstraint
 	FlushLog() // not close, because we had issues with writes coming in after this // TODO: see if that issue still exists
+}
+
+type RetryCounter interface {
+	GetTotalRetries() int64
 }
 
 // chunkStatusLogger records all chunk state transitions, and makes aggregate data immediately available
 // for performance diagnostics. Also optionally logs every individual transition to a file.
 type chunkStatusLogger struct {
+	atomicLastRetryCount            int64
+	atomicIsWaitingOnFinalBodyReads int32
 	counts                          []int64
 	outputEnabled                   bool
 	unsavedEntries                  chan *chunkWaitState
 	flushDone                       chan struct{}
-	atomicIsWaitingOnFinalBodyReads int32
+	cpuMonitor                      CPUMonitor
 }
 
-func NewChunkStatusLogger(jobID JobID, logFileFolder string, enableOutput bool) ChunkStatusLoggerCloser {
+func NewChunkStatusLogger(jobID JobID, cpuMon CPUMonitor, logFileFolder string, enableOutput bool) ChunkStatusLoggerCloser {
 	logger := &chunkStatusLogger{
 		counts:         make([]int64, numWaitReasons()),
 		outputEnabled:  enableOutput,
 		unsavedEntries: make(chan *chunkWaitState, 1000000),
 		flushDone:      make(chan struct{}),
+		cpuMonitor:     cpuMon,
 	}
 	if enableOutput {
 		chunkLogPath := path.Join(logFileFolder, jobID.String()+"-chunks.log") // its a CSV, but using log extension for consistency with other files in the directory
@@ -233,7 +275,7 @@ func (csl *chunkStatusLogger) LogChunkStatus(id ChunkID, reason WaitReason) {
 	// always update the in-memory stats, even if output is disabled
 	csl.countStateTransition(id, reason)
 
-	if !csl.outputEnabled {
+	if !csl.outputEnabled || id.IsPseudoChunk() { // pseudo chunks are only for aggregate stats, not detailed logging
 		return
 	}
 
@@ -277,7 +319,7 @@ func (csl *chunkStatusLogger) main(chunkLogPath string) {
 			csl.flushDone <- struct{}{}
 			continue // TODO can become break (or be moved to later if we close unsaved entries, once we figure out how we got stuff written to us after CloseLog was called)
 		}
-		_, _ = w.WriteString(fmt.Sprintf("%s,%d,%s,%s\n", x.Name, x.OffsetInFile, x.reason, x.waitStart))
+		_, _ = w.WriteString(fmt.Sprintf("%s,%d,%s,%s\n", x.Name, x.OffsetInFile(), x.reason, x.waitStart))
 		if alwaysFlushFromNowOn {
 			// TODO: remove when we figure out how we got stuff written to us after CloseLog was called. For now, this should handle those cases (if they still exist)
 			doFlush()
@@ -343,17 +385,29 @@ func (csl *chunkStatusLogger) GetCounts(td TransferDirection) []chunkStatusCount
 	return result
 }
 
-func (csl *chunkStatusLogger) GetPrimaryPerfConstraint(td TransferDirection) PerfConstraint {
+func (csl *chunkStatusLogger) GetPrimaryPerfConstraint(td TransferDirection, rc RetryCounter) PerfConstraint {
+	newCount := rc.GetTotalRetries()
+	oldCount := atomic.SwapInt64(&csl.atomicLastRetryCount, newCount)
+	retriesSinceLastCall := newCount - oldCount
+
 	switch {
 	// it seems sensible to report file pacer (Service) constraint as a higher priority than Disk, if both exist at the same time (but usually they won't)
 	case csl.isConstrainedByFilePacer():
-		return EPerfConstraint.Service() // service is throttling us (as at March 2019, we only detect this for page blobs, but that may change in future)
+		return EPerfConstraint.PageBlobService() // distinguish this from ordinary service throttling for ease of diagnostic understanding (page blobs have per-blob limits)
+
+	// check this ahead of disk, because for uploads retries can force disk activity, and so can be mistaken as a disk constraint
+	// if we looked at disk first
+	case retriesSinceLastCall > 0:
+		return EPerfConstraint.Service()
 
 	case td == ETransferDirection.Upload() && csl.isUploadDiskConstrained():
 		return EPerfConstraint.Disk()
 
 	case td == ETransferDirection.Download() && csl.isDownloadDiskConstrained():
 		return EPerfConstraint.Disk()
+
+	case csl.cpuMonitor.CPUContentionExists():
+		return EPerfConstraint.CPU()
 
 	default:
 		return EPerfConstraint.Unknown()

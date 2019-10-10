@@ -24,42 +24,25 @@ import (
 	"errors"
 	"math"
 	"math/rand"
-	"strings"
 	"sync"
 )
 
 const (
-	randomSliceLength = 32 * 1024
+	randomSliceLength = 1024 * 1024
 )
 
-var (
-	// SendRandomDataExt is an optionally specified file suffix, used for generating test data. To use,
-	// generate a SPARSE disk file that has zero on-disk size, but a large logical size.
-	// Give it a distinctive extension. E.g. myBigFile.azCopySparseFill
-	// Then set the command-line parameter to put that extension into this variable.
-	// The result will be that AzCopy will upload the full logical size of the sparse file, with all its content as pseudo-random
-	// bytes.  So you can have, for example, something that occupies 0 bytes on your disk, but gets uploaded as 10 TB of random data.
-	SendRandomDataExt string
-
-	randomDataBytePool = NewMultiSizeSlicePool(randomSliceLength)
-)
-
-func IsPlaceholderForRandomDataGenerator(filename string) bool {
-	// TODO: Add OS calls to also check here that the on-disk size of the file is zero bytes, so we KNOW for sure
-	//    that we are not throwing anything away by ignoring its content.
-	//    *** OR *** consider a random source enumerator (one day) so that we don't need to have the sparse files as placeholders
-	//   And if we do that, move the command line param from global to copy-only, since it will be no longer usable in sync.
-	return SendRandomDataExt != "" && strings.HasSuffix(filename, "."+SendRandomDataExt)
-}
+var randomDataBytePool = NewMultiSizeSlicePool(randomSliceLength)
 
 func NewRandomDataGenerator(length int64) CloseableReaderAt {
 	r := &randomDataGenerator{
 		length:    length,
-		randGen:   rand.New(rand.NewSource(rand.Int63())),
+		randGen:   rand.New(rand.NewSource(rand.Int63())), // create new rand source, seeded from global one, so that after seeding we never lock the global one
 		randBytes: randomDataBytePool.RentSlice(randomSliceLength),
 		randMu:    &sync.Mutex{}}
 
-	r.randGen.Read(r.randBytes)
+	if r.couldBeNewSlice(r.randBytes) {
+		r.randGen.Read(r.randBytes) // fill new arrays with random data
+	}
 	return r
 }
 
@@ -71,7 +54,14 @@ type randomDataGenerator struct {
 	readIterationCount int
 }
 
+func (r *randomDataGenerator) couldBeNewSlice(s []byte) bool {
+	return s[0] == 0
+}
+
 func (r *randomDataGenerator) Close() error {
+	if r.couldBeNewSlice(r.randBytes) {
+		r.randBytes[0] = 1 // so we know its not new when we get it back
+	}
 	randomDataBytePool.ReturnSlice(r.randBytes)
 	r.randBytes = nil
 	return nil
@@ -99,7 +89,7 @@ func (r *randomDataGenerator) ReadAt(p []byte, off int64) (n int, err error) {
 		remainingThisRead := min(len(p)-n, remainingInFile)
 		remainingThisIteration := min(remainingThisRead, int64(len(r.randBytes)))
 		r.freshenRandomData(remainingThisIteration)
-		copy(p, r.randBytes[:remainingThisIteration])
+		copy(p[n:], r.randBytes[:remainingThisIteration])
 		n += remainingThisIteration
 	}
 

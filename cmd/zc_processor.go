@@ -22,8 +22,11 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
+
+	"github.com/pkg/errors"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type copyTransferProcessor struct {
@@ -37,13 +40,13 @@ type copyTransferProcessor struct {
 	shouldEscapeDestinationObjectName bool
 
 	// handles for progress tracking
-	reportFirstPartDispatched func()
+	reportFirstPartDispatched func(jobStarted bool)
 	reportFinalPartDispatched func()
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
 	source string, destination string, shouldEscapeSourceObjectName bool, shouldEscapeDestinationObjectName bool,
-	reportFirstPartDispatched func(), reportFinalPartDispatched func()) *copyTransferProcessor {
+	reportFirstPartDispatched func(bool), reportFinalPartDispatched func()) *copyTransferProcessor {
 	return &copyTransferProcessor{
 		numOfTransfersPerPart:             numOfTransfersPerPart,
 		copyJobTemplate:                   copyJobTemplate,
@@ -58,9 +61,11 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 
 func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) (err error) {
 	if len(s.copyJobTemplate.Transfers) == s.numOfTransfersPerPart {
-		err = s.sendPartToSte()
-		if err != nil {
-			return err
+		resp := s.sendPartToSte()
+
+		// TODO: If we ever do launch errors outside of the final "no transfers" error, make them output nicer things here.
+		if resp.ErrorMsg != "" {
+			return errors.New(string(resp.ErrorMsg))
 		}
 
 		// reset the transfers buffer
@@ -77,6 +82,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 		LastModifiedTime: storedObject.lastModifiedTime,
 		ContentMD5:       storedObject.md5,
 		BlobType:         storedObject.blobType,
+		ContentEncoding:  storedObject.contentEncoding,
 	})
 	return nil
 }
@@ -89,21 +95,20 @@ func (s *copyTransferProcessor) escapeIfNecessary(path string, shouldEscape bool
 	return path
 }
 
+var NothingScheduledError = errors.New("no transfers were scheduled because no files matched the specified criteria")
+
 func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err error) {
-	numberOfCopyTransfers := len(s.copyJobTemplate.Transfers)
+	var resp common.CopyJobPartOrderResponse
+	s.copyJobTemplate.IsFinalPart = true
+	resp = s.sendPartToSte()
 
-	// if the number of transfer to copy is 0
-	// and no part was dispatched, then it means there is no work to do
-	if s.copyJobTemplate.PartNum == 0 && numberOfCopyTransfers == 0 {
-		return false, nil
-	}
-
-	if numberOfCopyTransfers > 0 {
-		s.copyJobTemplate.IsFinalPart = true
-		err = s.sendPartToSte()
-		if err != nil {
-			return false, err
+	if !resp.JobStarted {
+		if resp.ErrorMsg == common.ECopyJobPartOrderErrorType.NoTransfersScheduledErr() {
+			return false, NothingScheduledError
 		}
+
+		return false, fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s",
+			s.copyJobTemplate.JobID, s.copyJobTemplate.PartNum, resp.ErrorMsg)
 	}
 
 	if s.reportFinalPartDispatched != nil {
@@ -112,18 +117,15 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 	return true, nil
 }
 
-func (s *copyTransferProcessor) sendPartToSte() error {
+// only test the response on the final dispatch to help diagnose root cause of test failures from 0 transfers
+func (s *copyTransferProcessor) sendPartToSte() common.CopyJobPartOrderResponse {
 	var resp common.CopyJobPartOrderResponse
 	Rpc(common.ERpcCmd.CopyJobPartOrder(), s.copyJobTemplate, &resp)
-	if !resp.JobStarted {
-		return fmt.Errorf("copy job part order with JobId %s and part number %d failed to dispatch because %s",
-			s.copyJobTemplate.JobID, s.copyJobTemplate.PartNum, resp.ErrorMsg)
-	}
 
 	// if the current part order sent to ste is 0, then alert the progress reporting routine
 	if s.copyJobTemplate.PartNum == 0 && s.reportFirstPartDispatched != nil {
-		s.reportFirstPartDispatched()
+		s.reportFirstPartDispatched(resp.JobStarted)
 	}
 
-	return nil
+	return resp
 }

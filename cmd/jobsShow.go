@@ -45,11 +45,8 @@ func init() {
 		Short: showJobsCmdShortDescription,
 		Long:  showJobsCmdLongDescription,
 		Args: func(cmd *cobra.Command, args []string) error {
-
-			// if there is any argument passed
-			// it is an error
-			if len(args) == 0 {
-				return errors.New("showJob require at least the JobID")
+			if len(args) != 1 {
+				return errors.New("show job command requires only the JobID")
 			}
 			// Parse the JobId
 			jobId, err := common.ParseJobID(args[0])
@@ -76,7 +73,7 @@ func init() {
 	jobsCmd.AddCommand(shJob)
 
 	// filters
-	shJob.PersistentFlags().StringVar(&commandLineInput.OfStatus, "with-status", "", "only list the transfers of job with this status, available values: Started, Success, Failed")
+	shJob.PersistentFlags().StringVar(&commandLineInput.OfStatus, "with-status", "", "Only list the transfers of job with this status, available values: Started, Success, Failed.")
 }
 
 // handles the list command
@@ -140,18 +137,19 @@ func PrintJobProgressSummary(summary common.ListJobSummaryResponse) {
 
 	glcm.Exit(func(format common.OutputFormat) string {
 		if format == common.EOutputFormat.Json() {
-			jsonOutput, err := json.Marshal(summary)
+			jsonOutput, err := json.Marshal(summary) // see note below re % complete being approximate. We can't include "approx" in the JSON.
 			common.PanicIfErr(err)
 			return string(jsonOutput)
 		}
 
 		return fmt.Sprintf(
-			"\nJob %s summary\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nFinal Job Status: %v\n",
+			"\nJob %s summary\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nPercent Complete (approx): %.1f\nFinal Job Status: %v\n",
 			summary.JobID.String(),
 			summary.TotalTransfers,
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
 			summary.TransfersSkipped,
+			summary.PercentComplete, // noted as approx in the format string because won't include in-flight files if this Show command is run from a different process
 			summary.JobStatus,
 		)
 	}, common.EExitCode.Success())

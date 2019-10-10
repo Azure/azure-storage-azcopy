@@ -61,41 +61,40 @@ const failToResolveMapValue = "<resolving_failed>"
 var s3BucketNameResolveError = "fail to resolve s3 bucket name"
 
 // NewS3BucketNameToAzureResourcesResolver creates S3BucketNameToAzureResourcesResolver.
-// S3BucketNameToAzureResourcesResolver works in such pattern:
-// 1. User provided all the bucket names returned in a certain time. (S3 has service limitation, that one S3 account can only have 100 buckets, except opening service ticket to increase the number.)
-// 2. S3BucketNameToAzureResourcesResolver resolves the names with one logic pass during creating the resolver instance.
-// 3. User can get resolved name later with ResolveName.
-// As S3BucketNameToAzureResourcesResolver need to detect naming collision, the resolver doesn't accept adding new bucket name except the initial s3BucketNames,
-// considering there could be future valid name that is not predictable during previous naming resolving.
+// Users can provide bucket names upfront and on-demand via ResolveName.
+// Previously resolved names will be returned outright by ResolveName.
 func NewS3BucketNameToAzureResourcesResolver(s3BucketNames []string) *S3BucketNameToAzureResourcesResolver {
 	s3Resolver := S3BucketNameToAzureResourcesResolver{
 		bucketNameResolvingMap: make(map[string]string),
 		collisionDetectionMap:  make(map[string]struct{}),
 	}
 
+	// Set resolving map to empty so all get resolved in the next for loop.
 	for _, bucketName := range s3BucketNames {
-		s3Resolver.bucketNameResolvingMap[bucketName] = bucketName
+		s3Resolver.bucketNameResolvingMap[bucketName] = ""
 	}
 
-	s3Resolver.resolveS3BucketNameToAzureResources()
+	for _, bucketName := range s3BucketNames {
+		_, _ = s3Resolver.ResolveName(bucketName)
+	}
 
 	return &s3Resolver
 }
 
 // ResolveName returns resolved name for given bucket name.
 func (s3Resolver *S3BucketNameToAzureResourcesResolver) ResolveName(bucketName string) (string, error) {
-	if resolvedName, ok := s3Resolver.bucketNameResolvingMap[bucketName]; !ok {
-		return "", fmt.Errorf("%s: invalid state, cannot find resolved bucket name for %q", s3BucketNameResolveError, bucketName) // This should not happen logically
+	// If a resolved name is empty, it won't be valid either. Take advantage of this to initialize the resolver with a list of buckets.
+	if resolvedName, ok := s3Resolver.bucketNameResolvingMap[bucketName]; !ok || resolvedName == "" {
+		// Resolve the new bucket name, recurse.
+
+		s3Resolver.bucketNameResolvingMap[bucketName] = bucketName
+		s3Resolver.resolveNewBucketNameInternal(bucketName)
+
+		return s3Resolver.ResolveName(bucketName)
 	} else if resolvedName == failToResolveMapValue {
-		return "", fmt.Errorf("%s: s3 bucket name %q is invalid for Azure container/share/filesystem, and azcopy failed to convert it automatically", s3BucketNameResolveError, bucketName)
+		return "", fmt.Errorf("%s: container/bucket name %q is invalid for the destination, and azcopy failed to convert it automatically", s3BucketNameResolveError, bucketName)
 	} else {
 		return resolvedName, nil
-	}
-}
-
-func (s3Resolver *S3BucketNameToAzureResourcesResolver) resolveS3BucketNameToAzureResources() {
-	for orgBucketName := range s3Resolver.bucketNameResolvingMap {
-		s3Resolver.resolveNewBucketNameInternal(orgBucketName)
 	}
 }
 

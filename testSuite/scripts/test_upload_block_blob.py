@@ -244,7 +244,6 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
                                                                                                             "Archive").execute_azcopy_verify()
         self.assertTrue(result)
 
-
     def test_force_flag_set_to_false_upload(self):
         # creating directory with 20 files in it.
         dir_name = "dir_force_flag_set_upload"
@@ -380,7 +379,6 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         self.assertEquals(x.TransfersSkipped, 15)
         self.assertEquals(x.TransfersCompleted, 5)
 
-
     # test_upload_block_blob_include_flag tests the include flag in the upload scenario
     def test_upload_block_blob_include_flag(self):
         dir_name = "dir_include_flag_set_upload"
@@ -392,10 +390,10 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # create 10 files inside the sub-dir
         sub_dir_n_file_path = util.create_test_n_files(1024, 10, sub_dir_name)
 
-        # uploading the directory with 2 files in the include flag.
+        # uploading the directory with 2 file names (4 files) in the include flag.
         result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
             add_flags("recursive", "true").add_flags("log-level", "info") \
-            .add_flags("include", "test101024_2.txt;test101024_3.txt").add_flags("output-type",
+            .add_flags("include-pattern", "test101024_2.txt;test101024_3.txt").add_flags("output-type",
                                                                                  "json").execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -404,14 +402,14 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing output in Json format')
-        # Number of successful transfer should be 2 and there should be not a failed transfer
-        self.assertEquals(x.TransfersCompleted, 2)
+        # Number of successful transfer should be 4 and there should be not a failed transfer
+        self.assertEquals(x.TransfersCompleted, 4)
         self.assertEquals(x.TransfersFailed, 0)
 
         # uploading the directory with sub-dir in the include flag.
         result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
             add_flags("recursive", "true").add_flags("log-level", "info") \
-            .add_flags("include", "sub_dir_include_flag_set_upload/*").add_flags("output-type",
+            .add_flags("include-path", "sub_dir_include_flag_set_upload/").add_flags("output-type",
                                                                                "json").execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -435,10 +433,10 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # create 10 files inside the sub-dir
         sub_dir_n_file_path = util.create_test_n_files(1024, 10, sub_dir_name)
 
-        # uploading the directory with 2 files in the exclude flag.
+        # uploading the directory with 2 file names (4 total) in the exclude flag.
         result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
             add_flags("recursive", "true").add_flags("log-level", "info") \
-            .add_flags("exclude", "test101024_2.txt;test101024_3.txt").add_flags("output-type",
+            .add_flags("exclude-pattern", "test101024_2.txt;test101024_3.txt").add_flags("output-type",
                                                                                  "json").execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -447,16 +445,16 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        # Number of successful transfer should be 18 and there should be not failed transfer
-        # Since total number of files inside dir_exclude_flag_set_upload is 20 and 2 files are set
-        # to exclude, so total number of transfer should be 18
-        self.assertEquals(x.TransfersCompleted, 18)
+        # Number of successful transfer should be 16 and there should be not failed transfer
+        # Since total number of files inside dir_exclude_flag_set_upload is 20 and 4 files are set
+        # to exclude, so total number of transfer should be 16
+        self.assertEquals(x.TransfersCompleted, 16)
         self.assertEquals(x.TransfersFailed, 0)
 
         # uploading the directory with sub-dir in the exclude flag.
         result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
             add_flags("recursive", "true").add_flags("log-level", "info") \
-            .add_flags("exclude", "sub_dir_exclude_flag_set_upload/*").add_flags("output-type",
+            .add_flags("exclude-path", "sub_dir_exclude_flag_set_upload/").add_flags("output-type",
                                                                                "json").execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -497,7 +495,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         destination_sas = util.get_resource_sas(dir_name)
         result = util.Command("copy").add_arguments(destination_sas).add_arguments(util.test_directory_path). \
             add_flags("recursive", "true").add_flags("log-level", "info").add_flags("output-type", "json"). \
-            add_flags("include", "test101024_1.txt;test101024_2.txt;test101024_3.txt"). \
+            add_flags("include-pattern", "test101024_1.txt;test101024_2.txt;test101024_3.txt"). \
             execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -506,14 +504,15 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersCompleted, 3)
+        self.assertEquals(x.TransfersCompleted, 6)
         self.assertEquals(x.TransfersFailed, 0)
 
         # download from container with sub-dir in include flags
+        # TODO: Make this use include-path in the DL refactor
         destination_sas = util.get_resource_sas(dir_name)
         result = util.Command("copy").add_arguments(destination_sas).add_arguments(util.test_directory_path). \
             add_flags("recursive", "true").add_flags("log-level", "info").add_flags("output-type", "json"). \
-            add_flags("include", "sub_dir_include_flag_set_download/*"). \
+            add_flags("include-path", "sub_dir_include_flag_set_download/"). \
             execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -550,7 +549,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         destination_sas = util.get_resource_sas(dir_name)
         result = util.Command("copy").add_arguments(destination_sas).add_arguments(util.test_directory_path). \
             add_flags("recursive", "true").add_flags("log-level", "info").add_flags("output-type", "json"). \
-            add_flags("exclude", "test101024_1.txt;test101024_2.txt;test101024_3.txt"). \
+            add_flags("exclude-pattern", "test101024_1.txt;test101024_2.txt;test101024_3.txt"). \
             execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -560,14 +559,14 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         except:
             self.fail('error parsing the output in JSON Format')
         # Number of expected successful transfer should be 18 since two files in directory are set to exclude
-        self.assertEquals(x.TransfersCompleted, 17)
+        self.assertEquals(x.TransfersCompleted, 14)
         self.assertEquals(x.TransfersFailed, 0)
 
         # download from container with sub-dir in exclude flags
         destination_sas = util.get_resource_sas(dir_name)
         result = util.Command("copy").add_arguments(destination_sas).add_arguments(util.test_directory_path). \
             add_flags("recursive", "true").add_flags("log-level", "info").add_flags("output-type", "json"). \
-            add_flags("exclude", "sub_dir_exclude_flag_set_download/*"). \
+            add_flags("exclude-path", "sub_dir_exclude_flag_set_download/"). \
             execute_azcopy_copy_command_get_output()
 
         # parse the result to get the last job progress summary
@@ -683,4 +682,32 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             self.fail('error parsing the output in Json Format')
 
         self.assertEquals(x.TransfersCompleted, 310)
+        self.assertEquals(x.TransfersFailed, 0)
+
+    def test_follow_symlinks_upload(self):
+        link_name = "dir_link"
+        outside_dir = "dir_outside_linkto"
+        home_dir = "dir_home_follow_symlink_upload"
+
+        # produce all necessary paths
+        outside_path = util.create_test_n_files(1024, 10, outside_dir)
+        home_path = util.create_test_dir(home_dir)
+        link_path = os.path.join(home_path, link_name)
+
+        # Create the symlink
+        os.symlink(outside_path, link_path, target_is_directory=True)
+
+        # Upload home path
+        result = util.Command("copy").add_arguments(home_path).add_arguments(util.test_container_url). \
+            add_flags("log-level", "Info").add_flags("recursive", "true").add_flags("output-type", "json"). \
+            add_flags("follow-symlinks", "true").execute_azcopy_copy_command_get_output()
+        result = util.parseAzcopyOutput(result)
+
+        try:
+            # parse the JSON output
+            x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+        except:
+            self.fail('error parsing the output in JSON format')
+
+        self.assertEquals(x.TransfersCompleted, 10)
         self.assertEquals(x.TransfersFailed, 0)

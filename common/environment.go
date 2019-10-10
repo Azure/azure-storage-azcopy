@@ -20,6 +20,10 @@
 
 package common
 
+import (
+	"runtime"
+)
+
 type EnvironmentVariable struct {
 	Name         string
 	DefaultValue string
@@ -30,7 +34,10 @@ type EnvironmentVariable struct {
 // This array needs to be updated when a new public environment variable is added
 var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ConcurrencyValue(),
+	EEnvironmentVariable.TransferInitiationPoolSize(),
 	EEnvironmentVariable.LogLocation(),
+	EEnvironmentVariable.JobPlanLocation(),
+	EEnvironmentVariable.BufferGB(),
 	EEnvironmentVariable.AWSAccessKeyID(),
 	EEnvironmentVariable.AWSSecretAccessKey(),
 	EEnvironmentVariable.ShowPerfStates(),
@@ -38,9 +45,17 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.DefaultServiceApiVersion(),
 	EEnvironmentVariable.ClientSecret(),
 	EEnvironmentVariable.CertificatePassword(),
+	EEnvironmentVariable.AutoTuneToCpu(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
+
+func (EnvironmentVariable) UserDir() EnvironmentVariable {
+	// Only used internally, not listed in the environment variables.
+	return EnvironmentVariable{
+		Name: IffString(runtime.GOOS == "windows", "USERPROFILE", "HOME"),
+	}
+}
 
 func (EnvironmentVariable) ClientSecret() EnvironmentVariable {
 	return EnvironmentVariable{
@@ -61,7 +76,30 @@ func (EnvironmentVariable) CertificatePassword() EnvironmentVariable {
 func (EnvironmentVariable) ConcurrencyValue() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_CONCURRENCY_VALUE",
-		Description: "Overrides how many Go Routines work on transfers. By default, this number is determined based on the number of logical cores on the machine.",
+		Description: "Overrides how many HTTP connections work on transfers. By default, this number is determined based on the number of logical cores on the machine.",
+	}
+}
+
+// added in so that CPU usage detection can be disabled if advanced users feel it is causing tuning to be too conservative (i.e. not enough concurrency, due to detected CPU usage)
+func (EnvironmentVariable) AutoTuneToCpu() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_TUNE_TO_CPU",
+		Description: "Set to false to prevent AzCopy from taking CPU usage into account when auto-tuning its concurrency level (e.g. in the benchmark command).",
+	}
+}
+
+func (EnvironmentVariable) TransferInitiationPoolSize() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_CONCURRENT_FILES",
+		Description: "Overrides the (approximate) number of files that are in progress at any one time, by controlling how many files we concurrently initiate transfers for.",
+	}
+}
+
+func (EnvironmentVariable) OptimizeSparsePageBlobTransfers() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_OPTIMIZE_SPARSE_PAGE_BLOB",
+		Description:  "Provide a knob to disable the optimizations in case they cause customers any unforeseen issue. Set to any other value than 'true' to disable.",
+		DefaultValue: "true",
 	}
 }
 
@@ -69,6 +107,20 @@ func (EnvironmentVariable) LogLocation() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_LOG_LOCATION",
 		Description: "Overrides where the log files are stored, to avoid filling up a disk.",
+	}
+}
+
+func (EnvironmentVariable) JobPlanLocation() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_JOB_PLAN_LOCATION",
+		Description: "Overrides where the job plan files (used for progress tracking and resuming) are stored, to avoid filling up a disk.",
+	}
+}
+
+func (EnvironmentVariable) BufferGB() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_BUFFER_GB",
+		Description: "Max number of GB that AzCopy should use for buffering data between network and disk. May include decimal point, e.g. 0.5. The default is based on machine size.",
 	}
 }
 

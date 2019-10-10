@@ -24,8 +24,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"math"
+	"path/filepath"
 	"reflect"
 	"regexp"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -43,11 +45,17 @@ const (
 	AZCOPY_PATH_SEPARATOR_STRING = "/"
 	AZCOPY_PATH_SEPARATOR_CHAR   = '/'
 	OS_PATH_SEPARATOR            = string(os.PathSeparator)
-	Dev_Null                     = "/dev/null"
+	EXTENDED_PATH_PREFIX         = `\\?\`
+	EXTENDED_UNC_PATH_PREFIX     = `\\?\UNC`
+	Dev_Null                     = os.DevNull
 
 	//  this is the perm that AzCopy has used throughout its preview.  So, while we considered relaxing it to 0666
 	//  we decided that the best option was to leave it as is, and only relax it if user feedback so requires.
 	DEFAULT_FILE_PERM = 0644
+
+	// Since we haven't updated the Go SDKs to handle CPK just yet, we need to detect CPK related errors
+	// and inform the user that we don't support CPK yet.
+	CPK_ERROR_SERVICE_CODE = "BlobUsesCustomerSpecifiedEncryption"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -125,6 +133,66 @@ func (dd DeleteDestination) String() string {
 	return enum.StringInt(dd, reflect.TypeOf(dd))
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// represents one possible response
+var EResponseOption = ResponseOption{ResponseType: "", UserFriendlyResponseType: "", ResponseString: ""}
+
+type ResponseOption struct {
+	ResponseType             string // helps us clarify the user's intent and support partner team's localization
+	UserFriendlyResponseType string // text to print in interactive mode
+	ResponseString           string // short (abbreviation) string that gets sent back by the user to indicate that this response is chosen
+}
+
+// NOTE: these enums are shared with StgExp, so the text is spelled out explicitly (for easy json marshalling)
+func (ResponseOption) Yes() ResponseOption {
+	return ResponseOption{ResponseType: "Yes", UserFriendlyResponseType: "Yes", ResponseString: "y"}
+}
+func (ResponseOption) No() ResponseOption {
+	return ResponseOption{ResponseType: "No", UserFriendlyResponseType: "No", ResponseString: "n"}
+}
+func (ResponseOption) YesForAll() ResponseOption {
+	return ResponseOption{ResponseType: "YesForAll", UserFriendlyResponseType: "Yes for all", ResponseString: "a"}
+}
+func (ResponseOption) NoForAll() ResponseOption {
+	return ResponseOption{ResponseType: "NoForAll", UserFriendlyResponseType: "No for all", ResponseString: "l"}
+}
+func (ResponseOption) Default() ResponseOption {
+	return ResponseOption{ResponseType: "", UserFriendlyResponseType: "", ResponseString: ""}
+}
+
+func (o *ResponseOption) Parse(s string) error {
+	val, err := enum.Parse(reflect.TypeOf(o), s, true)
+	if err == nil {
+		*o = val.(ResponseOption)
+	}
+	return err
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var EOverwriteOption = OverwriteOption(0)
+
+type OverwriteOption uint8
+
+func (OverwriteOption) True() OverwriteOption   { return OverwriteOption(0) }
+func (OverwriteOption) False() OverwriteOption  { return OverwriteOption(1) }
+func (OverwriteOption) Prompt() OverwriteOption { return OverwriteOption(2) }
+
+func (o *OverwriteOption) Parse(s string) error {
+	val, err := enum.Parse(reflect.TypeOf(o), s, true)
+	if err == nil {
+		*o = val.(OverwriteOption)
+	}
+	return err
+}
+
+func (o OverwriteOption) String() string {
+	return enum.StringInt(o, reflect.TypeOf(o))
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 type OutputFormat uint32
 
 var EOutputFormat = OutputFormat(0)
@@ -151,6 +219,9 @@ type ExitCode uint32
 
 func (ExitCode) Success() ExitCode { return ExitCode(0) }
 func (ExitCode) Error() ExitCode   { return ExitCode(1) }
+
+// NoExit is used as a marker, to suppress the normal exit behaviour
+func (ExitCode) NoExit() ExitCode { return ExitCode(99) }
 
 type LogLevel uint8
 
@@ -271,6 +342,7 @@ func (j *JobStatus) IsJobDone() bool {
 		*j == EJobStatus.Failed()
 }
 
+func (JobStatus) All() JobStatus                           { return JobStatus(100) }
 func (JobStatus) InProgress() JobStatus                    { return JobStatus(0) }
 func (JobStatus) Paused() JobStatus                        { return JobStatus(1) }
 func (JobStatus) Cancelling() JobStatus                    { return JobStatus(2) }
@@ -291,13 +363,15 @@ var ELocation = Location(0)
 // Location indicates the type of Location
 type Location uint8
 
-func (Location) Unknown() Location { return Location(0) }
-func (Location) Local() Location   { return Location(1) }
-func (Location) Pipe() Location    { return Location(2) }
-func (Location) Blob() Location    { return Location(3) }
-func (Location) File() Location    { return Location(4) }
-func (Location) BlobFS() Location  { return Location(5) }
-func (Location) S3() Location      { return Location(6) }
+func (Location) Unknown() Location   { return Location(0) }
+func (Location) Local() Location     { return Location(1) }
+func (Location) Pipe() Location      { return Location(2) }
+func (Location) Blob() Location      { return Location(3) }
+func (Location) File() Location      { return Location(4) }
+func (Location) BlobFS() Location    { return Location(5) }
+func (Location) S3() Location        { return Location(6) }
+func (Location) Benchmark() Location { return Location(7) }
+
 func (l Location) String() string {
 	return enum.StringInt(uint32(l), reflect.TypeOf(l))
 }
@@ -313,10 +387,18 @@ func (l Location) IsRemote() bool {
 	switch l {
 	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3():
 		return true
-	case ELocation.Local(), ELocation.Pipe(), ELocation.Unknown():
+	case ELocation.Local(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
 		return false
 	default:
 		panic("unexpected location, please specify if it is remote")
+	}
+}
+
+func (l Location) IsLocal() bool {
+	if l == ELocation.Unknown() {
+		return false
+	} else {
+		return !l.IsRemote()
 	}
 }
 
@@ -347,7 +429,20 @@ func (FromTo) LocalBlobFS() FromTo { return FromTo(fromToValue(ELocation.Local()
 func (FromTo) BlobFSLocal() FromTo { return FromTo(fromToValue(ELocation.BlobFS(), ELocation.Local())) }
 func (FromTo) BlobBlob() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.Blob())) }
 func (FromTo) FileBlob() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.Blob())) }
+func (FromTo) BlobFile() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.File())) }
+func (FromTo) FileFile() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.File())) }
 func (FromTo) S3Blob() FromTo      { return FromTo(fromToValue(ELocation.S3(), ELocation.Blob())) }
+
+// todo: to we really want these?  Starts to look like a bit of a combinatorial explosion
+func (FromTo) BenchmarkBlob() FromTo {
+	return FromTo(fromToValue(ELocation.Benchmark(), ELocation.Blob()))
+}
+func (FromTo) BenchmarkFile() FromTo {
+	return FromTo(fromToValue(ELocation.Benchmark(), ELocation.File()))
+}
+func (FromTo) BenchmarkBlobFS() FromTo {
+	return FromTo(fromToValue(ELocation.Benchmark(), ELocation.BlobFS()))
+}
 
 func (ft FromTo) String() string {
 	return enum.StringInt(ft, reflect.TypeOf(ft))
@@ -381,13 +476,29 @@ func (ft *FromTo) From() Location {
 	return Location((((1 << 16) - 1) & *ft) >> 8)
 }
 
+func (ft *FromTo) IsDownload() bool {
+	return ft.From().IsRemote() && ft.To().IsLocal()
+}
+
+func (ft *FromTo) IsS2S() bool {
+	return ft.From().IsRemote() && ft.To().IsRemote()
+}
+
+func (ft *FromTo) IsUpload() bool {
+	return ft.From().IsLocal() && ft.To().IsRemote()
+}
+
+// TODO: deletes are not covered by the above Is* routines
+
+var BenchmarkLmt = time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC)
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Enumerates the values for blob type.
 type BlobType uint8
 
 var EBlobType = BlobType(0)
 
-func (BlobType) None() BlobType { return BlobType(0) }
+func (BlobType) Detect() BlobType { return BlobType(0) }
 
 func (BlobType) BlockBlob() BlobType { return BlobType(1) }
 
@@ -446,16 +557,13 @@ func (TransferStatus) Failed() TransferStatus { return TransferStatus(-1) }
 // Transfer failed due to failure while Setting blob tier.
 func (TransferStatus) BlobTierFailure() TransferStatus { return TransferStatus(-2) }
 
-func (TransferStatus) BlobAlreadyExistsFailure() TransferStatus { return TransferStatus(-3) }
+func (TransferStatus) SkippedFileAlreadyExists() TransferStatus { return TransferStatus(-3) }
 
-func (TransferStatus) FileAlreadyExistsFailure() TransferStatus { return TransferStatus(-4) }
-
-func (TransferStatus) ADLSGen2PathAlreadyExistsFailure() TransferStatus { return TransferStatus(-5) }
+func (TransferStatus) SkippedBlobHasSnapshots() TransferStatus { return TransferStatus(-4) }
 
 func (ts TransferStatus) ShouldTransfer() bool {
 	return ts == ETransferStatus.NotStarted() || ts == ETransferStatus.Started()
 }
-func (ts TransferStatus) DidFail() bool { return ts < 0 }
 
 // Transfer is any of the three possible state (InProgress, Completer or Failed)
 func (TransferStatus) All() TransferStatus { return TransferStatus(math.MaxInt8) }
@@ -714,7 +822,7 @@ type CopyTransfer struct {
 	LastModifiedTime time.Time //represents the last modified time of source which ensures that source hasn't changed while transferring
 	SourceSize       int64     // size of the source entity in bytes.
 
-	// Properties for service to service copy
+	// Properties for service to service copy (some also used in upload or download too)
 	ContentType        string
 	ContentEncoding    string
 	ContentDisposition string
@@ -726,6 +834,57 @@ type CopyTransfer struct {
 	// Properties for S2S blob copy
 	BlobType azblob.BlobType
 	BlobTier azblob.AccessTierType
+}
+
+func NewCopyTransfer(
+	steWillAutoDecompress bool,
+	Source, Destination string,
+	LMT time.Time,
+	ContentSize int64,
+	ContentType, ContentEncoding, ContentDisposition, ContentLanguage, CacheControl string,
+	ContentMD5 []byte,
+	Metadata Metadata,
+	BlobType azblob.BlobType,
+	BlobTier azblob.AccessTierType) CopyTransfer {
+
+	if steWillAutoDecompress {
+		Destination = stripCompressionExtension(Destination, ContentEncoding)
+	}
+
+	return CopyTransfer{
+		Source:             Source,
+		Destination:        Destination,
+		LastModifiedTime:   LMT,
+		SourceSize:         ContentSize,
+		ContentType:        ContentType,
+		ContentEncoding:    ContentEncoding,
+		ContentDisposition: ContentDisposition,
+		ContentLanguage:    ContentLanguage,
+		CacheControl:       CacheControl,
+		ContentMD5:         ContentMD5,
+		Metadata:           Metadata,
+		BlobType:           BlobType,
+		BlobTier:           BlobTier,
+	}
+}
+
+// stringCompressionExtension strips any file extension that corresponds to the
+// compression indicated by the encoding type.
+// Why remove this extension here, at enumeration time, instead of just doing it
+// in the STE when we are about to save the file?
+// Because by doing it here we get the accurate name in things that
+// directly read the Plan files, like the jobs show command
+func stripCompressionExtension(dest string, contentEncoding string) string {
+	// Ignore error getting compression type. We can't easily report it now, and we don't need to know about the error
+	// cases here when deciding renaming.  STE will log error on the error cases
+	ct, _ := GetCompressionType(contentEncoding)
+	ext := strings.ToLower(filepath.Ext(dest))
+	stripGzip := ct == ECompressionType.GZip() && (ext == ".gz" || ext == ".gzip")
+	stripZlib := ct == ECompressionType.ZLib() && ext == ".zz" // "standard" extension for zlib-wrapped files, according to pigz doc and Stack Overflow
+	if stripGzip || stripZlib {
+		return strings.TrimSuffix(dest, filepath.Ext(dest))
+	}
+	return dest
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -955,9 +1114,11 @@ var EPerfConstraint = PerfConstraint(0)
 
 type PerfConstraint int32
 
-func (PerfConstraint) Unknown() PerfConstraint { return PerfConstraint(0) }
-func (PerfConstraint) Disk() PerfConstraint    { return PerfConstraint(1) }
-func (PerfConstraint) Service() PerfConstraint { return PerfConstraint(2) }
+func (PerfConstraint) Unknown() PerfConstraint         { return PerfConstraint(0) }
+func (PerfConstraint) Disk() PerfConstraint            { return PerfConstraint(1) }
+func (PerfConstraint) Service() PerfConstraint         { return PerfConstraint(2) }
+func (PerfConstraint) PageBlobService() PerfConstraint { return PerfConstraint(3) }
+func (PerfConstraint) CPU() PerfConstraint             { return PerfConstraint(4) }
 
 // others will be added in future
 
@@ -971,4 +1132,61 @@ func (pc *PerfConstraint) Parse(s string) error {
 		*pc = val.(PerfConstraint)
 	}
 	return err
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+type PerformanceAdvice struct {
+
+	// Code representing the type of the advice
+	Code string `json:"Code"` // reminder that PerformanceAdvice may be serialized in JSON output
+
+	// Human-friendly title (directly corresponds to Code, but more readable)
+	Title string
+
+	// Reason why this advice has been given
+	Reason string
+
+	// Is this the primary advice (used to distinguish most important advice in cases where multiple advice objects are returned)
+	PriorityAdvice bool
+}
+
+const BenchmarkPreviewNotice = "The benchmark feature is currently in Preview status."
+
+const BenchmarkFinalDisclaimer = `This benchmark tries to find optimal performance, computed without touching any local disk. When reading 
+and writing real data, performance may be different. If disk limits throughput, AzCopy will display a message on screen.`
+
+const BenchmarkLinuxExtraDisclaimer = `On Linux, when AzCopy is uploading just one or two large files, disk performance may be greatly improved by
+increasing read_ahead_kb to 8192 for the data disk.`
+
+const SizePerFileParam = "size-per-file"
+const FileCountParam = "file-count"
+const FileCountDefault = 100
+
+//////////////////////////////////////////////////////////////////////////////////////
+
+var ECompressionType = CompressionType(0)
+
+type CompressionType uint8
+
+func (CompressionType) None() CompressionType        { return CompressionType(0) }
+func (CompressionType) ZLib() CompressionType        { return CompressionType(1) }
+func (CompressionType) GZip() CompressionType        { return CompressionType(2) }
+func (CompressionType) Unsupported() CompressionType { return CompressionType(255) }
+
+func (ct CompressionType) String() string {
+	return enum.StringInt(ct, reflect.TypeOf(ct))
+}
+
+func GetCompressionType(contentEncoding string) (CompressionType, error) {
+	switch strings.ToLower(contentEncoding) {
+	case "":
+		return ECompressionType.None(), nil
+	case "gzip":
+		return ECompressionType.GZip(), nil
+	case "deflate":
+		return ECompressionType.ZLib(), nil
+	default:
+		return ECompressionType.Unsupported(), fmt.Errorf("encoding type '%s' is not recognised as a supported encoding type for auto-decompression", contentEncoding)
+	}
 }
