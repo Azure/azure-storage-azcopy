@@ -332,6 +332,9 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		if f != nil {
 			scanner := bufio.NewScanner(f)
 			checkBOM := false
+			headerLineNum := 0
+			firstLineIsCurlyBrace := false
+
 			for scanner.Scan() {
 				v := scanner.Text()
 
@@ -341,6 +344,23 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 				if !checkBOM {
 					v = strings.TrimPrefix(v, utf8BOM)
 					checkBOM = true
+				}
+
+				// provide clear warning if user uses old (obsolete) format by mistake
+				if headerLineNum <= 1 {
+					cleanedLine := strings.Replace(strings.Replace(v, " ", "", -1), "\t", "", -1)
+					cleanedLine = strings.TrimSuffix(cleanedLine, "[") // don't care which line this is on, could be third line
+					if cleanedLine == "{" && headerLineNum == 0 {
+						firstLineIsCurlyBrace = true
+					} else {
+						const jsonStart = "{\"Files\":"
+						jsonStartNoBrace := strings.TrimPrefix(jsonStart, "{")
+						isJson := cleanedLine == jsonStart || firstLineIsCurlyBrace && cleanedLine == jsonStartNoBrace
+						if isJson {
+							glcm.Error("The format for list-of-files has changed. The old JSON format is no longer supported")
+						}
+					}
+					headerLineNum++
 				}
 
 				// empty strings should be ignored, otherwise the source root itself is selected
