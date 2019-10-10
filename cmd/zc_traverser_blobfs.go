@@ -21,6 +21,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/url"
 	"strings"
@@ -137,7 +138,7 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 					strings.TrimPrefix(*v.Name, searchPrefix),
 					v.LastModifiedTime(),
 					*v.ContentLength,
-					v.ContentMD5(),
+					t.getContentMd5(t.ctx, dirUrl, v),
 					blobTypeNA,
 					bfsURLParts.FileSystemName,
 				)
@@ -175,4 +176,40 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 	}
 
 	return
+}
+
+// globalBlobFSMd5ValidationOption is an ugly workaround, to tweak performance of another ugly workaround (namely getContentMd5, below)
+var globalBlobFSMd5ValidationOption = common.EHashValidationOption.FailIfDifferentOrMissing() // default to strict, if not set
+
+// getContentMd5 compensates for the fact that ADLS Gen 2 currently does not return MD5s in the PathListResponse (even
+// tho the property is there in the swagger and the generated API)
+func (t *blobFSTraverser) getContentMd5(ctx context.Context, directoryURL azbfs.DirectoryURL, file azbfs.Path) []byte {
+	if globalBlobFSMd5ValidationOption == common.EHashValidationOption.NoCheck() {
+		return nil // not gonna check it, so don't need it
+	}
+
+	var returnValueForError []byte = nil // If we get an error, we just act like there was no content MD5. If validation is set to fail on error, this will fail the transfer of this file later on (at the time of the MD5 check)
+
+	// convert format of what we have, if we have something in the PathListResponse from Service
+	if file.ContentMD5Base64 != nil {
+		value, err := base64.StdEncoding.DecodeString(*file.ContentMD5Base64)
+		if err != nil {
+			return returnValueForError
+		}
+		return value
+	}
+
+	// Fall back to making a new round trip to the server
+	// This is an interim measure, so that we can still validate MD5s even before they are being returned in the server's
+	// PathList response
+	// TODO: remove this in a future release, once we know that Service is always returning the MD5s in the PathListResponse.
+	//     Why? Because otherwise, if there's a file with NO MD5, we'll make a round-trip here, but that's pointless if we KNOW that
+	//     that Service is always returning them in the PathListResponse which we've already checked above.
+	//     As at mid-Feb 2019, we don't KNOW that (in fact it's not returning them in the PathListResponse) so we need this code for now.
+	fileURL := directoryURL.FileSystemURL().NewDirectoryURL(*file.Name)
+	props, err := fileURL.GetProperties(ctx)
+	if err != nil {
+		return returnValueForError
+	}
+	return props.ContentMD5()
 }

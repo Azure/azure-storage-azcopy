@@ -559,6 +559,8 @@ func (TransferStatus) BlobTierFailure() TransferStatus { return TransferStatus(-
 
 func (TransferStatus) SkippedFileAlreadyExists() TransferStatus { return TransferStatus(-3) }
 
+func (TransferStatus) SkippedBlobHasSnapshots() TransferStatus { return TransferStatus(-4) }
+
 func (ts TransferStatus) ShouldTransfer() bool {
 	return ts == ETransferStatus.NotStarted() || ts == ETransferStatus.Started()
 }

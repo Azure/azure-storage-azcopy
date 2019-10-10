@@ -180,8 +180,8 @@ func (AzureFileParentDirCreator) getParentDirectoryURL(fileURL azfile.FileURL, p
 // and there is no permission on directory level, i.e. create directory is a general permission for each level diretories for Azure file.
 func (AzureFileParentDirCreator) verifyAndHandleCreateErrors(err error) error {
 	if err != nil {
-		sErr := err.(azfile.StorageError)
-		if sErr != nil && sErr.Response() != nil &&
+		sErr, sErrOk := err.(azfile.StorageError)
+		if sErrOk && sErr.Response() != nil &&
 			(sErr.Response().StatusCode == http.StatusConflict) { // Note the ServiceCode actually be AuthenticationFailure when share failed to be created, if want to create share as well.
 			return nil
 		}
@@ -204,8 +204,8 @@ func (d AzureFileParentDirCreator) CreateParentDirToRoot(ctx context.Context, fi
 	dirURLExtension := common.FileURLPartsExtension{FileURLParts: azfile.NewFileURLParts(dirURL.URL())}
 	// Check whether parent dir of the file exists.
 	if _, err := dirURL.GetProperties(ctx); err != nil {
-		if err.(azfile.StorageError) != nil && (err.(azfile.StorageError)).Response() != nil &&
-			(err.(azfile.StorageError).Response().StatusCode == http.StatusNotFound) { // At least need read and write permisson for destination
+		if stgErr, stgErrOk := err.(azfile.StorageError); stgErrOk && stgErr.Response() != nil &&
+			stgErr.Response().StatusCode == http.StatusNotFound { // At least need read and write permisson for destination
 			// File's parent directory doesn't exist, try to create the parent directories.
 			// Split directories as segments.
 			segments := d.splitWithoutToken(dirURLExtension.DirectoryOrFilePath, '/')

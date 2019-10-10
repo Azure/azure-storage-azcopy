@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
@@ -58,7 +59,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		(cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() && cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
 	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
 	jobPartOrder.S2SSourceChangeValidation = cca.s2sSourceChangeValidation
-	jobPartOrder.S2SDestLengthValidation = cca.CheckLength
+	jobPartOrder.DestLengthValidation = cca.CheckLength
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
 
 	traverser, err = initResourceTraverser(src, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, func() {})
@@ -88,7 +89,17 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, err
 	}
 
-	if srcLevel == ELocationLevel.Object() && dstLevel == ELocationLevel.Service() {
+	// Disallow list-of-files and include-path on service-level traversal due to a major bug
+	// TODO: Fix the bug.
+	//       Two primary issues exist with the list-of-files implementation:
+	//       1) Account name doesn't get trimmed from the path
+	//       2) List-of-files is not considered an account traverser; therefore containers don't get made.
+	//       Resolve these two issues and service-level list-of-files/include-path will work
+	if cca.listOfFilesChannel != nil && srcLevel == ELocationLevel.Service() {
+		return nil, errors.New("cannot combine list-of-files or include-path with account traversal")
+	}
+
+	if (srcLevel == ELocationLevel.Object() || cca.fromTo.From().IsLocal()) && dstLevel == ELocationLevel.Service() {
 		return nil, errors.New("cannot transfer individual files/folders to the root of a service. Add a container or directory to the destination URL")
 	}
 
@@ -190,7 +201,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		if object.containerName != "" {
 			// set up the destination container name.
 			cName := dstContainerName
-			if cName == "" {
+			// if a destination container name is not specified OR copying service to container/folder, append the src container name.
+			if cName == "" || (srcLevel == ELocationLevel.Service() && dstLevel > ELocationLevel.Service()) {
 				cName, err = containerResolver.ResolveName(object.containerName)
 
 				if err != nil {
@@ -328,6 +340,7 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName, dstWithSAS strin
 
 	// Because the only use-cases for createDstContainer will be on service-level S2S and service-level download
 	// We only need to create "containers" on local and blob.
+	// TODO: Reduce code dupe somehow
 	switch cca.fromTo.To() {
 	case common.ELocation.Local():
 		err = os.MkdirAll(common.GenerateFullPath(cca.destination, containerName), os.ModeDir|os.ModePerm)
@@ -361,6 +374,41 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName, dstWithSAS strin
 		} else {
 			return err
 		}
+	case common.ELocation.File():
+		// Grab the account root and parse it as a URL
+		accountRoot, err := GetAccountRoot(dstWithSAS, cca.fromTo.To())
+
+		if err != nil {
+			return err
+		}
+
+		dstURL, err := url.Parse(accountRoot)
+
+		if err != nil {
+			return err
+		}
+
+		fsu := azfile.NewServiceURL(*dstURL, dstPipeline)
+		shareURL := fsu.NewShareURL(containerName)
+		_, err = shareURL.GetProperties(ctx)
+
+		if err == nil {
+			return err
+		}
+
+		// Create a destination share with the default service quota
+		// TODO: Create a flag for the quota
+		_, err = shareURL.Create(ctx, azfile.Metadata{}, 0)
+
+		if stgErr, ok := err.(azfile.StorageError); ok {
+			if stgErr.ServiceCode() != azfile.ServiceCodeShareAlreadyExists {
+				return err
+			}
+		} else {
+			return err
+		}
+	default:
+		panic(fmt.Sprintf("cannot create a destination container at location %s.", cca.fromTo.To()))
 	}
 
 	return

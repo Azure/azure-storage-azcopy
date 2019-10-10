@@ -141,7 +141,7 @@ func (u *blobFSUploader) RemoteFileExists() (bool, error) {
 func (u *blobFSUploader) Prologue(state common.PrologueState) (destinationModified bool) {
 	jptm := u.jptm
 
-	u.flushThreshold = int64(u.chunkSize * ADLSFlushThreshold)
+	u.flushThreshold = int64(u.chunkSize) * int64(ADLSFlushThreshold)
 
 	h := jptm.BfsDstData(state.LeadingBytes)
 	u.creationTimeHeaders = &h

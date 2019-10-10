@@ -338,7 +338,8 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo) (credentialType c
 		if credentialType, err = getBlobFSCredentialType(ctx, raw.source, raw.sourceSAS != ""); err != nil {
 			return common.ECredentialType.Unknown(), err
 		}
-	case common.EFromTo.LocalFile(), common.EFromTo.FileLocal(), common.EFromTo.FileTrash(), common.EFromTo.FilePipe(), common.EFromTo.PipeFile(), common.EFromTo.BenchmarkFile():
+	case common.EFromTo.LocalFile(), common.EFromTo.FileLocal(), common.EFromTo.FileTrash(), common.EFromTo.FilePipe(), common.EFromTo.PipeFile(), common.EFromTo.BenchmarkFile(),
+		common.EFromTo.FileFile(), common.EFromTo.BlobFile():
 		if credentialType, err = getAzureFileCredentialType(); err != nil {
 			return common.ECredentialType.Unknown(), err
 		}

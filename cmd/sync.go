@@ -71,6 +71,20 @@ func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []strin
 	return
 }
 
+// it is assume that the given url has the SAS stripped, and safe to print
+func (raw *rawSyncCmdArgs) validateURLIsNotServiceLevel(url string, location common.Location) error {
+	srcLevel, err := determineLocationLevel(url, location, true)
+	if err != nil {
+		return err
+	}
+
+	if srcLevel == ELocationLevel.Service() {
+		return fmt.Errorf("service level URLs (%s) are not supported in sync: ", url)
+	}
+
+	return nil
+}
+
 // validates and transform raw input into cooked input
 func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked := cookedSyncCmdArgs{}
@@ -103,6 +117,22 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	} else if cooked.fromTo.To() == common.ELocation.Local() {
 		cooked.destination = cleanLocalPath(raw.dst)
 		cooked.destination = common.ToExtendedPath(cooked.destination)
+	}
+
+	// we do not support service level sync yet
+	if cooked.fromTo.From().IsRemote() {
+		err = raw.validateURLIsNotServiceLevel(cooked.source, cooked.fromTo.From())
+		if err != nil {
+			return cooked, err
+		}
+	}
+
+	// we do not support service level sync yet
+	if cooked.fromTo.To().IsRemote() {
+		err = raw.validateURLIsNotServiceLevel(cooked.destination, cooked.fromTo.To())
+		if err != nil {
+			return cooked, err
+		}
 	}
 
 	// generate a new job ID

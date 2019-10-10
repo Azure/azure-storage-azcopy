@@ -63,7 +63,7 @@ type JobPartPlanHeader struct {
 	// S2SSourceChangeValidation represents whether user wants to check if source has changed after enumerating.
 	S2SSourceChangeValidation bool
 	// DestLengthValidation represents whether the user wants to check if the destination has a different content-length
-	S2SDestLengthValidation bool
+	DestLengthValidation bool
 	// S2SInvalidMetadataHandleOption represents how user wants to handle invalid metadata.
 	S2SInvalidMetadataHandleOption common.InvalidMetadataHandleOption
 
@@ -152,7 +152,7 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 	s2sGetPropertiesInBackend = jpph.S2SGetPropertiesInBackend
 	s2sSourceChangeValidation = jpph.S2SSourceChangeValidation
 	s2sInvalidMetadataHandleOption = jpph.S2SInvalidMetadataHandleOption
-	DestLengthValidation = jpph.S2SDestLengthValidation
+	DestLengthValidation = jpph.DestLengthValidation
 
 	offset := t.SrcOffset + int64(t.SrcLength) + int64(t.DstLength)
 

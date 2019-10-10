@@ -129,6 +129,7 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	}
 
 	c.recursive = true                                     // because source is directory-like, in which case recursive is required
+	c.internalOverrideStripTopDir = true                   // we don't want to append an extra strange name filled with meta characters at the destination
 	c.forceWrite = common.EOverwriteOption.True().String() // don't want the extra round trip (for overwrite check) when benchmarking
 
 	c.blockSizeMB = raw.blockSizeMB
@@ -170,7 +171,7 @@ func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (stri
 		if p.ContainerName == "" || p.BlobName != "" {
 			return "", errors.New("the blob target must be a container")
 		}
-		p.BlobName = virtualDir + "/*" // Append /* to imply strip-top-dir
+		p.BlobName = virtualDir
 		result = p.URL()
 
 	case common.ELocation.File():
@@ -180,7 +181,7 @@ func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (stri
 		if p.ShareName == "" || p.DirectoryOrFilePath != "" {
 			return "", errors.New("the Azure Files target must be a file share root")
 		}
-		p.DirectoryOrFilePath = virtualDir + "/*" // Append /* to imply strip-top-dir
+		p.DirectoryOrFilePath = virtualDir
 		result = p.URL() */
 
 	case common.ELocation.BlobFS():
@@ -190,7 +191,7 @@ func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (stri
 		if p.FileSystemName == "" || p.DirectoryOrFilePath != "" {
 			return "", errors.New("the blobFS target must be a file system")
 		}
-		p.DirectoryOrFilePath = virtualDir + "/*" // Append /* to imply strip-top-dir
+		p.DirectoryOrFilePath = virtualDir
 		result = p.URL()*/
 	default:
 		return "", errors.New("benchmarking only supports https connections to Blob, Azure Files, and ADLSGen2")

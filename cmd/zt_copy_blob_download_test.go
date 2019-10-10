@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -125,7 +126,7 @@ func (s *cmdIntegrationSuite) TestInferredStripTopDirDownload(c *chk.C) {
 	// test error
 	cooked, err = raw.cook()
 	c.Assert(err, chk.NotNil)
-	c.Assert(err.Error(), StringIncludes, "cannot use wildcards")
+	c.Assert(err.Error(), StringContains, "cannot use wildcards")
 
 	// no actual test needed-- this is where the error lives.
 
@@ -422,10 +423,9 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithPattern(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	urlString := rawContainerURLWithSAS.String()
-	// imply strip-top-dir (without the /* getting escaped by the line above)
-	urlString = strings.Replace(urlString, "?", "/*?", -1) // TODO: find a better way to do this in our tests
-	raw := getDefaultCopyRawInput(urlString, dstDirName)
+	rawContainerURLWithSAS.Path = path.Join(rawContainerURLWithSAS.Path, string([]byte{0x00}))
+	containerString := strings.ReplaceAll(rawContainerURLWithSAS.String(), "%00", "*")
+	raw := getDefaultCopyRawInput(containerString, dstDirName)
 	raw.recursive = true
 	raw.include = "*.pdf"
 

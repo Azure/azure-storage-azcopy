@@ -1,11 +1,10 @@
 package ste
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
-
-	"fmt"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -30,28 +29,35 @@ func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 	// Sets the transfer status and Report Transfer as Done.
 	// Internal function is created to avoid redundancy of the above steps from several places in the api.
 	transferDone := func(status common.TransferStatus, err error) {
-		if jptm.ShouldLog(pipeline.LogInfo) {
-			if status == common.ETransferStatus.Failed() {
-				jptm.LogError(info.Source, "DELETE ERROR ", err)
-			} else {
-				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, fmt.Sprintf("DELETE SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
-				}
-			}
+		if status == common.ETransferStatus.Failed() {
+			jptm.LogError(info.Source, "DELETE ERROR ", err)
+		} else if status == common.ETransferStatus.SkippedBlobHasSnapshots() {
+			// log at error level so that it's clear why the transfer was skipped even when the log level is set to error
+			jptm.Log(pipeline.LogError, fmt.Sprintf("DELETE SKIPPED(blob has snapshots): %s", strings.Split(info.Destination, "?")[0]))
+		} else {
+			jptm.Log(pipeline.LogInfo, fmt.Sprintf("DELETE SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
 		}
+
 		jptm.SetStatus(status)
 		jptm.ReportTransferDone()
 	}
 
 	// TODO confirm whether we should add a new flag to allow user to specify whether snapshots should be removed
-	_, err := srcBlobURL.Delete(jptm.Context(), azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
+	_, err := srcBlobURL.Delete(jptm.Context(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 	if err != nil {
-		// If the delete failed with err 404, i.e resource not found, then mark the transfer as success.
 		if strErr, ok := err.(azblob.StorageError); ok {
+			// if the delete failed with err 404, i.e resource not found, then mark the transfer as success.
 			if strErr.Response().StatusCode == http.StatusNotFound {
 				transferDone(common.ETransferStatus.Success(), nil)
 				return
 			}
+
+			// if the delete failed because the blob has snapshots, then skip it
+			if strErr.Response().StatusCode == http.StatusConflict && strErr.ServiceCode() == azblob.ServiceCodeSnapshotsPresent {
+				transferDone(common.ETransferStatus.SkippedBlobHasSnapshots(), nil)
+				return
+			}
+
 			// If the status code was 403, it means there was an authentication error and we exit.
 			// User can resume the job if completely ordered with a new sas.
 			if strErr.Response().StatusCode == http.StatusForbidden {

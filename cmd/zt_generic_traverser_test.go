@@ -58,7 +58,7 @@ func trySymlink(src, dst string, c *chk.C) {
 // While BlobFS could get properties in the future, it's currently disabled as BFS source S2S isn't set up right now, and likely won't be.
 func (s *genericTraverserSuite) TestFilesGetProperties(c *chk.C) {
 	fsu := getFSU()
-	share, shareName := createNewShare(c, fsu)
+	share, shareName := createNewAzureShare(c, fsu)
 	fileName := generateAzureFileName()
 
 	headers := azfile.FileHTTPHeaders{

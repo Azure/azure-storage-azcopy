@@ -87,12 +87,13 @@ func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID 
 	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
 	enableChunkLogOutput := level.ToPipelineLogLevel() == pipeline.LogDebug
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
-		httpClient:           NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
-		logger:               common.NewJobLogger(jobID, level, appLogger, logFileFolder),
-		chunkStatusLogger:    common.NewChunkStatusLogger(jobID, cpuMon, logFileFolder, enableChunkLogOutput),
-		concurrency:          concurrency,
-		overwritePrompter:    newOverwritePrompter(),
-		pipelineNetworkStats: newPipelineNetworkStats(JobsAdmin.(*jobsAdmin).concurrencyTuner), // let the stats coordinate with the concurrency tuner
+		httpClient:                    NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
+		logger:                        common.NewJobLogger(jobID, level, appLogger, logFileFolder),
+		chunkStatusLogger:             common.NewChunkStatusLogger(jobID, cpuMon, logFileFolder, enableChunkLogOutput),
+		concurrency:                   concurrency,
+		overwritePrompter:             newOverwritePrompter(),
+		pipelineNetworkStats:          newPipelineNetworkStats(JobsAdmin.(*jobsAdmin).concurrencyTuner), // let the stats coordinate with the concurrency tuner
+		exclusiveDestinationMapHolder: &atomic.Value{},
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
 	jm.logJobsAdminMessages()
@@ -166,6 +167,8 @@ type jobMgr struct {
 	ctx                  context.Context
 	cancel               context.CancelFunc
 	pipelineNetworkStats *pipelineNetworkStats
+
+	exclusiveDestinationMapHolder *atomic.Value
 
 	// Share the same HTTP Client across all job parts, so that the we maximize re-use of
 	// its internal connection pool
@@ -309,6 +312,7 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 	jm.jobPartMgrs.Set(partNum, jpm)
 	jm.finalPartOrdered = jpm.planMMF.Plan().IsFinalPart
 	jm.setDirection(jpm.Plan().FromTo)
+	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(partNum, jpm.Plan().FromTo)
 	if scheduleTransfers {
 		// If the schedule transfer is set to true
 		// Instead of the scheduling the Transfer for given JobPart
@@ -337,6 +341,15 @@ func (jm *jobMgr) setDirection(fromTo common.FromTo) {
 		jm.atomicTransferDirection.AtomicStore(common.ETransferDirection.S2SCopy())
 		JobsAdmin.RequestTuneSlowly()
 	}
+}
+
+// can't do this at time of constructing the jobManager, because it doesn't know fromTo at that time
+func (jm *jobMgr) getExclusiveDestinationMap(partNum PartNumber, fromTo common.FromTo) *common.ExclusiveStringMap {
+	// assume that first part is ordered before any others
+	if partNum == 0 {
+		jm.exclusiveDestinationMapHolder.Store(common.NewExclusiveStringMap(fromTo, runtime.GOOS))
+	}
+	return jm.exclusiveDestinationMapHolder.Load().(*common.ExclusiveStringMap)
 }
 
 func (jm *jobMgr) HttpClient() *http.Client {

@@ -34,7 +34,12 @@ type TestFileCommand struct {
 	// Content Type of the file to be validated.
 	ContentType string
 	// Content Encoding of the file to be validated.
-	ContentEncoding string
+	ContentEncoding    string
+	ContentDisposition string
+	ContentLanguage    string
+	CacheControl       string
+	CheckContentMD5    bool
+
 	// Represents the flag to determine whether number of blocks or pages needs
 	// to be verified or not.
 	// todo always set this to true
@@ -78,7 +83,11 @@ func init() {
 	// add flags.
 	testFileCmd.PersistentFlags().StringVar(&cmdInput.MetaData, "metadata", "", "metadata expected from the file in the container")
 	testFileCmd.PersistentFlags().StringVar(&cmdInput.ContentType, "content-type", "", "content type expected from the file in the container")
-	testFileCmd.PersistentFlags().StringVar(&cmdInput.ContentEncoding, "content-encoding", "", "Upload to Azure Storage using this content encoding.")
+	testFileCmd.PersistentFlags().StringVar(&cmdInput.ContentEncoding, "content-encoding", "", "validate the given HTTP header.")
+	testFileCmd.PersistentFlags().StringVar(&cmdInput.ContentDisposition, "content-disposition", "", "validate the given HTTP header.")
+	testFileCmd.PersistentFlags().StringVar(&cmdInput.ContentLanguage, "content-language", "", "validate the given HTTP header.")
+	testFileCmd.PersistentFlags().StringVar(&cmdInput.CacheControl, "cache-control", "", "validate the given HTTP header.")
+	testFileCmd.PersistentFlags().BoolVar(&cmdInput.CheckContentMD5, "check-content-md5", false, "Validate content MD5 is not empty.")
 	testFileCmd.PersistentFlags().BoolVar(&cmdInput.IsObjectDirectory, "is-object-dir", false, "set the type of object to verify against the subject")
 	testFileCmd.PersistentFlags().BoolVar(&cmdInput.IsRecursive, "is-recursive", true, "Set whether to validate against subject recursively when object is directory.")
 	// TODO: parameter name doesn't match file scenario, discuss and refactor.
@@ -302,6 +311,11 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 		os.Exit(1)
 	}
 
+	if testFileCmd.CheckContentMD5 && (get.ContentMD5() == nil || len(get.ContentMD5()) == 0) {
+		fmt.Println("ContentMD5 should not be empty")
+		os.Exit(1)
+	}
+
 	// verify the user given metadata supplied while uploading the file against the metadata actually present in the file
 	if !validateMetadataForFile(testFileCmd.MetaData, get.NewMetadata()) {
 		fmt.Println("meta data does not match between the actual and uploaded file.")
@@ -323,6 +337,21 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 	//verify the content-encoding
 	if !validateString(testFileCmd.ContentEncoding, get.ContentEncoding()) {
 		fmt.Println("mismatch content encoding between actual and user given file content encoding")
+		os.Exit(1)
+	}
+
+	if !validateString(testFileCmd.ContentDisposition, get.ContentDisposition()) {
+		fmt.Println("mismatch content disposition between actual and user given value")
+		os.Exit(1)
+	}
+
+	if !validateString(testFileCmd.ContentLanguage, get.ContentLanguage()) {
+		fmt.Println("mismatch content encoding between actual and user given value")
+		os.Exit(1)
+	}
+
+	if !validateString(testFileCmd.CacheControl, get.CacheControl()) {
+		fmt.Println("mismatch cache control between actual and user given value")
 		os.Exit(1)
 	}
 

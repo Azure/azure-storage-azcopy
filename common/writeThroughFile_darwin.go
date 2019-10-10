@@ -36,6 +36,7 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 	if err != nil {
 		return nil, err
 	}
+
 	// TODO: currently writeThrough is ignored here on darwin. Review, and use it if we have an implementation we are comfortable with
 	// A quick internet search returned conflicting opinions on whether MacOS suppose O_SYNC or uses a different flag with the same meaning.
 	// If different with same meaning, can we just use O_SYNC here?  That's what we need to find out before implementing.

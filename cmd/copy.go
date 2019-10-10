@@ -120,6 +120,9 @@ type rawCopyCmdArgs struct {
 	s2sSourceChangeValidation bool
 	// specify how user wants to handle invalid metadata.
 	s2sInvalidMetadataHandleOption string
+
+	// internal override to enforce strip-top-dir
+	internalOverrideStripTopDir bool
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -242,6 +245,10 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		if err != nil {
 			return cooked, err
 		}
+	}
+
+	if raw.internalOverrideStripTopDir {
+		cooked.stripTopDir = true
 	}
 
 	cooked.recursive = raw.recursive
@@ -382,6 +389,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	if err != nil {
 		return cooked, err
 	}
+	globalBlobFSMd5ValidationOption = cooked.md5ValidationOption // workaround, to avoid having to pass this all the way through the chain of methods in enumeration, just for one weird and (presumably) temporary workaround
 
 	cooked.CheckLength = raw.CheckLength
 	// length of devnull will be 0, thus this will always fail unless downloading an empty file
@@ -490,6 +498,8 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		}
 	case common.EFromTo.BlobBlob(),
 		common.EFromTo.FileBlob(),
+		common.EFromTo.FileFile(),
+		common.EFromTo.BlobFile(),
 		common.EFromTo.S3Blob():
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while copying from service to service")
@@ -497,14 +507,12 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		if cooked.followSymlinks {
 			return cooked, fmt.Errorf("follow-symlinks flag is not supported while copying from service to service")
 		}
+		// blob type is not supported if destination is not blob
+		if cooked.blobType != common.EBlobType.Detect() && cooked.fromTo.To() != common.ELocation.Blob() {
+			return cooked, fmt.Errorf("blob-type is not supported for the scenario (%s)", cooked.fromTo.String())
+		}
 		// Disabling blob tier override, when copying block -> block blob or page -> page blob, blob tier will be kept,
 		// For s3 and file, only hot block blob tier is supported.
-		if cooked.fromTo == common.EFromTo.FileBlob() && cooked.blobType != common.EBlobType.Detect() {
-			return cooked, fmt.Errorf("blob-type is not supported while copying from file to blob")
-		}
-		if cooked.fromTo == common.EFromTo.S3Blob() && cooked.blobType != common.EBlobType.Detect() {
-			return cooked, fmt.Errorf("blob-type is not supported while copying from s3 to blob")
-		}
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
 			return cooked, fmt.Errorf("blob-tier is not supported while copying from sevice to service")
@@ -869,6 +877,16 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	jobPartOrder.SourceSAS = cca.sourceSAS
 	jobPartOrder.SourceRoot, err = GetResourceRoot(cca.source, from)
 
+	// Stripping the trailing /* for local occurs much later than stripping the trailing /* for remote resources.
+	// TODO: Move these into the same place for maintainability.
+	if diff := strings.TrimPrefix(cca.source, jobPartOrder.SourceRoot); cca.fromTo.From().IsLocal() &&
+		diff == "*" || diff == common.OS_PATH_SEPARATOR+"*" || diff == common.AZCOPY_PATH_SEPARATOR_STRING+"*" {
+		// trim the /*
+		cca.source = jobPartOrder.SourceRoot
+		// set stripTopDir to true so that --list-of-files/--include-path play nice
+		cca.stripTopDir = true
+	}
+
 	if err != nil {
 		return err
 	}
@@ -892,6 +910,8 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		common.EFromTo.BlobFSLocal(),
 		common.EFromTo.BlobBlob(),
 		common.EFromTo.FileBlob(),
+		common.EFromTo.FileFile(),
+		common.EFromTo.BlobFile(),
 		common.EFromTo.S3Blob(),
 		common.EFromTo.BenchmarkBlob(),
 		common.EFromTo.BenchmarkBlobFS(),
@@ -1285,10 +1305,10 @@ func init() {
 		"This option supports wildcard characters (*). Separate files by using a ';'.")
 	cpCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "Include only these paths when copying. "+
 		"This option does not support wildcard characters (*). Checks relative path prefix (For example: myFolder;myFolder/subDirName/file.pdf).")
-	cpCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "Exclude these paths when copying. "+
-		"This option does not support wildcard characters (*). Checks relative path prefix(For example: myFolder;myFolder/subDirName/file.pdf).")
+	cpCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "Exclude these paths when copying. "+ // Currently, only exclude-path is supported alongside account traversal.
+		"This option does not support wildcard characters (*). Checks relative path prefix(For example: myFolder;myFolder/subDirName/file.pdf). When used in combination with account traversal, paths do not include the container name.")
 	// This flag is implemented only for Storage Explorer.
-	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "Defines the location of json which has the list of only files to be copied.")
+	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "Defines the location of text file which has the list of only files to be copied.")
 	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude these files when copying. This option supports wildcard characters (*)")
 	cpCmd.PersistentFlags().StringVar(&raw.forceWrite, "overwrite", "true", "Overwrite the conflicting files/blobs at the destination if this flag is set to true. (default true).")
 	cpCmd.PersistentFlags().BoolVar(&raw.autoDecompress, "decompress", false, "Automatically decompress files when downloading, if their content-encoding indicates that they are compressed. The supported content-encoding values are 'gzip' and 'deflate'. File extensions of '.gz'/'.gzip' or '.zz' aren't necessary, but will be removed if present.")
