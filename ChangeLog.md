@@ -1,11 +1,128 @@
 
 # Change Log
 
-## Version 10.XX.XX
+## Version 10.3.0
 
-### Breaking change
+### Breaking changes
 
-1. The sync command's output in JSON has changed for consistency reasons. Tools integrating AzCopy should be aware.
+1. The `*` character is no longer supported as a wildcard in URLs, except for the two exceptions
+   noted below. It remains supported in local file paths.
+   1. The first execption is that `/*` is still allowed at the very end of the "path" section of a
+      URL. This is illustrated by the difference between these two source URLs:
+      `https://account/container/virtual?SAS` and 
+      `https://account/container/virtualDir/*?SAS`.  The former copies the virtual directory
+      `virtualDir` by creating a folder of that name at the destination.  The latter copies the
+      _contents_ of `virtual` dir directly into the target without creating a folder named
+      "virtualDir".'
+   1. The second exception is when you are transferring multiple _whole_ containers (or S3 buckets). You can
+      use * as a wildcard in the container or bucket name. 
+1. The `--include` and `--exclude` parameters have been replaced by `--include-pattern` and
+   `--exclude-pattern` (for filenames) and `--include-path` and `--exclude-path` (for paths,
+   including directory and filenames).
+   The new parameters have behaviour that is better defined in complex situations (such as
+   recursion).  The `*` wildcard is supported in the pattern parameters, but _not_ in the path ones.
+1. There have been two breaking changes to the JSON output that is produced if you request
+   JSON-formatted output. The `sync` command's output in JSON has changed for consistency reasons,
+   and the final message type, for `copy` and `sync` has changed its name from `Exit` to `EndOfJob`.
+   Tools using the JSON output format to integrate AzCopy should be aware.
+1. If downloading to "null" on Windows the target must now be named "NUL", according to standard
+   Windows conventions.  "/dev/null" remains correct on Linux. (This feature can be used to test
+   throughput or check MD5s without saving the downloaded data.) 
+1. The file format of the (still undocumented) `--list-of-files` parameter is changed.  (It remains
+   undocmented because, for simplicity, users are
+   encouraged to use the new `--include-pattern` and `--include-path` parameters instead.)
+
+### New features
+
+1. `sync` is supported from Blob Storage to Blob Storage, and from Azure Files to Azure Files.
+1. `copy` is supported from Azure Files to Azure Files, and from Blob Storage to Azure Files.
+1. Percent complete is displayed as each job runs.
+1. VHD files are auto-detected as page blobs.
+1. A new benchmark mode allows quick and easy performance benchmarking of your network connection to
+   Blob Storage. Run AzCopy with the paramaters `bench --help` for details.  This feature is in
+   Preview status.
+1. The location for AzCopy's "plan" files can be specified with the environment variable
+   `AZCOPY_JOB_PLAN_LOCATION`. (If you move the plan files and also move the log files using the existing
+   `AZCOPY_LOG_LOCATION`, then AzCopy will not store anything under your home directory on Linux and
+   MacOS.  On Windows AzCopy will keep just one small encrypted file under `c:\users\<username>\.azcopy`)
+1. Log files and plan files can be cleaned up to save disk space, using AzCopy's new `jobs rm` and
+   `jobs clean` commands.
+1. When listing jobs with `jobs show`, the status of each job is included in the output.   
+1. The `--overwrite` parameter now supports the value of "prompt" to prompt the user on a
+   file-by-file basis. (The old values of true and false are also supported.)   
+1. The environment variable `AZCOPY_CONCURRENCY_VALUE` can now be set to "AUTO". This is expected to be
+    useful for customers with small networks, or those running AzCopy on
+   moderately-powered machines and transfer blobs between accounts.  This feature is in preview status.
+1. When uploading from Windows, files can be filtered by Windows-specific file attributes (such as
+   "Archive", "Hidden" etc)
+1. Memory usage can be controlled by setting the new environment variable `AZCOPY_BUFFER_GB`.
+   Decimal values are supported. Actual usage will be the value specified, plus some overhead. 
+1. An extra integrity check has been added: the length of the
+   completed desination file is checked against that of the source.
+1. When downloading, AzCopy can automatically decompress blobs (or Azure Files) that have a
+   `Content-Encoding` of `gzip` or `deflate`. To enable this behaviour, supply the `--decompress`
+   parameter.
+1. The number of disk files accessed concurrently can be controlled with the new
+   `AZCOPY_CONCURRENT_FILES` environment variable. This is an advanced setting, which generally
+   should not be modified.  It does not affect the number of HTTP connections, which is still
+   controlled by `AZCOPY_CONCURRENCY_VALUE`.
+1. The values of key environment variables are listed at the start of the log file.
+1. An official Windows 32-bit build is now released, in addition to the usual 64-bit builds for
+   Linux, Mac and Windows.
+1. If you need to refer a literal `*` in the name of a blob or Azure Files file, e.g. for a blob
+   named "\*", escape the `*` using standard URL escaping. To do this, replace the `*` with the following
+   character sequence: %2A 
+
+### Bug fixes
+
+1. When an AzCopy job is cancelled with CTRL-C, any partially-updated files are now deleted from
+   the destination. Previous releases of AzCopy v10 would just immediately exit, leaving destination files
+   potentially containing an unknown mix of old and new data. E.g. if uploading a new version of a file
+   over top of an old version, cancellation could result in the file being left with some parts
+   containing old data, and some containing new data. This issue affected downloads to local disk and
+   uploads to Azure Files, ADLS Gen 2, page blobs and append blobs. The bug did not affect transfers to block
+   blobs.
+1. If a transfer to a brand-new block blob is cancelled before it completes, the uncommitted blocks are now cleaned up
+   immediately. Previous versions would leave them, for automatic garbage collection to delete 7 days later.
+1. Long pathnames (over 260 characters) are now supported everywhere on Windows, including on UNC
+   shares.
+1. Safety is improved in the rare cases where two source files correspond to just one destination file. This can happen
+   when transferring to a case-insensitive destination, when the new `--decompress` flag removes an extension but
+   there's already a file without the extension, and in very rare cases related to escaping of filenames with illegal
+   characters. The bug fix ensures that the single resulting file contains data from only _one_ of the source files.
+1. When supplying a `--content-type` on the command line it's no longer necessary to also specify
+   `--no-guess-mime-type`.
+1. There is now no hard-coded limit on the number of files that can be processed by the `sync`
+   command.  The number that can be processed (without paging of memory to disk) depends only on the
+   amount of RAM available.
+1. Transfer of sparse page blobs has been improved, so that for many sparse page blobs only the
+   populated pages will transferred.  The one exception is blobs which have had a very high number
+   of updates, but which still have significant sparse sections.  Those blobs may not be
+   transferred optimally in this release. Handling of such blobs will be improved in a future release.
+1. Accessing root of drive (e.g. `d:\`) no longer causes an error.
+1. On slow networks, there are no longer excessive log messages sent to the Event Log (Windows) and
+   SysLog (Linux).
+1. If AzCopy can't check whether it's up to date, it will no longer hang. (Previously, it could hang
+   if its version check URL, https://aka.ms/azcopyv10-version-metadata, was unreachable due to
+   network routing restrictions.)  
+1. High concurrency values are supported (e.g. over 1000 connections). While these values are seldom
+   needed, they are occasionally useful - e.g. for service-to-service transfer of files around 1 MB
+   in size.
+1. Files skipped due to "overwrite=false" are no longer logged as "failed".
+1. Logging is more concise at the default log level.
+1. Error message text, returned by Blob and File services, is now included in the log.
+1. A log file is created for copy jobs even when there was nothing to copy.
+1. In the log, UPLOAD SUCCESSFUL messages now include the name of the successful file.
+1. Clear error messages are given to show that AzCopy does not currently support Customer-Provided
+   Encryption Keys.
+1. On Windows, downloading a filename with characters not supported by the operating system will
+   result in those characters being URL-encoded to construct a Windows-compatible filename. The
+   encoding process is reversed if the file is uploaded.
+1. Uploading a single file to ADLS Gen 2 works now.
+1. The `remove` command no longer hangs when removing blobs that have snapshots. Instead it will fail to 
+   delete them, and report the failures clearly.
+1. Jobs downloading from ADLS Gen 2 that result in no scheduled transfers will no longer hang.
+
 
 ## Version 10.2.1
 
