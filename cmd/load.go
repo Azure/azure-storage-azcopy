@@ -156,7 +156,7 @@ NOTE: This is a preview release of the load command. Please report any issues on
 `,
 	Example: `
 Load an entire directory with a SAS:
-  - azcopy cp "/path/to/dir" "https://[account].blob.core.windows.net/[container]?[SAS]" --state-path="/path/to/state/path"
+  - azcopy load "/path/to/dir" "https://[account].blob.core.windows.net/[container]?[SAS]" --state-path="/path/to/state/path"
 `,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if len(args) != 2 {
@@ -223,12 +223,13 @@ Load an entire directory with a SAS:
 func init() {
 	rootCmd.AddCommand(loadCmd)
 	loadCmd.PersistentFlags().BoolVar(&loadCmdRawInput.newSession, "new-session", true, "start a new job rather than continuing an existing one whose tracking information is kept at --state-path.")
-	loadCmd.PersistentFlags().StringVar(&loadCmdRawInput.statePath, "state-path", "", "required path to a local directory for job state tracking. The path should point to an existing directory in order to resume a job.")
+	loadCmd.PersistentFlags().StringVar(&loadCmdRawInput.statePath, "state-path", "", "required path to a local directory for job state tracking. The path must point to an existing directory in order to resume a job.")
 	loadCmd.PersistentFlags().StringVar(&loadCmdRawInput.compression, "compression-type", "LZ4", "specify the compression type to use for the transfers.")
-	loadCmd.PersistentFlags().Uint32Var(&loadCmdRawInput.numConcurrentWorkers, "concurrency-count", 0, "override the number of parallel connections.")
 	loadCmd.PersistentFlags().Uint32Var(&loadCmdRawInput.maxErrorsToTolerate, "max-errors", 0, "specify the maximum number of transfer failures to tolerate. If enough errors occur, stop the job immediately.")
-	loadCmd.PersistentFlags().BoolVar(&loadCmdRawInput.preserveHardlinks, "preserve-hardlinks", false, "preserve hard links while performing local scanning.")
+	loadCmd.PersistentFlags().BoolVar(&loadCmdRawInput.preserveHardlinks, "preserve-hardlinks", false, "preserve hard link relationships.")
 	loadCmd.PersistentFlags().StringVar(&loadCmdRawInput.logLevel, "log-level", "INFO", "define the log verbosity for the log file, available levels: DEBUG, INFO, WARNING, ERROR.")
+	loadCmd.PersistentFlags().Uint32Var(&loadCmdRawInput.numConcurrentWorkers, "concurrency-count", 0, "override the number of parallel connections.")
+	loadCmd.PersistentFlags().MarkHidden("concurrency-count")
 }
 
 func getClfsExtensionPathAndVerifyHash(expectedHash string) (string, error) {
