@@ -21,11 +21,6 @@
    including directory and filenames).
    The new parameters have behaviour that is better defined in complex situations (such as
    recursion).  The `*` wildcard is supported in the pattern parameters, but _not_ in the path ones.
-1. When copying from AWS, URLs of the form `https://s3.amazonaws.com` are not supported in this release.  This change
-   is because a bug was found in AzCopy that would cause intermittent failures when that URL format was used.  To copy from
-   AWS, use region-specific URLs instead, such as `https://s3.us-east-1.amazonaws.com` or, if copying a single bucket,
-   you can also use virtual-hosted bucket URLs such as `http://bucket.s3.amazonaws.com` and
-   `https://bucket.s3-aws-region.amazonaws.com`.
 1. There have been two breaking changes to the JSON output that is produced if you request
    JSON-formatted output. The `sync` command's output in JSON has changed for consistency reasons,
    and the final message type, for `copy` and `sync` has changed its name from `Exit` to `EndOfJob`.
