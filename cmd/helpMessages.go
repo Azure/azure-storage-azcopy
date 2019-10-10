@@ -171,7 +171,7 @@ const showJobsCmdShortDescription = "Show detailed information for the given job
 
 const showJobsCmdLongDescription = `
 If you provide only a job ID, and not a flag, then this command returns the progress summary only.
-The byte counts and percent complete that appears when you run this command don't reflect files related to jobs that are currently in progress.
+The byte counts and percent complete that appears when you run this command reflect only files that are completed in the job. They don't reflect partially completed files.
 If you set the with-status flag, then only the list of transfers associated with the given status appear.`
 
 const resumeJobsCmdShortDescription = "Resume the existing job with the given job ID."
@@ -325,6 +325,7 @@ The sync command differs from the copy command in several ways:
   2. The source and destination should not contain patterns (For example: * or ?).
   3. The include-pattern and exclude-pattern flags can be a list of patterns matching to the file names. Please refer to the example section for illustration.
   4. When syncing between virtual directories, add a trailing slash to the path (refer to examples) if there's a blob with the same name as one of the virtual directories.
+  5. If the 'deleteDestination' flag is set to true or prompt, then sync will delete files and blobs at the destination that are not present at the source.
 
 Advanced:
 
