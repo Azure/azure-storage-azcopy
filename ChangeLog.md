@@ -33,7 +33,7 @@
 1. If downloading to "null" on Windows the target must now be named "NUL", according to standard
    Windows conventions.  "/dev/null" remains correct on Linux. (This feature can be used to test
    throughput or check MD5s without saving the downloaded data.) 
-1. The file format of the (still undocmented) `--list-of-files` parameter is changed.  (It remains
+1. The file format of the (still undocumented) `--list-of-files` parameter is changed.  (It remains
    undocmented because, for simplicity, users are
    encouraged to use the new `--include-pattern` and `--include-path` parameters instead.)
 
@@ -47,7 +47,9 @@
    Blob Storage. Run AzCopy with the paramaters `bench --help` for details.  This feature is in
    Preview status.
 1. The location for AzCopy's "plan" files can be specified with the environment variable
-   `AZCOPY_JOB_PLAN_LOCATION`.
+   `AZCOPY_JOB_PLAN_LOCATION`. (If you move the plan files and also move the log files using the existing
+   `AZCOPY_LOG_LOCATION`, then AzCopy will not store anything under your home directory on Linux and
+   MacOS.  On Windows AzCopy will keep just one small encrypted file under `c:\users\<username>\.azcopy`)
 1. Log files and plan files can be cleaned up to save disk space, using AzCopy's new `jobs rm` and
    `jobs clean` commands.
 1. When listing jobs with `jobs show`, the status of each job is included in the output.   
@@ -58,9 +60,9 @@
    moderately-powered machines and transfer blobs between accounts.  This feature is in preview status.
 1. When uploading from Windows, files can be filtered by Windows-specific file attributes (such as
    "Archive", "Hidden" etc)
-1. Memory usange can be controlled by setting the new environment variable `AZCOPY_BUFFER_GB`.
+1. Memory usage can be controlled by setting the new environment variable `AZCOPY_BUFFER_GB`.
    Decimal values are supported. Actual usage will be the value specified, plus some overhead. 
-1. An extra integrity check has been added for Service to Service transfers: the length of the
+1. An extra integrity check has been added: the length of the
    completed desination file is checked against that of the source.
 1. When downloading, AzCopy can automatically decompress blobs (or Azure Files) that have a
    `Content-Encoding` of `gzip` or `deflate`. To enable this behaviour, supply the `--decompress`
@@ -122,8 +124,10 @@
    result in those characters being URL-encoded to construct a Windows-compatible filename. The
    encoding process is reversed if the file is uploaded.
 1. Uploading a single file to ADLS Gen 2 works now.
-1. The `remove` command no longer hangs when removing blobs that have snapshots. (It will, instead, fail to delete
-    them, and report the failures clearly.
+1. The `remove` command no longer hangs when removing blobs that have snapshots. Instead it will fail to 
+   delete them, and report the failures clearly.
+1. Jobs downloading from ADLS Gen 2 that result in no scheduled transfers will no longer hang.
+
 
 ## Version 10.2.1
 
