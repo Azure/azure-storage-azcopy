@@ -413,7 +413,11 @@ func createS3ClientWithMinio(o createS3ResOptions) (*minio.Client, error) {
 		return nil, fmt.Errorf("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY should be set before creating the S3 client")
 	}
 
-	s3Client, err := minio.NewWithRegion("s3.amazonaws.com", accessKeyID, secretAccessKey, true, o.Location)
+	urlRegion := o.Location
+	if urlRegion == "" {
+		urlRegion = "us-east-1"
+	}
+	s3Client, err := minio.NewWithRegion("s3."+urlRegion+".amazonaws.com", accessKeyID, secretAccessKey, true, o.Location)
 	if err != nil {
 		return nil, err
 	}
