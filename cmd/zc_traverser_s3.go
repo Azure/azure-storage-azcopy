@@ -22,10 +22,10 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/minio/minio-go"
 
@@ -193,9 +193,7 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, recursive, getProperti
 		t.s3URLParts = s3URLPartsExtension{s3URLParts}
 	}
 
-	if err = checkS3UrlType(s3URLParts); err != nil {
-		return
-	}
+	showS3UrlTypeWarning(s3URLParts)
 
 	t.s3Client, err = common.CreateS3Client(
 		t.ctx,
@@ -213,15 +211,18 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, recursive, getProperti
 	return
 }
 
-// Disallow the non-region aware URL type.
+// Discourage the non-region aware URL type. (but don't ban it, because that breaks almost all our S3 automated tests)
 // Reason is that we had intermittent bucket location lookup issues when using that technique
 // with the apparent cause being the lookup of bucket locations, which we need to change to use minio's BucketExists.
 // For info see: https://github.com/aws/aws-sdk-go/issues/720#issuecomment-243891223
 // Once we change to bucketExists, assuming its reliable, we will be able to re allow this URL type.
-func checkS3UrlType(s3URLParts common.S3URLParts) error {
+func showS3UrlTypeWarning(s3URLParts common.S3URLParts) {
 	if strings.EqualFold(s3URLParts.Host, "s3.amazonaws.com") {
-		return errors.New("this version of AzCopy does not support transferring from the 's3.amazonaws.com' URL. " +
-			"Please use a region-specific endpoint to transfer from one specific region. E.g. s3.us-east-1.amazonaws.com or a virtual-hosted reference to a single bucket")
+		s3UrlWarningOncer.Do(func() {
+			glcm.Info("Instead of transferring from the 's3.amazonaws.com' URL, in this version of AzCopy we recommend you " +
+				"use a region-specific endpoint to transfer from one specific region. E.g. s3.us-east-1.amazonaws.com or a virtual-hosted reference to a single bucket.")
+		})
 	}
-	return nil
 }
+
+var s3UrlWarningOncer = &sync.Once{}
