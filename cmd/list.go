@@ -99,6 +99,12 @@ func HandleListContainerCommand(source string, location common.Location) (err er
 		return err
 	}
 
+	level, err := determineLocationLevel(source, location, true)
+
+	if err != nil {
+		return err
+	}
+
 	// Treat our check as a destination because the isSource flag was designed for S2S transfers.
 	if credentialInfo, _, err = getCredentialInfoForLocation(ctx, location, base, token, false); err != nil {
 		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
@@ -126,6 +132,10 @@ func HandleListContainerCommand(source string, location common.Location) (err er
 
 	processor := func(object storedObject) error {
 		objectSummary := object.relativePath + "; Content Length: "
+
+		if level == level.Service() {
+			objectSummary = object.containerName + "/" + objectSummary
+		}
 
 		if parameters.MachineReadable {
 			objectSummary += strconv.Itoa(int(object.size))
@@ -194,7 +204,7 @@ func byteSizeToString(size int64) string {
 		"GiB",
 		"TiB",
 		"PiB",
-		"EiB", //Let's face it, a file probably won't be more than 1000 exabytes in YEARS. (and int64 literally isn't large enough to handle too many exbibytes. 128 bit processors when)
+		"EiB", // Let's face it, a file, account, or container probably won't be more than 1000 exabytes in YEARS. (and int64 literally isn't large enough to handle too many exbibytes. 128 bit processors when)
 	}
 	unit := 0
 	floatSize := float64(size)
