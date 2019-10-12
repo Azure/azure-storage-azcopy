@@ -32,6 +32,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 
@@ -201,6 +202,20 @@ Load an entire directory with a SAS:
 		}
 		clfsOutputParser := newClfsExtensionOutputParser(glcm)
 		go clfsOutputParser.startParsing(bufio.NewReader(out))
+
+		// route the cancel signal to the clfsload
+		cancelChannel := make(chan os.Signal)
+		go func() {
+			// cancelChannel will be notified when os receives os.Interrupt and os.Kill signals
+			signal.Notify(cancelChannel, os.Interrupt, os.Kill)
+
+			for {
+				select {
+				case <-cancelChannel:
+					glcm.Info("Cancellation requested. Beginning shutdown...")
+				}
+			}
+		}()
 
 		err = clfscmd.Start()
 		if err != nil {
