@@ -7,7 +7,7 @@ import utility as util
 # Temporary tests to guarantee simple load scenario works
 class LoadUserScenario(unittest.TestCase):
 
-    def test_sync_entire_directory_with_local(self):
+    def test_load_entire_directory(self):
         dir_name = "dir_load_test"
         dir_path = util.create_test_n_files(1024, 10, dir_name)
 

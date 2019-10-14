@@ -73,6 +73,7 @@ jobs:
           export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
           export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
           export TEST_DIRECTORY_PATH=$(pwd)/test-temp
+          cp ./CLFSLoad-* ./test-temp
           python ./testSuite/scripts/run.py
         name: 'Run_smoke_tests'
         env:
