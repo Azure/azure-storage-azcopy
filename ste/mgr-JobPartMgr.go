@@ -48,6 +48,7 @@ type IJobPartMgr interface {
 	FileCountLimiter() common.CacheLimiter
 	ExclusiveDestinationMap() *common.ExclusiveStringMap
 	ChunkStatusLogger() common.ChunkStatusLogger
+	GetUserDelegationAuthenticationManagerInstance() *userDelegationAuthenticationManager
 	common.ILogger
 	SourceProviderPipeline() pipeline.Pipeline
 	getOverwritePrompter() *overwritePrompter
@@ -549,6 +550,17 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	default:
 		panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
 	}
+}
+
+func (jpm *jobPartMgr) GetUserDelegationAuthenticationManagerInstance() *userDelegationAuthenticationManager {
+	udam := jpm.jobMgr.GetUserDelegationAuthenticationManagerInstance()
+
+	// Panic if udam isn't created-- this occurs before a transfer is scheduled!
+	if udam == nil {
+		panic("UDAM should be initialized already (Even as a dummy!)")
+	}
+
+	return udam
 }
 
 func (jpm *jobPartMgr) SlicePool() common.ByteSlicePooler {

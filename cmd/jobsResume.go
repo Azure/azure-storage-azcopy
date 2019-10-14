@@ -251,10 +251,25 @@ func (rca resumeCmdArgs) process() error {
 		}
 	}
 
+	// Why are we getting the OAuth token all the way out here?
+	// Because we need to inform the STE of our oauth token in getjobfromto otherwise userdelegationauthenticationmanager gets initialized incorrectly by ja.ResurrectJob
+	ctx := context.TODO()
+	credentialInfo := common.CredentialInfo{}
+
+	// obtain OAuth info so that userdelegationauthenticationmanager gets properly set up.
+	// STE doesn't panic if credentialType is Unknown this early on, so it's OK that we don't know based off our fromto.
+	uotm := GetUserOAuthTokenManagerInstance()
+	if tokenInfo, err := uotm.GetTokenInfo(ctx); err == nil {
+		credentialInfo.OAuthTokenInfo = *tokenInfo
+		// only error out if we failed to get an oauth token on an oauth transfer
+	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+		return err
+	}
+
 	// Get fromTo info, so we can decide what's the proper credential type to use.
 	var getJobFromToResponse common.GetJobFromToResponse
 	Rpc(common.ERpcCmd.GetJobFromTo(),
-		&common.GetJobFromToRequest{JobID: jobID},
+		&common.GetJobFromToRequest{JobID: jobID, CredInfo: credentialInfo},
 		&getJobFromToResponse)
 	if getJobFromToResponse.ErrorMsg != "" {
 		glcm.Error(getJobFromToResponse.ErrorMsg)
@@ -267,9 +282,6 @@ func (rca resumeCmdArgs) process() error {
 		return errors.New("resuming benchmark jobs is not supported")
 	}
 
-	ctx := context.TODO()
-	// Initialize credential info.
-	credentialInfo := common.CredentialInfo{}
 	// TODO: Replace context with root context
 	if credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
 		fromTo:         getJobFromToResponse.FromTo,
@@ -283,14 +295,6 @@ func (rca resumeCmdArgs) process() error {
 		// Message user that they are using Oauth token for authentication,
 		// in case of silently using cached token without consciousness。
 		glcm.Info("Resume is using OAuth token for authentication.")
-
-		uotm := GetUserOAuthTokenManagerInstance()
-		// Get token from env var or cache.
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return err
-		} else {
-			credentialInfo.OAuthTokenInfo = *tokenInfo
-		}
 	}
 
 	// Send resume job request.

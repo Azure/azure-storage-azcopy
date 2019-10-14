@@ -284,14 +284,15 @@ func getCredentialInfoForLocation(ctx context.Context, location common.Location,
 		}
 	}
 
-	if credInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		uotm := GetUserOAuthTokenManagerInstance()
-
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return credInfo, false, err
-		} else {
-			credInfo.OAuthTokenInfo = *tokenInfo
-		}
+	// Get the OAuth token info anyway. This may be used later in STE.
+	// Currently, it isn't.
+	// TODO: Shift STE credential info over to those generated in the new copy enumerator init instead of the old architecture
+	uotm := GetUserOAuthTokenManagerInstance()
+	if tokenInfo, err := uotm.GetTokenInfo(ctx); err == nil {
+		credInfo.OAuthTokenInfo = *tokenInfo
+		// only error out if we failed to get an oauth token on an oauth transfer
+	} else if credInfo.CredentialType == common.ECredentialType.OAuthToken() {
+		return credInfo, isPublic, err
 	}
 
 	return

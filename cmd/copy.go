@@ -872,14 +872,19 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		// Message user that they are using Oauth token for authentication,
 		// in case of silently using cached token without consciousness。
 		glcm.Info("Using OAuth token for authentication.")
+	}
 
-		uotm := GetUserOAuthTokenManagerInstance()
-		// Get token from env var or cache.
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+	// We're getting the token regardless of the dst credential type.
+	// This info needs to go to STE in case a oauth to sas transfer happpens.
+	// TODO: Make sync and others use this methodology as well.
+	uotm := GetUserOAuthTokenManagerInstance()
+	// Get token from env var or cache.
+	if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+		if cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
 			return err
-		} else {
-			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
 		}
+	} else {
+		cca.credentialInfo.OAuthTokenInfo = *tokenInfo
 	}
 
 	// initialize the fields that are constant across all job part orders

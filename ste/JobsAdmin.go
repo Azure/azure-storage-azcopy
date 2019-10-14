@@ -78,7 +78,7 @@ var JobsAdmin interface {
 	/*ScheduleTransfer(jptm IJobPartTransferMgr)*/
 	ScheduleChunk(priority common.JobPriority, chunkFunc chunkFunc)
 
-	ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string) bool
+	ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string, info common.CredentialInfo) bool
 
 	ResurrectJobParts()
 
@@ -606,7 +606,7 @@ func (ja *jobsAdmin) SuccessfulBytesInActiveFiles() uint64 {
 	return uint64(n)
 }
 
-func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string) bool {
+func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string, credInfo common.CredentialInfo) bool {
 	// Search the existing plan files for the PartPlans for the given jobId
 	// only the files which have JobId has prefix and DataSchemaVersion as Suffix
 	// are include in the result
@@ -634,6 +634,8 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinat
 		}
 		mmf := planFile.Map()
 		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
+		// resurrect with the credential info needed
+		jm.setInMemoryTransitJobState(InMemoryTransitJobState{credentialInfo: credInfo})
 		jm.AddJobPart(partNum, planFile, sourceSAS, destinationSAS, false)
 	}
 	return true

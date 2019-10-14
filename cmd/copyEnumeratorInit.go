@@ -37,6 +37,18 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, err
 	}
 
+	srcLevel, err := determineLocationLevel(cca.source, cca.fromTo.From(), true)
+
+	if err != nil {
+		return nil, err
+	}
+
+	dstLevel, err := determineLocationLevel(cca.destination, cca.fromTo.To(), false)
+
+	if err != nil {
+		return nil, err
+	}
+
 	var isPublic bool
 	srcCredInfo := common.CredentialInfo{}
 
@@ -46,8 +58,13 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	} else if cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() &&
 		(srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() ||
 			(srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && !isPublic && cca.sourceSAS == "")) {
-		// TODO: Generate a SAS token if it's blob -> *
-		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource")
+		if cca.fromTo.From() == common.ELocation.Blob() {
+			glcm.Info("A SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource. " +
+				"Because no SAS token is present on your blob source, we'll attempt to generate a SAS token at transfer time. Please note that " +
+				"transfers may fail if generating the user delegation SAS token fails.")
+		} else {
+			return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource (or a blob source and you have storage blob data owner permissions)")
+		}
 	}
 
 	// Infer on download so that we get LMT and MD5 on files download
@@ -76,18 +93,6 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// Check if the destination is a directory so we can correctly decide where our files land
 	isDestDir := cca.isDestDirectory(dst, &ctx)
-
-	srcLevel, err := determineLocationLevel(cca.source, cca.fromTo.From(), true)
-
-	if err != nil {
-		return nil, err
-	}
-
-	dstLevel, err := determineLocationLevel(cca.destination, cca.fromTo.To(), false)
-
-	if err != nil {
-		return nil, err
-	}
 
 	// Disallow list-of-files and include-path on service-level traversal due to a major bug
 	// TODO: Fix the bug.

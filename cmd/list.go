@@ -102,6 +102,7 @@ func HandleListContainerCommand(source string) (err error) {
 		// in case of silently using cached token without consciousness。
 		glcm.Info("List is using OAuth token for authentication.")
 
+		// Unlike other uses of GetTokenInfo, we won't be setting OAuthTokenInfo regardless-- SAS generation never comes into play on a list command.
 		uotm := GetUserOAuthTokenManagerInstance()
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err

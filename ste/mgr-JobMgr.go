@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"runtime"
 	"strings"
 	"sync"
@@ -31,6 +32,8 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/azblob"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
@@ -77,6 +80,7 @@ type IJobMgr interface {
 	ChunkStatusLogger() common.ChunkStatusLogger
 	HttpClient() *http.Client
 	PipelineNetworkStats() *pipelineNetworkStats
+	GetUserDelegationAuthenticationManagerInstance() *userDelegationAuthenticationManager
 	getOverwritePrompter() *overwritePrompter
 	common.ILoggerCloser
 }
@@ -188,9 +192,91 @@ type jobMgr struct {
 
 	// only a single instance of the prompter is needed for all transfers
 	overwritePrompter *overwritePrompter
+	// only a single instance of the user delegation authentication manager is needed for all transfers
+	udam             *userDelegationAuthenticationManager
+	udamCreationLock sync.Mutex // This is a sanity check because it *may* be possible to have AddJobPart called multiple times at once if transfers get scheduled fast enough.
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+func (jm *jobMgr) GetUserDelegationAuthenticationManagerInstance() *userDelegationAuthenticationManager {
+	return jm.udam
+}
+
+func (jm *jobMgr) setupUserDelegationAuthManager(src string) {
+	// Check if it doesn't already exist.
+	if jm.udam == nil {
+		// lock up to ensure nobody steps over us.
+		jm.udamCreationLock.Lock()
+		defer jm.udamCreationLock.Unlock()
+
+		// If somebody else has already done it by the time we obtained the lock, we're good to go.
+		if jm.udam != nil {
+			return
+		}
+
+		// If the OAuth token is empty, this will fail anyway.
+		// Set an empty UDAM instance that does nothing.
+		if jm.getInMemoryTransitJobState().credentialInfo.OAuthTokenInfo == (common.OAuthTokenInfo{}) {
+			jm.udam = &userDelegationAuthenticationManager{}
+			return
+		}
+
+		srcURL, err := url.Parse(src)
+
+		// no reason for this to fail, ever.
+		common.PanicIfErr(err)
+
+		// get a service-level URL
+		srcBlobURLParts := azblob.NewBlobURLParts(*srcURL)
+		srcBlobURLParts.BlobName = ""
+		srcBlobURLParts.ContainerName = ""
+
+		// create credentials, xfer options
+		credOption := common.CredentialOpOptions{
+			LogInfo:  func(str string) { jm.Log(pipeline.LogInfo, str) },
+			LogError: func(str string) { jm.Log(pipeline.LogError, str) },
+			Panic:    jm.Panic,
+			CallerID: "userDelegationAuthenticationManager",
+			Cancel:   jm.Cancel,
+		}
+
+		// Why craft our own credential info here?
+		// the frontend's may be impure, in the case that we're doing OAuth -> SAS
+		// This means that we'll get the OAuthTokenInfo but the credentialType will be anonymous.
+		credInfo := common.CredentialInfo{CredentialType: common.ECredentialType.OAuthToken()}
+		credInfo.OAuthTokenInfo = jm.getInMemoryTransitJobState().credentialInfo.OAuthTokenInfo
+		blobCredential := common.CreateBlobCredential(jm.ctx, credInfo, credOption)
+
+		// spawn a blob pipeline
+		p := NewBlobPipeline(
+			blobCredential,
+			azblob.PipelineOptions{
+				Log: jm.PipelineLogInfo(),
+				Telemetry: azblob.TelemetryOptions{
+					Value: common.UserAgent,
+				},
+			},
+			XferRetryOptions{
+				Policy:        0,
+				MaxTries:      UploadMaxTries, // TODO: Consider to unify options.
+				TryTimeout:    UploadTryTimeout,
+				RetryDelay:    UploadRetryDelay,
+				MaxRetryDelay: UploadMaxRetryDelay},
+			JobsAdmin.(*jobsAdmin).pacer,
+			jm.HttpClient(),
+			nil)
+
+		// finally, we have a service URL.
+		bsu := azblob.NewServiceURL(srcBlobURLParts.URL(), p)
+
+		// Ignoring the error. If we can't create UDAM, we don't have adequate permissions in the first place.
+		udam, _ := newUserDelegationAuthenticationManager(bsu)
+
+		// Even if we fail, udam should not be nil.
+		jm.udam = &udam
+	}
+}
 
 func (jm *jobMgr) Progress() (uint64, uint64) {
 	return atomic.LoadUint64(&jm.atomicNumberOfBytesCovered),
@@ -313,6 +399,21 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 	jm.finalPartOrdered = jpm.planMMF.Plan().IsFinalPart
 	jm.setDirection(jpm.Plan().FromTo)
 	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(partNum, jpm.Plan().FromTo)
+
+	// This is actually a really fantastic place to set up our user delegation authentication manager.
+	// This is because we have no awareness of our source root until now,
+	// and two job parts will never have different sourceroots.
+	// Note that setupUDAM checks if UDAM is nil before attempting to create it.
+	if jpm.Plan().FromTo.IsS2S() && jpm.Plan().FromTo.From() == common.ELocation.Blob() && len(jpm.sourceSAS) == 0 {
+		// So now you may be thinking "Can't you copy safely from a public resource?"
+		// The answer is yes.
+		// If a user is copying from a public resource in this case, one of two things will happen:
+		// 1) setupUDAM will fail cleanly, leaving an empty UDAM instance that does nothing.
+		// 2) they have OAuth perms on the source enough to make a user delegation key, and thus, creation will succeed.
+		// In either scenario, the transfer continues safely.
+		jm.setupUserDelegationAuthManager(string(jpm.Plan().SourceRoot[:jpm.Plan().SourceRootLength]))
+	}
+
 	if scheduleTransfers {
 		// If the schedule transfer is set to true
 		// Instead of the scheduling the Transfer for given JobPart

@@ -227,7 +227,8 @@ type ListJobTransfersResponse struct {
 
 // GetJobFromToRequest indicates request to get job's FromTo info from job part plan header
 type GetJobFromToRequest struct {
-	JobID JobID
+	JobID    JobID
+	CredInfo CredentialInfo
 }
 
 // GetJobFromToResponse indicates response to get job's FromTo info.

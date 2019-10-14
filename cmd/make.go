@@ -104,6 +104,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		// in case of silently using cached token without consciousness。
 		glcm.Info("Make is using OAuth token for authentication.")
 
+		// Unlike other uses of GetTokenInfo, we're not going to get the token regardless of credential type here. This is because SAS generation never comes into play in container creation.
 		uotm := GetUserOAuthTokenManagerInstance()
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err

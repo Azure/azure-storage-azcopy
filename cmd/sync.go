@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -486,13 +487,24 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		// Message user that they are using Oauth token for authentication,
 		// in case of silently using cached token without consciousness。
 		glcm.Info("Using OAuth token for authentication.")
+	}
 
-		uotm := GetUserOAuthTokenManagerInstance()
-		// Get token from env var or cache.
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return err
+	// Grab OAuth creds anyway, as they may come into play in a blob->blob sync.
+	uotm := GetUserOAuthTokenManagerInstance()
+	if tokenInfo, err := uotm.GetTokenInfo(ctx); err == nil {
+		cca.credentialInfo.OAuthTokenInfo = *tokenInfo
+		// only error out if we failed to get an oauth token on an oauth transfer
+	} else if cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+		return err
+	}
+
+	if cca.fromTo.IsS2S() && cca.sourceSAS == "" {
+		if cca.fromTo.From() == common.ELocation.Blob() && cca.credentialInfo.OAuthTokenInfo != (common.OAuthTokenInfo{}) {
+			glcm.Info("A SAS token is required as a part of the source in S2S sync, unless the source is a public resource. " +
+				"Because no SAS token is present on your blob source, we'll attempt to generate a SAS token at transfer time. Please note that " +
+				"transfers may fail if generating the user delegation SAS token fails.")
 		} else {
-			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
+			return errors.New("a SAS token is required as a part of the source in S2S sync, unless the source is a public resource (or a blob source and you have storage blob data owner permissions)")
 		}
 	}
 

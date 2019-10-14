@@ -185,6 +185,21 @@ func (jptm *jobPartTransferMgr) GetSourceCompressionType() (common.CompressionTy
 	return common.GetCompressionType(encoding)
 }
 
+func (jptm *jobPartTransferMgr) getSrcUserDelegationSAS(src string) (string, error) {
+	// panics if udam isn't found
+	udam := jptm.jobPartMgr.GetUserDelegationAuthenticationManagerInstance()
+
+	objectURL, err := url.Parse(src)
+
+	if err != nil {
+		return "", err
+	}
+
+	blobURLParts := azblob.NewBlobURLParts(*objectURL)
+
+	return udam.GetUserDelegationSASForURL(blobURLParts)
+}
+
 func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	plan := jptm.jobPartMgr.Plan()
 	src, dst := plan.TransferSrcDstStrings(jptm.transferIndex)
@@ -193,6 +208,19 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption :=
 		plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
+
+	// make use of UDAM ONLY in the case of blob -> elsewhere, AND the source SAS is not present to start with.
+	fromTo := jptm.FromTo()
+	if fromTo.IsS2S() && fromTo.From() == common.ELocation.Blob() {
+		// Check srcSAS because an S2S transfer requires that the source is either public OR has a SAS token
+		if len(srcSAS) == 0 {
+			// We're going to safely ignore the error here.
+			// Realistically, there will NEVER be an error.
+			// But, if there is, we get "" back. So there's no need to worry, because srcSAS was already empty.
+			srcSAS, _ = jptm.getSrcUserDelegationSAS(src)
+		}
+	}
+
 	// If the length of destination SAS is greater than 0
 	// it means the destination is remote url and destination SAS
 	// has been stripped from the destination before persisting it in
