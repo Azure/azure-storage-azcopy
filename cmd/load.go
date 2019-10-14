@@ -203,7 +203,7 @@ Load an entire directory with a SAS:
 		clfsOutputParser := newClfsExtensionOutputParser(glcm)
 		go clfsOutputParser.startParsing(bufio.NewReader(out))
 
-		// route the cancel signal to the clfsload
+		// let clfsload cancel itself, while we (the parent process) wait
 		cancelChannel := make(chan os.Signal)
 		go func() {
 			// cancelChannel will be notified when os receives os.Interrupt and os.Kill signals
@@ -213,6 +213,7 @@ Load an entire directory with a SAS:
 				select {
 				case <-cancelChannel:
 					glcm.Info("Cancellation requested. Beginning shutdown...")
+					return
 				}
 			}
 		}()

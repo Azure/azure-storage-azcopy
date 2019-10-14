@@ -42,7 +42,7 @@ const (
 
 type clfsExtensionOutputParser struct {
 	lcm          common.LifecycleMgr
-	finishSignal chan interface{}
+	finishSignal chan interface{} // TODO consider using a wait group
 }
 
 func newClfsExtensionOutputParser(lcm common.LifecycleMgr) *clfsExtensionOutputParser {
@@ -116,7 +116,7 @@ func (c *clfsExtensionOutputParser) processError(line string) {
 		return
 	}
 
-	c.lcm.Error(strings.TrimSpace(parts[1]))
+	c.lcm.Info(strings.TrimSpace(parts[1]))
 }
 
 func (c *clfsExtensionOutputParser) processProgress(line string) {

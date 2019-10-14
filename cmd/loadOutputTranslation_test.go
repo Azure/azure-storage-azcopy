@@ -75,7 +75,7 @@ func (s *clfsTestSuite) TestParsingError(c *chk.C) {
 	sampleError := "2019-10-01 23:27:36,232 ERR './state6' already exists"
 
 	// set up the mock lcm so that we can intercept the parsed message
-	mockedLcm := mockedLifecycleManager{errorLog: make(chan string, 50)}
+	mockedLcm := mockedLifecycleManager{infoLog: make(chan string, 50)}
 	parser := newClfsExtensionOutputParser(&mockedLcm)
 
 	// invoke the processing func
@@ -83,7 +83,7 @@ func (s *clfsTestSuite) TestParsingError(c *chk.C) {
 
 	// validate the parsed output
 	select {
-	case msg := <-mockedLcm.errorLog:
+	case msg := <-mockedLcm.infoLog:
 		c.Check(msg, chk.Equals, "'./state6' already exists")
 	default:
 		// nothing parsed, disappointing
@@ -281,8 +281,8 @@ func (s *clfsTestSuite) TestParsingSampleErrorOutput(c *chk.C) {
 	allProgress := mockedLcm.GatherAllLogs(mockedLcm.progressLog)
 	allExit := mockedLcm.GatherAllLogs(mockedLcm.exitLog)
 
-	c.Check(len(allError), chk.Equals, 1)
-	c.Check(len(allInfo), chk.Equals, 0)
+	c.Check(len(allError), chk.Equals, 0)
+	c.Check(len(allInfo), chk.Equals, 1)
 	c.Check(len(allProgress), chk.Equals, 0)
 	c.Check(len(allExit), chk.Equals, 1)
 }
