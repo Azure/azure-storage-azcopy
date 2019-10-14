@@ -39,6 +39,7 @@ var azcopyLogPathFolder string
 var azcopyJobPlanFolder string
 var azcopyMaxFileAndSocketHandles int
 var outputFormatRaw string
+var cancelFromStdin bool
 var azcopyOutputFormat common.OutputFormat
 var cmdLineCapMegaBitsPerSecond uint32
 
@@ -110,6 +111,10 @@ func init() {
 
 	rootCmd.PersistentFlags().Uint32Var(&cmdLineCapMegaBitsPerSecond, "cap-mbps", 0, "Caps the transfer rate, in megabits per second. Moment-by-moment throughput might vary slightly from the cap. If this option is set to zero, or it is omitted, the throughput isn't capped.")
 	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text", "Format of the command's output. The choices include: text, json. The default value is 'text'.")
+	rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false, "Used by partner teams to send in `cancel` through stdin to stop a job.")
+
+	// reserved for partner teams
+	rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
 }
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where
