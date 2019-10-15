@@ -40,13 +40,16 @@ func newUserDelegationAuthenticationManager(serviceURL azblob.ServiceURL) (userD
 
 	keyInfo := azblob.NewKeyInfo(authManager.startTime, authManager.expiryTime)
 
+	JobsAdmin.LogToJobLog("Attempting to obtain a User Delegation Credential for the blob source.")
 	var err error
 	authManager.credential, err = serviceURL.GetUserDelegationCredential(steCtx, keyInfo, nil, nil)
 
 	if err != nil {
+		JobsAdmin.LogToJobLog("Failed to obtain a User Delegation Credential for the blob source.")
 		return authManager, err
 	}
 
+	JobsAdmin.LogToJobLog("Successfully obtained a User Delegation Credential for the blob source.")
 	authManager.sasMap.Store(make(map[string]string))
 
 	return authManager, nil
@@ -104,6 +107,9 @@ func (u *userDelegationAuthenticationManager) createUserDelegationSASForURL(cont
 	// Write the query to the map and then store it.
 	sasMap[containerName] = sasQuery.Encode()
 	u.sasMap.Store(sasMap)
+
+	JobsAdmin.LogToJobLog("Successfully generated SAS token for source container " + containerName)
+
 	// return the SAS query
 	return sasQuery.Encode(), nil
 }
