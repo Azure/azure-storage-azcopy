@@ -125,6 +125,12 @@ func (d DeleteSnapshotsOption) String() string {
 }
 
 func (d *DeleteSnapshotsOption) Parse(s string) error {
+	// allow empty to mean "None"
+	if s == "" {
+		*d = 0
+		return nil
+	}
+
 	val, err := enum.ParseInt(reflect.TypeOf(d), s, true, true)
 	if err == nil {
 		*d = val.(DeleteSnapshotsOption)
