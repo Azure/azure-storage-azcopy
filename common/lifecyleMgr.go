@@ -3,7 +3,6 @@ package common
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
 	"runtime"
@@ -71,9 +70,9 @@ type lifecycleMgr struct {
 	waitEverCalled       int32
 	outputFormat         OutputFormat
 	logSanitizer         pipeline.LogSanitizer
-	inputQueue           chan userInput // msg from the user
-	allowWatchInput      bool
-	allowCancelFromStdIn bool
+	inputQueue           chan userInput // msgs from the user
+	allowWatchInput      bool           // accept user inputs and place then in the inputQueue
+	allowCancelFromStdIn bool           // allow user to send in 'cancel' from the stdin to stop the current job
 }
 
 type userInput struct {
@@ -94,11 +93,7 @@ func (lcm *lifecycleMgr) watchInputs() {
 		// reads input until the first occurrence of \n in the input,
 		input, err := consoleReader.ReadString('\n')
 		timeReceived := time.Now()
-
-		// When the user cancel the job more than one time before providing the
-		// input there will be an EOF Error.
-		// TODO confirm the meaning of this
-		if err == io.EOF {
+		if err != nil {
 			continue
 		}
 
