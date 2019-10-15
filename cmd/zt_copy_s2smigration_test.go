@@ -48,6 +48,13 @@ const (
 
 var defaultS2SInvalideMetadataHandleOption = common.DefaultInvalidMetadataHandleOption
 
+func (s *cmdIntegrationSuite) SetUpTest(c *chk.C) {
+	// set up a dummy OAuth manager. There are no adverse effects to using a dummy app path as nothing is written to it in cmd currently, unless the user were to run azcopy login
+	// lucky for us, there's no test suite for azcopy login.
+	// even if there were, it'd just plop things in the CWD/dummy.
+	azcopyAppPathFolder = "dummy"
+}
+
 func (s *cmdIntegrationSuite) SetUpSuite(c *chk.C) {
 	// skip cleaning up the S3 account when not necessary
 	if isS3Disabled() {
