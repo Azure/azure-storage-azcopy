@@ -42,8 +42,9 @@ func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		jptm.ReportTransferDone()
 	}
 
-	// TODO confirm whether we should add a new flag to allow user to specify whether snapshots should be removed
-	_, err := srcBlobURL.Delete(jptm.Context(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+	// note: if deleteSnapshotsOption is 'only', which means deleting all the snapshots but keep the root blob
+	// we still count this delete operation as successful since we accomplished the desired outcome
+	_, err := srcBlobURL.Delete(jptm.Context(), jptm.DeleteSnapshotsOption().ToDeleteSnapshotsOptionType(), azblob.BlobAccessConditions{})
 	if err != nil {
 		if strErr, ok := err.(azblob.StorageError); ok {
 			// if the delete failed with err 404, i.e resource not found, then mark the transfer as success.

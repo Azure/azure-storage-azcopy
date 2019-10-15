@@ -112,6 +112,35 @@ type Version uint32
 type Status uint32
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+var EDeleteSnapshotsOption = DeleteSnapshotsOption(0)
+
+type DeleteSnapshotsOption uint8
+
+func (DeleteSnapshotsOption) None() DeleteSnapshotsOption    { return DeleteSnapshotsOption(0) }
+func (DeleteSnapshotsOption) Include() DeleteSnapshotsOption { return DeleteSnapshotsOption(1) }
+func (DeleteSnapshotsOption) Only() DeleteSnapshotsOption    { return DeleteSnapshotsOption(2) }
+
+func (d DeleteSnapshotsOption) String() string {
+	return enum.StringInt(d, reflect.TypeOf(d))
+}
+
+func (d *DeleteSnapshotsOption) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(d), s, true, true)
+	if err == nil {
+		*d = val.(DeleteSnapshotsOption)
+	}
+	return err
+}
+
+func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() azblob.DeleteSnapshotsOptionType {
+	if d == EDeleteSnapshotsOption.None() {
+		return azblob.DeleteSnapshotsOptionNone
+	}
+
+	return azblob.DeleteSnapshotsOptionType(strings.ToLower(d.String()))
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 type DeleteDestination uint32
 

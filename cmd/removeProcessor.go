@@ -37,7 +37,8 @@ func newRemoveTransferProcessor(cca *cookedCopyCmdArgs, numOfTransfersPerPart in
 		SourceSAS:      cca.sourceSAS,
 
 		// flags
-		LogLevel: cca.logVerbosity,
+		LogLevel:       cca.logVerbosity,
+		BlobAttributes: common.BlobTransferAttributes{DeleteSnapshotsOption: cca.deleteSnapshotsOption},
 	}
 
 	reportFirstPart := func(jobStarted bool) {
