@@ -123,6 +123,8 @@ func (*mockedLifecycleManager) GetEnvironmentVariable(env common.EnvironmentVari
 	return value
 }
 func (*mockedLifecycleManager) SetOutputFormat(common.OutputFormat) {}
+func (*mockedLifecycleManager) EnableInputWatcher()                 {}
+func (*mockedLifecycleManager) EnableCancelFromStdIn()              {}
 
 type dummyProcessor struct {
 	record []storedObject
