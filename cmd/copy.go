@@ -96,6 +96,7 @@ type rawCopyCmdArgs struct {
 	putMd5                   bool
 	md5ValidationOption      string
 	CheckLength              bool
+	deleteSnapshotsOption    string
 	// defines the type of the blob at the destination in case of upload / account to account copy
 	blobType      string
 	blockBlobTier string
@@ -400,6 +401,12 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 
+	// Make sure the given input is the one of the enums given by the blob SDK
+	err = cooked.deleteSnapshotsOption.Parse(raw.deleteSnapshotsOption)
+	if err != nil {
+		return cooked, err
+	}
+
 	if cooked.contentType != "" {
 		cooked.noGuessMimeType = true // As specified in the help text, noGuessMimeType is inferred here.
 	}
@@ -656,6 +663,7 @@ type cookedCopyCmdArgs struct {
 	cacheControl             string
 	noGuessMimeType          bool
 	preserveLastModifiedTime bool
+	deleteSnapshotsOption    common.DeleteSnapshotsOption
 	putMd5                   bool
 	md5ValidationOption      common.HashValidationOption
 	CheckLength              bool
@@ -873,6 +881,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
 			PutMd5:                   cca.putMd5,
 			MD5ValidationOption:      cca.md5ValidationOption,
+			DeleteSnapshotsOption:    cca.deleteSnapshotsOption,
 		},
 		// source sas is stripped from the source given by the user and it will not be stored in the part plan file.
 		SourceSAS: cca.sourceSAS,

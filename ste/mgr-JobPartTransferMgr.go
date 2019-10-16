@@ -82,6 +82,7 @@ type IJobPartTransferMgr interface {
 	LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string)
 	GetOverwritePrompter() *overwritePrompter
 	common.ILogger
+	DeleteSnapshotsOption() common.DeleteSnapshotsOption
 }
 
 type TransferInfo struct {
@@ -383,6 +384,10 @@ func (jptm *jobPartTransferMgr) ShouldPutMd5() bool {
 
 func (jptm *jobPartTransferMgr) MD5ValidationOption() common.HashValidationOption {
 	return jptm.jobPartMgr.(*jobPartMgr).localDstData().MD5VerificationOption
+}
+
+func (jptm *jobPartTransferMgr) DeleteSnapshotsOption() common.DeleteSnapshotsOption {
+	return jptm.jobPartMgr.(*jobPartMgr).deleteSnapshotsOption()
 }
 
 func (jptm *jobPartTransferMgr) BlobTypeOverride() common.BlobType {

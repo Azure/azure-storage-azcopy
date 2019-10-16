@@ -14,7 +14,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 9
+const DataSchemaVersion common.Version = 10
 
 const (
 	CustomHeaderMaxBytes = 256
@@ -74,6 +74,9 @@ type JobPartPlanHeader struct {
 	// jobStatus_doNotUse is a private member whose value can be accessed by Status and SetJobStatus
 	// jobStatus_doNotUse should not be directly accessed anywhere except by the Status and SetJobStatus
 	atomicJobStatus common.JobStatus
+
+	// For delete operation specify what to do with snapshots
+	DeleteSnapshotsOption common.DeleteSnapshotsOption
 }
 
 // Status returns the job status stored in JobPartPlanHeader in thread-safe manner
