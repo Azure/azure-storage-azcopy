@@ -189,13 +189,14 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 
 	chunkCount := uint32(0)
 	for startIndex := int64(0); startIndex < fileSize; startIndex += downloadChunkSize {
-		id := common.NewChunkID(info.Destination, startIndex)
 		adjustedChunkSize := downloadChunkSize
 
 		// compute exact size of the chunk
 		if startIndex+downloadChunkSize > fileSize {
 			adjustedChunkSize = fileSize - startIndex
 		}
+
+		id := common.NewChunkID(info.Destination, startIndex, adjustedChunkSize) // TODO: stop using adjustedChunkSize, below, and use the size that's in the ID
 
 		// Wait until its OK to schedule it
 		// To prevent excessive RAM consumption, we have a limit on the amount of scheduled-but-not-yet-saved data
