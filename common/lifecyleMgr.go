@@ -110,6 +110,7 @@ func (lcm *lifecycleMgr) watchInputs() {
 
 // get the answer to a question that was asked at a certain time
 // only user input after the specified time is returned to make sure that we are getting the right answer to our question
+// NOTE: to ask a question, go through Prompt, to guarantee that only 1 question is asked at a time
 func (lcm *lifecycleMgr) getInputAfterTime(time time.Time) string {
 	for {
 		msg := <-lcm.inputQueue
