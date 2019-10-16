@@ -127,7 +127,7 @@ func (d DeleteSnapshotsOption) String() string {
 func (d *DeleteSnapshotsOption) Parse(s string) error {
 	// allow empty to mean "None"
 	if s == "" {
-		*d = 0
+		*d = EDeleteSnapshotsOption.None()
 		return nil
 	}
 

@@ -5,11 +5,14 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
+
+var explainedSkippedRemoveOnce sync.Once
 
 func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 
@@ -32,6 +35,10 @@ func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		if status == common.ETransferStatus.Failed() {
 			jptm.LogError(info.Source, "DELETE ERROR ", err)
 		} else if status == common.ETransferStatus.SkippedBlobHasSnapshots() {
+			explainedSkippedRemoveOnce.Do(func() {
+				common.GetLifecycleMgr().Info("Blobs with snapshots are skipped. Please specify the --delete-snapshots flag for alternative behaviors.")
+			})
+
 			// log at error level so that it's clear why the transfer was skipped even when the log level is set to error
 			jptm.Log(pipeline.LogError, fmt.Sprintf("DELETE SKIPPED(blob has snapshots): %s", strings.Split(info.Destination, "?")[0]))
 		} else {
