@@ -3,7 +3,6 @@ package common
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
 	"runtime"
@@ -18,15 +17,21 @@ import (
 // only one instance of the formatter should exist
 var lcm = func() (lcmgr *lifecycleMgr) {
 	lcmgr = &lifecycleMgr{
-		msgQueue:      make(chan outputMessage, 1000),
-		progressCache: "",
-		cancelChannel: make(chan os.Signal, 1),
-		outputFormat:  EOutputFormat.Text(), // output text by default
-		logSanitizer:  NewAzCopyLogSanitizer(),
+		msgQueue:             make(chan outputMessage, 1000),
+		progressCache:        "",
+		cancelChannel:        make(chan os.Signal, 1),
+		outputFormat:         EOutputFormat.Text(), // output text by default
+		logSanitizer:         NewAzCopyLogSanitizer(),
+		inputQueue:           make(chan userInput, 1000),
+		allowCancelFromStdIn: false,
+		allowWatchInput:      false,
 	}
 
 	// kick off the single routine that processes output
 	go lcmgr.processOutputMessage()
+
+	// and process input
+	go lcmgr.watchInputs()
 
 	// Check if need to do CPU profiling, and do CPU profiling accordingly when azcopy life start.
 	lcmgr.checkAndStartCPUProfiling()
@@ -49,6 +54,8 @@ type LifecycleMgr interface {
 	GetEnvironmentVariable(EnvironmentVariable) string           // get the environment variable or its default value
 	ClearEnvironmentVariable(EnvironmentVariable)                // clears the environment variable
 	SetOutputFormat(OutputFormat)                                // change the output format of the entire application
+	EnableInputWatcher()                                         // depending on the command, we may allow user to give input through Stdin
+	EnableCancelFromStdIn()                                      // allow user to send in `cancel` to stop the job
 }
 
 func GetLifecycleMgr() LifecycleMgr {
@@ -57,12 +64,72 @@ func GetLifecycleMgr() LifecycleMgr {
 
 // single point of control for all outputs
 type lifecycleMgr struct {
-	msgQueue       chan outputMessage
-	progressCache  string // useful for keeping job progress on the last line
-	cancelChannel  chan os.Signal
-	waitEverCalled int32
-	outputFormat   OutputFormat
-	logSanitizer   pipeline.LogSanitizer
+	msgQueue             chan outputMessage
+	progressCache        string // useful for keeping job progress on the last line
+	cancelChannel        chan os.Signal
+	waitEverCalled       int32
+	outputFormat         OutputFormat
+	logSanitizer         pipeline.LogSanitizer
+	inputQueue           chan userInput // msgs from the user
+	allowWatchInput      bool           // accept user inputs and place then in the inputQueue
+	allowCancelFromStdIn bool           // allow user to send in 'cancel' from the stdin to stop the current job
+}
+
+type userInput struct {
+	timeReceived time.Time
+	content      string
+}
+
+// should be started in a single go routine
+func (lcm *lifecycleMgr) watchInputs() {
+	consoleReader := bufio.NewReader(os.Stdin)
+	for {
+		// sleep for a bit, the option might be enabled later
+		if !lcm.allowWatchInput {
+			time.Sleep(time.Microsecond * 500)
+			continue
+		}
+
+		// reads input until the first occurrence of \n in the input,
+		input, err := consoleReader.ReadString('\n')
+		timeReceived := time.Now()
+		if err != nil {
+			continue
+		}
+
+		// remove spaces before/after the content
+		msg := strings.TrimSpace(input)
+
+		if lcm.allowCancelFromStdIn && strings.EqualFold(msg, "cancel") {
+			lcm.cancelChannel <- os.Interrupt
+		} else {
+			lcm.inputQueue <- userInput{timeReceived: timeReceived, content: msg}
+		}
+	}
+}
+
+// get the answer to a question that was asked at a certain time
+// only user input after the specified time is returned to make sure that we are getting the right answer to our question
+// NOTE: to ask a question, go through Prompt, to guarantee that only 1 question is asked at a time
+func (lcm *lifecycleMgr) getInputAfterTime(time time.Time) string {
+	for {
+		msg := <-lcm.inputQueue
+
+		// keep reading until we find an input that came in after the user specified time
+		if msg.timeReceived.After(time) {
+			return msg.content
+		}
+
+		// otherwise keep waiting as it's possible that the user has not typed it in yet
+	}
+}
+
+func (lcm *lifecycleMgr) EnableInputWatcher() {
+	lcm.allowWatchInput = true
+}
+
+func (lcm *lifecycleMgr) EnableCancelFromStdIn() {
+	lcm.allowCancelFromStdIn = true
 }
 
 func (lcm *lifecycleMgr) ClearEnvironmentVariable(variable EnvironmentVariable) {
@@ -261,6 +328,7 @@ func (lcm *lifecycleMgr) processNoneOutput(msgToOutput outputMessage) {
 
 func (lcm *lifecycleMgr) processJSONOutput(msgToOutput outputMessage) {
 	msgType := msgToOutput.msgType
+	questionTime := time.Now()
 
 	// simply output the json message
 	// we assume the msgContent is already formatted correctly
@@ -272,7 +340,7 @@ func (lcm *lifecycleMgr) processJSONOutput(msgToOutput outputMessage) {
 		os.Exit(int(msgToOutput.exitCode))
 	} else if msgType == eOutputMessageType.Prompt() {
 		// read the response to the prompt and send it back through the channel
-		msgToOutput.inputChannel <- lcm.readInCleanLineFromStdIn()
+		msgToOutput.inputChannel <- lcm.getInputAfterTime(questionTime)
 	}
 }
 
@@ -325,6 +393,8 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 			fmt.Println(msgToOutput.msgContent)
 		}
 	case eOutputMessageType.Prompt():
+		questionTime := time.Now()
+
 		if lcm.progressCache != "" { // a progress status is already on the last line
 			// print the prompt from the beginning on current line
 			fmt.Print("\r")
@@ -345,7 +415,7 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 		}
 
 		// read the response to the prompt and send it back through the channel
-		msgToOutput.inputChannel <- lcm.readInCleanLineFromStdIn()
+		msgToOutput.inputChannel <- lcm.getInputAfterTime(questionTime)
 	}
 }
 
@@ -386,24 +456,6 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 			time.Sleep(2 * time.Second)
 		}
 	}()
-}
-
-// reads in a single line from stdin
-// trims the new line, and also the extra spaces around the content
-func (lcm *lifecycleMgr) readInCleanLineFromStdIn() string {
-	consoleReader := bufio.NewReader(os.Stdin)
-
-	// reads input until the first occurrence of \n in the input,
-	input, err := consoleReader.ReadString('\n')
-	// When the user cancel the job more than one time before providing the
-	// input there will be an EOF Error.
-	if err == io.EOF {
-		return ""
-	}
-
-	// remove the delimiter "\n" and spaces before/after the content
-	input = strings.TrimSpace(input)
-	return strings.Trim(input, " ")
 }
 
 func (lcm *lifecycleMgr) GetEnvironmentVariable(env EnvironmentVariable) string {

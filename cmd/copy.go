@@ -1295,6 +1295,12 @@ func init() {
 			} else if len(args) == 2 { // normal copy
 				raw.src = args[0]
 				raw.dst = args[1]
+
+				// under normal copy, we may ask the user questions such as whether to overwrite a file
+				glcm.EnableInputWatcher()
+				if cancelFromStdin {
+					glcm.EnableCancelFromStdIn()
+				}
 			} else {
 				return errors.New("wrong number of arguments, please refer to the help page on usage of this command")
 			}
