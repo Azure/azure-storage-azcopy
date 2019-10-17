@@ -302,76 +302,76 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
     # Test from S3 to blob copy.
     ##################################
     def test_copy_single_1kb_file_from_s3_to_blob(self):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_copy_single_file_from_x_to_x(src_bucket_url, "S3", dst_container_url, "Blob", 1)
 
     def test_copy_single_0kb_file_from_s3_to_blob(self):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_copy_single_file_from_x_to_x(src_bucket_url, "S3", dst_container_url, "Blob", 0)
 
     def test_copy_single_63mb_file_from_s3_to_blob(self):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_copy_single_file_from_x_to_x(src_bucket_url, "S3", dst_container_url, "Blob", 63 * 1024 * 1024)
 
     def test_copy_10_files_from_s3_bucket_to_blob_container(self):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_copy_n_files_from_x_bucket_to_x_bucket(src_bucket_url, "S3", dst_container_url, "Blob")
 
     def test_copy_10_files_from_s3_bucket_to_blob_account(self):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         self.util_test_copy_n_files_from_s3_bucket_to_blob_account(src_bucket_url, util.test_s2s_dst_blob_account_url)
 
     def test_copy_file_from_s3_bucket_to_blob_container_strip_top_dir_recursive(self):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_copy_file_from_x_bucket_to_x_bucket_strip_top_dir(src_bucket_url, "S3", dst_container_url, "Blob", True)
 
     def test_copy_file_from_s3_bucket_to_blob_container_strip_top_dir_non_recursive(self):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_copy_file_from_x_bucket_to_x_bucket_strip_top_dir(src_bucket_url, "S3", dst_container_url, "Blob", False)
     
     def test_copy_n_files_from_s3_dir_to_blob_dir(self):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_copy_n_files_from_x_dir_to_x_dir(src_bucket_url, "S3", dst_container_url, "Blob")
 
     def test_copy_n_files_from_s3_dir_to_blob_dir_strip_top_dir_recursive(self):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_copy_n_files_from_x_dir_to_x_dir_strip_top_dir(src_bucket_url, "S3", dst_container_url, "Blob", True)
 
     def test_copy_n_files_from_s3_dir_to_blob_dir_strip_top_dir_non_recursive(self):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
         self.util_test_copy_n_files_from_x_dir_to_x_dir_strip_top_dir(src_bucket_url, "S3", dst_container_url, "Blob", False)
 
     def test_copy_files_from_s3_service_to_blob_account(self):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         self.util_test_copy_files_from_x_account_to_x_account(
             util.test_s2s_src_s3_service_url, 
@@ -381,7 +381,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             self.bucket_name_s3_blob)
 
     def test_copy_single_file_from_s3_to_blob_propertyandmetadata(self):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
@@ -392,7 +392,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             "Blob")
 
     def test_copy_single_file_from_s3_to_blob_no_preserve_propertyandmetadata(self):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
@@ -404,7 +404,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             False)
     
     def test_copy_file_from_s3_bucket_to_blob_container_propertyandmetadata(self):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
@@ -415,7 +415,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             "Blob")
 
     def test_copy_file_from_s3_bucket_to_blob_container_no_preserve_propertyandmetadata(self):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
@@ -427,7 +427,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             False)
 
     def test_overwrite_copy_single_file_from_s3_to_blob(self):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
@@ -440,7 +440,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             True)
 
     def test_non_overwrite_copy_single_file_from_s3_to_blob(self):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
@@ -453,7 +453,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             False)
 
     def test_copy_single_file_from_s3_to_blob_with_url_encoded_slash_as_filename(self):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
@@ -467,7 +467,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             "%252F") #encoded name for %2F, as path will be decoded
 
     def test_copy_single_file_from_s3_to_blob_excludeinvalidmetadata(self):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         self.util_test_copy_single_file_from_s3_to_blob_handleinvalidmetadata(
             "", # By default it should be ExcludeIfInvalid
@@ -476,7 +476,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         )
 
     def test_copy_single_file_from_s3_to_blob_renameinvalidmetadata(self):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         self.util_test_copy_single_file_from_s3_to_blob_handleinvalidmetadata(
             "RenameIfInvalid", # By default it should be ExcludeIfInvalid
@@ -490,7 +490,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         invalidMetadataHandleOption,
         srcS3Metadata, 
         expectResolvedMetadata):
-        if 'S3_TESTS_OFF' in os.environ:
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
             self.skipTest('S3 testing is disabled for this smoke test run.')
         srcBucketURL = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dstBucketURL = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
