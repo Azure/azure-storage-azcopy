@@ -132,6 +132,7 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 					pipeline.WriteRequestWithResponse(b, prepareRequestForLogging(request), response.Response(), err) // only write full headers if debugging or error
 				} else {
 					writeRequestAsOneLine(b, prepareRequestForLogging(request))
+					writeActivityId(b, response.Response())
 				}
 
 				if logBody {
@@ -181,6 +182,17 @@ func isContextCancelledError(err error) bool {
 
 func writeRequestAsOneLine(b *bytes.Buffer, request *http.Request) {
 	fmt.Fprint(b, "   "+request.Method+" "+request.URL.String()+"\n")
+}
+
+func writeActivityId(b *bytes.Buffer, response *http.Response) {
+	if response == nil {
+		return
+	}
+	const key = "X-Ms-Request-Id" // use this, rather than client ID, because this one is easier to search by in Service logs
+	value, ok := response.Header[key]
+	if ok {
+		fmt.Fprintf(b, "   %s: %+v\n", key, value)
+	}
 }
 
 func prepareRequestForLogging(request pipeline.Request) *http.Request {
