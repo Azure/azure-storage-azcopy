@@ -41,6 +41,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/telemetry"
 )
 
 const pipingUploadParallelism = 5
@@ -123,6 +124,11 @@ type rawCopyCmdArgs struct {
 
 	// internal override to enforce strip-top-dir
 	internalOverrideStripTopDir bool
+	// White Glove
+	// specify where to post the telemetry events
+	reportingAPI string
+	// The project reference id
+	projectID string
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -220,6 +226,10 @@ func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Lo
 }
 
 func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, error) {
+
+	// White Glove - Set Webhook URI and Project ID UUID from the parameters passed in the command line
+	telemetry.ReportingAPIURI = raw.reportingAPI
+	telemetry.ProjectReferenceID = raw.projectID
 
 	cooked := cookedCopyCmdArgs{
 		jobID: jobId,
@@ -1084,6 +1094,8 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			if format == common.EOutputFormat.Json() {
 				jsonOutput, err := json.Marshal(summary)
 				common.PanicIfErr(err)
+				// White Glove: Raise Summary Telemetry Event
+				telemetry.RaiseSummaryEvent(summary)
 				return string(jsonOutput)
 			} else {
 				screenStats, logStats := formatExtraStats(cca.fromTo, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
@@ -1121,6 +1133,8 @@ Final Job Status: %v%s%s
 				if exists {
 					jobMan.Log(pipeline.LogInfo, logStats+"\n"+output)
 				}
+				// White Glove: Raise Summary Telemetry Event
+				telemetry.RaiseSummaryEvent(summary)
 				return output
 			}
 		}
@@ -1150,6 +1164,8 @@ Final Job Status: %v%s%s
 		if format == common.EOutputFormat.Json() {
 			jsonOutput, err := json.Marshal(summary)
 			common.PanicIfErr(err)
+			// White Glove: raise Progress Telemetry Event
+			telemetry.RaiseSummaryEvent(summary)
 			return string(jsonOutput)
 		} else {
 			// abbreviated output for cleanup jobs
@@ -1174,7 +1190,8 @@ Final Job Status: %v%s%s
 			// indicate whether constrained by disk or not
 			isBenchmark := cca.fromTo.From() == common.ELocation.Benchmark()
 			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, isBenchmark)
-
+			// White Glove: raise Progress Telemetry Event
+			telemetry.RaiseSummaryEvent(summary)
 			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
 				summary.PercentComplete,
 				summary.TransfersCompleted,
@@ -1382,4 +1399,11 @@ func init() {
 	// Hide the flush-threshold flag since it is implemented only for CI.
 	cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on accounts that have a hierarchical namespace.")
 	cpCmd.PersistentFlags().MarkHidden("flush-threshold")
+
+	// White Glove
+	// Get the reporting Webhook UIR
+	// Get the reporting project reference numbers
+	cpCmd.PersistentFlags().StringVar(&raw.reportingAPI, "reporting-api", "", "URI of the Webhook where telemetry events should be posted.")
+	cpCmd.PersistentFlags().StringVar(&raw.projectID, "project-id", "", "The project reference number.")
+
 }

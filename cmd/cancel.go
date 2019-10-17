@@ -25,6 +25,7 @@ import (
 	"fmt"
 
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/telemetry"
 	"github.com/spf13/cobra"
 )
 
@@ -53,6 +54,8 @@ type cookedCancelCmdArgs struct {
 // dispatches the cancel Job order to the storage engine
 func (cca cookedCancelCmdArgs) process() error {
 	var cancelJobResponse common.CancelPauseResumeResponse
+	// White Glove: raise cancellation Telemetry event
+	telemetry.RaiseCancellationEvent(cca.jobID.String())
 	Rpc(common.ERpcCmd.CancelJob(), cca.jobID, &cancelJobResponse)
 	if !cancelJobResponse.CancelledPauseResumed {
 		return errors.New(cancelJobResponse.ErrorMsg)

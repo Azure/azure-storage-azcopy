@@ -114,6 +114,7 @@ type jobLogger struct {
 	sanitizer         pipeline.LogSanitizer
 }
 
+// NewJobLogger creates an initialize jobLogger structure
 func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, appLogger ILogger, logFileFolder string) ILoggerResetable {
 	if appLogger == nil {
 		panic("You must pass a appLogger when creating a JobLogger")
@@ -149,6 +150,9 @@ func (jl *jobLogger) OpenLog() {
 	jl.logger.Println("OS-Environment ", runtime.GOOS)
 	jl.logger.Println("OS-Architecture ", runtime.GOARCH)
 	jl.logger.Println(utcMessage)
+	// White Glove - Report hostname
+	hostname, _ := os.Hostname()
+	jl.logger.Println("HostName ", hostname)
 }
 
 func (jl *jobLogger) MinimumLogLevel() pipeline.LogLevel {
@@ -181,6 +185,10 @@ func (jl jobLogger) Log(loglevel pipeline.LogLevel, msg string) {
 		msg = strings.Replace(msg, "\n", lineEnding, -1)
 	}
 	if jl.ShouldLog(loglevel) {
+		// Todo: White Glove - Tap into the full log output
+		// I'm still undecided as to whether this should be done while running or
+		// just copy the log file at the end of the process
+		//telemetry.RaiseLoginEvent(jobid, msg)
 		jl.logger.Println(msg)
 	}
 }
