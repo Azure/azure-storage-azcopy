@@ -32,6 +32,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -73,6 +74,8 @@ type rawCopyCmdArgs struct {
 	excludePath           string
 	includeFileAttributes string
 	excludeFileAttributes string
+	legacyInclude         string // used only for warnings
+	legacyExclude         string // used only for warnings
 
 	// filters from flags
 	listOfFilesToCopy string
@@ -308,9 +311,16 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	// This saves us time because we know *exactly* what we're looking for right off the bat.
 	// Note that exclude-path is handled as a filter unlike include-path.
 
+	if raw.legacyInclude != "" || raw.legacyExclude != "" {
+		return cooked, fmt.Errorf("the include and exclude parameters have been replaced by include-pattern; include-path; exclude-pattern and exclude-path. For info, run: azcopy copy help")
+	}
+
 	if (len(raw.include) > 0 || len(raw.exclude) > 0) && cooked.fromTo == common.EFromTo.BlobFSTrash() {
 		return cooked, fmt.Errorf("include/exclude flags are not supported for this destination")
 	}
+
+	// warn on exclude unsupported wildcards here. Include have to be later, to cover list-of-files
+	raw.warnIfHasWildcard(excludeWarningOncer, "exclude-path", raw.excludePath)
 
 	// unbuffered so this reads as we need it to rather than all at once in bulk
 	listChan := make(chan string)
@@ -329,6 +339,14 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 
 	go func() {
 		defer close(listChan)
+
+		addToChannel := func(v string, paramName string) {
+			// empty strings should be ignored, otherwise the source root itself is selected
+			if len(v) > 0 {
+				raw.warnIfHasWildcard(includeWarningOncer, paramName, v)
+				listChan <- v
+			}
+		}
 
 		if f != nil {
 			scanner := bufio.NewScanner(f)
@@ -364,10 +382,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 					headerLineNum++
 				}
 
-				// empty strings should be ignored, otherwise the source root itself is selected
-				if len(v) > 0 {
-					listChan <- v
-				}
+				addToChannel(v, "list-of-files")
 			}
 		}
 
@@ -375,10 +390,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		includePathList := raw.parsePatterns(raw.includePath)
 
 		for _, v := range includePathList {
-			// empty strings should be ignored, otherwise the source root itself is selected
-			if len(v) > 0 {
-				listChan <- v
-			}
+			addToChannel(v, "include-path")
 		}
 	}()
 
@@ -594,6 +606,19 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	cooked.excludeFileAttributes = raw.parsePatterns(raw.excludeFileAttributes)
 
 	return cooked, nil
+}
+
+var excludeWarningOncer = &sync.Once{}
+var includeWarningOncer = &sync.Once{}
+
+func (raw *rawCopyCmdArgs) warnIfHasWildcard(oncer *sync.Once, paramName string, value string) {
+	if strings.Contains(value, "*") || strings.Contains(value, "?") {
+		oncer.Do(func() {
+			glcm.Info(fmt.Sprintf("*** Warning *** The %s parameter does not support wildcards. The wildcard "+
+				"character provided will be interpreted literally and will not have any wildcard effect. To use wildcards "+
+				"(in filenames only, not paths) use include-pattern or exclude-pattern", paramName))
+		})
+	}
 }
 
 // When other commands use the copy command arguments to cook cook, set the blobType to None and validation option
@@ -1393,6 +1418,12 @@ func init() {
 	// Hide the list-of-files flag since it is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().MarkHidden("list-of-files")
 	cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
+
+	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
+	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")
+	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "Legacy exclude param. DO NOT USE")
+	cpCmd.PersistentFlags().MarkHidden("include")
+	cpCmd.PersistentFlags().MarkHidden("exclude")
 
 	// Hide the flush-threshold flag since it is implemented only for CI.
 	cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on accounts that have a hierarchical namespace.")
