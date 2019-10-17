@@ -74,6 +74,8 @@ type rawCopyCmdArgs struct {
 	excludePath           string
 	includeFileAttributes string
 	excludeFileAttributes string
+	legacyInclude         string // used only for warnings
+	legacyExclude         string // used only for warnings
 
 	// filters from flags
 	listOfFilesToCopy string
@@ -308,6 +310,10 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	// This handles both list-of-files and include-path as a list enumerator.
 	// This saves us time because we know *exactly* what we're looking for right off the bat.
 	// Note that exclude-path is handled as a filter unlike include-path.
+
+	if raw.legacyInclude != "" || raw.legacyExclude != "" {
+		return cooked, fmt.Errorf("the include and exclude parameters have been replaced by include-pattern; include-path; exclude-pattern and exclude-path. For info, run: azcopy copy help")
+	}
 
 	if (len(raw.include) > 0 || len(raw.exclude) > 0) && cooked.fromTo == common.EFromTo.BlobFSTrash() {
 		return cooked, fmt.Errorf("include/exclude flags are not supported for this destination")
@@ -1412,6 +1418,12 @@ func init() {
 	// Hide the list-of-files flag since it is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().MarkHidden("list-of-files")
 	cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
+
+	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
+	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")
+	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "Legacy exclude param. DO NOT USE")
+	cpCmd.PersistentFlags().MarkHidden("include")
+	cpCmd.PersistentFlags().MarkHidden("exclude")
 
 	// Hide the flush-threshold flag since it is implemented only for CI.
 	cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on accounts that have a hierarchical namespace.")
