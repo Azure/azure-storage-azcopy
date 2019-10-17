@@ -32,6 +32,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -312,6 +313,9 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		return cooked, fmt.Errorf("include/exclude flags are not supported for this destination")
 	}
 
+	// warn on exclude unsupported wildcards here. Include have to be later, to cover list-of-files
+	raw.warnIfHasWildcard(excludeWarningOncer, "exclude-path", raw.excludePath)
+
 	// unbuffered so this reads as we need it to rather than all at once in bulk
 	listChan := make(chan string)
 	var f *os.File
@@ -329,6 +333,14 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 
 	go func() {
 		defer close(listChan)
+
+		addToChannel := func(v string, paramName string) {
+			// empty strings should be ignored, otherwise the source root itself is selected
+			if len(v) > 0 {
+				raw.warnIfHasWildcard(includeWarningOncer, paramName, v)
+				listChan <- v
+			}
+		}
 
 		if f != nil {
 			scanner := bufio.NewScanner(f)
@@ -364,10 +376,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 					headerLineNum++
 				}
 
-				// empty strings should be ignored, otherwise the source root itself is selected
-				if len(v) > 0 {
-					listChan <- v
-				}
+				addToChannel(v, "list-of-files")
 			}
 		}
 
@@ -375,10 +384,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		includePathList := raw.parsePatterns(raw.includePath)
 
 		for _, v := range includePathList {
-			// empty strings should be ignored, otherwise the source root itself is selected
-			if len(v) > 0 {
-				listChan <- v
-			}
+			addToChannel(v, "include-path")
 		}
 	}()
 
@@ -594,6 +600,19 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	cooked.excludeFileAttributes = raw.parsePatterns(raw.excludeFileAttributes)
 
 	return cooked, nil
+}
+
+var excludeWarningOncer = &sync.Once{}
+var includeWarningOncer = &sync.Once{}
+
+func (raw *rawCopyCmdArgs) warnIfHasWildcard(oncer *sync.Once, paramName string, value string) {
+	if strings.Contains(value, "*") || strings.Contains(value, "?") {
+		oncer.Do(func() {
+			glcm.Info(fmt.Sprintf("*** Warning *** The %s parameter does not support wildcards. The wildcard "+
+				"character provided will be interpreted literally and will not have any wildcard effect. To use wildcards "+
+				"(in filenames only, not paths) use include-pattern or exclude-pattern", paramName))
+		})
+	}
 }
 
 // When other commands use the copy command arguments to cook cook, set the blobType to None and validation option
