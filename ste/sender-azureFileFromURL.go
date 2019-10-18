@@ -21,15 +21,14 @@
 package ste
 
 import (
-	"net/url"
-
 	"github.com/Azure/azure-pipeline-go/pipeline"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type urlToAzureFileCopier struct {
 	azureFileSenderBase
-	srcURL url.URL
+	srcInfo IRemoteSourceInfoProvider
 }
 
 func newURLToAzureFileCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
@@ -40,12 +39,7 @@ func newURLToAzureFileCopier(jptm IJobPartTransferMgr, destination string, p pip
 		return nil, err
 	}
 
-	srcURL, err := srcInfoProvider.PreSignedSourceURL()
-	if err != nil {
-		return nil, err
-	}
-
-	return &urlToAzureFileCopier{azureFileSenderBase: *senderBase, srcURL: *srcURL}, nil
+	return &urlToAzureFileCopier{azureFileSenderBase: *senderBase, srcInfo: srcInfoProvider.(IRemoteSourceInfoProvider)}, nil
 }
 
 func (u *urlToAzureFileCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
@@ -64,8 +58,19 @@ func (u *urlToAzureFileCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 		if err := u.pacer.RequestTrafficAllocation(u.jptm.Context(), adjustedChunkSize); err != nil {
 			u.jptm.FailActiveUpload("Pacing block (global level)", err)
 		}
-		_, err := u.fileURL.UploadRangeFromURL(
-			u.ctx, u.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize)
+
+		// Why does this live in here now?
+		// Basically, PreSignedSourceURL appends an updated SAS token now. We need to get the new SAS token if the old one expires.
+		// This does it without adding a bunch of new architecture into STE
+		srcURL, err := u.srcInfo.PreSignedSourceURL()
+
+		if err != nil {
+			u.jptm.FailActiveS2SCopy("Getting source URL", err)
+			return
+		}
+
+		_, err = u.fileURL.UploadRangeFromURL(
+			u.ctx, *srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize)
 		if err != nil {
 			u.jptm.FailActiveS2SCopy("Uploading range from URL", err)
 			return

@@ -23,7 +23,6 @@ package ste
 import (
 	"bytes"
 	"context"
-	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -34,7 +33,7 @@ import (
 type urlToBlockBlobCopier struct {
 	blockBlobSenderBase
 
-	srcURL url.URL
+	srcInfo IRemoteSourceInfoProvider
 }
 
 func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
@@ -52,14 +51,9 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pip
 		return nil, err
 	}
 
-	srcURL, err := srcInfoProvider.PreSignedSourceURL()
-	if err != nil {
-		return nil, err
-	}
-
 	return &urlToBlockBlobCopier{
 		blockBlobSenderBase: *senderBase,
-		srcURL:              *srcURL}, nil
+		srcInfo:             srcInfoProvider}, nil
 }
 
 // Returns a chunk-func for blob copies
@@ -139,7 +133,18 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
-		_, err := c.destBlockBlobURL.StageBlockFromURL(ctxWithLatestServiceVersion, encodedBlockID, c.srcURL,
+
+		// Why does this live in here now?
+		// Basically, PreSignedSourceURL appends an updated SAS token now. We need to get the new SAS token if the old one expires.
+		// This does it without adding a bunch of new architecture into STE
+		srcURL, err := c.srcInfo.PreSignedSourceURL()
+
+		if err != nil {
+			c.jptm.FailActiveS2SCopy("Getting source URL", err)
+			return
+		}
+
+		_, err = c.destBlockBlobURL.StageBlockFromURL(ctxWithLatestServiceVersion, encodedBlockID, *srcURL,
 			id.OffsetInFile(), adjustedChunkSize, azblob.LeaseAccessConditions{}, azblob.ModifiedAccessConditions{})
 		if err != nil {
 			c.jptm.FailActiveSend("Staging block from URL", err)

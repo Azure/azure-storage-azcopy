@@ -81,6 +81,7 @@ type IJobPartTransferMgr interface {
 	ChunkStatusLogger() common.ChunkStatusLogger
 	LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string)
 	GetOverwritePrompter() *overwritePrompter
+	GetUserDelegationAuthenticationManagerInstance() *userDelegationAuthenticationManager
 	common.ILogger
 	DeleteSnapshotsOption() common.DeleteSnapshotsOption
 }
@@ -187,7 +188,7 @@ func (jptm *jobPartTransferMgr) GetSourceCompressionType() (common.CompressionTy
 
 func (jptm *jobPartTransferMgr) getSrcUserDelegationSAS(src string) (string, error) {
 	// panics if udam isn't found
-	udam := jptm.jobPartMgr.GetUserDelegationAuthenticationManagerInstance()
+	udam := jptm.GetUserDelegationAuthenticationManagerInstance()
 
 	objectURL, err := url.Parse(src)
 
@@ -200,6 +201,10 @@ func (jptm *jobPartTransferMgr) getSrcUserDelegationSAS(src string) (string, err
 	return udam.GetUserDelegationSASForURL(blobURLParts)
 }
 
+func (jptm *jobPartTransferMgr) GetUserDelegationAuthenticationManagerInstance() *userDelegationAuthenticationManager {
+	return jptm.jobPartMgr.GetUserDelegationAuthenticationManagerInstance()
+}
+
 func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	plan := jptm.jobPartMgr.Plan()
 	src, dst := plan.TransferSrcDstStrings(jptm.transferIndex)
@@ -210,16 +215,16 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
 
 	// make use of UDAM ONLY in the case of blob -> elsewhere, AND the source SAS is not present to start with.
-	fromTo := jptm.FromTo()
-	if fromTo.IsS2S() && fromTo.From() == common.ELocation.Blob() {
-		// Check srcSAS because an S2S transfer requires that the source is either public OR has a SAS token
-		if len(srcSAS) == 0 {
-			// We're going to safely ignore the error here.
-			// Realistically, there will NEVER be an error.
-			// But, if there is, we get "" back. So there's no need to worry, because srcSAS was already empty.
-			srcSAS, _ = jptm.getSrcUserDelegationSAS(src)
-		}
-	}
+	// fromTo := jptm.FromTo()
+	// if fromTo.IsS2S() && fromTo.From() == common.ELocation.Blob() {
+	// 	// Check srcSAS because an S2S transfer requires that the source is either public OR has a SAS token
+	// 	if len(srcSAS) == 0 {
+	// 		// We're going to safely ignore the error here.
+	// 		// Realistically, there will NEVER be an error.
+	// 		// But, if there is, we get "" back. So there's no need to worry, because srcSAS was already empty.
+	// 		srcSAS, _ = jptm.getSrcUserDelegationSAS(src)
+	// 	}
+	// }
 
 	// If the length of destination SAS is greater than 0
 	// it means the destination is remote url and destination SAS

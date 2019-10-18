@@ -22,17 +22,16 @@ package ste
 
 import (
 	"context"
-	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type urlToAppendBlobCopier struct {
 	appendBlobSenderBase
-
-	srcURL url.URL
+	srcInfo IRemoteSourceInfoProvider
 }
 
 func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
@@ -41,14 +40,10 @@ func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, p pi
 		return nil, err
 	}
 
-	srcURL, err := srcInfoProvider.PreSignedSourceURL()
-	if err != nil {
-		return nil, err
-	}
-
 	return &urlToAppendBlobCopier{
 		appendBlobSenderBase: *senderBase,
-		srcURL:               *srcURL}, nil
+		srcInfo:              srcInfoProvider,
+	}, nil
 }
 
 // Returns a chunk-func for blob copies
@@ -62,7 +57,18 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
-		_, err := c.destAppendBlobURL.AppendBlockFromURL(ctxWithLatestServiceVersion, c.srcURL, id.OffsetInFile(), adjustedChunkSize,
+
+		// Why does this live in here now?
+		// Basically, PreSignedSourceURL appends an updated SAS token now. We need to get the new SAS token if the old one expires.
+		// This does it without adding a bunch of new architecture into STE
+		srcURL, err := c.srcInfo.PreSignedSourceURL()
+
+		if err != nil {
+			c.jptm.FailActiveS2SCopy("Getting source URL", err)
+			return
+		}
+
+		_, err = c.destAppendBlobURL.AppendBlockFromURL(ctxWithLatestServiceVersion, *srcURL, id.OffsetInFile(), adjustedChunkSize,
 			azblob.AppendBlobAccessConditions{
 				AppendPositionAccessConditions: azblob.AppendPositionAccessConditions{IfAppendPositionEqual: id.OffsetInFile()},
 			}, azblob.ModifiedAccessConditions{}, nil)

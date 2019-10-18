@@ -21,6 +21,7 @@ type userDelegationAuthenticationManager struct {
 	startTime  time.Time
 	expiryTime time.Time
 	credential azblob.UserDelegationCredential
+	serviceURL azblob.ServiceURL
 	// This is a mostly-read scenario. Therefore, we treat the SAS map as an atomic value, and apply a write mutex to the map.
 	// We then, whenever we're attempting to get a SAS token for a container, check if it's present first.
 	// If it's not present, we start attempting to create the token. In order to do so, we lock the write mutex.
@@ -33,28 +34,59 @@ type userDelegationAuthenticationManager struct {
 // newUserDelegationAuthenticationManager uses an azblob service URL to obtain a user delegation credential, and returns a new userDelegationAuthenticationManager
 // serviceURL should have adequate permissions to generate a set of user delegation credentials.
 func newUserDelegationAuthenticationManager(serviceURL azblob.ServiceURL) (userDelegationAuthenticationManager, error) {
-	authManager := userDelegationAuthenticationManager{}
-	// Create a user delegation
-	authManager.startTime = time.Now()
-	authManager.expiryTime = authManager.startTime.Add(time.Hour * 24 * 7)
+	authManager := userDelegationAuthenticationManager{serviceURL: serviceURL}
 
-	keyInfo := azblob.NewKeyInfo(authManager.startTime, authManager.expiryTime)
-
-	JobsAdmin.LogToJobLog("Attempting to obtain a User Delegation Credential for the blob source.")
-	var err error
-	authManager.credential, err = serviceURL.GetUserDelegationCredential(steCtx, keyInfo, nil, nil)
+	err := authManager.refreshUDKInternal()
 
 	if err != nil {
-		JobsAdmin.LogToJobLog("Failed to obtain a User Delegation Credential for the blob source.")
-		return authManager, err
+		return userDelegationAuthenticationManager{}, err
+	}
+
+	// Start our refresh loop
+	go func() {
+		for {
+			<-time.After((time.Hour * 24 * 6) + (time.Hour * 12))
+			_ = authManager.refreshUDKInternal() // We don't need to worry about a retry here.
+		}
+	}()
+
+	return authManager, nil
+}
+
+func (u *userDelegationAuthenticationManager) refreshUDKInternal() error {
+	// First, grab the SAS token map lock. We need to flush it.
+	u.sasMapWriteMutex.Lock()
+	defer u.sasMapWriteMutex.Unlock()
+	// Flush the SAS token map-- Everything in there is now invalid.
+	u.sasMap.Store(make(map[string]string))
+
+	// Create a new start/expiry time.
+	u.startTime = time.Now()
+	u.expiryTime = u.startTime.Add(time.Hour * 24 * 7)
+	keyInfo := azblob.NewKeyInfo(u.startTime, u.expiryTime)
+
+	if JobsAdmin != nil {
+		JobsAdmin.LogToJobLog("Attempting to refresh the User Delegation Credential for the blob source.")
+	}
+
+	var err error
+	u.credential, err = u.serviceURL.GetUserDelegationCredential(steCtx, keyInfo, nil, nil)
+
+	if err != nil {
+		if JobsAdmin != nil {
+			JobsAdmin.LogToJobLog("Failed to obtain a User Delegation Credential for the blob source.")
+		}
+
+		// Clear the user delegation credential-- it is now invalid.
+		u.credential = azblob.UserDelegationCredential{}
+		return err
 	}
 
 	if JobsAdmin != nil {
 		JobsAdmin.LogToJobLog("Successfully obtained a User Delegation Credential for the blob source.")
 	}
-	authManager.sasMap.Store(make(map[string]string))
 
-	return authManager, nil
+	return nil
 }
 
 func (u *userDelegationAuthenticationManager) GetUserDelegationSASForURL(blobURLParts azblob.BlobURLParts) (string, error) {

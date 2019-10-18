@@ -21,14 +21,20 @@
 package ste
 
 import (
+	"net/url"
 	"time"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // Source info provider for Azure blob
 type blobSourceInfoProvider struct {
 	defaultRemoteSourceInfoProvider
+	udamInstance    *userDelegationAuthenticationManager
+	stashedURLNoSAS *url.URL
+	needsSAS        bool
 }
 
 func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
@@ -38,8 +44,38 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 	}
 
 	base := b.(*defaultRemoteSourceInfoProvider)
+	fromTo := jptm.FromTo()
 
-	return &blobSourceInfoProvider{defaultRemoteSourceInfoProvider: *base}, nil
+	return &blobSourceInfoProvider{
+		defaultRemoteSourceInfoProvider: *base,
+		udamInstance:                    jptm.GetUserDelegationAuthenticationManagerInstance(),
+		needsSAS:                        fromTo.IsS2S() && fromTo.From() == common.ELocation.Blob(),
+	}, nil
+}
+
+func (p *blobSourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
+	if p.stashedURLNoSAS == nil {
+		var err error
+		p.stashedURLNoSAS, err = p.defaultRemoteSourceInfoProvider.PreSignedSourceURL()
+
+		if err != nil {
+			return p.stashedURLNoSAS, err
+		}
+	}
+
+	result := p.stashedURLNoSAS
+	if p.needsSAS {
+		bURLParts := azblob.NewBlobURLParts(*p.stashedURLNoSAS)
+
+		// If there's not already a SAS on the source, append it!
+		if bURLParts.SAS.Encode() == "" {
+			result.RawQuery, _ = p.udamInstance.GetUserDelegationSASForURL(bURLParts)
+		} else {
+			p.needsSAS = false
+		}
+	}
+
+	return result, nil
 }
 
 func (p *blobSourceInfoProvider) BlobTier() azblob.AccessTierType {

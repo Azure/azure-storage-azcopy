@@ -22,7 +22,6 @@ package ste
 
 import (
 	"context"
-	"net/url"
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -34,7 +33,7 @@ import (
 type urlToPageBlobCopier struct {
 	pageBlobSenderBase
 
-	srcURL             url.URL
+	srcInfo            IRemoteSourceInfoProvider
 	pageRangeOptimizer *pageRangeOptimizer // nil if src is not a page blob
 }
 
@@ -64,7 +63,7 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipe
 
 	return &urlToPageBlobCopier{
 		pageBlobSenderBase: *senderBase,
-		srcURL:             *srcURL,
+		srcInfo:            srcInfoProvider,
 		pageRangeOptimizer: pageRangeOptimizer}, nil
 }
 
@@ -113,8 +112,19 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block (global level)", err)
 		}
-		_, err := c.destPageBlobURL.UploadPagesFromURL(
-			enrichedContext, c.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize, nil,
+
+		// Why does this live in here now?
+		// Basically, PreSignedSourceURL appends an updated SAS token now. We need to get the new SAS token if the old one expires.
+		// This does it without adding a bunch of new architecture into STE
+		srcURL, err := c.srcInfo.PreSignedSourceURL()
+
+		if err != nil {
+			c.jptm.FailActiveS2SCopy("Getting source URL", err)
+			return
+		}
+
+		_, err = c.destPageBlobURL.UploadPagesFromURL(
+			enrichedContext, *srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize, nil,
 			azblob.PageBlobAccessConditions{}, azblob.ModifiedAccessConditions{})
 		if err != nil {
 			c.jptm.FailActiveS2SCopy("Uploading page from URL", err)
@@ -143,6 +153,8 @@ type pageRangeOptimizer struct {
 	srcPageList    *azblob.PageList // nil if src is not a page blob, or it was not possible to get a response
 }
 
+// With the introduction of regenerated User Delegation SAS tokens, sender-*FromURL has to constantly get new source URLs to ensure it's not using an expired URL.
+// You'd think this function using a single URL would cause problems. But no, it's only called during the prologue. Which means, we already have a value
 func newPageRangeOptimizer(srcPageBlobURL azblob.PageBlobURL, ctx context.Context) *pageRangeOptimizer {
 	return &pageRangeOptimizer{srcPageBlobURL: srcPageBlobURL, ctx: ctx}
 }
