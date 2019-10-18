@@ -185,6 +185,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		S2SInvalidMetadataHandleOption: order.S2SInvalidMetadataHandleOption,
 		DestLengthValidation:           order.DestLengthValidation,
 		atomicJobStatus:                common.EJobStatus.InProgress(), // We default to InProgress
+		DeleteSnapshotsOption:          order.BlobAttributes.DeleteSnapshotsOption,
 	}
 
 	// Copy any strings into their respective fields

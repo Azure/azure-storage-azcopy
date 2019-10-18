@@ -1,6 +1,20 @@
 
 # Change Log
 
+## Version 10.3.1
+
+### New features
+
+1. Added helpful deprecation notice for legacy include/exclude flags.
+1. Added back request ID at log level INFO.
+1. Added back cancel-from-stdin option for partner integration.
+1. Added flag to define delete snapshot options for the remove command.
+
+### Bug fix
+
+1. Fixed race condition in shutdown of decompressingWriter.
+1. Made progress reporting more accurate.
+
 ## Version 10.3.0
 
 ### Breaking changes

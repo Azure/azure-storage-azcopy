@@ -42,7 +42,6 @@ type IJobPartTransferMgr interface {
 	ShouldDecompress() bool
 	GetSourceCompressionType() (common.CompressionType, error)
 	ReportChunkDone(id common.ChunkID) (lastChunk bool, chunksDone uint32)
-	UnsafeReportChunkDone() (lastChunk bool, chunksDone uint32)
 	TransferStatusIgnoringCancellation() common.TransferStatus
 	SetStatus(status common.TransferStatus)
 	SetErrorCode(errorCode int32)
@@ -83,6 +82,7 @@ type IJobPartTransferMgr interface {
 	LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string)
 	GetOverwritePrompter() *overwritePrompter
 	common.ILogger
+	DeleteSnapshotsOption() common.DeleteSnapshotsOption
 }
 
 type TransferInfo struct {
@@ -135,7 +135,6 @@ type jobPartTransferMgr struct {
 
 	// used to show whether THIS jptm holds the destination lock
 	atomicDestLockHeldIndicator uint32
-
 
 	jobPartMgr          IJobPartMgr // Refers to the "owning" Job Part
 	jobPartPlanTransfer *JobPartPlanTransfer
@@ -387,6 +386,10 @@ func (jptm *jobPartTransferMgr) MD5ValidationOption() common.HashValidationOptio
 	return jptm.jobPartMgr.(*jobPartMgr).localDstData().MD5VerificationOption
 }
 
+func (jptm *jobPartTransferMgr) DeleteSnapshotsOption() common.DeleteSnapshotsOption {
+	return jptm.jobPartMgr.(*jobPartMgr).deleteSnapshotsOption()
+}
+
 func (jptm *jobPartTransferMgr) BlobTypeOverride() common.BlobType {
 	return jptm.jobPartMgr.BlobTypeOverride()
 }
@@ -425,17 +428,8 @@ func (jptm *jobPartTransferMgr) ReportChunkDone(id common.ChunkID) (lastChunk bo
 
 	// track progress
 	if jptm.IsLive() {
-		info := jptm.Info()
-		successBytesDelta := common.AtomicMorphInt64(&jptm.atomicSuccessfulBytes, func(old int64) (new int64, delta interface{}) {
-			new = old + int64(info.BlockSize) // assume we just completed a full block
-			if new > info.SourceSize {        // but if that assumption gives over-counts total bytes in blob, make a correction
-				new = info.SourceSize // (we do it this way because we don't have the actual chunk size available to us here)
-			}
-			delta = new - old
-			return
-		}).(int64)
-
-		JobsAdmin.AddSuccessfulBytesInActiveFiles(successBytesDelta)
+		atomic.AddInt64(&jptm.atomicSuccessfulBytes, id.Length())
+		JobsAdmin.AddSuccessfulBytesInActiveFiles(id.Length())
 	}
 
 	// Do our actual processing
@@ -446,11 +440,6 @@ func (jptm *jobPartTransferMgr) ReportChunkDone(id common.ChunkID) (lastChunk bo
 		JobsAdmin.AddSuccessfulBytesInActiveFiles(-atomic.LoadInt64(&jptm.atomicSuccessfulBytes)) // subtract our bytes from the active files bytes, because we are done now
 	}
 	return lastChunk, chunksDone
-}
-
-// TODO: phase this method out.  It's just here to support parts of the codebase that don't yet have chunk IDs
-func (jptm *jobPartTransferMgr) UnsafeReportChunkDone() (lastChunk bool, chunksDone uint32) {
-	return jptm.ReportChunkDone(common.NewChunkID("", 0))
 }
 
 // If an automatic action has been specified for after the last chunk, run it now

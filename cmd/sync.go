@@ -47,6 +47,8 @@ type rawSyncCmdArgs struct {
 	exclude               string
 	includeFileAttributes string
 	excludeFileAttributes string
+	legacyInclude         string // for warning messages only
+	legacyExclude         string // for warning messages only
 
 	followSymlinks      bool
 	putMd5              bool
@@ -150,6 +152,11 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	err = cooked.deleteDestination.Parse(raw.deleteDestination)
 	if err != nil {
 		return cooked, err
+	}
+
+	// warn on legacy filters
+	if raw.legacyInclude != "" || raw.legacyExclude != "" {
+		return cooked, fmt.Errorf("the include and exclude parameters have been replaced by include-pattern and exclude-pattern. They work on filenames only (not paths)")
 	}
 
 	// parse the filter patterns
@@ -523,6 +530,11 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
+			glcm.EnableInputWatcher()
+			if cancelFromStdin {
+				glcm.EnableCancelFromStdIn()
+			}
+
 			cooked, err := raw.cook()
 			if err != nil {
 				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error())
@@ -549,6 +561,12 @@ func init() {
 		"If set to prompt, the user will be asked a question before scheduling files and blobs for deletion. (default 'false').")
 	syncCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob or file. (By default the hash is NOT created.) Only available when uploading.")
 	syncCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "check-md5", common.DefaultHashValidationOption.String(), "Specifies how strictly MD5 hashes should be validated when downloading. This option is only available when downloading. Available values include: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing. (default 'FailIfDifferent').")
+
+	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
+	syncCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")
+	syncCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "Legacy exclude param. DO NOT USE")
+	syncCmd.PersistentFlags().MarkHidden("include")
+	syncCmd.PersistentFlags().MarkHidden("exclude")
 
 	// TODO follow sym link is not implemented, clarify behavior first
 	//syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when performing sync from local file system.")

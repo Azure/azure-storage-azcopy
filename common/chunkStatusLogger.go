@@ -34,6 +34,7 @@ import (
 type ChunkID struct {
 	Name         string
 	offsetInFile int64
+	length       int64
 
 	// What is this chunk's progress currently waiting on?
 	// Must be a pointer, because the ChunkID itself is a struct.
@@ -55,12 +56,13 @@ type ChunkID struct {
 	//   And maybe at that point, we would also put Length into chunkID, and use that in jptm.ReportChunkDone
 }
 
-func NewChunkID(name string, offsetInFile int64) ChunkID {
+func NewChunkID(name string, offsetInFile int64, length int64) ChunkID {
 	dummyWaitReasonIndex := int32(0)
 	zeroNotificationState := int32(0)
 	return ChunkID{
 		Name:                     name,
 		offsetInFile:             offsetInFile,
+		length:                   length,
 		waitReasonIndex:          &dummyWaitReasonIndex, // must initialize, so don't get nil pointer on usage
 		completionNotifiedToJptm: &zeroNotificationState,
 	}
@@ -92,6 +94,10 @@ func (id ChunkID) OffsetInFile() int64 {
 
 func (id ChunkID) IsPseudoChunk() bool {
 	return id.offsetInFile < 0
+}
+
+func (id ChunkID) Length() int64 {
+	return id.length
 }
 
 var EWaitReason = WaitReason{0, ""}
