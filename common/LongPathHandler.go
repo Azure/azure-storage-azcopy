@@ -36,6 +36,11 @@ import (
 
 // ToExtendedPath converts short paths to an extended path.
 func ToExtendedPath(short string) string {
+	// filepath.Abs has an issue where if the path is just the drive indicator of your CWD, it just returns the CWD. So, we append the / to show that yes, we really mean C: or whatever.
+	if runtime.GOOS == "windows" && len(short) == 2 && RootDriveRegex.MatchString(strings.ToUpper(short)) {
+		short += "/"
+	}
+
 	short, err := filepath.Abs(short)
 	PanicIfErr(err) //TODO: Handle errors better?
 
@@ -48,7 +53,7 @@ func ToExtendedPath(short string) string {
 			// Steal the first backslash, and then append the prefix. Enforce \.
 			return strings.Replace(EXTENDED_UNC_PATH_PREFIX+short[1:], `/`, `\`, -1) // convert to extended UNC path
 		} else { // this is coming from a drive-- capitalize the drive prefix. (C:/folder/file.txt)
-			if RootDriveRegex.MatchString(short[:2]) {
+			if len(short) >= 2 && RootDriveRegex.MatchString(strings.ToUpper(short[:2])) { // make the check case insensitive
 				short = strings.Replace(short, short[:2], strings.ToUpper(short[:2]), 1)
 			}
 			// Then append the prefix. Enforce \.
