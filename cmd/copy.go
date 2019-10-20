@@ -1364,7 +1364,7 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only these files when copying. "+
 		"This option supports wildcard characters (*). Separate files by using a ';'.")
 	cpCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "Include only these paths when copying. "+
-		"This option does not support wildcard characters (*). Checks relative path prefix (For example: myFolder;myFolder/subDirName/file.pdf).")
+		"This option does not support wildcard characters (*). Handled as a list of files. Folders and files can be included, but anything within this list is taken as literal paths, NOT a prefix. For example: myFolder;myFolder/subDirName/file.pdf")
 	cpCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "Exclude these paths when copying. "+ // Currently, only exclude-path is supported alongside account traversal.
 		"This option does not support wildcard characters (*). Checks relative path prefix(For example: myFolder;myFolder/subDirName/file.pdf). When used in combination with account traversal, paths do not include the container name.")
 	// This flag is implemented only for Storage Explorer.
