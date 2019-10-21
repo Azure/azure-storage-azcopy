@@ -12,6 +12,7 @@ type udamTestSuite struct{}
 
 var _ = chk.Suite(&udamTestSuite{})
 
+// MakeUDAMInstance uses fake values in order to create a mostly-dummy instance of UDAM that works, but doesn't produce working tokens.
 func (s *udamTestSuite) MakeUDAMInstance(dummyInstance bool) userDelegationAuthenticationManager {
 	if dummyInstance {
 		return userDelegationAuthenticationManager{}
@@ -60,8 +61,7 @@ func (s *udamTestSuite) TestSASWriteLock(c *chk.C) {
 		c.Assert(sas, chk.Not(chk.Equals), "")
 		c.Assert(isLocked, chk.Equals, false)
 		knownSAS = sas // stash the SAS because we're going to test that in a bit
-		c.Log(sas)
-		testwg.Done() // ensure that this test actually finishes before we move on
+		testwg.Done()  // ensure that this test actually finishes before we move on
 	}()
 
 	time.Sleep(time.Second)

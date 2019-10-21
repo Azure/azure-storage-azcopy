@@ -504,7 +504,7 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 				"Because no SAS token is present on your blob source, we'll attempt to generate a SAS token at transfer time. Please note that " +
 				"transfers may fail if generating the user delegation SAS token fails.")
 		} else {
-			return errors.New("a SAS token is required as a part of the source in S2S sync, unless the source is a public resource (or a blob source and you have storage blob data owner permissions)")
+			return errors.New("a SAS token is required as a part of the source in S2S sync, unless the source is a public resource (or a blob source and you have relevant permissions; check https://docs.microsoft.com/en-us/rest/api/storageservices/get-user-delegation-key#authorization)")
 		}
 	}
 

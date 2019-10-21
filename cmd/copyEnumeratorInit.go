@@ -63,7 +63,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				"Because no SAS token is present on your blob source, we'll attempt to generate a SAS token at transfer time. Please note that " +
 				"transfers may fail if generating the user delegation SAS token fails.")
 		} else {
-			return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource (or a blob source and you have storage blob data owner permissions)")
+			return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource (or a blob source and you have relevant permissions; check https://docs.microsoft.com/en-us/rest/api/storageservices/get-user-delegation-key#authorization)")
 		}
 	}
 

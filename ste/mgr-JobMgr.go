@@ -244,6 +244,7 @@ func (jm *jobMgr) setupUserDelegationAuthManager(src string) {
 		// Why craft our own credential info here?
 		// the frontend's may be impure, in the case that we're doing OAuth -> SAS
 		// This means that we'll get the OAuthTokenInfo but the credentialType will be anonymous.
+		// TODO: Find a better way to get an OAuth token within STE instead of relying on cmd to deliver it.
 		credInfo := common.CredentialInfo{CredentialType: common.ECredentialType.OAuthToken()}
 		credInfo.OAuthTokenInfo = jm.getInMemoryTransitJobState().credentialInfo.OAuthTokenInfo
 		blobCredential := common.CreateBlobCredential(jm.ctx, credInfo, credOption)
@@ -271,7 +272,12 @@ func (jm *jobMgr) setupUserDelegationAuthManager(src string) {
 		bsu := azblob.NewServiceURL(srcBlobURLParts.URL(), p)
 
 		// Ignoring the error. If we can't create UDAM, we don't have adequate permissions in the first place.
-		udam, _ := newUserDelegationAuthenticationManager(bsu)
+		udam, err := newUserDelegationAuthenticationManager(bsu)
+
+		if err != nil {
+			common.GetLifecycleMgr().Info("Could not generate user delegation SAS tokens for the blob source. Empty tokens will be used instead. Transfers may still succeed if the source is public.")
+			jm.Log(pipeline.LogError, "Could not generate user delegation SAS tokens for the blob source. Empty tokens will be used instead. Transfers may still succeed if the source is public.")
+		}
 
 		// Even if we fail, udam should not be nil.
 		jm.udam = &udam
