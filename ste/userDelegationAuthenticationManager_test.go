@@ -78,20 +78,25 @@ func (s *udamTestSuite) TestSASWriteLock(c *chk.C) {
 	// Create a dummy URL parts with the known SAS-- only one field matters here
 	burlparts := azblob.BlobURLParts{ContainerName: "dummyContainer"}
 
-	testwg.Add(1)
+	lockCheckChan := make(chan struct{})
 	go func() {
 		// this should trigger before we unlock because it is already known
 		sas, err := udam.GetUserDelegationSASForURL(burlparts)
 		c.Assert(err, chk.IsNil)
 		c.Assert(sas, chk.Equals, knownSAS)
 		c.Assert(isLocked, chk.Equals, true)
-		testwg.Done()
+		lockCheckChan <- struct{}{}
 	}()
 
 	time.Sleep(time.Second)
 
 	// unlock the mutex and see the effects
+	select {
+	case <-time.After(time.Second * 5):
+		c.Fail() // GetUserDelegationSASForURL has timed out. Basically, the write lock being claimed is causing issues.
+	case <-lockCheckChan:
+		// Nothing bad happened, we correctly grabbed the SAS token before unlocking.
+	}
 	isLocked = false
 	udam.sasMapWriteMutex.Unlock()
-	testwg.Wait()
 }
