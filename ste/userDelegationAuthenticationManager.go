@@ -27,14 +27,14 @@ type userDelegationAuthenticationManager struct {
 	// If it's not present, we start attempting to create the token. In order to do so, we lock the write mutex.
 	// Since this may take time, and by the time we obtain the lock, the SAS we're trying to get MAY have already been created,
 	// Check the map for the key before we overwrite.
-	sasMap           atomic.Value // points to a map[string]string. map[containerName]sasToken
-	sasMapWriteMutex sync.Mutex
+	sasMap           *atomic.Value // points to a map[string]string. map[containerName]sasToken
+	sasMapWriteMutex *sync.Mutex
 }
 
 // newUserDelegationAuthenticationManager uses an azblob service URL to obtain a user delegation credential, and returns a new userDelegationAuthenticationManager
 // serviceURL should have adequate permissions to generate a set of user delegation credentials.
 func newUserDelegationAuthenticationManager(serviceURL azblob.ServiceURL) (userDelegationAuthenticationManager, error) {
-	authManager := userDelegationAuthenticationManager{serviceURL: serviceURL}
+	authManager := userDelegationAuthenticationManager{serviceURL: serviceURL, sasMap: &atomic.Value{}, sasMapWriteMutex: &sync.Mutex{}}
 
 	err := authManager.refreshUDKInternal()
 

@@ -32,9 +32,9 @@ import (
 // Source info provider for Azure blob
 type blobSourceInfoProvider struct {
 	defaultRemoteSourceInfoProvider
-	udamInstance    *userDelegationAuthenticationManager
-	stashedURLNoSAS *url.URL
-	needsSAS        bool
+	udamInstance *userDelegationAuthenticationManager
+	stashedURL   *url.URL
+	needsSAS     bool
 }
 
 func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
@@ -54,18 +54,19 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 }
 
 func (p *blobSourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
-	if p.stashedURLNoSAS == nil {
+	if p.stashedURL == nil {
 		var err error
-		p.stashedURLNoSAS, err = p.defaultRemoteSourceInfoProvider.PreSignedSourceURL()
+		p.stashedURL, err = p.defaultRemoteSourceInfoProvider.PreSignedSourceURL()
 
 		if err != nil {
-			return p.stashedURLNoSAS, err
+			return p.stashedURL, err
 		}
 	}
 
-	result := p.stashedURLNoSAS
+	// result needs to dereference so we don't modify the actual URL. This enables proper refreshing.
+	result := *p.stashedURL
 	if p.needsSAS {
-		bURLParts := azblob.NewBlobURLParts(*p.stashedURLNoSAS)
+		bURLParts := azblob.NewBlobURLParts(result)
 
 		// If there's not already a SAS on the source, append it!
 		if bURLParts.SAS.Encode() == "" {
@@ -75,7 +76,7 @@ func (p *blobSourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
 		}
 	}
 
-	return result, nil
+	return &result, nil
 }
 
 func (p *blobSourceInfoProvider) BlobTier() azblob.AccessTierType {
