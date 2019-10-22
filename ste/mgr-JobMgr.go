@@ -418,6 +418,8 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 		// 2) they have OAuth perms on the source enough to make a user delegation key, and thus, creation will succeed.
 		// In either scenario, the transfer continues safely.
 		jm.setupUserDelegationAuthManager(string(jpm.Plan().SourceRoot[:jpm.Plan().SourceRootLength]))
+	} else {
+		jm.udam = &userDelegationAuthenticationManager{} // Create a dummy instance anyway. It'll return empty oauth tokens (and never be used in the first place)
 	}
 
 	if scheduleTransfers {
