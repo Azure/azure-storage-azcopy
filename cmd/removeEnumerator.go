@@ -172,6 +172,9 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
 
 			return successMsg
 		}, common.EExitCode.Success())
+
+		// explicitly exit, since in our tests Exit might be mocked away
+		return nil
 	}
 
 	// list of files is given, record the parent path
