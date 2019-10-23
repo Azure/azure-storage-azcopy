@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -119,29 +120,29 @@ func (s *directoryStack) Pop() (*azfile.DirectoryURL, bool) {
 // TODO move after ADLS/Blob interop goes public
 // TODO this simple remove command is only here to support the scenario temporarily
 // Ultimately, this code can be merged into the newRemoveEnumerator
-func removeBfsResources(cca *cookedCopyCmdArgs) (successMessage string, err error) {
+func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
 	ctx := context.Background()
 
 	// return an error if the unsupported options are passed in
 	if len(cca.includePatterns)+len(cca.excludePatterns) > 0 {
-		return "", errors.New("include/exclude options are not supported")
+		return errors.New("include/exclude options are not supported")
 	}
 
 	// patterns are not supported
 	if strings.Contains(cca.source, "*") {
-		return "", errors.New("pattern matches are not supported in this command")
+		return errors.New("pattern matches are not supported in this command")
 	}
 
 	// create bfs pipeline
 	p, err := createBlobFSPipeline(ctx, cca.credentialInfo)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	// attempt to parse the source url
 	sourceURL, err := url.Parse(cca.source)
 	if err != nil {
-		return "", errors.New("cannot parse source URL")
+		return errors.New("cannot parse source URL")
 	}
 
 	// append the SAS query to the newly parsed URL
@@ -150,13 +151,36 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (successMessage string, err erro
 	// parse the given source URL into parts, which separates the filesystem name and directory/file path
 	urlParts := azbfs.NewBfsURLParts(*sourceURL)
 
+	if cca.listOfFilesChannel == nil {
+		successMsg, err := removeSingleBfsResource(urlParts, p, ctx, cca.recursive)
+		if err != nil {
+			return err
+		}
+
+		glcm.Exit(func(format common.OutputFormat) string {
+			if format == common.EOutputFormat.Json() {
+				summary := common.ListJobSummaryResponse{
+					JobStatus:          common.EJobStatus.Completed(),
+					TotalTransfers:     1,
+					TransfersCompleted: 1,
+					PercentComplete:    100,
+				}
+				jsonOutput, err := json.Marshal(summary)
+				common.PanicIfErr(err)
+				return string(jsonOutput)
+			}
+
+			return successMsg
+		}, common.EExitCode.Success())
+
+		// explicitly exit, since in our tests Exit might be mocked away
+		return nil
+	}
+
 	// list of files is given, record the parent path
 	parentPath := urlParts.DirectoryOrFilePath
-	successCount := 0
-
-	if cca.listOfFilesChannel == nil {
-		return removeSingleBfsResource(urlParts, p, ctx, cca.recursive)
-	}
+	successCount := uint32(0)
+	failedTransfers := make([]common.TransferDetail, 0)
 
 	// read from the list of files channel to find out what needs to be deleted.
 	childPath, ok := <-cca.listOfFilesChannel
@@ -165,6 +189,8 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (successMessage string, err erro
 		urlParts.DirectoryOrFilePath = common.GenerateFullPath(parentPath, childPath)
 		successMessage, err := removeSingleBfsResource(urlParts, p, ctx, cca.recursive)
 		if err != nil {
+			// the specific error is not included in the details, since it doesn't have a field for full error message
+			failedTransfers = append(failedTransfers, common.TransferDetail{Src: childPath, TransferStatus: common.ETransferStatus.Failed()})
 			glcm.Info(fmt.Sprintf("Skipping %s due to error %s", childPath, err))
 		} else {
 			glcm.Info(successMessage)
@@ -172,7 +198,35 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (successMessage string, err erro
 		}
 	}
 
-	return fmt.Sprintf("Successfully removed %v entities.", successCount), nil
+	glcm.Exit(func(format common.OutputFormat) string {
+		if format == common.EOutputFormat.Json() {
+			status := common.EJobStatus.Completed()
+			if len(failedTransfers) > 0 {
+				status = common.EJobStatus.CompletedWithErrors()
+
+				// if nothing got deleted
+				if successCount == 0 {
+					status = common.EJobStatus.Failed()
+				}
+			}
+
+			summary := common.ListJobSummaryResponse{
+				JobStatus:          status,
+				TotalTransfers:     successCount + uint32(len(failedTransfers)),
+				TransfersCompleted: successCount,
+				TransfersFailed:    uint32(len(failedTransfers)),
+				PercentComplete:    100,
+				FailedTransfers:    failedTransfers,
+			}
+			jsonOutput, err := json.Marshal(summary)
+			common.PanicIfErr(err)
+			return string(jsonOutput)
+		}
+
+		return fmt.Sprintf("Successfully removed %v entities.", successCount)
+	}, common.EExitCode.Success())
+
+	return nil
 }
 
 // TODO move after ADLS/Blob interop goes public

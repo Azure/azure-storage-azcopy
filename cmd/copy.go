@@ -988,14 +988,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	case common.EFromTo.BlobFSTrash():
 		// TODO merge with BlobTrash case
-		msg, err := removeBfsResources(cca)
-		if err == nil {
-			glcm.Exit(func(format common.OutputFormat) string {
-				return msg
-			}, common.EExitCode.Success())
-		}
-
-		return err
+		err = removeBfsResources(cca)
 
 	// TODO: Hide the File to Blob direction temporarily, as service support on-going.
 	// case common.EFromTo.FileBlob():
