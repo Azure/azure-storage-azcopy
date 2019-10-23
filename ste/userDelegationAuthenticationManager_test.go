@@ -2,6 +2,7 @@ package ste
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -15,7 +16,10 @@ var _ = chk.Suite(&udamTestSuite{})
 // MakeUDAMInstance uses fake values in order to create a mostly-dummy instance of UDAM that works, but doesn't produce working tokens.
 func (s *udamTestSuite) MakeUDAMInstance(dummyInstance bool) userDelegationAuthenticationManager {
 	if dummyInstance {
-		return userDelegationAuthenticationManager{}
+		return userDelegationAuthenticationManager{
+			sasMap:           &atomic.Value{},
+			sasMapWriteMutex: &sync.Mutex{},
+		}
 	} else {
 		startTime := time.Now()
 		expiryTime := time.Now().Add(time.Hour * 24)
@@ -33,9 +37,11 @@ func (s *udamTestSuite) MakeUDAMInstance(dummyInstance bool) userDelegationAuthe
 
 		// create a actual working instance of UDAM, but don't use the normal creation path
 		udam := userDelegationAuthenticationManager{
-			credential: udc,
-			startTime:  startTime,
-			expiryTime: expiryTime,
+			credential:       udc,
+			startTime:        startTime,
+			expiryTime:       expiryTime,
+			sasMap:           &atomic.Value{},
+			sasMapWriteMutex: &sync.Mutex{},
 		}
 
 		udam.sasMap.Store(make(map[string]string))
