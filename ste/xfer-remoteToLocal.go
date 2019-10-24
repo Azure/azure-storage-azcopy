@@ -78,13 +78,17 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 
 	// step 4b: special handling for empty files
 	if fileSize == 0 {
-		err := jptm.WaitUntilLockDestination(jptm.Context())
-		if err == nil {
-			err = createEmptyFile(info.Destination)
-		}
-		if err != nil {
-			jptm.LogDownloadError(info.Source, info.Destination, "Empty File Creation error "+err.Error(), 0)
-			jptm.SetStatus(common.ETransferStatus.Failed())
+		if strings.EqualFold(info.Destination, common.Dev_Null) {
+			// do nothing
+		} else {
+			err := jptm.WaitUntilLockDestination(jptm.Context())
+			if err == nil {
+				err = createEmptyFile(info.Destination)
+			}
+			if err != nil {
+				jptm.LogDownloadError(info.Source, info.Destination, "Empty File Creation error "+err.Error(), 0)
+				jptm.SetStatus(common.ETransferStatus.Failed())
+			}
 		}
 		epilogueWithCleanupDownload(jptm, dl, nil, nil) // need standard epilogue, rather than a quick exit, so we can preserve modification dates
 		return
