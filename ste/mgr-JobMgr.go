@@ -157,8 +157,9 @@ type jobMgr struct {
 	// TODO: added for debugging purpose. remove later
 	atomicCurrentConcurrentConnections int64
 	// atomicAllTransfersScheduled defines whether all job parts have been iterated and resumed or not
-	atomicAllTransfersScheduled int32
-	atomicTransferDirection     common.TransferDirection
+	atomicAllTransfersScheduled     int32
+	atomicFinalPartOrderedIndicator int32
+	atomicTransferDirection         common.TransferDirection
 
 	concurrency          ConcurrencySettings
 	logger               common.ILoggerResetable
@@ -183,8 +184,7 @@ type jobMgr struct {
 	// list of transfer mentioned to include only then while resuming the job
 	include map[string]int
 	// list of transfer mentioned to exclude while resuming the job
-	exclude          map[string]int
-	finalPartOrdered bool
+	exclude map[string]int
 
 	// only a single instance of the prompter is needed for all transfers
 	overwritePrompter *overwritePrompter
@@ -310,7 +310,7 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 		fileCountLimiter: JobsAdmin.(*jobsAdmin).fileCountLimiter}
 	jpm.planMMF = jpm.filename.Map()
 	jm.jobPartMgrs.Set(partNum, jpm)
-	jm.finalPartOrdered = jpm.planMMF.Plan().IsFinalPart
+	jm.setFinalPartOrdered(partNum, jpm.planMMF.Plan().IsFinalPart)
 	jm.setDirection(jpm.Plan().FromTo)
 	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(partNum, jpm.Plan().FromTo)
 	if scheduleTransfers {
@@ -322,6 +322,26 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 		JobsAdmin.QueueJobParts(jpm)
 	}
 	return jpm
+}
+
+func (jm *jobMgr) setFinalPartOrdered(partNum PartNumber, isFinalPart bool) {
+	newVal := common.Iffint32(isFinalPart, 1, 0)
+	oldVal := atomic.SwapInt32(&jm.atomicFinalPartOrderedIndicator, newVal)
+	if newVal == 0 && oldVal == 1 {
+		// we just cleared the flag. Sanity check that.
+		if partNum == 0 {
+			// We can't complain because, when resuming a job, there are actually TWO calls made the ResurrectJob.
+			// The effect is that all the parts are ordered... then all the parts are ordered _again_ (with new JobPartManagers replacing those from the first time)
+			// (The first resurrect is from GetJobFromTo and the second is from ResumeJobOrder)
+			// So we don't object if the _first_ part clears the flag. The assumption we make, by allowing this special case here, is that
+			// the first part will be scheduled before any higher-numbered part.  As long as that assumption is true, this is safe.
+			// TODO: do we really need to to Resurrect the job twice?
+		} else {
+			// But we do object if any other part clears the flag, since that wouldn't make sense.
+			panic("Error: another job part was scheduled after the final part")
+		}
+
+	}
 }
 
 // Remembers which direction we are running in (upload, download or neither (for service to service))
@@ -414,7 +434,7 @@ func (jm *jobMgr) ReportJobPartDone() uint32 {
 	// If the last part is still awaited or other parts all still not complete,
 	// JobPart 0 status is not changed (unless we are cancelling)
 	allKnownPartsDone := partsDone == jm.jobPartMgrs.Count()
-	haveFinalPart := jm.finalPartOrdered
+	haveFinalPart := atomic.LoadInt32(&jm.atomicFinalPartOrderedIndicator) == 1
 	isCancelling := jobStatus == common.EJobStatus.Cancelling()
 	shouldComplete := allKnownPartsDone && (haveFinalPart || isCancelling)
 	if !shouldComplete {
@@ -425,7 +445,7 @@ func (jm *jobMgr) ReportJobPartDone() uint32 {
 	}
 
 	partDescription := "all parts of entire Job"
-	if !jm.finalPartOrdered {
+	if !haveFinalPart {
 		partDescription = "known parts of incomplete Job"
 	}
 	if shouldLog {
