@@ -318,7 +318,8 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 	jpp0 := jpm.Plan()
 	switch jpp0.JobStatus() {
 	// Cannot resume a Job which is in Cancelling state
-	// Cancelling is an intermediary state
+	// Cancelling is an intermediary state. The reason we accept and process it here, rather than returning an error,
+	// is in case a process was terminated while its job was in cancelling state.
 	case common.EJobStatus.Cancelling():
 		jpp0.SetJobStatus(common.EJobStatus.Cancelled())
 		fallthrough
