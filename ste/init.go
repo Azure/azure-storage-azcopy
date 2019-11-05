@@ -406,6 +406,17 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		FailedTransfers:    []common.TransferDetail{},
 	}
 
+	// To avoid race condition: get overall status BEFORE we get counts of completed files)
+	// (if we get it afterwards, we can get a cases where the counts haven't reached 100% done, but by the time we
+	// get the status, the job IS finished - and so we report completion with a lower total file count than what the job really had).
+	// Better to check overall status first, and see it as uncompleted on this call (and completed on the next call).
+	part0, ok := jm.JobPartMgr(0)
+	if !ok {
+		panic(fmt.Errorf("error getting the 0th part of Job %s", jobID))
+	}
+	part0PlanStatus := part0.Plan().JobStatus()
+
+	// Now iterate and count things up
 	jm.(*jobMgr).jobPartMgrs.Iterate(true, func(partNum common.PartNumber, jpm IJobPartMgr) {
 		jpp := jpm.Plan()
 		js.CompleteJobOrdered = js.CompleteJobOrdered || jpp.IsFinalPart
@@ -467,12 +478,6 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	// are iterated and have been scheduled
 	js.CompleteJobOrdered = js.CompleteJobOrdered || jm.AllTransfersScheduled()
 
-	// get zero'th part of the job part plan.
-	jp0, ok := jm.JobPartMgr(0)
-	if !ok {
-		panic(fmt.Errorf("error getting the 0th part of Job %s", jobID))
-	}
-
 	js.BytesOverWire = uint64(JobsAdmin.BytesOverWire())
 
 	// Get the number of active go routines performing the transfer or executing the chunk Func
@@ -492,7 +497,6 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	// If the status is cancelled, then no need to check for completerJobOrdered
 	// since user must have provided the consent to cancel an incompleteJob if that
 	// is the case.
-	part0PlanStatus := jp0.Plan().JobStatus()
 	if part0PlanStatus == common.EJobStatus.Cancelled() {
 		js.JobStatus = part0PlanStatus
 		js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped)
