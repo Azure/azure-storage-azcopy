@@ -785,15 +785,13 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         self.assertTrue(result)
 
         # Verifying the downloaded blob
-        result = filecmp.cmp(file_path, local_validate_dest, shallow=False)
         if not checkLMT == "fail":
+            result = filecmp.cmp(file_path, local_validate_dest, shallow=False)
             # Do not expect a failure
             self.assertTrue(result)
         else:
             # disable debug mode for future tests
             os.environ['AZCOPY_DEBUG_MODE'] = 'off'
-            # Expect a failure caused by supply-invalid-lmt
-            self.assertFalse(result)
 
         # clean up both source and destination bucket
         # util.Command("clean").add_arguments(srcBucketURL).add_flags("serviceType", srcType). \

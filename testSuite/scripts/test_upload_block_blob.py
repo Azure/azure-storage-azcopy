@@ -38,13 +38,17 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             result.add_flags("check-length", "true").add_flags("supply-invalid-length", "true")
 
         result = result.execute_azcopy_copy_command()
-        self.assertTrue(result)
+        if checkLength == "fail":
+            self.assertFalse(result)
+        else:
+            self.assertTrue(result)
 
-        # Verifying the uploaded blob.
-        # the resource local path should be the first argument for the azcopy validator.
-        # the resource sas should be the second argument for azcopy validator.
-        result = util.Command("testBlob").add_arguments(file_path).add_arguments(dest_validate).execute_azcopy_verify()
-        self.assertTrue(result)
+        if not checkLength == "fail":
+            # Verifying the uploaded blob.
+            # the resource local path should be the first argument for the azcopy validator.
+            # the resource sas should be the second argument for azcopy validator.
+            result = util.Command("testBlob").add_arguments(file_path).add_arguments(dest_validate).execute_azcopy_verify()
+            self.assertTrue(result)
 
     # test_1kb_blob_upload verifies the 1KB blob upload by azcopy.
     def test_1kb_blob_upload_with_sas(self):

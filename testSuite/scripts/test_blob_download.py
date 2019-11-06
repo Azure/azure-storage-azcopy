@@ -46,7 +46,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         # upload 1kb using azcopy
         src = file_path
         dst = util.test_container_url
-        result = util.Command("copy").add_arguments(src).add_flags(dst). \
+        result = util.Command("copy").add_arguments(src).add_arguments(dst). \
             add_flags("log-level", "info").execute_azcopy_copy_command()
         self.assertTrue(result)
 
@@ -83,7 +83,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         # upload 1kb using azcopy
         src = file_path
         dst = util.test_container_url
-        result = util.Command("copy").add_arguments(src).add_flags(dst). \
+        result = util.Command("copy").add_arguments(src).add_arguments(dst). \
             add_flags("log-level", "info").add_flags("put-md5", "true").execute_azcopy_copy_command()
         self.assertTrue(result)
 
