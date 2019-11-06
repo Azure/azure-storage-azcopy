@@ -168,8 +168,10 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
                                                     17 * 1024 * 1024, True)
 
     def test_copy_single_file_from_blob_to_blob_full_oauth(self):
-        src_container_url = util.get_object_without_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-        dst_container_url = util.get_object_without_sas(util.test_s2s_oauth_container_url, self.bucket_name)
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
+        # URL on the next line was test_s2s_dst_blob_account_url, but for now its changed to
+        # be the main OAuth one, to simplify OAuth setup
+        dst_container_url = util.get_object_without_sas(util.test_oauth_container_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob",
                                                     50 * 1024 * 1024, srcOAuth=True, dstOAuth=True)
 
@@ -590,6 +592,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
                 src_bucket_url, "Blob", dst_container_url, "Blob", size, "AppendBlob", "", "", "", "AppendBlob", no_blob_tier)
 
     def test_copy_single_file_from_s3_object_to_blockblob_with_default_blobtier(self):
+        if 'S3_TESTS_OFF' in os.environ:
+            self.skipTest("S3 testing is disabled.")
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_block_append_page)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
         blob_sizes = [0, 1, 8*1024*1024 - 1, 8 * 1024*1024]
@@ -672,7 +676,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         self.assertTrue(result)
 
     def util_test_copy_single_file_from_x_to_x(self, srcBucketURL, srcType, dstBucketURL, dstType, sizeInKB=1,
-                                               dstOAuth=False, srcOAuth=True, customizedFileName="", srcBlobType="",
+                                               dstOAuth=False, srcOAuth=False, customizedFileName="", srcBlobType="",
                                                dstBlobType=""):
         # create source bucket
         result = util.Command("create").add_arguments(srcBucketURL).add_flags("serviceType", srcType). \
@@ -956,12 +960,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             src_bucket_url1 = util.get_object_without_sas(srcAccountURL, bucketName1)
             src_bucket_url2 = util.get_object_without_sas(srcAccountURL, bucketName2)
         else:
-            if srcOAuth:
-                src_bucket_url1 = util.get_object_without_sas(srcAccountURL, bucketName1)
-                src_bucket_url2 = util.get_object_without_sas(srcAccountURL, bucketName2)
-            else:
-                src_bucket_url1 = util.get_object_sas(srcAccountURL, bucketName1)
-                src_bucket_url2 = util.get_object_sas(srcAccountURL, bucketName2)
+            src_bucket_url1 = util.get_object_sas(srcAccountURL, bucketName1)
+            src_bucket_url2 = util.get_object_sas(srcAccountURL, bucketName2)
 
         # create source bucket
         createBucketResult1 = util.Command("create").add_arguments(src_bucket_url1).add_flags("serviceType", srcType). \
@@ -982,8 +982,13 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         self.util_upload_to_src(src_dir_path1, srcType, src_bucket_url1, True)
         self.util_upload_to_src(src_dir_path2, srcType, src_bucket_url2, True)
 
+        if srcOAuth:
+            txSrc = util.get_object_without_sas(srcAccountURL, "")
+        else:
+            txSrc = util.get_object_sas(srcAccountURL, "")
+
         # Copy files using azcopy from srcURL to destURL
-        result = util.Command("copy").add_arguments(srcAccountURL).add_arguments(dstAccountURL). \
+        result = util.Command("copy").add_arguments(txSrc).add_arguments(dstAccountURL). \
             add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
         self.assertTrue(result)
 
