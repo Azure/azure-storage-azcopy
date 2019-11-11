@@ -308,7 +308,13 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 				jptm.FailActiveDownload("Download length check", err)
 			}
 
-			if fi.Size() != info.SourceSize {
+			fLength := fi.Size()
+
+			if SupplyInvalidDstLength {
+				fLength += 5
+			}
+
+			if fLength != info.SourceSize {
 				jptm.FailActiveDownload("Download length check", errors.New("destination length did not match source length"))
 			}
 		}
