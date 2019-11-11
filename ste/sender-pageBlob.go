@@ -57,6 +57,7 @@ type pageBlobSenderBase struct {
 
 const (
 	managedDiskImportExportAccountPrefix = "md-impexp-"
+	legacyDiskExportPrefix               = "md-" // these don't have the impepx bit that follows
 
 	// Start high(ish), because it auto-tunes downwards faster than it auto-tunes upwards
 	pageBlobInitialBytesPerSecond = (4 * 1000 * 1000 * 1000) / 8
@@ -124,6 +125,15 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 // these accounts have special restrictions of which APIs operations they support
 func isInManagedDiskImportExportAccount(u url.URL) bool {
 	return strings.HasPrefix(u.Host, managedDiskImportExportAccountPrefix)
+}
+
+// "legacy" is perhaps not the best name, since these remain in use for (all?) EXports of managed disks.
+// These "legacy" ones an older mechanism than the new md-impexp path that is used for IMports as of mid 2019.
+func isInLegacyDiskExportAccount(u url.URL) bool {
+	if isInManagedDiskImportExportAccount(u) {
+		return false // it's the new-style md-impexp
+	}
+	return strings.HasPrefix(u.Host, legacyDiskExportPrefix) // md-....
 }
 
 func (s *pageBlobSenderBase) isInManagedDiskImportExportAccount() bool {
