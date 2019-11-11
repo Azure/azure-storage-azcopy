@@ -565,6 +565,7 @@ func (uotm *UserOAuthTokenManager) getTokenInfoFromEnvVar(ctx context.Context) (
 	// Remove the env var after successfully fetching once,
 	// in case of env var is further spreading into child processes unexpectly.
 	lcm.ClearEnvironmentVariable(EEnvironmentVariable.OAuthTokenInfo())
+	stashedEnvOAuthTokenExists = true
 
 	tokenInfo, err := jsonToTokenInfo([]byte(rawToken))
 	if err != nil {

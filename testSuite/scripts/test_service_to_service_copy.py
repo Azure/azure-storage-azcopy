@@ -982,7 +982,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         self.util_upload_to_src(src_dir_path1, srcType, src_bucket_url1, True)
         self.util_upload_to_src(src_dir_path2, srcType, src_bucket_url2, True)
 
-        if srcOAuth:
+        if srcOAuth or srcType == "S3":
             txSrc = util.get_object_without_sas(srcAccountURL, "")
         else:
             txSrc = util.get_object_sas(srcAccountURL, "")

@@ -183,24 +183,7 @@ def main():
     print("Smoke tests starting...")
     init()
 
-    test_class_to_run = [BlobPipingTests,
-                         File_Service_2_Service_Copy_User_Scenario,
-                         Blob_Sync_User_Scenario,
-                         File_Sync_User_Scenario,
-                         Block_Upload_User_Scenarios,
-                         Blob_Download_User_Scenario,
-                         PageBlob_Upload_User_Scenarios,
-                         BlobFs_Upload_OAuth_User_Scenarios,
-                         BlobFs_Download_OAuth_User_Scenarios,
-                         BlobFs_Download_SAS_User_Scenarios,
-                         BlobFs_Upload_SAS_User_Scenarios,
-                         Azcopy_Operation_User_Scenario,
-                         FileShare_Download_User_Scenario,
-                         FileShare_Upload_User_Scenario,
-                         BlobFs_Upload_ShareKey_User_Scenarios,
-                         BlobFs_Download_SharedKey_User_Scenarios,
-                         Service_2_Service_Copy_User_Scenario,
-                         Autodetect_Blob_Type_Scenario]
+    test_class_to_run = [Service_2_Service_Copy_User_Scenario]
     suites_list = []
 
     loader = unittest.TestLoader()
