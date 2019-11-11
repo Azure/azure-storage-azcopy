@@ -690,6 +690,7 @@ func getDefaultCopyRawInput(src string, dst string) rawCopyCmdArgs {
 		md5ValidationOption:            common.DefaultHashValidationOption.String(),
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
 		forceWrite:                     common.EOverwriteOption.True().String(),
+		adlsFlushThreshold:             7500,
 	}
 }
 
