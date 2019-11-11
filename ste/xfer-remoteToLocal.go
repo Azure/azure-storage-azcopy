@@ -337,10 +337,16 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 			jptm.Log(pipeline.LogDebug, " Finalizing Transfer Cancellation/Failure")
 		}
 		if jptm.IsDeadInflight() && jptm.HoldsDestinationLock() {
+			jptm.LogAtLevelForCurrentTransfer(pipeline.LogInfo, "Deleting incomplete destination file")
+
 			// the file created locally should be deleted
 			tryDeleteFile(info, jptm)
 		}
 	} else {
+		if !jptm.IsLive() {
+			panic("reached branch where jptm is assumed to be live, but it isn't")
+		}
+
 		// We know all chunks are done (because this routine was called)
 		// and we know the transfer didn't fail (because just checked its status above),
 		// so it must have succeeded. So make sure its not left "in progress" state
