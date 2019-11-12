@@ -275,6 +275,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 		}
 		if closeErr != nil {
 			jptm.FailActiveDownload("Closing file", closeErr)
+			jptm.LogAtLevelForCurrentTransfer(pipeline.LogInfo, "Error closing file: "+closeErr.Error()) // log this way so that this line will be logged even if transfer is already failed
 		}
 
 		// Check MD5 (but only if file was fully flushed and saved - else no point and may not have actualAsSaved hash anyway)
