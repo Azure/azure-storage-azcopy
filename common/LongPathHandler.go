@@ -36,19 +36,27 @@ import (
 
 // ToExtendedPath converts short paths to an extended path.
 func ToExtendedPath(short string) string {
+	// filepath.Abs has an issue where if the path is just the drive indicator of your CWD, it just returns the CWD. So, we append the / to show that yes, we really mean C: or whatever.
+	if runtime.GOOS == "windows" && len(short) == 2 && RootDriveRegex.MatchString(strings.ToUpper(short)) {
+		short += "/"
+	}
+
 	short, err := filepath.Abs(short)
 	PanicIfErr(err) //TODO: Handle errors better?
 
 	// ex. C:/dir/file.txt -> \\?\C:\dir\file.txt
 	// ex. \\share\dir\file.txt -> \\?\UNC\share\dir\file.txt
 	if runtime.GOOS == "windows" { // Only do this on Windows
-		if strings.HasPrefix(short, EXTENDED_PATH_PREFIX) {
+		if strings.HasPrefix(short, EXTENDED_PATH_PREFIX) { // already an extended path \\?\C:\folder\file.txt or \\?\UNC\sharename\folder\file.txt
 			return strings.Replace(short, `/`, `\`, -1) // Just ensure it has all backslashes-- Windows can't handle forward-slash anymore in this format.
-		} else if strings.HasPrefix(short, `\\`) {
+		} else if strings.HasPrefix(short, `\\`) { // this is a file share (//sharename/folder/file.txt)
 			// Steal the first backslash, and then append the prefix. Enforce \.
 			return strings.Replace(EXTENDED_UNC_PATH_PREFIX+short[1:], `/`, `\`, -1) // convert to extended UNC path
-		} else {
-			// Just append the prefix. Enforce \.
+		} else { // this is coming from a drive-- capitalize the drive prefix. (C:/folder/file.txt)
+			if len(short) >= 2 && RootDriveRegex.MatchString(strings.ToUpper(short[:2])) { // make the check case insensitive
+				short = strings.Replace(short, short[:2], strings.ToUpper(short[:2]), 1)
+			}
+			// Then append the prefix. Enforce \.
 			return strings.Replace(EXTENDED_PATH_PREFIX+short, `/`, `\`, -1) // Just append the prefix
 		}
 	}

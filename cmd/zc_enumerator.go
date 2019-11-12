@@ -179,8 +179,6 @@ func initResourceTraverser(resource string, location common.Location, ctx *conte
 	if listofFilesChannel != nil {
 		sas := ""
 		if location.IsRemote() {
-			// note to future self: this will cause a merge conflict.
-			// rename source to resource and delete this comment.
 			var err error
 			resource, sas, err = SplitAuthTokenFromResource(resource, location)
 
