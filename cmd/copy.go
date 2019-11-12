@@ -237,11 +237,11 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 
 	// set up CI flags if set and the prerequisite debug mode environment variable is set
 	if strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AzcopyDebugMode())) == "on" {
-		ste.ADLSFlushThreshold = raw.adlsFlushThreshold
+		ste.ADLSFlushThreshold = common.Iffuint32(raw.adlsFlushThreshold <= 0, 7500, raw.adlsFlushThreshold)
 		ste.SupplyInvalidDstLength = raw.introduceLenFault
 		ste.SupplyInvalidMD5 = raw.introduceMD5Fault
 		ste.SupplyInvalidSrcTimeCheck = raw.introduceLMTFault
-	} else if raw.adlsFlushThreshold != 7500 || raw.introduceLenFault || raw.introduceMD5Fault || raw.introduceLMTFault {
+	} else if (raw.adlsFlushThreshold != 7500 && raw.adlsFlushThreshold != 0) || raw.introduceLenFault || raw.introduceMD5Fault || raw.introduceLMTFault {
 		return cooked, errors.New("cannot use debug flags without the AZCOPY_DEBUG_MODE flag set to \"on\"")
 	}
 
