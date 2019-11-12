@@ -160,7 +160,7 @@ func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (stri
 
 	u, err := url.Parse(target)
 	if err != nil {
-		return "", fmt.Errorf("error parsing the url %s. Failed with error %s", u.String(), err.Error())
+		return "", fmt.Errorf("error parsing the url %s. Failed with error %s", target, err.Error())
 	}
 
 	var result url.URL
