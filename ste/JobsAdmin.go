@@ -115,7 +115,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 	cpuMon := common.NewNullCpuMonitor()
 	// One day, we might monitor CPU as the app runs in all cases (and report CPU as possible constraint like we do with disk).
 	// But for now, we only monitor it when tuning the GR pool size.
-	if concurrency.AutoTuneMainPool() && concurrency.CheckCpuWhenTuing.Value {
+	if concurrency.AutoTuneMainPool() && concurrency.CheckCpuWhenTuning.Value {
 		// let our CPU monitor self-calibrate BEFORE we start doing any real work TODO: remove if we switch to gopsutil
 		cpuMon = common.NewCalibratedCpuUsageMonitor()
 	}

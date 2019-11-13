@@ -136,8 +136,8 @@ func (jm *jobMgr) logConcurrencyParameters() {
 		jm.concurrency.MaxMainPoolSize.GetDescription()))
 
 	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Check CPU usage when dynamically tuning concurrency: %t (%s)",
-		jm.concurrency.CheckCpuWhenTuing.Value,
-		jm.concurrency.CheckCpuWhenTuing.GetDescription()))
+		jm.concurrency.CheckCpuWhenTuning.Value,
+		jm.concurrency.CheckCpuWhenTuning.GetDescription()))
 
 	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent transfer initiation routines: %d (%s)",
 		jm.concurrency.TransferInitiationPoolSize.Value,
