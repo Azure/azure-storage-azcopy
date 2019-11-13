@@ -30,6 +30,12 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 1)
 
+    def test_copy_single_1kb_file_from_blob_to_blob_with_auth_env_var(self):
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 1,
+                                                    oAuth=True, credTypeOverride="OAuthToken")
+
     def test_copy_single_512b_file_from_page_to_block_blob(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
@@ -679,7 +685,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         oAuth=False,
         customizedFileName="",
         srcBlobType="",
-        dstBlobType=""):
+        dstBlobType="",
+        credTypeOverride=""):
         # create source bucket
         result = util.Command("create").add_arguments(srcBucketURL).add_flags("serviceType", srcType). \
             add_flags("resourceType", "Bucket").execute_azcopy_create()
@@ -700,10 +707,12 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             dstFileURL = util.get_object_without_sas(dstBucketURL, filename)
         else:
             dstFileURL = util.get_object_sas(dstBucketURL, filename)
-        
 
         # Upload file.
         self.util_upload_to_src(file_path, srcType, srcFileURL, blobType=srcBlobType)
+
+        if credTypeOverride != "":
+            os.environ["AZCOPY_CRED_TYPE"] = credTypeOverride
 
         # Copy file using azcopy from srcURL to destURL
         result = util.Command("copy").add_arguments(srcFileURL).add_arguments(dstFileURL). \
@@ -713,6 +722,9 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
 
         r = result.execute_azcopy_copy_command()  # nice "dynamic typing"
         self.assertTrue(r)
+
+        if credTypeOverride != "":
+            os.environ["AZCOPY_CRED_TYPE"] = ""
 
         # Downloading the copied file for validation
         validate_dir_name = "validate_copy_single_%dKB_file_from_%s_to_%s_%s" % (sizeInKB, srcType, dstType, customizedFileName)
