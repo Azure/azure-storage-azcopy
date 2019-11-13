@@ -32,7 +32,7 @@ import (
 // //myShare
 // //myShare/
 // demonstrated at: https://regexr.com/4mf6l
-var RootDriveRegex = regexp.MustCompile(`(^[A-Z]:\/?$)`)
+var RootDriveRegex = regexp.MustCompile(`(?i)(^[A-Z]:\/?$)`)
 var RootShareRegex = regexp.MustCompile(`(^\/\/[^\/]*\/?$)`)
 
 func CreateParentDirectoryIfNotExist(destinationPath string) error {
