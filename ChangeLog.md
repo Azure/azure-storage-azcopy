@@ -5,9 +5,9 @@
 
 ### Bug fixes
 
-1. Jobs could not be cancelled while scanning (aka enumeration) was in progress.
+1. Jobs could not be cancelled while scanning was still in progress.
 1. Downloading large managed disks (8 TB and above) failed with errors.
-1. Downloading large page blobs could stall, and make no progress for the first 15 or 20 minutes.
+1. Downloading large page blobs might make no progress for the first 15 or 20 minutes.
 1. There was a rare error where the final output could under-report the total number of files in the job. That error has been fixed.
 1. When using JSON output mode, the output from the rm command on ADLS Gen2 was inconsistent with the output from other commands
 1. After authentication errors, any files in progress where not cleaned up (deleted) at the destination. If there was an
