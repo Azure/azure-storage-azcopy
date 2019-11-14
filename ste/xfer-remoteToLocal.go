@@ -281,6 +281,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 		}
 		if closeErr != nil {
 			jptm.FailActiveDownload("Closing file", closeErr)
+			jptm.LogAtLevelForCurrentTransfer(pipeline.LogInfo, "Error closing file: "+closeErr.Error()) // log this way so that this line will be logged even if transfer is already failed
 		}
 
 		// Check MD5 (but only if file was fully flushed and saved - else no point and may not have actualAsSaved hash anyway)
@@ -349,10 +350,16 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 			jptm.Log(pipeline.LogDebug, " Finalizing Transfer Cancellation/Failure")
 		}
 		if jptm.IsDeadInflight() && jptm.HoldsDestinationLock() {
+			jptm.LogAtLevelForCurrentTransfer(pipeline.LogInfo, "Deleting incomplete destination file")
+
 			// the file created locally should be deleted
 			tryDeleteFile(info, jptm)
 		}
 	} else {
+		if !jptm.IsLive() {
+			panic("reached branch where jptm is assumed to be live, but it isn't")
+		}
+
 		// We know all chunks are done (because this routine was called)
 		// and we know the transfer didn't fail (because just checked its status above),
 		// so it must have succeeded. So make sure its not left "in progress" state

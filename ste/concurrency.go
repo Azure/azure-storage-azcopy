@@ -115,8 +115,8 @@ type ConcurrencySettings struct {
 	MaxOpenDownloadFiles int
 	// TODO: consider whether we should also use this (renamed to( MaxOpenFiles) for uploads, somehow (see command above). Is there any actual value in that? Maybe only highly handle-constrained Linux environments?
 
-	// CheckCpuWhenTuing determines whether CPU usage should be taken into account when auto-tuning
-	CheckCpuWhenTuing *ConfiguredBool
+	// CheckCpuWhenTuning determines whether CPU usage should be taken into account when auto-tuning
+	CheckCpuWhenTuning *ConfiguredBool
 }
 
 // AutoTuneMainPool says whether the main pool size should by dynamically tuned
@@ -139,7 +139,7 @@ func NewConcurrencySettings(maxFileAndSocketHandles int, requestAutoTuneGRs bool
 		MaxMainPoolSize:            maxMainPoolSize,
 		TransferInitiationPoolSize: getTransferInitiationPoolSize(),
 		MaxOpenDownloadFiles:       getMaxOpenPayloadFiles(maxFileAndSocketHandles, maxMainPoolSize.Value),
-		CheckCpuWhenTuing:          getCheckCpuUsageWhenTuning(),
+		CheckCpuWhenTuning:          getCheckCpuUsageWhenTuning(),
 	}
 
 	// Set the max idle connections that we allow. If there are any more idle connections

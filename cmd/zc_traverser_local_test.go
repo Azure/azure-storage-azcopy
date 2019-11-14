@@ -42,6 +42,8 @@ func (s *localTraverserTestSuite) TestCleanLocalPathForWindows(c *chk.C) {
 		`\\foo\bar\`:  `\\foo\bar`,  // network share
 		`C:\`:         `C:\`,        // special case, the slash after colon is actually required
 		`D:`:          `D:\`,        // special case, the slash after colon is actually required
+		`c:\`:         `c:\`,        // special case, the slash after colon is actually required
+		`c:`:          `c:\`,        // special case, the slash after colon is actually required
 	}
 
 	for orig, expected := range testCases {
