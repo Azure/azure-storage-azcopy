@@ -25,6 +25,7 @@ import (
 	"context"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -55,6 +56,22 @@ var rootCmd = &cobra.Command{
 		glcm.SetOutputFormat(azcopyOutputFormat)
 		if err != nil {
 			return err
+		}
+
+		// warn Windows users re quoting (since our docs all use single quotes, but CMD needs double)
+		// Single ones just come through as part of the args, in CMD.
+		// Ideally, for usability, we'd ideally have this info come back in the result of url.Parse. But that's hard to
+		// arrange. So we check it here.
+		if runtime.GOOS == "windows" {
+			for _, a := range args {
+				a = strings.ToLower(a)
+				if strings.HasPrefix(a, "'http") { // note the single quote
+					glcm.Info("")
+					glcm.Info("*** When running from CMD, surround URLs with double quotes. Only using single quotes from PowerShell. ***")
+					glcm.Info("")
+					break
+				}
+			}
 		}
 
 		// currently, we only automatically do auto-tuning when benchmarking

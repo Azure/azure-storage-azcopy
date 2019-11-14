@@ -1,6 +1,24 @@
 
 # Change Log
 
+## Version 10.3.2
+
+### Bug fixes
+
+1. Jobs could not be cancelled while scanning was still in progress.
+1. Downloading large managed disks (8 TB and above) failed with errors.
+1. Downloading large page blobs might make no progress for the first 15 or 20 minutes.
+1. There was a rare error where the final output could under-report the total number of files in the job. That error has been fixed.
+1. When using JSON output mode, the output from the rm command on ADLS Gen2 was inconsistent with the output from other commands
+1. After authentication errors, files in progress were not cleaned up (deleted) at the destination. If there was an
+   authentication failure during a job (e.g. a SAS token expired while in use) this could result in files being left
+   behind that had incomplete contents (even though their size looked correct).
+1. The AUTO concurrency option, for automatically tuning concurrency as AzCopy runs, started working too late if scanning (aka enumeration) took a long time. This resulted in reduced throughput when using this setting.
+1. It was not possible to access the root of Windows drives with lowercase drive letters. E.g. d:\
+1. Service to Service transfers would fail when using environment variable to specify OAuth authentication.
+1. Certain errors parsing URLs were not reported clearly.
+1. When downloading to NUL (/dev/null on Linux), files of zero length no longer trigger errors. (Downloads to NUL can be used in performance testing and bulk MD5 checking.
+
 ## Version 10.3.1
 
 ### New features

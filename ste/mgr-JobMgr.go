@@ -136,8 +136,8 @@ func (jm *jobMgr) logConcurrencyParameters() {
 		jm.concurrency.MaxMainPoolSize.GetDescription()))
 
 	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Check CPU usage when dynamically tuning concurrency: %t (%s)",
-		jm.concurrency.CheckCpuWhenTuing.Value,
-		jm.concurrency.CheckCpuWhenTuing.GetDescription()))
+		jm.concurrency.CheckCpuWhenTuning.Value,
+		jm.concurrency.CheckCpuWhenTuning.GetDescription()))
 
 	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent transfer initiation routines: %d (%s)",
 		jm.concurrency.TransferInitiationPoolSize.Value,
@@ -157,8 +157,9 @@ type jobMgr struct {
 	// TODO: added for debugging purpose. remove later
 	atomicCurrentConcurrentConnections int64
 	// atomicAllTransfersScheduled defines whether all job parts have been iterated and resumed or not
-	atomicAllTransfersScheduled int32
-	atomicTransferDirection     common.TransferDirection
+	atomicAllTransfersScheduled     int32
+	atomicFinalPartOrderedIndicator int32
+	atomicTransferDirection         common.TransferDirection
 
 	concurrency          ConcurrencySettings
 	logger               common.ILoggerResetable
@@ -183,8 +184,7 @@ type jobMgr struct {
 	// list of transfer mentioned to include only then while resuming the job
 	include map[string]int
 	// list of transfer mentioned to exclude while resuming the job
-	exclude          map[string]int
-	finalPartOrdered bool
+	exclude map[string]int
 
 	// only a single instance of the prompter is needed for all transfers
 	overwritePrompter *overwritePrompter
@@ -310,7 +310,7 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 		fileCountLimiter: JobsAdmin.(*jobsAdmin).fileCountLimiter}
 	jpm.planMMF = jpm.filename.Map()
 	jm.jobPartMgrs.Set(partNum, jpm)
-	jm.finalPartOrdered = jpm.planMMF.Plan().IsFinalPart
+	jm.setFinalPartOrdered(partNum, jpm.planMMF.Plan().IsFinalPart)
 	jm.setDirection(jpm.Plan().FromTo)
 	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(partNum, jpm.Plan().FromTo)
 	if scheduleTransfers {
@@ -322,6 +322,26 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 		JobsAdmin.QueueJobParts(jpm)
 	}
 	return jpm
+}
+
+func (jm *jobMgr) setFinalPartOrdered(partNum PartNumber, isFinalPart bool) {
+	newVal := common.Iffint32(isFinalPart, 1, 0)
+	oldVal := atomic.SwapInt32(&jm.atomicFinalPartOrderedIndicator, newVal)
+	if newVal == 0 && oldVal == 1 {
+		// we just cleared the flag. Sanity check that.
+		if partNum == 0 {
+			// We can't complain because, when resuming a job, there are actually TWO calls made the ResurrectJob.
+			// The effect is that all the parts are ordered... then all the parts are ordered _again_ (with new JobPartManagers replacing those from the first time)
+			// (The first resurrect is from GetJobFromTo and the second is from ResumeJobOrder)
+			// So we don't object if the _first_ part clears the flag. The assumption we make, by allowing this special case here, is that
+			// the first part will be scheduled before any higher-numbered part.  As long as that assumption is true, this is safe.
+			// TODO: do we really need to to Resurrect the job twice?
+		} else {
+			// But we do object if any other part clears the flag, since that wouldn't make sense.
+			panic("Error: another job part was scheduled after the final part")
+		}
+
+	}
 }
 
 // Remembers which direction we are running in (upload, download or neither (for service to service))
@@ -402,31 +422,42 @@ func (jm *jobMgr) ResetAllTransfersScheduled() {
 // ReportJobPartDone is called to report that a job part completed or failed
 func (jm *jobMgr) ReportJobPartDone() uint32 {
 	shouldLog := jm.ShouldLog(pipeline.LogInfo)
+
+	jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
+	if !ok {
+		jm.Panic(fmt.Errorf("Failed to find Job %v, Part #0", jm.jobID))
+	}
+	part0Plan := jobPart0Mgr.Plan()
+	jobStatus := part0Plan.JobStatus() // status of part 0 is status of job as a whole
+
 	partsDone := atomic.AddUint32(&jm.partsDone, 1)
 	// If the last part is still awaited or other parts all still not complete,
-	// JobPart 0 status is not changed.
-	if partsDone != jm.jobPartMgrs.Count() || !jm.finalPartOrdered {
+	// JobPart 0 status is not changed (unless we are cancelling)
+	allKnownPartsDone := partsDone == jm.jobPartMgrs.Count()
+	haveFinalPart := atomic.LoadInt32(&jm.atomicFinalPartOrderedIndicator) == 1
+	isCancelling := jobStatus == common.EJobStatus.Cancelling()
+	shouldComplete := allKnownPartsDone && (haveFinalPart || isCancelling)
+	if !shouldComplete {
 		if shouldLog {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("is part of Job which %d total number of parts done ", partsDone))
 		}
 		return partsDone
 	}
 
-	if shouldLog {
-		jm.Log(pipeline.LogInfo, fmt.Sprintf("all parts of Job %s successfully completed, cancelled or paused", jm.jobID.String()))
+	partDescription := "all parts of entire Job"
+	if !haveFinalPart {
+		partDescription = "known parts of incomplete Job"
 	}
-	jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
-	if !ok {
-		jm.Panic(fmt.Errorf("Failed to find Job %v, Part #0", jm.jobID))
+	if shouldLog {
+		jm.Log(pipeline.LogInfo, fmt.Sprintf("%s %s successfully completed, cancelled or paused", partDescription, jm.jobID.String()))
 	}
 
-	switch part0Plan := jobPart0Mgr.Plan(); part0Plan.JobStatus() {
+	switch jobStatus {
 	case common.EJobStatus.Cancelling():
 		part0Plan.SetJobStatus(common.EJobStatus.Cancelled())
 		if shouldLog {
-			jm.Log(pipeline.LogInfo, fmt.Sprintf("all parts of Job %v successfully cancelled; cleaning up the Job", jm.jobID))
+			jm.Log(pipeline.LogInfo, fmt.Sprintf("%s %v successfully cancelled", partDescription, jm.jobID))
 		}
-		//jm.jobsInfo.cleanUpJob(jm.jobID)
 	case common.EJobStatus.InProgress():
 		part0Plan.SetJobStatus((common.EJobStatus).Completed())
 	}

@@ -292,6 +292,17 @@ func NewBFSXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 	})
 }
 
+var retrySuppressionContextKey = contextKey{"retrySuppression"}
+
+// withNoRetryForBlob returns a context that contains a marker to say we don't want any retries to happen
+// Is only implemented for blob pipelines at present
+func withNoRetryForBlob(ctx context.Context) context.Context {
+	return context.WithValue(ctx, retrySuppressionContextKey, struct{}{})
+	// TODO: this is fragile, in the sense that we have no way to check, here, that we are running in a pipeline that
+	//    actually knows how to check the context for the value.  Maybe add a check here, if/when we rationalize
+	//    all our retry policies into one
+}
+
 // TODO: Fix the separate retry policies, use Azure blob's retry policy after blob SDK with retry optimization get released.
 // NewBlobXferRetryPolicyFactory creates a RetryPolicyFactory object configured using the specified options.
 func NewBlobXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
@@ -311,7 +322,11 @@ func NewBlobXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 			//    For a primary wait ((2 ^ primaryTries - 1) * delay * random(0.8, 1.2)
 			//    If secondary gets a 404, don't fail, retry but future retries are only against the primary
 			//    When retrying against a secondary, ignore the retry count and wait (.1 second * random(0.8, 1.2))
-			for try := int32(1); try <= o.MaxTries; try++ {
+			maxTries := o.MaxTries
+			if _, ok := ctx.Value(retrySuppressionContextKey).(struct{}); ok {
+				maxTries = 1 // retries are suppressed by the context
+			}
+			for try := int32(1); try <= maxTries; try++ {
 				logf("\n=====> Try=%d\n", try)
 
 				// Determine which endpoint to try. It's primary if there is no secondary or if it is an add # attempt.

@@ -852,6 +852,9 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize
 func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
+	// Note: credential info here is only used by remove at the moment.
+	// TODO: Get the entirety of remove into the new copyEnumeratorInit script so we can remove this
+	//       and stop having two places in copy that we get credential info
 	// verifies credential type and initializes credential info.
 	// Note: Currently, only one credential type is necessary for source and destination.
 	// For upload&download, only one side need credential.
@@ -988,14 +991,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	case common.EFromTo.BlobFSTrash():
 		// TODO merge with BlobTrash case
-		msg, err := removeBfsResources(cca)
-		if err == nil {
-			glcm.Exit(func(format common.OutputFormat) string {
-				return msg
-			}, common.EExitCode.Success())
-		}
-
-		return err
+		err = removeBfsResources(cca)
 
 	// TODO: Hide the File to Blob direction temporarily, as service support on-going.
 	// case common.EFromTo.FileBlob():

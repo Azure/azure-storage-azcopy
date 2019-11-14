@@ -258,7 +258,9 @@ type rawFromToInfo struct {
 }
 
 func getCredentialInfoForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool) (credInfo common.CredentialInfo, isPublic bool, err error) {
-	if credInfo.CredentialType = GetCredTypeFromEnvVar(); credInfo.CredentialType == common.ECredentialType.Unknown() {
+	if resourceSAS != "" {
+		credInfo.CredentialType = common.ECredentialType.Anonymous()
+	} else if credInfo.CredentialType = GetCredTypeFromEnvVar(); credInfo.CredentialType == common.ECredentialType.Unknown() {
 		switch location {
 		case common.ELocation.Local(), common.ELocation.Benchmark():
 			credInfo.CredentialType = common.ECredentialType.Anonymous()
