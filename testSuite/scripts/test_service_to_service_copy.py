@@ -770,19 +770,6 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         if dstBlobType != "":
             result = result.add_flags("blob-type", dstBlobType)
 
-        r = result.execute_azcopy_copy_command()  # nice "dynamic typing"
-        self.assertTrue(r)
-
-        if credTypeOverride != "":
-            os.environ["AZCOPY_CRED_TYPE"] = ""
-
-        # Downloading the copied file for validation
-        validate_dir_name = "validate_copy_single_%dKB_file_from_%s_to_%s_%s" % (sizeInKB, srcType, dstType, customizedFileName)
-        local_validate_dest_dir = util.create_test_dir(validate_dir_name)
-        local_validate_dest = os.path.join(local_validate_dest_dir, filename)
-        result = util.Command("copy").add_arguments(dstFileURL).add_arguments(local_validate_dest). \
-            add_flags("log-level", "info")
-
         # tell azcopy to check the LMT and possibly introduce a fault with the LMT to fail the transfer
         if checkLMT == "pass":
             result.add_flags("s2s-detect-source-changed", "True")
@@ -793,17 +780,32 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             # introduce a fault in the LMT to fail the transfer
             result.add_flags("supply-invalid-lmt", "True")
 
-        result = result.execute_azcopy_copy_command()
+        r = result.execute_azcopy_copy_command()  # nice "dynamic typing"
 
-        # Verifying the downloaded blob
+        if credTypeOverride != "":
+            os.environ["AZCOPY_CRED_TYPE"] = ""
+
         if not checkLMT == "fail":
-            result = filecmp.cmp(file_path, local_validate_dest, shallow=False)
-            # Do not expect a failure
-            self.assertTrue(result)
+            self.assertTrue(r)
         else:
-            self.assertFalse(result)
+            self.assertFalse(r)
             # disable debug mode for future tests
             os.environ['AZCOPY_DEBUG_MODE'] = 'off'
+            return  # No need to validate
+
+        # Downloading the copied file for validation
+        validate_dir_name = "validate_copy_single_%dKB_file_from_%s_to_%s_%s" % (sizeInKB, srcType, dstType, customizedFileName)
+        local_validate_dest_dir = util.create_test_dir(validate_dir_name)
+        local_validate_dest = os.path.join(local_validate_dest_dir, filename)
+        result = util.Command("copy").add_arguments(dstFileURL).add_arguments(local_validate_dest). \
+            add_flags("log-level", "info")
+
+        result = result.execute_azcopy_copy_command()
+        self.assertTrue(result)
+
+        result = filecmp.cmp(file_path, local_validate_dest, shallow=False)
+        # Do not expect a failure
+        self.assertTrue(result)
 
         # clean up both source and destination bucket
         # util.Command("clean").add_arguments(srcBucketURL).add_flags("serviceType", srcType). \
