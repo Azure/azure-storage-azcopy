@@ -775,9 +775,9 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         if checkLMT == "pass":
             result.add_flags("s2s-detect-source-changed", "True")
         elif checkLMT == "fail":
+            result.add_flags("s2s-detect-source-changed", "True")
             # enable debug mode
             os.environ['AZCOPY_DEBUG_MODE'] = 'on'
-            result.add_flags("s2s-detect-source-changed", "True")
             # introduce a fault in the LMT to fail the transfer
             result.add_flags("supply-invalid-lmt", "True")
 
@@ -790,6 +790,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             # Do not expect a failure
             self.assertTrue(result)
         else:
+            self.assertFalse(result)
             # disable debug mode for future tests
             os.environ['AZCOPY_DEBUG_MODE'] = 'off'
 
