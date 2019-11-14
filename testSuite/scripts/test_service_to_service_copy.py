@@ -782,7 +782,6 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             result.add_flags("supply-invalid-lmt", "True")
 
         result = result.execute_azcopy_copy_command()
-        self.assertTrue(result)
 
         # Verifying the downloaded blob
         if not checkLMT == "fail":
