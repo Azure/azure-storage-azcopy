@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -110,6 +111,8 @@ func inferFromTo(src, dst string) common.FromTo {
 	return common.EFromTo.Unknown()
 }
 
+var IPv4Regex = regexp.MustCompile(`\d+\.\d+\.\d+\.\d+`) // simple regex
+
 func inferArgumentLocation(arg string) common.Location {
 	if arg == pipeLocation {
 		return common.ELocation.Pipe()
@@ -130,6 +133,9 @@ func inferArgumentLocation(arg string) common.Location {
 				return common.ELocation.BlobFS()
 			case strings.Contains(host, benchmarkSourceHost):
 				return common.ELocation.Benchmark()
+				// enable targeting an emulator/stack
+			case IPv4Regex.MatchString(host):
+				return common.ELocation.Blob()
 			}
 
 			if common.IsS3URL(*u) {
