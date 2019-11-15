@@ -663,7 +663,17 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 		if status == http.StatusForbidden {
 			// quit right away, since without proper authentication no work can be done
 			// display a clear message
-			common.GetLifecycleMgr().Error(fmt.Sprintf("Authentication failed, it is either not correct, or expired, or does not have the correct permission %s", err.Error()))
+			common.GetLifecycleMgr().Info(fmt.Sprintf("Authentication failed, it is either not correct, or expired, or does not have the correct permission %s", err.Error()))
+			// and use the normal cancelling mechanism so that we can exit in a clean and controlled way
+			jobId := jptm.jobPartMgr.Plan().JobID
+			CancelPauseJobOrder(jobId, common.EJobStatus.Cancelling())
+			// TODO: this results in the final job output line being: Final Job Status: Cancelled
+			//     That's not ideal, because it would be better if it said Final Job Status: Failed
+			//     However, we don't have any way to distinguish "user cancelled after some failed files" from
+			//     from "application cancelled itself after an auth failure".  The former should probably be reported as
+			//     Cancelled, so we can't just make a sweeping change to reporting both as Failed.
+			//     For now, let's live with it being reported as cancelled, since that's still better than not reporting any
+			//     status at all, which is what it did previously (when we called glcm.Error here)
 		}
 	}
 	// TODO: right now the convention re cancellation seems to be that if you cancel, you MUST both call cancel AND

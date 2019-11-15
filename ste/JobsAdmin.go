@@ -115,7 +115,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 	cpuMon := common.NewNullCpuMonitor()
 	// One day, we might monitor CPU as the app runs in all cases (and report CPU as possible constraint like we do with disk).
 	// But for now, we only monitor it when tuning the GR pool size.
-	if concurrency.AutoTuneMainPool() && concurrency.CheckCpuWhenTuing.Value {
+	if concurrency.AutoTuneMainPool() && concurrency.CheckCpuWhenTuning.Value {
 		// let our CPU monitor self-calibrate BEFORE we start doing any real work TODO: remove if we switch to gopsutil
 		cpuMon = common.NewCalibratedCpuUsageMonitor()
 	}
@@ -341,6 +341,7 @@ func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 	initialMonitoringInterval := time.Duration(4 * time.Second)
 	expandedMonitoringInterval := time.Duration(8 * time.Second)
 	throughputMonitoringInterval := initialMonitoringInterval
+	slowTuneCh := ja.poolSizingChannels.requestSlowTuneCh
 
 	// get initial pool size
 	targetConcurrency, reason := tuner.GetRecommendedConcurrency(-1, ja.cpuMonitor.CPUContentionExists())
@@ -368,10 +369,11 @@ func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 			// worker has exited
 			actualConcurrency--
 			atomic.StoreInt32(&ja.atomicCurrentMainPoolSize, int32(actualConcurrency))
-		case <-ja.poolSizingChannels.requestSlowTuneCh:
+		case <-slowTuneCh:
 			// we've been asked to tune more slowly
 			// TODO: confirm we don't need this: expandedMonitoringInterval *= 2
 			throughputMonitoringInterval = expandedMonitoringInterval
+			slowTuneCh = nil // so we won't keep running this case at the expense of others)
 		case <-time.After(throughputMonitoringInterval):
 			if actualConcurrency == targetConcurrency { // scalebacks can take time. Don't want to do any tuning if actual is not yet aligned to target
 				bytesOnWire := ja.BytesOverWire()

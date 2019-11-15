@@ -10,6 +10,9 @@ var _ = chk.Suite(&pathHandlerSuite{})
 
 func (p *pathHandlerSuite) TestShortToLong(c *chk.C) {
 	if OS_PATH_SEPARATOR == `\` {
+		c.Assert(ToExtendedPath(`c:`), chk.Equals, `\\?\C:\`)
+		c.Assert(ToExtendedPath(`c:/`), chk.Equals, `\\?\C:\`)
+		c.Assert(ToExtendedPath(`c:/myPath`), chk.Equals, `\\?\C:\myPath`)
 		c.Assert(ToExtendedPath(`C:\myPath`), chk.Equals, `\\?\C:\myPath`)
 		c.Assert(ToExtendedPath(`\\myHost\myPath`), chk.Equals, `\\?\UNC\myHost\myPath`)
 		c.Assert(ToExtendedPath(`\\?\C:\myPath`), chk.Equals, `\\?\C:\myPath`)

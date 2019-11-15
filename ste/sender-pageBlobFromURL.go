@@ -173,7 +173,8 @@ func (p *pageRangeOptimizer) fetchPages() {
 	// thus, if the page blob is not sparse, it's ok for it to fail
 	// TODO follow up with the service folks to confirm the scale at which the timeouts occur
 	// TODO perhaps we need to add more logic here to optimize for more cases
-	pageList, err := p.srcPageBlobURL.GetPageRanges(p.ctx, 0, 0, azblob.BlobAccessConditions{})
+	limitedContext := withNoRetryForBlob(p.ctx) // we don't want retries here. If it doesn't work the first time, we don't want to chew up (lots) time retrying
+	pageList, err := p.srcPageBlobURL.GetPageRanges(limitedContext, 0, 0, azblob.BlobAccessConditions{})
 	if err == nil {
 		p.srcPageList = pageList
 	}
