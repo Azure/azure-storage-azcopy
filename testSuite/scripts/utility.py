@@ -582,7 +582,7 @@ def verify_operation(command):
             command, stderr=subprocess.STDOUT, shell=True, timeout=240,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
-        # print("command failed with error code ", exec.returncode, " and message " + exec.output)
+        print("command failed with error code ", exec.returncode, " and message " + exec.output)
         return False
     else:
         return True
