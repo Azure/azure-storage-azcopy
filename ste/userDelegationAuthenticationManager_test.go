@@ -2,7 +2,6 @@ package ste
 
 import (
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -17,8 +16,7 @@ var _ = chk.Suite(&udamTestSuite{})
 func (s *udamTestSuite) MakeUDAMInstance(dummyInstance bool) userDelegationAuthenticationManager {
 	if dummyInstance {
 		return userDelegationAuthenticationManager{
-			sasMap:           &atomic.Value{},
-			sasMapWriteMutex: &sync.Mutex{},
+			sasMap: &sync.Map{},
 		}
 	} else {
 		startTime := time.Now()
@@ -37,14 +35,11 @@ func (s *udamTestSuite) MakeUDAMInstance(dummyInstance bool) userDelegationAuthe
 
 		// create a actual working instance of UDAM, but don't use the normal creation path
 		udam := userDelegationAuthenticationManager{
-			credential:       udc,
-			startTime:        startTime,
-			expiryTime:       expiryTime,
-			sasMap:           &atomic.Value{},
-			sasMapWriteMutex: &sync.Mutex{},
+			credential: udc,
+			startTime:  startTime,
+			expiryTime: expiryTime,
+			sasMap:     &sync.Map{},
 		}
-
-		udam.sasMap.Store(make(map[string]string))
 
 		return udam
 	}
@@ -53,56 +48,18 @@ func (s *udamTestSuite) MakeUDAMInstance(dummyInstance bool) userDelegationAuthe
 func (s *udamTestSuite) TestSASWriteLock(c *chk.C) {
 	// We just want a non-empty UDK
 	udam := s.MakeUDAMInstance(false)
-	var testwg sync.WaitGroup
 	var knownSAS string
 
-	// test that the write lock actually works when we're getting a currently unknown container name.
-	isLocked := true
-	udam.sasMapWriteMutex.Lock()
+	// Get an already existing SAS
+	knownSAS, err := udam.createUserDelegationSASForURL("dummyContainer")
+	c.Assert(err, chk.IsNil)
 
-	testwg.Add(1)
-	go func() {
-		sas, err := udam.createUserDelegationSASForURL("dummyContainer")
-		c.Assert(err, chk.IsNil)
-		c.Assert(sas, chk.Not(chk.Equals), "")
-		c.Assert(isLocked, chk.Equals, false)
-		knownSAS = sas // stash the SAS because we're going to test that in a bit
-		testwg.Done()  // ensure that this test actually finishes before we move on
-	}()
+	o, err := udam.GetUserDelegationSASForURL(azblob.BlobURLParts{ContainerName: "dummyContainer"})
+	c.Assert(err, chk.IsNil)
+	c.Assert(o, chk.Equals, knownSAS)
 
-	time.Sleep(time.Second)
-
-	// unlock the mutex and see the effects
-	isLocked = false
-	udam.sasMapWriteMutex.Unlock()
-	testwg.Wait()
-
-	// test that getting a known container SAS works while the lock is present
-	isLocked = true
-	udam.sasMapWriteMutex.Lock()
-
-	// Create a dummy URL parts with the known SAS-- only one field matters here
-	burlparts := azblob.BlobURLParts{ContainerName: "dummyContainer"}
-
-	lockCheckChan := make(chan struct{})
-	go func() {
-		// this should trigger before we unlock because it is already known
-		sas, err := udam.GetUserDelegationSASForURL(burlparts)
-		c.Assert(err, chk.IsNil)
-		c.Assert(sas, chk.Equals, knownSAS)
-		c.Assert(isLocked, chk.Equals, true)
-		lockCheckChan <- struct{}{}
-	}()
-
-	time.Sleep(time.Second)
-
-	// unlock the mutex and see the effects
-	select {
-	case <-time.After(time.Second * 5):
-		c.Fail() // GetUserDelegationSASForURL has timed out. Basically, the write lock being claimed is causing issues.
-	case <-lockCheckChan:
-		// Nothing bad happened, we correctly grabbed the SAS token before unlocking.
-	}
-	isLocked = false
-	udam.sasMapWriteMutex.Unlock()
+	// Try getting a new SAS
+	newSAS, err := udam.GetUserDelegationSASForURL(azblob.BlobURLParts{ContainerName: ""})
+	c.Assert(err, chk.IsNil)
+	c.Assert(newSAS, chk.Not(chk.Equals), "")
 }

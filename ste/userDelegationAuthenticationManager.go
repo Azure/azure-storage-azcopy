@@ -2,7 +2,6 @@ package ste
 
 import (
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -22,19 +21,16 @@ type userDelegationAuthenticationManager struct {
 	expiryTime time.Time
 	credential azblob.UserDelegationCredential
 	serviceURL azblob.ServiceURL
-	// This is a mostly-read scenario. Therefore, we treat the SAS map as an atomic value, and apply a write mutex to the map.
-	// We then, whenever we're attempting to get a SAS token for a container, check if it's present first.
-	// If it's not present, we start attempting to create the token. In order to do so, we lock the write mutex.
-	// Since this may take time, and by the time we obtain the lock, the SAS we're trying to get MAY have already been created,
-	// Check the map for the key before we overwrite.
-	sasMap           *atomic.Value // points to a map[string]string. map[containerName]sasToken
-	sasMapWriteMutex *sync.Mutex
+	// sync.Maps can be safely accessed concurrently.
+	// Yes, we'll have some routines trying to get the same UDK stepping over eachother, potentially,
+	// But the stringtosign and such will end up being the exact same until a refresh.
+	sasMap *sync.Map
 }
 
 // newUserDelegationAuthenticationManager uses an azblob service URL to obtain a user delegation credential, and returns a new userDelegationAuthenticationManager
 // serviceURL should have adequate permissions to generate a set of user delegation credentials.
 func newUserDelegationAuthenticationManager(serviceURL azblob.ServiceURL) (userDelegationAuthenticationManager, error) {
-	authManager := userDelegationAuthenticationManager{serviceURL: serviceURL, sasMap: &atomic.Value{}, sasMapWriteMutex: &sync.Mutex{}}
+	authManager := userDelegationAuthenticationManager{serviceURL: serviceURL, sasMap: &sync.Map{}}
 
 	err := authManager.refreshUDKInternal()
 
@@ -45,8 +41,8 @@ func newUserDelegationAuthenticationManager(serviceURL azblob.ServiceURL) (userD
 	// Start our refresh loop
 	go func() {
 		for {
-			<-time.After((time.Hour * 24 * 6) + (time.Hour * 12))
-			_ = authManager.refreshUDKInternal() // We don't need to worry about a retry here.
+			<-time.After((time.Hour * 24 * 6) + (time.Hour * 12)) // Refresh after exactly 6.5 days so we have .5 days of wiggle room if any SAS tokens are still in use.
+			_ = authManager.refreshUDKInternal()                  // We don't need to worry about a retry here.
 		}
 	}()
 
@@ -54,11 +50,10 @@ func newUserDelegationAuthenticationManager(serviceURL azblob.ServiceURL) (userD
 }
 
 func (u *userDelegationAuthenticationManager) refreshUDKInternal() error {
-	// First, grab the SAS token map lock. We need to flush it.
-	u.sasMapWriteMutex.Lock()
-	defer u.sasMapWriteMutex.Unlock()
-	// Flush the SAS token map-- Everything in there is now invalid.
-	u.sasMap.Store(make(map[string]string))
+	u.sasMap.Range(func(k, v interface{}) bool { // empty the map
+		u.sasMap.Delete(k)
+		return true
+	})
 
 	// Create a new start/expiry time.
 	u.startTime = time.Now()
@@ -96,11 +91,9 @@ func (u *userDelegationAuthenticationManager) GetUserDelegationSASForURL(blobURL
 		return "", nil
 	}
 
-	sasMap := u.sasMap.Load().(map[string]string)
-
 	// Check if the SAS token is already present. No need to waste time locking the write mutex if it already exists.
-	if sas, ok := sasMap[blobURLParts.ContainerName]; ok {
-		return sas, nil
+	if sas, ok := u.sasMap.Load(blobURLParts.ContainerName); ok {
+		return sas.(string), nil
 	} else {
 		// if it is not already present, it should be.
 		// so, create it and return whatever it returns.
@@ -110,20 +103,6 @@ func (u *userDelegationAuthenticationManager) GetUserDelegationSASForURL(blobURL
 }
 
 func (u *userDelegationAuthenticationManager) createUserDelegationSASForURL(containerName string) (string, error) {
-	// First, obtain the mutex
-	u.sasMapWriteMutex.Lock()
-	// defer an unlock
-	defer u.sasMapWriteMutex.Unlock()
-
-	// check against the SAS map again in case something already created it.
-	sasMap := u.sasMap.Load().(map[string]string)
-
-	// If it's already present, just return it.
-	// We do this check a second time in a row because something may have stepped over us.
-	if sas, ok := sasMap[containerName]; ok {
-		return sas, nil
-	}
-
 	// If it's not present, we need to generate a SAS query and store it, then return.
 	sasQuery, err := azblob.BlobSASSignatureValues{
 		Version:       DefaultServiceApiVersion,
@@ -139,8 +118,7 @@ func (u *userDelegationAuthenticationManager) createUserDelegationSASForURL(cont
 	}
 
 	// Write the query to the map and then store it.
-	sasMap[containerName] = sasQuery.Encode()
-	u.sasMap.Store(sasMap)
+	u.sasMap.Store(containerName, sasQuery.Encode())
 
 	if JobsAdmin != nil {
 		JobsAdmin.LogToJobLog("Successfully generated SAS token for source container " + containerName)
