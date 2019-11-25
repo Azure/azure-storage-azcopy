@@ -103,6 +103,14 @@ func (EnvironmentVariable) OptimizeSparsePageBlobTransfers() EnvironmentVariable
 	}
 }
 
+func (EnvironmentVariable) CacheProxyLookup() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_CACHE_PROXY_LOOKUP",
+		Description:  "By default AzCopy on Windows will cache proxy server lookups at hostname level (not taking URL path into account). Set to any other value than 'true' to disable the cache.",
+		DefaultValue: "true",
+	}
+}
+
 func (EnvironmentVariable) LogLocation() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_LOG_LOCATION",

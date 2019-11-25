@@ -42,5 +42,5 @@ func NewPipeline(c Credential, o PipelineOptions) pipeline.Pipeline {
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		NewRequestLogPolicyFactory_Deprecated(o.RequestLog))
 
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: o.Log})
+	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: o.Log}) // TODO: can't use this if we go with proxy lookup caching in AzCopy
 }
