@@ -90,7 +90,7 @@ func (c *proxyLookupCache) getProxyNoCache(req *http.Request) proxyLookupResult 
 	case v := <-ch:
 		return v
 	case <-time.After(time.Minute):
-		return proxyLookupResult{nil, ProxyLookupTimeoutError}
+		return proxyLookupResult{nil, ProxyLookupTimeoutError} // TODO: run a test that actually triggers the logging of this error. May take several attempts. Maybe also run with fmt.Print here, just fo the test, since its so hard to repro, don't want to lose it due to retry logging not logging this error... Although given that it's not a retryable error, maybe juts let the transfer fail...
 	}
 }
 
