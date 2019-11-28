@@ -75,15 +75,23 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
-	s.copyJobTemplate.Transfers = append(s.copyJobTemplate.Transfers, common.CopyTransfer{
-		Source:           s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeSourceObjectName),
-		Destination:      s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeDestinationObjectName),
-		SourceSize:       storedObject.size,
-		LastModifiedTime: storedObject.lastModifiedTime,
-		ContentMD5:       storedObject.md5,
-		BlobType:         storedObject.blobType,
-		ContentEncoding:  storedObject.contentEncoding,
-	})
+	s.copyJobTemplate.Transfers = append(s.copyJobTemplate.Transfers, common.NewCopyTransfer(
+		false,
+		s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeSourceObjectName),
+		s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeDestinationObjectName),
+		storedObject.lastModifiedTime,
+		storedObject.size,
+		storedObject.contentType,
+		storedObject.contentEncoding,
+		storedObject.contentDisposition,
+		storedObject.contentLanguage,
+		storedObject.cacheControl,
+		storedObject.md5,
+		storedObject.Metadata,
+		storedObject.blobType,
+		storedObject.blobAccessTier,
+	))
+
 	return nil
 }
 
