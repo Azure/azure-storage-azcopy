@@ -81,8 +81,60 @@ const (
 	blobTypeNA = azblob.BlobNone // some things, e.g. local files, aren't blobs so they don't have their own blob type so we use this "not applicable" constant
 )
 
-func (storedObject *storedObject) isMoreRecentThan(storedObject2 storedObject) bool {
-	return storedObject.lastModifiedTime.After(storedObject2.lastModifiedTime)
+func (s *storedObject) isMoreRecentThan(storedObject2 storedObject) bool {
+	return s.lastModifiedTime.After(storedObject2.lastModifiedTime)
+}
+
+func (s *storedObject) ToNewCopyTransfer(
+	steWillAutoDecompress bool,
+	Source string,
+	Destination string,
+	preserveBlobTier bool) common.CopyTransfer {
+
+	if steWillAutoDecompress {
+		Destination = stripCompressionExtension(Destination, s.contentEncoding)
+	}
+
+	t := common.CopyTransfer{
+		Source:             Source,
+		Destination:        Destination,
+		LastModifiedTime:   s.lastModifiedTime,
+		SourceSize:         s.size,
+		ContentType:        s.contentType,
+		ContentEncoding:    s.contentEncoding,
+		ContentDisposition: s.contentDisposition,
+		ContentLanguage:    s.contentLanguage,
+		CacheControl:       s.cacheControl,
+		ContentMD5:         s.md5,
+		Metadata:           s.Metadata,
+		BlobType:           s.blobType,
+		// set this below, conditionally: BlobTier
+	}
+
+	if preserveBlobTier {
+		t.BlobTier = s.blobAccessTier
+	}
+
+	return t
+}
+
+// stripCompressionExtension strips any file extension that corresponds to the
+// compression indicated by the encoding type.
+// Why remove this extension here, at enumeration time, instead of just doing it
+// in the STE when we are about to save the file?
+// Because by doing it here we get the accurate name in things that
+// directly read the Plan files, like the jobs show command
+func stripCompressionExtension(dest string, contentEncoding string) string {
+	// Ignore error getting compression type. We can't easily report it now, and we don't need to know about the error
+	// cases here when deciding renaming.  STE will log error on the error cases
+	ct, _ := common.GetCompressionType(contentEncoding)
+	ext := strings.ToLower(filepath.Ext(dest))
+	stripGzip := ct == common.ECompressionType.GZip() && (ext == ".gz" || ext == ".gzip")
+	stripZlib := ct == common.ECompressionType.ZLib() && ext == ".zz" // "standard" extension for zlib-wrapped files, according to pigz doc and Stack Overflow
+	if stripGzip || stripZlib {
+		return strings.TrimSuffix(dest, filepath.Ext(dest))
+	}
+	return dest
 }
 
 // a constructor is used so that in case the storedObject has to change, the callers would get a compilation error
