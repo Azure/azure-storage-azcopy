@@ -67,8 +67,9 @@ func (t *benchmarkTraverser) traverse(preprocessor objectMorpher, processor obje
 			relativePath,
 			common.BenchmarkLmt,
 			t.bytesPerFile,
-			nil,
-			blobTypeNA,
+			noContentProps,
+			noBlobProps,
+			noMetdata,
 			""), processor)
 		if err != nil {
 			return err

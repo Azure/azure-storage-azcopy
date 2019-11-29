@@ -47,6 +47,7 @@ import (
 
 // represent a local or remote resource object (ex: local file, blob, etc.)
 // we can add more properties if needed, as this is easily extensible
+// ** DO NOT instantiate directly, always use newStoredObject ** (to make sure its fully populated and any preprocessor method runs)
 type storedObject struct {
 	name             string
 	lastModifiedTime time.Time
@@ -85,15 +86,36 @@ func (storedObject *storedObject) isMoreRecentThan(storedObject2 storedObject) b
 	return storedObject.lastModifiedTime.After(storedObject2.lastModifiedTime)
 }
 
+// interfaces for standard properties of storedObjects
+type contentPropsProvider interface {
+	CacheControl() string
+	ContentDisposition() string
+	ContentEncoding() string
+	ContentLanguage() string
+	ContentType() string
+	ContentMD5() []byte
+}
+type blobPropsProvider interface {
+	BlobType() azblob.BlobType
+	AccessTier() azblob.AccessTierType
+}
 // a constructor is used so that in case the storedObject has to change, the callers would get a compilation error
-func newStoredObject(morpher objectMorpher, name string, relativePath string, lmt time.Time, size int64, md5 []byte, blobType azblob.BlobType, containerName string) storedObject {
+// and it forces all necessary properties to be always supplied and not forgotten
+func newStoredObject(morpher objectMorpher, name string, relativePath string, lmt time.Time, size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) storedObject {
 	obj := storedObject{
 		name:             name,
 		relativePath:     relativePath,
 		lastModifiedTime: lmt,
 		size:             size,
-		md5:              md5,
-		blobType:         blobType,
+		cacheControl:       props.CacheControl(),
+		contentDisposition: props.ContentDisposition(),
+		contentEncoding:    props.ContentEncoding(),
+		contentLanguage:    props.ContentLanguage(),
+		contentType:        props.ContentType(),
+		md5:                props.ContentMD5(),
+		blobType:           blobProps.BlobType(),
+		blobAccessTier:     blobProps.AccessTier(),
+		Metadata:           meta,
 		containerName:    containerName,
 	}
 
