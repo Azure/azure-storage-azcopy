@@ -112,21 +112,20 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 				relativePath = strings.TrimPrefix(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 				// We need to omit some properties if we don't get properties
-				fullProperties := &azfile.FileGetPropertiesResponse{}
 				lmt := time.Time{}
+				var props contentPropsProvider = noContentProps
 				var meta common.Metadata = nil
 
 				// Only get the properties if we're told to
 				if t.getProperties {
-					fullProperties, err = f.GetProperties(t.ctx)
+					fullProperties, err := f.GetProperties(t.ctx)
 					if err != nil {
 						return err
 					}
 
 					lmt = fullProperties.LastModified()
-
+					props = fullProperties
 					meta = common.FromAzFileMetadataToCommonMetadata(fullProperties.NewMetadata())
-
 				}
 				storedObject := newStoredObject(
 					preprocessor,
@@ -134,7 +133,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 					relativePath,
 					lmt,
 					fileInfo.Properties.ContentLength,
-					fullProperties,
+					props,
 					noBlobProps,
 					meta,
 					targetURLParts.ShareName,
