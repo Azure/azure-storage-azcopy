@@ -42,11 +42,13 @@ type copyTransferProcessor struct {
 	// handles for progress tracking
 	reportFirstPartDispatched func(jobStarted bool)
 	reportFinalPartDispatched func()
+
+	preserveAccessTier bool
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
 	source string, destination string, shouldEscapeSourceObjectName bool, shouldEscapeDestinationObjectName bool,
-	reportFirstPartDispatched func(bool), reportFinalPartDispatched func()) *copyTransferProcessor {
+	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool) *copyTransferProcessor {
 	return &copyTransferProcessor{
 		numOfTransfersPerPart:             numOfTransfersPerPart,
 		copyJobTemplate:                   copyJobTemplate,
@@ -56,6 +58,7 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 		shouldEscapeDestinationObjectName: shouldEscapeDestinationObjectName,
 		reportFirstPartDispatched:         reportFirstPartDispatched,
 		reportFinalPartDispatched:         reportFinalPartDispatched,
+		preserveAccessTier:                preserveAccessTier,
 	}
 }
 
@@ -90,6 +93,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 		storedObject.Metadata,
 		storedObject.blobType,
 		storedObject.blobAccessTier,
+		s.preserveAccessTier,
 	))
 
 	return nil

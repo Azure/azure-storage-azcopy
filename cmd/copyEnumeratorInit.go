@@ -239,11 +239,9 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			object.md5,
 			object.Metadata,
 			object.blobType,
-			azblob.AccessTierNone) // access tier is assigned conditionally
-
-		if cca.s2sPreserveAccessTier {
-			transfer.BlobTier = object.blobAccessTier
-		}
+			object.blobAccessTier,
+			cca.s2sPreserveAccessTier,
+		)
 
 		return addTransfer(&jobPartOrder, transfer, cca)
 	}

@@ -871,6 +871,8 @@ type CopyTransfer struct {
 	BlobTier azblob.AccessTierType
 }
 
+// TODO: after merging PR#760, and before adding any more properties to CopyTransfer, refactor signature of this method
+//     to take interfaces that group properties together, probably by reusing some interfaces from PR 760
 func NewCopyTransfer(
 	steWillAutoDecompress bool,
 	Source, Destination string,
@@ -880,7 +882,12 @@ func NewCopyTransfer(
 	ContentMD5 []byte,
 	Metadata Metadata,
 	BlobType azblob.BlobType,
-	BlobTier azblob.AccessTierType) CopyTransfer {
+	BlobTier azblob.AccessTierType,
+	preserveBlobTier bool) CopyTransfer {
+
+	if !preserveBlobTier {
+		BlobTier = azblob.AccessTierNone // don't preserve the blob tier
+	}
 
 	if steWillAutoDecompress {
 		Destination = stripCompressionExtension(Destination, ContentEncoding)
