@@ -26,6 +26,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
 	"net/url"
 	"strconv"
@@ -157,8 +158,6 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 
 func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (string, error) {
 
-	tempTargetSupportError := errors.New("the current version of the benchmark command only supports Blob Storage. Support for other targets may follow in a future release")
-
 	u, err := url.Parse(target)
 	if err != nil {
 		return "", fmt.Errorf("error parsing the url %s. Failed with error %s", target, err.Error())
@@ -176,14 +175,12 @@ func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (stri
 		result = p.URL()
 
 	case common.ELocation.File():
-		return "", tempTargetSupportError
-		/*  TODO: enable and test
 		p := azfile.NewFileURLParts(*u)
 		if p.ShareName == "" || p.DirectoryOrFilePath != "" {
 			return "", errors.New("the Azure Files target must be a file share root")
 		}
 		p.DirectoryOrFilePath = virtualDir
-		result = p.URL() */
+		result = p.URL()
 
 	case common.ELocation.BlobFS():
 		p := azbfs.NewBfsURLParts(*u)
