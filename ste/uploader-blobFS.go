@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"math"
 	"net/url"
-	"os"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -56,6 +55,9 @@ func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.
 		return nil, err
 	}
 
+	/* Remove all directory-related tests. They break benchmark mode (since the local entity doesn't exist),
+	/  and they will be obsolete when we introduce folders as first class citizens)
+	//
 	// Get the file/dir Info to determine whether source is a file or directory
 	// since url to upload files and directories is different
 	fInfo, err := os.Stat(info.Source)
@@ -67,7 +69,7 @@ func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.
 		// TODO perhaps implement this by returning a different uploader type...
 		//      Note that when doing so, remember  our rule that all uploaders process 1 chunk
 		//      The returned type will just do one pseudo chunk, in which it creates the directory
-		/* for the record, here is what the chunkFunc used to do, in the directory case - even though that code was never actually called in the current release,
+		// for the record, here is what the chunkFunc used to do, in the directory case - even though that code was never actually called in the current release,
 		   because, as at 1 Jan 2019, we don't actually pass in directories here.  But if we do, this code below could be repacked into an uploader
 
 			if fInfo.IsDir() {
@@ -103,8 +105,8 @@ func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.
 				transferDone(common.ETransferStatus.Success())
 				return
 			}
-		*/
-	}
+
+	}*/
 
 	// compute chunk size and number of chunks
 	chunkSize := info.BlockSize

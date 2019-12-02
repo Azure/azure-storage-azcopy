@@ -23,6 +23,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
@@ -185,16 +186,14 @@ func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (stri
 		result = p.URL() */
 
 	case common.ELocation.BlobFS():
-		return "", tempTargetSupportError
-		/* TODO: enable and test
 		p := azbfs.NewBfsURLParts(*u)
 		if p.FileSystemName == "" || p.DirectoryOrFilePath != "" {
 			return "", errors.New("the blobFS target must be a file system")
 		}
 		p.DirectoryOrFilePath = virtualDir
-		result = p.URL()*/
+		result = p.URL()
 	default:
-		return "", errors.New("benchmarking only supports https connections to Blob, Azure Files, and ADLSGen2")
+		return "", errors.New("benchmarking only supports https connections to Blob, Azure Files, and ADLS Gen2")
 	}
 
 	return result.String(), nil
