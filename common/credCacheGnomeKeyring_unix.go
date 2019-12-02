@@ -1,3 +1,5 @@
+// +build freebsd linux
+
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,14 +23,11 @@
 package common
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 )
 
-// CredCacheInternalIntegration manages credential caches with Gnome keyring.
-// Note: This should be only used for internal integration.
-type CredCacheInternalIntegration struct {
+type CredCacheGnomeKeyring struct {
 	state       string
 	accountName string
 	serviceName string
@@ -37,9 +36,9 @@ type CredCacheInternalIntegration struct {
 	lock        sync.Mutex
 }
 
-// NewCredCacheInternalIntegration creates a cred cache.
-func NewCredCacheInternalIntegration(options CredCacheOptions) *CredCacheInternalIntegration {
-	return &CredCacheInternalIntegration{
+// NewCredCacheGnomeKeyring creates a cred cache.
+func NewCredCacheGnomeKeyring(options CredCacheOptions) *CredCacheGnomeKeyring {
+	return &CredCacheGnomeKeyring{
 		keyName:     options.KeyName,
 		serviceName: options.ServiceName,
 		accountName: options.AccountName,
@@ -48,7 +47,7 @@ func NewCredCacheInternalIntegration(options CredCacheOptions) *CredCacheInterna
 }
 
 // HasCachedToken returns if there is cached token for current executing user.
-func (c *CredCacheInternalIntegration) HasCachedToken() (bool, error) {
+func (c *CredCacheGnomeKeyring) HasCachedToken() (bool, error) {
 	c.lock.Lock()
 	has, err := c.hasCachedTokenInternal()
 	c.lock.Unlock()
@@ -56,7 +55,7 @@ func (c *CredCacheInternalIntegration) HasCachedToken() (bool, error) {
 }
 
 // RemoveCachedToken deletes the cached token.
-func (c *CredCacheInternalIntegration) RemoveCachedToken() error {
+func (c *CredCacheGnomeKeyring) RemoveCachedToken() error {
 	c.lock.Lock()
 	err := c.removeCachedTokenInternal()
 	c.lock.Unlock()
@@ -64,7 +63,7 @@ func (c *CredCacheInternalIntegration) RemoveCachedToken() error {
 }
 
 // SaveToken saves an oauth token.
-func (c *CredCacheInternalIntegration) SaveToken(token OAuthTokenInfo) error {
+func (c *CredCacheGnomeKeyring) SaveToken(token OAuthTokenInfo) error {
 	c.lock.Lock()
 	err := c.saveTokenInternal(token)
 	c.lock.Unlock()
@@ -72,7 +71,7 @@ func (c *CredCacheInternalIntegration) SaveToken(token OAuthTokenInfo) error {
 }
 
 // LoadToken gets the cached oauth token.
-func (c *CredCacheInternalIntegration) LoadToken() (*OAuthTokenInfo, error) {
+func (c *CredCacheGnomeKeyring) LoadToken() (*OAuthTokenInfo, error) {
 	c.lock.Lock()
 	token, err := c.loadTokenInternal()
 	c.lock.Unlock()
@@ -92,7 +91,7 @@ func (c *CredCacheInternalIntegration) LoadToken() (*OAuthTokenInfo, error) {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 // hasCachedTokenInternal returns if there is cached token in token manager.
-func (c *CredCacheInternalIntegration) hasCachedTokenInternal() (bool, error) {
+func (c *CredCacheGnomeKeyring) hasCachedTokenInternal() (bool, error) {
 	if _, err := c.keyring.Get(c.serviceName, c.accountName); err != nil {
 		return false, fmt.Errorf("failed to find token from gnome keyring, %v", err)
 	}
@@ -101,13 +100,12 @@ func (c *CredCacheInternalIntegration) hasCachedTokenInternal() (bool, error) {
 }
 
 // removeCachedTokenInternal deletes all the cached token.
-func (c *CredCacheInternalIntegration) removeCachedTokenInternal() error {
-	// By design, not useful currently.
-	return errors.New("Not implemented")
+func (c *CredCacheGnomeKeyring) removeCachedTokenInternal() error {
+	return c.keyring.Remove(c.serviceName, c.accountName)
 }
 
 // loadTokenInternal restores a Token object from file cache.
-func (c *CredCacheInternalIntegration) loadTokenInternal() (*OAuthTokenInfo, error) {
+func (c *CredCacheGnomeKeyring) loadTokenInternal() (*OAuthTokenInfo, error) {
 	data, err := c.keyring.Get(c.serviceName, c.accountName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get token from gnome keyring, %v", err)
@@ -121,7 +119,15 @@ func (c *CredCacheInternalIntegration) loadTokenInternal() (*OAuthTokenInfo, err
 }
 
 // saveTokenInternal persists an oauth token on disk.
-func (c *CredCacheInternalIntegration) saveTokenInternal(token OAuthTokenInfo) error {
-	// By design, not useful currently.
-	return errors.New("Not implemented")
+func (c *CredCacheGnomeKeyring) saveTokenInternal(token OAuthTokenInfo) error {
+	b, err := token.toJSON()
+	if err != nil {
+		return fmt.Errorf("failed to marshal during saving token, %v", err)
+	}
+
+	err = c.keyring.Save(c.serviceName, c.accountName, string(b))
+	if err != nil {
+		return fmt.Errorf("failed to save key, %v", err)
+	}
+	return nil
 }

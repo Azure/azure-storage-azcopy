@@ -1,4 +1,4 @@
-// +build linux darwin
+// +build freebsd linux
 
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
 //
@@ -23,6 +23,7 @@
 package common
 
 import (
+	"golang.org/x/sys/unix"
 	"os"
 	"sync"
 	"syscall"
@@ -55,7 +56,7 @@ func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, err
 	}
 	addr, err := syscall.Mmap(int(file.Fd()), offset, int(length), prot, flags)
 	if !writable {
-		syscall.Madvise(addr, syscall.MADV_SEQUENTIAL|syscall.MADV_WILLNEED)
+		unix.Madvise(addr, unix.MADV_SEQUENTIAL|unix.MADV_WILLNEED)
 	}
 	return &MMF{slice: (addr), isMapped: true, lock: sync.RWMutex{}}, err
 }

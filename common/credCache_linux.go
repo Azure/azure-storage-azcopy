@@ -63,6 +63,9 @@ func NewCredCache(options CredCacheOptions) *CredCache {
 	return c
 }
 
+// Libsecret (successor to GNOME keyring) is used for internal integration.
+var NewCredCacheInternalIntegration = NewCredCacheGnomeKeyring
+
 // HasCachedToken returns if there is cached token for current executing user.
 func (c *CredCache) HasCachedToken() (bool, error) {
 	c.lock.Lock()

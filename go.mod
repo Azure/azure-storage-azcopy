@@ -13,7 +13,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/jiacfan/keychain v0.0.0-20180920053336-f2c902a3d807
 	github.com/jiacfan/keyctl v0.3.1
-	github.com/mattn/go-ieproxy v0.0.0-20190610004146-91bb50d98149
+	github.com/mattn/go-ieproxy v0.0.0-20191113090002-7c0f6868bffe
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/pkg/errors v0.8.1
@@ -25,6 +25,7 @@ require (
 	golang.org/x/crypto v0.0.0-20190513172903-22d7a77e9e5f
 	golang.org/x/net v0.0.0-20190522155817-f3200d17e092 // indirect
 	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
+	golang.org/x/sys v0.0.0-20191112214154-59a1497f0cea
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127
 	gopkg.in/ini.v1 v1.42.0 // indirect
 	gopkg.in/yaml.v2 v2.2.2 // indirect

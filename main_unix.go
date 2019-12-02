@@ -1,4 +1,4 @@
-// +build linux darwin
+// +build linux darwin freebsd
 
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
 //
