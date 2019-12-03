@@ -74,6 +74,10 @@ type proxyLookupResult struct {
 // if used in something with usage patterns like a web browser).
 // TODO: should we one day find a better solution, so it can be contributed to mattn.go-ieproxy instead of done here?
 //    or maybe just the code in getProxyNoCache could be contributed there?
+// TODO: consider that one consequence of the current lack of integration with mattn.go-ieproxy is that pipelines created by
+//    pipeline.NewPipeline don't use proxyLookupCache at all.  However, that only affects the enumeration portion of our code,
+//    for Azure Files and ADLS Gen2. The issues that proxyLookupCache solves have not been reported there. The issues matter in
+//    the STE, where request counts are much higher (and there, we always do use this cache, because we make our own pipelines).
 type proxyLookupCache struct {
 	m               *sync.Map // is optimized for caches that only grow (as is the case here)
 	refreshInterval time.Duration
