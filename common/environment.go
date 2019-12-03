@@ -46,6 +46,7 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ClientSecret(),
 	EEnvironmentVariable.CertificatePassword(),
 	EEnvironmentVariable.AutoTuneToCpu(),
+	EEnvironmentVariable.CacheProxyLookup(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
