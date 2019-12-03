@@ -21,7 +21,6 @@
 package main
 
 import (
-	"github.com/mattn/go-ieproxy"
 	"math"
 	"net/http"
 	"os"
@@ -68,5 +67,5 @@ func GetAzCopyAppPath() string {
 
 func init() {
 	//Catch everything that uses http.DefaultTransport with ieproxy.GetProxyFunc()
-	http.DefaultTransport.(*http.Transport).Proxy = ieproxy.GetProxyFunc()
+	http.DefaultTransport.(*http.Transport).Proxy = common.GlobalProxyLookup
 }
