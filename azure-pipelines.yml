@@ -17,7 +17,7 @@ jobs:
     steps:
       - task: GoTool@0
         inputs:
-          version: '1.12'
+          version: '1.13'
       - script: |
           GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
           GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
@@ -35,7 +35,7 @@ jobs:
     steps:
       - task: GoTool@0
         inputs:
-          version: '1.12'
+          version: '1.13'
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
         displayName: 'Generate builds'
@@ -59,7 +59,7 @@ jobs:
       - task: GoTool@0
         name: 'Set_up_Golang'
         inputs:
-          version: '1.12'
+          version: '1.13'
       - script: |
           pip install azure-storage-blob==12.0.0b3
           # the recent release 1.0.0b4 has a breaking change

@@ -25,6 +25,7 @@ import (
 	"context"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -39,6 +40,7 @@ var azcopyLogPathFolder string
 var azcopyJobPlanFolder string
 var azcopyMaxFileAndSocketHandles int
 var outputFormatRaw string
+var cancelFromStdin bool
 var azcopyOutputFormat common.OutputFormat
 var cmdLineCapMegaBitsPerSecond uint32
 
@@ -54,6 +56,22 @@ var rootCmd = &cobra.Command{
 		glcm.SetOutputFormat(azcopyOutputFormat)
 		if err != nil {
 			return err
+		}
+
+		// warn Windows users re quoting (since our docs all use single quotes, but CMD needs double)
+		// Single ones just come through as part of the args, in CMD.
+		// Ideally, for usability, we'd ideally have this info come back in the result of url.Parse. But that's hard to
+		// arrange. So we check it here.
+		if runtime.GOOS == "windows" {
+			for _, a := range args {
+				a = strings.ToLower(a)
+				if strings.HasPrefix(a, "'http") { // note the single quote
+					glcm.Info("")
+					glcm.Info("*** When running from CMD, surround URLs with double quotes. Only using single quotes from PowerShell. ***")
+					glcm.Info("")
+					break
+				}
+			}
 		}
 
 		// currently, we only automatically do auto-tuning when benchmarking
@@ -108,8 +126,14 @@ func init() {
 	// replace the word "global" to avoid confusion (e.g. it doesn't affect all instances of AzCopy)
 	rootCmd.SetUsageTemplate(strings.Replace((&cobra.Command{}).UsageTemplate(), "Global Flags", "Flags Applying to All Commands", -1))
 
-	rootCmd.PersistentFlags().Uint32Var(&cmdLineCapMegaBitsPerSecond, "cap-mbps", 0, "caps the transfer rate, in Mega bits per second. Moment-by-moment throughput may vary slightly from the cap. If zero or omitted, throughput is not capped.")
-	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text", "format of the command's output, the choices include: text, json.")
+	rootCmd.PersistentFlags().Uint32Var(&cmdLineCapMegaBitsPerSecond, "cap-mbps", 0, "Caps the transfer rate, in megabits per second. Moment-by-moment throughput might vary slightly from the cap. If this option is set to zero, or it is omitted, the throughput isn't capped.")
+	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text", "Format of the command's output. The choices include: text, json. The default value is 'text'.")
+
+	// Note: this is due to Windows not supporting signals properly
+	rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false, "Used by partner teams to send in `cancel` through stdin to stop a job.")
+
+	// reserved for partner teams
+	rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
 }
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where

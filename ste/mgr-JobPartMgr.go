@@ -629,6 +629,10 @@ func (jpm *jobPartMgr) localDstData() *JobPartPlanDstLocal {
 	return &jpm.Plan().DstLocalData
 }
 
+func (jpm *jobPartMgr) deleteSnapshotsOption() common.DeleteSnapshotsOption {
+	return jpm.Plan().DeleteSnapshotsOption
+}
+
 // Call Done when a transfer has completed its epilog; this method returns the number of transfers completed so far
 func (jpm *jobPartMgr) ReportTransferDone() (transfersDone uint32) {
 	transfersDone = atomic.AddUint32(&jpm.atomicTransfersDone, 1)

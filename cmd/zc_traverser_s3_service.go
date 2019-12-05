@@ -137,6 +137,8 @@ func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, getProperties b
 		s3URLParts.BucketName = ""
 	}
 
+	showS3UrlTypeWarning(s3URLParts)
+
 	t.s3URL = s3URLPartsExtension{s3URLParts}
 
 	t.s3Client, err = common.CreateS3Client(

@@ -43,6 +43,6 @@ var envCmd = &cobra.Command{
 }
 
 func init() {
-	envCmd.PersistentFlags().BoolVar(&showSensitive, "show-sensitive", false, "Show sensitive/secret environment variables")
+	envCmd.PersistentFlags().BoolVar(&showSensitive, "show-sensitive", false, "Shows sensitive/secret environment variables.")
 	rootCmd.AddCommand(envCmd)
 }

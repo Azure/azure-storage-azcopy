@@ -67,6 +67,10 @@ By default, AzCopy will overwrite the files at the destination if they already e
 
 By default, the 'sync' command doesn't delete files in the destination unless you use an optional flag with the command. To learn more, see [Synchronize files](https://docs.microsoft.com/azure/storage/common/storage-use-azcopy-blobs#synchronize-files).
 
+## Download AzCopy
+The latest binary install for AzCopy along with installation instructions may be found
+[here](https://docs.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-v10).
+
 ## How to contribute to AzCopy v10
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a

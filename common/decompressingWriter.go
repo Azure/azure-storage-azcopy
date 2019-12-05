@@ -65,17 +65,20 @@ func (d decompressingWriter) decompressorFactory(tp CompressionType, preader *io
 
 func (d decompressingWriter) worker(tp CompressionType, preader *io.PipeReader, destination io.WriteCloser, workerError chan error) {
 
+	var err error
+	var dec io.ReadCloser
+
 	defer func() {
 		_ = destination.Close() // always close the destination file before we exit, since its a WriteCloser
 		_ = preader.Close()
+		workerError <- err // send the error AFTER we have closed everything, to avoid race conditions where callers assume all closes are completed when we return
 	}()
 
 	// make the decompressor. Must be in the worker method because,
 	// like the rest of read, this reads from the pipe.
 	// (Factory reads from pipe to read the zip/gzip file header)
-	dec, err := d.decompressorFactory(tp, preader)
+	dec, err = d.decompressorFactory(tp, preader)
 	if err != nil {
-		workerError <- err
 		return
 	}
 
@@ -84,7 +87,7 @@ func (d decompressingWriter) worker(tp CompressionType, preader *io.PipeReader, 
 	b := decompressingWriterBufferPool.RentSlice(decompressingWriterCopyBufferSize)
 	_, err = io.CopyBuffer(destination, dec, b) // returns err==nil if hits EOF, as per docs
 	decompressingWriterBufferPool.ReturnSlice(b)
-	workerError <- err
+
 	return
 }
 

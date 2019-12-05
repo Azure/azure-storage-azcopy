@@ -72,9 +72,9 @@ func init() {
 		},
 	}
 
-	listContainerCmd.PersistentFlags().BoolVar(&parameters.MachineReadable, "machine-readable", false, "Lists file sizes in bytes")
-	listContainerCmd.PersistentFlags().BoolVar(&parameters.RunningTally, "running-tally", false, "Counts the total number of files & their sizes")
-	listContainerCmd.PersistentFlags().BoolVar(&parameters.MegaUnits, "mega-units", false, "Displays units in orders of 1000, not 1024")
+	listContainerCmd.PersistentFlags().BoolVar(&parameters.MachineReadable, "machine-readable", false, "Lists file sizes in bytes.")
+	listContainerCmd.PersistentFlags().BoolVar(&parameters.RunningTally, "running-tally", false, "Counts the total number of files and their sizes.")
+	listContainerCmd.PersistentFlags().BoolVar(&parameters.MegaUnits, "mega-units", false, "Displays units in orders of 1000, not 1024.")
 
 	rootCmd.AddCommand(listContainerCmd)
 }

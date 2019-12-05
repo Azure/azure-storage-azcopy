@@ -62,22 +62,22 @@ func init() {
 
 	rootCmd.AddCommand(lgCmd)
 
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.tenantID, "tenant-id", "", "the Azure active directory tenant id to use for OAuth device interactive login")
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.aadEndpoint, "aad-endpoint", "", "the Azure active directory endpoint to use for OAuth user interactive login")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.tenantID, "tenant-id", "", "The Azure Active Directory tenant ID to use for OAuth device interactive login.")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.aadEndpoint, "aad-endpoint", "", "The Azure Active Directory endpoint to use for OAuth user interactive login.")
 	// Use identity which aligns to Azure powershell and CLI.
-	lgCmd.PersistentFlags().BoolVar(&loginCmdArgs.identity, "identity", false, "log in using virtual machine's identity, also known as managed service identity (MSI)")
+	lgCmd.PersistentFlags().BoolVar(&loginCmdArgs.identity, "identity", false, "Log in using virtual machine's identity, also known as managed service identity (MSI).")
 	// Use SPN certificate to log in.
-	lgCmd.PersistentFlags().BoolVar(&loginCmdArgs.servicePrincipal, "service-principal", false, "log in via SPN (Service Principal Name) using a certificate or a secret. The client secret or certificate password must be placed in the appropriate environment variable. Type AzCopy env to see names and descriptions of environment variables.")
+	lgCmd.PersistentFlags().BoolVar(&loginCmdArgs.servicePrincipal, "service-principal", false, "Log in via Service Principal Name (SPN) by using a certificate or a secret. The client secret or certificate password must be placed in the appropriate environment variable. Type AzCopy env to see names and descriptions of environment variables.")
 	// Client ID of user-assigned identity.
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityClientID, "identity-client-id", "", "client ID of user-assigned identity")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityClientID, "identity-client-id", "", "Client ID of user-assigned identity.")
 	// Object ID of user-assigned identity.
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityObjectID, "identity-object-id", "", "object ID of user-assigned identity")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityObjectID, "identity-object-id", "", "Object ID of user-assigned identity.")
 	// Resource ID of user-assigned identity.
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityResourceID, "identity-resource-id", "", "resource ID of user-assigned identity")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityResourceID, "identity-resource-id", "", "Resource ID of user-assigned identity.")
 
 	//login with SPN
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.applicationID, "application-id", "", "application ID of user-assigned identity. Required for service principal auth.")
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.certPath, "certificate-path", "", "path to certificate for SPN authentication. Required for certificate-based service principal auth.")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.applicationID, "application-id", "", "Application ID of user-assigned identity. Required for service principal auth.")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.certPath, "certificate-path", "", "Path to certificate for SPN authentication. Required for certificate-based service principal auth.")
 
 	// hide flags
 	// temporaily hide aad-endpoint and support Production environment only.

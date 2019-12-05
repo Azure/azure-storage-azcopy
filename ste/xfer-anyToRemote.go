@@ -210,13 +210,14 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 	chunkIDCount := int32(0)
 	for startIndex := int64(0); startIndex < srcSize || isDummyChunkInEmptyFile(startIndex, srcSize); startIndex += int64(chunkSize) {
 
-		id := common.NewChunkID(srcPath, startIndex)
 		adjustedChunkSize := int64(chunkSize)
 
 		// compute actual size of the chunk
 		if startIndex+int64(chunkSize) > srcSize {
 			adjustedChunkSize = srcSize - startIndex
 		}
+
+		id := common.NewChunkID(srcPath, startIndex, adjustedChunkSize) // TODO: stop using adjustedChunkSize, below, and use the size that's in the ID
 
 		if srcInfoProvider.IsLocal() {
 			if jptm.WasCanceled() {
