@@ -45,6 +45,7 @@ type rawSyncCmdArgs struct {
 	logVerbosity          string
 	include               string
 	exclude               string
+	excludePath           string
 	includeFileAttributes string
 	excludeFileAttributes string
 	legacyInclude         string // for warning messages only
@@ -160,8 +161,9 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	}
 
 	// parse the filter patterns
-	cooked.include = raw.parsePatterns(raw.include)
-	cooked.exclude = raw.parsePatterns(raw.exclude)
+	cooked.includePatterns = raw.parsePatterns(raw.include)
+	cooked.excludePatterns = raw.parsePatterns(raw.exclude)
+	cooked.excludePaths = raw.parsePatterns(raw.excludePath)
 
 	// parse the attribute filter patterns
 	cooked.includeFileAttributes = raw.parsePatterns(raw.includeFileAttributes)
@@ -216,8 +218,9 @@ type cookedSyncCmdArgs struct {
 	// filters
 	recursive             bool
 	followSymlinks        bool
-	include               []string
-	exclude               []string
+	includePatterns       []string
+	excludePatterns       []string
+	excludePaths          []string
 	includeFileAttributes []string
 	excludeFileAttributes []string
 
@@ -554,6 +557,8 @@ func init() {
 	syncCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage or downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
+	syncCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "Exclude these paths when comparing the source against the destination. "+
+		"This option does not support wildcard characters (*). Checks relative path prefix(For example: myFolder;myFolder/subDirName/file.pdf).")
 	syncCmd.PersistentFlags().StringVar(&raw.includeFileAttributes, "include-attributes", "", "(Windows only) Include only files whose attributes match the attribute list. For example: A;S;R")
 	syncCmd.PersistentFlags().StringVar(&raw.excludeFileAttributes, "exclude-attributes", "", "(Windows only) Exclude files whose attributes match the attribute list. For example: A;S;R")
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "Define the log verbosity for the log file, available levels: INFO(all requests and responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default INFO).")

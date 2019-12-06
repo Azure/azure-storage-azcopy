@@ -219,7 +219,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithMismatchedDestination(c *chk.C
 }
 
 // include flag limits the scope of source/destination comparison
-func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludeFlag(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludePatternFlag(c *chk.C) {
 	bsu := getBSU()
 
 	// set up the container with numerous blobs
@@ -255,7 +255,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludeFlag(c *chk.C) {
 }
 
 // exclude flag limits the scope of source/destination comparison
-func (s *cmdIntegrationSuite) TestSyncDownloadWithExcludeFlag(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSyncDownloadWithExcludePatternFlag(c *chk.C) {
 	bsu := getBSU()
 
 	// set up the container with numerous blobs
@@ -291,7 +291,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithExcludeFlag(c *chk.C) {
 }
 
 // include and exclude flag can work together to limit the scope of source/destination comparison
-func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludeAndExcludeFlag(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludeAndExcludePatternFlag(c *chk.C) {
 	bsu := getBSU()
 
 	// set up the container with numerous blobs

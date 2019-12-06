@@ -216,7 +216,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithMismatchedDestination(c *chk.C) {
 }
 
 // include flag limits the scope of source/destination comparison
-func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeFlag(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSyncS2SWithIncludePatternFlag(c *chk.C) {
 	bsu := getBSU()
 	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
 	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
@@ -251,7 +251,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeFlag(c *chk.C) {
 }
 
 // exclude flag limits the scope of source/destination comparison
-func (s *cmdIntegrationSuite) TestSyncS2SWithExcludeFlag(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSyncS2SWithExcludePatternFlag(c *chk.C) {
 	bsu := getBSU()
 	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
 	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
@@ -286,7 +286,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithExcludeFlag(c *chk.C) {
 }
 
 // include and exclude flag can work together to limit the scope of source/destination comparison
-func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeAndExcludeFlag(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeAndExcludePatternFlag(c *chk.C) {
 	bsu := getBSU()
 	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
 	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
