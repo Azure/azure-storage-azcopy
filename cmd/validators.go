@@ -31,8 +31,10 @@ import (
 )
 
 func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
-	inferredFromTo := inferFromTo(src, dst)
+	var inferredFromTo common.FromTo
 	if userSpecifiedFromTo == "" {
+		inferredFromTo = inferFromTo(src, dst)
+
 		// If user didn't explicitly specify FromTo, use what was inferred (if possible)
 		if inferredFromTo == common.EFromTo.Unknown() {
 			return common.EFromTo.Unknown(), fmt.Errorf("the inferred source/destination combination is currently not supported. Please post an issue on Github if support for this scenario is desired")
@@ -135,7 +137,7 @@ func inferArgumentLocation(arg string) common.Location {
 				return common.ELocation.Benchmark()
 				// enable targeting an emulator/stack
 			case IPv4Regex.MatchString(host):
-				return common.ELocation.Blob()
+				return common.ELocation.Unknown()
 			}
 
 			if common.IsS3URL(*u) {
