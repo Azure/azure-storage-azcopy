@@ -333,6 +333,60 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludeAndExcludePatternFlag(c
 	})
 }
 
+// a specific path is avoided in the comparison
+func (s *cmdIntegrationSuite) TestSyncDownloadWithExcludePathFlag(c *chk.C) {
+	bsu := getBSU()
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
+	defer deleteContainer(c, containerURL)
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// add special blobs that we wish to exclude
+	blobsToExclude := []string{"excludeSub/notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToExclude, blockBlobDefaultData)
+	excludeString := "excludeSub;exactName"
+
+	// set up the destination with an empty folder
+	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
+	raw.excludePath = excludeString
+
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateDownloadTransfersAreScheduled(c, "", "", blobList, mockedRPC)
+	})
+
+	// now set up the destination with the files to be excluded, and make sure they are not touched
+	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobsToExclude)
+
+	// re-create the ones at the source so that their lmts are newer
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToExclude, blockBlobDefaultData)
+
+	mockedRPC.reset()
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateDownloadTransfersAreScheduled(c, "", "", blobList, mockedRPC)
+
+		// make sure the extra files were not touched
+		for _, blobName := range blobsToExclude {
+			_, err := os.Stat(filepath.Join(dstDirName, blobName))
+			c.Assert(err, chk.IsNil)
+		}
+	})
+}
+
 // validate the bug fix for this scenario
 func (s *cmdIntegrationSuite) TestSyncDownloadWithMissingDestination(c *chk.C) {
 	bsu := getBSU()

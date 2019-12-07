@@ -348,6 +348,24 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludePathFlag(c *chk.C) {
 		c.Assert(err, chk.IsNil)
 		validateUploadTransfersAreScheduled(c, "", "", fileList, mockedRPC)
 	})
+
+	// now set up the destination with the blobs to be excluded, and make sure they are not touched
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, filesToExclude, blockBlobDefaultData)
+
+	// re-create the ones at the source so that their lmts are newer
+	scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, filesToExclude)
+
+	mockedRPC.reset()
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateUploadTransfersAreScheduled(c, "", "", fileList, mockedRPC)
+
+		// make sure the extra blobs were not touched
+		for _, blobName := range filesToExclude {
+			exists := scenarioHelper{}.blobExists(containerURL.NewBlobURL(blobName))
+			c.Assert(exists, chk.Equals, true)
+		}
+	})
 }
 
 // validate the bug fix for this scenario
