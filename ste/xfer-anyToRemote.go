@@ -331,7 +331,8 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 		destLength, err := s.GetDestinationLength()
 
 		if err != nil {
-			jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", err)
+			wrapped := fmt.Errorf("could not read destination length. If destination is write-only, use --check-length=false on the AzCopy command line. %w", err)
+			jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", wrapped)
 		}
 
 		if destLength != jptm.Info().SourceSize {
