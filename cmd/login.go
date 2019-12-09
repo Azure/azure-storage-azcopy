@@ -63,7 +63,7 @@ func init() {
 	rootCmd.AddCommand(lgCmd)
 
 	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.tenantID, "tenant-id", "", "The Azure Active Directory tenant ID to use for OAuth device interactive login.")
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.aadEndpoint, "aad-endpoint", "", "The Azure Active Directory endpoint to use for OAuth user interactive login.")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.aadEndpoint, "aad-endpoint", "", "The Azure Active Directory endpoint to use. The default ("+common.DefaultActiveDirectoryEndpoint+") is correct for the public Azure cloud. Set this parameter when authenticating in a national cloud. Not needed for Managed Service Identity")
 	// Use identity which aligns to Azure powershell and CLI.
 	lgCmd.PersistentFlags().BoolVar(&loginCmdArgs.identity, "identity", false, "Log in using virtual machine's identity, also known as managed service identity (MSI).")
 	// Use SPN certificate to log in.
@@ -78,10 +78,6 @@ func init() {
 	//login with SPN
 	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.applicationID, "application-id", "", "Application ID of user-assigned identity. Required for service principal auth.")
 	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.certPath, "certificate-path", "", "Path to certificate for SPN authentication. Required for certificate-based service principal auth.")
-
-	// hide flags
-	// temporaily hide aad-endpoint and support Production environment only.
-	lgCmd.PersistentFlags().MarkHidden("aad-endpoint")
 }
 
 type loginCmdArgs struct {
