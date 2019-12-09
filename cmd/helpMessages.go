@@ -198,7 +198,7 @@ const cleanJobsCmdExample = "  azcopy jobs clean --with-status=completed"
 // ===================================== LIST COMMAND ===================================== //
 const listCmdShortDescription = "List the entities in a given resource"
 
-const listCmdLongDescription = `List the entities in a given resource. Blob, Files, and BlobFS containers, folders, and accounts are supported.`
+const listCmdLongDescription = `List the entities in a given resource. Blob, Files, and ADLS Gen 2 containers, folders, and accounts are supported.`
 
 const listCmdExample = "azcopy list [containerURL]"
 
