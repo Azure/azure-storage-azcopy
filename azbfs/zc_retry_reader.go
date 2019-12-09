@@ -53,7 +53,14 @@ type RetryReaderOptions struct {
 	// from the same "thread" (goroutine) as Read.  Concurrent Close calls from other goroutines may instead produce network errors
 	// which will be retried.
 	TreatEarlyCloseAsError bool
+
+	// TODO: make this default to true, but make it public so people can opt out of the new behavior, for backward compat
+	DetectEarlyEOF bool
 }
+
+// TODO: if we go ahead with early EOF detection, merge this into the other SDKs, and run some tests
+//     Note on test procedure: run with HTTP and Fiddler's AutoResponder set to break on our target URL
+//     and supply a response file which consists solely of headers (no body).
 
 // retryReader implements io.ReaderCloser methods.
 // retryReader tries to read from response, and if there is retriable network error
@@ -127,6 +134,16 @@ func (s *retryReader) Read(p []byte) (n int, err error) {
 			err = &net.DNSError{IsTemporary: true}
 		}
 
+		if err == io.EOF && s.o.DetectEarlyEOF {
+			// If we got EOF before getting all the expected bytes,
+			// then this EOF is an _unexpected_ EOF
+			hasExpectation := s.info.Count != CountToEnd
+			isEarlyEOF := hasExpectation && int64(n) < s.info.Count
+			if isEarlyEOF {
+				err = io.ErrUnexpectedEOF
+			}
+		}
+
 		// We successfully read data or end EOF.
 		if err == nil || err == io.EOF {
 			s.info.Offset += int64(n) // Increments the start offset in case we need to make a new HTTP request in the future
@@ -141,7 +158,8 @@ func (s *retryReader) Read(p []byte) (n int, err error) {
 		// Check the retry count and error code, and decide whether to retry.
 		retriesExhausted := try >= s.o.MaxRetryRequests
 		_, isNetError := err.(net.Error)
-		willRetry := (isNetError || s.wasRetryableEarlyClose(err)) && !retriesExhausted
+		earlyEOF := err == io.ErrUnexpectedEOF
+		willRetry := (isNetError || earlyEOF || s.wasRetryableEarlyClose(err)) && !retriesExhausted
 
 		// Notify, for logging purposes, of any failures
 		if s.o.NotifyFailedRead != nil {
