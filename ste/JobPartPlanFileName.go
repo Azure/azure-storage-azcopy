@@ -231,6 +231,9 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			}
 			srcMetadataLength = len(metadataStr)
 		}
+		if srcMetadataLength > math.MaxInt16 {
+			panic(fmt.Sprintf("The metadata on source file %s exceeds azcopy's current maximum metadata length, and cannot be processed.", order.Transfers[t].Source))
+		}
 		// Create & initialize this transfer's Job Part Plan Transfer
 		jppt := JobPartPlanTransfer{
 			SrcOffset:      currentSrcStringOffset, // SrcOffset of the src string
