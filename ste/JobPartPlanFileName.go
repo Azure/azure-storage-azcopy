@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"reflect"
 	"strings"
@@ -215,6 +216,10 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 
 	// Write each transfer to the Job Part Plan file (except for the src/dst strings; comes come later)
 	for t := range order.Transfers {
+		if len(order.Transfers[t].Source) > math.MaxInt16 || len(order.Transfers[t].Destination) > math.MaxInt16 {
+			panic(fmt.Sprintf("The file %s exceeds azcopy's current maximum path length on either the source or the destination.", order.Transfers[t].Source))
+		}
+
 		// Prepare info for JobPartPlanTransfer
 		// Sending Metadata type to Transfer could ensure strong type validation.
 		// TODO: discuss the performance drop of marshaling metadata twice
@@ -225,6 +230,9 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 				panic(err)
 			}
 			srcMetadataLength = len(metadataStr)
+		}
+		if srcMetadataLength > math.MaxInt16 {
+			panic(fmt.Sprintf("The metadata on source file %s exceeds azcopy's current maximum metadata length, and cannot be processed.", order.Transfers[t].Source))
 		}
 		// Create & initialize this transfer's Job Part Plan Transfer
 		jppt := JobPartPlanTransfer{
@@ -263,14 +271,14 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	for t := range order.Transfers {
 		// Sanity check: Verify that we are were we think we are and that no bug has occurred
 		if eof != srcDstStringsOffset[t] {
-			panic(errors.New("error writing src/dst strings to job part plan file"))
+			panic(errors.New("job plan file's EOF and the transfer's offset didn't line up; filename: " + order.Transfers[t].Source))
 		}
 
 		// Write the src & dst strings to the job part plan file
 		bytesWritten, err := file.WriteString(order.Transfers[t].Source)
 		common.PanicIfErr(err)
-		// write the destination string in memory map file
 		eof += int64(bytesWritten)
+		// write the destination string in memory map file
 		bytesWritten, err = file.WriteString(order.Transfers[t].Destination)
 		common.PanicIfErr(err)
 		eof += int64(bytesWritten)
