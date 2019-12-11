@@ -7,6 +7,7 @@
 
 1. `azcopy list` is now supported on Azure Files and ADLS Gen 2, in addition to Blob Storage.
 1. The `--exclude-path` flag is now supported in the `sync` command.
+1. Added new environment variable `AZCOPY_USER_AGENT_PREFIX` to allow a prefix to be appended to the user agent strings.
 
 ### Bug fixes
 

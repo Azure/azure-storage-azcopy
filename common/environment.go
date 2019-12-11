@@ -208,6 +208,6 @@ func (EnvironmentVariable) DefaultServiceApiVersion() EnvironmentVariable {
 func (EnvironmentVariable) UserAgentPrefix() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_USER_AGENT_PREFIX",
-		Description: "Add a prefix to the default AzCopy User Agent, which is used for telemetry purposes.",
+		Description: "Add a prefix to the default AzCopy User Agent, which is used for telemetry purposes. A space is automatically inserted.",
 	}
 }
