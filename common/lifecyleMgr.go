@@ -56,6 +56,7 @@ type LifecycleMgr interface {
 	SetOutputFormat(OutputFormat)                                // change the output format of the entire application
 	EnableInputWatcher()                                         // depending on the command, we may allow user to give input through Stdin
 	EnableCancelFromStdIn()                                      // allow user to send in `cancel` to stop the job
+	AddUserAgentPrefix(string) string                            // append the global user agent prefix, if applicable
 }
 
 func GetLifecycleMgr() LifecycleMgr {
@@ -464,6 +465,15 @@ func (lcm *lifecycleMgr) GetEnvironmentVariable(env EnvironmentVariable) string 
 		return env.DefaultValue
 	}
 	return value
+}
+
+func (lcm *lifecycleMgr) AddUserAgentPrefix(userAgent string) string {
+	prefix := lcm.GetEnvironmentVariable(EEnvironmentVariable.UserAgentPrefix())
+	if len(prefix) > 0 {
+		userAgent = prefix + " " + userAgent
+	}
+
+	return userAgent
 }
 
 // captures the common logic of exiting if there's an expected error
