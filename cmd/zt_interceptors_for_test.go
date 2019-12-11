@@ -125,6 +125,9 @@ func (*mockedLifecycleManager) GetEnvironmentVariable(env common.EnvironmentVari
 func (*mockedLifecycleManager) SetOutputFormat(common.OutputFormat) {}
 func (*mockedLifecycleManager) EnableInputWatcher()                 {}
 func (*mockedLifecycleManager) EnableCancelFromStdIn()              {}
+func (*mockedLifecycleManager) AddUserAgentPrefix(userAgent string) string {
+	return userAgent
+}
 
 type dummyProcessor struct {
 	record []storedObject

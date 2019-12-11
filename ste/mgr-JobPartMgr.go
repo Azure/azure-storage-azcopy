@@ -434,7 +434,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
 		userAgent = common.BenchmarkUserAgent
 	}
-	userAgent = common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.UserAgentPrefix()) + userAgent
+	userAgent = common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
 
 	credOption := common.CredentialOpOptions{
 		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
