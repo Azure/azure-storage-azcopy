@@ -165,13 +165,26 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		// Check its length, since it already has a size, and the upload will fail at the end if you what
 		// upload to it is bigger than its existing size. (And, for big files, it may be hours until you discover that
 		// difference if we don't check here).
+		//
+		// We use an equality check (rather than ensuring sourceSize <= dest), because customer should have declared the correct exact size when
+		// making the disk in Azure. (And if we don't check equality here, by default we do check it after upload for all blobs, as of version 10.3)
+		//
+		// Note re types and sizes:
+		// Currently (2019) only VHDs are supported for Azure managed disk upload. VHDXs (which have a different footer size, are not).
+		// Azure requires VHD size to be a multiple of 1MB plus 512 bytes for the VHD footer. And the VHD must be fixed size.
+		// E.g. these are the values reported by PowerShell's Get-VHD for a valid 1 GB VHD:
+		// VhdFormat               : VHD
+		// VhdType                 : Fixed
+		// FileSize                : 1073742336  (equals our s.srcSize, i.e. the size of the disk file)
+		// Size                    : 1073741824
+
 		p, err := s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{})
 		if err != nil {
 			s.jptm.FailActiveSend("Checking size of managed disk blob", err)
 			return
 		}
-		if s.srcSize > p.ContentLength() {
-			sizeErr := errors.New(fmt.Sprintf("source file is too big for the destination page blob. Source size is %d bytes but destination size is %d bytes",
+		if s.srcSize != p.ContentLength() {
+			sizeErr := errors.New(fmt.Sprintf("source file is not same size as the destination page blob. Source size is %d bytes but destination size is %d bytes. Re-create the destination with exactly the right size. E.g. see parameter UploadSizeInBytes in PowerShell's New-AzDiskConfig. Ensure the source is a fixed-size VHD",
 				s.srcSize, p.ContentLength()))
 			s.jptm.FailActiveSend("Checking size of managed disk blob", sizeErr)
 			return
