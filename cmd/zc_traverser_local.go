@@ -88,6 +88,9 @@ func UnfurlSymlinks(symlinkPath string) (result string, err error) {
 				return result, err
 			}
 
+			// We need to discern whether the item symlinked is under the same directory as the symlink.
+			// This is because when this happens, we only get a relative path, not a full path.
+			// So we'll check for the existence of the item under the relative path, and otherwise treat it as a full path.
 			sameDir := filepath.Join(filepath.Dir(item), result)
 			if _, err = os.Stat(sameDir); err == nil {
 				result = sameDir
