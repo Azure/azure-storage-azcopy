@@ -24,14 +24,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"strconv"
-	"strings"
+
+	"github.com/spf13/cobra"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/spf13/cobra"
 )
 
 func init() {
@@ -59,11 +57,12 @@ func init() {
 			// the expected argument in input is the container sas / or path of virtual directory in the container.
 			// verifying the location type
 			location := inferArgumentLocation(sourcePath)
-			if location != location.Blob() {
+			// Only support listing for Azure locations
+			if location != location.Blob() && location != location.File() && location != location.BlobFS() {
 				glcm.Error("invalid path passed for listing. given source is of type " + location.String() + " while expect is container / container path ")
 			}
 
-			err := HandleListContainerCommand(sourcePath)
+			err := HandleListContainerCommand(sourcePath, location)
 			if err == nil {
 				glcm.Exit(nil, common.EExitCode.Success())
 			} else {
@@ -89,17 +88,29 @@ type ListParameters struct {
 var parameters = ListParameters{}
 
 // HandleListContainerCommand handles the list container command
-func HandleListContainerCommand(source string) (err error) {
+func HandleListContainerCommand(source string, location common.Location) (err error) {
 	// TODO: Temporarily use context.TODO(), this should be replaced with a root context from main.
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	credentialInfo := common.CredentialInfo{}
-	// Use source as resource URL, and it can be public access resource URL.
-	if credentialInfo.CredentialType, _, err = getBlobCredentialType(ctx, source, true, false); err != nil {
+
+	base, token, err := SplitAuthTokenFromResource(source, location)
+	if err != nil {
 		return err
+	}
+
+	level, err := determineLocationLevel(source, location, true)
+
+	if err != nil {
+		return err
+	}
+
+	// Treat our check as a destination because the isSource flag was designed for S2S transfers.
+	if credentialInfo, _, err = getCredentialInfoForLocation(ctx, location, base, token, false); err != nil {
+		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
+	} else if location == location.File() && token == "" {
+		return errors.New("azure files requires a SAS token for authentication")
 	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		// Message user that they are using Oauth token for authentication,
-		// in case of silently using cached token without consciousness。
 		glcm.Info("List is using OAuth token for authentication.")
 
 		uotm := GetUserOAuthTokenManagerInstance()
@@ -110,85 +121,56 @@ func HandleListContainerCommand(source string) (err error) {
 		}
 	}
 
-	// Create Pipeline which will be used further in the blob operations.
-	p, err := createBlobPipeline(ctx, credentialInfo)
+	traverser, err := initResourceTraverser(source, location, &ctx, &credentialInfo, nil, nil, true, false, func() {})
+
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to initialize traverser: %s", err.Error())
 	}
 
-	// attempt to parse the source url
-	sourceURL, err := url.Parse(source)
-	if err != nil {
-		return errors.New("cannot parse source URL")
-	}
+	var fileCount int64 = 0
+	var sizeCount int64 = 0
 
-	util := copyHandlerUtil{} // TODO: util could be further refactored
-	// get the container url to be used for listing
-	literalContainerURL := util.getContainerURLFromString(*sourceURL)
-	containerURL := azblob.NewContainerURL(literalContainerURL, p)
+	processor := func(object storedObject) error {
+		objectSummary := object.relativePath + "; Content Length: "
 
-	// get the search prefix to query the service
-	searchPrefix := ""
-	// if the source is container url, then searchPrefix is empty
-	if !util.urlIsContainerOrVirtualDirectory(sourceURL) {
-		searchPrefix = util.getBlobNameFromURL(sourceURL.Path)
-	}
-	if len(searchPrefix) > 0 {
-		// if the user did not specify / at the end of the virtual directory, add it before doing the prefix search
-		if strings.LastIndex(searchPrefix, "/") != len(searchPrefix)-1 {
-			searchPrefix += "/"
-		}
-	}
-
-	summary := common.ListContainerResponse{}
-
-	fileCount := 0
-	sizeCount := 0
-
-	// perform a list blob
-	for marker := (azblob.Marker{}); marker.NotDone(); {
-		// look for all blobs that start with the prefix
-		listBlob, err := containerURL.ListBlobsFlatSegment(ctx, marker,
-			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
-		if err != nil {
-			return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())
+		if level == level.Service() {
+			objectSummary = object.containerName + "/" + objectSummary
 		}
 
-		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
-		for _, blobInfo := range listBlob.Segment.BlobItems {
-			blobName := blobInfo.Name + "; Content Size: "
-
-			if parameters.MachineReadable {
-				blobName += strconv.Itoa(int(*blobInfo.Properties.ContentLength))
-			} else {
-				blobName += byteSizeToString(*blobInfo.Properties.ContentLength)
-			}
-
-			if parameters.RunningTally {
-				fileCount++
-				sizeCount += int(*blobInfo.Properties.ContentLength)
-			}
-
-			if len(searchPrefix) > 0 {
-				// strip away search prefix from the blob name.
-				blobName = strings.Replace(blobName, searchPrefix, "", 1)
-			}
-			summary.Blobs = append(summary.Blobs, blobName)
+		if parameters.MachineReadable {
+			objectSummary += strconv.Itoa(int(object.size))
+		} else {
+			objectSummary += byteSizeToString(object.size)
 		}
-		marker = listBlob.NextMarker
-		printListContainerResponse(&summary)
 
 		if parameters.RunningTally {
-			glcm.Info("")
-			glcm.Info("File count: " + strconv.Itoa(fileCount))
+			fileCount++
+			sizeCount += object.size
+		}
 
-			if parameters.MachineReadable {
-				glcm.Info("Total file size: " + strconv.Itoa(sizeCount))
-			} else {
-				glcm.Info("Total file size: " + byteSizeToString(int64(sizeCount)))
-			}
+		glcm.Info(objectSummary)
+
+		// No need to strip away from the name as the traverser has already done so.
+		return nil
+	}
+
+	err = traverser.traverse(nil, processor, nil)
+
+	if err != nil {
+		return fmt.Errorf("failed to traverse container: %s", err.Error())
+	}
+
+	if parameters.RunningTally {
+		glcm.Info("")
+		glcm.Info("File count: " + strconv.Itoa(int(fileCount)))
+
+		if parameters.MachineReadable {
+			glcm.Info("Total file size: " + strconv.Itoa(int(sizeCount)))
+		} else {
+			glcm.Info("Total file size: " + byteSizeToString(sizeCount))
 		}
 	}
+
 	return nil
 }
 
@@ -222,7 +204,7 @@ func byteSizeToString(size int64) string {
 		"GiB",
 		"TiB",
 		"PiB",
-		"EiB", //Let's face it, a file probably won't be more than 1000 exabytes in YEARS. (and int64 literally isn't large enough to handle too many exbibytes. 128 bit processors when)
+		"EiB", // Let's face it, a file, account, or container probably won't be more than 1000 exabytes in YEARS. (and int64 literally isn't large enough to handle too many exbibytes. 128 bit processors when)
 	}
 	unit := 0
 	floatSize := float64(size)

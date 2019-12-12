@@ -39,8 +39,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mattn/go-ieproxy"
-
 	"golang.org/x/crypto/pkcs12"
 
 	"github.com/Azure/go-autorest/autorest/adal"
@@ -79,7 +77,7 @@ func NewUserOAuthTokenManagerInstance(credCacheOptions CredCacheOptions) *UserOA
 func newAzcopyHTTPClient() *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
-			Proxy: ieproxy.GetProxyFunc(),
+			Proxy: GlobalProxyLookup,
 			// We use Dial instead of DialContext as DialContext has been reported to cause slower performance.
 			Dial /*Context*/ : (&net.Dialer{
 				Timeout:   30 * time.Second,

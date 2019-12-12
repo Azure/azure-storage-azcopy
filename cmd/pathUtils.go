@@ -59,47 +59,24 @@ func determineLocationLevel(location string, locationType common.Location, sourc
 
 	case common.ELocation.Blob(),
 		common.ELocation.File(),
-		common.ELocation.BlobFS():
+		common.ELocation.BlobFS(),
+		common.ELocation.S3():
 		URL, err := url.Parse(location)
 
 		if err != nil {
 			return ELocationLevel.Service(), err
 		}
 
-		// blobURLParts is the same format and doesn't care about endpoint
-		bURL := azblob.NewBlobURLParts(*URL)
+		// GenericURLParts determines the correct resource URL parts to make use of
+		bURL := common.NewGenericResourceURLParts(*URL, locationType)
 
-		if strings.Contains(bURL.ContainerName, "*") && bURL.BlobName != "" {
+		if strings.Contains(bURL.GetContainerName(), "*") && bURL.GetObjectName() != "" {
 			return ELocationLevel.Service(), errors.New("can't use a wildcarded container name and specific blob name in combination")
 		}
 
-		if bURL.BlobName != "" {
+		if bURL.GetObjectName() != "" {
 			return ELocationLevel.Object(), nil
-		} else if bURL.ContainerName != "" && !strings.Contains(bURL.ContainerName, "*") {
-			return ELocationLevel.Container(), nil
-		} else {
-			return ELocationLevel.Service(), nil
-		}
-	case common.ELocation.S3():
-		URL, err := url.Parse(location)
-
-		if err != nil {
-			return ELocationLevel.Service(), nil
-		}
-
-		s3URL, err := common.NewS3URLParts(*URL)
-
-		if err != nil {
-			return ELocationLevel.Service(), nil
-		}
-
-		if strings.Contains(s3URL.BucketName, "*") && s3URL.ObjectKey != "" {
-			return ELocationLevel.Service(), errors.New("can't use a wildcarded container name and specific object name in combination")
-		}
-
-		if s3URL.ObjectKey != "" {
-			return ELocationLevel.Object(), nil
-		} else if s3URL.BucketName != "" && !strings.Contains(s3URL.BucketName, "*") {
+		} else if bURL.GetContainerName() != "" && !strings.Contains(bURL.GetContainerName(), "*") {
 			return ELocationLevel.Container(), nil
 		} else {
 			return ELocationLevel.Service(), nil

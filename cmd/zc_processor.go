@@ -42,11 +42,13 @@ type copyTransferProcessor struct {
 	// handles for progress tracking
 	reportFirstPartDispatched func(jobStarted bool)
 	reportFinalPartDispatched func()
+
+	preserveAccessTier bool
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
 	source string, destination string, shouldEscapeSourceObjectName bool, shouldEscapeDestinationObjectName bool,
-	reportFirstPartDispatched func(bool), reportFinalPartDispatched func()) *copyTransferProcessor {
+	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool) *copyTransferProcessor {
 	return &copyTransferProcessor{
 		numOfTransfersPerPart:             numOfTransfersPerPart,
 		copyJobTemplate:                   copyJobTemplate,
@@ -56,6 +58,7 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 		shouldEscapeDestinationObjectName: shouldEscapeDestinationObjectName,
 		reportFirstPartDispatched:         reportFirstPartDispatched,
 		reportFinalPartDispatched:         reportFinalPartDispatched,
+		preserveAccessTier:                preserveAccessTier,
 	}
 }
 
@@ -75,15 +78,13 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
-	s.copyJobTemplate.Transfers = append(s.copyJobTemplate.Transfers, common.CopyTransfer{
-		Source:           s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeSourceObjectName),
-		Destination:      s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeDestinationObjectName),
-		SourceSize:       storedObject.size,
-		LastModifiedTime: storedObject.lastModifiedTime,
-		ContentMD5:       storedObject.md5,
-		BlobType:         storedObject.blobType,
-		ContentEncoding:  storedObject.contentEncoding,
-	})
+	s.copyJobTemplate.Transfers = append(s.copyJobTemplate.Transfers, storedObject.ToNewCopyTransfer(
+		false, // sync has no --decompress option
+		s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeSourceObjectName),
+		s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeDestinationObjectName),
+		s.preserveAccessTier,
+	))
+
 	return nil
 }
 

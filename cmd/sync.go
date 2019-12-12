@@ -45,6 +45,7 @@ type rawSyncCmdArgs struct {
 	logVerbosity          string
 	include               string
 	exclude               string
+	excludePath           string
 	includeFileAttributes string
 	excludeFileAttributes string
 	legacyInclude         string // for warning messages only
@@ -57,6 +58,8 @@ type rawSyncCmdArgs struct {
 	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
 	// otherwise the user is prompted to make a decision
 	deleteDestination string
+
+	s2sPreserveAccessTier bool
 }
 
 func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -160,8 +163,9 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	}
 
 	// parse the filter patterns
-	cooked.include = raw.parsePatterns(raw.include)
-	cooked.exclude = raw.parsePatterns(raw.exclude)
+	cooked.includePatterns = raw.parsePatterns(raw.include)
+	cooked.excludePatterns = raw.parsePatterns(raw.exclude)
+	cooked.excludePaths = raw.parsePatterns(raw.excludePath)
 
 	// parse the attribute filter patterns
 	cooked.includeFileAttributes = raw.parsePatterns(raw.includeFileAttributes)
@@ -183,6 +187,10 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	}
 	if err = validateMd5Option(cooked.md5ValidationOption, cooked.fromTo); err != nil {
 		return cooked, err
+	}
+
+	if cooked.fromTo.IsS2S() {
+		cooked.preserveAccessTier = raw.s2sPreserveAccessTier
 	}
 
 	return cooked, nil
@@ -216,8 +224,9 @@ type cookedSyncCmdArgs struct {
 	// filters
 	recursive             bool
 	followSymlinks        bool
-	include               []string
-	exclude               []string
+	includePatterns       []string
+	excludePatterns       []string
+	excludePaths          []string
 	includeFileAttributes []string
 	excludeFileAttributes []string
 
@@ -252,6 +261,8 @@ type cookedSyncCmdArgs struct {
 	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
 	// otherwise the user is prompted to make a decision
 	deleteDestination common.DeleteDestination
+
+	preserveAccessTier bool
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -554,6 +565,8 @@ func init() {
 	syncCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage or downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
+	syncCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "Exclude these paths when comparing the source against the destination. "+
+		"This option does not support wildcard characters (*). Checks relative path prefix(For example: myFolder;myFolder/subDirName/file.pdf).")
 	syncCmd.PersistentFlags().StringVar(&raw.includeFileAttributes, "include-attributes", "", "(Windows only) Include only files whose attributes match the attribute list. For example: A;S;R")
 	syncCmd.PersistentFlags().StringVar(&raw.excludeFileAttributes, "exclude-attributes", "", "(Windows only) Exclude files whose attributes match the attribute list. For example: A;S;R")
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "Define the log verbosity for the log file, available levels: INFO(all requests and responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default INFO).")
@@ -561,6 +574,9 @@ func init() {
 		"If set to prompt, the user will be asked a question before scheduling files and blobs for deletion. (default 'false').")
 	syncCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob or file. (By default the hash is NOT created.) Only available when uploading.")
 	syncCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "check-md5", common.DefaultHashValidationOption.String(), "Specifies how strictly MD5 hashes should be validated when downloading. This option is only available when downloading. Available values include: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing. (default 'FailIfDifferent').")
+	syncCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true, "Preserve access tier during service to service copy. "+
+		"Please refer to [Azure Blob storage: hot, cool, and archive access tiers](https://docs.microsoft.com/azure/storage/blobs/storage-blob-storage-tiers) to ensure destination storage account supports setting access tier. "+
+		"In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false to bypass copying access tier. (default true). ")
 
 	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
 	syncCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")
@@ -571,5 +587,5 @@ func init() {
 	// TODO follow sym link is not implemented, clarify behavior first
 	//syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when performing sync from local file system.")
 
-	// TODO sync does not support any BlobAttributes, this functionality should be added
+	// TODO sync does not support all BlobAttributes on the command line, this functionality should be added
 }

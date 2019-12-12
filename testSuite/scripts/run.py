@@ -21,6 +21,7 @@ import configparser
 import platform
 import sys
 import unittest
+import re
 
 
 def parse_config_file_set_env():
@@ -103,6 +104,10 @@ def check_env_not_exist(key):
         return True
     return False
 
+def get_env_logged(key):
+    value = os.environ.get(key)
+    print(key + " = " + re.sub("(?i)(?P<key>sig[ \t]*[:=][ \t]*)(?P<value>[^& ,;\t\n\r]+)", "sig=REDACTED", value))
+    return value
 
 def init():
     # Check the environment variables.
@@ -122,43 +127,56 @@ def init():
 
     # Get the environment variables value
     # test_dir_path is the location where test_data folder will be created and test files will be created further.
-    test_dir_path = os.environ.get('TEST_DIRECTORY_PATH')
+    test_dir_path = get_env_logged('TEST_DIRECTORY_PATH')
 
     # azcopy_exec_location is the location of the azcopy executable
     # azcopy executable will be copied to test data folder.
-    azcopy_exec_location = os.environ.get('AZCOPY_EXECUTABLE_PATH')
+    azcopy_exec_location = get_env_logged('AZCOPY_EXECUTABLE_PATH')
 
     # test_suite_exec_location is the location of the test suite executable
     # test suite executable will be copied to test data folder.
-    test_suite_exec_location = os.environ.get('TEST_SUITE_EXECUTABLE_LOCATION')
+    test_suite_exec_location = get_env_logged('TEST_SUITE_EXECUTABLE_LOCATION')
 
     # container_sas is the shared access signature of the container
     # where test data will be uploaded to and downloaded from.
-    container_sas = os.environ.get('CONTAINER_SAS_URL')
+    container_sas = get_env_logged('CONTAINER_SAS_URL')
 
     # container_oauth is container for oauth testing.
-    container_oauth = os.environ.get('CONTAINER_OAUTH_URL')
+    container_oauth = get_env_logged('CONTAINER_OAUTH_URL')
 
     # container_oauth_validate is the URL with SAS for oauth validation.
-    container_oauth_validate = os.environ.get('CONTAINER_OAUTH_VALIDATE_SAS_URL')
+    container_oauth_validate = get_env_logged('CONTAINER_OAUTH_VALIDATE_SAS_URL')
 
     # share_sas_url is the URL with SAS of the share where test data will be uploaded to and downloaded from.
-    share_sas_url = os.environ.get('SHARE_SAS_URL')
+    share_sas_url = get_env_logged('SHARE_SAS_URL')
 
     # container sas of the premium storage account.
-    premium_container_sas = os.environ.get('PREMIUM_CONTAINER_SAS_URL')
+    premium_container_sas = get_env_logged('PREMIUM_CONTAINER_SAS_URL')
 
     # get the filesystem url
-    filesystem_url = os.environ.get('FILESYSTEM_URL')
-    filesystem_sas_url = os.environ.get('FILESYSTEM_SAS_URL')
+    filesystem_url = get_env_logged('FILESYSTEM_URL')
+    filesystem_sas_url = get_env_logged('FILESYSTEM_SAS_URL')
 
     # get the s2s copy src URLs
-    s2s_src_blob_account_url = os.environ.get('S2S_SRC_BLOB_ACCOUNT_SAS_URL')
-    s2s_src_file_account_url = os.environ.get('S2S_SRC_FILE_ACCOUNT_SAS_URL')
-    s2s_src_s3_service_url = os.environ.get('S2S_SRC_S3_SERVICE_URL')
+    s2s_src_blob_account_url = get_env_logged('S2S_SRC_BLOB_ACCOUNT_SAS_URL')
+    s2s_src_file_account_url = get_env_logged('S2S_SRC_FILE_ACCOUNT_SAS_URL')
+    s2s_src_s3_service_url = get_env_logged('S2S_SRC_S3_SERVICE_URL')
 
     # get the s2s copy dest account URLs
-    s2s_dst_blob_account_url = os.environ.get('S2S_DST_BLOB_ACCOUNT_SAS_URL')
+    s2s_dst_blob_account_url = get_env_logged('S2S_DST_BLOB_ACCOUNT_SAS_URL')
+
+    get_env_logged("ACCOUNT_NAME")
+    # do NOT log ACCOUNT_KEY
+
+    # don't log, it will just get redacted by DevOps logging system: get_env_logged("AWS_ACCESS_KEY_ID")
+    # do NOT log AWS_SECRET_ACCESS_KEY
+
+    get_env_logged("OAUTH_AAD_ENDPOINT")
+    # don't log, it will just get redacted by DevOps logging system: get_env_logged("OAUTH_TENANT_ID")
+    # do not log AZCOPY_OAUTH_TOKEN_INFO
+
+    get_env_logged("S3_TESTS_OFF")
+
 
     # deleting the log files.
     cleanup()
