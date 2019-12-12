@@ -145,35 +145,35 @@ type ListJobSummaryResponse struct {
 	Timestamp time.Time `json:"-"`
 	JobID     JobID     `json:"-"`
 	// TODO: added for debugging purpose. remove later
-	ActiveConnections int64
+	ActiveConnections int64 `json:",string"`
 	// CompleteJobOrdered determines whether the Job has been completely ordered or not
 	CompleteJobOrdered bool
 	JobStatus          JobStatus
-	TotalTransfers     uint32
-	TransfersCompleted uint32
-	TransfersFailed    uint32
-	TransfersSkipped   uint32
+	TotalTransfers     uint32 `json:",string"`
+	TransfersCompleted uint32 `json:",string"`
+	TransfersFailed    uint32 `json:",string"`
+	TransfersSkipped   uint32 `json:",string"`
 
 	// includes bytes sent in retries (i.e. has double counting, if there are retries) and in failed transfers
-	BytesOverWire uint64
+	BytesOverWire uint64 `json:",string"`
 
 	// does not include failed transfers or bytes sent in retries (i.e. no double counting). Includes successful transfers and transfers in progress
-	TotalBytesTransferred uint64
+	TotalBytesTransferred uint64 `json:",string"`
 
 	// sum of the total transfer enumerated so far.
-	TotalBytesEnumerated uint64
+	TotalBytesEnumerated uint64 `json:",string"`
 	// sum of total bytes expected in the job (i.e. based on our current expectation of which files will be successful)
-	TotalBytesExpected uint64
+	TotalBytesExpected uint64 `json:",string"`
 
-	PercentComplete float32
+	PercentComplete float32 `json:",string"`
 
 	// Stats measured from the network pipeline
 	// Values are all-time values, for the duration of the job.
 	// Will be zero if read outside the process running the job (e.g. with 'jobs show' command)
-	AverageIOPS            int
-	AverageE2EMilliseconds int
-	ServerBusyPercentage   float32
-	NetworkErrorPercentage float32
+	AverageIOPS            int     `json:",string"`
+	AverageE2EMilliseconds int     `json:",string"`
+	ServerBusyPercentage   float32 `json:",string"`
+	NetworkErrorPercentage float32 `json:",string"`
 
 	FailedTransfers  []TransferDetail
 	SkippedTransfers []TransferDetail
@@ -187,8 +187,8 @@ type ListJobSummaryResponse struct {
 // wraps the standard ListJobSummaryResponse with sync-specific stats
 type ListSyncJobSummaryResponse struct {
 	ListJobSummaryResponse
-	DeleteTotalTransfers     uint32
-	DeleteTransfersCompleted uint32
+	DeleteTotalTransfers     uint32 `json:",string"`
+	DeleteTransfersCompleted uint32 `json:",string"`
 }
 
 type ListJobTransfersRequest struct {
@@ -210,7 +210,7 @@ type TransferDetail struct {
 	Src            string
 	Dst            string
 	TransferStatus TransferStatus
-	ErrorCode      int32
+	ErrorCode      int32 `json:",string"`
 }
 
 type CancelPauseResumeResponse struct {
