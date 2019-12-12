@@ -1,6 +1,30 @@
 
 # Change Log
 
+## Version 10.3.3
+
+### New features
+
+1. `azcopy list` is now supported on Azure Files and ADLS Gen 2, in addition to Blob Storage.
+1. The `--exclude-path` flag is now supported in the `sync` command.
+1. Added new environment variable `AZCOPY_USER_AGENT_PREFIX` to allow a prefix to be appended to the user agent strings.
+
+### Bug fixes
+
+1. Content properties (such as Content-Encoding and Cache-Control) are now included when syncing Blob -> Blob and Azure
+   Files -> Azure Files
+1. Custom metadata is now included when syncing Blob -> Blob and Azure Files -> Azure Files
+1. The `azcopy list` command no longer repeats parts of its output. (Previously it would sometimes repeat itself and show the same blob multiple times in the output.)
+1. The `--aad-endpoint` parameter is now visible, instead of hidden. It allows use of Azure Active Directory
+   authentication in national clouds (e.g. Azure China).
+1. On Windows, AzCopy now caches information about which proxy server should be used, instead of looking it up every
+   time. This significantly reduces CPU
+   usage when transferring many small files. It also solves a rare bug when transfers got permanently "stuck" with
+   one uncompleted file.
+1. When uploading to a write-only destination, there is now a clearer error message when the built-in file length check
+   fails. The message says how to fix the problem using `--check-length=false`.
+1. Size checks on managed disk imports are now clearer, and all run at the start of the import process instead of the end.
+
 ## Version 10.3.2
 
 ### Bug fixes

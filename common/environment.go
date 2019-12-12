@@ -46,6 +46,8 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ClientSecret(),
 	EEnvironmentVariable.CertificatePassword(),
 	EEnvironmentVariable.AutoTuneToCpu(),
+	EEnvironmentVariable.CacheProxyLookup(),
+	EEnvironmentVariable.UserAgentPrefix(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
@@ -99,6 +101,14 @@ func (EnvironmentVariable) OptimizeSparsePageBlobTransfers() EnvironmentVariable
 	return EnvironmentVariable{
 		Name:         "AZCOPY_OPTIMIZE_SPARSE_PAGE_BLOB",
 		Description:  "Provide a knob to disable the optimizations in case they cause customers any unforeseen issue. Set to any other value than 'true' to disable.",
+		DefaultValue: "true",
+	}
+}
+
+func (EnvironmentVariable) CacheProxyLookup() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_CACHE_PROXY_LOOKUP",
+		Description:  "By default AzCopy on Windows will cache proxy server lookups at hostname level (not taking URL path into account). Set to any other value than 'true' to disable the cache.",
 		DefaultValue: "true",
 	}
 }
@@ -200,5 +210,12 @@ func (EnvironmentVariable) AzcopyDebugMode() EnvironmentVariable {
 		Name:         "AZCOPY_DEBUG_MODE",
 		DefaultValue: "off",
 		Description:  "Enables the use of flags that intentionally cause transfer failures. (\"on\" = enabled)",
+  }
+}
+    
+func (EnvironmentVariable) UserAgentPrefix() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_USER_AGENT_PREFIX",
+		Description: "Add a prefix to the default AzCopy User Agent, which is used for telemetry purposes. A space is automatically inserted.",
 	}
 }

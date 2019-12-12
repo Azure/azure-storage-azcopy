@@ -208,7 +208,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithMismatchedDestination(c *chk.C) 
 }
 
 // include flag limits the scope of source/destination comparison
-func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeFlag(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSyncUploadWithIncludePatternFlag(c *chk.C) {
 	bsu := getBSU()
 
 	// set up the source with numerous files
@@ -242,7 +242,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeFlag(c *chk.C) {
 }
 
 // exclude flag limits the scope of source/destination comparison
-func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeFlag(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSyncUploadWithExcludePatternFlag(c *chk.C) {
 	bsu := getBSU()
 
 	// set up the source with numerous files
@@ -276,7 +276,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeFlag(c *chk.C) {
 }
 
 // include and exclude flag can work together to limit the scope of source/destination comparison
-func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndExcludeFlag(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndExcludePatternFlag(c *chk.C) {
 	bsu := getBSU()
 
 	// set up the source with numerous files
@@ -313,6 +313,58 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndExcludeFlag(c *chk.C) 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		validateUploadTransfersAreScheduled(c, "", "", filesToInclude, mockedRPC)
+	})
+}
+
+// a specific path is avoided in the comparison
+func (s *cmdIntegrationSuite) TestSyncUploadWithExcludePathFlag(c *chk.C) {
+	bsu := getBSU()
+
+	// set up the source with numerous files
+	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirName)
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
+
+	// add special files that we wish to exclude
+	filesToExclude := []string{"excludeSub/notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
+	scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, filesToExclude)
+	excludeString := "excludeSub;exactName"
+
+	// set up the destination as an empty container
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultSyncRawInput(srcDirName, rawContainerURLWithSAS.String())
+	raw.excludePath = excludeString
+
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateUploadTransfersAreScheduled(c, "", "", fileList, mockedRPC)
+	})
+
+	// now set up the destination with the blobs to be excluded, and make sure they are not touched
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, filesToExclude, blockBlobDefaultData)
+
+	// re-create the ones at the source so that their lmts are newer
+	scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, filesToExclude)
+
+	mockedRPC.reset()
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateUploadTransfersAreScheduled(c, "", "", fileList, mockedRPC)
+
+		// make sure the extra blobs were not touched
+		for _, blobName := range filesToExclude {
+			exists := scenarioHelper{}.blobExists(containerURL.NewBlobURL(blobName))
+			c.Assert(exists, chk.Equals, true)
+		}
 	})
 }
 

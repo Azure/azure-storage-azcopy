@@ -216,7 +216,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithMismatchedDestination(c *chk.C) {
 }
 
 // include flag limits the scope of source/destination comparison
-func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeFlag(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSyncS2SWithIncludePatternFlag(c *chk.C) {
 	bsu := getBSU()
 	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
 	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
@@ -251,7 +251,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeFlag(c *chk.C) {
 }
 
 // exclude flag limits the scope of source/destination comparison
-func (s *cmdIntegrationSuite) TestSyncS2SWithExcludeFlag(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSyncS2SWithExcludePatternFlag(c *chk.C) {
 	bsu := getBSU()
 	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
 	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
@@ -286,7 +286,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithExcludeFlag(c *chk.C) {
 }
 
 // include and exclude flag can work together to limit the scope of source/destination comparison
-func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeAndExcludeFlag(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeAndExcludePatternFlag(c *chk.C) {
 	bsu := getBSU()
 	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
 	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
@@ -324,6 +324,59 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeAndExcludeFlag(c *chk.C) {
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		validateS2SSyncTransfersAreScheduled(c, "", "", blobsToInclude, mockedRPC)
+	})
+}
+
+// a specific path is avoided in the comparison
+func (s *cmdIntegrationSuite) TestSyncS2SWithExcludePathFlag(c *chk.C) {
+	bsu := getBSU()
+	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, srcContainerURL)
+	defer deleteContainer(c, dstContainerURL)
+
+	// set up the source container with numerous blobs
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, srcContainerURL, "")
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// add special blobs that we wish to exclude
+	blobsToExclude := []string{"excludeSub/notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
+	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, blobsToExclude, blockBlobDefaultData)
+	excludeString := "excludeSub;exactName"
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
+	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
+	raw.excludePath = excludeString
+
+	// make sure the list doesn't include the blobs specified by the exclude flag
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateS2SSyncTransfersAreScheduled(c, "", "", blobList, mockedRPC)
+	})
+
+	// now set up the destination with the blobs to be excluded, and make sure they are not touched
+	scenarioHelper{}.generateBlobsFromList(c, dstContainerURL, blobsToExclude, blockBlobDefaultData)
+
+	// re-create the ones at the source so that their lmts are newer
+	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, blobsToExclude, blockBlobDefaultData)
+
+	mockedRPC.reset()
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateS2SSyncTransfersAreScheduled(c, "", "", blobList, mockedRPC)
+
+		// make sure the extra blobs were not touched
+		for _, blobName := range blobsToExclude {
+			exists := scenarioHelper{}.blobExists(dstContainerURL.NewBlobURL(blobName))
+			c.Assert(exists, chk.Equals, true)
+		}
 	})
 }
 

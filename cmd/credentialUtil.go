@@ -367,7 +367,7 @@ func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo) (pi
 		credential,
 		azblob.PipelineOptions{
 			Telemetry: azblob.TelemetryOptions{
-				Value: common.UserAgent,
+				Value: glcm.AddUserAgentPrefix(common.UserAgent),
 			},
 		},
 		ste.XferRetryOptions{
@@ -402,7 +402,7 @@ func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo) (
 				MaxRetryDelay: ste.UploadMaxRetryDelay,
 			},
 			Telemetry: azbfs.TelemetryOptions{
-				Value: common.UserAgent,
+				Value: glcm.AddUserAgentPrefix(common.UserAgent),
 			},
 		}), nil
 }
@@ -420,7 +420,7 @@ func createFilePipeline(ctx context.Context, credInfo common.CredentialInfo) (pi
 				MaxRetryDelay: ste.UploadMaxRetryDelay,
 			},
 			Telemetry: azfile.TelemetryOptions{
-				Value: common.UserAgent,
+				Value: glcm.AddUserAgentPrefix(common.UserAgent),
 			},
 		}), nil
 }

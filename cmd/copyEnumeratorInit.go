@@ -230,20 +230,11 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		srcRelPath := cca.makeEscapedRelativePath(true, isDestDir, object)
 		dstRelPath := cca.makeEscapedRelativePath(false, isDestDir, object)
 
-		transfer := common.NewCopyTransfer(
+		transfer := object.ToNewCopyTransfer(
 			cca.autoDecompress && cca.fromTo.IsDownload(),
 			srcRelPath, dstRelPath,
-			object.lastModifiedTime,
-			object.size,
-			object.contentType, object.contentEncoding, object.contentDisposition, object.contentLanguage, object.cacheControl,
-			object.md5,
-			object.Metadata,
-			object.blobType,
-			azblob.AccessTierNone) // access tier is assigned conditionally
-
-		if cca.s2sPreserveAccessTier {
-			transfer.BlobTier = object.blobAccessTier
-		}
+			cca.s2sPreserveAccessTier,
+		)
 
 		return addTransfer(&jobPartOrder, transfer, cca)
 	}

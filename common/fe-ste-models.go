@@ -24,7 +24,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"math"
-	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
@@ -851,6 +850,7 @@ const (
 )
 
 // This struct represent a single transfer entry with source and destination details
+// ** DO NOT construct directly. Use cmd.storedObject.ToNewCopyTransfer **
 type CopyTransfer struct {
 	Source           string
 	Destination      string
@@ -869,57 +869,6 @@ type CopyTransfer struct {
 	// Properties for S2S blob copy
 	BlobType azblob.BlobType
 	BlobTier azblob.AccessTierType
-}
-
-func NewCopyTransfer(
-	steWillAutoDecompress bool,
-	Source, Destination string,
-	LMT time.Time,
-	ContentSize int64,
-	ContentType, ContentEncoding, ContentDisposition, ContentLanguage, CacheControl string,
-	ContentMD5 []byte,
-	Metadata Metadata,
-	BlobType azblob.BlobType,
-	BlobTier azblob.AccessTierType) CopyTransfer {
-
-	if steWillAutoDecompress {
-		Destination = stripCompressionExtension(Destination, ContentEncoding)
-	}
-
-	return CopyTransfer{
-		Source:             Source,
-		Destination:        Destination,
-		LastModifiedTime:   LMT,
-		SourceSize:         ContentSize,
-		ContentType:        ContentType,
-		ContentEncoding:    ContentEncoding,
-		ContentDisposition: ContentDisposition,
-		ContentLanguage:    ContentLanguage,
-		CacheControl:       CacheControl,
-		ContentMD5:         ContentMD5,
-		Metadata:           Metadata,
-		BlobType:           BlobType,
-		BlobTier:           BlobTier,
-	}
-}
-
-// stringCompressionExtension strips any file extension that corresponds to the
-// compression indicated by the encoding type.
-// Why remove this extension here, at enumeration time, instead of just doing it
-// in the STE when we are about to save the file?
-// Because by doing it here we get the accurate name in things that
-// directly read the Plan files, like the jobs show command
-func stripCompressionExtension(dest string, contentEncoding string) string {
-	// Ignore error getting compression type. We can't easily report it now, and we don't need to know about the error
-	// cases here when deciding renaming.  STE will log error on the error cases
-	ct, _ := GetCompressionType(contentEncoding)
-	ext := strings.ToLower(filepath.Ext(dest))
-	stripGzip := ct == ECompressionType.GZip() && (ext == ".gz" || ext == ".gzip")
-	stripZlib := ct == ECompressionType.ZLib() && ext == ".zz" // "standard" extension for zlib-wrapped files, according to pigz doc and Stack Overflow
-	if stripGzip || stripZlib {
-		return strings.TrimSuffix(dest, filepath.Ext(dest))
-	}
-	return dest
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

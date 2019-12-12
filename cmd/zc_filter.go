@@ -54,7 +54,7 @@ func (f *excludeBlobTypeFilter) doesPass(object storedObject) bool {
 
 type excludeFilter struct {
 	pattern     string
-	targetsPath bool // TODO: include targetsPath in sync
+	targetsPath bool
 }
 
 func (f *excludeFilter) doesSupportThisOS() (msg string, supported bool) {

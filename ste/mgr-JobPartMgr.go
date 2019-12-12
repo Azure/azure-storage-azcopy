@@ -12,8 +12,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	autoProxy "github.com/mattn/go-ieproxy"
-
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -86,7 +84,7 @@ func NewVersionPolicyFactory() pipeline.Factory {
 func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
-			Proxy: autoProxy.GetProxyFunc(),
+			Proxy: common.GlobalProxyLookup,
 			DialContext: newDialRateLimiter(&net.Dialer{
 				Timeout:   30 * time.Second,
 				KeepAlive: 30 * time.Second,
@@ -436,6 +434,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
 		userAgent = common.BenchmarkUserAgent
 	}
+	userAgent = common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
 
 	credOption := common.CredentialOpOptions{
 		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
