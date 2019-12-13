@@ -1,11 +1,12 @@
 package ste
 
 import (
-	"sync"
 	"time"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type udamTestSuite struct{}
@@ -14,9 +15,10 @@ var _ = chk.Suite(&udamTestSuite{})
 
 // MakeUDAMInstance uses fake values in order to create a mostly-dummy instance of UDAM that works, but doesn't produce working tokens.
 func (s *udamTestSuite) MakeUDAMInstance(dummyInstance bool) userDelegationAuthenticationManager {
+	cache := common.NewLFUCache(20)
 	if dummyInstance {
 		return userDelegationAuthenticationManager{
-			sasMap: &sync.Map{},
+			sasCache: &cache,
 		}
 	} else {
 		startTime := time.Now()
@@ -38,14 +40,14 @@ func (s *udamTestSuite) MakeUDAMInstance(dummyInstance bool) userDelegationAuthe
 			credential: udc,
 			startTime:  startTime,
 			expiryTime: expiryTime,
-			sasMap:     &sync.Map{},
+			sasCache:   &cache,
 		}
 
 		return udam
 	}
 }
 
-func (s *udamTestSuite) TestSASWriteLock(c *chk.C) {
+func (s *udamTestSuite) TestGetSASToken(c *chk.C) {
 	// We just want a non-empty UDK
 	udam := s.MakeUDAMInstance(false)
 	var knownSAS string
