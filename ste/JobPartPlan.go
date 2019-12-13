@@ -135,7 +135,7 @@ func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (sour
 	return common.GenerateFullPath(srcRoot, srcRelative), common.GenerateFullPath(dstRoot, dstRelative)
 }
 
-func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
+func (jpph *JobPartPlanHeader) getString(offset int64, length uint32) string {
 	tempSlice := []byte{}
 	sh := (*reflect.SliceHeader)(unsafe.Pointer(&tempSlice))
 	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(offset) // Address of Job Part Plan + this string's offset
@@ -160,27 +160,27 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 	offset := t.SrcOffset + int64(t.SrcLength) + int64(t.DstLength)
 
 	if t.SrcContentTypeLength != 0 {
-		h.ContentType = jpph.getString(offset, t.SrcContentTypeLength)
+		h.ContentType = jpph.getString(offset, uint32(t.SrcContentTypeLength))
 		offset += int64(t.SrcContentTypeLength)
 	}
 	if t.SrcContentEncodingLength != 0 {
-		h.ContentEncoding = jpph.getString(offset, t.SrcContentEncodingLength)
+		h.ContentEncoding = jpph.getString(offset, uint32(t.SrcContentEncodingLength))
 		offset += int64(t.SrcContentEncodingLength)
 	}
 	if t.SrcContentLanguageLength != 0 {
-		h.ContentLanguage = jpph.getString(offset, t.SrcContentLanguageLength)
+		h.ContentLanguage = jpph.getString(offset, uint32(t.SrcContentLanguageLength))
 		offset += int64(t.SrcContentLanguageLength)
 	}
 	if t.SrcContentDispositionLength != 0 {
-		h.ContentDisposition = jpph.getString(offset, t.SrcContentDispositionLength)
+		h.ContentDisposition = jpph.getString(offset, uint32(t.SrcContentDispositionLength))
 		offset += int64(t.SrcContentDispositionLength)
 	}
 	if t.SrcCacheControlLength != 0 {
-		h.CacheControl = jpph.getString(offset, t.SrcCacheControlLength)
+		h.CacheControl = jpph.getString(offset, uint32(t.SrcCacheControlLength))
 		offset += int64(t.SrcCacheControlLength)
 	}
 	if t.SrcContentMD5Length != 0 {
-		h.ContentMD5 = []byte(jpph.getString(offset, t.SrcContentMD5Length))
+		h.ContentMD5 = []byte(jpph.getString(offset, uint32(t.SrcContentMD5Length)))
 		offset += int64(t.SrcContentMD5Length)
 	}
 	if t.SrcMetadataLength != 0 {
@@ -190,12 +190,12 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 		offset += int64(t.SrcMetadataLength)
 	}
 	if t.SrcBlobTypeLength != 0 {
-		tmpBlobTypeStr := []byte(jpph.getString(offset, t.SrcBlobTypeLength))
+		tmpBlobTypeStr := []byte(jpph.getString(offset, uint32(t.SrcBlobTypeLength)))
 		blobType = azblob.BlobType(tmpBlobTypeStr)
 		offset += int64(t.SrcBlobTypeLength)
 	}
 	if t.SrcBlobTierLength != 0 {
-		tmpBlobTierStr := []byte(jpph.getString(offset, t.SrcBlobTierLength))
+		tmpBlobTierStr := []byte(jpph.getString(offset, uint32(t.SrcBlobTierLength)))
 		blobTier = azblob.AccessTierType(tmpBlobTierStr)
 		offset += int64(t.SrcBlobTierLength)
 	}
@@ -279,9 +279,9 @@ type JobPartPlanTransfer struct {
 	// SrcOffset represents the actual start offset transfer header written in JobPartOrder file
 	SrcOffset int64
 	// SrcLength represents the actual length of source string for specific transfer
-	SrcLength int16
+	SrcLength uint32 // Well exceeds the maximum path limit on all popular platforms
 	// DstLength represents the actual length of destination string for specific transfer
-	DstLength int16
+	DstLength uint32 // Well exceeds the maximum path limit on all popular platforms
 	// ChunkCount represents the num of chunks a transfer is split into
 	//ChunkCount uint16	// TODO: Remove this, we need to determine it at runtime
 	// ModifiedTime represents the last time at which source was modified before start of transfer stored as nanoseconds.
@@ -299,7 +299,7 @@ type JobPartPlanTransfer struct {
 	SrcContentDispositionLength int16
 	SrcCacheControlLength       int16
 	SrcContentMD5Length         int16
-	SrcMetadataLength           int16
+	SrcMetadataLength           uint32 // int16 can hit up to 32k characters, but uint32 can hit up to roughly 4.2 million characters.
 	SrcBlobTypeLength           int16
 	SrcBlobTierLength           int16
 

@@ -237,8 +237,8 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		// Create & initialize this transfer's Job Part Plan Transfer
 		jppt := JobPartPlanTransfer{
 			SrcOffset:      currentSrcStringOffset, // SrcOffset of the src string
-			SrcLength:      int16(len(order.Transfers[t].Source)),
-			DstLength:      int16(len(order.Transfers[t].Destination)),
+			SrcLength:      uint32(len(order.Transfers[t].Source)),
+			DstLength:      uint32(len(order.Transfers[t].Destination)),
 			ModifiedTime:   order.Transfers[t].LastModifiedTime.UnixNano(),
 			SourceSize:     order.Transfers[t].SourceSize,
 			CompletionTime: 0,
@@ -249,7 +249,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			SrcContentDispositionLength: int16(len(order.Transfers[t].ContentDisposition)),
 			SrcCacheControlLength:       int16(len(order.Transfers[t].CacheControl)),
 			SrcContentMD5Length:         int16(len(order.Transfers[t].ContentMD5)),
-			SrcMetadataLength:           int16(srcMetadataLength),
+			SrcMetadataLength:           uint32(srcMetadataLength),
 			SrcBlobTypeLength:           int16(len(order.Transfers[t].BlobType)),
 			SrcBlobTierLength:           int16(len(order.Transfers[t].BlobTier)),
 
@@ -261,10 +261,10 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		// The NEXT transfer's src/dst string come after THIS transfer's src/dst strings
 		srcDstStringsOffset[t] = currentSrcStringOffset
 
-		currentSrcStringOffset += int64(jppt.SrcLength + jppt.DstLength + jppt.SrcContentTypeLength +
-			jppt.SrcContentEncodingLength + jppt.SrcContentLanguageLength + jppt.SrcContentDispositionLength +
-			jppt.SrcCacheControlLength + jppt.SrcContentMD5Length + jppt.SrcMetadataLength +
-			jppt.SrcBlobTypeLength + jppt.SrcBlobTierLength)
+		currentSrcStringOffset += int64(jppt.SrcLength + jppt.DstLength + uint32(jppt.SrcContentTypeLength) +
+			uint32(jppt.SrcContentEncodingLength) + uint32(jppt.SrcContentLanguageLength) + uint32(jppt.SrcContentDispositionLength) +
+			uint32(jppt.SrcCacheControlLength) + uint32(jppt.SrcContentMD5Length) + jppt.SrcMetadataLength +
+			uint32(jppt.SrcBlobTypeLength) + uint32(jppt.SrcBlobTierLength))
 	}
 
 	// All the transfers were written; now write each transfer's src/dst strings
