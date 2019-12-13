@@ -25,6 +25,16 @@ class Command(object):
         if argument == None:
             return
         self.args.append(argument)
+
+        # auto-set MD5 checking flags, so that we always check when testing
+        ct = str.lower(self.command_type)
+        is_copy_or_sync = ct == "copy" or ct == "cp" or ct == "sync"
+        if is_copy_or_sync and (not str.startswith(argument, "http")):  # this is a local location
+            if len(self.args) == 1:
+                self.add_flags("put-md5", "true")  # this is an upload
+            else:
+                self.add_flags("check-md5", "FailIfDifferentOrMissing")
+
         return self
 
     def add_flags(self, flag, value):
