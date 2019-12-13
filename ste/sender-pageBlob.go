@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -152,6 +153,8 @@ func (s *pageBlobSenderBase) RemoteFileExists() (bool, error) {
 	return remoteObjectExists(s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}))
 }
 
+var premiumPageBlobTierRegex = regexp.MustCompile(`P\d+`)
+
 func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
 
 	// Create file pacer now.  Safe to create now, because we know that if Prologue is called the Epilogue will be to
@@ -220,17 +223,41 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		if err := blockBlobTier.Parse(string(s.destBlobTier)); err != nil { // i.e it's not block blob tier
 			// Set the latest service version from sdk as service version in the context.
 			ctxWithLatestServiceVersion := context.WithValue(s.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-			if _, err := s.destPageBlobURL.SetTier(ctxWithLatestServiceVersion, s.destBlobTier, azblob.LeaseAccessConditions{}); err != nil {
-				if s.jptm.Info().S2SSrcBlobTier != azblob.AccessTierNone {
-					s.jptm.LogTransferInfo(pipeline.LogError, s.jptm.Info().Source, s.jptm.Info().Destination, "Failed to replicate blob tier at destination. Try transferring with the flag --s2s-preserve-access-tier=false")
-					s2sAccessTierFailureLogStdout.Do(func() {
-						glcm := common.GetLifecycleMgr()
-						glcm.Error("One or more blobs have failed blob tier replication at the destination. Try transferring with the flag --s2s-preserve-access-tier=false")
-					})
+
+			// First, let's check if the intended tier is a premium page blob tier.
+			// These aren't available on non-premium storage accounts, but we can still copy the data.
+
+			shouldSet := true
+			if premiumPageBlobTierRegex.MatchString(string(s.destBlobTier)) {
+				infoResp, err := s.destPageBlobURL.GetAccountInfo(ctxWithLatestServiceVersion)
+				if err != nil {
+					// If GetAccountInfo fails, this transfer should fail because we lack at least one available permission
+					// (https://docs.microsoft.com/en-us/rest/api/storageservices/get-account-information#authorization)
+					s.jptm.FailActiveSendWithStatus("Checking destination tier availability (Set PageBlob tier) ", err, common.ETransferStatus.TierAvailabilityCheckFailure())
 				}
 
-				s.jptm.FailActiveSendWithStatus("Setting PageBlob tier ", err, common.ETransferStatus.BlobTierFailure())
-				return
+				// Will catch destinations Premium_LRS and Premium_ZRS
+				shouldSet = strings.Contains(string(infoResp.SkuName()), "Premium")
+
+				if !shouldSet {
+					s.jptm.LogTransferInfo(pipeline.LogWarning, s.jptm.Info().Source, s.jptm.Info().Destination, "Cannot set destination page blob's access tier ("+string(s.destBlobTier)+") because it is not available on the destination SKU. The transfer will still occur.")
+				}
+			}
+
+			if shouldSet {
+				if _, err := s.destPageBlobURL.SetTier(ctxWithLatestServiceVersion, s.destBlobTier, azblob.LeaseAccessConditions{}); err != nil {
+					if s.jptm.Info().S2SSrcBlobTier != azblob.AccessTierNone {
+						s.jptm.LogTransferInfo(pipeline.LogError, s.jptm.Info().Source, s.jptm.Info().Destination, "Failed to replicate blob tier at destination. Try transferring with the flag --s2s-preserve-access-tier=false")
+						s2sAccessTierFailureLogStdout.Do(func() {
+							glcm := common.GetLifecycleMgr()
+							// Info, rather than error. Error kills azcopy.
+							glcm.Info("One or more blobs have failed blob tier replication at the destination. Try transferring with the flag --s2s-preserve-access-tier=false")
+						})
+					}
+
+					s.jptm.FailActiveSendWithStatus("Setting PageBlob tier ", err, common.ETransferStatus.BlobTierFailure())
+					return
+				}
 			}
 		}
 	}
