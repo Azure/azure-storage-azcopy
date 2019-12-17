@@ -17,21 +17,17 @@ v10
 `azcopy copy '<source>' '<destination>' [parameters]`
 
 ## Authentication
-Method | v8 | v10
------------- | ------------- | -------------
-Azure Active Directory (Azure AD) | `azcopy login` | `azcopy login`
-Shared Access Signature (SAS) | `azcopy /Source:https://myaccount.blob.core.windows.net/mycontainer /Dest:C:\MyFolder /SourceSAS:[SAS]` | `azcopy copy 'https://myaccount.blob.core.windows.net/mycontainer?SAS' 'C:\MyFolder'`
 
-### Azure Active Directory (Azure AD)
+#### Azure Active Directory (Azure AD)
 
-v8/v10: For both versions, this step is the same and will cache the user's encrypted login information using OS built-in mechanisms.
+For both v8 and v10, this step is the same and will cache the user's encrypted login information using OS built-in mechanisms.
 ```
 azcopy login
 ```
 
-### Shared Access Signature (SAS)
+#### Shared Access Signature (SAS)
 
-v8: Use appropriate parameter `/SourceSAS:[SAS]` and/or `/DestSAS:[SAS]`
+**v8** Use the appropriate parameter `/SourceSAS:[SAS]` and/or `/DestSAS:[SAS]`
 ```
 azcopy
   /Source:https://myaccount.blob.core.windows.net/mycontainer
@@ -39,20 +35,20 @@ azcopy
   /SourceSAS:[SAS]
 ```
 
-v10: Append SAS token to the source and/or destination URIs
+**v10** Append the SAS token to the source and/or destination URIs
 ```
 azcopy copy
   'https://myaccount.blob.core.windows.net/mycontainer?SAS'
   'C:\MyFolder'
 ```
 
-### Shared Key
+#### Shared Key
 
-v8: Use flag `/SourceKey:[key]` and/or `/DestKey:[key]`
+**v8** Use flag `/SourceKey:[key]` and/or `/DestKey:[key]`
 
-v10: Use OAuth or SAS
+**v10** Use OAuth or SAS
 
-## Command Comparisons
+## Common Command Comparisons
 
 #### Download a blob to file
 v8
