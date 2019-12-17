@@ -1,9 +1,12 @@
-# Migration Guide for v8 to v10
+# AzCopy Migration Guide for v8 to v10
 
 ## Purpose
-This migration guide is intended for AzCopy users who are accustomed to the v8 syntax. Below are mappings from AzCopy v8 to their equivalent AzCopy v10 commands. You may use this content to become familiar with using AzCopy v10 and learn how to migrate with ease.
+This migration guide is intended for AzCopy users who are accustomed to the v8 syntax and are seeking to migrate to v10. The content below outlines key differences in the two versions, maps popular AzCopy v8 commands to their equivalent AzCopy v10 commands, and compares the optional parameters.
 
-## Usage
+## General Usage
+v8 | v10
+------------- | -------------
+`azcopy /Source:<source> /Dest:<destination> [parameters]` | `azcopy copy '<source>' '<destination>' [parameters]`
 
 v8
 
@@ -14,9 +17,24 @@ v10
 `azcopy copy '<source>' '<destination>' [parameters]`
 
 ## Authentication
-AzCopy v8 features 3 ways to authenticate credentials outlined below, but for AzCopy v10 we decided to move away from Shared Key due to poor security.
+Method | v8 | v10
+------------ | ------------- | -------------
+Azure Active Directory (Azure AD) | `azcopy login` | `azcopy login`
+Shared Access Signature (SAS) | Use appropriate parameter `/SourceSAS:[SAS]` and/or `/DestSAS:[SAS]`
+```
+azcopy
+  /Source:https://myaccount.blob.core.windows.net/mycontainer
+  /Dest:C:\MyFolder
+  /SourceSAS:[SAS]
+```
+| Append SAS token to the source and/or destination URIs
+```
+azcopy copy
+  'https://myaccount.blob.core.windows.net/mycontainer?SAS'
+  'C:\MyFolder'
+```
 
-### Azure Active Directory (AAD)
+### Azure Active Directory (Azure AD)
 
 v8/v10: For both versions, this step is the same and will cache the user's encrypted login information using OS built-in mechanisms.
 ```
