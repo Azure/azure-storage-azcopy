@@ -20,19 +20,7 @@ v10
 Method | v8 | v10
 ------------ | ------------- | -------------
 Azure Active Directory (Azure AD) | `azcopy login` | `azcopy login`
-Shared Access Signature (SAS) | Use appropriate parameter `/SourceSAS:[SAS]` and/or `/DestSAS:[SAS]`
-```
-azcopy
-  /Source:https://myaccount.blob.core.windows.net/mycontainer
-  /Dest:C:\MyFolder
-  /SourceSAS:[SAS]
-```
-| Append SAS token to the source and/or destination URIs
-```
-azcopy copy
-  'https://myaccount.blob.core.windows.net/mycontainer?SAS'
-  'C:\MyFolder'
-```
+Shared Access Signature (SAS) | `azcopy /Source:https://myaccount.blob.core.windows.net/mycontainer /Dest:C:\MyFolder /SourceSAS:[SAS]` | `azcopy copy 'https://myaccount.blob.core.windows.net/mycontainer?SAS' 'C:\MyFolder'`
 
 ### Azure Active Directory (Azure AD)
 
