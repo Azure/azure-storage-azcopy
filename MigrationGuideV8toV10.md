@@ -27,7 +27,7 @@ azcopy login
 
 #### Shared Access Signature (SAS)
 
-**v8** Use the appropriate parameter `/SourceSAS:[SAS]` and/or `/DestSAS:[SAS]`
+**v8** - Use the appropriate parameter `/SourceSAS:[SAS]` and/or `/DestSAS:[SAS]`
 ```
 azcopy
   /Source:https://myaccount.blob.core.windows.net/mycontainer
@@ -35,7 +35,7 @@ azcopy
   /SourceSAS:[SAS]
 ```
 
-**v10** Append the SAS token to the source and/or destination URIs
+**v10** - Append the SAS token to the source and/or destination URIs
 ```
 azcopy copy
   'https://myaccount.blob.core.windows.net/mycontainer?SAS'
@@ -44,21 +44,21 @@ azcopy copy
 
 #### Shared Key
 
-**v8** Use flag `/SourceKey:[key]` and/or `/DestKey:[key]`
+**v8** - Use flag `/SourceKey:[key]` and/or `/DestKey:[key]`
 
-**v10** Use OAuth or SAS
+**v10** - Use OAuth or SAS
 
 ## Common Command Comparisons
 
 #### Download a blob to file
-v8
+**v8**
 ```
 azcopy
   /Source:https://myaccount.blob.core.windows.net/mycontainer/myblob
   /Dest:C:\MyFolder
   /SourceSAS:[SAS]
 ```
-v10
+**v10**
 ```
 azcopy copy
   'https://myaccount.blob.core.windows.net/mycontainer/myblob?SAS'
@@ -66,15 +66,15 @@ azcopy copy
 ```
 
 #### Download all blobs from a container to directory
-v8
+**v8**
 ```
 azcopy
-  /Source:https://myaccount.blob.core.windows.net/mycontainer/myblob
+  /Source:https://myaccount.blob.core.windows.net/mycontainer
   /Dest:C:\MyFolder
   /SourceSAS:[SAS]
   /S
 ```
-v10
+**v10**
 ```
 azcopy copy
   'https://myaccount.blob.core.windows.net/mycontainer?SAS'
@@ -82,37 +82,45 @@ azcopy copy
   --recursive
 ```
 
-#### Upload all blobs in a folder
-v8
+#### Upload blobs with a specific prefix
+The following commands upload all blobs that start with `abc` such as `abc.txt`, `abc1.txt`, `vd1\abcd.txt`, etc.
+FIX THIS
+**v8**
 ```
 azcopy
   /Source:C:\MyFolder
   /Dest:https://myaccount.blob.core.windows.net/mycontainer
   /DestSAS:[SAS]
+  /Pattern:abc
   /S
 ```
-v10
+**v10**
 ```
 azcopy copy
   'C:\MyFolder'
   'https://myaccount.blob.core.windows.net/mycontainer?SAS'
+  --include-path 'abc'
   --recursive
 ```
 
-#### Copy blobs within storage account (SOMETHING WRONG HERE)
-v8
+#### Upload specific files
+The following commands uploads all files in the `C:\myDirectory\photos` directory and the `C:\myDirectory\documents\myFile.txt` file.
+FIX THIS
+**v8**
 ```
 azcopy
-  /Source:https://myaccount.blob.core.windows.net/mycontainer1
-  /Dest:https://myaccount.blob.core.windows.net/mycontainer2
-  /SourceSAS:[SAS1]
-  /DestSAS:[SAS2]
+  /Source:C:\MyFolder
+  /Dest:https://myaccount.blob.core.windows.net/mycontainer
+  /DestSAS:[SAS]
+  /Pattern: PUT CORRECT PATTERN HERE
 ```
-v10
+**v10**
 ```
 azcopy copy
-  'https://myaccount.blob.core.windows.net/mycontainer1?SAS1'
-  'https://myaccount.blob.core.windows.net/mycontainer2?SAS2'
+  'C:\MyFolder'
+  'https://myaccount.blob.core.windows.net/mycontainer?SAS'
+  --include-path 'photos;documents\myFile.txt'
+  --recursive
 ```
 
 ## Parameters Table
@@ -124,7 +132,7 @@ Specify journal file folder | `/Z:[journal-file-folder]` | Modify environment va
 Specify parameter file | `/@:<parameter-file>` | Run commands in command line
 Suppress confirmation prompts | `/Y` | Suppressed by default, to enable specify parameter: INSERT HERE
 Specify number of concurrent operations | `/NC:<number-of-concurrent>` | Modify environment variable: `AZCOPY_CONCURRENCY_VALUE`
-Specify source/destination type | `/SourceType:<option> /DestType:<option>` Options: blob, file | `--from-to=[enums]` (typically not used)
+Specify source/destination type | `/SourceType:<option>` `/DestType:<option>` Options: blob, file | `--from-to=[enums]` (typically not used)
 Upload contents recursively | `/S` | `--recursive`
 Match a specific pattern | `/Pattern:<pattern>` | `--include-pattern string --exclude-pattern string --include-path string --exclude-path string`
 Create an MD5 hash when downloading data | Always does this | `--put-md5`
@@ -134,7 +142,7 @@ Set modified time to be same as the source blobs | `/MT` | `--preserve-last-modi
 Exclude newer source | `/XN` | Not yet supported
 Exclude older source | `/XO` | Use the sync command
 Upload archive files/blobs | `/A` | See row below
-Set attributes | `/IA:[RASHCNETOI] /XA:[RASHCNETOI]` | `--include-attributes string --exclude-attributes string`
+Set attributes | `/IA:[RASHCNETOI]` `/XA:[RASHCNETOI]` | `--include-attributes string` `--exclude-attributes string`
 Copy blobs or files synchronously among two Azure Storage endpoints | `/SyncCopy` | V10 is always synchronous from source to destination, unlike v8 which downloads then re-uploads
 Set content type | `/SetContentType:[content-type]` | `--content-type string`
 Set blob type at destination | `/BlobType:<option>` Options: page, block, append | `--blob-type string`
