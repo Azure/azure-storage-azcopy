@@ -4,15 +4,11 @@
 This migration guide is intended for AzCopy users who are accustomed to the v8 syntax and are seeking to migrate to v10. The content below outlines key differences in the two versions, maps popular AzCopy v8 commands to their equivalent AzCopy v10 commands, and compares the optional parameters.
 
 ## General Usage
-v8 | v10
-------------- | -------------
-`azcopy /Source:<source> /Dest:<destination> [parameters]` | `azcopy copy '<source>' '<destination>' [parameters]`
-
-v8
+**v8**
 
 `azcopy /Source:<source> /Dest:<destination> [parameters]`
 
-v10
+**v10**
 
 `azcopy copy '<source>' '<destination>' [parameters]`
 
