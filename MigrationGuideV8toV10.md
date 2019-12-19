@@ -20,7 +20,9 @@ This migration guide is intended for AzCopy users who are accustomed to the v8 s
 
 ### Azure Active Directory (Azure AD)
 
-Use the same command for both v8 and v10. AzCopy caches you're encrypted login information by using the built-in mechanisms of the operating system.
+AzCopy caches you're encrypted login information by using the built-in mechanisms of the operating system.
+
+Use the same command for both v8 and v10.
 
 ```azcopy
 azcopy login
