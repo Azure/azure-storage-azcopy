@@ -1,31 +1,36 @@
 # AzCopy Migration Guide for v8 to v10
 
 ## Purpose
-This migration guide is intended for AzCopy users who are accustomed to the v8 syntax and are seeking to migrate to v10. The content below outlines key differences in the two versions, maps popular AzCopy v8 commands to their equivalent AzCopy v10 commands, and compares the optional parameters.
+
+This migration guide is intended for AzCopy users who are accustomed to the v8 syntax and are seeking to migrate to v10. This article outlines the key differences between these two versions, maps popular AzCopy v8 commands to their equivalent AzCopy v10 commands, and then compares the optional parameters.
 
 ## General Usage
-**v8**
+
+### v8
 
 `azcopy /Source:<source> /Dest:<destination> [parameters]`
 
-**v10**
+### v10
 
 `azcopy copy '<source>' '<destination>' [parameters]`
 
-In v10, it is possible to have commands like `azcopy sync ...` or `azcopy list` but for general usage purposes the `copy` command has been specified here. To learn what other commands there are in v10 type `azcopy -h`.
+**Note** This example shows the `azcopy copy` command, but there are many other commands available to you. To see a complete list, open a command window, and type `azcopy -h`.
 
 ## Authentication
 
-#### Azure Active Directory (Azure AD)
+### Azure Active Directory (Azure AD)
 
-For both v8 and v10, this step is the same and will cache the user's encrypted login information using OS built-in mechanisms.
-```
+This step is the same for both v8 and v10. It caches the user's encrypted login information by using the built-in mechanisms of the operating system.
+
+```azcopy
 azcopy login
 ```
 
-#### Shared Access Signature (SAS)
+### Shared Access Signature (SAS)
 
-**v8** - Use the appropriate parameter `/SourceSAS:[SAS]` and/or `/DestSAS:[SAS]`
+#### v8
+
+Use the appropriate parameter `/SourceSAS:[SAS]` and/or `/DestSAS:[SAS]`
 ```
 azcopy
   /Source:https://myaccount.blob.core.windows.net/mycontainer
@@ -33,38 +38,46 @@ azcopy
   /SourceSAS:[SAS]
 ```
 
-**v10** - Append the SAS token to the source and/or destination URIs
+#### v10
+
+Append the SAS token to the source and/or destination URIs
+
 ```
 azcopy copy
   'https://myaccount.blob.core.windows.net/mycontainer?SAS'
   'C:\MyFolder'
 ```
 
-#### Shared Key
+### Shared Key
 
-**v8** - Use flag `/SourceKey:[key]` and/or `/DestKey:[key]`
+**v8** - Use flag `/SourceKey:[key]` and/or `/DestKey:[key]`.
 
-**v10** - Use Azure AD or SAS
+**v10** - Use Azure AD or SAS.
 
 ## Common Command Comparisons
 
-#### Download a blob to file
-**v8**
+### Download a blob to file
+
+#### v8
+
 ```
 azcopy
   /Source:https://myaccount.blob.core.windows.net/mycontainer/myblob
   /Dest:C:\MyFolder
   /SourceSAS:[SAS]
 ```
-**v10**
+
+#### v10
+
 ```
 azcopy copy
   'https://myaccount.blob.core.windows.net/mycontainer/myblob?SAS'
   'C:\MyFolder'
 ```
 
-#### Download all blobs from a container to directory
-**v8**
+### Download all blobs from a container to directory
+
+### v8
 ```
 azcopy
   /Source:https://myaccount.blob.core.windows.net/mycontainer
