@@ -20,7 +20,7 @@ This migration guide is intended for AzCopy users who are accustomed to the v8 s
 
 ### Azure Active Directory (Azure AD)
 
-Provide your credentials by using the same command for both v8 and v10.
+Use the same command for both v8 and v10.
 
 ```azcopy
 azcopy login
