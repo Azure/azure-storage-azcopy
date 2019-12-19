@@ -83,23 +83,23 @@ azcopy copy
 ## Parameters Table
 Task | v8 | v10
 ------------ | ------------- | -------------
-Authenticate | ```/SourceKey:<Key> /DestKey:<Key> /SourceSAS:<SAS> /DestSAS:<SAS> ``` | Append the SAS token to the source and/or destination URI. `'blob URI' + '?' + 'SAS'`
+Authenticate | `/SourceKey:<Key>` <br> `/DestKey:<Key>` <br> `/SourceSAS:<SAS>` <br> `/DestSAS:<SAS>` | Append the SAS token to the source and/or destination URI. <br> `'blob URI' + '?' + 'SAS'`
 Check log verbosity | `/V:[verbose-log-file]` | `--log-level`
-Specify journal file folder | `/Z:[journal-file-folder]` | Modify environment variable: `AZCOPY_JOB_PLAN_LOCATION`
+Specify journal file folder | `/Z:[journal-file-folder]` | Modify environment variable: <br> `AZCOPY_JOB_PLAN_LOCATION`
 Specify parameter file | `/@:<parameter-file>` | Run commands in command line
-Suppress confirmation prompts | `/Y` | Suppressed by default, to enable specify parameter: INSERT HERE
-Specify number of concurrent operations | `/NC:<number-of-concurrent>` | Modify environment variable: `AZCOPY_CONCURRENCY_VALUE`
-Specify source/destination type | `/SourceType:<option>` `/DestType:<option>` Options: blob, file | `--from-to=[enums]` (typically not used)
+Suppress confirmation prompts | `/Y` | Suppressed by default. To enable, specify parameter: INSERT HERE
+Specify number of concurrent operations | `/NC:<number-of-concurrent>` | Modify environment variable: <br> `AZCOPY_CONCURRENCY_VALUE`
+Specify source/destination type | `/SourceType:<option>` `/DestType:<option>` Options: blob, file | `--from-to=[enums]` <br> (typically not used)
 Upload contents recursively | `/S` | `--recursive`
-Match a specific pattern | `/Pattern:<pattern>` | `--include-pattern string --exclude-pattern string --include-path string --exclude-path string`
+Match a specific pattern | `/Pattern:<pattern>` | `--include-pattern string` <br> `--exclude-pattern string` <br> `--include-path string` <br> `--exclude-path string`
 Create an MD5 hash when downloading data | Always does this | `--put-md5`
-Check the MD5 hash when downloading data | `/CheckMD5` | `--check-md5=[option]` Options: NoCheck, LogOnly, FailIfDifferent (default), FailIfDifferentOrMissing
+Check the MD5 hash when downloading data | `/CheckMD5` | `--check-md5=[option]` <br> Options: NoCheck, LogOnly, FailIfDifferent (default), FailIfDifferentOrMissing
 Retrieve listing | `/L` | `azcopy list`
 Set modified time to be same as the source blobs | `/MT` | `--preserve-last-modified-time`
 Exclude newer source | `/XN` | Not yet supported
 Exclude older source | `/XO` | Use the sync command
 Upload archive files/blobs | `/A` | See row below
-Set attributes | `/IA:[RASHCNETOI]` `/XA:[RASHCNETOI]` | `--include-attributes string` `--exclude-attributes string`
+Set attributes | `/IA:[RASHCNETOI]` <br> `/XA:[RASHCNETOI]` | `--include-attributes string` <br> `--exclude-attributes string`
 Copy blobs or files synchronously among two Azure Storage endpoints | `/SyncCopy` | V10 is always synchronous from source to destination, unlike v8 which downloads then re-uploads
 Set content type | `/SetContentType:[content-type]` | `--content-type string`
 Set blob type at destination | `/BlobType:<option>` Options: page, block, append | `--blob-type string`
