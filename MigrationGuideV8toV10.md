@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This migration guide is intended for AzCopy users who are accustomed to the v8 syntax and are seeking to migrate to v10. This article outlines the key differences between these two versions, maps popular AzCopy v8 commands to their equivalent AzCopy v10 commands, and then compares the optional parameters.
+This migration guide is intended for AzCopy users who are accustomed to the v8 syntax and are seeking to migrate to v10. This article outlines the key differences between these two versions, maps popular AzCopy v8 commands to their equivalent AzCopy v10 commands, and compares the optional parameters.
 
 ## General Usage
 
@@ -20,7 +20,7 @@ This migration guide is intended for AzCopy users who are accustomed to the v8 s
 
 ### Azure Active Directory (Azure AD)
 
-This step is the same for both v8 and v10. It caches the user's encrypted login information by using the built-in mechanisms of the operating system.
+Use the same command for both v8 and v10. AzCopy caches you're encrypted login information by using the built-in mechanisms of the operating system.
 
 ```azcopy
 azcopy login
