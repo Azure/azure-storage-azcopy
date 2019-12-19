@@ -12,6 +12,8 @@ This migration guide is intended for AzCopy users who are accustomed to the v8 s
 
 `azcopy copy '<source>' '<destination>' [parameters]`
 
+In v10, it is possible to have commands like `azcopy sync ...` or `azcopy list` but for general usage purposes the `copy` command has been specified here. To learn what other commands there are in v10 type `azcopy -h`.
+
 ## Authentication
 
 #### Azure Active Directory (Azure AD)
@@ -42,7 +44,7 @@ azcopy copy
 
 **v8** - Use flag `/SourceKey:[key]` and/or `/DestKey:[key]`
 
-**v10** - Use OAuth or SAS
+**v10** - Use Azure AD or SAS
 
 ## Common Command Comparisons
 
@@ -78,47 +80,6 @@ azcopy copy
   --recursive
 ```
 
-#### Upload blobs with a specific prefix
-The following commands upload all blobs that start with `abc` such as `abc.txt`, `abc1.txt`, `vd1\abcd.txt`, etc.
-FIX THIS
-**v8**
-```
-azcopy
-  /Source:C:\MyFolder
-  /Dest:https://myaccount.blob.core.windows.net/mycontainer
-  /DestSAS:[SAS]
-  /Pattern:abc
-  /S
-```
-**v10**
-```
-azcopy copy
-  'C:\MyFolder'
-  'https://myaccount.blob.core.windows.net/mycontainer?SAS'
-  --include-path 'abc'
-  --recursive
-```
-
-#### Upload specific files
-The following commands uploads all files in the `C:\myDirectory\photos` directory and the `C:\myDirectory\documents\myFile.txt` file.
-FIX THIS
-**v8**
-```
-azcopy
-  /Source:C:\MyFolder
-  /Dest:https://myaccount.blob.core.windows.net/mycontainer
-  /DestSAS:[SAS]
-  /Pattern: PUT CORRECT PATTERN HERE
-```
-**v10**
-```
-azcopy copy
-  'C:\MyFolder'
-  'https://myaccount.blob.core.windows.net/mycontainer?SAS'
-  --include-path 'photos;documents\myFile.txt'
-  --recursive
-```
-
 ## Parameters Table
 Task | v8 | v10
 ------------ | ------------- | -------------
@@ -150,8 +111,8 @@ Transfer blob snapshots | `/Snapshot` | Coming soon
 ## Common Questions
 
 #### How does service-to-service transfer differ in V8 and V10?
-v8 either schedules transfers (async) or downloads the data and re-uploads it (streaming).
-v10 uses new synchronous copy APIs where data is read on the server side.
+V8 either schedules transfers (async) or downloads the data and re-uploads it (streaming).
+V10 uses new synchronous copy APIs where data is read on the server side.
 
 #### How can I use AzCopy to work with Azure Tables?
 The latest version that supports tables is AzCopy 7.3
@@ -160,8 +121,8 @@ The latest version that supports tables is AzCopy 7.3
 The latest version that supports queues is AzCopy 8.1
 
 #### What is different between the job management (how to resume jobs in both use examples)?
-v8 rerun the same command from before and answer the prompt.
-v10 have a job sub group where you can resume with job id.
+In v8, you can rerun the same command from before and answer the prompt.
+In v10, you can have a job sub group where you can resume with job id.
 
 #### How can I figure out which files failed?
 
