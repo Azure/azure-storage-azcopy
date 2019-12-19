@@ -1,9 +1,11 @@
 # AzCopy Migration Guide for v8 to v10
 
 ## Purpose
-This migration guide is intended for AzCopy users who are accustomed to the v8 syntax and are seeking to migrate to v10. The content below outlines key differences in the two versions, maps popular AzCopy v8 commands to their equivalent AzCopy v10 commands, and compares the optional parameters.
+
+This migration guide is intended for AzCopy users who are accustomed to the v8 syntax and are seeking to migrate to v10. This article outlines the key differences between these two versions, maps popular AzCopy v8 commands to their equivalent AzCopy v10 commands, and compares the optional parameters.
 
 ## General Usage
+
 **v8**
 
 `azcopy /Source:<source> /Dest:<destination> [parameters]`
@@ -12,68 +14,81 @@ This migration guide is intended for AzCopy users who are accustomed to the v8 s
 
 `azcopy copy '<source>' '<destination>' [parameters]`
 
-In v10, it is possible to have commands like `azcopy sync ...` or `azcopy list` but for general usage purposes the `copy` command has been specified here. To learn what other commands there are in v10 type `azcopy -h`.
+**Note** This example shows the `azcopy copy` command, but there are many other commands available to you. To see a complete list, open a command window, and type `azcopy -h`.
 
 ## Authentication
 
-#### Azure Active Directory (Azure AD)
+### Azure Active Directory (Azure AD)
 
-For both v8 and v10, this step is the same and will cache the user's encrypted login information using OS built-in mechanisms.
-```
+Use the same command for both v8 and v10.
+
+```azcopy
 azcopy login
 ```
 
-#### Shared Access Signature (SAS)
+AzCopy encrypts and caches your credentials by using the built-in mechanisms of the operating system.
 
-**v8** - Use the appropriate parameter `/SourceSAS:[SAS]` and/or `/DestSAS:[SAS]`
-```
+### Shared Access Signature (SAS)
+
+**v8** - Use the appropriate parameter `/SourceSAS:[SAS]` and/or `/DestSAS:[SAS]`.
+
+```azcopy
 azcopy
   /Source:https://myaccount.blob.core.windows.net/mycontainer
   /Dest:C:\MyFolder
   /SourceSAS:[SAS]
 ```
 
-**v10** - Append the SAS token to the source and/or destination URIs
-```
+**v10** - Append the SAS token to the source and/or destination URIs.
+
+```azcopy
 azcopy copy
   'https://myaccount.blob.core.windows.net/mycontainer?SAS'
   'C:\MyFolder'
 ```
 
-#### Shared Key
+### Shared Key
 
-**v8** - Use flag `/SourceKey:[key]` and/or `/DestKey:[key]`
+**v8** - Use flag `/SourceKey:[key]` and/or `/DestKey:[key]`.
 
-**v10** - Use Azure AD or SAS
+**v10** - Use Azure AD or SAS.
 
 ## Common Command Comparisons
 
-#### Download a blob to file
+### Download a blob to file
+
 **v8**
-```
+
+```azcopy
 azcopy
   /Source:https://myaccount.blob.core.windows.net/mycontainer/myblob
   /Dest:C:\MyFolder
   /SourceSAS:[SAS]
 ```
+
 **v10**
-```
+
+```azcopy
 azcopy copy
   'https://myaccount.blob.core.windows.net/mycontainer/myblob?SAS'
   'C:\MyFolder'
 ```
 
-#### Download all blobs from a container to directory
+### Download all blobs from a container to directory
+
 **v8**
-```
+
+```azcopy
 azcopy
   /Source:https://myaccount.blob.core.windows.net/mycontainer
   /Dest:C:\MyFolder
   /SourceSAS:[SAS]
   /S
 ```
+
 **v10**
-```
+
+```azcopy
 azcopy copy
   'https://myaccount.blob.core.windows.net/mycontainer?SAS'
   'C:\MyFolder'
@@ -81,6 +96,7 @@ azcopy copy
 ```
 
 ## Parameters Table
+
 Task | v8 | v10
 ------------ | ------------- | -------------
 Authenticate | `/SourceKey:<Key>` <br> `/DestKey:<Key>` <br> `/SourceSAS:<SAS>` <br> `/DestSAS:<SAS>` | Append the SAS token to the source and/or destination URI. <br> `'blob URI' + '?' + 'SAS'`
@@ -107,26 +123,23 @@ Use specified block size | `/BlockSizeInMb:<block-size-in-mb>` | `--block-size-m
 Set file name delimiters | `/Delimiter:<delimiter>` | N/A
 Transfer blob snapshots | `/Snapshot` | Coming soon
 
-
 ## Common Questions
 
-#### How does service-to-service transfer differ in V8 and V10?
+### How does service-to-service transfer differ in V8 and V10?
 V8 either schedules transfers (async) or downloads the data and re-uploads it (streaming).
 V10 uses new synchronous copy APIs where data is read on the server side.
 
-#### How can I use AzCopy to work with Azure Tables?
-The latest version that supports tables is AzCopy 7.3
+### How can I use AzCopy to work with Azure Tables?
+The latest version that supports tables is AzCopy 7.3.
 
-#### How can I use AzCopy to work with Azure Queues?
-The latest version that supports queues is AzCopy 8.1
+### How can I use AzCopy to work with Azure Queues?
+The latest version that supports queues is AzCopy 8.1.
 
-#### What is different between the job management (how to resume jobs in both use examples)?
+### What is different between the job management (how to resume jobs in both use examples)?
 In v8, you can rerun the same command from before and answer the prompt.
 In v10, you can have a job sub group where you can resume with job id.
 
-#### How can I figure out which files failed?
-
-
+### How can I figure out which files failed?
 
 To learn more about AzCopy v8 visit [this](https://docs.microsoft.com/en-us/previous-versions/azure/storage/storage-use-azcopy) page.
 To learn more about AzCopy v10 visit [this](https://docs.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-v10) page.
