@@ -2,7 +2,6 @@ package sddl
 
 import (
 	"reflect"
-	"strings"
 
 	chk "gopkg.in/check.v1"
 )
@@ -77,25 +76,19 @@ func (s *GoSDDLTestSuite) TestACERightsShorthands(c *chk.C) {
 	}
 }
 
-// If the parse test fails, THIS TEST IS UNRELIABLE.
-// No existing test cases would/SHOULD overlap accidentally.
-// This test RELIES upon parsing if we can't find the flag on an even boundary.
-// This is because of the way we re-construct ACE rights.
-// using a range over a map results in inconsistent ordering.
-// THIS IS OK, though. There is no need for two different parsers within this library, just for testing.
-// That would be bug-prone.
+// Because all combinable structs are now consistently regenerated, checking exact order is safe.
 func (s *GoSDDLTestSuite) TestACERightsToString(c *chk.C) {
 	toStringTests := []struct {
 		input  ACERights
-		result []string
+		result string
 	}{
 		{ // single right
 			input:  EACERights.SDDL_CREATE_CHILD(),
-			result: []string{"CC"},
+			result: "CC",
 		},
 		{ // multiple rights
 			input:  EACERights.SDDL_WRITE_OWNER() | EACERights.SDDL_WRITE_DAC(),
-			result: []string{"WO", "WD"},
+			result: "WDWO",
 		},
 		{ // test a nonexistant right
 			input: 1 << 31,
@@ -105,22 +98,6 @@ func (s *GoSDDLTestSuite) TestACERightsToString(c *chk.C) {
 	for _, v := range toStringTests {
 		output := v.input.String()
 
-		if len(v.result) == 0 {
-			c.Assert(output, chk.Equals, "")
-		} else {
-			for _, r := range v.result {
-				// It should always be on the two-character boundary to ensure we don't get a weird overlap issue.
-				idx := strings.Index(output, r)
-				c.Assert(idx, chk.Not(chk.Equals), -1) // the string is not present if this triggers
-
-				// If it's not on an even boundary, we just need to parse and check, as we're experiencing overlapping.
-				if idx%2 != 0 {
-					rights, err := ParseACERights(output)
-					c.Assert(err, chk.IsNil)
-					c.Assert(rights, chk.Equals, v.input)
-					continue
-				}
-			}
-		}
+		c.Assert(output, chk.Equals, v.result)
 	}
 }

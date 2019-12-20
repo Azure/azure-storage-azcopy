@@ -74,9 +74,42 @@ var shorthandACERights = map[string]ACERights{
 }
 
 func (r ACERights) String() string {
+	reconstructionOrder := []string{
+		"GA", // Preserve the map order
+		"GR",
+		"GW",
+		"GX",
+		"RC",
+		"SD",
+		"WD",
+		"WO",
+		"RP",
+		"WP",
+		"CC",
+		"DC",
+		"LC",
+		"SW",
+		"LO",
+		"DT",
+		"CR",
+		"FA",
+		"FR",
+		"FW",
+		"FX",
+		"KA",
+		"KR",
+		"KW",
+		"KX",
+		"NR",
+		"NW",
+		"NX",
+	}
+
 	output := ""
 
-	for k, v := range shorthandACERights {
+	for _, k := range reconstructionOrder {
+		v := shorthandACERights[k]
+
 		if r&v != 0 {
 			output += k
 		}

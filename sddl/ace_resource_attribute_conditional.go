@@ -443,7 +443,7 @@ func ParseConditionalACEResourceAttribute(input string) (ConditionalACEResourceA
 						subExprIdx := len(plan.dest.SubExpressions) - 1
 
 						atomic.AddInt64(incomingAtomic, 1)
-						schedulePlan(conditionalPlan{
+						go schedulePlan(conditionalPlan{
 							input: strings.TrimPrefix(strings.TrimSuffix(runningString, ")"), "("),
 							index: plan.index + iterator - len(runningString) + 1,
 							dest:  plan.dest.SubExpressions[subExprIdx],

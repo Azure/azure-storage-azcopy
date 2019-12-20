@@ -89,9 +89,21 @@ func (eACEFlags) SDDL_AUDIT_FAILURE() ACEFlags {
 }
 
 func (f ACEFlags) String() string {
+	reconstructOrder := []string{
+		"CI",
+		"OI",
+		"NP",
+		"IO",
+		"ID",
+		"SA",
+		"FA",
+	}
+
 	output := ""
 
-	for k, v := range shorthandACEFlags {
+	for _, k := range reconstructOrder {
+		v := shorthandACEFlags[k]
+
 		if f&v != 0 { // If the flag contains this flag, then add the shorthand string.
 			output += k
 		}

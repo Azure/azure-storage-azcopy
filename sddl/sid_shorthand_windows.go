@@ -13,6 +13,12 @@ func getSIDFromShorthand(shorthand string) (SID, error) {
 		return SID{}, err
 	}
 
+	str, err := wsid.String()
+
+	if err != nil {
+		return SID{}, err
+	}
+
 	// golang.org/x/sys/windows has a SID type of its own. We do not want to use it because this is is a platform portable library.
-	return ParseSID(wsid.String())
+	return ParseSID(str)
 }

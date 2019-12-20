@@ -6,8 +6,8 @@ import (
 )
 
 // This test relies upon the success of the parsing test.
-// This is because rather than manually constructing conditional ACEs (a surprising amount of work)
-// Because we're aware of parentheses, we can generate an equivalent structure basically all the time.
+// The goal is to return an equivalent structure.
+// Because we're aware of parentheses, we can generate an equivalent structure all the time.
 // We are, however, more antsy about spaces than the original structure.
 func (s *GoSDDLTestSuite) TestConditionalACEResourceAttributeToString(c *chk.C) {
 	toStringTests := []struct {

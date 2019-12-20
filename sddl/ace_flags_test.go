@@ -1,8 +1,6 @@
 package sddl
 
 import (
-	"strings"
-
 	chk "gopkg.in/check.v1"
 )
 
@@ -64,41 +62,25 @@ func (s *GoSDDLTestSuite) TestParseACEFlags(c *chk.C) {
 func (s *GoSDDLTestSuite) TestACEFlagsToString(c *chk.C) {
 	toStringTests := []struct {
 		input  ACEFlags
-		result []string // Contains all of these shorthand flags
+		result string // Contains all of these shorthand flags
 	}{
 		{ // test single flag
 			input:  EACEFlags.SDDL_CONTAINER_INHERIT(),
-			result: []string{"CI"},
+			result: "CI",
 		},
 		{ // test a concatenation of flags
 			input:  EACEFlags.SDDL_CONTAINER_INHERIT() | EACEFlags.SDDL_NO_PROPOGATE(),
-			result: []string{"CI", "NP"},
+			result: "CINP",
 		},
 		{ // test a nonexistant flag
 			input:  1 << 7,
-			result: []string{},
+			result: "",
 		},
 	}
 
 	for _, v := range toStringTests {
 		output := v.input.String()
 
-		if len(v.result) == 0 {
-			c.Assert(output, chk.Equals, "")
-		} else {
-			for _, r := range v.result {
-				// It should always be on the two-character boundary to ensure we don't get a weird overlap issue.
-				idx := strings.Index(output, r)
-				c.Assert(idx, chk.Not(chk.Equals), -1) // the string is not present if this triggers
-
-				// If it's not on an even boundary, we just need to parse and check, as we're experiencing overlapping.
-				if idx%2 != 0 {
-					f, err := ParseACEFlags(output)
-					c.Assert(err, chk.IsNil)
-					c.Assert(f, chk.Equals, v.input)
-					continue
-				}
-			}
-		}
+		c.Assert(output, chk.Equals, v.result)
 	}
 }
