@@ -2,6 +2,8 @@ package sddl
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -42,6 +44,7 @@ var shorthandACERights = map[string]ACERights{
 	"GR": EACERights.SDDL_GENERIC_READ(),
 	"GW": EACERights.SDDL_GENERIC_WRITE(),
 	"GX": EACERights.SDDL_GENERIC_EXECUTE(),
+	"AS": EACERights.SDDL_ACCESS_SYSTEM_SECURITY(),
 
 	"RC": EACERights.SDDL_READ_CONTROL(),
 	"SD": EACERights.SDDL_STANDARD_DELETE(),
@@ -74,52 +77,27 @@ var shorthandACERights = map[string]ACERights{
 }
 
 func (r ACERights) String() string {
-	reconstructionOrder := []string{
-		"GA", // Preserve the map order
-		"GR",
-		"GW",
-		"GX",
-		"RC",
-		"SD",
-		"WD",
-		"WO",
-		"RP",
-		"WP",
-		"CC",
-		"DC",
-		"LC",
-		"SW",
-		"LO",
-		"DT",
-		"CR",
-		"FA",
-		"FR",
-		"FW",
-		"FX",
-		"KA",
-		"KR",
-		"KW",
-		"KX",
-		"NR",
-		"NW",
-		"NX",
-	}
-
-	output := ""
-
-	for _, k := range reconstructionOrder {
-		v := shorthandACERights[k]
-
-		if r&v != 0 {
-			output += k
-		}
-	}
-
-	return output
+	// Just return the hex; it's valid.
+	// This works past the issue of overlaps with mandatory labels and keys.
+	return "0x" + strings.ToUpper(strconv.FormatUint(uint64(r), 16))
 }
+
+var hexadecimalRegex = regexp.MustCompile(`(?i)0x[A-F0-9]+`)
 
 func ParseACERights(input string) (ACERights, error) {
 	output := ACERights(0)
+
+	if hexadecimalRegex.MatchString(input) {
+		// TODO: parse the hexadecimal
+		// TODO: Map all ace rights to their original format in the windows DLL!
+		tmpOut, err := strconv.ParseUint(input[2:], 16, 32) // this will break input down to the hexadecimal
+
+		if err != nil {
+			return output, err
+		}
+
+		return ACERights(tmpOut), nil
+	}
 
 	runningString := ""
 	for _, v := range strings.Split(strings.ToUpper(input), "") {
@@ -142,154 +120,176 @@ func (eACERights) NO_RIGHTS() ACERights {
 	return 0
 }
 
-// ======== GENERIC ACCESS RIGHTS ===========
+// The following magic numbers are modeled after Windows' implementation, as hexadecimal literal access masks are supported.
 
-// "GA"
-func (eACERights) SDDL_GENERIC_ALL() ACERights {
-	return 1
-}
+// ========== GENERIC ACCESS RIGHTS ==========
 
-// "GR"
+// Generic access rights are defined here:
+// https://docs.microsoft.com/en-us/windows/win32/secauthz/access-mask-format
+// Bits 31-28, GR, GW, GE, GA
+
 func (eACERights) SDDL_GENERIC_READ() ACERights {
-	return 1 << 1
+	return 1 << 31
 }
 
-// "GW"
 func (eACERights) SDDL_GENERIC_WRITE() ACERights {
-	return 1 << 2
+	return 1 << 30
 }
 
-// "GX"
 func (eACERights) SDDL_GENERIC_EXECUTE() ACERights {
-	return 1 << 3
+	return 1 << 29
 }
 
-// ========== STANDARD ACCESS RIGHTS ==========
+func (eACERights) SDDL_GENERIC_ALL() ACERights {
+	return 1 << 28
+}
 
-// "RC"
+// Bit 24 is AS
+func (eACERights) SDDL_ACCESS_SYSTEM_SECURITY() ACERights {
+	return 1 << 24
+}
+
+// The following values come from queries to
+// https://www.magnumdb.com
+// The queries are above the function.
+// Then, log2(x) is used to find how far to push.
+
+// =========== STANDARD ACCESS RIGHTS ===========
+
+// filename:Winnt.h AND READ_CONTROL
 func (eACERights) SDDL_READ_CONTROL() ACERights {
-	return 1 << 4
+	return 1 << 17
 }
 
-// "SD"
+// filename:Winnt.h AND DELETE
 func (eACERights) SDDL_STANDARD_DELETE() ACERights {
-	return 1 << 5
+	return 1 << 16
 }
 
-// "WD"
+// filename:Winnt.h AND WRITE_DAC
 func (eACERights) SDDL_WRITE_DAC() ACERights {
-	return 1 << 6
+	return 1 << 18
 }
 
-// "WO"
+// filename:Winnt.h AND WRITE_OWNER
 func (eACERights) SDDL_WRITE_OWNER() ACERights {
-	return 1 << 7
+	return 1 << 19
 }
 
 // ========== DIRECTORY SERVICE OBJECT ACCESS RIGHTS ==========
 
-// "RP"
+// filename:iads.h AND ADS_RIGHT_DS_READ_PROP
 func (eACERights) SDDL_READ_PROPERTY() ACERights {
+	return 1 << 4
+}
+
+// filename:iads.h AND ADS_RIGHT_DS_WRITE_PROP
+func (eACERights) SDDL_WRITE_PROPERTY() ACERights {
+	return 1 << 5
+}
+
+// filename:iads.h AND ADS_RIGHT_DS_CREATE_CHILD
+func (eACERights) SDDL_CREATE_CHILD() ACERights {
+	return 1
+}
+
+// filename:iads.h AND ADS_RIGHT_DS_DELETE_CHILD
+func (eACERights) SDDL_DELETE_CHILD() ACERights {
+	return 1 << 1
+}
+
+// filename:iads.h AND ADS_RIGHT_ACTRL_DS_LIST
+func (eACERights) SDDL_LIST_CHILDREN() ACERights {
+	return 1 << 2
+}
+
+// filename:iads.h AND ADS_RIGHT_DS_SELF
+func (eACERights) SDDL_SELF_WRITE() ACERights {
+	return 1 << 3
+}
+
+// filename:iads.h AND ADS_RIGHT_DS_LIST_OBJECT
+func (eACERights) SDDL_LIST_OBJECT() ACERights {
+	return 1 << 7
+}
+
+// filename:iads.h AND ADS_RIGHT_DS_DELETE_TREE
+func (eACERights) SDDL_DELETE_TREE() ACERights {
+	return 1 << 6
+}
+
+// filename:iads.h AND ADS_RIGHT_DS_CONTROL_ACCESS
+func (eACERights) SDDL_CONTROL_ACCESS() ACERights {
 	return 1 << 8
 }
 
-// "WP"
-func (eACERights) SDDL_WRITE_PROPERTY() ACERights {
-	return 1 << 9
-}
+// =========== FILE ACCESS RIGHTS ===========
 
-// "CC"
-func (eACERights) SDDL_CREATE_CHILD() ACERights {
-	return 1 << 10
-}
+// Unlike prior sections, raw values will be used here as these aren't push backs.
+// I'm _concerned_ for overlaps.
 
-// "DC"
-func (eACERights) SDDL_DELETE_CHILD() ACERights {
-	return 1 << 11
-}
-
-// "LC"
-func (eACERights) SDDL_LIST_CHILDREN() ACERights {
-	return 1 << 12
-}
-
-// "SW"
-func (eACERights) SDDL_SELF_WRITE() ACERights {
-	return 1 << 13
-}
-
-// "LO"
-func (eACERights) SDDL_LIST_OBJECT() ACERights {
-	return 1 << 14
-}
-
-// "DT"
-func (eACERights) SDDL_DELETE_TREE() ACERights {
-	return 1 << 15
-}
-
-// "CR"
-func (eACERights) SDDL_CONTROL_ACCESS() ACERights {
-	return 1 << 16
-}
-
-// =========== FILE ACCESS RIGHTS ==========
-
-// "FA"
+// FILE_ALL_ACCESS
 func (eACERights) SDDL_FILE_ALL() ACERights {
-	return 1 << 17
+	return 2032127
 }
 
-// "FR"
+// FILE_GENERIC_READ
 func (eACERights) SDDL_FILE_READ() ACERights {
-	return 1 << 18
+	return 1179785
 }
 
-// "FW"
+// FILE_GENERIC_WRITE
 func (eACERights) SDDL_FILE_WRITE() ACERights {
-	return 1 << 19
+	return 1179926
 }
 
-// "FX"
+// FILE_GENERIC_EXECUTE
 func (eACERights) SDDL_FILE_EXECUTE() ACERights {
-	return 1 << 20
+	return 1179808
 }
 
-// ========= REGISTRY KEY ACCESS RIGHTS =========
+// =========== REGISTRY KEY ACCESS RIGHTS ===========
 
-// "KA"
+// KEY_ALL_ACCESS
 func (eACERights) SDDL_KEY_ALL() ACERights {
-	return 1 << 21
+	return 983103
 }
 
-// "KR"
+// KEY_READ
 func (eACERights) SDDL_KEY_READ() ACERights {
-	return 1 << 22
+	return 131097
 }
 
-// "KW"
+// KEY_WRITE
 func (eACERights) SDDL_KEY_WRITE() ACERights {
-	return 1 << 23
+	return 131078
 }
 
-// "KX"
+// KEY_EXECUTE
 func (eACERights) SDDL_KEY_EXECUTE() ACERights {
-	return 1 << 24
+	return 131097
 }
 
-// ========= MANDATORY LABEL RIGHTS =========
+// =========== MANDATORY LABEL RIGHTS ===========
+
+// These overlap with some directory bits.
+// However, they'll never be used in conjunction with each other.
+// Therefore, we'll stringify/parse them separately if the stringifier and the parser are told to.
 
 // "NR"
+// SYSTEM_MANDATORY_LABEL_NO_READ_UP
 func (eACERights) SDDL_NO_READ_UP() ACERights {
-	return 1 << 25
+	return 1 << 1
 }
 
 // "NW"
+// SYSTEM_MANDATORY_LABEL_NO_WRITE_UP
 func (eACERights) SDDL_NO_WRITE_UP() ACERights {
-	return 1 << 26
+	return 1
 }
 
 // "NX"
+// SYSTEM_MANDATORY_LABEL_NO_EXECUTE_UP
 func (eACERights) SDDL_NO_EXECUTE_UP() ACERights {
-	return 1 << 27
+	return 1 << 2
 }

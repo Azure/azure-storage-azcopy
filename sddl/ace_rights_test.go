@@ -33,9 +33,24 @@ func (s *GoSDDLTestSuite) TestParseACERights(c *chk.C) {
 			input:     "nonexist",
 			expectErr: true,
 		},
+		{ // Test some ACE rights in the form of a hexadecimal
+			input: "0x100e003f",
+			result: EACERights.SDDL_READ_PROPERTY() |
+				EACERights.SDDL_WRITE_PROPERTY() |
+				EACERights.SDDL_CREATE_CHILD() |
+				EACERights.SDDL_DELETE_CHILD() |
+				EACERights.SDDL_LIST_CHILDREN() |
+				EACERights.SDDL_SELF_WRITE() |
+				EACERights.SDDL_READ_CONTROL() |
+				EACERights.SDDL_WRITE_DAC() |
+				EACERights.SDDL_WRITE_OWNER() |
+				EACERights.SDDL_GENERIC_ALL(),
+		},
 	}
 
 	for _, v := range parseTests {
+		c.Log("Testing ", v.input, " Expecting ", v.result.String())
+
 		rights, err := ParseACERights(v.input)
 
 		if v.expectErr {
@@ -84,14 +99,37 @@ func (s *GoSDDLTestSuite) TestACERightsToString(c *chk.C) {
 	}{
 		{ // single right
 			input:  EACERights.SDDL_CREATE_CHILD(),
-			result: "CC",
+			result: "0x1",
 		},
 		{ // multiple rights
 			input:  EACERights.SDDL_WRITE_OWNER() | EACERights.SDDL_WRITE_DAC(),
-			result: "WDWO",
+			result: "0xC0000",
 		},
-		{ // test a nonexistant right
-			input: 1 << 31,
+		{ // mandatory label
+			input:  EACERights.SDDL_NO_READ_UP(),
+			result: "0x2",
+		},
+		{ // mandatory label false
+			input:  EACERights.SDDL_NO_READ_UP(),
+			result: "0x2", // This overlaps
+		},
+
+		// { // test a nonexistant right
+		// 	input: 1 << 15, // No man's land
+		// }, No longer needed due to hexing
+
+		{ // Test a lot of rights.
+			input: EACERights.SDDL_READ_PROPERTY() |
+				EACERights.SDDL_WRITE_PROPERTY() |
+				EACERights.SDDL_CREATE_CHILD() |
+				EACERights.SDDL_DELETE_CHILD() |
+				EACERights.SDDL_LIST_CHILDREN() |
+				EACERights.SDDL_SELF_WRITE() |
+				EACERights.SDDL_READ_CONTROL() |
+				EACERights.SDDL_WRITE_DAC() |
+				EACERights.SDDL_WRITE_OWNER() |
+				EACERights.SDDL_GENERIC_ALL(),
+			result: "0x100E003F",
 		},
 	}
 
