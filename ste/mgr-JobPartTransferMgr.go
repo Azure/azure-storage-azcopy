@@ -91,6 +91,10 @@ type TransferInfo struct {
 	SourceSize  int64
 	Destination string
 
+	// Expected failure info
+	ExpectFailure bool
+	FailureReason string
+
 	// Transfer info for S2S copy
 	SrcProperties
 	S2SGetPropertiesInBackend      bool
@@ -190,7 +194,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	src, dst := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
 
-	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption :=
+	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, expectFailure, failureReason :=
 		plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
 	// If the length of destination SAS is greater than 0
@@ -246,6 +250,8 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		Source:                         src,
 		SourceSize:                     sourceSize,
 		Destination:                    dst,
+		ExpectFailure:                  expectFailure,
+		FailureReason:                  failureReason,
 		S2SGetPropertiesInBackend:      s2sGetPropertiesInBackend,
 		S2SSourceChangeValidation:      s2sSourceChangeValidation,
 		S2SInvalidMetadataHandleOption: s2sInvalidMetadataHandleOption,

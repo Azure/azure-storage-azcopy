@@ -242,6 +242,10 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			ModifiedTime:   order.Transfers[t].LastModifiedTime.UnixNano(),
 			SourceSize:     order.Transfers[t].SourceSize,
 			CompletionTime: 0,
+
+			ExpectedFailure:     order.Transfers[t].ExpectedFailure,
+			FailureReasonLength: uint16(len(order.Transfers[t].FailureReason)),
+
 			// For S2S copy, per Transfer source's properties
 			SrcContentTypeLength:        int16(len(order.Transfers[t].ContentType)),
 			SrcContentEncodingLength:    int16(len(order.Transfers[t].ContentEncoding)),
@@ -261,7 +265,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		// The NEXT transfer's src/dst string come after THIS transfer's src/dst strings
 		srcDstStringsOffset[t] = currentSrcStringOffset
 
-		currentSrcStringOffset += int64(jppt.SrcLength + jppt.DstLength + uint32(jppt.SrcContentTypeLength) +
+		currentSrcStringOffset += int64(jppt.SrcLength + jppt.DstLength + uint32(jppt.FailureReasonLength) + uint32(jppt.SrcContentTypeLength) +
 			uint32(jppt.SrcContentEncodingLength) + uint32(jppt.SrcContentLanguageLength) + uint32(jppt.SrcContentDispositionLength) +
 			uint32(jppt.SrcCacheControlLength) + uint32(jppt.SrcContentMD5Length) + jppt.SrcMetadataLength +
 			uint32(jppt.SrcBlobTypeLength) + uint32(jppt.SrcBlobTierLength))
@@ -283,6 +287,12 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		common.PanicIfErr(err)
 		eof += int64(bytesWritten)
 
+		// Write the expected failure reason, if present
+		if len(order.Transfers[t].FailureReason) != 0 {
+			bytesWritten, err = file.WriteString(order.Transfers[t].FailureReason)
+			common.PanicIfErr(err)
+			eof += int64(bytesWritten)
+		}
 		// For S2S copy (and, in the case of Content-MD5, always), write the src properties
 		if len(order.Transfers[t].ContentType) != 0 {
 			bytesWritten, err = file.WriteString(order.Transfers[t].ContentType)

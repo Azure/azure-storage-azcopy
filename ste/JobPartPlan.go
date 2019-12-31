@@ -148,7 +148,7 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length uint32) string {
 // TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder
 // TODO: Refactor return type to an object
 func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType, blobTier azblob.AccessTierType,
-	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption) {
+	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, expectFailure bool, expectFailureReason string) {
 	var err error
 	t := jpph.Transfer(transferIndex)
 
@@ -156,9 +156,14 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 	s2sSourceChangeValidation = jpph.S2SSourceChangeValidation
 	s2sInvalidMetadataHandleOption = jpph.S2SInvalidMetadataHandleOption
 	DestLengthValidation = jpph.DestLengthValidation
+	expectFailure = t.ExpectedFailure
 
 	offset := t.SrcOffset + int64(t.SrcLength) + int64(t.DstLength)
 
+	if t.FailureReasonLength != 0 {
+		expectFailureReason = jpph.getString(offset, uint32(t.FailureReasonLength))
+		offset += int64(t.FailureReasonLength)
+	}
 	if t.SrcContentTypeLength != 0 {
 		h.ContentType = jpph.getString(offset, uint32(t.SrcContentTypeLength))
 		offset += int64(t.SrcContentTypeLength)
@@ -290,6 +295,9 @@ type JobPartPlanTransfer struct {
 	SourceSize int64
 	// CompletionTime represents the time at which transfer was completed
 	CompletionTime uint64
+	// ExpectedFailure and FailureReason specify when a transfer is supposed to fail, and why it's supposed to fail.
+	ExpectedFailure     bool
+	FailureReasonLength uint16
 
 	// For S2S copy, per Transfer source's properties
 	// TODO: ensure the length is enough

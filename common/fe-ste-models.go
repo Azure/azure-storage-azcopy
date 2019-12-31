@@ -866,6 +866,10 @@ type CopyTransfer struct {
 	ContentMD5         []byte
 	Metadata           Metadata
 
+	// Intended failure info
+	ExpectedFailure bool
+	FailureReason   string
+
 	// Properties for S2S blob copy
 	BlobType azblob.BlobType
 	BlobTier azblob.AccessTierType

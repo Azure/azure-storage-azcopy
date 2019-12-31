@@ -55,6 +55,9 @@ type storedObject struct {
 	md5              []byte
 	blobType         azblob.BlobType // will be "None" when unknown or not applicable
 
+	expectedFailure bool
+	failureReason   string
+
 	// all of these will be empty when unknown or not applicable.
 	contentDisposition string
 	cacheControl       string
@@ -101,6 +104,8 @@ func (s *storedObject) ToNewCopyTransfer(
 		Destination:        Destination,
 		LastModifiedTime:   s.lastModifiedTime,
 		SourceSize:         s.size,
+		ExpectedFailure:    s.expectedFailure,
+		FailureReason:      s.failureReason,
 		ContentType:        s.contentType,
 		ContentEncoding:    s.contentEncoding,
 		ContentDisposition: s.contentDisposition,

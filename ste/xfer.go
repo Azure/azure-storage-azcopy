@@ -64,6 +64,24 @@ type newJobXfer func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer
 type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer, df downloaderFactory)
 type newJobXferWithSenderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer, sf senderFactory, sipf sourceInfoProviderFactory)
 
+func expectFailureXferDecorator(targetFunction newJobXfer) newJobXfer {
+	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer) {
+		info := jptm.Info()
+
+		// Pre-emptively fail if requested.
+		if info.ExpectFailure {
+			jptm.LogSendError(info.Source, info.Destination, info.FailureReason, 0)
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
+
+			// Do not perform the target fnuction.
+			return
+		}
+
+		targetFunction(jptm, pipeline, pacer)
+	}
+}
+
 // Takes a multi-purpose download function, and makes it ready to user with a specific type of downloader
 func parameterizeDownload(targetFunction newJobXferWithDownloaderFactory, df downloaderFactory) newJobXfer {
 	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer) {
@@ -147,19 +165,25 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		}
 	}
 
+	// Get the base xfer
+	var baseXfer newJobXfer
+
 	// main computeJobXfer logic
 	switch {
 	case fromTo == common.EFromTo.BlobTrash():
-		return DeleteBlobPrologue
+		baseXfer = DeleteBlobPrologue
 	case fromTo == common.EFromTo.FileTrash():
-		return DeleteFilePrologue
+		baseXfer = DeleteFilePrologue
 	default:
 		if fromTo.IsDownload() {
-			return parameterizeDownload(remoteToLocal, getDownloader(fromTo.From()))
+			baseXfer = parameterizeDownload(remoteToLocal, getDownloader(fromTo.From()))
 		} else {
-			return parameterizeSend(anyToRemote, getSenderFactory(fromTo), getSipFactory(fromTo.From()))
+			baseXfer = parameterizeSend(anyToRemote, getSenderFactory(fromTo), getSipFactory(fromTo.From()))
 		}
 	}
+
+	// Wrap the base xfer func inside the expected failure wrapper
+	return expectFailureXferDecorator(baseXfer)
 }
 
 var inferExtensions = map[string]azblob.BlobType{
