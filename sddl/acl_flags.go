@@ -20,7 +20,7 @@ func (f ACLFlags) Sub(f2 ACLFlags) ACLFlags {
 }
 
 func (f ACLFlags) Contains(f2 ACLFlags) bool {
-	return f&f2 != 0
+	return f&f2 == f2
 }
 
 func (f ACLFlags) ToList() []string {

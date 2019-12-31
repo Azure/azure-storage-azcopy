@@ -22,7 +22,7 @@ func (r ACERights) Sub(r2 ACERights) ACERights {
 }
 
 func (r ACERights) Contains(r2 ACERights) bool {
-	return r&r2 != 0
+	return r&r2 == r2
 }
 
 func (r ACERights) ToList() []string {

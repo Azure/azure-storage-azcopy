@@ -21,7 +21,7 @@ func (f ACEFlags) Sub(f2 ACEFlags) ACEFlags {
 }
 
 func (f ACEFlags) Contains(f2 ACEFlags) bool {
-	return f&f2 != 0
+	return f&f2 == f2
 }
 
 func (f ACEFlags) ToList() []string {
