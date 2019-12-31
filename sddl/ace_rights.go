@@ -18,7 +18,7 @@ func (r ACERights) Add(r2 ACERights) ACERights {
 }
 
 func (r ACERights) Sub(r2 ACERights) ACERights {
-	return r ^ r2
+	return r &^ r2 // bitclear
 }
 
 func (r ACERights) Contains(r2 ACERights) bool {

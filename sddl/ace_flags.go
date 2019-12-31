@@ -17,7 +17,7 @@ func (f ACEFlags) Add(f2 ACEFlags) ACEFlags {
 }
 
 func (f ACEFlags) Sub(f2 ACEFlags) ACEFlags {
-	return f ^ f2
+	return f &^ f2 // bitclear
 }
 
 func (f ACEFlags) Contains(f2 ACEFlags) bool {
