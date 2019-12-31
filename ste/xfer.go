@@ -70,7 +70,11 @@ func expectFailureXferDecorator(targetFunction newJobXfer) newJobXfer {
 
 		// Pre-emptively fail if requested.
 		if info.ExpectFailure {
-			jptm.LogSendError(info.Source, info.Destination, info.FailureReason, 0)
+			// Because some paths can be ultra-long here, we avoid making the error log _too_ obnoxious.
+			shortSrc := info.Source[common.Iffint32(len(info.Source) > 100, int32(len(info.Source)-100), 0):]
+			shortDst := info.Destination[common.Iffint32(len(info.Destination) > 100, int32(len(info.Destination)-100), 0):]
+
+			jptm.LogSendError(shortSrc, shortDst, info.FailureReason, 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
 

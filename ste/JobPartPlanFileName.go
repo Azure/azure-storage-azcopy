@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -214,10 +215,34 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	// Initialize the offset for the 1st transfer's src/dst strings
 	currentSrcStringOffset := eof + int64(unsafe.Sizeof(JobPartPlanTransfer{}))*int64(jpph.NumTransfers)
 
+	// Determine the maximum destination length:
+	var maxDestLength = math.MaxUint32
+
+	switch order.FromTo.To() {
+	case common.ELocation.Blob():
+		// The maximum length is 1024 characters
+		maxDestLength = 1024
+	case common.ELocation.File():
+		// it's actually 255 per segment, for a total of 2048
+		maxDestLength = 2048
+	case common.ELocation.BlobFS():
+		maxDestLength = 1024
+		// Leave it as is if it's a default.
+	}
+
 	// Write each transfer to the Job Part Plan file (except for the src/dst strings; comes come later)
 	for t := range order.Transfers {
-		if len(order.Transfers[t].Source) > math.MaxInt16 || len(order.Transfers[t].Destination) > math.MaxInt16 {
-			panic(fmt.Sprintf("The file %s exceeds azcopy's current maximum path length on either the source or the destination.", order.Transfers[t].Source))
+		if len(order.Transfers[t].Source) > math.MaxUint32 || len(order.Transfers[t].Destination) > maxDestLength {
+			// If the order wasn't already going to fail, let's fail it.
+			if !order.Transfers[t].ExpectedFailure {
+				order.Transfers[t].ExpectedFailure = true
+
+				// shorten the path name a bit so the log isn't so obnoxious
+				shortName := order.Transfers[t].Source
+				shortName = filepath.Base(shortName)
+
+				order.Transfers[t].FailureReason = fmt.Sprintf("The file (parent path trimmed) .../%s exceeds the maximum path length on either the source or the destination.", shortName)
+			}
 		}
 
 		// Prepare info for JobPartPlanTransfer
@@ -231,8 +256,12 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			}
 			srcMetadataLength = len(metadataStr)
 		}
-		if srcMetadataLength > math.MaxInt16 {
-			panic(fmt.Sprintf("The metadata on source file %s exceeds azcopy's current maximum metadata length, and cannot be processed.", order.Transfers[t].Source))
+		if srcMetadataLength > math.MaxUint32 {
+			// If the order wasn't already going to fail, let's fail it.
+			if !order.Transfers[t].ExpectedFailure {
+				order.Transfers[t].ExpectedFailure = true
+				order.Transfers[t].FailureReason = fmt.Sprintf("The metadata on source file %s exceeds azcopy's current maximum metadata length, and cannot be processed.", order.Transfers[t].Source)
+			}
 		}
 		// Create & initialize this transfer's Job Part Plan Transfer
 		jppt := JobPartPlanTransfer{
