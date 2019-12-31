@@ -73,6 +73,17 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 		}
 	}
 
+	if jptm.MD5ValidationOption() == common.EHashValidationOption.FailIfDifferentOrMissing() {
+		// We can make a check early on MD5 existence and fail the transfer if it's not present.
+		// This will save hours in the event a user has say, a several hundred gigabyte file.
+		if len(info.SrcHTTPHeaders.ContentMD5) == 0 {
+			jptm.LogDownloadError(info.Source, info.Destination, errExpectedMd5Missing.Error(), 0)
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
+			return
+		}
+	}
+
 	// step 4a: mark destination as modified before we take our first action there (which is to create the destination file)
 	jptm.SetDestinationIsModified()
 
