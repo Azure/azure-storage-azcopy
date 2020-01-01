@@ -16,7 +16,7 @@ type URLStringExtension string
 
 func (s URLStringExtension) RedactSecretQueryParamForLogging() string {
 	u, err := url.Parse(string(s))
-	if err != nil {
+	if err != nil || !strings.HasPrefix(u.Scheme, "http") {
 		return string(s)
 	}
 	return URLExtension{*u}.RedactSecretQueryParamForLogging()

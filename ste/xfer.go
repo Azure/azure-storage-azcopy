@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"net/url"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -70,11 +71,36 @@ func expectFailureXferDecorator(targetFunction newJobXfer) newJobXfer {
 
 		// Pre-emptively fail if requested.
 		if info.ExpectFailure {
-			// Because some paths can be ultra-long here, we avoid making the error log _too_ obnoxious.
-			shortSrc := info.Source[common.Iffint32(len(info.Source) > 100, int32(len(info.Source)-100), 0):]
-			shortDst := info.Destination[common.Iffint32(len(info.Destination) > 100, int32(len(info.Destination)-100), 0):]
+			// Get the fromto
+			fromTo := jptm.FromTo()
 
-			jptm.LogSendError(shortSrc, shortDst, info.FailureReason, 0)
+			// Shorten our paths so the error isn't obnoxious in the case of ultra-long paths
+			shortenPath := func(loc string, locType common.Location) string {
+				// Trim the query. We're only interested in the path.
+				if locType.IsRemote() {
+					u, err := url.Parse(loc)
+					common.PanicIfErr(err)
+
+					loc = u.Path
+				}
+
+				loc = common.IffString(len(loc) > 100, "(path trimmed) ...", "") +
+					loc[common.Iffint32(len(loc) > 100, int32(len(loc)-100), 0):]
+
+				return loc
+			}
+
+			shortSrc := shortenPath(info.Source, fromTo.From())
+			shortDst := shortenPath(info.Destination, fromTo.To())
+
+			// Send the right type of error
+			if fromTo.IsDownload() {
+				jptm.LogDownloadError(shortSrc, shortDst, info.FailureReason, 0)
+			} else if fromTo.IsUpload() {
+				jptm.LogUploadError(shortSrc, shortDst, info.FailureReason, 0)
+			} else if fromTo.IsS2S() {
+				jptm.LogS2SCopyError(shortSrc, shortDst, info.FailureReason, 0)
+			}
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
 
