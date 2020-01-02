@@ -276,9 +276,15 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.NotNil)
 
-		loggedError := glcm.(*mockedLifecycleManager).logContainsText("invalid name", time.Second)
+		foundInvalid := false
 
-		c.Assert(loggedError, chk.Equals, true)
+		for _, v := range mockedRPC.transfers {
+			if v.ExpectedFailure == true && strings.Contains(v.FailureReason, "invalid name") {
+				foundInvalid = true
+			}
+		}
+
+		c.Assert(foundInvalid, chk.Equals, true)
 	})
 }
 
