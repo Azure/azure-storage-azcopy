@@ -58,9 +58,6 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
 
-		// Why does this live in here now?
-		// Basically, PreSignedSourceURL appends an updated SAS token now. We need to get the new SAS token if the old one expires.
-		// This does it without adding a bunch of new architecture into STE
 		srcURL, err := c.srcInfo.PreSignedSourceURL()
 
 		if err != nil {

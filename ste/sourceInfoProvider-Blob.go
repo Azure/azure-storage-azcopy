@@ -32,9 +32,7 @@ import (
 // Source info provider for Azure blob
 type blobSourceInfoProvider struct {
 	defaultRemoteSourceInfoProvider
-	udamInstance *userDelegationAuthenticationManager
-	stashedURL   *url.URL
-	needsSAS     bool
+	needsSAS bool
 }
 
 func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
@@ -46,37 +44,38 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 	base := b.(*defaultRemoteSourceInfoProvider)
 	fromTo := jptm.FromTo()
 
+	result, err := base.PreSignedSourceURL()
+
+	if err != nil {
+		return nil, err
+	}
+
+	bURLParts := azblob.NewBlobURLParts(*result)
+
 	return &blobSourceInfoProvider{
 		defaultRemoteSourceInfoProvider: *base,
-		udamInstance:                    jptm.GetUserDelegationAuthenticationManagerInstance(),
-		needsSAS:                        fromTo.IsS2S() && fromTo.From() == common.ELocation.Blob(),
+		needsSAS:                        fromTo.IsS2S() && fromTo.From() == common.ELocation.Blob() && bURLParts.SAS.Encode() == "",
 	}, nil
 }
 
 func (p *blobSourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
-	if p.stashedURL == nil {
-		var err error
-		p.stashedURL, err = p.defaultRemoteSourceInfoProvider.PreSignedSourceURL()
-
-		if err != nil {
-			return p.stashedURL, err
-		}
-	}
+	udamInstance := p.jptm.GetUserDelegationAuthenticationManagerInstance()
 
 	// result needs to dereference so we don't modify the actual URL. This enables proper refreshing.
-	result := *p.stashedURL
-	if p.needsSAS {
-		bURLParts := azblob.NewBlobURLParts(result)
+	result, err := p.defaultRemoteSourceInfoProvider.PreSignedSourceURL()
 
-		// If there's not already a SAS on the source, append it!
-		if bURLParts.SAS.Encode() == "" {
-			result.RawQuery, _ = p.udamInstance.GetUserDelegationSASForURL(bURLParts)
-		} else {
-			p.needsSAS = false
-		}
+	if err != nil {
+		return result, err
 	}
 
-	return &result, nil
+	// needsSAS is only set if it's a blob-* s2s transfer, and no SAS is present on the source.
+	// As a result, we generate one.
+	if p.needsSAS {
+		bURLParts := azblob.NewBlobURLParts(*result)
+		result.RawQuery, _ = udamInstance.GetUserDelegationSASForURL(bURLParts)
+	}
+
+	return result, nil
 }
 
 func (p *blobSourceInfoProvider) BlobTier() azblob.AccessTierType {

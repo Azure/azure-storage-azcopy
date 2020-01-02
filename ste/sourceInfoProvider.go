@@ -49,6 +49,8 @@ type IRemoteSourceInfoProvider interface {
 	ISourceInfoProvider
 
 	// SourceURL returns source's URL.
+	// When in combination with UDAM, PreSignedSourceURL returns the latest SAS token.
+	// Note that User Delegation SAS tokens refresh every 6.5 days, and expire every 7 days.
 	PreSignedSourceURL() (*url.URL, error)
 
 	// SourceSize returns size of source

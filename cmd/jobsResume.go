@@ -257,13 +257,14 @@ func (rca resumeCmdArgs) process() error {
 	credentialInfo := common.CredentialInfo{}
 
 	// obtain OAuth info so that userdelegationauthenticationmanager gets properly set up.
-	// STE doesn't panic if credentialType is Unknown this early on, so it's OK that we don't know based off our fromto.
+	// STE doesn't panic if credentialType is Unknown this early on (During the getJobFromTo command), so it's OK that we don't know based off our fromto.
 	uotm := GetUserOAuthTokenManagerInstance()
+	var getTokenErr error // This will be used once we know the credential type to error out if we needed to use a oauth token.
 	if tokenInfo, err := uotm.GetTokenInfo(ctx); err == nil {
 		credentialInfo.OAuthTokenInfo = *tokenInfo
-		// only error out if we failed to get an oauth token on an oauth transfer
-	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		return err
+	} else {
+		// Set this error on the side so we can check it at an appropriate time.
+		getTokenErr = err
 	}
 
 	// Get fromTo info, so we can decide what's the proper credential type to use.
@@ -295,6 +296,11 @@ func (rca resumeCmdArgs) process() error {
 		// Message user that they are using Oauth token for authentication,
 		// in case of silently using cached token without consciousness。
 		glcm.Info("Resume is using OAuth token for authentication.")
+
+		// Ensure we actually got an oauth token.
+		if getTokenErr != nil {
+			return getTokenErr
+		}
 	}
 
 	// Send resume job request.

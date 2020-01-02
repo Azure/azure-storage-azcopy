@@ -879,7 +879,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	// We're getting the token regardless of the dst credential type.
 	// This info needs to go to STE in case a oauth to sas transfer happpens.
-	// TODO: Make sync and others use this methodology as well.
 	uotm := GetUserOAuthTokenManagerInstance()
 	// Get token from env var or cache.
 	if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
