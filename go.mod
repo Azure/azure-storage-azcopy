@@ -10,6 +10,8 @@ require (
 	github.com/danieljoos/wincred v1.0.1
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
 	github.com/go-ini/ini v1.41.0 // indirect
+	github.com/golang/groupcache v0.0.0-20191227052852-215e87163ea7
+	github.com/golang/protobuf v1.3.2 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/jiacfan/keychain v0.0.0-20180920053336-f2c902a3d807
 	github.com/jiacfan/keyctl v0.3.1

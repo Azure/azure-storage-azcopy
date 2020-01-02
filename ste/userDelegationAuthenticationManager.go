@@ -1,11 +1,11 @@
 package ste
 
 import (
+	"errors"
 	"time"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
-
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/golang/groupcache/lru"
 )
 
 // userDelegationAuthenticationManager manages the automatic creation of user delegation SAS tokens for each container.
@@ -17,6 +17,7 @@ import (
 // When UDAM spins up, a credential is created.
 // UDAM is not necessary in the frontend because if UDAM would succeed, the OAuth token would have to be capable of enumerating the container to start with.
 type userDelegationAuthenticationManager struct {
+	validityTime time.Duration
 	// Because User Delegation SAS tokens cannot last longer than a user delegation credential, we must hold onto the key info.
 	startTime  time.Time
 	expiryTime time.Time
@@ -25,15 +26,21 @@ type userDelegationAuthenticationManager struct {
 	// sasCache makes use of the thread-safe common.LFUCache.
 	// Yes, some routines will inevitably step over eachother.
 	// But the stringtosign and such should be the exact same until a refresh.
-	sasCache *common.LFUCache
+	sasCache *lru.Cache
 }
 
 // newUserDelegationAuthenticationManager uses an azblob service URL to obtain a user delegation credential, and returns a new userDelegationAuthenticationManager
 // serviceURL should have adequate permissions to generate a set of user delegation credentials.
-func newUserDelegationAuthenticationManager(serviceURL azblob.ServiceURL) (userDelegationAuthenticationManager, error) {
-	authManager := userDelegationAuthenticationManager{serviceURL: serviceURL}
-	cache := common.NewLFUCache(100000)
-	authManager.sasCache = &cache
+// KeyValidityTime should be longer than keyRefreshInterval, but have a sensible amount of downtime between the two so operations don't run into expiry time
+// Typically, this is 7 days to expire (This is the max), and 6.5 days until refresh.
+func newUserDelegationAuthenticationManager(serviceURL azblob.ServiceURL, keyValidityTime, keyRefreshInterval time.Duration) (userDelegationAuthenticationManager, error) {
+	if keyValidityTime < keyRefreshInterval {
+		return userDelegationAuthenticationManager{}, errors.New("Key validity must be longer than the refresh interval")
+	}
+
+	authManager := userDelegationAuthenticationManager{serviceURL: serviceURL, validityTime: keyValidityTime}
+	cache := lru.New(100000)
+	authManager.sasCache = cache
 
 	err := authManager.refreshUDKInternal()
 
@@ -44,8 +51,8 @@ func newUserDelegationAuthenticationManager(serviceURL azblob.ServiceURL) (userD
 	// Start our refresh loop
 	go func() {
 		for {
-			<-time.After((time.Hour * 24 * 6) + (time.Hour * 12)) // Refresh after exactly 6.5 days so we have .5 days of wiggle room if any SAS tokens are still in use.
-			_ = authManager.refreshUDKInternal()                  // We don't need to worry about a retry here.
+			<-time.After(keyRefreshInterval)     // Refresh regularly so the key doesn't expire while we're working with it.
+			_ = authManager.refreshUDKInternal() // We don't need to worry about a retry here.
 		}
 	}()
 
@@ -53,14 +60,9 @@ func newUserDelegationAuthenticationManager(serviceURL azblob.ServiceURL) (userD
 }
 
 func (u *userDelegationAuthenticationManager) refreshUDKInternal() error {
-	u.sasCache.Range(func(k, v interface{}) bool { // empty the map
-		u.sasCache.Delete(k)
-		return true
-	})
-
 	// Create a new start/expiry time.
 	u.startTime = time.Now()
-	u.expiryTime = u.startTime.Add(time.Hour * 24 * 7)
+	u.expiryTime = u.startTime.Add(u.validityTime)
 	keyInfo := azblob.NewKeyInfo(u.startTime, u.expiryTime)
 
 	if JobsAdmin != nil {
@@ -79,6 +81,8 @@ func (u *userDelegationAuthenticationManager) refreshUDKInternal() error {
 		u.credential = azblob.UserDelegationCredential{}
 		return err
 	}
+
+	u.sasCache.Clear()
 
 	if JobsAdmin != nil {
 		JobsAdmin.LogToJobLog("Successfully obtained a User Delegation Credential for the blob source.")
@@ -109,7 +113,7 @@ func (u *userDelegationAuthenticationManager) createUserDelegationSASForURL(cont
 	// If it's not present, we need to generate a SAS query and store it, then return.
 	sasQuery, err := azblob.BlobSASSignatureValues{
 		Version:       DefaultServiceApiVersion,
-		Protocol:      azblob.SASProtocolHTTPSandHTTP, // A user may be inclined to use HTTP for one reason or another. We already warn them about this.
+		Protocol:      azblob.SASProtocolHTTPS, // A user may be inclined to use HTTP for one reason or another. We already warn them about this.
 		StartTime:     u.startTime,
 		ExpiryTime:    u.expiryTime,
 		Permissions:   azblob.ContainerSASPermissions{Read: true, List: true}.String(), // read-only perms, effectively
@@ -121,7 +125,7 @@ func (u *userDelegationAuthenticationManager) createUserDelegationSASForURL(cont
 	}
 
 	// Write the query to the map and then store it.
-	u.sasCache.Set(containerName, sasQuery.Encode())
+	u.sasCache.Add(containerName, sasQuery.Encode())
 
 	if JobsAdmin != nil {
 		JobsAdmin.LogToJobLog("Successfully generated SAS token for source container " + containerName)

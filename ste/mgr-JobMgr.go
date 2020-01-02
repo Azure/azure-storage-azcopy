@@ -272,7 +272,10 @@ func (jm *jobMgr) setupUserDelegationAuthManager(src string) {
 		bsu := azblob.NewServiceURL(srcBlobURLParts.URL(), p)
 
 		// Ignoring the error. If we can't create UDAM, we don't have adequate permissions in the first place.
-		udam, err := newUserDelegationAuthenticationManager(bsu)
+		udam, err := newUserDelegationAuthenticationManager(bsu,
+			time.Hour*24*7,                  // 7 days until expiry
+			(time.Hour*24*6)+(time.Hour*12), // 6.5 days until refresh
+		)
 
 		if err != nil {
 			common.GetLifecycleMgr().Info("Could not generate user delegation SAS tokens for the blob source. Empty tokens will be used instead. Transfers may still succeed if the source is public.")
@@ -417,6 +420,10 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 		// 1) setupUDAM will fail cleanly, leaving an empty UDAM instance that does nothing.
 		// 2) they have OAuth perms on the source enough to make a user delegation key, and thus, creation will succeed.
 		// In either scenario, the transfer continues safely.
+
+		// Upgrade the default version for this transfer.
+		DefaultServiceApiVersion = "2018-11-09"
+
 		jm.setupUserDelegationAuthManager(string(jpm.Plan().SourceRoot[:jpm.Plan().SourceRootLength]))
 	} else {
 		jm.udam = &userDelegationAuthenticationManager{} // Create a dummy instance anyway. It'll return empty oauth tokens (and never be used in the first place)
