@@ -9,13 +9,12 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
+	"time"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
 func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) (*copyEnumerator, error) {
@@ -112,8 +111,29 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// Giving it nothing to work with as new names will be added as we traverse.
 	var containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
 	existingContainers := make(map[string]bool)
-	var logDstContainerCreateFailureOnce sync.Once
 	seenFailedContainers := make(map[string]bool) // Create map of already failed container conversions so we don't log a million items just for one container.
+
+	createContainerFailureTransfer := func(dstContainerName, failureReason string) error {
+		// Don't spam logs on failed containers
+		if _, ok := seenFailedContainers[dstContainerName]; !ok {
+			// Schedule a intentionally failing transfer at the container level with a empty dummy object
+			dummyObj := newStoredObject(nil, "", "", time.Now(), 0, nil, azblob.BlobNone, dstContainerName)
+
+			dummyObj.failureReason = failureReason
+			dummyObj.expectedFailure = true
+
+			dummyTransfer := dummyObj.ToNewCopyTransfer(
+				cca.autoDecompress && cca.fromTo.IsDownload(),
+				"", dstContainerName,
+				cca.s2sPreserveAccessTier)
+
+			seenFailedContainers[dstContainerName] = true
+
+			return addTransfer(&jobPartOrder, dummyTransfer, cca)
+		}
+
+		return nil
+	}
 
 	dstContainerName := ""
 	// Extract the existing destination container name
@@ -129,13 +149,10 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			// Attempt to create the container. If we fail, fail silently.
 			err = cca.createDstContainer(dstContainerName, dst, ctx, existingContainers)
 
-			// check against seenFailedContainers so we don't spam the job log with initialization failed errors
-			if _, ok := seenFailedContainers[dstContainerName]; err != nil && ste.JobsAdmin != nil && !ok {
-				logDstContainerCreateFailureOnce.Do(func() {
-					glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
-				})
-				ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err))
-				seenFailedContainers[dstContainerName] = true
+			if err != nil {
+				// No need to worry about an error from here.
+				_ = createContainerFailureTransfer(dstContainerName,
+					fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err))
 			}
 		} else if cca.fromTo.From().IsRemote() { // if the destination has implicit container names
 			if acctTraverser, ok := traverser.(accountTraverser); ok && dstLevel == ELocationLevel.Service() {
@@ -159,15 +176,9 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 					err = cca.createDstContainer(bucketName, dst, ctx, existingContainers)
 
-					// if JobsAdmin is nil, we're probably in testing mode.
-					// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
-					// check against seenFailedContainers so we don't spam the job log with initialization failed errors
-					if _, ok := seenFailedContainers[bucketName]; err != nil && ste.JobsAdmin != nil && !ok {
-						logDstContainerCreateFailureOnce.Do(func() {
-							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
-						})
-						ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", bucketName, err))
-						seenFailedContainers[bucketName] = true
+					if err != nil {
+						_ = createContainerFailureTransfer(bucketName,
+							fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", bucketName, err))
 					}
 				}
 			} else {
@@ -180,15 +191,13 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 				resName, err := containerResolver.ResolveName(cName)
 
+				// Ignore the error in resolution, it'll get logged later.
 				if err == nil {
 					err = cca.createDstContainer(resName, dst, ctx, existingContainers)
 
-					if _, ok := seenFailedContainers[dstContainerName]; err != nil && ste.JobsAdmin != nil && !ok {
-						logDstContainerCreateFailureOnce.Do(func() {
-							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
-						})
-						ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err))
-						seenFailedContainers[dstContainerName] = true
+					if err != nil {
+						_ = createContainerFailureTransfer(resName,
+							fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", cName, err))
 					}
 				}
 			}
@@ -206,11 +215,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				cName, err = containerResolver.ResolveName(object.containerName)
 
 				if err != nil {
-					if _, ok := seenFailedContainers[object.containerName]; !ok {
-						LogStdoutAndJobLog(fmt.Sprintf("failed to add transfers from container %s as it has an invalid name. Please manually transfer from this container to one with a valid name.", object.containerName))
-						seenFailedContainers[object.containerName] = true
-					}
-					return nil
+					return createContainerFailureTransfer(object.containerName,
+						fmt.Sprintf("failed to add transfers from container %s as it has an invalid name. Please manually transfer from this container to one with a valid name.", object.containerName))
 				}
 
 				object.dstContainerName = cName
