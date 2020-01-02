@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -101,7 +102,29 @@ func (t *blobAccountTraverser) traverse(preprocessor objectMorpher, processor ob
 		err = containerTraverser.traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
-			LogStdoutAndJobLog(fmt.Sprintf("failed to list blobs in container %s: %s", v, err))
+			// Schedule a dummy transfer so the user knows something went wrong with enumeration.
+			dummyObj := newStoredObject(
+				nil, // Morphers are of no use here.
+				"",
+				" ", // will be printed out as "/container/ "
+				time.Now(),
+				0,
+				nil,
+				azblob.BlobNone,
+				v,
+			)
+
+			dummyObj.failureReason = fmt.Sprintf("failed to list blobs in container %s: %s", v, err)
+			dummyObj.expectedFailure = true
+
+			// Bypass filters
+			err = processor(dummyObj)
+
+			// Don't ignore this error-- If we can't process the dummy object, we need to escalate anyway.
+			if err != nil {
+				return err
+			}
+
 			continue
 		}
 	}

@@ -24,8 +24,10 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 )
@@ -112,7 +114,29 @@ func (t *BlobFSAccountTraverser) traverse(preprocessor objectMorpher, processor 
 		err = fileSystemTraverser.traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
-			LogStdoutAndJobLog(fmt.Sprintf("failed to list files in filesystem %s: %s", v, err))
+			// Schedule a dummy transfer so the user knows something went wrong with enumeration.
+			dummyObj := newStoredObject(
+				nil, // Morphers are of no use here.
+				"",
+				" ", // will be printed out as "/container/ "
+				time.Now(),
+				0,
+				nil,
+				azblob.BlobNone,
+				v,
+			)
+
+			dummyObj.failureReason = fmt.Sprintf("failed to list files in filesystem %s: %s", v, err)
+			dummyObj.expectedFailure = true
+
+			// Bypass filters
+			err = processor(dummyObj)
+
+			// Don't ignore this error-- If we can't process the dummy object, we need to escalate anyway.
+			if err != nil {
+				return err
+			}
+
 			continue
 		}
 	}

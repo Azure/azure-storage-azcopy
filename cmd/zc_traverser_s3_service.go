@@ -25,7 +25,9 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/minio/minio-go"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -104,17 +106,38 @@ func (t *s3ServiceTraverser) traverse(preprocessor objectMorpher, processor obje
 		err = bucketTraverser.traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
+			var errStr string
 			if strings.Contains(err.Error(), "301 response missing Location header") {
-				LogStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q , as it's not in the region specified by source URL", v))
-				continue
+				errStr = fmt.Sprintf("skip enumerating the bucket %q , as it's not in the region specified by source URL", v)
+			} else if strings.Contains(err.Error(), "cannot list objects, The specified bucket does not exist") {
+				errStr = fmt.Sprintf("skip enumerating the bucket %q, as it does not exist.", v)
+			} else {
+				errStr = err.Error()
 			}
 
-			if strings.Contains(err.Error(), "cannot list objects, The specified bucket does not exist") {
-				LogStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q, as it does not exist.", v))
-				continue
+			// Schedule a dummy transfer so the user knows something went wrong with enumeration.
+			dummyObj := newStoredObject(
+				nil, // Morphers are of no use here.
+				"",
+				" ", // will be printed out as "/container/ "
+				time.Now(),
+				0,
+				nil,
+				azblob.BlobNone,
+				v,
+			)
+
+			dummyObj.failureReason = fmt.Sprintf("failed to list objects in bucket %s: %s", v, errStr)
+			dummyObj.expectedFailure = true
+
+			// Bypass filters
+			err = processor(dummyObj)
+
+			// Don't ignore this error-- If we can't process the dummy object, we need to escalate anyway.
+			if err != nil {
+				return err
 			}
 
-			LogStdoutAndJobLog(fmt.Sprintf("failed to list objects in bucket %s: %s", v, err))
 			continue
 		}
 	}
