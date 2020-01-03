@@ -254,7 +254,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			if err != nil {
 				panic(err)
 			}
-			srcMetadataLength = len(metadataStr)
+			srcMetadataLength = uint32(len(metadataStr))
 		}
 		if srcMetadataLength > uint32(math.MaxUint32) {
 			// If the order wasn't already going to fail, let's fail it.
