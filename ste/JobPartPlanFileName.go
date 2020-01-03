@@ -216,7 +216,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	currentSrcStringOffset := eof + int64(unsafe.Sizeof(JobPartPlanTransfer{}))*int64(jpph.NumTransfers)
 
 	// Determine the maximum destination length:
-	var maxDestLength = math.MaxUint32
+	var maxDestLength uint32 = math.MaxUint32
 
 	switch order.FromTo.To() {
 	case common.ELocation.Blob():
@@ -232,7 +232,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 
 	// Write each transfer to the Job Part Plan file (except for the src/dst strings; comes come later)
 	for t := range order.Transfers {
-		if len(order.Transfers[t].Source) > math.MaxUint32 || len(order.Transfers[t].Destination) > maxDestLength {
+		if uint32(len(order.Transfers[t].Source)) > uint32(math.MaxUint32) || uint32(len(order.Transfers[t].Destination)) > maxDestLength {
 			// If the order wasn't already going to fail, let's fail it.
 			if !order.Transfers[t].ExpectedFailure {
 				order.Transfers[t].ExpectedFailure = true
@@ -248,7 +248,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		// Prepare info for JobPartPlanTransfer
 		// Sending Metadata type to Transfer could ensure strong type validation.
 		// TODO: discuss the performance drop of marshaling metadata twice
-		srcMetadataLength := 0
+		srcMetadataLength := uint32(0)
 		if order.Transfers[t].Metadata != nil {
 			metadataStr, err := order.Transfers[t].Metadata.Marshal()
 			if err != nil {
@@ -256,7 +256,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			}
 			srcMetadataLength = len(metadataStr)
 		}
-		if srcMetadataLength > math.MaxUint32 {
+		if srcMetadataLength > uint32(math.MaxUint32) {
 			// If the order wasn't already going to fail, let's fail it.
 			if !order.Transfers[t].ExpectedFailure {
 				order.Transfers[t].ExpectedFailure = true
