@@ -43,6 +43,7 @@ type JobPartPlanHeader struct {
 	JobID                 common.JobID           // Job Part's JobID
 	PartNum               common.PartNumber      // Job Part's part number (0+)
 	SourceRootLength      uint16                 // The length of the source root path
+	SourcePublic          bool                   // Is the source a public location? If so, we should not init UDAM.
 	SourceRoot            [1000]byte             // The root directory of the source
 	DestinationRootLength uint16                 // The length of the destination root path
 	DestinationRoot       [1000]byte             // The root directory of the destination

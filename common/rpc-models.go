@@ -52,6 +52,7 @@ type CopyJobPartOrderRequest struct {
 	// list of blobTypes to exclude.
 	ExcludeBlobType []azblob.BlobType
 	SourceRoot      string
+	SourcePublic    bool
 	DestinationRoot string
 	Transfers       []CopyTransfer
 	LogLevel        LogLevel

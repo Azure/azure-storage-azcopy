@@ -498,17 +498,33 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return err
 	}
 
-	if cca.fromTo.IsS2S() && cca.sourceSAS == "" {
-		if cca.fromTo.From() == common.ELocation.Blob() && cca.credentialInfo.OAuthTokenInfo != (common.OAuthTokenInfo{}) {
-			glcm.Info("A SAS token is required as a part of the source in S2S sync, unless the source is a public resource. " +
-				"Because no SAS token is present on your blob source, we'll attempt to generate a SAS token at transfer time. Please note that " +
-				"transfers may fail if generating the user delegation SAS token fails.")
-		} else {
-			return errors.New("a SAS token is required as a part of the source in S2S sync, unless the source is a public resource (or a blob source and you have relevant permissions; check https://docs.microsoft.com/en-us/rest/api/storageservices/get-user-delegation-key#authorization)")
+	var publicSource bool
+
+	if cca.fromTo.From() == common.ELocation.Blob() {
+		// Ignore source credential info, we're only here for the public flag.
+		_, publicSource, err = getBlobCredentialType(ctx, cca.source, true, cca.sourceSAS != "")
+
+		if err != nil {
+			// No reason for this to happen, since it's called above successfully.
+			return err
 		}
 	}
 
-	enumerator, err := cca.initEnumerator(ctx)
+	if cca.fromTo.IsS2S() && cca.sourceSAS == "" {
+		if cca.fromTo.From() == common.ELocation.Blob() && cca.credentialInfo.OAuthTokenInfo != (common.OAuthTokenInfo{}) {
+			if !publicSource {
+				glcm.Info("A SAS token is required as a part of the source in S2S sync, unless the source is a public resource. " +
+					"Because no SAS token is present on your blob source, we'll attempt to generate a SAS token at transfer time. Please note that " +
+					"transfers may fail if generating the user delegation SAS token fails.")
+			}
+		} else {
+			if !publicSource {
+				return errors.New("a SAS token is required as a part of the source in S2S sync, unless the source is a public resource (or a blob source and you have relevant permissions; check https://docs.microsoft.com/en-us/rest/api/storageservices/get-user-delegation-key#authorization)")
+			}
+		}
+	}
+
+	enumerator, err := cca.initEnumerator(ctx, publicSource)
 	if err != nil {
 		return err
 	}

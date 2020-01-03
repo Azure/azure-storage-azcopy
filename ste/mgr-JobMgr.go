@@ -203,9 +203,11 @@ func (jm *jobMgr) GetUserDelegationAuthenticationManagerInstance() *userDelegati
 	return jm.udam
 }
 
+var udamSetupOnce = &sync.Once{}
+
 func (jm *jobMgr) setupUserDelegationAuthManager(src string) {
 	// Check if it doesn't already exist.
-	if jm.udam == nil {
+	udamSetupOnce.Do(func() {
 		// lock up to ensure nobody steps over us.
 		jm.udamCreationLock.Lock()
 		defer jm.udamCreationLock.Unlock()
@@ -226,6 +228,12 @@ func (jm *jobMgr) setupUserDelegationAuthManager(src string) {
 
 		// no reason for this to fail, ever.
 		common.PanicIfErr(err)
+
+		// Check if the source is pointing at Azure. We shouldn't send the OAuth token anywhere else.
+		// format is account.[blob.core.windows.net], [] is the selection
+		if srcURL.Host[strings.Index(srcURL.Host, ".")+1:] != "blob.core.windows.net" {
+			jm.udam = &userDelegationAuthenticationManager{}
+		}
 
 		// get a service-level URL
 		srcBlobURLParts := azblob.NewBlobURLParts(*srcURL)
@@ -271,7 +279,6 @@ func (jm *jobMgr) setupUserDelegationAuthManager(src string) {
 		// finally, we have a service URL.
 		bsu := azblob.NewServiceURL(srcBlobURLParts.URL(), p)
 
-		// Ignoring the error. If we can't create UDAM, we don't have adequate permissions in the first place.
 		udam, err := newUserDelegationAuthenticationManager(bsu,
 			time.Hour*24*7,                  // 7 days until expiry
 			(time.Hour*24*6)+(time.Hour*12), // 6.5 days until refresh
@@ -284,7 +291,7 @@ func (jm *jobMgr) setupUserDelegationAuthManager(src string) {
 
 		// Even if we fail, udam should not be nil.
 		jm.udam = &udam
-	}
+	})
 }
 
 func (jm *jobMgr) Progress() (uint64, uint64) {
@@ -413,15 +420,14 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 	// This is because we have no awareness of our source root until now,
 	// and two job parts will never have different sourceroots.
 	// Note that setupUDAM checks if UDAM is nil before attempting to create it.
-	if jpm.Plan().FromTo.IsS2S() && jpm.Plan().FromTo.From() == common.ELocation.Blob() && len(jpm.sourceSAS) == 0 {
-		// So now you may be thinking "Can't you copy safely from a public resource?"
-		// The answer is yes.
-		// If a user is copying from a public resource in this case, one of two things will happen:
-		// 1) setupUDAM will fail cleanly, leaving an empty UDAM instance that does nothing.
-		// 2) they have OAuth perms on the source enough to make a user delegation key, and thus, creation will succeed.
-		// In either scenario, the transfer continues safely.
 
+	// For UDAM to be initialized, there are some conditions:
+	// 1) The source must not be public (It's unsafe to send the OAuth token to a public source)
+	// 2) It should be a S2S transfer from blob (There's no need for a SAS on a download, and user delegation doesn't work on files)
+	// 3) The source should lack a SAS token (There's no need for SAS generation when we already have)
+	if !jpm.Plan().SourcePublic && jpm.Plan().FromTo.IsS2S() && jpm.Plan().FromTo.From() == common.ELocation.Blob() && len(jpm.sourceSAS) == 0 {
 		// Upgrade the default version for this transfer.
+		// Note that S2S transfers with a User delegation SAS will fail on a lower revision.
 		DefaultServiceApiVersion = "2018-11-09"
 
 		jm.setupUserDelegationAuthManager(string(jpm.Plan().SourceRoot[:jpm.Plan().SourceRootLength]))

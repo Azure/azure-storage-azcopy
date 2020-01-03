@@ -67,6 +67,9 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		}
 	}
 
+	// Inform STE that the source is public
+	jobPartOrder.SourcePublic = isPublic
+
 	// Infer on download so that we get LMT and MD5 on files download
 	// On S2S transfers the following rules apply:
 	// If preserve properties is enabled, but get properties in backend is disabled, turn it on

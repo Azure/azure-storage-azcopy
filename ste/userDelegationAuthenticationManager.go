@@ -16,6 +16,7 @@ import (
 //
 // When UDAM spins up, a credential is created.
 // UDAM is not necessary in the frontend because if UDAM would succeed, the OAuth token would have to be capable of enumerating the container to start with.
+// However, calls like PutBlockFromURL require a SAS token on the source, which is where UDAM kicks in.
 type userDelegationAuthenticationManager struct {
 	validityTime time.Duration
 	// Because User Delegation SAS tokens cannot last longer than a user delegation credential, we must hold onto the key info.

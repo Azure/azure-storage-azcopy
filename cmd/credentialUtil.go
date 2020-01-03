@@ -303,6 +303,7 @@ func getCredentialInfoForLocation(ctx context.Context, location common.Location,
 // getCredentialType checks user provided info, and gets the proper credential type
 // for current command.
 // kept around for legacy compatibility at the moment
+// todo: phase me out, I'm duped code
 func getCredentialType(ctx context.Context, raw rawFromToInfo) (credentialType common.CredentialType, err error) {
 	// In the integration case, AzCopy directly use caller provided credential type if specified and not Unknown.
 	if credType := GetCredTypeFromEnvVar(); credType != common.ECredentialType.Unknown() {

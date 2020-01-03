@@ -31,7 +31,7 @@ import (
 
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
 
-func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *syncEnumerator, err error) {
+func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context, isPublic bool) (enumerator *syncEnumerator, err error) {
 	src, err := appendSASIfNecessary(cca.source, cca.sourceSAS)
 	if err != nil {
 		return nil, err
@@ -70,7 +70,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		return nil, errors.New("sync must happen between source and destination of the same type, e.g. either file <-> file, or directory/container <-> directory/container")
 	}
 
-	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart)
+	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, isPublic)
 
 	// set up the filters in the right order
 	// Note: includeFilters and includeAttrFilters are ANDed
