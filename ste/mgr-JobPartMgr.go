@@ -217,8 +217,9 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 // jobPartMgr represents the runtime information for a Job's Part
 type jobPartMgr struct {
 	// These fields represent the part's existence
-	jobMgr   IJobMgr // Refers to this part's Job (for logging, cancelling, etc.)
-	filename JobPartPlanFileName
+	jobMgr          IJobMgr // Refers to this part's Job (for logging, cancelling, etc.)
+	jobMgrInitState *jobMgrInitState
+	filename        JobPartPlanFileName
 
 	// sourceSAS defines the sas of the source of the Job. If the source is local Location, then sas is empty.
 	// Since sas is not persisted in JobPartPlan file, it stripped from the source and stored in memory in JobPart Manager
@@ -553,14 +554,12 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 }
 
 func (jpm *jobPartMgr) GetUserDelegationAuthenticationManagerInstance() *userDelegationAuthenticationManager {
-	udam := jpm.jobMgr.GetUserDelegationAuthenticationManagerInstance()
-
 	// Panic if udam isn't created-- this occurs before a transfer is scheduled!
-	if udam == nil {
+	if jpm.jobMgrInitState == nil || jpm.jobMgrInitState.udam == nil {
 		panic("UDAM should be initialized already (Even as a dummy!)")
 	}
 
-	return udam
+	return jpm.jobMgrInitState.udam
 }
 
 func (jpm *jobPartMgr) SlicePool() common.ByteSlicePooler {

@@ -80,7 +80,6 @@ type IJobMgr interface {
 	ChunkStatusLogger() common.ChunkStatusLogger
 	HttpClient() *http.Client
 	PipelineNetworkStats() *pipelineNetworkStats
-	GetUserDelegationAuthenticationManagerInstance() *userDelegationAuthenticationManager
 	getOverwritePrompter() *overwritePrompter
 	common.ILoggerCloser
 }
@@ -98,6 +97,7 @@ func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID 
 		overwritePrompter:             newOverwritePrompter(),
 		pipelineNetworkStats:          newPipelineNetworkStats(JobsAdmin.(*jobsAdmin).concurrencyTuner), // let the stats coordinate with the concurrency tuner
 		exclusiveDestinationMapHolder: &atomic.Value{},
+		initMu:                        &sync.Mutex{},
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
 	jm.logJobsAdminMessages()
@@ -150,6 +150,11 @@ func (jm *jobMgr) logConcurrencyParameters() {
 		jm.concurrency.MaxOpenDownloadFiles))
 }
 
+// jobMgrInitState holds one-time init structures (such as SIPM), that initialize when the first part is added.
+type jobMgrInitState struct {
+	udam *userDelegationAuthenticationManager
+}
+
 // jobMgr represents the runtime information for a Job
 type jobMgr struct {
 	// NOTE: for the 64 bit atomic functions to work on a 32 bit system, we have to guarantee the right 64-bit alignment
@@ -192,35 +197,22 @@ type jobMgr struct {
 
 	// only a single instance of the prompter is needed for all transfers
 	overwritePrompter *overwritePrompter
-	// only a single instance of the user delegation authentication manager is needed for all transfers
-	udam             *userDelegationAuthenticationManager
-	udamCreationLock sync.Mutex // This is a sanity check because it *may* be possible to have AddJobPart called multiple times at once if transfers get scheduled fast enough.
+
+	initMu    *sync.Mutex
+	initState *jobMgrInitState
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-func (jm *jobMgr) GetUserDelegationAuthenticationManagerInstance() *userDelegationAuthenticationManager {
-	return jm.udam
-}
 
 var udamSetupOnce = &sync.Once{}
 
 func (jm *jobMgr) setupUserDelegationAuthManager(src string) {
 	// Check if it doesn't already exist.
 	udamSetupOnce.Do(func() {
-		// lock up to ensure nobody steps over us.
-		jm.udamCreationLock.Lock()
-		defer jm.udamCreationLock.Unlock()
-
-		// If somebody else has already done it by the time we obtained the lock, we're good to go.
-		if jm.udam != nil {
-			return
-		}
-
 		// If the OAuth token is empty, this will fail anyway.
 		// Set an empty UDAM instance that does nothing.
 		if jm.getInMemoryTransitJobState().credentialInfo.OAuthTokenInfo == (common.OAuthTokenInfo{}) {
-			jm.udam = &userDelegationAuthenticationManager{}
+			jm.initState.udam = &userDelegationAuthenticationManager{}
 			return
 		}
 
@@ -232,7 +224,7 @@ func (jm *jobMgr) setupUserDelegationAuthManager(src string) {
 		// Check if the source is pointing at Azure. We shouldn't send the OAuth token anywhere else.
 		// format is account.[blob.core.windows.net], [] is the selection
 		if srcURL.Host[strings.Index(srcURL.Host, ".")+1:] != "blob.core.windows.net" {
-			jm.udam = &userDelegationAuthenticationManager{}
+			jm.initState.udam = &userDelegationAuthenticationManager{}
 		}
 
 		// get a service-level URL
@@ -290,7 +282,7 @@ func (jm *jobMgr) setupUserDelegationAuthManager(src string) {
 		}
 
 		// Even if we fail, udam should not be nil.
-		jm.udam = &udam
+		jm.initState.udam = &udam
 	})
 }
 
@@ -416,24 +408,28 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 	jm.setDirection(jpm.Plan().FromTo)
 	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(partNum, jpm.Plan().FromTo)
 
-	// This is actually a really fantastic place to set up our user delegation authentication manager.
-	// This is because we have no awareness of our source root until now,
-	// and two job parts will never have different sourceroots.
-	// Note that setupUDAM checks if UDAM is nil before attempting to create it.
+	jm.initMu.Lock()
+	defer jm.initMu.Unlock()
 
-	// For UDAM to be initialized, there are some conditions:
-	// 1) The source must not be public (It's unsafe to send the OAuth token to a public source)
-	// 2) It should be a S2S transfer from blob (There's no need for a SAS on a download, and user delegation doesn't work on files)
-	// 3) The source should lack a SAS token (There's no need for SAS generation when we already have)
-	if !jpm.Plan().SourcePublic && jpm.Plan().FromTo.IsS2S() && jpm.Plan().FromTo.From() == common.ELocation.Blob() && len(jpm.sourceSAS) == 0 {
-		// Upgrade the default version for this transfer.
-		// Note that S2S transfers with a User delegation SAS will fail on a lower revision.
-		DefaultServiceApiVersion = "2018-11-09"
+	if jm.initState == nil {
+		jm.initState = &jobMgrInitState{}
 
-		jm.setupUserDelegationAuthManager(string(jpm.Plan().SourceRoot[:jpm.Plan().SourceRootLength]))
-	} else {
-		jm.udam = &userDelegationAuthenticationManager{} // Create a dummy instance anyway. It'll return empty oauth tokens (and never be used in the first place)
+		// For UDAM to be initialized, there are some conditions:
+		// 1) The source must not be public (It's unsafe to send the OAuth token to a public source)
+		// 2) It should be a S2S transfer from blob (There's no need for a SAS on a download, and user delegation doesn't work on files)
+		// 3) The source should lack a SAS token (There's no need for SAS generation when we already have)
+		if !jpm.Plan().SourcePublic && jpm.Plan().FromTo.IsS2S() && jpm.Plan().FromTo.From() == common.ELocation.Blob() && len(jpm.sourceSAS) == 0 {
+			// Upgrade the default version for this transfer.
+			// Note that S2S transfers with a User delegation SAS will fail on a lower revision.
+			DefaultServiceApiVersion = "2018-11-09"
+
+			jm.setupUserDelegationAuthManager(string(jpm.Plan().SourceRoot[:jpm.Plan().SourceRootLength]))
+		} else {
+			jm.initState.udam = &userDelegationAuthenticationManager{} // Create a dummy instance anyway. It'll return empty oauth tokens (and never be used in the first place)
+		}
 	}
+
+	jpm.jobMgrInitState = jm.initState
 
 	if scheduleTransfers {
 		// If the schedule transfer is set to true
