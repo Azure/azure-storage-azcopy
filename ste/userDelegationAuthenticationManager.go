@@ -2,6 +2,7 @@ package ste
 
 import (
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -20,10 +21,11 @@ import (
 type userDelegationAuthenticationManager struct {
 	validityTime time.Duration
 	// Because User Delegation SAS tokens cannot last longer than a user delegation credential, we must hold onto the key info.
-	startTime  time.Time
-	expiryTime time.Time
-	credential azblob.UserDelegationCredential
-	serviceURL azblob.ServiceURL
+	credInfoLock *sync.Mutex
+	startTime    time.Time
+	expiryTime   time.Time
+	credential   azblob.UserDelegationCredential
+	serviceURL   azblob.ServiceURL
 	// sasCache makes use of the thread-safe common.LFUCache.
 	// Yes, some routines will inevitably step over eachother.
 	// But the stringtosign and such should be the exact same until a refresh.
@@ -39,7 +41,7 @@ func newUserDelegationAuthenticationManager(serviceURL azblob.ServiceURL, keyVal
 		return userDelegationAuthenticationManager{}, errors.New("Key validity must be longer than the refresh interval")
 	}
 
-	authManager := userDelegationAuthenticationManager{serviceURL: serviceURL, validityTime: keyValidityTime}
+	authManager := userDelegationAuthenticationManager{serviceURL: serviceURL, validityTime: keyValidityTime, credInfoLock: &sync.Mutex{}}
 	cache := lru.New(100000)
 	authManager.sasCache = cache
 
@@ -61,6 +63,9 @@ func newUserDelegationAuthenticationManager(serviceURL azblob.ServiceURL, keyVal
 }
 
 func (u *userDelegationAuthenticationManager) refreshUDKInternal() error {
+	u.credInfoLock.Lock()
+	defer u.credInfoLock.Unlock()
+
 	// Create a new start/expiry time.
 	u.startTime = time.Now()
 	u.expiryTime = u.startTime.Add(u.validityTime)
@@ -111,6 +116,8 @@ func (u *userDelegationAuthenticationManager) GetUserDelegationSASForURL(blobURL
 }
 
 func (u *userDelegationAuthenticationManager) createUserDelegationSASForURL(containerName string) (string, error) {
+	u.credInfoLock.Lock()
+
 	// If it's not present, we need to generate a SAS query and store it, then return.
 	sasQuery, err := azblob.BlobSASSignatureValues{
 		Version:       DefaultServiceApiVersion,
@@ -120,6 +127,8 @@ func (u *userDelegationAuthenticationManager) createUserDelegationSASForURL(cont
 		Permissions:   azblob.ContainerSASPermissions{Read: true, List: true}.String(), // read-only perms, effectively
 		ContainerName: containerName,
 	}.NewSASQueryParameters(u.credential)
+
+	u.credInfoLock.Unlock()
 
 	if err != nil {
 		return "", err
