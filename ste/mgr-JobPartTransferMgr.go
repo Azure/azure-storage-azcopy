@@ -186,21 +186,6 @@ func (jptm *jobPartTransferMgr) GetSourceCompressionType() (common.CompressionTy
 	return common.GetCompressionType(encoding)
 }
 
-func (jptm *jobPartTransferMgr) getSrcUserDelegationSAS(src string) (string, error) {
-	// panics if udam isn't found
-	udam := jptm.GetUserDelegationAuthenticationManagerInstance()
-
-	objectURL, err := url.Parse(src)
-
-	if err != nil {
-		return "", err
-	}
-
-	blobURLParts := azblob.NewBlobURLParts(*objectURL)
-
-	return udam.GetUserDelegationSASForURL(blobURLParts)
-}
-
 func (jptm *jobPartTransferMgr) GetUserDelegationAuthenticationManagerInstance() *userDelegationAuthenticationManager {
 	return jptm.jobPartMgr.GetUserDelegationAuthenticationManagerInstance()
 }

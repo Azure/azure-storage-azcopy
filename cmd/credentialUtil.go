@@ -286,15 +286,18 @@ func getCredentialInfoForLocation(ctx context.Context, location common.Location,
 		}
 	}
 
-	// Get the OAuth token info anyway. This may be used later in STE.
-	// Currently, it isn't.
-	// TODO: Shift STE credential info over to those generated in the new copy enumerator init instead of the old architecture
-	uotm := GetUserOAuthTokenManagerInstance()
-	if tokenInfo, err := uotm.GetTokenInfo(ctx); err == nil {
-		credInfo.OAuthTokenInfo = *tokenInfo
-		// only error out if we failed to get an oauth token on an oauth transfer
-	} else if credInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		return credInfo, isPublic, err
+	// Unless the cred type is OAuth, or not specified by the env var, we shouldn't initialize UDAM
+	if envCredType := GetCredTypeFromEnvVar(); credInfo.CredentialType == common.ECredentialType.OAuthToken() || envCredType == common.ECredentialType.Unknown() {
+		// Get the OAuth token info anyway. This may be used later in STE.
+		// Currently, it isn't.
+		// TODO: Shift STE credential info over to those generated in the new copy enumerator init instead of the old architecture
+		uotm := GetUserOAuthTokenManagerInstance()
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err == nil {
+			credInfo.OAuthTokenInfo = *tokenInfo
+			// only error out if we failed to get an oauth token on an oauth transfer
+		} else if credInfo.CredentialType == common.ECredentialType.OAuthToken() {
+			return credInfo, isPublic, err
+		}
 	}
 
 	return

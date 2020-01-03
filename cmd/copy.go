@@ -877,16 +877,20 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		glcm.Info("Using OAuth token for authentication.")
 	}
 
-	// We're getting the token regardless of the dst credential type.
-	// This info needs to go to STE in case a oauth to sas transfer happpens.
-	uotm := GetUserOAuthTokenManagerInstance()
-	// Get token from env var or cache.
-	if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-		if cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-			return err
+	// Only grab the OAuth token when necessary or unspecified (for oauth blob source).
+	// This will be useful if a user sets the env cred type manually to something other than OAuth.
+	if envCredType := GetCredTypeFromEnvVar(); cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() ||
+		envCredType == common.ECredentialType.Unknown() {
+		// This info needs to go to STE in case a oauth to sas transfer happpens.
+		uotm := GetUserOAuthTokenManagerInstance()
+		// Get token from env var or cache.
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+			if cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+				return err
+			}
+		} else {
+			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
 		}
-	} else {
-		cca.credentialInfo.OAuthTokenInfo = *tokenInfo
 	}
 
 	// initialize the fields that are constant across all job part orders

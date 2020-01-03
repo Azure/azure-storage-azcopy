@@ -489,13 +489,17 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		glcm.Info("Using OAuth token for authentication.")
 	}
 
-	// Grab OAuth creds anyway, as they may come into play in a blob->blob sync.
-	uotm := GetUserOAuthTokenManagerInstance()
-	if tokenInfo, err := uotm.GetTokenInfo(ctx); err == nil {
-		cca.credentialInfo.OAuthTokenInfo = *tokenInfo
-		// only error out if we failed to get an oauth token on an oauth transfer
-	} else if cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		return err
+	// Only grab the OAuth token when necessary or unspecified (for oauth blob source).
+	// This will be useful if a user sets the env cred type manually to something other than OAuth.
+	if envCredType := GetCredTypeFromEnvVar(); cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() ||
+		envCredType == common.ECredentialType.Unknown() {
+		uotm := GetUserOAuthTokenManagerInstance()
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err == nil {
+			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
+			// only error out if we failed to get an oauth token on an oauth transfer
+		} else if cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+			return err
+		}
 	}
 
 	var publicSource bool
