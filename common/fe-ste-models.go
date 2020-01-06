@@ -854,6 +854,7 @@ const (
 type CopyTransfer struct {
 	Source           string
 	Destination      string
+	EntityType       EntityType
 	LastModifiedTime time.Time //represents the last modified time of source which ensures that source hasn't changed while transferring
 	SourceSize       int64     // size of the source entity in bytes.
 
@@ -1174,3 +1175,12 @@ func GetCompressionType(contentEncoding string) (CompressionType, error) {
 		return ECompressionType.Unsupported(), fmt.Errorf("encoding type '%s' is not recognised as a supported encoding type for auto-decompression", contentEncoding)
 	}
 }
+
+/////////////////////////////////////////////////////////////////
+
+var EEntityType = EntityType(0)
+
+type EntityType uint8
+
+func (EntityType) File() EntityType   { return EntityType(0) }
+func (EntityType) Folder() EntityType { return EntityType(1) }

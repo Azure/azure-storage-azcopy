@@ -14,7 +14,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 10
+const DataSchemaVersion common.Version = 11
 
 const (
 	CustomHeaderMaxBytes = 256
@@ -284,6 +284,9 @@ type JobPartPlanTransfer struct {
 	DstLength int16
 	// ChunkCount represents the num of chunks a transfer is split into
 	//ChunkCount uint16	// TODO: Remove this, we need to determine it at runtime
+	// EntityType indicates whether this is a file or a folder
+	// We use a dedicated field for this because the alternative (of doing something fancy the names) was too complex and error-prone
+	EntityType common.EntityType
 	// ModifiedTime represents the last time at which source was modified before start of transfer stored as nanoseconds.
 	ModifiedTime int64
 	// SourceSize represents the actual size of the source on disk

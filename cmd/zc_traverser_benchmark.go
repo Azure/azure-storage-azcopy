@@ -65,6 +65,7 @@ func (t *benchmarkTraverser) traverse(preprocessor objectMorpher, processor obje
 			preprocessor,
 			name,
 			relativePath,
+			common.EEntityType.File(),
 			common.BenchmarkLmt,
 			t.bytesPerFile,
 			noContentProps,

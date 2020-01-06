@@ -73,6 +73,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 				preprocessor,
 				getObjectNameOnly(targetURLParts.DirectoryOrFilePath),
 				"",
+				common.EEntityType.File(),
 				fileProperties.LastModified(),
 				fileProperties.ContentLength(),
 				fileProperties,
@@ -102,38 +103,47 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
 
-			// Process the files returned in this segment.
+			// Process the files and folders we listed
+			fs := make([]azfileEntity, 0, len(lResp.FileItems)+len(lResp.DirectoryItems))
 			for _, fileInfo := range lResp.FileItems {
-				f := currentDirURL.NewFileURL(fileInfo.Name)
-
+				fs = append(fs, newAzfileFileEntity(currentDirURL, fileInfo))
+			}
+			for _, dirInfo := range lResp.DirectoryItems {
+				fs = append(fs, newAzfileFolderEntity(currentDirURL, dirInfo))
+			}
+			for _, f := range fs {
 				// compute the relative path of the file with respect to the target directory
-				fileURLParts := azfile.NewFileURLParts(f.URL())
+				fileURLParts := azfile.NewFileURLParts(f.url)
 				relativePath := strings.TrimPrefix(fileURLParts.DirectoryOrFilePath, targetURLParts.DirectoryOrFilePath)
 				relativePath = strings.TrimPrefix(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 				// We need to omit some properties if we don't get properties
 				lmt := time.Time{}
-				var props contentPropsProvider = noContentProps
+				var contentProps contentPropsProvider = noContentProps
 				var meta common.Metadata = nil
 
 				// Only get the properties if we're told to
 				if t.getProperties {
-					fullProperties, err := f.GetProperties(t.ctx)
+					var fullProperties azfilePropertiesAdapter
+					fullProperties, err = f.propertyGetter(t.ctx)
 					if err != nil {
 						return err
 					}
-
-					lmt = fullProperties.LastModified()
-					props = fullProperties
+					if f.entityType == common.EEntityType.File() {
+						fileProps := fullProperties.(azfile.FileGetPropertiesResponse)
+						contentProps = fileProps       // only files have content props. Folders don't.
+						lmt = fileProps.LastModified() // only files have LMTs that are worth preserving. Folder LMTs are not updated in Azure Files when the folder content's change, so folder LMTs are not worth preserving
+					}
 					meta = common.FromAzFileMetadataToCommonMetadata(fullProperties.NewMetadata())
 				}
 				storedObject := newStoredObject(
 					preprocessor,
-					getObjectNameOnly(fileInfo.Name),
+					getObjectNameOnly(f.name),
 					relativePath,
+					f.entityType,
 					lmt,
-					fileInfo.Properties.ContentLength,
-					props,
+					f.contentLength,
+					contentProps,
 					noBlobProps,
 					meta,
 					targetURLParts.ShareName,
@@ -166,4 +176,40 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter func()) (t *fileTraverser) {
 	t = &fileTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, getProperties: getProperties, incrementEnumerationCounter: incrementEnumerationCounter}
 	return
+}
+
+//  allows polymorphic treatment of folders and files
+type azfileEntity struct {
+	name           string
+	contentLength  int64
+	url            url.URL
+	propertyGetter func(ctx context.Context) (azfilePropertiesAdapter, error)
+	entityType     common.EntityType
+}
+
+func newAzfileFileEntity(containingDir *azfile.DirectoryURL, fileInfo azfile.FileItem) azfileEntity {
+	fu := containingDir.NewFileURL(fileInfo.Name)
+	return azfileEntity{
+		fileInfo.Name,
+		fileInfo.Properties.ContentLength,
+		fu.URL(),
+		func(ctx context.Context) (azfilePropertiesAdapter, error) { return fu.GetProperties(ctx) },
+		common.EEntityType.File(),
+	}
+}
+
+func newAzfileFolderEntity(containingDir *azfile.DirectoryURL, dirInfo azfile.DirectoryItem) azfileEntity {
+	du := containingDir.NewDirectoryURL(dirInfo.Name)
+	return azfileEntity{
+		dirInfo.Name,
+		0,
+		du.URL(),
+		func(ctx context.Context) (azfilePropertiesAdapter, error) { return du.GetProperties(ctx) },
+		common.EEntityType.Folder(),
+	}
+}
+
+// azureFilesMetadataAdapter allows polymorphic treatment of File and Folder properties, since both implement the method
+type azfilePropertiesAdapter interface {
+	NewMetadata() azfile.Metadata
 }

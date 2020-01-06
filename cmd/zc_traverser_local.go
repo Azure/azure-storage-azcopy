@@ -181,6 +181,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 				preprocessor,
 				singleFileInfo.Name(),
 				"",
+				common.EEntityType.File(),
 				singleFileInfo.ModTime(),
 				singleFileInfo.Size(),
 				noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
@@ -217,6 +218,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 						preprocessor,
 						fileInfo.Name(),
 						strings.ReplaceAll(relPath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
+						common.EEntityType.File(), // TODO: add code path for folders
 						fileInfo.ModTime(),
 						fileInfo.Size(),
 						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
@@ -285,6 +287,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 						preprocessor,
 						singleFile.Name(),
 						strings.ReplaceAll(relativePath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
+						common.EEntityType.File(), // TODO: add code path for folders
 						singleFile.ModTime(),
 						singleFile.Size(),
 						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files

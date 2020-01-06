@@ -92,6 +92,7 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 			preprocessor,
 			getObjectNameOnly(bfsURLParts.DirectoryOrFilePath),
 			"",
+			common.EEntityType.File(),
 			t.parseLMT(pathProperties.LastModified()),
 			pathProperties.ContentLength(),
 			md5OnlyAdapter{md5: pathProperties.ContentMD5()}, // not supplying full props, since we can't below, and it would be inconsistent to do so here
@@ -132,6 +133,7 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 					preprocessor,
 					getObjectNameOnly(*v.Name),
 					strings.TrimPrefix(*v.Name, searchPrefix),
+					common.EEntityType.File(), // TODO: add code path for Folders
 					v.LastModifiedTime(),
 					*v.ContentLength,
 					md5OnlyAdapter{md5: t.getContentMd5(t.ctx, dirUrl, v)},
