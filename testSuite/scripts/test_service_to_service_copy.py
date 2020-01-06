@@ -123,6 +123,21 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
                                                               util.test_s2s_dst_blob_account_url, "Blob",
                                                               self.bucket_name, srcOAuth=True)
 
+    def test_copy_files_from_blob_account_to_blob_account_src_oauth_ensure_refresh(self):
+        # Set the refresh environment variables to rather speedy rates
+        # By default, the key refreshes every 6.5 days and expires every 7. That provides a healthy amount of
+        #    buffer time for keys that are still in use. In my testing, with refreshes every minute, I (Adele)
+        #    didn't encounter any failures, but on the off-chance the dev machine takes too long,
+        #    I bumped up the expiry time to an hour.
+        os.environ["AZCOPY_UDAM_REFRESH_TIMER"] = "30"  # Refresh every 30 seconds
+        os.environ["AZCOPY_UDAM_EXPIRY_TIMER"] = "3600"  # The key expires every 60 minutes
+        self.util_test_copy_files_from_x_account_to_x_account(util.test_s2s_src_blob_account_url, "Blob",
+                                                              util.test_s2s_dst_blob_account_url, "Blob",
+                                                              self.bucket_name, srcOAuth=True)
+        # Clear the refresh environment variables
+        os.environ["AZCOPY_UDAM_REFRESH_TIMER"] = ""
+        os.environ["AZCOPY_UDAM_EXPIRY_TIMER"] = ""
+
     def test_copy_single_file_from_blob_to_blob_propertyandmetadata(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)

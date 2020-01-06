@@ -67,7 +67,9 @@ func (u *userDelegationAuthenticationManager) refreshUDKInternal() error {
 	defer u.credInfoLock.Unlock()
 
 	// Create a new start/expiry time.
-	u.startTime = time.Now()
+	// Because SAS tokens are based on UTC, we need to convert our time to UTC.
+	// Thankfully, Golang includes a .UTC() on time.Time.
+	u.startTime = time.Now().UTC()
 	u.expiryTime = u.startTime.Add(u.validityTime)
 	keyInfo := azblob.NewKeyInfo(u.startTime, u.expiryTime)
 

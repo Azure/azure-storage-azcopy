@@ -4,9 +4,8 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/golang/groupcache/lru"
 	chk "gopkg.in/check.v1"
-
-	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type udamTestSuite struct{}
@@ -15,10 +14,10 @@ var _ = chk.Suite(&udamTestSuite{})
 
 // MakeUDAMInstance uses fake values in order to create a mostly-dummy instance of UDAM that works, but doesn't produce working tokens.
 func (s *udamTestSuite) MakeUDAMInstance(dummyInstance bool) userDelegationAuthenticationManager {
-	cache := common.NewLFUCache(20)
+	cache := lru.New(10)
 	if dummyInstance {
 		return userDelegationAuthenticationManager{
-			sasCache: &cache,
+			sasCache: cache,
 		}
 	} else {
 		startTime := time.Now()
@@ -40,7 +39,7 @@ func (s *udamTestSuite) MakeUDAMInstance(dummyInstance bool) userDelegationAuthe
 			credential: udc,
 			startTime:  startTime,
 			expiryTime: expiryTime,
-			sasCache:   &cache,
+			sasCache:   cache,
 		}
 
 		return udam

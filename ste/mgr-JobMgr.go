@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"net/url"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -271,10 +272,32 @@ func (jm *jobMgr) setupUserDelegationAuthManager(src string) {
 		// finally, we have a service URL.
 		bsu := azblob.NewServiceURL(srcBlobURLParts.URL(), p)
 
-		udam, err := newUserDelegationAuthenticationManager(bsu,
-			time.Hour*24*7,                  // 7 days until expiry
-			(time.Hour*24*6)+(time.Hour*12), // 6.5 days until refresh
-		)
+		var expiryTime time.Duration
+		var refreshTime time.Duration
+
+		lcm := common.GetLifecycleMgr()
+
+		// Set up refresh speed
+		if secs, err := strconv.ParseInt(lcm.GetEnvironmentVariable(common.EEnvironmentVariable.UDAMRefreshSpeed()), 10, 64); err == nil {
+			// We're casting to duration for the sake of multiplying. They're both int64 under the hood.
+			refreshTime = time.Second * time.Duration(secs)
+		} else {
+			// 6.5 days default
+			lcm.Info("Failed to pares refresh time env var; defaulting to 6.5 days")
+			refreshTime = ((6 * 24) + 12) * time.Hour
+		}
+
+		// Set up expiry time
+		if secs, err := strconv.ParseInt(lcm.GetEnvironmentVariable(common.EEnvironmentVariable.UDAMExpiryTime()), 10, 64); err == nil {
+			// We're casting to duration for the sake of multiplying. They're both int64 under the hood.
+			expiryTime = time.Second * time.Duration(secs)
+		} else {
+			// 7 days default
+			lcm.Info("Failed to pares expiry time env var; defaulting to 7 days")
+			expiryTime = 7 * 24 * time.Hour
+		}
+
+		udam, err := newUserDelegationAuthenticationManager(bsu, expiryTime, refreshTime)
 
 		if err != nil {
 			common.GetLifecycleMgr().Info("Could not generate user delegation SAS tokens for the blob source. Empty tokens will be used instead. Transfers may still succeed if the source is public.")

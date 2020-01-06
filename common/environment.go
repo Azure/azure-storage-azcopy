@@ -22,6 +22,7 @@ package common
 
 import (
 	"runtime"
+	"strconv"
 )
 
 type EnvironmentVariable struct {
@@ -185,6 +186,32 @@ func (EnvironmentVariable) OAuthTokenInfo() EnvironmentVariable {
 // CredentialType is only used for internal integration.
 func (EnvironmentVariable) CredentialType() EnvironmentVariable {
 	return EnvironmentVariable{Name: "AZCOPY_CRED_TYPE"}
+}
+
+// UDAMRefreshSpeed is only used for internal integration.
+// It is when the user delegation key refreshes, not necessarily when it expires.
+// It is measured in seconds.
+func (EnvironmentVariable) UDAMRefreshSpeed() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name: "AZCOPY_UDAM_REFRESH_TIMER",
+		DefaultValue: strconv.Itoa(
+			((6 * 24) + 12) * // 6.5 days
+				(60 * 60), // Hours -> Minutes (*60), Minutes -> Seconds (*60)
+		),
+	}
+}
+
+// UDAMExpiryTime is only used for internal integration.
+// It is when the user delegation key expires, not necessarily it refreshes.
+// It is measured in seconds.
+func (EnvironmentVariable) UDAMExpiryTime() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name: "AZCOPY_UDAM_EXPIRY_TIMER",
+		DefaultValue: strconv.Itoa(
+			(7 * 24) * // 7 days
+				(60 * 60), // Hours -> Minutes (*60), Minutes -> Seconds (*60)
+		),
+	}
 }
 
 func (EnvironmentVariable) DefaultServiceApiVersion() EnvironmentVariable {
