@@ -23,6 +23,7 @@ jobs:
           GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
           GOARCH=amd64 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
           GOARCH=386 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
+          cp ThirdPartyNotice.txt $(Build.ArtifactStagingDirectory)
         displayName: 'Generate builds'
 
       - task: PublishBuildArtifacts@1
