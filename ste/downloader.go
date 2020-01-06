@@ -43,7 +43,15 @@ type downloader interface {
 	Epilogue()
 }
 
-type downloaderFactory func() downloader
+// downloaderPutsSDDL is a windows-triggered interface.
+// Code outside of windows-specific files shouldn't implement this ever.
+type downloaderPutsSDDL interface {
+	downloader
+
+	PutSDDL(sip ISDDLBearingSourceInfoProvider, txInfo TransferInfo) error
+}
+
+type downloaderFactory func(sip ISourceInfoProvider) downloader
 
 func createDownloadChunkFunc(jptm IJobPartTransferMgr, id common.ChunkID, body func()) chunkFunc {
 	// If uploading, we set the chunk status to done as soon as the chunkFunc completes.

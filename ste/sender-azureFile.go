@@ -83,6 +83,32 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		return nil, err
 	}
 
+	headers := props.SrcHTTPHeaders.ToAzFileHTTPHeaders()
+
+	// TODO: handle errors better fartparty
+	// Prepare to transfer SDDLs from the source.
+	if sddlSIP, ok := sip.(ISDDLBearingSourceInfoProvider); ok {
+		// If both sides are files...
+		if fSIP, ok := sddlSIP.(*fileSourceInfoProvider); ok {
+			srcURL, err := url.Parse(info.Source)
+			common.PanicIfErr(err)
+
+			srcURLParts := azfile.NewFileURLParts(*srcURL)
+			dstURLParts := azfile.NewFileURLParts(*destURL)
+
+			// and happen to be the same account and share, we can get away with using the same key and save a trip.
+			if srcURLParts.Host == dstURLParts.Host && srcURLParts.ShareName == dstURLParts.ShareName {
+				headers.PermissionKey = fSIP.cachedPermissionKey
+			}
+		}
+
+		// If we didn't do the workaround, then let's get the SDDL and put it later.
+		if headers.PermissionKey == "" {
+			headers.PermissionString, err = sddlSIP.GetSDDL()
+			common.PanicIfErr(err)
+		}
+	}
+
 	return &azureFileSenderBase{
 		jptm:            jptm,
 		fileURL:         azfile.NewFileURL(*destURL, p),
@@ -91,7 +117,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		pipeline:        p,
 		pacer:           pacer,
 		ctx:             ctx,
-		headersToApply:  props.SrcHTTPHeaders.ToAzFileHTTPHeaders(),
+		headersToApply:  headers,
 		metadataToApply: props.SrcMetadata.ToAzFileMetadata(),
 	}, nil
 }
@@ -125,6 +151,18 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		// sometimes, specifically when reading local files, we have more info
 		// about the file type at this time than what we had before
 		u.headersToApply.ContentType = state.GetInferredContentType(u.jptm)
+	}
+
+	// TODO: handle errors better fartparty
+	if len(u.headersToApply.PermissionString) > filesServiceMaxSDDLSize {
+		gURLParts := common.NewGenericResourceURLParts(u.fileURL.URL(), common.ELocation.File())
+
+		sipm := u.jptm.SecurityInfoPersistenceManager()
+
+		u.headersToApply.PermissionKey, err = sipm.PutSDDL(gURLParts.GetAccountName(), gURLParts.GetContainerName(), u.headersToApply.PermissionString, u.pipeline)
+		common.PanicIfErr(err)
+
+		u.headersToApply.PermissionString = ""
 	}
 
 	// Create Azure file with the source size
@@ -215,7 +253,8 @@ func (d AzureFileParentDirCreator) CreateParentDirToRoot(ctx context.Context, fi
 			// Try to create the directories
 			for i := 0; i < len(segments); i++ {
 				curDirURL = curDirURL.NewDirectoryURL(segments[i])
-				_, err := curDirURL.Create(ctx, azfile.Metadata{})
+				// TODO: Persist permissions on folders.
+				_, err := curDirURL.Create(ctx, azfile.Metadata{}, "", "")
 				if verifiedErr := d.verifyAndHandleCreateErrors(err); verifiedErr != nil {
 					return verifiedErr
 				}

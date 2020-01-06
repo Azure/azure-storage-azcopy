@@ -32,13 +32,22 @@ import (
 )
 
 // general-purpose "any remote persistence location" to local
-func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, df downloaderFactory) {
+func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, df downloaderFactory, sipf sourceInfoProviderFactory) {
+	info := jptm.Info()
+	sip, err := sipf(jptm)
+
+	if err != nil {
+		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
+	}
+
 	// step 1: create downloader instance for this transfer
 	// We are using a separate instance per transfer, in case some implementations need to hold per-transfer state
-	dl := df()
+	dl := df(sip)
 
 	// step 2: get the source, destination info for the transfer.
-	info := jptm.Info()
 	fileSize := int64(info.SourceSize)
 	downloadChunkSize := int64(info.BlockSize)
 
@@ -112,7 +121,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 		epilogueWithCleanupDownload(jptm, dl, nil, nil)
 	}
 	// block until we can safely use a file handle
-	err := jptm.WaitUntilLockDestination(jptm.Context())
+	err = jptm.WaitUntilLockDestination(jptm.Context())
 	if err != nil {
 		failFileCreation(err)
 		return

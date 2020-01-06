@@ -3,6 +3,7 @@ package common
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -42,6 +43,27 @@ func NewGenericResourceURLParts(resourceURL url.URL, location Location) GenericR
 	}
 
 	return g
+}
+
+func (g GenericResourceURLParts) GetAccountName() string {
+	switch g.location {
+	case ELocation.Blob():
+		acctName := g.blobURLParts.IPEndpointStyleInfo.AccountName
+		if acctName == "" {
+			acctName = g.blobURLParts.Host[:strings.Index(g.blobURLParts.Host, ".")]
+		}
+		return acctName
+	case ELocation.File():
+		acctName := g.fileURLParts.IPEndpointStyleInfo.AccountName
+		if acctName == "" {
+			acctName = g.fileURLParts.Host[:strings.Index(g.fileURLParts.Host, ".")]
+		}
+		return acctName
+	case ELocation.BlobFS():
+		return g.bfsURLParts.Host[:strings.Index(g.blobURLParts.Host, ".")]
+	}
+
+	return ""
 }
 
 func (g GenericResourceURLParts) GetContainerName() string {

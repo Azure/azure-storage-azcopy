@@ -83,6 +83,7 @@ type IJobPartTransferMgr interface {
 	GetOverwritePrompter() *overwritePrompter
 	common.ILogger
 	DeleteSnapshotsOption() common.DeleteSnapshotsOption
+	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 }
 
 type TransferInfo struct {
@@ -780,4 +781,8 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 
 func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {
 	return jptm.jobPartMgr.SourceProviderPipeline()
+}
+
+func (jptm *jobPartTransferMgr) SecurityInfoPersistenceManager() *securityInfoPersistenceManager {
+	return jptm.jobPartMgr.SecurityInfoPersistenceManager()
 }
