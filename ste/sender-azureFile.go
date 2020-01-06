@@ -215,7 +215,7 @@ func (d AzureFileParentDirCreator) CreateParentDirToRoot(ctx context.Context, fi
 			// Try to create the directories
 			for i := 0; i < len(segments); i++ {
 				curDirURL = curDirURL.NewDirectoryURL(segments[i])
-				_, err := curDirURL.Create(ctx, azfile.Metadata{})
+				_, err := curDirURL.Create(ctx, azfile.Metadata{}, "", "")
 				if verifiedErr := d.verifyAndHandleCreateErrors(err); verifiedErr != nil {
 					return verifiedErr
 				}
