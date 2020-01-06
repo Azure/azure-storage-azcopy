@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -74,19 +75,11 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 				"",
 				fileProperties.LastModified(),
 				fileProperties.ContentLength(),
-				fileProperties.ContentMD5(),
-				blobTypeNA,
+				fileProperties,
+				noBlobProps,
+				common.FromAzFileMetadataToCommonMetadata(fileProperties.NewMetadata()), // .NewMetadata() seems odd to call here, but it does actually obtain the metadata.
 				targetURLParts.ShareName,
 			)
-
-			storedObject.contentDisposition = fileProperties.ContentDisposition()
-			storedObject.cacheControl = fileProperties.CacheControl()
-			storedObject.contentLanguage = fileProperties.ContentLanguage()
-			storedObject.contentEncoding = fileProperties.ContentEncoding()
-			storedObject.contentType = fileProperties.ContentType()
-
-			// .NewMetadata() seems odd to call here, but it does actually obtain the metadata.
-			storedObject.Metadata = common.FromAzFileMetadataToCommonMetadata(fileProperties.NewMetadata())
 
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter()
@@ -119,37 +112,32 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 				relativePath = strings.TrimPrefix(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 				// We need to omit some properties if we don't get properties
-				// TODO: make it so we can (and must) call newStoredOBject here.
-				storedObject := storedObject{
-					name:          getObjectNameOnly(fileInfo.Name),
-					relativePath:  relativePath,
-					size:          fileInfo.Properties.ContentLength,
-					containerName: targetURLParts.ShareName,
-				}
-				if preprocessor != nil { // TODO ******** REMOVE THIS ONCE USE newStoredOBject, above *******
-					preprocessor(&storedObject)
-				}
+				lmt := time.Time{}
+				var props contentPropsProvider = noContentProps
+				var meta common.Metadata = nil
 
 				// Only get the properties if we're told to
 				if t.getProperties {
-					fileProperties, err := f.GetProperties(t.ctx)
+					fullProperties, err := f.GetProperties(t.ctx)
 					if err != nil {
 						return err
 					}
 
-					// Leaving this on because it's free IO wise, and file->* is in the works
-					storedObject.contentDisposition = fileProperties.ContentDisposition()
-					storedObject.cacheControl = fileProperties.CacheControl()
-					storedObject.contentLanguage = fileProperties.ContentLanguage()
-					storedObject.contentEncoding = fileProperties.ContentEncoding()
-					storedObject.contentType = fileProperties.ContentType()
-					storedObject.md5 = fileProperties.ContentMD5()
-
-					// .NewMetadata() seems odd to call here, but it does actually obtain the metadata.
-					storedObject.Metadata = common.FromAzFileMetadataToCommonMetadata(fileProperties.NewMetadata())
-
-					storedObject.lastModifiedTime = fileProperties.LastModified()
+					lmt = fullProperties.LastModified()
+					props = fullProperties
+					meta = common.FromAzFileMetadataToCommonMetadata(fullProperties.NewMetadata())
 				}
+				storedObject := newStoredObject(
+					preprocessor,
+					getObjectNameOnly(fileInfo.Name),
+					relativePath,
+					lmt,
+					fileInfo.Properties.ContentLength,
+					props,
+					noBlobProps,
+					meta,
+					targetURLParts.ShareName,
+				)
 
 				if t.incrementEnumerationCounter != nil {
 					t.incrementEnumerationCounter()
