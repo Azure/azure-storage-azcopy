@@ -78,7 +78,7 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorMultipleFiles(c *chk.C)
 	for _, numOfParts := range []int{1, 3} {
 		numOfTransfersPerPart := len(sampleObjects) / numOfParts
 		copyProcessor := newCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), numOfTransfersPerPart,
-			containerURL.String(), dstDirName, false, false, nil, nil, false)
+			containerURL.String(), dstDirName, false, false, nil, nil, false, false)
 
 		// go through the objects and make sure they are processed without error
 		for _, storedObject := range sampleObjects {
@@ -125,7 +125,7 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorSingleFile(c *chk.C) {
 	// set up the processor
 	blobURL := containerURL.NewBlockBlobURL(blobList[0]).String()
 	copyProcessor := newCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), 2,
-		blobURL, filepath.Join(dstDirName, dstFileName), false, false, nil, nil, false)
+		blobURL, filepath.Join(dstDirName, dstFileName), false, false, nil, nil, false, false)
 
 	// exercise the copy transfer processor
 	storedObject := newStoredObject(noPreProccessor, blobList[0], "", common.EEntityType.File(), time.Now(), 0, noContentProps, noBlobProps, noMetdata, "")

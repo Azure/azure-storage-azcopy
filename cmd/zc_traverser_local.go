@@ -37,7 +37,7 @@ type localTraverser struct {
 	followSymlinks bool
 
 	// a generic function to notify that a new stored object has been enumerated
-	incrementEnumerationCounter func()
+	incrementEnumerationCounter enumerationCounterFunc
 }
 
 func (t *localTraverser) isDirectory(bool) bool {
@@ -173,7 +173,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 	// if the path is a single file, then pass it through the filters and send to processor
 	if isSingleFile {
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter()
+			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
 
 		return processIfPassedFilters(filters,
@@ -210,7 +210,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 				}
 
 				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter()
+					t.incrementEnumerationCounter(common.EEntityType.File()) //TODO
 				}
 
 				return processIfPassedFilters(filters,
@@ -279,7 +279,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 				}
 
 				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter()
+					t.incrementEnumerationCounter(common.EEntityType.File()) // TODO
 				}
 
 				err := processIfPassedFilters(filters,
@@ -314,7 +314,7 @@ func consolidatePathSeparators(path string) string {
 	return strings.ReplaceAll(path, common.AZCOPY_PATH_SEPARATOR_STRING, pathSep)
 }
 
-func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter func()) *localTraverser {
+func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter enumerationCounterFunc) *localTraverser {
 	traverser := localTraverser{
 		fullPath:                    cleanLocalPath(fullPath),
 		recursive:                   recursive,

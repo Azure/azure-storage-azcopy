@@ -40,10 +40,10 @@ type blobFSTraverser struct {
 	recursive bool
 
 	// Generic function to indicate that a new stored object has been enumerated
-	incrementEnumerationCounter func()
+	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func newBlobFSTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive bool, incrementEnumerationCounter func()) (t *blobFSTraverser) {
+func newBlobFSTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive bool, incrementEnumerationCounter enumerationCounterFunc) (t *blobFSTraverser) {
 	t = &blobFSTraverser{
 		rawURL:                      rawURL,
 		p:                           p,
@@ -102,7 +102,7 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 		)
 
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter()
+			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
 
 		return processIfPassedFilters(filters, storedObject, processor)
@@ -143,7 +143,7 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 				)
 
 				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter()
+					t.incrementEnumerationCounter(common.EEntityType.File()) // TODO
 				}
 
 				err := processIfPassedFilters(filters, storedObject, processor)

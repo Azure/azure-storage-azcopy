@@ -42,7 +42,7 @@ type fileTraverser struct {
 	getProperties bool
 
 	// a generic function to notify that a new stored object has been enumerated
-	incrementEnumerationCounter func()
+	incrementEnumerationCounter enumerationCounterFunc
 }
 
 func (t *fileTraverser) isDirectory(bool) bool {
@@ -83,7 +83,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			)
 
 			if t.incrementEnumerationCounter != nil {
-				t.incrementEnumerationCounter()
+				t.incrementEnumerationCounter(common.EEntityType.File())
 			}
 
 			return processIfPassedFilters(filters, storedObject, processor)
@@ -150,7 +150,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 				)
 
 				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter()
+					t.incrementEnumerationCounter(f.entityType)
 				}
 
 				processErr := processIfPassedFilters(filters, storedObject, processor)
@@ -173,7 +173,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 	return
 }
 
-func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter func()) (t *fileTraverser) {
+func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (t *fileTraverser) {
 	t = &fileTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, getProperties: getProperties, incrementEnumerationCounter: incrementEnumerationCounter}
 	return
 }

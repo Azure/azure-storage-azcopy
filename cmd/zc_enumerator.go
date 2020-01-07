@@ -224,11 +224,13 @@ func recommendHttpsIfNecessary(url url.URL) {
 	}
 }
 
+type enumerationCounterFunc func(entityType common.EntityType)
+
 // source, location, recursive, and incrementEnumerationCounter are always required.
 // ctx, pipeline are only required for remote resources.
 // followSymlinks is only required for local resources (defaults to false)
 // errorOnDirWOutRecursive is used by copy.
-func initResourceTraverser(resource string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel chan string, recursive, getProperties bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
+func initResourceTraverser(resource string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel chan string, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (resourceTraverser, error) {
 	var output resourceTraverser
 	var p *pipeline.Pipeline
 

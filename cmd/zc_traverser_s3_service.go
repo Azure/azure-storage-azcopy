@@ -45,7 +45,7 @@ type s3ServiceTraverser struct {
 	s3Client *minio.Client
 
 	// a generic function to notify that a new stored object has been enumerated
-	incrementEnumerationCounter func()
+	incrementEnumerationCounter enumerationCounterFunc
 }
 
 func (t *s3ServiceTraverser) isDirectory(isSource bool) bool {
@@ -122,7 +122,7 @@ func (t *s3ServiceTraverser) traverse(preprocessor objectMorpher, processor obje
 	return nil
 }
 
-func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, getProperties bool, incrementEnumerationCounter func()) (t *s3ServiceTraverser, err error) {
+func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (t *s3ServiceTraverser, err error) {
 	t = &s3ServiceTraverser{ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter, getProperties: getProperties}
 
 	var s3URLParts common.S3URLParts

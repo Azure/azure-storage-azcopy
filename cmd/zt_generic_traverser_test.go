@@ -76,7 +76,7 @@ func (s *genericTraverserSuite) TestFilesGetProperties(c *chk.C) {
 
 	pipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 	// first test reading from the share itself
-	traverser := newFileTraverser(&shareURL, pipeline, ctx, false, true, func() {})
+	traverser := newFileTraverser(&shareURL, pipeline, ctx, false, true, func(common.EntityType) {})
 
 	// embed the check into the processor for ease of use
 	seenContentType := false
@@ -98,7 +98,7 @@ func (s *genericTraverserSuite) TestFilesGetProperties(c *chk.C) {
 	// then test reading from the filename exactly, because that's a different codepath.
 	seenContentType = false
 	fileURL := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, fileName)
-	traverser = newFileTraverser(&fileURL, pipeline, ctx, false, true, func() {})
+	traverser = newFileTraverser(&fileURL, pipeline, ctx, false, true, func(common.EntityType) {})
 
 	err = traverser.traverse(noPreProccessor, processor, nil)
 	c.Assert(err, chk.IsNil)
@@ -137,7 +137,7 @@ func (s *genericTraverserSuite) TestS3GetProperties(c *chk.C) {
 	// First test against the bucket
 	s3BucketURL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName)
 
-	traverser, err := newS3Traverser(&s3BucketURL, ctx, false, true, func() {})
+	traverser, err := newS3Traverser(&s3BucketURL, ctx, false, true, func(common.EntityType) {})
 	c.Assert(err, chk.IsNil)
 
 	// Embed the check into the processor for ease of use
@@ -160,7 +160,7 @@ func (s *genericTraverserSuite) TestS3GetProperties(c *chk.C) {
 	// Then, test against the object itself because that's a different codepath.
 	seenContentType = false
 	s3ObjectURL := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, objectName)
-	traverser, err = newS3Traverser(&s3ObjectURL, ctx, false, true, func() {})
+	traverser, err = newS3Traverser(&s3ObjectURL, ctx, false, true, func(common.EntityType) {})
 	c.Assert(err, chk.IsNil)
 
 	err = traverser.traverse(noPreProccessor, processor, nil)
@@ -352,7 +352,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 		scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
 
 		// construct a local traverser
-		localTraverser := newLocalTraverser(filepath.Join(dstDirName, dstFileName), false, false, func() {})
+		localTraverser := newLocalTraverser(filepath.Join(dstDirName, dstFileName), false, false, func(common.EntityType) {})
 
 		// invoke the local traversal with a dummy processor
 		localDummyProcessor := dummyProcessor{}
@@ -364,7 +364,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
-		blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, false, func() {})
+		blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, false, func(common.EntityType) {})
 
 		// invoke the blob traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
@@ -388,7 +388,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 			// construct an Azure file traverser
 			filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 			rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, fileList[0])
-			azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, false, false, func() {})
+			azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, false, false, func(common.EntityType) {})
 
 			// invoke the file traversal with a dummy processor
 			fileDummyProcessor := dummyProcessor{}
@@ -408,7 +408,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 		accountName, accountKey := getAccountAndKey()
 		bfsPipeline := azbfs.NewPipeline(azbfs.NewSharedKeyCredential(accountName, accountKey), azbfs.PipelineOptions{})
 		rawFileURL := filesystemURL.NewRootDirectoryURL().NewFileURL(bfsList[0]).URL()
-		bfsTraverser := newBlobFSTraverser(&rawFileURL, bfsPipeline, ctx, false, func() {})
+		bfsTraverser := newBlobFSTraverser(&rawFileURL, bfsPipeline, ctx, false, func(common.EntityType) {})
 
 		// Construct and run a dummy processor for bfs
 		bfsDummyProcessor := dummyProcessor{}
@@ -427,7 +427,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 			// construct a s3 traverser
 			s3DummyProcessor := dummyProcessor{}
 			url := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, storedObjectName)
-			S3Traverser, err := newS3Traverser(&url, ctx, false, false, func() {})
+			S3Traverser, err := newS3Traverser(&url, ctx, false, false, func(common.EntityType) {})
 			c.Assert(err, chk.IsNil)
 
 			err = S3Traverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
@@ -485,7 +485,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
-		localTraverser := newLocalTraverser(dstDirName, isRecursiveOn, false, func() {})
+		localTraverser := newLocalTraverser(dstDirName, isRecursiveOn, false, func(common.EntityType) {})
 
 		// invoke the local traversal with an indexer
 		// so that the results are indexed for easy validation
@@ -497,7 +497,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 		rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-		blobTraverser := newBlobTraverser(&rawContainerURLWithSAS, p, ctx, isRecursiveOn, func() {})
+		blobTraverser := newBlobTraverser(&rawContainerURLWithSAS, p, ctx, isRecursiveOn, func(common.EntityType) {})
 
 		// invoke the local traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
@@ -507,7 +507,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		// construct an Azure File traverser
 		filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 		rawFileURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
-		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, false, func() {})
+		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, false, func(common.EntityType) {})
 
 		// invoke the file traversal with a dummy processor
 		fileDummyProcessor := dummyProcessor{}
@@ -520,7 +520,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		rawFilesystemURL := filesystemURL.NewRootDirectoryURL().URL()
 
 		// construct and run a FS traverser
-		bfsTraverser := newBlobFSTraverser(&rawFilesystemURL, bfsPipeline, ctx, isRecursiveOn, func() {})
+		bfsTraverser := newBlobFSTraverser(&rawFilesystemURL, bfsPipeline, ctx, isRecursiveOn, func(common.EntityType) {})
 		bfsDummyProcessor := dummyProcessor{}
 		err = bfsTraverser.traverse(noPreProccessor, bfsDummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
@@ -529,7 +529,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		if s3Enabled {
 			// construct and run a S3 traverser
 			rawS3URL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName)
-			S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, false, func() {})
+			S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, false, func(common.EntityType) {})
 			c.Assert(err, chk.IsNil)
 			err = S3Traverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
 			c.Assert(err, chk.IsNil)
@@ -607,7 +607,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
-		localTraverser := newLocalTraverser(filepath.Join(dstDirName, virDirName), isRecursiveOn, false, func() {})
+		localTraverser := newLocalTraverser(filepath.Join(dstDirName, virDirName), isRecursiveOn, false, func(common.EntityType) {})
 
 		// invoke the local traversal with an indexer
 		// so that the results are indexed for easy validation
@@ -619,7 +619,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 		rawVirDirURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, virDirName)
-		blobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, func() {})
+		blobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, func(common.EntityType) {})
 
 		// invoke the local traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
@@ -629,7 +629,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		// construct an Azure File traverser
 		filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 		rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, virDirName)
-		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, false, func() {})
+		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, false, func(common.EntityType) {})
 
 		// invoke the file traversal with a dummy processor
 		fileDummyProcessor := dummyProcessor{}
@@ -642,7 +642,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		rawFilesystemURL := filesystemURL.NewRootDirectoryURL().NewDirectoryURL(virDirName).URL()
 
 		// construct and run a FS traverser
-		bfsTraverser := newBlobFSTraverser(&rawFilesystemURL, bfsPipeline, ctx, isRecursiveOn, func() {})
+		bfsTraverser := newBlobFSTraverser(&rawFilesystemURL, bfsPipeline, ctx, isRecursiveOn, func(common.EntityType) {})
 		bfsDummyProcessor := dummyProcessor{}
 		err = bfsTraverser.traverse(noPreProccessor, bfsDummyProcessor.process, nil)
 
@@ -651,7 +651,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 			// construct and run a S3 traverser
 			// directory object keys always end with / in S3
 			rawS3URL := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, virDirName+"/")
-			S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, false, func() {})
+			S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, false, func(common.EntityType) {})
 			c.Assert(err, chk.IsNil)
 			err = S3Traverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
 			c.Assert(err, chk.IsNil)
