@@ -149,7 +149,15 @@ type ListJobSummaryResponse struct {
 	// CompleteJobOrdered determines whether the Job has been completely ordered or not
 	CompleteJobOrdered bool
 	JobStatus          JobStatus
-	TotalTransfers     uint32
+
+	TotalTransfers uint32 // = FileTransfers + FolderPropertyTransfers. It also = TransfersCompleted + TransfersFailed + TransfersSkipped
+	// FileTransfers and FolderPropertyTransfers just break the total down into the two types.
+	// The name FolderPropertyTransfers is used to emphasise that is is only counting transferring the properties and existence of
+	// folders. A "folder property transfer" does not include any files that may be in the folder. Those are counted as
+	// FileTransfers.
+	FileTransfers           uint32
+	FolderPropertyTransfers uint32
+
 	TransfersCompleted uint32
 	TransfersFailed    uint32
 	TransfersSkipped   uint32

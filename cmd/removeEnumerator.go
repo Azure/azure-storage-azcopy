@@ -160,8 +160,9 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
 		glcm.Exit(func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
 				summary := common.ListJobSummaryResponse{
-					JobStatus:          common.EJobStatus.Completed(),
-					TotalTransfers:     1,
+					JobStatus:      common.EJobStatus.Completed(),
+					TotalTransfers: 1,
+					// It's not meaningful to set FileTransfers or FolderPropertyTransfers because even if its a folder, its not really folder _properties_ which is what the name is
 					TransfersCompleted: 1,
 					PercentComplete:    100,
 				}

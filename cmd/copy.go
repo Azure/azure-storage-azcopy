@@ -1123,7 +1123,9 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 
 Job %s summary
 Elapsed Time (Minutes): %v
-Total Number Of Transfers: %v
+Number of File Transfers: %v
+Number of Folder Property Transfers: %v
+Total Number of Transfers: %v
 Number of Transfers Completed: %v
 Number of Transfers Failed: %v
 Number of Transfers Skipped: %v
@@ -1132,6 +1134,8 @@ Final Job Status: %v%s%s
 `,
 					summary.JobID.String(),
 					ste.ToFixed(duration.Minutes(), 4),
+					summary.FileTransfers,
+					summary.FolderPropertyTransfers,
 					summary.TotalTransfers,
 					summary.TransfersCompleted,
 					summary.TransfersFailed,
