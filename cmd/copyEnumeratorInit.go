@@ -230,13 +230,18 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		srcRelPath := cca.makeEscapedRelativePath(true, isDestDir, object)
 		dstRelPath := cca.makeEscapedRelativePath(false, isDestDir, object)
 
-		transfer := object.ToNewCopyTransfer(
+		transfer, shouldSendToSte := object.ToNewCopyTransfer(
 			cca.autoDecompress && cca.fromTo.IsDownload(),
 			srcRelPath, dstRelPath,
 			cca.s2sPreserveAccessTier,
+			cca.fromTo.AreBothFolderAware(),
 		)
 
-		return addTransfer(&jobPartOrder, transfer, cca)
+		if shouldSendToSte {
+			return addTransfer(&jobPartOrder, transfer, cca)
+		} else {
+			return nil
+		}
 	}
 	finalizer := func() error {
 		return dispatchFinalPart(&jobPartOrder, cca)

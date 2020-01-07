@@ -91,7 +91,8 @@ func (s *storedObject) ToNewCopyTransfer(
 	steWillAutoDecompress bool,
 	Source string,
 	Destination string,
-	preserveBlobTier bool) common.CopyTransfer {
+	preserveBlobTier bool,
+	transferFolderProperties bool) (transfer common.CopyTransfer, shouldSendToSte bool) {
 
 	if steWillAutoDecompress {
 		Destination = stripCompressionExtension(Destination, s.contentEncoding)
@@ -118,7 +119,15 @@ func (s *storedObject) ToNewCopyTransfer(
 		t.BlobTier = s.blobAccessTier
 	}
 
-	return t
+	// We should only send folder-type entities to the STE if they are in fact wanted in this job
+	// We check this here because its a centralized place - so we can do it once, and also we can be sure
+	// that its always done.
+	// (The alternative would have been to pass a transferFolderProperties boolean into every folder-aware enumerator
+	// and have it modify its behaviour accordingly. But we already have quite a few bools that get passed into enumerators
+	// and so don't really want to complicate things with another).
+	shouldSend := s.entityType == common.EEntityType.File() || transferFolderProperties
+
+	return t, shouldSend
 }
 
 // stripCompressionExtension strips any file extension that corresponds to the

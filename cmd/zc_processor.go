@@ -43,12 +43,13 @@ type copyTransferProcessor struct {
 	reportFirstPartDispatched func(jobStarted bool)
 	reportFinalPartDispatched func()
 
-	preserveAccessTier bool
+	preserveAccessTier       bool
+	transferFolderProperties bool
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
 	source string, destination string, shouldEscapeSourceObjectName bool, shouldEscapeDestinationObjectName bool,
-	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool) *copyTransferProcessor {
+	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool, transferFolderProperties bool) *copyTransferProcessor {
 	return &copyTransferProcessor{
 		numOfTransfersPerPart:             numOfTransfersPerPart,
 		copyJobTemplate:                   copyJobTemplate,
@@ -59,10 +60,24 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 		reportFirstPartDispatched:         reportFirstPartDispatched,
 		reportFinalPartDispatched:         reportFinalPartDispatched,
 		preserveAccessTier:                preserveAccessTier,
+		transferFolderProperties:          transferFolderProperties,
 	}
 }
 
 func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) (err error) {
+
+	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(
+		false, // sync has no --decompress option
+		s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeSourceObjectName),
+		s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeDestinationObjectName),
+		s.preserveAccessTier,
+		s.transferFolderProperties,
+	)
+
+	if !shouldSendToSte {
+		return nil // skip this one
+	}
+
 	if len(s.copyJobTemplate.Transfers) == s.numOfTransfersPerPart {
 		resp := s.sendPartToSte()
 
@@ -78,12 +93,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
-	s.copyJobTemplate.Transfers = append(s.copyJobTemplate.Transfers, storedObject.ToNewCopyTransfer(
-		false, // sync has no --decompress option
-		s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeSourceObjectName),
-		s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeDestinationObjectName),
-		s.preserveAccessTier,
-	))
+	s.copyJobTemplate.Transfers = append(s.copyJobTemplate.Transfers, copyTransfer)
 
 	return nil
 }

@@ -436,6 +436,19 @@ func (l Location) IsLocal() bool {
 	}
 }
 
+// IsFolderAware returns true if the location has real folders (e.g. there's such a thing as an empty folder,
+// and folders may have properties). Folders are only virtual, and so not real, in Blob Storage.
+func (l Location) IsFolderAware() bool {
+	switch l {
+	case ELocation.BlobFS(), ELocation.File(), ELocation.Local():
+		return true
+	case ELocation.Blob(), ELocation.S3(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
+		return false
+	default:
+		panic("unexpected location, please specify if it is folder-aware")
+	}
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var EFromTo = FromTo(0)
@@ -520,6 +533,10 @@ func (ft *FromTo) IsS2S() bool {
 
 func (ft *FromTo) IsUpload() bool {
 	return ft.From().IsLocal() && ft.To().IsRemote()
+}
+
+func (ft *FromTo) AreBothFolderAware() bool {
+	return ft.From().IsFolderAware() && ft.To().IsFolderAware()
 }
 
 // TODO: deletes are not covered by the above Is* routines
