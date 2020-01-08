@@ -1,6 +1,13 @@
 
 # Change Log
 
+## Version 10.x.x
+
+### Breaking changes
+
+1. To accommodate interfacing with JavaScript programs (and other languages that have similar issue with number precision), 
+   all the numbers in the JSON output have been converted to strings (i.e. with quotes around them).
+
 ## Version 10.3.3
 
 ### New features
