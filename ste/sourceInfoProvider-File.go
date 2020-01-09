@@ -62,29 +62,49 @@ func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 			return nil, err
 		}
 
-		fileURL := azfile.NewFileURL(*presignedURL, p.jptm.SourceProviderPipeline())
-		properties, err := fileURL.GetProperties(p.ctx)
-		if err != nil {
-			return nil, err
-		}
+		switch p.EntityType() {
+		case common.EEntityType.File():
+			fileURL := azfile.NewFileURL(*presignedURL, p.jptm.SourceProviderPipeline())
+			properties, err := fileURL.GetProperties(p.ctx)
+			if err != nil {
+				return nil, err
+			}
 
-		srcProperties = &SrcProperties{
-			SrcHTTPHeaders: common.ResourceHTTPHeaders{
-				ContentType:        properties.ContentType(),
-				ContentEncoding:    properties.ContentEncoding(),
-				ContentDisposition: properties.ContentDisposition(),
-				ContentLanguage:    properties.ContentLanguage(),
-				CacheControl:       properties.CacheControl(),
-				ContentMD5:         properties.ContentMD5(),
-			},
-			SrcMetadata: common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata()),
+			srcProperties = &SrcProperties{
+				SrcHTTPHeaders: common.ResourceHTTPHeaders{
+					ContentType:        properties.ContentType(),
+					ContentEncoding:    properties.ContentEncoding(),
+					ContentDisposition: properties.ContentDisposition(),
+					ContentLanguage:    properties.ContentLanguage(),
+					CacheControl:       properties.CacheControl(),
+					ContentMD5:         properties.ContentMD5(),
+				},
+				SrcMetadata: common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata()),
+			}
+		case common.EEntityType.Folder():
+			dirURL := azfile.NewDirectoryURL(*presignedURL, p.jptm.SourceProviderPipeline())
+			properties, err := dirURL.GetProperties(p.ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			srcProperties = &SrcProperties{
+				SrcHTTPHeaders: common.ResourceHTTPHeaders{}, // no contentType etc for folders
+				SrcMetadata:    common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata()),
+			}
+		default:
+			panic("unsupported entity type")
 		}
 	}
 
 	return srcProperties, nil
 }
 
-func (p *fileSourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
+func (p *fileSourceInfoProvider) GetFileLastModifiedTime() (time.Time, error) {
+	if p.EntityType() != common.EEntityType.File() {
+		panic("unsupported. Cannot get modification time on non-file object") // nothing should ever call this for a non-file
+	}
+
 	presignedURL, err := p.PreSignedSourceURL()
 	if err != nil {
 		return time.Time{}, err

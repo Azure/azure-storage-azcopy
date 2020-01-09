@@ -68,7 +68,7 @@ func (u *azureFileUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 		// upload the byte range represented by this chunk
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newPacedRequestBody(u.ctx, reader, u.pacer)
-		_, err := u.fileURL.UploadRange(u.ctx, id.OffsetInFile(), body, nil)
+		_, err := u.fileURL().UploadRange(u.ctx, id.OffsetInFile(), body, nil)
 		if err != nil {
 			jptm.FailActiveUpload("Uploading range", err)
 			return
@@ -88,7 +88,7 @@ func (u *azureFileUploader) Epilogue() {
 
 			epilogueHeaders := u.headersToApply
 			epilogueHeaders.ContentMD5 = md5Hash
-			_, err := u.fileURL.SetHTTPHeaders(u.ctx, epilogueHeaders)
+			_, err := u.fileURL().SetHTTPHeaders(u.ctx, epilogueHeaders)
 			return err
 		})
 	}

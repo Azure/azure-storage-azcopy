@@ -29,11 +29,12 @@ import (
 
 // Source info provider for local files
 type localFileSourceInfoProvider struct {
-	jptm IJobPartTransferMgr
+	jptm         IJobPartTransferMgr
+	transferInfo TransferInfo
 }
 
 func newLocalSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
-	return &localFileSourceInfoProvider{jptm}, nil
+	return &localFileSourceInfoProvider{jptm, jptm.Info()}, nil
 }
 
 func (f localFileSourceInfoProvider) Properties() (*SrcProperties, error) {
@@ -63,10 +64,14 @@ func (f localFileSourceInfoProvider) OpenSourceFile() (common.CloseableReaderAt,
 	return os.Open(f.jptm.Info().Source)
 }
 
-func (f localFileSourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
+func (f localFileSourceInfoProvider) GetFileLastModifiedTime() (time.Time, error) {
 	i, err := os.Stat(f.jptm.Info().Source)
 	if err != nil {
 		return time.Time{}, err
 	}
 	return i.ModTime(), nil
+}
+
+func (f localFileSourceInfoProvider) EntityType() common.EntityType {
+	return f.transferInfo.EntityType
 }

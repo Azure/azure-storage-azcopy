@@ -121,6 +121,10 @@ func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.
 	}, nil
 }
 
+func (u *blobFSUploader) SendableEntityType() common.EntityType {
+	return common.EEntityType.File()
+}
+
 func (u *blobFSUploader) ChunkSize() uint32 {
 	return u.chunkSize
 }

@@ -33,10 +33,13 @@ type ISourceInfoProvider interface {
 	// Properties returns source's properties.
 	Properties() (*SrcProperties, error)
 
-	// GetLastModifiedTime return source's latest last modified time.
-	GetLastModifiedTime() (time.Time, error)
+	// GetLastModifiedTime return source's latest last modified time.  Not used when
+	// EntityType() == Folder
+	GetFileLastModifiedTime() (time.Time, error)
 
 	IsLocal() bool
+
+	EntityType() common.EntityType
 }
 
 type ILocalSourceInfoProvider interface {
@@ -112,6 +115,10 @@ func (p *defaultRemoteSourceInfoProvider) RawSource() string {
 	return p.transferInfo.Source
 }
 
-func (p *defaultRemoteSourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
+func (p *defaultRemoteSourceInfoProvider) GetFileLastModifiedTime() (time.Time, error) {
 	return p.jptm.LastModifiedTime(), nil
+}
+
+func (p *defaultRemoteSourceInfoProvider) EntityType() common.EntityType {
+	return p.transferInfo.EntityType
 }

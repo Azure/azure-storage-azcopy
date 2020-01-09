@@ -29,17 +29,29 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
-// ISenderBase is the abstraction contains common sender behaviors.
-/////////////////////////////////////////////////////////////////////////////////////////////////
 type ISenderBase interface {
+	// SendableEntityType says which kind of entity this instance of the sender is able to process.
+	// Sender implementations that support both IFileSender and IFolderSender in the same type
+	// should use this to indicate which entity type is being processed by _this instance_ of the type.
+	// TODO: review the existence of this method.  We may never need to call it.  In which case it would
+	//   just serve to define ISenderBase, so that IFileSender and IFolderSender have a common "ancestor" (otherwise
+	//   we'd end up returning interface{} from some factory methods, if we didn't have an ancestor)
+	SendableEntityType() common.EntityType
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// IFileSender is the abstraction that contains common sender behavior, for sending files/blobs.
+/////////////////////////////////////////////////////////////////////////////////////////////////
+type IFileSender interface {
+	ISenderBase
+
 	// ChunkSize returns the chunk size that should be used
 	ChunkSize() uint32
 
 	// NumChunks returns the number of chunks that will be required for the target file
 	NumChunks() uint32
 
-	// RemoteFileExists is called to see whether the file already exists at the remote location (so we know whether we'll be overwriting it)
+	// RemoteFileExists is called to see whether the file already exists at the remote location
 	RemoteFileExists() (bool, error)
 
 	// Prologue is called automatically before the first chunkFunc is generated.
@@ -64,13 +76,27 @@ type ISenderBase interface {
 	GetDestinationLength() (int64, error)
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// IFolderSender is the abstraction that contains common sender behavior, for sending folders
+/////////////////////////////////////////////////////////////////////////////////////////////////
+type IFolderSender interface {
+	ISenderBase
+	RemoteFolderExists() (bool, error)
+	EnsureFolderExists() error
+	SetFolderProperties() error
+}
+
 type senderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error)
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// For copying folder properties, many of the ISender of the methods needed to copy one file from URL to a remote location
+/////////////////////////////////////////////////////////////////////////////////////////////////
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 // Abstraction of the methods needed to copy one file from URL to a remote location
 /////////////////////////////////////////////////////////////////////////////////////////////////
 type s2sCopier interface {
-	ISenderBase
+	IFileSender
 
 	// GenerateCopyFunc returns a func() that will copy the specified portion of the source URL file to the remote location.
 	GenerateCopyFunc(chunkID common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc
@@ -82,7 +108,7 @@ type s2sCopierFactory func(jptm IJobPartTransferMgr, srcInfoProvider IRemoteSour
 // Abstraction of the methods needed to upload one file to a remote location
 /////////////////////////////////////////////////////////////////////////////////////////////////
 type uploader interface {
-	ISenderBase
+	IFileSender
 
 	// GenerateUploadFunc returns a func() that will upload the specified portion of the local file to the remote location
 	// Instead of taking local file as a parameter, it takes a helper that will read from the file. That keeps details of

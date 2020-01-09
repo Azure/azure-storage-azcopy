@@ -1,6 +1,14 @@
 
 # Change Log
 
+## Version 10.4
+
+### Breaking changes
+
+1. The TransferStatus value `SkippedFileAlreadyExists` has been renamed `SkippedEntityExists` and may now be used both 
+   for when files are skipped and for when the setting of folder properties is skipped.  This affects the input and 
+   output of `azcopy jobs show` and the status values shown in the JSON output format.
+
 ## Version 10.3.3
 
 ### New features

@@ -148,7 +148,7 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
 // TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder
 // TODO: Refactor return type to an object
 func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType, blobTier azblob.AccessTierType,
-	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption) {
+	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType) {
 	var err error
 	t := jpph.Transfer(transferIndex)
 
@@ -158,6 +158,8 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 	DestLengthValidation = jpph.DestLengthValidation
 
 	offset := t.SrcOffset + int64(t.SrcLength) + int64(t.DstLength)
+
+	entityType = t.EntityType
 
 	if t.SrcContentTypeLength != 0 {
 		h.ContentType = jpph.getString(offset, t.SrcContentTypeLength)

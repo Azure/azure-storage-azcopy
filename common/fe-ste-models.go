@@ -608,7 +608,7 @@ func (TransferStatus) Failed() TransferStatus { return TransferStatus(-1) }
 // Transfer failed due to failure while Setting blob tier.
 func (TransferStatus) BlobTierFailure() TransferStatus { return TransferStatus(-2) }
 
-func (TransferStatus) SkippedFileAlreadyExists() TransferStatus { return TransferStatus(-3) }
+func (TransferStatus) SkippedEntityAlreadyExists() TransferStatus { return TransferStatus(-3) }
 
 func (TransferStatus) SkippedBlobHasSnapshots() TransferStatus { return TransferStatus(-4) }
 
