@@ -220,31 +220,43 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		// Ensure destBlobTier is not block blob tier, i.e. not Hot, Cool and Archive.
 		// Note: When copying from page blob source, the inferred blob tier could be Hot.
 		var blockBlobTier common.BlockBlobTier
+		var tierSetPossibleFail = destAccountKind == "failget"              // If a user can't get the account tier, we still want to try to set the tier even if it won't work.
 		if err := blockBlobTier.Parse(string(s.destBlobTier)); err != nil { // i.e it's not block blob tier
 			// Set the latest service version from sdk as service version in the context.
 			ctxWithLatestServiceVersion := context.WithValue(s.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
 
 			// First, let's check if the intended tier is a premium page blob tier.
 			// These aren't available on non-premium storage accounts, but we can still copy the data.
+			destParts := azblob.NewBlobURLParts(s.destPageBlobURL.URL())
+			willGet := destParts.SAS.Encode() == ""
 
-			shouldSet := true
+			shouldSet := false
 			if premiumPageBlobTierRegex.MatchString(string(s.destBlobTier)) {
 				getDestAccountInfo.Do(func() {
 					infoResp, err := s.destPageBlobURL.GetAccountInfo(ctxWithLatestServiceVersion)
 					if err != nil {
 						// If GetAccountInfo fails, this transfer should fail because we lack at least one available permission
+						// UNLESS the user is using OAuth. In which case, the account owner can still get the info.
+						// If we fail to get the info under OAuth, don't fail the transfer.
 						// (https://docs.microsoft.com/en-us/rest/api/storageservices/get-account-information#authorization)
-						s.jptm.FailActiveSendWithStatus("Checking destination tier availability (Set PageBlob tier) ", err, common.ETransferStatus.TierAvailabilityCheckFailure())
+						if !willGet {
+							s.jptm.FailActiveSendWithStatus("Checking destination tier availability (Set PageBlob tier) ", err, common.ETransferStatus.TierAvailabilityCheckFailure())
+						} else {
+							tierSetPossibleFail = true
+							destAccountKind = "failget"
+						}
+					} else {
+						destAccountKind = string(infoResp.SkuName())
 					}
-
-					destAccountKind = string(infoResp.SkuName())
 				})
 
 				// Will catch destinations Premium_LRS and Premium_ZRS
-				shouldSet = strings.Contains(destAccountKind, "Premium")
+				shouldSet = strings.Contains(destAccountKind, "Premium") || tierSetPossibleFail
 
 				if !shouldSet {
 					s.jptm.LogTransferInfo(pipeline.LogWarning, s.jptm.Info().Source, s.jptm.Info().Destination, "Cannot set destination page blob's access tier ("+string(s.destBlobTier)+") because it is not available on the destination SKU. The transfer will still occur.")
+				} else if tierSetPossibleFail {
+					s.jptm.LogTransferInfo(pipeline.LogWarning, s.jptm.Info().Source, s.jptm.Info().Destination, "Could not detect if the destination supports the pending access tier ("+string(s.destBlobTier)+") because no SAS token was present, and the oauth user is not the account owner. The transfer will still occur, but tier setting may fail.")
 				}
 			}
 
@@ -259,7 +271,12 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 						})
 					}
 
-					s.jptm.FailActiveSendWithStatus("Setting PageBlob tier ", err, common.ETransferStatus.BlobTierFailure())
+					// If we don't think it was possible for the tier setting to fail
+					if !tierSetPossibleFail {
+						s.jptm.FailActiveSendWithStatus("Setting PageBlob tier ", err, common.ETransferStatus.BlobTierFailure())
+					} else {
+						s.jptm.LogTransferInfo(pipeline.LogWarning, s.jptm.Info().Source, s.jptm.Info().Destination, "Cannot set destination page blob to the pending access tier ("+string(s.destBlobTier)+"), because either the destination account or blob type does not support it. The transfer will still succeed.")
+					}
 					return
 				}
 			}
