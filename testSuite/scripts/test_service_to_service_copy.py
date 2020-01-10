@@ -1141,6 +1141,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             cpCmd.add_flags("s2s-preserve-properties", "false")
 
         result = cpCmd.execute_azcopy_copy_command()
+        self.assertTrue(result)
 
         # Downloading the copied file for validation
         validate_dir_name = "validate_copy_file_from_%s_bucket_to_%s_bucket_propertyandmetadata_%s" % (srcType, dstType, preserveProperties)
