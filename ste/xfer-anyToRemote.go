@@ -226,6 +226,7 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 				// As long as the prefetch error is nil, we'll attempt a prefetch.
 				// Otherwise, the chunk reader didn't need to be made.
 				// It's a waste of time to prefetch here, too, if we already know we can't upload.
+				// Furthermore, this prevents prefetchErr changing from under us.
 				if prefetchErr == nil {
 					// create reader and prefetch the data into it
 					chunkReader = createPopulatedChunkReader(jptm, sourceFileFactory, id, adjustedChunkSize, srcFile)
@@ -265,14 +266,9 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 					_ = chunkReader.Close()
 				}
 
-				// Copy the error so that we can avoid the prefetch err being overwritten under us.
-				failChunkFuncGen := func(err error) func() {
-					return func() { jptm.FailActiveSend("chunk data read", err) }
-				}
-
 				// Our jptm logic currently requires us to schedule every chunk, even if we know there's an error,
 				// so we schedule a func that will just fail with the given error
-				cf = createSendToRemoteChunkFunc(jptm, id, failChunkFuncGen(prefetchErr))
+				cf = createSendToRemoteChunkFunc(jptm, id, func() { jptm.FailActiveSend("chunk data read", prefetchErr) })
 			}
 		} else {
 			cf = s.(s2sCopier).GenerateCopyFunc(id, chunkIDCount, adjustedChunkSize, isWholeFile)
