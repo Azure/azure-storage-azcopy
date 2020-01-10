@@ -156,14 +156,15 @@ type blobPropsProvider interface {
 	BlobType() azblob.BlobType
 	AccessTier() azblob.AccessTierType
 }
+
 // a constructor is used so that in case the storedObject has to change, the callers would get a compilation error
 // and it forces all necessary properties to be always supplied and not forgotten
 func newStoredObject(morpher objectMorpher, name string, relativePath string, lmt time.Time, size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) storedObject {
 	obj := storedObject{
-		name:             name,
-		relativePath:     relativePath,
-		lastModifiedTime: lmt,
-		size:             size,
+		name:               name,
+		relativePath:       relativePath,
+		lastModifiedTime:   lmt,
+		size:               size,
 		cacheControl:       props.CacheControl(),
 		contentDisposition: props.ContentDisposition(),
 		contentEncoding:    props.ContentEncoding(),
@@ -173,7 +174,7 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, lm
 		blobType:           blobProps.BlobType(),
 		blobAccessTier:     blobProps.AccessTier(),
 		Metadata:           meta,
-		containerName:    containerName,
+		containerName:      containerName,
 	}
 
 	// in some cases we may be supplied with a func that will perform some modification on the basic object
@@ -190,9 +191,10 @@ func newForcedErrorStoredObject(err, name, relativePath, containerName string) s
 		name,
 		relativePath,
 		time.Now(),
-		0,               // A intended failure has no size.
-		nil,             // No MD5, either.
-		azblob.BlobNone, // and no blob type
+		0,                        // A intended failure has no size,
+		emptyPropertiesAdapter{}, // and no content properties
+		emptyPropertiesAdapter{}, // and no blob properties
+		common.Metadata{},
 		containerName,
 	)
 
