@@ -25,9 +25,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-	"time"
 
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/minio/minio-go"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -115,23 +113,11 @@ func (t *s3ServiceTraverser) traverse(preprocessor objectMorpher, processor obje
 				errStr = err.Error()
 			}
 
-			// Schedule a dummy transfer so the user knows something went wrong with enumeration.
-			dummyObj := newStoredObject(
-				nil, // Morphers are of no use here.
-				"",
-				" ", // will be printed out as "/container/ "
-				time.Now(),
-				0,
-				nil,
-				azblob.BlobNone,
-				v,
-			)
-
-			dummyObj.failureReason = fmt.Sprintf("failed to list objects in bucket %s: %s", v, errStr)
-			dummyObj.expectedFailure = true
-
-			// Bypass filters
-			err = processor(dummyObj)
+			// Schedule a dummy transfer when we cannot enumerate a bucket for some reason.
+			err = processor(newForcedErrorStoredObject(
+				fmt.Sprintf("failed to list objects in bucket %s: %s", v, errStr),
+				"", " ", // With only a space in the relative path, we fool makeEscapedRelativePath into making the tx location "/container/ " (appearing without the space in a user's eyes)
+				v))
 
 			// Don't ignore this error-- If we can't process the dummy object, we need to escalate anyway.
 			if err != nil {

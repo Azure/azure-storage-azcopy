@@ -184,6 +184,24 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, lm
 	return obj
 }
 
+func newForcedErrorStoredObject(err, name, relativePath, containerName string) storedObject {
+	so := newStoredObject(
+		nil, // No need for a morpher on a intended failure
+		name,
+		relativePath,
+		time.Now(),
+		0,               // A intended failure has no size.
+		nil,             // No MD5, either.
+		azblob.BlobNone, // and no blob type
+		containerName,
+	)
+
+	so.expectedFailure = true
+	so.failureReason = err
+
+	return so
+}
+
 // capable of traversing a structured resource like container or local directory
 // pass each storedObject to the given objectProcessor if it passes all the filters
 type resourceTraverser interface {

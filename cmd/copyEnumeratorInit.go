@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -117,10 +116,10 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		// Don't spam logs on failed containers
 		if _, ok := seenFailedContainers[dstContainerName]; !ok {
 			// Schedule a intentionally failing transfer at the container level with a empty dummy object
-			dummyObj := newStoredObject(nil, "", "", time.Now(), 0, nil, azblob.BlobNone, dstContainerName)
-
-			dummyObj.failureReason = failureReason
-			dummyObj.expectedFailure = true
+			dummyObj := newForcedErrorStoredObject(
+				failureReason,
+				"", "",
+				dstContainerName)
 
 			dummyTransfer := dummyObj.ToNewCopyTransfer(
 				cca.autoDecompress && cca.fromTo.IsDownload(),
