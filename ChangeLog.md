@@ -7,6 +7,11 @@
 
 1. Azcopy can now detect when setting a blob tier would be impossible. If azcopy cannot check the destination account type, a new job failure status will be set: `TierAvailabilityCheckFailure`
 
+### Breaking changes
+
+1. To accommodate interfacing with JavaScript programs (and other languages that have similar issue with number precision), 
+   all the numbers in the JSON output have been converted to strings (i.e. with quotes around them).
+
 ## Version 10.3.3
 
 ### New features
