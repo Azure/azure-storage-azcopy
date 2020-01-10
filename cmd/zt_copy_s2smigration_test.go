@@ -68,21 +68,22 @@ func (s *cmdIntegrationSuite) SetUpSuite(c *chk.C) {
 
 func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 	return rawCopyCmdArgs{
-		src:                            src,
-		dst:                            dst,
-		recursive:                      true,
-		logVerbosity:                   defaultLogVerbosityForCopy,
-		output:                         defaultOutputFormatForCopy,
-		blobType:                       defaultBlobTypeForCopy,
-		blockBlobTier:                  defaultBlockBlobTierForCopy,
-		pageBlobTier:                   defaultPageBlobTierForCopy,
-		md5ValidationOption:            common.DefaultHashValidationOption.String(),
-		s2sGetPropertiesInBackend:      defaultS2SGetPropertiesInBackend,
-		s2sPreserveAccessTier:          defaultS2SPreserveAccessTier,
-		s2sPreserveProperties:          defaultS2SPreserveProperties,
-		s2sSourceChangeValidation:      defaultS2SSourceChangeValidation,
-		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
-		forceWrite:                     common.EOverwriteOption.True().String(),
+		src:                                     src,
+		dst:                                     dst,
+		recursive:                               true,
+		logVerbosity:                            defaultLogVerbosityForCopy,
+		output:                                  defaultOutputFormatForCopy,
+		blobType:                                defaultBlobTypeForCopy,
+		blockBlobTier:                           defaultBlockBlobTierForCopy,
+		pageBlobTier:                            defaultPageBlobTierForCopy,
+		md5ValidationOption:                     common.DefaultHashValidationOption.String(),
+		s2sGetPropertiesInBackend:               defaultS2SGetPropertiesInBackend,
+		s2sPreserveAccessTier:                   defaultS2SPreserveAccessTier,
+		s2sPreserveProperties:                   defaultS2SPreserveProperties,
+		s2sSourceChangeValidation:               defaultS2SSourceChangeValidation,
+		s2sInvalidMetadataHandleOption:          defaultS2SInvalideMetadataHandleOption.String(),
+		forceWrite:                              common.EOverwriteOption.True().String(),
+		internalDisableContainerFailureTransfer: true,
 	}
 }
 

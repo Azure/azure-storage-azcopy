@@ -113,6 +113,10 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	seenFailedContainers := make(map[string]bool) // Create map of already failed container conversions so we don't log a million items just for one container.
 
 	createContainerFailureTransfer := func(dstContainerName, failureReason string) error {
+		if cca.internalDisableContainerFailureTransfer {
+			return nil // Don't create failure tx-- CI has requested to not do so.
+		}
+
 		// Don't spam logs on failed containers
 		if _, ok := seenFailedContainers[dstContainerName]; !ok {
 			// Schedule a intentionally failing transfer at the container level with a empty dummy object
