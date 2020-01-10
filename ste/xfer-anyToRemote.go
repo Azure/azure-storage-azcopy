@@ -36,6 +36,10 @@ import (
 // This sync.Once is present to ensure we output information about a S2S access tier preservation failure to stdout once
 var s2sAccessTierFailureLogStdout sync.Once
 
+// This sync.Once and string pair ensures that we only get a user's destination account kind once when handling set-tier
+var destAccountKind string
+var getDestAccountInfo sync.Once
+
 // anyToRemote handles all kinds of sender operations - both uploads from local files, and S2S copies
 func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 

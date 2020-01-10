@@ -148,20 +148,25 @@ func (s *blockBlobSenderBase) Epilogue() {
 	// GPv2 or Blob Storage is supported, GPv1 is not supported, can only set to blob without snapshot in active status.
 	// https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
 	if jptm.IsLive() && s.destBlobTier != azblob.AccessTierNone {
-		// Set the latest service version from sdk as service version in the context.
-		ctxWithLatestServiceVersion := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-		_, err := s.destBlockBlobURL.SetTier(ctxWithLatestServiceVersion, s.destBlobTier, azblob.LeaseAccessConditions{})
-		if err != nil {
-			if s.jptm.Info().S2SSrcBlobTier != azblob.AccessTierNone {
-				s.jptm.LogTransferInfo(pipeline.LogError, s.jptm.Info().Source, s.jptm.Info().Destination, "Failed to replicate blob tier at destination. Try transferring with the flag --s2s-preserve-access-tier=false")
-				s2sAccessTierFailureLogStdout.Do(func() {
-					glcm := common.GetLifecycleMgr()
-					glcm.Error("One or more blobs have failed blob tier replication at the destination. Try transferring with the flag --s2s-preserve-access-tier=false")
-				})
-			}
+		// Don't set the destination access tier if it's a premium page blob tier.
+		if !premiumPageBlobTierRegex.MatchString(string(s.destBlobTier)) {
+			// Set the latest service version from sdk as service version in the context.
+			ctxWithLatestServiceVersion := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+			_, err := s.destBlockBlobURL.SetTier(ctxWithLatestServiceVersion, s.destBlobTier, azblob.LeaseAccessConditions{})
+			if err != nil {
+				if s.jptm.Info().S2SSrcBlobTier != azblob.AccessTierNone {
+					s.jptm.LogTransferInfo(pipeline.LogError, s.jptm.Info().Source, s.jptm.Info().Destination, "Failed to replicate blob tier at destination. Try transferring with the flag --s2s-preserve-access-tier=false")
+					s2sAccessTierFailureLogStdout.Do(func() {
+						glcm := common.GetLifecycleMgr()
+						glcm.Error("One or more blobs have failed blob tier replication at the destination. Try transferring with the flag --s2s-preserve-access-tier=false")
+					})
+				}
 
-			jptm.FailActiveSendWithStatus("Setting BlockBlob tier", err, common.ETransferStatus.BlobTierFailure())
-			return
+				jptm.FailActiveSendWithStatus("Setting BlockBlob tier", err, common.ETransferStatus.BlobTierFailure())
+				return
+			}
+		} else {
+			s.jptm.LogTransferInfo(pipeline.LogWarning, s.jptm.Info().Source, s.jptm.Info().Destination, "Cannot set destination page blob's access tier ("+string(s.destBlobTier)+") because it is not available on the destination blob type. The transfer will still occur.")
 		}
 	}
 }

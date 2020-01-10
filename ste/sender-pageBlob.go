@@ -229,15 +229,19 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 
 			shouldSet := true
 			if premiumPageBlobTierRegex.MatchString(string(s.destBlobTier)) {
-				infoResp, err := s.destPageBlobURL.GetAccountInfo(ctxWithLatestServiceVersion)
-				if err != nil {
-					// If GetAccountInfo fails, this transfer should fail because we lack at least one available permission
-					// (https://docs.microsoft.com/en-us/rest/api/storageservices/get-account-information#authorization)
-					s.jptm.FailActiveSendWithStatus("Checking destination tier availability (Set PageBlob tier) ", err, common.ETransferStatus.TierAvailabilityCheckFailure())
-				}
+				getDestAccountInfo.Do(func() {
+					infoResp, err := s.destPageBlobURL.GetAccountInfo(ctxWithLatestServiceVersion)
+					if err != nil {
+						// If GetAccountInfo fails, this transfer should fail because we lack at least one available permission
+						// (https://docs.microsoft.com/en-us/rest/api/storageservices/get-account-information#authorization)
+						s.jptm.FailActiveSendWithStatus("Checking destination tier availability (Set PageBlob tier) ", err, common.ETransferStatus.TierAvailabilityCheckFailure())
+					}
+
+					destAccountKind = string(infoResp.SkuName())
+				})
 
 				// Will catch destinations Premium_LRS and Premium_ZRS
-				shouldSet = strings.Contains(string(infoResp.SkuName()), "Premium")
+				shouldSet = strings.Contains(destAccountKind, "Premium")
 
 				if !shouldSet {
 					s.jptm.LogTransferInfo(pipeline.LogWarning, s.jptm.Info().Source, s.jptm.Info().Destination, "Cannot set destination page blob's access tier ("+string(s.destBlobTier)+") because it is not available on the destination SKU. The transfer will still occur.")

@@ -1,6 +1,12 @@
 
 # Change Log
 
+## Version 10.x.x
+
+### New features
+
+1. Azcopy can now detect when setting a blob tier would be impossible. If azcopy cannot check the destination account type, a new job failure status will be set: `TierAvailabilityCheckFailure`
+
 ## Version 10.3.3
 
 ### New features
