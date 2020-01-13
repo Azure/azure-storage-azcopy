@@ -241,12 +241,12 @@ Log in by using the user-assigned identity of a VM and a Resource ID of the serv
 Log in as a service principal by using a client secret:
 Set the environment variable AZCOPY_SPA_CLIENT_SECRET to the client secret for secret based service principal auth.
 
-   - azcopy login --service-principal
+   - azcopy login --service-principal --application-id <your service principal's application ID>
 
 Log in as a service principal by using a certificate and it's password:
 Set the environment variable AZCOPY_SPA_CERT_PASSWORD to the certificate's password for cert based service principal auth
 
-   - azcopy login --service-principal --certificate-path /path/to/my/cert
+   - azcopy login --service-principal --certificate-path /path/to/my/cert --application-id <your service principal's application ID>
 
    Please treat /path/to/my/cert as a path to a PEM or PKCS12 file-- AzCopy does not reach into the system cert store to obtain your certificate.
    --certificate-path is mandatory when doing cert-based service principal auth.
