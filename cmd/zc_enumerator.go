@@ -191,10 +191,10 @@ func newForcedErrorStoredObject(err, name, relativePath, containerName string) s
 		name,
 		relativePath,
 		time.Now(),
-		0,                        // A intended failure has no size,
-		emptyPropertiesAdapter{}, // and no content properties
-		emptyPropertiesAdapter{}, // and no blob properties
-		common.Metadata{},
+		0,              // A intended failure has no size,
+		noContentProps, // and no content properties
+		noBlobProps,    // and no blob properties
+		noMetdata,
 		containerName,
 	)
 

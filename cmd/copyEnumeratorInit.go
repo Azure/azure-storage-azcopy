@@ -9,11 +9,13 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
 func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) (*copyEnumerator, error) {
@@ -110,8 +112,12 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// Giving it nothing to work with as new names will be added as we traverse.
 	var containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
 	existingContainers := make(map[string]bool)
+	var logDstContainerCreateFailureOnce sync.Once
 	seenFailedContainers := make(map[string]bool) // Create map of already failed container conversions so we don't log a million items just for one container.
 
+	// This is used when a container name simply cannot be translated.
+	// It throws a expected failure transfer to cause a job failure status.
+	// This is because there were one or more files under it that just couldn't be transferred.
 	createContainerFailureTransfer := func(dstContainerName, failureReason string) error {
 		if cca.internalDisableContainerFailureTransfer {
 			return nil // Don't create failure tx-- CI has requested to not do so.
@@ -138,6 +144,19 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil
 	}
 
+	// This is used in the event of destination container creation failure.
+	// It provides a lesser level of logging, because we don't know whether the container already existed, or something else of that nature.
+	// Therefore, the transfer could still succeed.
+	logContainerCreationFailure := func(containerName string, err error) {
+		logDstContainerCreateFailureOnce.Do(func() {
+			glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
+		})
+
+		if ste.JobsAdmin != nil {
+			ste.JobsAdmin.LogToJobLog(fmt.Sprintf(`Failed to initialize the destination container %s. Your transfers to this container may still succeed if the container already exists. => (%s)`, containerName, err))
+		}
+	}
+
 	dstContainerName := ""
 	// Extract the existing destination container name
 	if cca.fromTo.To().IsRemote() {
@@ -154,8 +173,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 			if err != nil {
 				// No need to worry about an error from here.
-				_ = createContainerFailureTransfer(dstContainerName,
-					fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err))
+				logContainerCreationFailure(dstContainerName, err)
 			}
 		} else if cca.fromTo.From().IsRemote() { // if the destination has implicit container names
 			if acctTraverser, ok := traverser.(accountTraverser); ok && dstLevel == ELocationLevel.Service() {
@@ -180,8 +198,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					err = cca.createDstContainer(bucketName, dst, ctx, existingContainers)
 
 					if err != nil {
-						_ = createContainerFailureTransfer(bucketName,
-							fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", bucketName, err))
+						logContainerCreationFailure(bucketName, err)
 					}
 				}
 			} else {
@@ -199,8 +216,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					err = cca.createDstContainer(resName, dst, ctx, existingContainers)
 
 					if err != nil {
-						_ = createContainerFailureTransfer(resName,
-							fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", cName, err))
+						logContainerCreationFailure(cName, err)
 					}
 				}
 			}
