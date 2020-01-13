@@ -148,10 +148,19 @@ func (s *blockBlobSenderBase) Epilogue() {
 	// GPv2 or Blob Storage is supported, GPv1 is not supported, can only set to blob without snapshot in active status.
 	// https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
 	if jptm.IsLive() && s.destBlobTier != azblob.AccessTierNone {
-		// Don't set the destination access tier if it's a premium page blob tier.
-		if !premiumPageBlobTierRegex.MatchString(string(s.destBlobTier)) {
-			// Set the latest service version from sdk as service version in the context.
-			ctxWithLatestServiceVersion := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+		// Set the latest service version from sdk as service version in the context.
+		ctxWithLatestServiceVersion := context.WithValue(s.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+
+		// Let's check if we can confirm we'll be able to check the destination blob's account info.
+		// A SAS token, even with write-only permissions is enough. OR, OAuth with the account owner.
+		// We can't guess that last information, so we'll take a gamble and try to get account info anyway.
+		destParts := azblob.NewBlobURLParts(s.destBlockBlobURL.URL())
+		mustGet := destParts.SAS.Encode() != ""
+
+		prepareDestAccountInfo(s.destBlockBlobURL.BlobURL, s.jptm, ctxWithLatestServiceVersion, mustGet)
+		tierAvailable := BlobTierAllowed(s.destBlobTier)
+
+		if tierAvailable {
 			_, err := s.destBlockBlobURL.SetTier(ctxWithLatestServiceVersion, s.destBlobTier, azblob.LeaseAccessConditions{})
 			if err != nil {
 				if s.jptm.Info().S2SSrcBlobTier != azblob.AccessTierNone {
@@ -162,11 +171,16 @@ func (s *blockBlobSenderBase) Epilogue() {
 					})
 				}
 
-				jptm.FailActiveSendWithStatus("Setting BlockBlob tier", err, common.ETransferStatus.BlobTierFailure())
+				// If we know the destination tier is possible, something's wrong and we should error out.
+				if !tierSetPossibleFail {
+					jptm.FailActiveSendWithStatus("Setting BlockBlob tier", err, common.ETransferStatus.BlobTierFailure())
+				} else {
+					s.jptm.LogTransferInfo(pipeline.LogWarning, s.jptm.Info().Source, s.jptm.Info().Destination, "Cannot set destination block blob to the pending access tier ("+string(s.destBlobTier)+"), because either the destination account or blob type does not support it. The transfer will still succeed.")
+				}
 				return
 			}
 		} else {
-			s.jptm.LogTransferInfo(pipeline.LogWarning, s.jptm.Info().Source, s.jptm.Info().Destination, "Cannot set destination page blob's access tier ("+string(s.destBlobTier)+") because it is not available on the destination blob type. The transfer will still occur.")
+			s.jptm.LogTransferInfo(pipeline.LogWarning, s.jptm.Info().Source, s.jptm.Info().Destination, "The intended tier ("+string(s.destBlobTier)+") isn't available on the destination blob type or storage account, so it was left as the default.")
 		}
 	}
 }

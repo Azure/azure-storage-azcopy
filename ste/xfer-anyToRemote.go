@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"context"
 	"crypto/md5"
 	"errors"
 	"fmt"
@@ -30,6 +31,8 @@ import (
 	"sync"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/azblob"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
@@ -37,8 +40,68 @@ import (
 var s2sAccessTierFailureLogStdout sync.Once
 
 // This sync.Once and string pair ensures that we only get a user's destination account kind once when handling set-tier
+// Premium block blob doesn't support tiering, and page blobs only support P1-80.
+// There are also size restrictions on tiering.
+var destAccountSKU string
 var destAccountKind string
+var tierSetPossibleFail bool
 var getDestAccountInfo sync.Once
+
+func prepareDestAccountInfo(bURL azblob.BlobURL, jptm IJobPartTransferMgr, ctx context.Context, mustGet bool) {
+	getDestAccountInfo.Do(func() {
+		infoResp, err := bURL.GetAccountInfo(ctx)
+		if err != nil {
+			// If GetAccountInfo fails, this transfer should fail because we lack at least one available permission
+			// UNLESS the user is using OAuth. In which case, the account owner can still get the info.
+			// If we fail to get the info under OAuth, don't fail the transfer.
+			// (https://docs.microsoft.com/en-us/rest/api/storageservices/get-account-information#authorization)
+			if mustGet {
+				jptm.FailActiveSendWithStatus("Checking destination tier availability (Set PageBlob tier) ", err, common.ETransferStatus.TierAvailabilityCheckFailure())
+			} else {
+				tierSetPossibleFail = true
+				destAccountSKU = "failget"
+				destAccountKind = "failget"
+			}
+		} else {
+			destAccountSKU = string(infoResp.SkuName())
+			destAccountKind = string(infoResp.AccountKind())
+		}
+	})
+}
+
+// TODO: Infer availability based upon blob size as well, for premium page blobs.
+func BlobTierAllowed(destTier azblob.AccessTierType) bool {
+	// If we failed to get the account info, just return true.
+	// This is because we can't infer whether it's possible or not, and the setTier operation could possibly succeed (or fail)
+	if tierSetPossibleFail {
+		return true
+	}
+
+	// If the account is premium, Storage/StorageV2 only supports page blobs (Tiers P1-80). Block blob does not support tiering whatsoever.
+	if strings.Contains(destAccountSKU, "Premium") {
+		// storage V1/V2
+		if destAccountKind == "StorageV2" {
+			// P1-80 possible.
+			return premiumPageBlobTierRegex.MatchString(string(destTier))
+		}
+
+		if destAccountKind == "Storage" {
+			// No tier setting is allowed.
+			return false
+		}
+
+		if strings.Contains(destAccountKind, "Block") {
+			// No tier setting is allowed.
+			return false
+		}
+
+		// Any other storage type would have to be file storage, and we can't set tier there.
+		panic("Cannot set tier on azure files.")
+	} else {
+		// Standard storage account. If it's Hot, Cool, or Archive, we're A-OK.
+		return destTier == azblob.AccessTierArchive || destTier == azblob.AccessTierCool || destTier == azblob.AccessTierHot
+	}
+}
 
 // anyToRemote handles all kinds of sender operations - both uploads from local files, and S2S copies
 func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
