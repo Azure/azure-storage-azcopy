@@ -1137,7 +1137,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         cpCmd = util.Command("copy").add_arguments(srcBucketURL).add_arguments(dstBucketURL). \
             add_flags("log-level", "info").add_flags("recursive", "true")
 
-        if preserveProperties == False:
+        if not preserveProperties:
             cpCmd.add_flags("s2s-preserve-properties", "false")
 
         result = cpCmd.execute_azcopy_copy_command()
@@ -1151,12 +1151,14 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         if srcType == "S3":
             result = util.Command("copy").add_arguments(dstFileURL).add_arguments(local_validate_dest). \
                 add_flags("log-level", "info")  # Temporarily set result to Command for the sake of modifying the md5 check
-            result.flags["check-md5"] = "NoCheck"
+            if not preserveProperties:
+                result.flags["check-md5"] = "NoCheck"
             result = result.execute_azcopy_copy_command()  # Wrangle result to a bool for checking
         else:
             result = util.Command("copy").add_arguments(srcFileURL).add_arguments(local_validate_dest). \
                 add_flags("log-level", "info")  # Temporarily set result to Command for the sake of modifying the md5 check
-            result.flags["check-md5"] = "NoCheck"
+            if not preserveProperties:
+                result.flags["check-md5"] = "NoCheck"
             result = result.execute_azcopy_copy_command()  # Wrangle result to a bool for checking
         self.assertTrue(result)
 
