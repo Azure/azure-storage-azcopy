@@ -1151,12 +1151,12 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         if srcType == "S3":
             result = util.Command("copy").add_arguments(dstFileURL).add_arguments(local_validate_dest). \
                 add_flags("log-level", "info")  # Temporarily set result to Command for the sake of modifying the md5 check
-            result.flags["check-md5"] = ""
+            result.flags["check-md5"] = "NoCheck"
             result = result.execute_azcopy_copy_command()  # Wrangle result to a bool for checking
         else:
             result = util.Command("copy").add_arguments(srcFileURL).add_arguments(local_validate_dest). \
                 add_flags("log-level", "info")  # Temporarily set result to Command for the sake of modifying the md5 check
-            result.flags["check-md5"] = ""
+            result.flags["check-md5"] = "NoCheck"
             result = result.execute_azcopy_copy_command()  # Wrangle result to a bool for checking
         self.assertTrue(result)
 
