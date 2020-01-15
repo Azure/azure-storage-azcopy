@@ -223,16 +223,22 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 			if jptm.WasCanceled() {
 				prefetchErr = jobCancelledLocalPrefetchErr
 			} else {
-				// create reader and prefetch the data into it
-				chunkReader = createPopulatedChunkReader(jptm, sourceFileFactory, id, adjustedChunkSize, srcFile)
-
-				// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
-				prefetchErr = chunkReader.BlockingPrefetch(srcFile, false)
+				// As long as the prefetch error is nil, we'll attempt a prefetch.
+				// Otherwise, the chunk reader didn't need to be made.
+				// It's a waste of time to prefetch here, too, if we already know we can't upload.
+				// Furthermore, this prevents prefetchErr changing from under us.
 				if prefetchErr == nil {
-					chunkReader.WriteBufferTo(md5Hasher)
-					ps = chunkReader.GetPrologueState()
-				} else {
-					safeToUseHash = false // because we've missed a chunk
+					// create reader and prefetch the data into it
+					chunkReader = createPopulatedChunkReader(jptm, sourceFileFactory, id, adjustedChunkSize, srcFile)
+
+					// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
+					prefetchErr = chunkReader.BlockingPrefetch(srcFile, false)
+					if prefetchErr == nil {
+						chunkReader.WriteBufferTo(md5Hasher)
+						ps = chunkReader.GetPrologueState()
+					} else {
+						safeToUseHash = false // because we've missed a chunk
+					}
 				}
 			}
 		}
@@ -259,6 +265,7 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 				if chunkReader != nil {
 					_ = chunkReader.Close()
 				}
+
 				// Our jptm logic currently requires us to schedule every chunk, even if we know there's an error,
 				// so we schedule a func that will just fail with the given error
 				cf = createSendToRemoteChunkFunc(jptm, id, func() { jptm.FailActiveSend("chunk data read", prefetchErr) })
