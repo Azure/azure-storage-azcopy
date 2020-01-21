@@ -107,7 +107,7 @@ func (s *blockBlobSenderBase) NumChunks() uint32 {
 	return s.numChunks
 }
 
-func (s *blockBlobSenderBase) RemoteFileExists() (bool, error) {
+func (s *blockBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
 	return remoteObjectExists(s.destBlockBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}))
 }
 
