@@ -40,10 +40,7 @@ type blobDownloader struct {
 	pageRangeOptimizer *pageRangeOptimizer
 }
 
-func newBlobDownloader(sip ISourceInfoProvider) downloader {
-	// noop the sip
-	// blobs don't have any info we need a sip for.
-
+func newBlobDownloader() downloader {
 	return &blobDownloader{
 		filePacer: newNullAutoPacer(), // defer creation of real one, if needed, to Prologue
 	}

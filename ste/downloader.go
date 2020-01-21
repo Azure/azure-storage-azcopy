@@ -51,7 +51,7 @@ type downloaderPutsSDDL interface {
 	PutSDDL(sip ISDDLBearingSourceInfoProvider, txInfo TransferInfo) error
 }
 
-type downloaderFactory func(sip ISourceInfoProvider) downloader
+type downloaderFactory func() downloader
 
 func createDownloadChunkFunc(jptm IJobPartTransferMgr, id common.ChunkID, body func()) chunkFunc {
 	// If uploading, we set the chunk status to done as soon as the chunkFunc completes.

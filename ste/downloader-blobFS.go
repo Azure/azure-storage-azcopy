@@ -32,7 +32,7 @@ import (
 
 type blobFSDownloader struct{}
 
-func newBlobFSDownloader(sip ISourceInfoProvider) downloader {
+func newBlobFSDownloader() downloader {
 	return &blobFSDownloader{}
 }
 

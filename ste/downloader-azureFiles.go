@@ -31,17 +31,21 @@ import (
 )
 
 type azureFilesDownloader struct {
-	txInfo     TransferInfo
-	sip        ISourceInfoProvider
-	sddlString string
+	txInfo TransferInfo
+	sip    ISourceInfoProvider
 }
 
-func newAzureFilesDownloader(sip ISourceInfoProvider) downloader {
-	return &azureFilesDownloader{sip: sip}
+func newAzureFilesDownloader() downloader {
+	return &azureFilesDownloader{}
 }
 
 func (bd *azureFilesDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
 	bd.txInfo = jptm.Info()
+	var err error
+	bd.sip, err = newFileSourceInfoProvider(jptm)
+	common.PanicIfErr(err) // This literally will never return an error in the first place.
+	// It's not possible for newDefaultRemoteSourceInfoProvider to return an error,
+	// and it's not possible for newFileSourceInfoProvider to return an error either.
 }
 
 func (bd *azureFilesDownloader) Epilogue() {
