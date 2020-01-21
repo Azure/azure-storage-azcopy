@@ -24,5 +24,5 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 		return "", err
 	}
 
-	return fSDDL.String(), nil
+	return fSDDL.PortableString(), nil
 }

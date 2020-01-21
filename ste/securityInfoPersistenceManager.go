@@ -68,7 +68,7 @@ func (sipm *securityInfoPersistenceManager) PutSDDL(acctName, shareName, sddlStr
 	}
 
 	// No extra work is needed to make SIDs portable, because SID.String() calls SID.ToPortable() for us.
-	upSDDL := parsedSDDL.String()
+	upSDDL := parsedSDDL.PortableString()
 
 	serviceURL, ok := sipm.serviceURLs[acctName]
 
