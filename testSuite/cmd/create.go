@@ -246,7 +246,8 @@ func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobH
 	// Generate a content MD5 for the new blob if requested
 	if genMD5 {
 		md5hasher := md5.New()
-		blobHTTPHeaders.ContentMD5 = md5hasher.Sum([]byte(randomString))
+		md5hasher.Write([]byte(randomString))
+		blobHTTPHeaders.ContentMD5 = md5hasher.Sum(nil)
 	}
 
 	putBlobResp, err := blobUrl.Upload(
@@ -325,7 +326,8 @@ func createFile(fileURLStr string, fileSize uint32, metadata azfile.Metadata, fi
 	// Generate a content MD5 for the new blob if requested
 	if genMD5 {
 		md5hasher := md5.New()
-		fileHTTPHeaders.ContentMD5 = md5hasher.Sum([]byte(randomString))
+		md5hasher.Write([]byte(randomString))
+		fileHTTPHeaders.ContentMD5 = md5hasher.Sum(nil)
 	}
 
 	err = azfile.UploadBufferToAzureFile(context.Background(), []byte(randomString), fileURL, azfile.UploadToAzureFileOptions{
