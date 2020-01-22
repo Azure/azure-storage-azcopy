@@ -32,7 +32,7 @@ import (
 )
 
 // general-purpose "any remote persistence location" to local
-func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, df downloaderFactory) {
+func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, df downloaderFactory, sipf sourceInfoProviderFactory) {
 	// step 1: create downloader instance for this transfer
 	// We are using a separate instance per transfer, in case some implementations need to hold per-transfer state
 	dl := df()
@@ -62,6 +62,30 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 			if jptm.GetOverwriteOption() == common.EOverwriteOption.Prompt() {
 				shouldOverwrite = jptm.GetOverwritePrompter().shouldOverwrite(info.Destination)
 			} else if jptm.GetOverwriteOption() == common.EOverwriteOption.IfSourceNewer() {
+				// check if the source has changed from the time of scanning
+				srcInfoProvider, err := sipf(jptm)
+				if err != nil {
+					jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
+					jptm.SetStatus(common.ETransferStatus.Failed())
+					jptm.ReportTransferDone()
+					return
+				}
+
+				// get the lmt, this incurs a cost of 1 I/O
+				lmt, err := srcInfoProvider.GetLastModifiedTime()
+				if err != nil {
+					jptm.LogSendError(info.Source, info.Destination, "Couldn't get source's last modified time-"+err.Error(), 0)
+					jptm.SetStatus(common.ETransferStatus.Failed())
+					jptm.ReportTransferDone()
+					return
+				}
+				if lmt.UTC() != jptm.LastModifiedTime().UTC() {
+					jptm.LogSendError(info.Source, info.Destination, "File modified since transfer scheduled", 0)
+					jptm.SetStatus(common.ETransferStatus.Failed())
+					jptm.ReportTransferDone()
+					return
+				}
+
 				// only overwrite if source lmt is newer (after) the destination
 				if jptm.LastModifiedTime().After(dstProps.ModTime()) {
 					shouldOverwrite = true

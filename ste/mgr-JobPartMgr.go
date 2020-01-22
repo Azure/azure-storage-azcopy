@@ -548,6 +548,11 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	default:
 		panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
 	}
+
+	// for a download operation the same pipeline should be shared for sourceProvider
+	if jpm.sourceProviderPipeline == nil && fromTo.To() == common.ELocation.Local() {
+		jpm.sourceProviderPipeline = jpm.pipeline
+	}
 }
 
 func (jpm *jobPartMgr) SlicePool() common.ByteSlicePooler {
