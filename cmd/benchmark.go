@@ -37,7 +37,7 @@ import (
 type rawBenchmarkCmdArgs struct {
 	// no src, since it's implicitly the auto-data-generator used for benchmarking
 
-	// where are we uploading the benchmark data to?
+	// where are we uploading the benchmark data to ?
 	dst string
 
 	// parameters controlling the auto-generated data
