@@ -440,9 +440,10 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # target an empty folder, so the download should succeed normally
         # sleep a bit so that the lmts of the source blobs are in the past
         time.sleep(2)
+        source = util.get_resource_sas(dir_name)
         destination = os.path.join(util.test_directory_path, "dir_overwrite_flag_set_download")
         os.mkdir(destination)
-        result = util.Command("copy").add_arguments(util.test_container_url).add_arguments(destination). \
+        result = util.Command("copy").add_arguments(source).add_arguments(destination). \
             add_flags("recursive", "true").add_flags("overwrite", "ifSourceNewer").add_flags("log-level", "info"). \
             add_flags("output-type", "json").execute_azcopy_copy_command_get_output()
         self.assertNotEquals(result, None)
@@ -459,7 +460,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # case 2: local files are newer
         # download the directory again with force flag set to ifSourceNewer.
         # this time, since the local files are newer, no download should occur
-        result = util.Command("copy").add_arguments(util.test_container_url).add_arguments(destination). \
+        result = util.Command("copy").add_arguments(source).add_arguments(destination). \
             add_flags("recursive", "true").add_flags("overwrite", "ifSourceNewer").add_flags("log-level", "info"). \
             add_flags("output-type", "json").execute_azcopy_copy_command_get_output()
         self.assertNotEquals(result, None)
@@ -480,7 +481,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         self.assertTrue(result)
 
         # case 3: source blobs are newer now, so download should proceed
-        result = util.Command("copy").add_arguments(util.test_container_url).add_arguments(destination). \
+        result = util.Command("copy").add_arguments(source).add_arguments(destination). \
             add_flags("recursive", "true").add_flags("overwrite", "ifSourceNewer").add_flags("log-level", "info"). \
             add_flags("output-type", "json").execute_azcopy_copy_command_get_output()
         self.assertNotEquals(result, None)
