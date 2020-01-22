@@ -637,6 +637,8 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinat
 		mmf := planFile.Map()
 		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
 		jm.AddJobPart(partNum, planFile, sourceSAS, destinationSAS, false)
+		// Note that unmapping this mmf is perfectly fine. It just gets re-mapped in the job part managers.
+		mmf.Unmap()
 	}
 	return true
 }
@@ -666,6 +668,8 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 		//todo : call the compute transfer function here for each job.
 		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
 		jm.AddJobPart(partNum, planFile, EMPTY_SAS_STRING, EMPTY_SAS_STRING, false)
+		// This only unmaps this particular instance of the mmf, which has already been re-mapped for the job part.
+		mmf.Unmap()
 	}
 }
 

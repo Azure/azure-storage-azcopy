@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
@@ -598,6 +599,12 @@ func ListJobs() common.ListJobsResponse {
 		listJobResponse.JobIDDetails = append(listJobResponse.JobIDDetails,
 			common.JobIDDetails{JobId: jobId, CommandString: jpm.Plan().CommandString(),
 				StartTime: jpm.Plan().StartTime, JobStatus: jpm.Plan().JobStatus()})
+
+		// Close the job part managers and the log.
+		jm.(*jobMgr).jobPartMgrs.Iterate(false, func(k common.PartNumber, v IJobPartMgr) {
+			v.Close()
+		})
+		jm.CloseLog()
 	}
 	return listJobResponse
 }
