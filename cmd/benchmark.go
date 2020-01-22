@@ -23,8 +23,10 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
 	"net/url"
 	"strconv"
@@ -35,7 +37,7 @@ import (
 type rawBenchmarkCmdArgs struct {
 	// no src, since it's implicitly the auto-data-generator used for benchmarking
 
-	// where are we uploading the benchmark data to?
+	// where are we uploading the benchmark data to ?
 	dst string
 
 	// parameters controlling the auto-generated data
@@ -156,8 +158,6 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 
 func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (string, error) {
 
-	tempTargetSupportError := errors.New("the current version of the benchmark command only supports Blob Storage. Support for other targets may follow in a future release")
-
 	u, err := url.Parse(target)
 	if err != nil {
 		return "", fmt.Errorf("error parsing the url %s. Failed with error %s", target, err.Error())
@@ -175,26 +175,22 @@ func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (stri
 		result = p.URL()
 
 	case common.ELocation.File():
-		return "", tempTargetSupportError
-		/*  TODO: enable and test
 		p := azfile.NewFileURLParts(*u)
 		if p.ShareName == "" || p.DirectoryOrFilePath != "" {
 			return "", errors.New("the Azure Files target must be a file share root")
 		}
 		p.DirectoryOrFilePath = virtualDir
-		result = p.URL() */
+		result = p.URL()
 
 	case common.ELocation.BlobFS():
-		return "", tempTargetSupportError
-		/* TODO: enable and test
 		p := azbfs.NewBfsURLParts(*u)
 		if p.FileSystemName == "" || p.DirectoryOrFilePath != "" {
 			return "", errors.New("the blobFS target must be a file system")
 		}
 		p.DirectoryOrFilePath = virtualDir
-		result = p.URL()*/
+		result = p.URL()
 	default:
-		return "", errors.New("benchmarking only supports https connections to Blob, Azure Files, and ADLSGen2")
+		return "", errors.New("benchmarking only supports https connections to Blob, Azure Files, and ADLS Gen2")
 	}
 
 	return result.String(), nil
