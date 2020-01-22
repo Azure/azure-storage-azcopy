@@ -23,6 +23,7 @@ package common
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"math"
 	"reflect"
 	"regexp"
@@ -1074,6 +1075,18 @@ func (h ResourceHTTPHeaders) ToAzFileHTTPHeaders() azfile.FileHTTPHeaders {
 	return azfile.FileHTTPHeaders{
 		ContentType:        h.ContentType,
 		ContentMD5:         h.ContentMD5,
+		ContentEncoding:    h.ContentEncoding,
+		ContentLanguage:    h.ContentLanguage,
+		ContentDisposition: h.ContentDisposition,
+		CacheControl:       h.CacheControl,
+	}
+}
+
+// ToBlobFSHTTPHeaders converts ResourceHTTPHeaders to BlobFS Headers.
+func (h ResourceHTTPHeaders) ToBlobFSHTTPHeaders() azbfs.BlobFSHTTPHeaders {
+	return azbfs.BlobFSHTTPHeaders{
+		ContentType: h.ContentType,
+		// ContentMD5 isn't in these headers. ContentMD5 is handled separately for BlobFS
 		ContentEncoding:    h.ContentEncoding,
 		ContentLanguage:    h.ContentLanguage,
 		ContentDisposition: h.ContentDisposition,

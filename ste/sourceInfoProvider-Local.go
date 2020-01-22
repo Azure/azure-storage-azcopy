@@ -41,8 +41,7 @@ func (f localFileSourceInfoProvider) Properties() (*SrcProperties, error) {
 	// create simulated headers, to represent what we want to propagate to the destination based on
 	// this file
 
-	// TODO: find a better way to get generic ("Resource" headers/metadata, from jptm)
-	headers, metadata := f.jptm.BlobDstData(nil) // we don't have a known MIME type yet, so pass nil for the sniffed content of thefile
+	headers, metadata := f.jptm.ResourceDstData(nil) // we don't have a known MIME type yet, so pass nil for the sniffed content of thefile
 
 	return &SrcProperties{
 		SrcHTTPHeaders: common.ResourceHTTPHeaders{
@@ -52,7 +51,7 @@ func (f localFileSourceInfoProvider) Properties() (*SrcProperties, error) {
 			ContentDisposition: headers.ContentDisposition,
 			CacheControl:       headers.CacheControl,
 		},
-		SrcMetadata: common.FromAzBlobMetadataToCommonMetadata(metadata),
+		SrcMetadata: metadata,
 	}, nil
 }
 

@@ -147,7 +147,8 @@ func (u *blobFSUploader) Prologue(state common.PrologueState) (destinationModifi
 
 	u.flushThreshold = int64(u.chunkSize) * int64(ADLSFlushThreshold)
 
-	h := jptm.BfsDstData(state.LeadingBytes)
+	commonH, _ := jptm.ResourceDstData(state.LeadingBytes)
+	h := commonH.ToBlobFSHTTPHeaders()
 	u.creationTimeHeaders = &h
 	// Create file with the source size
 	destinationModified = true

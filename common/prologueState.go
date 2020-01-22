@@ -20,12 +20,8 @@
 
 package common
 
-import (
-	"github.com/Azure/azure-storage-blob-go/azblob"
-)
-
 type cutdownJptm interface {
-	BlobDstData(dataFileToXfer []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata)
+	ResourceDstData(dataFileToXfer []byte) (headers ResourceHTTPHeaders, metadata Metadata)
 }
 
 // PrologueState contains info necessary for different sending operations' prologue.
@@ -41,8 +37,6 @@ func (ps PrologueState) CanInferContentType() bool {
 }
 
 func (ps PrologueState) GetInferredContentType(jptm cutdownJptm) string {
-	headers, _ := jptm.BlobDstData(ps.LeadingBytes)
+	headers, _ := jptm.ResourceDstData(ps.LeadingBytes)
 	return headers.ContentType
-	// TODO: this BlobDstData method is messy, both because of the blob/file distinction and
-	//     because its so coarse grained.  Do something about that one day.
 }
