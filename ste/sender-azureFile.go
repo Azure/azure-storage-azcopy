@@ -142,7 +142,7 @@ func (u *azureFileSenderBase) NumChunks() uint32 {
 	return u.numChunks
 }
 
-func (u *azureFileSenderBase) RemoteFileExists() (bool, error) {
+func (u *azureFileSenderBase) RemoteFileExists() (bool, time.Time, error) {
 	return remoteObjectExists(u.fileURL().GetProperties(u.ctx))
 }
 

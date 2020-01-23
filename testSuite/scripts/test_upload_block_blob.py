@@ -2,6 +2,7 @@ import json
 import os
 import unittest
 import shutil
+import time
 from collections import namedtuple
 from stat import *
 import utility as util
@@ -378,6 +379,121 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             self.fail('error parsing the output in Json Format')
         self.assertEquals(x.TransfersSkipped, "15")
         self.assertEquals(x.TransfersCompleted, "5")
+
+    def test_overwrite_flag_set_to_if_source_new_upload(self):
+        # creating directory with 20 files in it.
+        dir_name = "dir_overwrite_flag_set_upload"
+        dir_n_files_path = util.create_test_n_files(1024, 20, dir_name)
+
+        # uploading the directory with 20 files in it. Wait a bit so that the lmt of the source is in the past
+        time.sleep(2)
+        result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
+            add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
+        self.assertTrue(result)
+
+        # uploading the directory again with force flag set to ifSourceNewer.
+        result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
+            add_flags("recursive", "true").add_flags("overwrite", "ifSourceNewer").add_flags("log-level", "info"). \
+            add_flags("output-type", "json").execute_azcopy_copy_command_get_output()
+        self.assertNotEquals(result, None)
+
+        # parsing the json and comparing the number of failed and successful transfers.
+        result = util.parseAzcopyOutput(result)
+        try:
+            x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+        except:
+            self.fail('error parsing the output in Json Format')
+        self.assertEquals(x.TransfersSkipped, 20)
+        self.assertEquals(x.TransfersCompleted, 0)
+
+        # refresh the lmts of the source files so that they appear newer
+        for filename in os.listdir(dir_n_files_path):
+            # update the lmts of the files to the latest
+            os.utime(os.path.join(dir_n_files_path, filename), None)
+
+        # uploading the directory again with force flag set to ifSourceNewer.
+        result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
+            add_flags("recursive", "true").add_flags("overwrite", "ifSourceNewer").add_flags("log-level", "info"). \
+            add_flags("output-type", "json").execute_azcopy_copy_command_get_output()
+        self.assertNotEquals(result, None)
+
+        # parsing the json and comparing the number of failed and successful transfers.
+        result = util.parseAzcopyOutput(result)
+        try:
+            x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+        except:
+            self.fail('error parsing the output in Json Format')
+        self.assertEquals(x.TransfersSkipped, 0)
+        self.assertEquals(x.TransfersCompleted, 20)
+
+    def test_overwrite_flag_set_to_if_source_new_download(self):
+        # creating directory with 20 files in it.
+        dir_name = "dir_overwrite_flag_set_download_setup"
+        dir_n_files_path = util.create_test_n_files(1024, 20, dir_name)
+        # uploading the directory with 20 files in it.
+        result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
+            add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
+        self.assertTrue(result)
+
+        # case 1: destination is empty
+        # download the directory with force flag set to ifSourceNewer.
+        # target an empty folder, so the download should succeed normally
+        # sleep a bit so that the lmts of the source blobs are in the past
+        time.sleep(2)
+        source = util.get_resource_sas(dir_name)
+        destination = os.path.join(util.test_directory_path, "dir_overwrite_flag_set_download")
+        os.mkdir(destination)
+        result = util.Command("copy").add_arguments(source).add_arguments(destination). \
+            add_flags("recursive", "true").add_flags("overwrite", "ifSourceNewer").add_flags("log-level", "info"). \
+            add_flags("output-type", "json").execute_azcopy_copy_command_get_output()
+        self.assertNotEquals(result, None)
+
+        # parsing the json and comparing the number of failed and successful transfers.
+        result = util.parseAzcopyOutput(result)
+        try:
+            x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+        except:
+            self.fail('error parsing the output in Json Format')
+        self.assertEquals(x.TransfersSkipped, 0)
+        self.assertEquals(x.TransfersCompleted, 20)
+
+        # case 2: local files are newer
+        # download the directory again with force flag set to ifSourceNewer.
+        # this time, since the local files are newer, no download should occur
+        result = util.Command("copy").add_arguments(source).add_arguments(destination). \
+            add_flags("recursive", "true").add_flags("overwrite", "ifSourceNewer").add_flags("log-level", "info"). \
+            add_flags("output-type", "json").execute_azcopy_copy_command_get_output()
+        self.assertNotEquals(result, None)
+
+        # parsing the json and comparing the number of failed and successful transfers.
+        result = util.parseAzcopyOutput(result)
+        try:
+            x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+        except:
+            self.fail('error parsing the output in Json Format')
+        self.assertEquals(x.TransfersSkipped, 20)
+        self.assertEquals(x.TransfersCompleted, 0)
+
+        # re-uploading the directory with 20 files in it, to refresh the lmts of the source
+        time.sleep(2)
+        result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
+            add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
+        self.assertTrue(result)
+
+        # case 3: source blobs are newer now, so download should proceed
+        result = util.Command("copy").add_arguments(source).add_arguments(destination). \
+            add_flags("recursive", "true").add_flags("overwrite", "ifSourceNewer").add_flags("log-level", "info"). \
+            add_flags("output-type", "json").execute_azcopy_copy_command_get_output()
+        self.assertNotEquals(result, None)
+
+        # parsing the json and comparing the number of failed and successful transfers.
+        result = util.parseAzcopyOutput(result)
+        try:
+            x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+        except:
+            self.fail('error parsing the output in Json Format')
+        self.assertEquals(x.TransfersSkipped, 0)
+        self.assertEquals(x.TransfersCompleted, 20)
 
     # test_upload_block_blob_include_flag tests the include flag in the upload scenario
     def test_upload_block_blob_include_flag(self):
