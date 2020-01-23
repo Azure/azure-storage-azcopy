@@ -61,13 +61,13 @@ var cpkAccessFailureLogGLCM sync.Once
 type newJobXfer func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer)
 
 // same as newJobXfer, but with an extra parameter
-type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer, df downloaderFactory, sipf sourceInfoProviderFactory)
+type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer, df downloaderFactory)
 type newJobXferWithSenderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer, sf senderFactory, sipf sourceInfoProviderFactory)
 
 // Takes a multi-purpose download function, and makes it ready to user with a specific type of downloader
-func parameterizeDownload(targetFunction newJobXferWithDownloaderFactory, df downloaderFactory, sipf sourceInfoProviderFactory) newJobXfer {
+func parameterizeDownload(targetFunction newJobXferWithDownloaderFactory, df downloaderFactory) newJobXfer {
 	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer) {
-		targetFunction(jptm, pipeline, pacer, df, sipf)
+		targetFunction(jptm, pipeline, pacer, df)
 	}
 }
 
@@ -155,7 +155,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		return DeleteFilePrologue
 	default:
 		if fromTo.IsDownload() {
-			return parameterizeDownload(remoteToLocal, getDownloader(fromTo.From()), getSipFactory(fromTo.From()))
+			return parameterizeDownload(remoteToLocal, getDownloader(fromTo.From()))
 		} else {
 			return parameterizeSend(anyToRemote, getSenderFactory(fromTo), getSipFactory(fromTo.From()))
 		}

@@ -73,26 +73,6 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 		panic("must always schedule one chunk, even if file is empty") // this keeps our code structure simpler, by using a dummy chunk for empty files
 	}
 
-	// Do LMT verfication before transfer, when:
-	// 1) Source is local, so get source file's LMT is free.
-	// 2) Source is remote, i.e. S2S copy case. And source's size is larger than one chunk. So verification can possibly save transfer's cost.
-	if copier, isS2SCopier := s.(s2sCopier); srcInfoProvider.IsLocal() ||
-		(isS2SCopier && info.S2SSourceChangeValidation && srcSize > int64(copier.ChunkSize())) {
-		lmt, err := srcInfoProvider.GetLastModifiedTime()
-		if err != nil {
-			jptm.LogSendError(info.Source, info.Destination, "Couldn't get source's last modified time-"+err.Error(), 0)
-			jptm.SetStatus(common.ETransferStatus.Failed())
-			jptm.ReportTransferDone()
-			return
-		}
-		if lmt.UTC() != jptm.LastModifiedTime().UTC() {
-			jptm.LogSendError(info.Source, info.Destination, "File modified since transfer scheduled", 0)
-			jptm.SetStatus(common.ETransferStatus.Failed())
-			jptm.ReportTransferDone()
-			return
-		}
-	}
-
 	// step 3: check overwrite option
 	// if the force Write flags is set to false or prompt
 	// then check the file exists at the remote location
@@ -144,6 +124,26 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 			return
 		}
 		defer srcFile.Close() // we read all the chunks in this routine, so can close the file at the end
+	}
+
+	// Do LMT verfication before transfer, when:
+	// 1) Source is local, so get source file's LMT is free.
+	// 2) Source is remote, i.e. S2S copy case. And source's size is larger than one chunk. So verification can possibly save transfer's cost.
+	if copier, isS2SCopier := s.(s2sCopier); srcInfoProvider.IsLocal() ||
+		(isS2SCopier && info.S2SSourceChangeValidation && srcSize > int64(copier.ChunkSize())) {
+		lmt, err := srcInfoProvider.GetLastModifiedTime()
+		if err != nil {
+			jptm.LogSendError(info.Source, info.Destination, "Couldn't get source's last modified time-"+err.Error(), 0)
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
+			return
+		}
+		if lmt.UTC() != jptm.LastModifiedTime().UTC() {
+			jptm.LogSendError(info.Source, info.Destination, "File modified since transfer scheduled", 0)
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
+			return
+		}
 	}
 
 	// step 5a: lock the destination
