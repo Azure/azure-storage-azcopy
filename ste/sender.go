@@ -22,6 +22,7 @@ package ste
 
 import (
 	"errors"
+	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -40,7 +41,8 @@ type ISenderBase interface {
 	NumChunks() uint32
 
 	// RemoteFileExists is called to see whether the file already exists at the remote location (so we know whether we'll be overwriting it)
-	RemoteFileExists() (bool, error)
+	// the lmt is returned if the file exists
+	RemoteFileExists() (bool, time.Time, error)
 
 	// Prologue is called automatically before the first chunkFunc is generated.
 	// Implementation should do any initialization that is necessary - e.g.

@@ -209,9 +209,10 @@ var EOverwriteOption = OverwriteOption(0)
 
 type OverwriteOption uint8
 
-func (OverwriteOption) True() OverwriteOption   { return OverwriteOption(0) }
-func (OverwriteOption) False() OverwriteOption  { return OverwriteOption(1) }
-func (OverwriteOption) Prompt() OverwriteOption { return OverwriteOption(2) }
+func (OverwriteOption) True() OverwriteOption          { return OverwriteOption(0) }
+func (OverwriteOption) False() OverwriteOption         { return OverwriteOption(1) }
+func (OverwriteOption) Prompt() OverwriteOption        { return OverwriteOption(2) }
+func (OverwriteOption) IfSourceNewer() OverwriteOption { return OverwriteOption(3) }
 
 func (o *OverwriteOption) Parse(s string) error {
 	val, err := enum.Parse(reflect.TypeOf(o), s, true)

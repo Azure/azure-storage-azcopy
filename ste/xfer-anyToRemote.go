@@ -78,9 +78,9 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 	// then check the file exists at the remote location
 	// if it does, react accordingly
 	if jptm.GetOverwriteOption() != common.EOverwriteOption.True() {
-		exists, existenceErr := s.RemoteFileExists()
+		exists, dstLmt, existenceErr := s.RemoteFileExists()
 		if existenceErr != nil {
-			jptm.LogSendError(info.Source, info.Destination, "Could not check file existence. "+existenceErr.Error(), 0)
+			jptm.LogSendError(info.Source, info.Destination, "Could not check destination file existence. "+existenceErr.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed()) // is a real failure, not just a SkippedFileAlreadyExists, in this case
 			jptm.ReportTransferDone()
 			return
@@ -94,6 +94,11 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 				parsed, _ := url.Parse(info.Destination)
 				parsed.RawQuery = ""
 				shouldOverwrite = jptm.GetOverwritePrompter().shouldOverwrite(parsed.String())
+			} else if jptm.GetOverwriteOption() == common.EOverwriteOption.IfSourceNewer() {
+				// only overwrite if source lmt is newer (after) the destination
+				if jptm.LastModifiedTime().After(dstLmt) {
+					shouldOverwrite = true
+				}
 			}
 
 			if !shouldOverwrite {

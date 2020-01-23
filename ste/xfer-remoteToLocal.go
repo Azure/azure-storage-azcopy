@@ -53,7 +53,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 	// then check the file exists at the remote location
 	// if it does, react accordingly
 	if jptm.GetOverwriteOption() != common.EOverwriteOption.True() {
-		_, err := os.Stat(info.Destination)
+		dstProps, err := os.Stat(info.Destination)
 		if err == nil {
 			// if the error is nil, then file exists locally
 			shouldOverwrite := false
@@ -61,6 +61,11 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 			// if necessary, prompt to confirm user's intent
 			if jptm.GetOverwriteOption() == common.EOverwriteOption.Prompt() {
 				shouldOverwrite = jptm.GetOverwritePrompter().shouldOverwrite(info.Destination)
+			} else if jptm.GetOverwriteOption() == common.EOverwriteOption.IfSourceNewer() {
+				// only overwrite if source lmt is newer (after) the destination
+				if jptm.LastModifiedTime().After(dstProps.ModTime()) {
+					shouldOverwrite = true
+				}
 			}
 
 			if !shouldOverwrite {
