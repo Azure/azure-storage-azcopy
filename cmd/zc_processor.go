@@ -43,13 +43,14 @@ type copyTransferProcessor struct {
 	reportFirstPartDispatched func(jobStarted bool)
 	reportFinalPartDispatched func()
 
-	preserveAccessTier       bool
-	transferFolderProperties bool
+	preserveAccessTier     bool
+	folderPropertiesOption common.FolderPropertyOption
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
 	source string, destination string, shouldEscapeSourceObjectName bool, shouldEscapeDestinationObjectName bool,
-	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool, transferFolderProperties bool) *copyTransferProcessor {
+	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool,
+	folderPropertiesOption common.FolderPropertyOption) *copyTransferProcessor {
 	return &copyTransferProcessor{
 		numOfTransfersPerPart:             numOfTransfersPerPart,
 		copyJobTemplate:                   copyJobTemplate,
@@ -60,7 +61,7 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 		reportFirstPartDispatched:         reportFirstPartDispatched,
 		reportFinalPartDispatched:         reportFinalPartDispatched,
 		preserveAccessTier:                preserveAccessTier,
-		transferFolderProperties:          transferFolderProperties,
+		folderPropertiesOption:            folderPropertiesOption,
 	}
 }
 
@@ -71,7 +72,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 		s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeSourceObjectName),
 		s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeDestinationObjectName),
 		s.preserveAccessTier,
-		s.transferFolderProperties,
+		s.folderPropertiesOption,
 	)
 
 	if !shouldSendToSte {

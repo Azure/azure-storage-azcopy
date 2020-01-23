@@ -92,7 +92,7 @@ func (s *storedObject) ToNewCopyTransfer(
 	Source string,
 	Destination string,
 	preserveBlobTier bool,
-	transferFolderProperties bool) (transfer common.CopyTransfer, shouldSendToSte bool) {
+	folderPropertiesOption common.FolderPropertyOption) (transfer common.CopyTransfer, shouldSendToSte bool) {
 
 	if steWillAutoDecompress {
 		Destination = stripCompressionExtension(Destination, s.contentEncoding)
@@ -122,10 +122,22 @@ func (s *storedObject) ToNewCopyTransfer(
 	// We should only send folder-type entities to the STE if they are in fact wanted in this job
 	// We check this here because its a centralized place - so we can do it once, and also we can be sure
 	// that its always done.
-	// (The alternative would have been to pass a transferFolderProperties boolean into every folder-aware enumerator
-	// and have it modify its behaviour accordingly. But we already have quite a few bools that get passed into enumerators
+	// (The alternative would have been to pass folderPropertiesOption into every folder-aware enumerator
+	// and have it modify its behaviour accordingly. But we already have quite a few flags that get passed into enumerators
 	// and so don't really want to complicate things with another).
-	shouldSend := s.entityType == common.EEntityType.File() || transferFolderProperties
+	shouldSend := true
+	if s.entityType == common.EEntityType.Folder() {
+		switch folderPropertiesOption {
+		case common.EFolderPropertiesOption.None():
+			shouldSend = false
+		case common.EFolderPropertiesOption.AllFoldersExceptRoot():
+			shouldSend = s.relativePath != ""
+		case common.EFolderPropertiesOption.AllFolders():
+			shouldSend = true
+		default:
+			panic("undefined folder properties option")
+		}
+	}
 
 	return t, shouldSend
 }

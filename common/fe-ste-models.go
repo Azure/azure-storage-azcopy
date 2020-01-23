@@ -1201,3 +1201,27 @@ type EntityType uint8
 
 func (EntityType) File() EntityType   { return EntityType(0) }
 func (EntityType) Folder() EntityType { return EntityType(1) }
+
+////////////////////////////////////////////////////////////////
+
+var EFolderPropertiesOption = FolderPropertyOption(0)
+
+// FolderPropertyOption controls which folders get their properties recorded in the Plan file
+type FolderPropertyOption uint8
+
+func (FolderPropertyOption) None() FolderPropertyOption { return FolderPropertyOption(0) }
+func (FolderPropertyOption) AllFoldersExceptRoot() FolderPropertyOption {
+	return FolderPropertyOption(1)
+}
+func (FolderPropertyOption) AllFolders() FolderPropertyOption { return FolderPropertyOption(2) }
+
+func NewFolderPropertyOption(transferFolderProperties bool, stripTopDir bool) FolderPropertyOption {
+	if transferFolderProperties {
+		if stripTopDir {
+			return EFolderPropertiesOption.AllFoldersExceptRoot()
+		} else {
+			return EFolderPropertiesOption.AllFolders()
+		}
+	}
+	return EFolderPropertiesOption.None()
+}
