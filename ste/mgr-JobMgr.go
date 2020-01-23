@@ -52,7 +52,8 @@ type IJobMgr interface {
 	JobID() common.JobID
 	JobPartMgr(partNum PartNumber) (IJobPartMgr, bool)
 	//Throughput() XferThroughput
-	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, sourceSAS string,
+	// If existingPlanMMF is nil, a new MMF is opened.
+	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF, sourceSAS string,
 		destinationSAS string, scheduleTransfers bool) IJobPartMgr
 	SetIncludeExclude(map[string]int, map[string]int)
 	IncludeExclude() (map[string]int, map[string]int)
@@ -316,14 +317,20 @@ func (jm *jobMgr) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32, 
 }
 
 // initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
-func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, sourceSAS string,
+func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF, sourceSAS string,
 	destinationSAS string, scheduleTransfers bool) IJobPartMgr {
 	jpm := &jobPartMgr{jobMgr: jm, filename: planFile, sourceSAS: sourceSAS,
 		destinationSAS: destinationSAS, pacer: JobsAdmin.(*jobsAdmin).pacer,
 		slicePool:        JobsAdmin.(*jobsAdmin).slicePool,
 		cacheLimiter:     JobsAdmin.(*jobsAdmin).cacheLimiter,
 		fileCountLimiter: JobsAdmin.(*jobsAdmin).fileCountLimiter}
-	jpm.planMMF = jpm.filename.Map()
+	// If an existing plan MMF was supplied, re use it. Otherwise, init a new one.
+	if existingPlanMMF == nil {
+		jpm.planMMF = jpm.filename.Map()
+	} else {
+		jpm.planMMF = existingPlanMMF
+	}
+
 	jm.jobPartMgrs.Set(partNum, jpm)
 	jm.setFinalPartOrdered(partNum, jpm.planMMF.Plan().IsFinalPart)
 	jm.setDirection(jpm.Plan().FromTo)
