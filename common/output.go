@@ -74,15 +74,15 @@ func GetJsonStringFromTemplate(template interface{}) string {
 }
 
 // defines the general output template when the format is set to json
-type jsonOutputTemplate struct {
+type JsonOutputTemplate struct {
 	TimeStamp      time.Time
 	MessageType    string
 	MessageContent string // a simple string for INFO and ERROR, a serialized JSON for INIT, PROGRESS, EXIT
 	PromptDetails  PromptDetails
 }
 
-func newJsonOutputTemplate(messageType outputMessageType, messageContent string, promptDetails PromptDetails) *jsonOutputTemplate {
-	return &jsonOutputTemplate{TimeStamp: time.Now(), MessageType: messageType.String(),
+func newJsonOutputTemplate(messageType outputMessageType, messageContent string, promptDetails PromptDetails) *JsonOutputTemplate {
+	return &JsonOutputTemplate{TimeStamp: time.Now(), MessageType: messageType.String(),
 		MessageContent: messageContent, PromptDetails: promptDetails}
 }
 
