@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
@@ -151,7 +152,8 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 		InMemoryTransitJobState{
 			credentialInfo: order.CredentialInfo,
 		})
-	jpm.AddJobPart(order.PartNum, jppfn, order.SourceSAS, order.DestinationSAS, true) // Add this part to the Job and schedule its transfers
+	// Supply no plan MMF because we don't have one, and AddJobPart will create one on its own.
+	jpm.AddJobPart(order.PartNum, jppfn, nil, order.SourceSAS, order.DestinationSAS, true) // Add this part to the Job and schedule its transfers
 	return common.CopyJobPartOrderResponse{JobStarted: true}
 }
 
@@ -598,6 +600,12 @@ func ListJobs() common.ListJobsResponse {
 		listJobResponse.JobIDDetails = append(listJobResponse.JobIDDetails,
 			common.JobIDDetails{JobId: jobId, CommandString: jpm.Plan().CommandString(),
 				StartTime: jpm.Plan().StartTime, JobStatus: jpm.Plan().JobStatus()})
+
+		// Close the job part managers and the log.
+		jm.(*jobMgr).jobPartMgrs.Iterate(false, func(k common.PartNumber, v IJobPartMgr) {
+			v.Close()
+		})
+		jm.CloseLog()
 	}
 	return listJobResponse
 }
