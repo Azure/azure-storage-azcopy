@@ -5,7 +5,11 @@
 
 ### New features
 
-1. Fixed feature parity issue by adding support for "ifSourceNewer" option on the `overwrite` flag. It serves as a replacement of the '\XO' flag in V8. 
+1. Fixed feature parity issue by adding support for "ifSourceNewer" option on the `overwrite` flag. It serves as a replacement of the '\XO' flag in V8.
+
+### Bug fixes
+
+1. Fixed `jobs clean` command on Windows which was previously crashing when the `with-status` flag was used.
 
 ## Version 10.3.3
 
