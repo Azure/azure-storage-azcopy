@@ -21,12 +21,6 @@
 package e2etest
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-
-	"github.com/Azure/azure-storage-azcopy/common"
-
 	chk "gopkg.in/check.v1"
 )
 
@@ -43,6 +37,39 @@ type sourceFiles struct {
 
 	// names of files that we expect to be skipped to an overwrite setting
 	shouldSkip []string
+}
+
+type sourceSpecifier interface{} // TODO
+type destSpecifier interface{}   // TODO
+
+func newSourceLocalDir(x interface{}) interface{} { // todo
+	return nil
+}
+
+func newDestContainer(x interface{}) interface{} { // todo
+	return nil
+}
+
+type copyParams struct {
+	source      sourceSpecifier
+	dest        destSpecifier
+	recursive   bool
+	includePath string
+}
+
+type testState struct {
+}
+
+func (t testState) cleanup() {
+
+}
+
+func (t testState) validateCopyTransfersAreScheduled() {
+
+}
+
+func runCopy(p copyParams) testState {
+	return testState{}
 }
 
 func (s *cmdIntegrationSuite) TestIncludeDir(c *chk.C) {
@@ -64,14 +91,14 @@ func (s *cmdIntegrationSuite) TestIncludeDir(c *chk.C) {
 		},
 	}
 
-	r := RunCopy(copyParams{
+	r := runCopy(copyParams{
 		source:      newSourceLocalDir(sourceContents),
 		dest:        newDestContainer(EAccountType.Standard()),
 		recursive:   true,
 		includePath: "sub/subsub"})
-	defer r.Cleanup()
+	defer r.cleanup()
 
-	r.ValidateCopyTransfersAreScheduled()
+	r.validateCopyTransfersAreScheduled()
 
 	// note the object returned by RunCopy represents the complete state of the test run. It includes
 	// - information about the source and dest (including which have been created and
@@ -82,4 +109,9 @@ func (s *cmdIntegrationSuite) TestIncludeDir(c *chk.C) {
 	//   calling a Validate method
 	//
 	// In addition to the RunCopy method here, there would be RunSync, RunList etc.
+	//
+	// To specify files with certain sizes, best notation I can find is to just use something like "filename:20K"
+	// i.e. choose a separator, and make our own syntax for what comes after it, and have our setup code process
+	// it accordingly. (We lose the ability to put that separator into test filenames - with this test harness/helper method -
+	// but for the rare tests where we need that I think we can just write unit-style test directly against the relevant classes)
 }
