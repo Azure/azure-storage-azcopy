@@ -30,46 +30,56 @@ import (
 	chk "gopkg.in/check.v1"
 )
 
+// represents a set of source files, including what we expect shoud happen to them
+type sourceFiles struct {
+	// names of files that we expect to be transferred
+	shouldTransfer []string
+
+	// names of files that we expect to be found by the enumeration
+	shouldIgnore []string
+
+	// names of files that we expect to  fail with error
+	shouldFail []string
+
+	// names of files that we expect to be skipped to an overwrite setting
+	shouldSkip []string
+}
+
 func (s *cmdIntegrationSuite) TestIncludeDir(c *chk.C) {
-	// set up the source
-	files := []string{
-		"filea",
-		"fileb",
-		"filec",
-		"sub/filea",
-		"sub/fileb",
-		"sub/filec",
-		"sub/somethingelse/subsub/filex", // should not be included because sub/subsub is not contiguous here
-		"othersub/sub/subsub/filey",      // should not be included because sub/subsub is not at root here
+	sourceContents := sourceFiles{
+		shouldIgnore: []string{
+			"filea",
+			"fileb",
+			"filec",
+			"sub/filea",
+			"sub/fileb",
+			"sub/filec",
+			"sub/somethingelse/subsub/filex", // should not be included because sub/subsub is not contiguous here
+			"othersub/sub/subsub/filey",      // should not be included because sub/subsub is not at root here
+		},
+		shouldTransfer: []string{
+			"sub/subsub/filea",
+			"sub/subsub/fileb",
+			"sub/subsub/filec",
+		},
 	}
 
-	filesToInclude := []string{
-		"sub/subsub/filea",
-		"sub/subsub/fileb",
-		"sub/subsub/filec",
-	}
+	r := RunCopy(copyParams{
+		source:      newSourceLocalDir(sourceContents),
+		dest:        newDestContainer(EAccountType.Standard()),
+		recursive:   true,
+		includePath: "sub/subsub"})
+	defer r.Cleanup()
 
-	dirPath := TestResourceFactory{}.CreateLocalDirectory(c)
-	defer os.RemoveAll(dirPath)
-	scenarioHelper{}.generateLocalFilesFromList(c, dirPath, files)
-	scenarioHelper{}.generateLocalFilesFromList(c, dirPath, filesToInclude)
+	r.ValidateCopyTransfersAreScheduled()
 
-	// set up the destination
-	containerURL, _, containerURLWithSAS := TestResourceFactory{}.CreateNewContainer(c, EAccountType.Standard())
-	defer deleteContainer(c, containerURL)
-
-	// invoke the executable and get results
-	runner := newTestRunner()
-	runner.SetRecursiveFlag(true)
-	runner.SetIncludePathFlag("sub/subsub")
-
-	result, err := runner.ExecuteCopyCommand(dirPath, containerURLWithSAS.String())
-	c.Assert(err, chk.IsNil)
-	c.Assert(int(result.finalStatus.TransfersCompleted), chk.Equals, len(filesToInclude))
-
-	transfers := result.GetTransferList(common.ETransferStatus.Success())
-	srcRoot := dirPath
-	dstRoot := fmt.Sprintf("%s/%s", containerURL.String(), filepath.Base(dirPath))
-	Validator{}.ValidateCopyTransfersAreScheduled(c, false, true, srcRoot, dstRoot,
-		filesToInclude, transfers)
+	// note the object returned by RunCopy represents the complete state of the test run. It includes
+	// - information about the source and dest (including which have been created and
+	//   therefore need to be cleaned up in the deferred cleanup)
+	// - information about the results of the test run, including any error, any caputured output and logs etc
+	// - Validate methods to validate those results. By default, every ValidateXXX method includes validation that
+	//   the transfer succeded. That can be turned off with something like like r.ExpectJobStatus(...Failed) before
+	//   calling a Validate method
+	//
+	// In addition to the RunCopy method here, there would be RunSync, RunList etc.
 }
