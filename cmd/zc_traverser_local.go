@@ -199,8 +199,11 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 					return nil
 				}
 
+				var entityType common.EntityType
 				if fileInfo.IsDir() {
-					return nil
+					entityType = common.EEntityType.Folder()
+				} else {
+					entityType = common.EEntityType.File()
 				}
 
 				relPath := strings.TrimPrefix(strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(t.fullPath)), common.DeterminePathSeparator(t.fullPath))
@@ -210,7 +213,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 				}
 
 				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter(common.EEntityType.File()) //TODO
+					t.incrementEnumerationCounter(entityType)
 				}
 
 				return processIfPassedFilters(filters,
@@ -218,7 +221,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 						preprocessor,
 						fileInfo.Name(),
 						strings.ReplaceAll(relPath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
-						common.EEntityType.File(), // TODO: add code path for folders
+						entityType,
 						fileInfo.ModTime(),
 						fileInfo.Size(),
 						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
@@ -276,10 +279,11 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 
 				if singleFile.IsDir() {
 					continue
+					// it does't make sense to transfer directory properties when not recursing
 				}
 
 				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter(common.EEntityType.File()) // TODO
+					t.incrementEnumerationCounter(common.EEntityType.File())
 				}
 
 				err := processIfPassedFilters(filters,

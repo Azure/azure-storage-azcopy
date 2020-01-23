@@ -184,6 +184,16 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, en
 		containerName:      containerName,
 	}
 
+	// Folders don't have size and they don't (in general)
+	// have LMTs that are worth preserving. E.g. they are not up to date in some sources (e.g. Azure Files as
+	// at early 2020) and they don't necessarily reflect file mods to arbitrarily deep children (e.g. some file systems)
+	// So, by design, we don't preserve folder LMTs.
+	// Zero out both properties here, for consistency regardless of what enumerator has given us.
+	if entityType == common.EEntityType.Folder() {
+		obj.size = 0
+		obj.lastModifiedTime = time.Time{}
+	}
+
 	// in some cases we may be supplied with a func that will perform some modification on the basic object
 	if morpher != nil {
 		morpher(&obj)
