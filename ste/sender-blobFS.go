@@ -77,6 +77,7 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p pipelin
 		pipeline:            p,
 		pacer:               pacer,
 		creationTimeHeaders: &headers,
+		flushThreshold:      int64(chunkSize) * int64(ADLSFlushThreshold),
 	}, nil
 }
 
@@ -90,7 +91,6 @@ func (u *blobFSSenderBase) dirURL() azbfs.DirectoryURL {
 
 func (u *blobFSSenderBase) SendableEntityType() common.EntityType {
 	if _, ok := u.fileOrDirURL.(azbfs.DirectoryURL); ok {
-		panic("not supported yet")
 		return common.EEntityType.Folder()
 	} else {
 		return common.EEntityType.File()
@@ -110,8 +110,6 @@ func (u *blobFSSenderBase) RemoteFileExists() (bool, error) {
 }
 
 func (u *blobFSSenderBase) Prologue(state common.PrologueState) (destinationModified bool) {
-
-	u.flushThreshold = int64(u.chunkSize) * int64(ADLSFlushThreshold)
 
 	// Create file with the source size
 	destinationModified = true
@@ -148,4 +146,21 @@ func (u *blobFSSenderBase) GetDestinationLength() (int64, error) {
 	}
 
 	return prop.ContentLength(), nil
+}
+
+func (u *blobFSSenderBase) RemoteFolderExists() (bool, error) {
+	return remoteObjectExists(u.dirURL().GetProperties(u.jptm.Context()))
+}
+
+func (u *blobFSSenderBase) EnsureFolderExists() error {
+	_, err := u.dirURL().Create(u.jptm.Context(), false)
+	if stgErr, ok := err.(azbfs.StorageError); ok && stgErr.ServiceCode() == azbfs.ServiceCodePathAlreadyExists {
+		return nil // not a error as far as we are concerned. It just already exists
+	}
+	return err
+}
+
+func (u *blobFSSenderBase) SetFolderProperties() error {
+	// TODO
+	return nil
 }

@@ -64,11 +64,22 @@ func (d DirectoryURL) NewDirectoryURL(dirName string) DirectoryURL {
 }
 
 // Create creates a new directory within a File System
-func (d DirectoryURL) Create(ctx context.Context) (*DirectoryCreateResponse, error) {
+func (d DirectoryURL) Create(ctx context.Context, recreateIfExists bool) (*DirectoryCreateResponse, error) {
+	var ifNoneMatch *string
+	if recreateIfExists {
+		ifNoneMatch = nil // the default ADLS Gen2 behavior, see https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create
+	} else {
+		star := "*" // see https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create
+		ifNoneMatch = &star
+	}
+	return d.doCreate(ctx, ifNoneMatch)
+}
+
+func (d DirectoryURL) doCreate(ctx context.Context, ifNoneMatch *string) (*DirectoryCreateResponse, error) {
 	resp, err := d.directoryClient.Create(ctx, d.filesystem, d.pathParameter, PathResourceDirectory, nil,
 		PathRenameModeNone, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, ifNoneMatch,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, nil)
 	return (*DirectoryCreateResponse)(resp), err
