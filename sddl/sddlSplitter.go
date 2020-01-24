@@ -185,7 +185,7 @@ func (a *ACLList) PortableString() string {
 		output += ")"
 	}
 
-	return output
+	return strings.TrimSpace(output)
 }
 
 func (a *ACLList) String() string {
@@ -205,7 +205,7 @@ func (a *ACLList) String() string {
 		output += ")"
 	}
 
-	return output
+	return strings.TrimSpace(output)
 }
 
 func (s *SDDLString) String() string {
@@ -281,7 +281,7 @@ func (s *SDDLString) setACLFlags(flags string, aclType rune) error {
 		return fmt.Errorf("%s ACL type invalid", string(aclType))
 	}
 
-	*aclFlags = flags
+	*aclFlags = strings.TrimSpace(flags)
 
 	return nil
 }
@@ -298,6 +298,8 @@ func ParseSDDL(input string) (sddl SDDLString, err error) {
 			if v == '"' && input[k-1] != '\\' {
 				inString = false
 			}
+		case v == '"':
+			inString = true
 		case v == '(': // this comes before scope == 1 because ACE strings can be multi-leveled. We only care about the bottom level.
 			scope++
 			if scope == 1 { // only do this if we're in the base of an ACE string-- We don't care about the metadata as much.
@@ -352,10 +354,17 @@ func ParseSDDL(input string) (sddl SDDLString, err error) {
 						//      ^
 						//      k-1
 						// string separations in go happen [x:y).
-						sddl.OwnerSID = input[elementStart[0]:IffInt(k == len(input)-1, len(input), k-1)]
+						sddl.OwnerSID = strings.TrimSpace(input[elementStart[0]:IffInt(k == len(input)-1, len(input), k-1)])
 					case 'G':
-						sddl.GroupSID = input[elementStart[0]:IffInt(k == len(input)-1, len(input), k-1)]
-					case 'D', 'S': // These are both parsed WHILE they happen
+						sddl.GroupSID = strings.TrimSpace(input[elementStart[0]:IffInt(k == len(input)-1, len(input), k-1)])
+					case 'D', 'S': // These are both parsed WHILE they happen, UNLESS we're awaiting flags.
+						if awaitingACLFlags {
+							err := sddl.setACLFlags(strings.TrimSpace(input[elementStart[0]:IffInt(k == len(input)-1, len(input), k-1)]), elementType)
+
+							if err != nil {
+								return sddl, err
+							}
+						}
 					default:
 						return sddl, fmt.Errorf("%s is an invalid SDDL section", string(elementType))
 					}

@@ -85,7 +85,6 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 
 	headers := props.SrcHTTPHeaders.ToAzFileHTTPHeaders()
 
-	// TODO: handle errors better fartparty
 	// Prepare to transfer SDDLs from the source.
 	if sddlSIP, ok := sip.(ISDDLBearingSourceInfoProvider); ok {
 		// If both sides are files...
@@ -105,7 +104,9 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		// If we didn't do the workaround, then let's get the SDDL and put it later.
 		if headers.PermissionKey == "" {
 			headers.PermissionString, err = sddlSIP.GetSDDL()
-			common.PanicIfErr(err)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -153,14 +154,15 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		u.headersToApply.ContentType = state.GetInferredContentType(u.jptm)
 	}
 
-	// TODO: handle errors better fartparty
 	if len(u.headersToApply.PermissionString) > filesServiceMaxSDDLSize {
 		gURLParts := common.NewGenericResourceURLParts(u.fileURL.URL(), common.ELocation.File())
 
 		sipm := u.jptm.SecurityInfoPersistenceManager()
 
 		u.headersToApply.PermissionKey, err = sipm.PutSDDL(gURLParts.GetAccountName(), gURLParts.GetContainerName(), u.headersToApply.PermissionString, u.pipeline)
-		common.PanicIfErr(err)
+		if err != nil {
+			jptm.FailActiveUpload("Putting permissions", err)
+		}
 
 		u.headersToApply.PermissionString = ""
 	}
