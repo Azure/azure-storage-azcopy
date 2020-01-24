@@ -163,6 +163,10 @@ func (jl *jobLogger) ShouldLog(level pipeline.LogLevel) bool {
 }
 
 func (jl *jobLogger) CloseLog() {
+	if jl.minimumLevelToLog == pipeline.LogNone {
+		return
+	}
+
 	jl.logger.Println("Closing Log")
 	err := jl.file.Close()
 	PanicIfErr(err)
