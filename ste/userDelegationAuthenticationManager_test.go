@@ -1,6 +1,7 @@
 package ste
 
 import (
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -17,7 +18,8 @@ func (s *udamTestSuite) MakeUDAMInstance(dummyInstance bool) userDelegationAuthe
 	cache := lru.New(10)
 	if dummyInstance {
 		return userDelegationAuthenticationManager{
-			sasCache: cache,
+			credInfoLock: &sync.Mutex{},
+			sasCache:     cache,
 		}
 	} else {
 		startTime := time.Now()
@@ -36,10 +38,11 @@ func (s *udamTestSuite) MakeUDAMInstance(dummyInstance bool) userDelegationAuthe
 
 		// create a actual working instance of UDAM, but don't use the normal creation path
 		udam := userDelegationAuthenticationManager{
-			credential: udc,
-			startTime:  startTime,
-			expiryTime: expiryTime,
-			sasCache:   cache,
+			credInfoLock: &sync.Mutex{},
+			credential:   udc,
+			startTime:    startTime,
+			expiryTime:   expiryTime,
+			sasCache:     cache,
 		}
 
 		return udam
