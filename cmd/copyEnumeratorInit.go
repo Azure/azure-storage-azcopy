@@ -405,6 +405,33 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName, dstWithSAS strin
 	return
 }
 
+// Because some invalid characters weren't being properly encoded by url.PathEscape, we're going to instead manually encode them.
+var encodedInvalidCharacters = map[rune]string{
+	0x00: "%00",
+	'<':  "%3C",
+	'>':  "%3E",
+	'\\': "%5C",
+	'/':  "%2F",
+	':':  "%3A",
+	'"':  "%22",
+	'|':  "%7C",
+	'?':  "%3F",
+	'*':  "%2A",
+}
+
+var reverseEncodedChars = map[string]rune{
+	"%00": 0x00,
+	"%3C": '<',
+	"%3E": '>',
+	"%5C": '\\',
+	"%2F": '/',
+	"%3A": ':',
+	"%22": '"',
+	"%7C": '|',
+	"%3F": '?',
+	"%2A": '*',
+}
+
 func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool, object storedObject) (relativePath string) {
 	var pathEncodeRules = func(path string) string {
 		loc := common.ELocation.Unknown()
@@ -418,21 +445,20 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 
 		// If downloading on Windows or uploading to files, encode unsafe characters.
 		if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") || (!source && loc == common.ELocation.File()) {
-			invalidChars := `<>\/:"|?*` + string(0x00)
+			// invalidChars := `<>\/:"|?*` + string(0x00)
 
-			for _, c := range strings.Split(invalidChars, "") {
-				for k, p := range pathParts {
-					pathParts[k] = strings.ReplaceAll(p, c, url.PathEscape(c))
+			for k, c := range encodedInvalidCharacters {
+				for part, p := range pathParts {
+					pathParts[part] = strings.ReplaceAll(p, string(k), c)
 				}
 			}
 
 			// If uploading from Windows or downloading from files, decode unsafe chars
 		} else if (!source && cca.fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") || (!source && cca.fromTo.From() == common.ELocation.File()) {
-			invalidChars := `<>\/:"|?*` + string(0x00)
 
-			for _, c := range strings.Split(invalidChars, "") {
+			for encoded, c := range reverseEncodedChars {
 				for k, p := range pathParts {
-					pathParts[k] = strings.ReplaceAll(p, url.PathEscape(c), c)
+					pathParts[k] = strings.ReplaceAll(p, encoded, string(c))
 				}
 			}
 		}

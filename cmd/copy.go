@@ -176,49 +176,39 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 // if nothing happens, the original source is returned
 func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Location) (result string, stripTopDir bool, err error) {
 	result = raw.src
-	// Because local already handles wildcards via a list traverser, we should only handle the trailing wildcard --strip-top-dir inference remotely.
-	// To avoid getting trapped by parsing a URL and losing a sense of which *s are real, strip the SAS token in a """unsafe""" way.
-	splitURL := strings.Split(result, "?")
-
-	// If we parse the URL now, we'll have no concept of whether a * was encoded or unencoded.
-	// This is important because we treat unencoded *s as wildcards, and %2A (encoded *) as literal stars.
-	// So, replace any and all instances of (raw) %2A with %00 (NULL), so we can distinguish these later down the pipeline.
-	// Azure storage doesn't support NULL, so nobody has any reason to ever intentionally place a %00 in their URLs.
-	// Thus, %00 is our magic number. Understandably, this is an exception to how we handle wildcards, but this isn't a user-facing exception.
-	splitURL[0] = strings.ReplaceAll(splitURL[0], "%2A", "%00")
-
-	sourceURL, err := url.Parse(splitURL[0])
+	resourceURL, err := url.Parse(result)
+	gURLParts := common.NewGenericResourceURLParts(*resourceURL, location)
 
 	if err != nil {
-		err = fmt.Errorf("failed to encode %s as URL; %s", strings.ReplaceAll(splitURL[0], "%00", "%2A"), err)
+		err = fmt.Errorf("failed to parse url %s; %s", result, err)
 		return
 	}
 
-	// Catch trailing wildcard in object name
-	// Ignore wildcard in container name, as that is handled by initResourceTraverser -> AccountTraverser
-	genericResourceURLParts := common.NewGenericResourceURLParts(*sourceURL, location)
+	if strings.Contains(gURLParts.GetContainerName(), "*") {
+		// Disallow container name search and object specifics
+		if gURLParts.GetObjectName() != "" {
+			err = errors.New("cannot combine a specific object name with an account-level search")
+			return
+		}
 
-	if cName := genericResourceURLParts.GetContainerName(); (strings.Contains(cName, "*") || cName == "") && genericResourceURLParts.GetObjectName() != "" {
-		err = errors.New("cannot combine a specific object name with an account-level search")
+		// Return immediately here because we know this'll be safe.
 		return
 	}
 
-	// Infer stripTopDir, trim suffix so we can traverse properly
-	if strings.HasSuffix(genericResourceURLParts.GetObjectName(), "/*") || genericResourceURLParts.GetObjectName() == "*" {
-		genericResourceURLParts.SetObjectName(strings.TrimSuffix(genericResourceURLParts.GetObjectName(), "*"))
+	// Trim the trailing /*.
+	if strings.HasSuffix(resourceURL.RawPath, "/*") {
+		resourceURL.RawPath = strings.TrimSuffix(resourceURL.RawPath, "/*")
+		resourceURL.Path = strings.TrimSuffix(resourceURL.Path, "/*")
 		stripTopDir = true
 	}
 
-	// Check for other *s, error out and explain the usage
-	if strings.Contains(genericResourceURLParts.GetObjectName(), "*") {
+	// Ensure there aren't any extra *s floating around.
+	if strings.Contains(resourceURL.RawPath, "*") {
 		err = errors.New("cannot use wildcards in the path section of the URL except in trailing \"/*\". If you wish to use * in your URL, manually encode it to %2A")
 		return
 	}
 
-	splitURL[0] = strings.ReplaceAll(genericResourceURLParts.String(), "%00", "%2A")
-	// drop URL back to string and replace our magic number
-	// re-combine underlying string
-	result = strings.Join(splitURL, "?")
+	result = resourceURL.String()
 
 	return
 }

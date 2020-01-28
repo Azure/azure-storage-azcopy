@@ -30,8 +30,9 @@ type URLExtension struct {
 // URLWithPlusDecodedInPath returns a URL with '+' in path decoded as ' '(space).
 // This is useful for the cases, e.g: S3 management console encode ' '(space) as '+', which is not supported by Azure resources.
 func (u URLExtension) URLWithPlusDecodedInPath() url.URL {
-	if u.Path != "" && strings.Contains(u.Path, "+") {
-		u.Path = strings.Replace(u.Path, "+", " ", -1)
+	if u.RawPath != "" && strings.Contains(u.RawPath, "+") {
+		u.RawPath = strings.Replace(u.RawPath, "+", " ", -1)
+		u.Path = url.PathEscape(u.RawPath)
 	}
 	return u.URL
 }
