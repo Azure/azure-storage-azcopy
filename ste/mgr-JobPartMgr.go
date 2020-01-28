@@ -411,6 +411,10 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			jpm.jobMgr.ConfirmAllTransfersScheduled()
 		}
 	}
+
+	if plan.IsFinalPart {
+		jpm.Log(pipeline.LogInfo, "Final job part has been scheduled")
+	}
 }
 
 func (jpm *jobPartMgr) ScheduleChunks(chunkFunc chunkFunc) {
