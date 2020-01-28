@@ -123,7 +123,7 @@ func (u *userDelegationAuthenticationManager) createUserDelegationSASForURL(cont
 	// If it's not present, we need to generate a SAS query and store it, then return.
 	sasQuery, err := azblob.BlobSASSignatureValues{
 		Version:       DefaultServiceApiVersion,
-		Protocol:      azblob.SASProtocolHTTPS, // A user may be inclined to use HTTP for one reason or another. We already warn them about this.
+		Protocol:      azblob.SASProtocolHTTPS,
 		StartTime:     u.startTime,
 		ExpiryTime:    u.expiryTime,
 		Permissions:   azblob.ContainerSASPermissions{Read: true, List: true}.String(), // read-only perms, effectively
