@@ -442,9 +442,6 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 		// 2) It should be a S2S transfer from blob (There's no need for a SAS on a download, and user delegation doesn't work on files)
 		// 3) The source should lack a SAS token (There's no need for SAS generation when we already have)
 		if !jpm.Plan().SourcePublic && jpm.Plan().FromTo.IsS2S() && jpm.Plan().FromTo.From() == common.ELocation.Blob() && len(jpm.sourceSAS) == 0 {
-			// Upgrade the default version for this transfer.
-			// Note that S2S transfers with a User delegation SAS will fail on a lower revision.
-			DefaultServiceApiVersion = "2018-11-09"
 
 			jm.setupUserDelegationAuthManager(string(jpm.Plan().SourceRoot[:jpm.Plan().SourceRootLength]))
 		} else {
