@@ -269,28 +269,20 @@ func (rca resumeCmdArgs) process() error {
 
 	ctx := context.TODO()
 	// Initialize credential info.
-	credentialInfo := common.CredentialInfo{}
-	// TODO: Replace context with root context
-	if credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
-		fromTo:         getJobFromToResponse.FromTo,
-		source:         getJobFromToResponse.Source,
-		destination:    getJobFromToResponse.Destination,
-		sourceSAS:      rca.SourceSAS,
-		destinationSAS: rca.DestinationSAS,
-	}); err != nil {
-		return err
-	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		// Message user that they are using Oauth token for authentication,
-		// in case of silently using cached token without consciousness。
-		glcm.Info("Resume is using OAuth token for authentication.")
+	var credentialInfo common.CredentialInfo
 
-		uotm := GetUserOAuthTokenManagerInstance()
-		// Get token from env var or cache.
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return err
-		} else {
-			credentialInfo.OAuthTokenInfo = *tokenInfo
-		}
+	// Determine the destination credential info to pass to STE and remove.
+	// We ignore the isPublic flag because it cannot be returned when we indicate this is not a source credential.
+	toTrash := getJobFromToResponse.FromTo.To() == common.ELocation.Unknown()
+	if credentialInfo, _, err = getCredentialInfoForLocation(
+		ctx,
+		// Because delete blob and delete file are handled by STE, we'll do much the same thing as copy, and supply the "source" information instead.
+		common.IffLocation(toTrash, getJobFromToResponse.FromTo.From(), getJobFromToResponse.FromTo.To()),
+		common.IffString(toTrash, getJobFromToResponse.Source, getJobFromToResponse.Destination),
+		common.IffString(toTrash, rca.SourceSAS, rca.DestinationSAS),
+		false,
+	); err != nil {
+		return err
 	}
 
 	// Send resume job request.

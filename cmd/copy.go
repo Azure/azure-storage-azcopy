@@ -700,7 +700,7 @@ type cookedCopyCmdArgs struct {
 	jobID common.JobID
 
 	// extracted from the input
-	credentialInfo common.CredentialInfo
+	dstCredentialInfo common.CredentialInfo
 
 	// variables used to calculate progress
 	// intervalStartTime holds the last time value when the progress summary was fetched
@@ -852,37 +852,20 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize
 func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	// Note: credential info here is only used by remove at the moment.
-	// TODO: Get the entirety of remove into the new copyEnumeratorInit script so we can remove this
-	//       and stop having two places in copy that we get credential info
-	// verifies credential type and initializes credential info.
-	// Note: Currently, only one credential type is necessary for source and destination.
-	// For upload&download, only one side need credential.
-	// For S2S copy, as azcopy-v10 use Put*FromUrl, only one credential is needed for destination.
-	if cca.credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
-		fromTo:         cca.fromTo,
-		source:         cca.source,
-		destination:    cca.destination,
-		sourceSAS:      cca.sourceSAS,
-		destinationSAS: cca.destinationSAS,
-	}); err != nil {
+	// Determine the destination credential info to pass to STE and remove.
+	// We ignore the isPublic flag because it cannot be returned when we indicate this is not a source credential.
+	// Note that we also no longer need to obtain the OAuth token ourselves because getCredentialInfoForLocation does this for us in a safe manner.
+	// Note that this is not re-used for any operations against the source.
+	toTrash := cca.fromTo.To() == common.ELocation.Unknown()
+	if cca.dstCredentialInfo, _, err = getCredentialInfoForLocation(
+		ctx,
+		// We want to provide source information when doing a trash transfer, since remove puts all of our information in cca.source.
+		common.IffLocation(toTrash, cca.fromTo.From(), cca.fromTo.To()),
+		common.IffString(toTrash, cca.source, cca.destination),
+		common.IffString(toTrash, cca.sourceSAS, cca.destinationSAS),
+		false,
+	); err != nil {
 		return err
-	}
-
-	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
-	// the info will be transferred to STE.
-	if cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		// Message user that they are using Oauth token for authentication,
-		// in case of silently using cached token without consciousness。
-		glcm.Info("Using OAuth token for authentication.")
-
-		uotm := GetUserOAuthTokenManagerInstance()
-		// Get token from env var or cache.
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return err
-		} else {
-			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
-		}
 	}
 
 	// initialize the fields that are constant across all job part orders
@@ -917,7 +900,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		// destination sas is stripped from the destination given by the user and it will not be stored in the part plan file.
 		DestinationSAS: cca.destinationSAS,
 		CommandString:  cca.commandString,
-		CredentialInfo: cca.credentialInfo,
+		CredentialInfo: cca.dstCredentialInfo,
 	}
 
 	from := cca.fromTo.From()

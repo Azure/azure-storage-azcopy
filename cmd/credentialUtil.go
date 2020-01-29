@@ -299,61 +299,6 @@ func getCredentialInfoForLocation(ctx context.Context, location common.Location,
 	return
 }
 
-// getCredentialType checks user provided info, and gets the proper credential type
-// for current command.
-// kept around for legacy compatibility at the moment
-func getCredentialType(ctx context.Context, raw rawFromToInfo) (credentialType common.CredentialType, err error) {
-	// In the integration case, AzCopy directly use caller provided credential type if specified and not Unknown.
-	if credType := GetCredTypeFromEnvVar(); credType != common.ECredentialType.Unknown() {
-		return credType, nil
-	}
-
-	// Could be using oauth session mode or non-oauth scenario which uses SAS authentication or public endpoint,
-	// verify credential type with cached token info, src or dest resource URL.
-	switch raw.fromTo {
-	case common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob():
-		// For blob/file to blob copy, calculate credential type for destination (currently only support StageBlockFromURL)
-		// If the traditional approach(download+upload) need be supported, credential type should be calculated for both src and dest.
-		fallthrough
-	case common.EFromTo.LocalBlob(), common.EFromTo.PipeBlob(), common.EFromTo.BenchmarkBlob():
-		if credentialType, _, err = getBlobCredentialType(ctx, raw.destination, false, raw.destinationSAS != ""); err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-	case common.EFromTo.BlobTrash():
-		// For BlobTrash direction, use source as resource URL, and it should not be public access resource.
-		if credentialType, _, err = getBlobCredentialType(ctx, raw.source, false, raw.sourceSAS != ""); err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-	case common.EFromTo.BlobFSTrash():
-		if credentialType, err = getBlobFSCredentialType(ctx, raw.source, raw.sourceSAS != ""); err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-	case common.EFromTo.BlobLocal(), common.EFromTo.BlobPipe():
-		if credentialType, _, err = getBlobCredentialType(ctx, raw.source, true, raw.sourceSAS != ""); err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-	case common.EFromTo.LocalBlobFS(), common.EFromTo.BenchmarkBlobFS():
-		if credentialType, err = getBlobFSCredentialType(ctx, raw.destination, raw.destinationSAS != ""); err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-	case common.EFromTo.BlobFSLocal():
-		if credentialType, err = getBlobFSCredentialType(ctx, raw.source, raw.sourceSAS != ""); err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-	case common.EFromTo.LocalFile(), common.EFromTo.FileLocal(), common.EFromTo.FileTrash(), common.EFromTo.FilePipe(), common.EFromTo.PipeFile(), common.EFromTo.BenchmarkFile(),
-		common.EFromTo.FileFile(), common.EFromTo.BlobFile():
-		if credentialType, err = getAzureFileCredentialType(); err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-	default:
-		credentialType = common.ECredentialType.Anonymous()
-		// Log the FromTo types which getCredentialType hasn't solved, in case of miss-use.
-		glcm.Info(fmt.Sprintf("Use anonymous credential by default for from-to '%v'", raw.fromTo))
-	}
-
-	return credentialType, nil
-}
-
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================

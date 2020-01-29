@@ -35,6 +35,13 @@ func IffError(test bool, trueVal, falseVal error) error {
 	return falseVal
 }
 
+func IffLocation(test bool, trueVal, falseVal Location) Location {
+	if test {
+		return trueVal
+	}
+	return falseVal
+}
+
 func IffString(test bool, trueVal, falseVal string) string {
 	if test {
 		return trueVal

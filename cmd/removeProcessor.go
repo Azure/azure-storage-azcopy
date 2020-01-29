@@ -33,7 +33,7 @@ func newRemoveTransferProcessor(cca *cookedCopyCmdArgs, numOfTransfersPerPart in
 		SourceRoot:    consolidatePathSeparators(cca.source),
 
 		// authentication related
-		CredentialInfo: cca.credentialInfo,
+		CredentialInfo: cca.dstCredentialInfo,
 		SourceSAS:      cca.sourceSAS,
 
 		// flags

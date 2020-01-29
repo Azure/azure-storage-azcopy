@@ -214,12 +214,12 @@ type cookedSyncCmdArgs struct {
 	// deletion count keeps track of how many extra files from the destination were removed
 	atomicDeletionCount uint32
 
-	source         string
-	sourceSAS      string
-	destination    string
-	destinationSAS string
-	fromTo         common.FromTo
-	credentialInfo common.CredentialInfo
+	source            string
+	sourceSAS         string
+	destination       string
+	destinationSAS    string
+	fromTo            common.FromTo
+	dstCredentialInfo common.CredentialInfo
 
 	// filters
 	recursive             bool
@@ -477,34 +477,17 @@ Final Job Status: %v%s%s
 func (cca *cookedSyncCmdArgs) process() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	// verifies credential type and initializes credential info.
-	// For sync, only one side need credential.
-	cca.credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
-		fromTo:         cca.fromTo,
-		source:         cca.source,
-		destination:    cca.destination,
-		sourceSAS:      cca.sourceSAS,
-		destinationSAS: cca.destinationSAS,
-	})
+	// Initializes credential info and oauth token for the destination. This should not be re-used on the source.
+	cca.dstCredentialInfo, _, err = getCredentialInfoForLocation(
+		ctx,
+		cca.fromTo.To(),
+		cca.destination,
+		cca.destinationSAS,
+		false,
+	)
 
 	if err != nil {
 		return err
-	}
-
-	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
-	// the info will be transferred to STE.
-	if cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		// Message user that they are using Oauth token for authentication,
-		// in case of silently using cached token without consciousness。
-		glcm.Info("Using OAuth token for authentication.")
-
-		uotm := GetUserOAuthTokenManagerInstance()
-		// Get token from env var or cache.
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return err
-		} else {
-			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
-		}
 	}
 
 	enumerator, err := cca.initEnumerator(ctx)

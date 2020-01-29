@@ -93,7 +93,7 @@ func newBlobTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (t *blobTrav
 		return nil, errors.New("illegal URL, no pattern matching allowed for sync command")
 	}
 
-	p, err := createBlobPipeline(ctx, cca.credentialInfo)
+	p, err := createBlobPipeline(ctx, cca.dstCredentialInfo)
 	if err != nil {
 		return
 	}
