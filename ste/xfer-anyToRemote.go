@@ -46,6 +46,7 @@ var destAccountSKU string
 var destAccountKind string
 var tierSetPossibleFail bool
 var getDestAccountInfo sync.Once
+var getDestAccountInfoError error
 
 func prepareDestAccountInfo(bURL azblob.BlobURL, jptm IJobPartTransferMgr, ctx context.Context, mustGet bool) {
 	getDestAccountInfo.Do(func() {
@@ -56,7 +57,7 @@ func prepareDestAccountInfo(bURL azblob.BlobURL, jptm IJobPartTransferMgr, ctx c
 			// If we fail to get the info under OAuth, don't fail the transfer.
 			// (https://docs.microsoft.com/en-us/rest/api/storageservices/get-account-information#authorization)
 			if mustGet {
-				jptm.FailActiveSendWithStatus("Checking destination tier availability (Set PageBlob tier) ", err, common.ETransferStatus.TierAvailabilityCheckFailure())
+				getDestAccountInfoError = err
 			} else {
 				tierSetPossibleFail = true
 				destAccountSKU = "failget"
@@ -67,6 +68,10 @@ func prepareDestAccountInfo(bURL azblob.BlobURL, jptm IJobPartTransferMgr, ctx c
 			destAccountKind = string(infoResp.AccountKind())
 		}
 	})
+
+	if getDestAccountInfoError != nil {
+		jptm.FailActiveSendWithStatus("Checking destination tier availability (Set PageBlob tier) ", getDestAccountInfoError, common.ETransferStatus.TierAvailabilityCheckFailure())
+	}
 }
 
 // TODO: Infer availability based upon blob size as well, for premium page blobs.

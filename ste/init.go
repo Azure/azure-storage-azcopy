@@ -438,6 +438,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 				js.TotalBytesTransferred += uint64(jppt.SourceSize)
 				js.TotalBytesExpected += uint64(jppt.SourceSize)
 			case common.ETransferStatus.Failed(),
+				common.ETransferStatus.TierAvailabilityCheckFailure(),
 				common.ETransferStatus.BlobTierFailure():
 				js.TransfersFailed++
 				// getting the source and destination for failed transfer at position - index
