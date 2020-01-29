@@ -130,7 +130,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 						return err
 					}
 					if f.entityType == common.EEntityType.File() {
-						fileProps := fullProperties.(azfile.FileGetPropertiesResponse)
+						fileProps := fullProperties.(*azfile.FileGetPropertiesResponse)
 						contentProps = fileProps       // only files have content props. Folders don't.
 						lmt = fileProps.LastModified() // only files have LMTs that are worth preserving. Folder LMTs are not updated in Azure Files when the folder content's change, so folder LMTs are not worth preserving
 					}

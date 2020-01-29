@@ -33,7 +33,7 @@ type IJobPartTransferMgr interface {
 	SlicePool() common.ByteSlicePooler
 	CacheLimiter() common.CacheLimiter
 	WaitUntilLockDestination(ctx context.Context) error
-	UnlockDestination()
+	EnsureDestinationUnlocked()
 	HoldsDestinationLock() bool
 	StartJobXfer()
 	GetOverwriteOption() common.OverwriteOption
@@ -338,7 +338,7 @@ func (jptm *jobPartTransferMgr) WaitUntilLockDestination(ctx context.Context) er
 	return err
 }
 
-func (jptm *jobPartTransferMgr) UnlockDestination() {
+func (jptm *jobPartTransferMgr) EnsureDestinationUnlocked() {
 	didHaveLock := atomic.CompareAndSwapUint32(&jptm.atomicDestLockHeldIndicator, 1, 0) // set to 0, but only if it is currently 1. Return true if changed
 	// only unlock if THIS jptm actually had the lock. (So that we don't make unwanted removals from fileCountLimiter)
 	if didHaveLock {

@@ -359,13 +359,14 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s IFileSender, si
 		s.Cleanup() // Perform jptm cleanup, if THIS jptm has the lock on the destination
 	}
 
-	jptm.UnlockDestination()
-
 	commonSenderCompletion(jptm, s, info)
 }
 
 // commonSenderCompletion is used for both files and folders
 func commonSenderCompletion(jptm IJobPartTransferMgr, s ISenderBase, info TransferInfo) {
+
+	jptm.EnsureDestinationUnlocked()
+
 	if jptm.TransferStatusIgnoringCancellation() == 0 {
 		panic("think we're finished but status is notStarted")
 	}

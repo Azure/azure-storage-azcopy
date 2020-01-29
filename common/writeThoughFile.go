@@ -37,19 +37,22 @@ var RootShareRegex = regexp.MustCompile(`(^\/\/[^\/]*\/?$)`)
 
 func CreateParentDirectoryIfNotExist(destinationPath string) error {
 	// find the parent directory
-	parentDirectory := destinationPath[:strings.LastIndex(destinationPath, DeterminePathSeparator(destinationPath))]
+	directory := destinationPath[:strings.LastIndex(destinationPath, DeterminePathSeparator(destinationPath))]
+	return CreateDirectoryIfNotExist(directory)
+}
 
+func CreateDirectoryIfNotExist(directory string) error {
 	// If we're pointing at the root of a drive, don't try because it won't work.
-	if shortParentDir := strings.ReplaceAll(ToShortPath(parentDirectory), OS_PATH_SEPARATOR, AZCOPY_PATH_SEPARATOR_STRING); RootDriveRegex.MatchString(shortParentDir) || RootShareRegex.MatchString(shortParentDir) || strings.EqualFold(shortParentDir, "/") {
+	if shortParentDir := strings.ReplaceAll(ToShortPath(directory), OS_PATH_SEPARATOR, AZCOPY_PATH_SEPARATOR_STRING); RootDriveRegex.MatchString(shortParentDir) || RootShareRegex.MatchString(shortParentDir) || strings.EqualFold(shortParentDir, "/") {
 		return nil
 	}
 
 	// try to create the root directory if the source does
-	if _, err := os.Stat(parentDirectory); err != nil {
+	if _, err := os.Stat(directory); err != nil {
 		// if the error is present, try to create the directory
 		// stat errors can be present in write-only scenarios, when the directory isn't present, etc.
 		// as a result, we care more about the mkdir error than the stat error, because that's the tell.
-		err := os.MkdirAll(parentDirectory, os.ModePerm)
+		err := os.MkdirAll(directory, os.ModePerm)
 		// if MkdirAll succeeds, no error is dropped-- it is nil.
 		// therefore, returning here is perfectly acceptable as it either succeeds (or it doesn't)
 		return err
