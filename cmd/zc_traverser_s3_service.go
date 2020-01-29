@@ -69,6 +69,20 @@ func (t *s3ServiceTraverser) listContainers() ([]string, error) {
 					}
 				}
 
+				// Check if the bucket is in the region after we have checked the pattern.
+				// This will save us from having to check if the bucket exists on however many buckets the user has in their account.
+				// BucketExists doesn't return an error if it's NoSuchBucket. Therefore, checking err here is what we should do.
+				_, err := t.s3Client.BucketExists(v.Name)
+
+				if err != nil {
+					if strings.Contains(err.Error(), "301 response missing Location header") {
+						LogStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q , as it's not in the region specified by source URL", v))
+						continue
+					}
+
+					return nil, err
+				}
+
 				bucketList = append(bucketList, v.Name)
 			}
 		} else {
@@ -104,10 +118,11 @@ func (t *s3ServiceTraverser) traverse(preprocessor objectMorpher, processor obje
 		err = bucketTraverser.traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
-			if strings.Contains(err.Error(), "301 response missing Location header") {
-				LogStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q , as it's not in the region specified by source URL", v))
-				continue
-			}
+			// This check occurs up in listContainers.
+			// if strings.Contains(err.Error(), "301 response missing Location header") {
+			// 	LogStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q , as it's not in the region specified by source URL", v))
+			// 	continue
+			// }
 
 			if strings.Contains(err.Error(), "cannot list objects, The specified bucket does not exist") {
 				LogStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q, as it does not exist.", v))
