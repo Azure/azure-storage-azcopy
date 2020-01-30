@@ -124,33 +124,48 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 		}
 
 		for _, v := range dlr.Paths {
-			if v.IsDirectory == nil {
-				// TODO: if we need to get full properties and metadata, then add call here to
-				//     dirUrl.NewFileURL(storedObject.relativePath).GetProperties(t.ctx)
-				//     AND consider also supporting alternate mechanism to get the props in the backend
-				//     using s2sGetPropertiesInBackend
-				storedObject := newStoredObject(
-					preprocessor,
-					getObjectNameOnly(*v.Name),
-					strings.TrimPrefix(*v.Name, searchPrefix),
-					common.EEntityType.File(), // TODO: add code path for Folders
-					v.LastModifiedTime(),
-					*v.ContentLength,
-					md5OnlyAdapter{md5: t.getContentMd5(t.ctx, dirUrl, v)},
-					noBlobProps,
-					noMetdata,
-					bfsURLParts.FileSystemName,
-				)
-
-				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter(common.EEntityType.File()) // TODO
-				}
-
-				err := processIfPassedFilters(filters, storedObject, processor)
-				if err != nil {
-					return err
-				}
+			var entityType common.EntityType
+			var contentProps contentPropsProvider
+			var size int64
+			var lmt time.Time
+			if v.IsDirectory == nil || *v.IsDirectory == false {
+				entityType = common.EEntityType.File()
+				contentProps = md5OnlyAdapter{md5: t.getContentMd5(t.ctx, dirUrl, v)}
+				size = *v.ContentLength
+				lmt = v.LastModifiedTime()
+			} else {
+				entityType = common.EEntityType.Folder()
+				contentProps = noContentProps
+				size = 0
+				lmt = time.Time{} // by design, we do not preserve LMT's for folders (because they are not present/reliable enough in enough folder-aware sources)
 			}
+
+			// TODO: if we need to get full properties and metadata, then add call here to
+			//     dirUrl.NewFileURL(storedObject.relativePath).GetProperties(t.ctx)
+			//     AND consider also supporting alternate mechanism to get the props in the backend
+			//     using s2sGetPropertiesInBackend
+			storedObject := newStoredObject(
+				preprocessor,
+				getObjectNameOnly(*v.Name),
+				strings.TrimPrefix(*v.Name, searchPrefix),
+				entityType,
+				lmt,
+				size,
+				contentProps,
+				noBlobProps,
+				noMetdata,
+				bfsURLParts.FileSystemName,
+			)
+
+			if t.incrementEnumerationCounter != nil {
+				t.incrementEnumerationCounter(entityType)
+			}
+
+			err := processIfPassedFilters(filters, storedObject, processor)
+			if err != nil {
+				return err
+			}
+
 		}
 
 		marker = dlr.XMsContinuation()
