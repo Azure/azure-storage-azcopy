@@ -43,6 +43,8 @@ func (s *s3URLPartsTestSuite) TestS3URLParse(c *chk.C) {
 	c.Assert(p.Region, chk.Equals, "")
 	c.Assert(p.Version, chk.Equals, "")
 	c.Assert(p.String(), chk.Equals, "http://bucket.s3.amazonaws.com")
+	pStyle := p.ToPathStyle()
+	c.Assert(pStyle.String(), chk.Equals, "http://s3.amazonaws.com/bucket")
 
 	u, _ = url.Parse("http://bucket.s3.amazonaws.com/")
 	p, err = NewS3URLParts(*u)
@@ -53,6 +55,8 @@ func (s *s3URLPartsTestSuite) TestS3URLParse(c *chk.C) {
 	c.Assert(p.Region, chk.Equals, "")
 	c.Assert(p.Version, chk.Equals, "")
 	c.Assert(p.String(), chk.Equals, "http://bucket.s3.amazonaws.com")
+	pStyle = p.ToPathStyle()
+	c.Assert(pStyle.String(), chk.Equals, "http://s3.amazonaws.com/bucket")
 
 	u, _ = url.Parse("http://bucket.s3-aws-region.amazonaws.com/keydir/keysubdir/keyname")
 	p, err = NewS3URLParts(*u)
@@ -63,6 +67,8 @@ func (s *s3URLPartsTestSuite) TestS3URLParse(c *chk.C) {
 	c.Assert(p.Region, chk.Equals, "aws-region")
 	c.Assert(p.Version, chk.Equals, "")
 	c.Assert(p.String(), chk.Equals, "http://bucket.s3-aws-region.amazonaws.com/keydir/keysubdir/keyname")
+	pStyle = p.ToPathStyle()
+	c.Assert(pStyle.String(), chk.Equals, "http://s3-aws-region.amazonaws.com/bucket/keydir/keysubdir/keyname")
 
 	u, _ = url.Parse("http://bucket.s3-aws-region.amazonaws.com/keyname")
 	p, err = NewS3URLParts(*u)
@@ -73,6 +79,8 @@ func (s *s3URLPartsTestSuite) TestS3URLParse(c *chk.C) {
 	c.Assert(p.Region, chk.Equals, "aws-region")
 	c.Assert(p.Version, chk.Equals, "")
 	c.Assert(p.String(), chk.Equals, "http://bucket.s3-aws-region.amazonaws.com/keyname")
+	pStyle = p.ToPathStyle()
+	c.Assert(pStyle.String(), chk.Equals, "http://s3-aws-region.amazonaws.com/bucket/keyname")
 
 	u, _ = url.Parse("http://bucket.s3-aws-region.amazonaws.com/keyname/")
 	p, err = NewS3URLParts(*u)
@@ -83,6 +91,8 @@ func (s *s3URLPartsTestSuite) TestS3URLParse(c *chk.C) {
 	c.Assert(p.Region, chk.Equals, "aws-region")
 	c.Assert(p.Version, chk.Equals, "")
 	c.Assert(p.String(), chk.Equals, "http://bucket.s3-aws-region.amazonaws.com/keyname/")
+	pStyle = p.ToPathStyle()
+	c.Assert(pStyle.String(), chk.Equals, "http://s3-aws-region.amazonaws.com/bucket/keyname/")
 
 	// dual stack
 	u, _ = url.Parse("http://bucket.s3.dualstack.aws-region.amazonaws.com/keyname/")
@@ -94,6 +104,8 @@ func (s *s3URLPartsTestSuite) TestS3URLParse(c *chk.C) {
 	c.Assert(p.Region, chk.Equals, "aws-region")
 	c.Assert(p.Version, chk.Equals, "")
 	c.Assert(p.String(), chk.Equals, "http://bucket.s3.dualstack.aws-region.amazonaws.com/keyname/")
+	pStyle = p.ToPathStyle()
+	c.Assert(pStyle.String(), chk.Equals, "http://s3.dualstack.aws-region.amazonaws.com/bucket/keyname/")
 
 	u, _ = url.Parse("https://s3.amazonaws.com")
 	p, err = NewS3URLParts(*u)
@@ -104,6 +116,8 @@ func (s *s3URLPartsTestSuite) TestS3URLParse(c *chk.C) {
 	c.Assert(p.Region, chk.Equals, "")
 	c.Assert(p.Version, chk.Equals, "")
 	c.Assert(p.String(), chk.Equals, "https://s3.amazonaws.com")
+	pStyle = p.ToPathStyle()
+	c.Assert(pStyle.String(), chk.Equals, "https://s3.amazonaws.com")
 
 	u, _ = url.Parse("https://s3.amazonaws.com/")
 	p, err = NewS3URLParts(*u)
@@ -114,6 +128,8 @@ func (s *s3URLPartsTestSuite) TestS3URLParse(c *chk.C) {
 	c.Assert(p.Region, chk.Equals, "")
 	c.Assert(p.Version, chk.Equals, "")
 	c.Assert(p.String(), chk.Equals, "https://s3.amazonaws.com")
+	pStyle = p.ToPathStyle()
+	c.Assert(pStyle.String(), chk.Equals, "https://s3.amazonaws.com")
 
 	u, _ = url.Parse("https://s3-ap-southeast-1.amazonaws.com/")
 	p, err = NewS3URLParts(*u)
@@ -124,6 +140,8 @@ func (s *s3URLPartsTestSuite) TestS3URLParse(c *chk.C) {
 	c.Assert(p.Region, chk.Equals, "ap-southeast-1")
 	c.Assert(p.Version, chk.Equals, "")
 	c.Assert(p.String(), chk.Equals, "https://s3-ap-southeast-1.amazonaws.com")
+	pStyle = p.ToPathStyle()
+	c.Assert(pStyle.String(), chk.Equals, "https://s3-ap-southeast-1.amazonaws.com")
 
 	u, _ = url.Parse("https://s3-ap-southeast-1.amazonaws.com/jiac-art-awsbucket01")
 	p, err = NewS3URLParts(*u)
@@ -134,6 +152,8 @@ func (s *s3URLPartsTestSuite) TestS3URLParse(c *chk.C) {
 	c.Assert(p.Region, chk.Equals, "ap-southeast-1")
 	c.Assert(p.Version, chk.Equals, "")
 	c.Assert(p.String(), chk.Equals, "https://s3-ap-southeast-1.amazonaws.com/jiac-art-awsbucket01")
+	pStyle = p.ToPathStyle()
+	c.Assert(pStyle.String(), chk.Equals, "https://s3-ap-southeast-1.amazonaws.com/jiac-art-awsbucket01")
 
 	u, _ = url.Parse("https://s3-ap-southeast-1.amazonaws.com/jiac-art-awsbucket01/")
 	p, err = NewS3URLParts(*u)
@@ -144,6 +164,8 @@ func (s *s3URLPartsTestSuite) TestS3URLParse(c *chk.C) {
 	c.Assert(p.Region, chk.Equals, "ap-southeast-1")
 	c.Assert(p.Version, chk.Equals, "")
 	c.Assert(p.String(), chk.Equals, "https://s3-ap-southeast-1.amazonaws.com/jiac-art-awsbucket01")
+	pStyle = p.ToPathStyle()
+	c.Assert(pStyle.String(), chk.Equals, "https://s3-ap-southeast-1.amazonaws.com/jiac-art-awsbucket01")
 
 	u, _ = url.Parse("https://s3-ap-southeast-1.amazonaws.com/jiac-art-awsbucket01/Test.pdf")
 	p, err = NewS3URLParts(*u)
@@ -154,6 +176,8 @@ func (s *s3URLPartsTestSuite) TestS3URLParse(c *chk.C) {
 	c.Assert(p.Region, chk.Equals, "ap-southeast-1")
 	c.Assert(p.Version, chk.Equals, "")
 	c.Assert(p.String(), chk.Equals, "https://s3-ap-southeast-1.amazonaws.com/jiac-art-awsbucket01/Test.pdf")
+	pStyle = p.ToPathStyle()
+	c.Assert(pStyle.String(), chk.Equals, "https://s3-ap-southeast-1.amazonaws.com/jiac-art-awsbucket01/Test.pdf")
 
 	u, _ = url.Parse("https://s3-ap-southeast-1.amazonaws.com/jiac-art-awsbucket01/space+folder/Test.pdf")
 	p, err = NewS3URLParts(*u)
@@ -164,6 +188,8 @@ func (s *s3URLPartsTestSuite) TestS3URLParse(c *chk.C) {
 	c.Assert(p.Region, chk.Equals, "ap-southeast-1")
 	c.Assert(p.Version, chk.Equals, "")
 	c.Assert(p.String(), chk.Equals, "https://s3-ap-southeast-1.amazonaws.com/jiac-art-awsbucket01/space+folder/Test.pdf")
+	pStyle = p.ToPathStyle()
+	c.Assert(pStyle.String(), chk.Equals, "https://s3-ap-southeast-1.amazonaws.com/jiac-art-awsbucket01/space+folder/Test.pdf")
 
 	// Version testing
 	u, _ = url.Parse("https://s3.ap-northeast-2.amazonaws.com/jiac-art-awsbucket02-versionenabled/Test.pdf?versionId=Cy0pgpqHDTR7RlMEwU_BxDVER2QN5lJJ")
@@ -175,6 +201,8 @@ func (s *s3URLPartsTestSuite) TestS3URLParse(c *chk.C) {
 	c.Assert(p.Region, chk.Equals, "ap-northeast-2")
 	c.Assert(p.Version, chk.Equals, "Cy0pgpqHDTR7RlMEwU_BxDVER2QN5lJJ")
 	c.Assert(p.String(), chk.Equals, "https://s3.ap-northeast-2.amazonaws.com/jiac-art-awsbucket02-versionenabled/Test.pdf?versionId=Cy0pgpqHDTR7RlMEwU_BxDVER2QN5lJJ")
+	pStyle = p.ToPathStyle()
+	c.Assert(pStyle.String(), chk.Equals, "https://s3.ap-northeast-2.amazonaws.com/jiac-art-awsbucket02-versionenabled/Test.pdf?versionId=Cy0pgpqHDTR7RlMEwU_BxDVER2QN5lJJ")
 
 	// Version and dualstack testing
 	u, _ = url.Parse("https://s3.dualstack.ap-northeast-2.amazonaws.com/jiac-art-awsbucket02-versionenabled/Test.pdf?versionId=Cy0pgpqHDTR7RlMEwU_BxDVER2QN5lJJ")
@@ -186,6 +214,8 @@ func (s *s3URLPartsTestSuite) TestS3URLParse(c *chk.C) {
 	c.Assert(p.Region, chk.Equals, "ap-northeast-2")
 	c.Assert(p.Version, chk.Equals, "Cy0pgpqHDTR7RlMEwU_BxDVER2QN5lJJ")
 	c.Assert(p.String(), chk.Equals, "https://s3.dualstack.ap-northeast-2.amazonaws.com/jiac-art-awsbucket02-versionenabled/Test.pdf?versionId=Cy0pgpqHDTR7RlMEwU_BxDVER2QN5lJJ")
+	pStyle = p.ToPathStyle()
+	c.Assert(pStyle.String(), chk.Equals, "https://s3.dualstack.ap-northeast-2.amazonaws.com/jiac-art-awsbucket02-versionenabled/Test.pdf?versionId=Cy0pgpqHDTR7RlMEwU_BxDVER2QN5lJJ")
 
 }
 

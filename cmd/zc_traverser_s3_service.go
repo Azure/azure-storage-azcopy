@@ -92,6 +92,7 @@ func (t *s3ServiceTraverser) traverse(preprocessor objectMorpher, processor obje
 	for _, v := range bucketList {
 		tmpS3URL := t.s3URL
 		tmpS3URL.BucketName = v
+		tmpS3URL = s3URLPartsExtension{tmpS3URL.ToPathStyle()} // Convert to path style prior to return to URL form.
 		urlResult := tmpS3URL.URL()
 		bucketTraverser, err := newS3Traverser(&urlResult, t.ctx, true, t.getProperties, t.incrementEnumerationCounter)
 
