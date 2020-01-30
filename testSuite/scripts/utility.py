@@ -1,6 +1,7 @@
 import ctypes
 import os
 import platform
+import re
 import shutil
 import subprocess
 import shlex
@@ -540,6 +541,7 @@ def execute_azcopy_command(command):
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
         # todo kill azcopy command in case of timeout
+        print(re.sub("(?i)(?P<key>sig[ \t]*[:=][ \t]*)(?P<value>[^& ,;\t\n\r]+)", "sig=REDACTED", cmnd))
         print("command failed with error code " , exec.returncode , " and message " + exec.output)
         return False
     else:
