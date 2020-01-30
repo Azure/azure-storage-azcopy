@@ -153,6 +153,10 @@ func (p *S3URLParts) URL() url.URL {
 	if p.BucketName != "" {
 		if p.isPathStyle {
 			path += "/" + p.BucketName
+		} else { // Convert to path style
+			p.Host = p.Endpoint
+			p.isPathStyle = true
+			path += "/" + p.BucketName
 		}
 		if p.ObjectKey != "" {
 			path += "/" + p.ObjectKey
