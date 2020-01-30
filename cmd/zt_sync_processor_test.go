@@ -85,7 +85,7 @@ func (s *syncProcessorSuite) TestBlobDeleter(c *chk.C) {
 	cca := &cookedSyncCmdArgs{
 		destination:       containerURL.String(),
 		destinationSAS:    parts.SAS.Encode(),
-		credentialInfo:    common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()},
+		dstCredentialInfo: common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()},
 		deleteDestination: common.EDeleteDestination.True(),
 		fromTo:            common.EFromTo.LocalBlob(),
 	}
@@ -123,7 +123,7 @@ func (s *syncProcessorSuite) TestFileDeleter(c *chk.C) {
 	cca := &cookedSyncCmdArgs{
 		destination:       shareURL.String(),
 		destinationSAS:    parts.SAS.Encode(),
-		credentialInfo:    common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()},
+		dstCredentialInfo: common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()},
 		deleteDestination: common.EDeleteDestination.True(),
 		fromTo:            common.EFromTo.FileFile(),
 	}

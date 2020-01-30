@@ -45,7 +45,7 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int)
 		DestinationRoot: consolidatePathSeparators(cca.destination),
 
 		// authentication related
-		CredentialInfo: cca.credentialInfo,
+		CredentialInfo: cca.dstCredentialInfo,
 		SourceSAS:      cca.sourceSAS,
 		DestinationSAS: cca.destinationSAS,
 
@@ -189,7 +189,7 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	p, err := initPipeline(ctx, cca.fromTo.To(), cca.credentialInfo)
+	p, err := initPipeline(ctx, cca.fromTo.To(), cca.dstCredentialInfo)
 	if err != nil {
 		return nil, err
 	}

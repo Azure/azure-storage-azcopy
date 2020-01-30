@@ -42,10 +42,32 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		return nil, err
 	}
 
+	srcCredentialInfo, isPublic, err := getCredentialInfoForLocation(
+		ctx,
+		cca.fromTo.From(),
+		cca.source,
+		cca.sourceSAS,
+		true,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// blob to file isn't supported in sync yet.
+	if cca.fromTo == common.EFromTo.BlobBlob() {
+		// The source must either have a SAS or be public at time of writing.
+		// TODO: Change this behavior after PR #689 (blob->blob OAuth) is merged.
+
+		if cca.sourceSAS == "" && !isPublic {
+			return nil, errors.New("")
+		}
+	}
+
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
-	sourceTraverser, err := initResourceTraverser(src, cca.fromTo.From(), &ctx, &cca.credentialInfo,
+	sourceTraverser, err := initResourceTraverser(src, cca.fromTo.From(), &ctx, &srcCredentialInfo,
 		nil, nil, cca.recursive, true, func() {
 			atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 		})
@@ -57,7 +79,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
-	destinationTraverser, err := initResourceTraverser(dst, cca.fromTo.To(), &ctx, &cca.credentialInfo,
+	destinationTraverser, err := initResourceTraverser(dst, cca.fromTo.To(), &ctx, &cca.dstCredentialInfo,
 		nil, nil, cca.recursive, true, func() {
 			atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 		})

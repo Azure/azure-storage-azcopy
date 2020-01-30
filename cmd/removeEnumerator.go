@@ -57,7 +57,7 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	}
 
 	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = initResourceTraverser(rawURL.String(), cca.fromTo.From(), &ctx, &cca.credentialInfo, nil, cca.listOfFilesChannel, cca.recursive, false, func() {})
+	sourceTraverser, err = initResourceTraverser(rawURL.String(), cca.fromTo.From(), &ctx, &cca.dstCredentialInfo, nil, cca.listOfFilesChannel, cca.recursive, false, func() {})
 
 	// report failure to create traverser
 	if err != nil {
@@ -134,7 +134,7 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
 	}
 
 	// create bfs pipeline
-	p, err := createBlobFSPipeline(ctx, cca.credentialInfo)
+	p, err := createBlobFSPipeline(ctx, cca.dstCredentialInfo)
 	if err != nil {
 		return err
 	}
