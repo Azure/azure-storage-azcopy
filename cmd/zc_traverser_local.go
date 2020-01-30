@@ -232,6 +232,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 					processor)
 			}
 
+			// note: Walk includes root, so no need here to separately create storedObject for root (as we do for other folder-aware sources)
 			if t.followSymlinks {
 				return WalkWithSymlinks(t.fullPath, processFile)
 			} else {
@@ -239,6 +240,9 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 			}
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath
+			// We don't transfer any directory properties here, not even the root. (Because the root's
+			// properties won't be transferred, because the only way to do a non-recursive directory transfer
+			// is with /* (aka stripTopDir).
 			files, err := ioutil.ReadDir(t.fullPath)
 			if err != nil {
 				return err

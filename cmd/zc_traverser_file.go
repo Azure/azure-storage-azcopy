@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -90,8 +91,62 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		}
 	}
 
+	// else, its not just one file
+
+	processEntity := func(f azfileEntity) error {
+		// compute the relative path of the file with respect to the target directory
+		fileURLParts := azfile.NewFileURLParts(f.url)
+		relativePath := strings.TrimPrefix(fileURLParts.DirectoryOrFilePath, targetURLParts.DirectoryOrFilePath)
+		relativePath = strings.TrimPrefix(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+
+		// We need to omit some properties if we don't get properties
+		lmt := time.Time{}
+		var contentProps contentPropsProvider = noContentProps
+		var meta common.Metadata = nil
+
+		// Only get the properties if we're told to
+		if t.getProperties {
+			var fullProperties azfilePropertiesAdapter
+			fullProperties, err = f.propertyGetter(t.ctx)
+			if err != nil {
+				return err
+			}
+			if f.entityType == common.EEntityType.File() {
+				fileProps := fullProperties.(*azfile.FileGetPropertiesResponse)
+				contentProps = fileProps       // only files have content props. Folders don't.
+				lmt = fileProps.LastModified() // only files have LMTs that are worth preserving. Folder LMTs are not updated in Azure Files when the folder content's change, so folder LMTs are not worth preserving
+			}
+			meta = common.FromAzFileMetadataToCommonMetadata(fullProperties.NewMetadata())
+		}
+		storedObject := newStoredObject(
+			preprocessor,
+			getObjectNameOnly(f.name),
+			relativePath,
+			f.entityType,
+			lmt,
+			f.contentLength,
+			contentProps,
+			noBlobProps,
+			meta,
+			targetURLParts.ShareName,
+		)
+
+		if t.incrementEnumerationCounter != nil {
+			t.incrementEnumerationCounter(f.entityType)
+		}
+		return processIfPassedFilters(filters, storedObject, processor)
+	}
+
 	// get the directory URL so that we can list the files
 	directoryURL := azfile.NewDirectoryURL(targetURLParts.URL(), t.p)
+
+	// Include the root dir in the enumeration results
+	// Our rule is that enumerators of folder-aware sources must always include the root folder's properties
+	rootName := filepath.Base(targetURLParts.URL().Path) // will be name of file system, if root is at filesystem level. Else will be a dir name.
+	err = processEntity(newAzFileRootFolderEntity(&directoryURL, rootName))
+	if err != nil {
+		return err
+	}
 
 	dirStack := &directoryStack{}
 	dirStack.Push(directoryURL)
@@ -106,54 +161,13 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			// Process the files and folders we listed
 			fs := make([]azfileEntity, 0, len(lResp.FileItems)+len(lResp.DirectoryItems))
 			for _, fileInfo := range lResp.FileItems {
-				fs = append(fs, newAzfileFileEntity(currentDirURL, fileInfo))
+				fs = append(fs, newAzFileFileEntity(currentDirURL, fileInfo))
 			}
 			for _, dirInfo := range lResp.DirectoryItems {
-				fs = append(fs, newAzfileFolderEntity(currentDirURL, dirInfo))
+				fs = append(fs, newAzFileChildFolderEntity(currentDirURL, dirInfo.Name))
 			}
 			for _, f := range fs {
-				// compute the relative path of the file with respect to the target directory
-				fileURLParts := azfile.NewFileURLParts(f.url)
-				relativePath := strings.TrimPrefix(fileURLParts.DirectoryOrFilePath, targetURLParts.DirectoryOrFilePath)
-				relativePath = strings.TrimPrefix(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
-
-				// We need to omit some properties if we don't get properties
-				lmt := time.Time{}
-				var contentProps contentPropsProvider = noContentProps
-				var meta common.Metadata = nil
-
-				// Only get the properties if we're told to
-				if t.getProperties {
-					var fullProperties azfilePropertiesAdapter
-					fullProperties, err = f.propertyGetter(t.ctx)
-					if err != nil {
-						return err
-					}
-					if f.entityType == common.EEntityType.File() {
-						fileProps := fullProperties.(*azfile.FileGetPropertiesResponse)
-						contentProps = fileProps       // only files have content props. Folders don't.
-						lmt = fileProps.LastModified() // only files have LMTs that are worth preserving. Folder LMTs are not updated in Azure Files when the folder content's change, so folder LMTs are not worth preserving
-					}
-					meta = common.FromAzFileMetadataToCommonMetadata(fullProperties.NewMetadata())
-				}
-				storedObject := newStoredObject(
-					preprocessor,
-					getObjectNameOnly(f.name),
-					relativePath,
-					f.entityType,
-					lmt,
-					f.contentLength,
-					contentProps,
-					noBlobProps,
-					meta,
-					targetURLParts.ShareName,
-				)
-
-				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter(f.entityType)
-				}
-
-				processErr := processIfPassedFilters(filters, storedObject, processor)
+				processErr := processEntity(f)
 				if processErr != nil {
 					return processErr
 				}
@@ -187,7 +201,7 @@ type azfileEntity struct {
 	entityType     common.EntityType
 }
 
-func newAzfileFileEntity(containingDir *azfile.DirectoryURL, fileInfo azfile.FileItem) azfileEntity {
+func newAzFileFileEntity(containingDir *azfile.DirectoryURL, fileInfo azfile.FileItem) azfileEntity {
 	fu := containingDir.NewFileURL(fileInfo.Name)
 	return azfileEntity{
 		fileInfo.Name,
@@ -198,13 +212,17 @@ func newAzfileFileEntity(containingDir *azfile.DirectoryURL, fileInfo azfile.Fil
 	}
 }
 
-func newAzfileFolderEntity(containingDir *azfile.DirectoryURL, dirInfo azfile.DirectoryItem) azfileEntity {
-	du := containingDir.NewDirectoryURL(dirInfo.Name)
+func newAzFileChildFolderEntity(containingDir *azfile.DirectoryURL, dirName string) azfileEntity {
+	du := containingDir.NewDirectoryURL(dirName)
+	return newAzFileRootFolderEntity(&du, dirName) // now that we have du, the logic is same as if it was the root
+}
+
+func newAzFileRootFolderEntity(rootDir *azfile.DirectoryURL, name string) azfileEntity {
 	return azfileEntity{
-		dirInfo.Name,
+		name,
 		0,
-		du.URL(),
-		func(ctx context.Context) (azfilePropertiesAdapter, error) { return du.GetProperties(ctx) },
+		rootDir.URL(),
+		func(ctx context.Context) (azfilePropertiesAdapter, error) { return rootDir.GetProperties(ctx) },
 		common.EEntityType.Folder(),
 	}
 }
