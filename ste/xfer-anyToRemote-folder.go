@@ -104,7 +104,10 @@ func anyToRemote_folder(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.
 	}
 	*/
 
-	// no chunks to schedule. Just run the folder handling operations
+	// No chunks to schedule. Just run the folder handling operations.
+	// There are no checks for folders on LMT's changing while we read them. We need that for files,
+	// so we don't use and out-dated size to plan chunks, or read a mix of old and new data, but neither
+	// of those issues apply to folders.
 	err = s.EnsureFolderExists()
 	if err != nil {
 		jptm.FailActiveSend("ensuring destination folder exists", err)

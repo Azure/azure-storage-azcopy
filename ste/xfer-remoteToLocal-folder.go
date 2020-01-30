@@ -67,7 +67,8 @@ func remoteToLocal_folder(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer p
 	if err != nil {
 		jptm.FailActiveSend("ensuring destination folder exists", err)
 	} else {
-		// TODO: get the properties from somewher (a source info provider, presumably?)
+		// TODO: in the later PR (to come) about actually transferring properties
+		//    get the properties from somewhere (a source info provider, presumably?)
 		// and set them
 		//
 		//		if err != nil {
