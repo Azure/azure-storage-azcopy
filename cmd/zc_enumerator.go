@@ -65,9 +65,13 @@ type storedObject struct {
 
 	// partial path relative to its root directory
 	// example: rootDir=/var/a/b/c fullPath=/var/a/b/c/d/e/f.pdf => relativePath=d/e/f.pdf name=f.pdf
-	// note that sometimes the rootDir given by the user turns out to be a single file
+	// Note 1: sometimes the rootDir given by the user turns out to be a single file
 	// example: rootDir=/var/a/b/c/d/e/f.pdf fullPath=/var/a/b/c/d/e/f.pdf => relativePath=""
 	// in this case, since rootDir already points to the file, relatively speaking the path is nothing.
+	// In this case isSingleSourceFile returns true.
+	// Note 2: The other unusual case is the storedObject representing the folder properties of the root dir
+	// (if the source is folder-aware). In this case relativePath is also empty.
+	// In this case isSourceRootFolder returns true.
 	relativePath string
 	// container source, only included by account traversers.
 	containerName string
@@ -85,6 +89,14 @@ const (
 
 func (s *storedObject) isMoreRecentThan(storedObject2 storedObject) bool {
 	return s.lastModifiedTime.After(storedObject2.lastModifiedTime)
+}
+
+func (s *storedObject) isSingleSourceFile() bool {
+	return s.relativePath == "" && s.entityType == common.EEntityType.File()
+}
+
+func (s *storedObject) isSourceRootFolder() bool {
+	return s.relativePath == "" && s.entityType == common.EEntityType.Folder()
 }
 
 func (s *storedObject) ToNewCopyTransfer(
@@ -131,7 +143,7 @@ func (s *storedObject) ToNewCopyTransfer(
 		case common.EFolderPropertiesOption.None():
 			shouldSend = false
 		case common.EFolderPropertiesOption.AllFoldersExceptRoot():
-			shouldSend = s.relativePath != ""
+			shouldSend = !s.isSourceRootFolder()
 		case common.EFolderPropertiesOption.AllFolders():
 			shouldSend = true
 		default:

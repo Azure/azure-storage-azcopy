@@ -457,14 +457,17 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 		return "" // ignore path encode rules
 	}
 
-	// source is a EXACT path to the file.
-	if object.relativePath == "" {
+	// source is a EXACT path to the file
+	if object.isSingleSourceFile() {
 		// If we're finding an object from the source, it returns "" if it's already got it.
 		// If we're finding an object on the destination and we get "", we need to hand it the object name (if it's pointing to a folder)
 		if source {
 			relativePath = ""
 		} else {
 			if dstIsDir {
+				// Our source points to a specific file (and so has no relative path)
+				// but our dest does not point to a specific file, it just points to a directory,
+				// and so relativePath needs the _name_ of the source.
 				relativePath = "/" + object.name
 			} else {
 				relativePath = ""
@@ -474,7 +477,7 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 		return pathEncodeRules(relativePath)
 	}
 
-	// If it's out here, the object is contained in a folder, or was found via a wildcard.
+	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true
 
 	relativePath = "/" + strings.Replace(object.relativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 
@@ -492,6 +495,8 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 			// Realistically, err should never not be nil here.
 			if err == nil {
 				rootDir = ueRootDir
+			} else {
+				panic("unexpected un-escapeable rootDir name")
 			}
 		}
 
