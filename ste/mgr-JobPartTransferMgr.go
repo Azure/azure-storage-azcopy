@@ -201,7 +201,7 @@ func (jptm *jobPartTransferMgr) GetSourceCompressionType() (common.CompressionTy
 
 func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	plan := jptm.jobPartMgr.Plan()
-	src, dst := plan.TransferSrcDstStrings(jptm.transferIndex)
+	src, dst, _ := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
 
 	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType :=

@@ -332,7 +332,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		// If it doesn't exists, skip the transfer
 		if len(includeTransfer) > 0 {
 			// Get the source string from the part plan header
-			src, _ := plan.TransferSrcDstStrings(t)
+			src, _, _ := plan.TransferSrcDstStrings(t)
 			// If source doesn't exists, skip the transfer
 			_, ok := includeTransfer[src]
 			if !ok {
@@ -345,7 +345,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		// If it exists, then skip the transfer
 		if len(excludeTransfer) > 0 {
 			// Get the source string from the part plan header
-			src, _ := plan.TransferSrcDstStrings(t)
+			src, _, _ := plan.TransferSrcDstStrings(t)
 			// If the source exists in the list of excluded transfer
 			// skip the transfer
 			_, ok := excludeTransfer[src]

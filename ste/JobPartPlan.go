@@ -112,11 +112,13 @@ func (jpph *JobPartPlanHeader) CommandString() string {
 }
 
 // TransferSrcDstDetail returns the source and destination string for a transfer at given transferIndex in JobPartOrder
-func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (source, destination string) {
+// Also indication of entity type since that's often necessary to avoid ambiguity about what the source and dest are
+func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (source, destination string, isFolder bool) {
 	srcRoot := string(jpph.SourceRoot[:jpph.SourceRootLength])
 	dstRoot := string(jpph.DestinationRoot[:jpph.DestinationRootLength])
 
 	jppt := jpph.Transfer(transferIndex)
+	isFolder = jppt.EntityType == common.EEntityType.Folder()
 
 	srcSlice := []byte{}
 	sh := (*reflect.SliceHeader)(unsafe.Pointer(&srcSlice))
@@ -132,7 +134,7 @@ func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (sour
 	sh.Cap = sh.Len
 	dstRelative := string(dstSlice)
 
-	return common.GenerateFullPath(srcRoot, srcRelative), common.GenerateFullPath(dstRoot, dstRelative)
+	return common.GenerateFullPath(srcRoot, srcRelative), common.GenerateFullPath(dstRoot, dstRelative), isFolder
 }
 
 func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {

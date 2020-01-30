@@ -9,6 +9,12 @@
    for when files are skipped and for when the setting of folder properties is skipped.  This affects the input and 
    output of `azcopy jobs show` and the status values shown in the JSON output format.
 
+### New features
+
+1. AzCopy can now transfer empty folders, and transfer the properties of folders. This applies when both the source 
+   and destination support real folders (Blob Storage does not, because it only supports virtual folders).  Status output
+   from AzCopy jobs, and `jobs status`, now contain information about folders.
+
 ## Version 10.3.3
 
 ### New features

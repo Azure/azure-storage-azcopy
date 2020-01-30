@@ -215,10 +215,11 @@ type ResumeJobRequest struct {
 
 // represents the Details and details of a single transfer
 type TransferDetail struct {
-	Src            string
-	Dst            string
-	TransferStatus TransferStatus
-	ErrorCode      int32
+	Src                string
+	Dst                string
+	IsFolderProperties bool
+	TransferStatus     TransferStatus
+	ErrorCode          int32
 }
 
 type CancelPauseResumeResponse struct {
