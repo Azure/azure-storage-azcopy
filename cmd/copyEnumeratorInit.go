@@ -234,7 +234,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			cca.autoDecompress && cca.fromTo.IsDownload(),
 			srcRelPath, dstRelPath,
 			cca.s2sPreserveAccessTier,
-			common.NewFolderPropertyOption(cca.fromTo.AreBothFolderAware(), cca.stripTopDir),
+			common.NewFolderPropertyOption(cca.fromTo.AreBothFolderAware(), cca.recursive, cca.stripTopDir),
 		)
 
 		if shouldSendToSte {

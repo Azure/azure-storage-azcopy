@@ -1228,13 +1228,18 @@ func (FolderPropertyOption) AllFoldersExceptRoot() FolderPropertyOption {
 }
 func (FolderPropertyOption) AllFolders() FolderPropertyOption { return FolderPropertyOption(2) }
 
-func NewFolderPropertyOption(transferFolderProperties bool, stripTopDir bool) FolderPropertyOption {
-	if transferFolderProperties {
+func NewFolderPropertyOption(bothFolderAware bool, recursive bool, stripTopDir bool) FolderPropertyOption {
+	if !recursive {
+		return EFolderPropertiesOption.None() // does't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
+	}
+
+	if bothFolderAware {
 		if stripTopDir {
 			return EFolderPropertiesOption.AllFoldersExceptRoot()
 		} else {
 			return EFolderPropertiesOption.AllFolders()
 		}
 	}
+
 	return EFolderPropertiesOption.None()
 }
