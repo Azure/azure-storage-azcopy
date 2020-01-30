@@ -856,13 +856,14 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// We ignore the isPublic flag because it cannot be returned when we indicate this is not a source credential.
 	// Note that we also no longer need to obtain the OAuth token ourselves because getCredentialInfoForLocation does this for us in a safe manner.
 	// Note that this is not re-used for any operations against the source.
-	toTrash := cca.fromTo.To() == common.ELocation.Unknown()
+	useSrc := cca.fromTo.To() == common.ELocation.Unknown() || cca.fromTo.IsDownload()
 	if cca.dstCredentialInfo, _, err = getCredentialInfoForLocation(
 		ctx,
-		// We want to provide source information when doing a trash transfer, since remove puts all of our information in cca.source.
-		common.IffLocation(toTrash, cca.fromTo.From(), cca.fromTo.To()),
-		common.IffString(toTrash, cca.source, cca.destination),
-		common.IffString(toTrash, cca.sourceSAS, cca.destinationSAS),
+		// Sometimes we do need to use the source credentials.
+		// For instance, when downloading, or attempting to delete files.
+		common.IffLocation(useSrc, cca.fromTo.From(), cca.fromTo.To()),
+		common.IffString(useSrc, cca.source, cca.destination),
+		common.IffString(useSrc, cca.sourceSAS, cca.destinationSAS),
 		false,
 	); err != nil {
 		return err

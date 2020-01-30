@@ -273,13 +273,13 @@ func (rca resumeCmdArgs) process() error {
 
 	// Determine the destination credential info to pass to STE and remove.
 	// We ignore the isPublic flag because it cannot be returned when we indicate this is not a source credential.
-	toTrash := getJobFromToResponse.FromTo.To() == common.ELocation.Unknown()
+	useSrc := getJobFromToResponse.FromTo.To() == common.ELocation.Unknown() || getJobFromToResponse.FromTo.IsDownload()
 	if credentialInfo, _, err = getCredentialInfoForLocation(
 		ctx,
-		// Because delete blob and delete file are handled by STE, we'll do much the same thing as copy, and supply the "source" information instead.
-		common.IffLocation(toTrash, getJobFromToResponse.FromTo.From(), getJobFromToResponse.FromTo.To()),
-		common.IffString(toTrash, getJobFromToResponse.Source, getJobFromToResponse.Destination),
-		common.IffString(toTrash, rca.SourceSAS, rca.DestinationSAS),
+		// Since downloads and deletes require source credentials, we need to be able to get either when needbe.
+		common.IffLocation(useSrc, getJobFromToResponse.FromTo.From(), getJobFromToResponse.FromTo.To()),
+		common.IffString(useSrc, getJobFromToResponse.Source, getJobFromToResponse.Destination),
+		common.IffString(useSrc, rca.SourceSAS, rca.DestinationSAS),
 		false,
 	); err != nil {
 		return err

@@ -478,11 +478,13 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// Initializes credential info and oauth token for the destination. This should not be re-used on the source.
+	useSrc := cca.fromTo.To().IsLocal()
 	cca.dstCredentialInfo, _, err = getCredentialInfoForLocation(
 		ctx,
-		cca.fromTo.To(),
-		cca.destination,
-		cca.destinationSAS,
+		// On downloads, we'll still need to use the source credentials.
+		common.IffLocation(useSrc, cca.fromTo.From(), cca.fromTo.To()),
+		common.IffString(useSrc, cca.source, cca.destination),
+		common.IffString(useSrc, cca.sourceSAS, cca.destinationSAS),
 		false,
 	)
 
