@@ -94,7 +94,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		} else {
 			err := jptm.WaitUntilLockDestination(jptm.Context())
 			if err == nil {
-				err = createEmptyFile(info.Destination)
+				err = createEmptyFile(jptm, info.Destination)
 			}
 			if err != nil {
 				jptm.LogDownloadError(info.Source, info.Destination, "Empty File Creation error "+err.Error(), 0)
@@ -250,7 +250,7 @@ func createDestinationFile(jptm IJobPartTransferMgr, destination string, size in
 	}
 
 	var dstFile io.WriteCloser
-	dstFile, err = common.CreateFileOfSizeWithWriteThroughOption(destination, size, writeThrough)
+	dstFile, err = common.CreateFileOfSizeWithWriteThroughOption(destination, size, writeThrough, jptm.GetFolderCreationTracker())
 	if err != nil {
 		return nil, err
 	}
@@ -387,8 +387,8 @@ func commonDownloaderCompletion(jptm IJobPartTransferMgr, info TransferInfo, ent
 }
 
 // create an empty file and its parent directories, without any content
-func createEmptyFile(destinationPath string) error {
-	err := common.CreateParentDirectoryIfNotExist(destinationPath)
+func createEmptyFile(jptm IJobPartTransferMgr, destinationPath string) error {
+	err := common.CreateParentDirectoryIfNotExist(destinationPath, jptm.GetFolderCreationTracker())
 	if err != nil {
 		return err
 	}

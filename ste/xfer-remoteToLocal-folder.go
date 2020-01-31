@@ -63,13 +63,24 @@ func remoteToLocal_folder(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer p
 	}*/
 
 	// no chunks to schedule. Just run the folder handling operations
-	err := common.CreateDirectoryIfNotExist(info.Destination)
+	t := jptm.GetFolderCreationTracker()
+	defer t.StopTracking(info.Destination) // don't need it after this routine
+
+	err := common.CreateDirectoryIfNotExist(info.Destination, t) // we may create it here, or possible there's already a file transfer for the folder that has created it, or maybe it already existed before this job
 	if err != nil {
 		jptm.FailActiveSend("ensuring destination folder exists", err)
 	} else {
+		shouldSetProps := t.ShouldSetProperties(info.Destination, jptm.GetOverwriteOption())
+		if !shouldSetProps {
+			jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "Folder already exists, so due to the --overwrite option, its properties won't be set")
+			jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists()) // using same status for both files and folders, for simplicity
+			jptm.ReportTransferDone()
+			return
+		}
+
 		// TODO: in the later PR (to come) about actually transferring properties
-		//    get the properties from somewhere (a source info provider, presumably?)
-		// and set them
+		//    we need to get the properties from somewhere (a source info provider, presumably?)
+		//    and set them
 		//
 		//		if err != nil {
 		//			jptm.FailActiveSend("setting folder properties", err)
