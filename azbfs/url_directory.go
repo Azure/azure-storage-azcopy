@@ -28,6 +28,10 @@ func NewDirectoryURL(url url.URL, p pipeline.Pipeline) DirectoryURL {
 	return DirectoryURL{directoryClient: directoryClient, filesystem: urlParts.FileSystemName, pathParameter: urlParts.DirectoryOrFilePath}
 }
 
+func (d DirectoryURL) IsFileSystemRoot() bool {
+	return d.pathParameter == ""
+}
+
 // URL returns the URL endpoint used by the DirectoryURL object.
 func (d DirectoryURL) URL() url.URL {
 	return d.directoryClient.URL()

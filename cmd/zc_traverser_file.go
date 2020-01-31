@@ -24,7 +24,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"path/filepath"
+	"path"
 	"strings"
 	"time"
 
@@ -142,7 +142,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 
 	// Include the root dir in the enumeration results
 	// Our rule is that enumerators of folder-aware sources must always include the root folder's properties
-	rootName := filepath.Base(targetURLParts.URL().Path) // will be name of file system, if root is at filesystem level. Else will be a dir name.
+	rootName := path.Base(targetURLParts.URL().Path) // will be name of file system, if root is at filesystem level. Else will be a dir name.
 	err = processEntity(newAzFileRootFolderEntity(&directoryURL, rootName))
 	if err != nil {
 		return err

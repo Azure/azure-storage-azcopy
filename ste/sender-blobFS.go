@@ -111,9 +111,27 @@ func (u *blobFSSenderBase) RemoteFileExists() (bool, error) {
 
 func (u *blobFSSenderBase) Prologue(state common.PrologueState) (destinationModified bool) {
 
-	// Create file with the source size
 	destinationModified = true
-	_, err := u.fileURL().Create(u.jptm.Context(), *u.creationTimeHeaders) // note that "create" actually calls "create path"
+
+	// create the directory separately
+	// This "burns" an extra IO operation, unfortunately, but its the only way we can make our
+	// folderCreationTracker work, and we need that for our overwrite logic for folders.
+	// (Even tho there's not much in the way of properties to set in ADLS Gen 2 on folders, at least, not
+	// that we support right now, we still run the same folder logic here to be consistent with our other
+	// folder-aware sources).
+	parentDir, err := u.fileURL().GetParentDir()
+	if err != nil {
+		u.jptm.FailActiveUpload("Getting parent directory URL", err)
+		return
+	}
+	err = u.doEnsureDirExists(parentDir)
+	if err != nil {
+		u.jptm.FailActiveUpload("Ensuring parent directory exists", err)
+		return
+	}
+
+	// Create file with the source size
+	_, err = u.fileURL().Create(u.jptm.Context(), *u.creationTimeHeaders) // "create" actually calls "create path", so if we didn't need to track folder creation, we could just let this call create the folder as needed
 	if err != nil {
 		u.jptm.FailActiveUpload("Creating file", err)
 		return
@@ -148,12 +166,23 @@ func (u *blobFSSenderBase) GetDestinationLength() (int64, error) {
 	return prop.ContentLength(), nil
 }
 
-func (u *blobFSSenderBase) RemoteFolderExists() (bool, error) {
-	return remoteObjectExists(u.dirURL().GetProperties(u.jptm.Context()))
+func (u *blobFSSenderBase) EnsureFolderExists() error {
+	return u.doEnsureDirExists(u.dirURL())
 }
 
-func (u *blobFSSenderBase) EnsureFolderExists() error {
-	_, err := u.dirURL().Create(u.jptm.Context(), false)
+func (u *blobFSSenderBase) doEnsureDirExists(d azbfs.DirectoryURL) error {
+	if d.IsFileSystemRoot() {
+		return nil // nothing to do, there's no directory component to create
+	}
+
+	_, err := d.Create(u.jptm.Context(), false)
+	if err == nil {
+		// must always do this, regardless of whether we are called in a file-centric code path
+		// or a folder-centric one, since with the parallelism we use, we don't actually
+		// know which will happen first
+		dirUrl := u.dirURL().URL()
+		u.jptm.GetFolderCreationTracker().RecordCreation(dirUrl.String())
+	}
 	if stgErr, ok := err.(azbfs.StorageError); ok && stgErr.ServiceCode() == azbfs.ServiceCodePathAlreadyExists {
 		return nil // not a error as far as we are concerned. It just already exists
 	}

@@ -78,6 +78,7 @@ type IJobMgr interface {
 	HttpClient() *http.Client
 	PipelineNetworkStats() *pipelineNetworkStats
 	getOverwritePrompter() *overwritePrompter
+	getFolderCreationTracker() common.FolderCreationTracker
 	common.ILoggerCloser
 }
 
@@ -92,6 +93,7 @@ func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID 
 		chunkStatusLogger:             common.NewChunkStatusLogger(jobID, cpuMon, logFileFolder, enableChunkLogOutput),
 		concurrency:                   concurrency,
 		overwritePrompter:             newOverwritePrompter(),
+		folderCreationTracker:         common.NewFolderCreationTracker(),
 		pipelineNetworkStats:          newPipelineNetworkStats(JobsAdmin.(*jobsAdmin).concurrencyTuner), // let the stats coordinate with the concurrency tuner
 		exclusiveDestinationMapHolder: &atomic.Value{},
 		/*Other fields remain zero-value until this job is scheduled */}
@@ -102,6 +104,10 @@ func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID 
 
 func (jm *jobMgr) getOverwritePrompter() *overwritePrompter {
 	return jm.overwritePrompter
+}
+
+func (jm *jobMgr) getFolderCreationTracker() common.FolderCreationTracker {
+	return jm.folderCreationTracker
 }
 
 func (jm *jobMgr) reset(appCtx context.Context, commandString string) IJobMgr {
@@ -188,6 +194,9 @@ type jobMgr struct {
 
 	// only a single instance of the prompter is needed for all transfers
 	overwritePrompter *overwritePrompter
+
+	// must have a single instance of this, for the whole job
+	folderCreationTracker common.FolderCreationTracker
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

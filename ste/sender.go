@@ -81,7 +81,6 @@ type IFileSender interface {
 /////////////////////////////////////////////////////////////////////////////////////////////////
 type IFolderSender interface {
 	ISenderBase
-	RemoteFolderExists() (bool, error)
 	EnsureFolderExists() error
 	SetFolderProperties() error
 }

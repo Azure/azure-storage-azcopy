@@ -49,6 +49,7 @@ type IJobPartMgr interface {
 	common.ILogger
 	SourceProviderPipeline() pipeline.Pipeline
 	getOverwritePrompter() *overwritePrompter
+	getFolderCreationTracker() common.FolderCreationTracker
 }
 
 type serviceAPIVersionOverride struct{}
@@ -272,6 +273,10 @@ type jobPartMgr struct {
 
 func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {
 	return jpm.jobMgr.getOverwritePrompter()
+}
+
+func (jpm *jobPartMgr) getFolderCreationTracker() common.FolderCreationTracker {
+	return jpm.jobMgr.getFolderCreationTracker()
 }
 
 func (jpm *jobPartMgr) Plan() *JobPartPlanHeader { return jpm.planMMF.Plan() }

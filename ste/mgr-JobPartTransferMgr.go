@@ -79,6 +79,7 @@ type IJobPartTransferMgr interface {
 	ChunkStatusLogger() common.ChunkStatusLogger
 	LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string)
 	GetOverwritePrompter() *overwritePrompter
+	GetFolderCreationTracker() common.FolderCreationTracker
 	common.ILogger
 	DeleteSnapshotsOption() common.DeleteSnapshotsOption
 }
@@ -172,6 +173,10 @@ type jobPartTransferMgr struct {
 
 func (jptm *jobPartTransferMgr) GetOverwritePrompter() *overwritePrompter {
 	return jptm.jobPartMgr.getOverwritePrompter()
+}
+
+func (jptm *jobPartTransferMgr) GetFolderCreationTracker() common.FolderCreationTracker {
+	return jptm.jobPartMgr.getFolderCreationTracker()
 }
 
 func (jptm *jobPartTransferMgr) FromTo() common.FromTo {

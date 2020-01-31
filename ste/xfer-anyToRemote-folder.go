@@ -62,7 +62,7 @@ func anyToRemote_folder(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.
 	// if it does, react accordingly
 	if jptm.GetOverwriteOption() != common.EOverwriteOption.True() {
 		TODO
-		exists, existenceErr := s.RemoteFolderExists()
+		//exists, existenceErr := s.RemoteFolderExists()
 		if existenceErr != nil {
 			jptm.LogSendError(info.Source, info.Destination, "Could not check existence at destination. "+existenceErr.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed()) // is a real failure, not just a SkippedFileAlreadyExists, in this case
@@ -108,14 +108,26 @@ func anyToRemote_folder(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.
 	// There are no checks for folders on LMT's changing while we read them. We need that for files,
 	// so we don't use and out-dated size to plan chunks, or read a mix of old and new data, but neither
 	// of those issues apply to folders.
-	err = s.EnsureFolderExists()
+	err = s.EnsureFolderExists() // we may create it here, or possible there's already a file transfer for the folder that has created it, or maybe it already existed before this job
 	if err != nil {
 		jptm.FailActiveSend("ensuring destination folder exists", err)
 	} else {
+
+		t := jptm.GetFolderCreationTracker()
+		defer t.StopTracking(info.Destination) // don't need it after this routine
+		shouldSetProps := t.ShouldSetProperties(info.Destination, jptm.GetOverwriteOption())
+		if !shouldSetProps {
+			jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "Folder already exists, so due to the --overwrite option, its properties won't be set")
+			jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists()) // using same status for both files and folders, for simplicity
+			jptm.ReportTransferDone()
+			return
+		}
+
 		err = s.SetFolderProperties()
 		if err != nil {
 			jptm.FailActiveSend("setting folder properties", err)
 		}
 	}
+
 	commonSenderCompletion(jptm, s, info) // for consistency, always run the standard epilogue
 }

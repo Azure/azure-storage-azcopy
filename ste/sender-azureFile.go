@@ -152,7 +152,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 	destinationModified = true
 
 	// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
-	err := AzureFileParentDirCreator{}.CreateParentDirToRoot(u.ctx, u.fileURL(), u.pipeline)
+	err := AzureFileParentDirCreator{}.CreateParentDirToRoot(u.ctx, u.fileURL(), u.pipeline, u.jptm.GetFolderCreationTracker())
 	if err != nil {
 		jptm.FailActiveUpload("Creating parent directory", err)
 		return
@@ -201,12 +201,8 @@ func (u *azureFileSenderBase) GetDestinationLength() (int64, error) {
 	return prop.ContentLength(), nil
 }
 
-func (u *azureFileSenderBase) RemoteFolderExists() (bool, error) {
-	return remoteObjectExists(u.dirURL().GetProperties(u.ctx))
-}
-
 func (u *azureFileSenderBase) EnsureFolderExists() error {
-	return AzureFileParentDirCreator{}.CreateDirToRoot(u.ctx, u.dirURL(), u.pipeline)
+	return AzureFileParentDirCreator{}.CreateDirToRoot(u.ctx, u.dirURL(), u.pipeline, u.jptm.GetFolderCreationTracker())
 }
 
 func (u *azureFileSenderBase) SetFolderProperties() error {
@@ -249,13 +245,13 @@ func (AzureFileParentDirCreator) splitWithoutToken(str string, token rune) []str
 }
 
 // CreateParentDirToRoot creates parent directories of the Azure file if file's parent directory doesn't exist.
-func (d AzureFileParentDirCreator) CreateParentDirToRoot(ctx context.Context, fileURL azfile.FileURL, p pipeline.Pipeline) error {
+func (d AzureFileParentDirCreator) CreateParentDirToRoot(ctx context.Context, fileURL azfile.FileURL, p pipeline.Pipeline, t common.FolderCreationTracker) error {
 	dirURL := d.getParentDirectoryURL(fileURL, p)
-	return d.CreateDirToRoot(ctx, dirURL, p)
+	return d.CreateDirToRoot(ctx, dirURL, p, t)
 }
 
 // CreateDirToRoot Creates the dir (and parents as necessary) if it does not exist
-func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, dirURL azfile.DirectoryURL, p pipeline.Pipeline) error {
+func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, dirURL azfile.DirectoryURL, p pipeline.Pipeline, t common.FolderCreationTracker) error {
 	dirURLExtension := common.FileURLPartsExtension{FileURLParts: azfile.NewFileURLParts(dirURL.URL())}
 	if _, err := dirURL.GetProperties(ctx); err != nil {
 		if stgErr, stgErrOk := err.(azfile.StorageError); stgErrOk && stgErr.Response() != nil &&
@@ -270,6 +266,13 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, dirURL a
 			for i := 0; i < len(segments); i++ {
 				curDirURL = curDirURL.NewDirectoryURL(segments[i])
 				_, err := curDirURL.Create(ctx, azfile.Metadata{})
+				if err == nil {
+					// We did create it, so record that fact. I.e. THIS job created the folder.
+					// Must do it here, in the routine that is shared by both the folder and the file code,
+					// because due to the parallelism of AzCopy, we don't know which will get here first, file code, or folder code.
+					dirUrl := curDirURL.URL()
+					t.RecordCreation(dirUrl.String())
+				}
 				if verifiedErr := d.verifyAndHandleCreateErrors(err); verifiedErr != nil {
 					return verifiedErr
 				}
