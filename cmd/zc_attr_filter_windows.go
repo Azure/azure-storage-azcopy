@@ -40,6 +40,10 @@ func (f *attrFilter) doesSupportThisOS() (msg string, supported bool) {
 	return
 }
 
+func (f *attrFilter) appliesOnlyToFiles() bool {
+	return true // keep this filter consistent with include-pattern
+}
+
 func (f *attrFilter) doesPass(storedObject storedObject) bool {
 	fileName := common.GenerateFullPath(f.filePath, storedObject.relativePath)
 	lpFileName, _ := syscall.UTF16PtrFromString(fileName)

@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -74,8 +75,6 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		return nil, errors.New("sync must happen between source and destination of the same type, e.g. either file <-> file, or directory/container <-> directory/container")
 	}
 
-	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart)
-
 	// set up the filters in the right order
 	// Note: includeFilters and includeAttrFilters are ANDed
 	// They must both pass to get the file included
@@ -92,6 +91,13 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		excludeAttrFilters := buildAttrFilters(cca.excludeFileAttributes, src, false)
 		filters = append(filters, excludeAttrFilters...)
 	}
+
+	// decide our folder transfer strategy
+	fpo, folderMessage := newFolderPropertyOption(cca.fromTo.AreBothFolderAware(), cca.recursive, true, filters) // sync always acts like stripTopDir=true
+	glcm.Info(folderMessage)
+	ste.JobsAdmin.LogToJobLog(folderMessage)
+
+	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo)
 
 	// set up the comparator so that the source/destination can be compared
 	indexer := newObjectIndexer()

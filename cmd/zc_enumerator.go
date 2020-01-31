@@ -526,6 +526,7 @@ var noPreProccessor objectMorpher = nil
 type objectFilter interface {
 	doesSupportThisOS() (msg string, supported bool)
 	doesPass(storedObject storedObject) bool
+	appliesOnlyToFiles() bool
 }
 
 // -------------------------------------- Generic Enumerators -------------------------------------- \\
@@ -639,6 +640,15 @@ func passedFilters(filters []objectFilter, storedObject storedObject) bool {
 			if !supported {
 				glcm.Error(msg)
 			}
+
+			if filter.appliesOnlyToFiles() && storedObject.entityType != common.EEntityType.File() {
+				// don't pass folders to filters that only know how to deal with files
+				// As at Feb 2020, we have separate logic to weed out folder properties (and not even send them)
+				// if any filter applies only to files... but that logic runs after this point, so we need this
+				// protection here, just to make sure we don't pass the filter logic an object that it can't handle.
+				continue
+			}
+
 			if !filter.doesPass(storedObject) {
 				return false
 			}

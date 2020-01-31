@@ -196,6 +196,12 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	filters := cca.initModularFilters()
+
+	// decide our folder transfer strategy
+	fpo, message := newFolderPropertyOption(cca.fromTo.AreBothFolderAware(), cca.recursive, cca.stripTopDir, filters)
+	glcm.Info(message)
+	ste.JobsAdmin.LogToJobLog(message)
+
 	processor := func(object storedObject) error {
 		// Start by resolving the name and creating the container
 		if object.containerName != "" {
@@ -234,7 +240,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			cca.autoDecompress && cca.fromTo.IsDownload(),
 			srcRelPath, dstRelPath,
 			cca.s2sPreserveAccessTier,
-			common.NewFolderPropertyOption(cca.fromTo.AreBothFolderAware(), cca.recursive, cca.stripTopDir),
+			fpo,
 		)
 
 		if shouldSendToSte {
@@ -504,4 +510,37 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 	}
 
 	return pathEncodeRules(relativePath)
+}
+
+func newFolderPropertyOption(bothFolderAware bool, recursive bool, stripTopDir bool, filters []objectFilter) (common.FolderPropertyOption, string) {
+	if bothFolderAware {
+		if !recursive {
+			return common.EFolderPropertiesOption.None(), // does't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
+				"Any empty folders will not be transferred, because --recursive was not specified"
+		}
+
+		// check filters. Otherwise, if filter was say --include-pattern *.txt, we would transfer properties
+		// (but not contents) for every directory that contained NO text files.  Could make heaps of empty directories
+		// at the destination.
+		filtersOK := true
+		for _, f := range filters {
+			if f.appliesOnlyToFiles() {
+				filtersOK = false // we have a least one filter that doesn't apply to folders
+			}
+		}
+		if !filtersOK {
+			return common.EFolderPropertiesOption.None(),
+				"Any empty folders will not be transferred, because a file-focused filter is applied."
+		}
+
+		message := "Any empty folders will be transferred, because source and destination both support folders"
+		if stripTopDir {
+			return common.EFolderPropertiesOption.AllFoldersExceptRoot(), message
+		} else {
+			return common.EFolderPropertiesOption.AllFolders(), message
+		}
+	}
+
+	return common.EFolderPropertiesOption.None(),
+		"Any empty folders will not be transferred, because source and/or destination doesn't have full folder support"
 }

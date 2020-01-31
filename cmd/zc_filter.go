@@ -42,6 +42,10 @@ func (f *excludeBlobTypeFilter) doesSupportThisOS() (msg string, supported bool)
 	return "", true
 }
 
+func (f *excludeBlobTypeFilter) appliesOnlyToFiles() bool {
+	return true // there aren't any (real) folders in Blob Storage
+}
+
 func (f *excludeBlobTypeFilter) doesPass(object storedObject) bool {
 	if _, ok := f.blobTypes[object.blobType]; !ok {
 		// For readability purposes, focus on returning false.
@@ -61,6 +65,10 @@ func (f *excludeFilter) doesSupportThisOS() (msg string, supported bool) {
 	msg = ""
 	supported = true
 	return
+}
+
+func (f *excludeFilter) appliesOnlyToFiles() bool {
+	return !f.targetsPath
 }
 
 func (f *excludeFilter) doesPass(storedObject storedObject) bool {
@@ -115,6 +123,10 @@ func (f *includeFilter) doesSupportThisOS() (msg string, supported bool) {
 	msg = ""
 	supported = true
 	return
+}
+
+func (f *includeFilter) appliesOnlyToFiles() bool {
+	return true // includeFilter is a name-pattern-based filter, and we treat those as relating to FILE names only
 }
 
 func (f *includeFilter) doesPass(storedObject storedObject) bool {
