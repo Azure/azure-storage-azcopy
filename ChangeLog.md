@@ -13,7 +13,8 @@
 
 1. AzCopy can now transfer empty folders, and transfer the properties of folders. This applies when both the source 
    and destination support real folders (Blob Storage does not, because it only supports virtual folders).  Status output
-   from AzCopy jobs, and `jobs status`, now contain information about folders.
+   from AzCopy jobs, `jobs list` and `jobs status`, now contain information about folders.  This includes new properties in the JSON
+   output of copy, sync, list and jobs status commands, when `--output-type json` is used.
 
 ## Version 10.3.3
 
