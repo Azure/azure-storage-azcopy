@@ -39,7 +39,6 @@ type URLHolder interface {
 	String() string
 }
 
-// TODO: review the decision to have this implement both interfaces
 // azureFileSenderBase implements both IFolderSender and (most of) IFileSender.
 // Why implement both interfaces in the one type, even though they are largely unrelated? Because it
 // makes functions like newAzureFilesUploader easier to reason about, since they always return the same type.
