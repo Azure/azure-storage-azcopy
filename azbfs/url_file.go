@@ -89,7 +89,9 @@ func (f FileURL) Download(ctx context.Context, offset int64, count int64) (*Down
 // Body constructs a stream to read data from with a resilient reader option.
 // A zero-value option means to get a raw stream.
 func (dr *DownloadResponse) Body(o RetryReaderOptions) io.ReadCloser {
-	if o.MaxRetryRequests == 0 {
+	// For internal testing, we  check if injectedError is nil.
+	// This allows us to have reader retries
+	if o.MaxRetryRequests == 0 && o.injectedError == nil {
 		return dr.Response().Body
 	}
 
