@@ -372,7 +372,7 @@ func commonDownloaderCompletion(jptm IJobPartTransferMgr, info TransferInfo, ent
 
 		// Final logging
 		if jptm.ShouldLog(pipeline.LogInfo) { // TODO: question: can we remove these ShouldLogs?  Aren't they inside Log?
-			jptm.Log(pipeline.LogInfo, fmt.Sprintf("DOWNLOADSUCCESSFUL: %s", info.Destination))
+			jptm.Log(pipeline.LogInfo, fmt.Sprintf("DOWNLOADSUCCESSFUL: %s%s", info.entityTypeLogIndicator(), info.Destination))
 		}
 		if jptm.ShouldLog(pipeline.LogDebug) {
 			jptm.Log(pipeline.LogDebug, "Finalizing Transfer")
