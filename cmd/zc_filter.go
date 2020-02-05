@@ -159,6 +159,10 @@ func (f *includeFilter) doesPass(storedObject storedObject) bool {
 }
 
 func buildIncludeFilters(patterns []string) []objectFilter {
+	if len(patterns) == 0 {
+		return []objectFilter{}
+	}
+
 	validPatterns := make([]string, 0)
 	for _, pattern := range patterns {
 		if pattern != "" {
