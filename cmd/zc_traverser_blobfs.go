@@ -84,8 +84,8 @@ func (_ *blobFSTraverser) parseLMT(t string) time.Time {
 	return out
 }
 
-func (t *blobFSTraverser) getFolderProps() (p contentPropsProvider, size int64, lmt time.Time) {
-	return noContentProps, 0, time.Time{} // by design, we do not preserve LMT's for folders (because they are not present/reliable enough in enough folder-aware sources)
+func (t *blobFSTraverser) getFolderProps() (p contentPropsProvider, size int64) {
+	return noContentProps, 0
 }
 
 func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
@@ -117,13 +117,13 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 
 	// Include the root dir in the enumeration results
 	// Our rule is that enumerators of folder-aware sources must always include the root folder's properties
-	contentProps, size, lmt := t.getFolderProps()
+	contentProps, size := t.getFolderProps()
 	storedObject := newStoredObject(
 		preprocessor,
 		filepath.Base(bfsURLParts.DirectoryOrFilePath),
 		"", // it IS the root, so has no name within the root
 		common.EEntityType.Folder(),
-		lmt,
+		t.parseLMT(pathProperties.LastModified()),
 		size,
 		contentProps,
 		noBlobProps,
@@ -155,14 +155,14 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 
 		for _, v := range dlr.Paths {
 			var entityType common.EntityType
+			lmt := v.LastModifiedTime()
 			if v.IsDirectory == nil || *v.IsDirectory == false {
 				entityType = common.EEntityType.File()
 				contentProps = md5OnlyAdapter{md5: t.getContentMd5(t.ctx, dirUrl, v)}
 				size = *v.ContentLength
-				lmt = v.LastModifiedTime()
 			} else {
 				entityType = common.EEntityType.Folder()
-				contentProps, size, lmt = t.getFolderProps()
+				contentProps, size = t.getFolderProps()
 			}
 
 			// TODO: if we need to get full properties and metadata, then add call here to

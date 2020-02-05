@@ -216,7 +216,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 						fileInfo.Name(),
 						strings.ReplaceAll(relPath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
 						entityType,
-						fileInfo.ModTime(),
+						fileInfo.ModTime(), // get this for both files and folders, since sync needs it for both.
 						fileInfo.Size(),
 						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
 						noBlobProps,

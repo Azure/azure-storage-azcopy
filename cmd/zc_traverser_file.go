@@ -111,10 +111,9 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			if err != nil {
 				return err
 			}
+			lmt = fullProperties.LastModified()
 			if f.entityType == common.EEntityType.File() {
-				fileProps := fullProperties.(*azfile.FileGetPropertiesResponse)
-				contentProps = fileProps       // only files have content props. Folders don't.
-				lmt = fileProps.LastModified() // only files have LMTs that are worth preserving. Folder LMTs are not updated in Azure Files when the folder content's change, so folder LMTs are not worth preserving
+				contentProps = fullProperties.(*azfile.FileGetPropertiesResponse) // only files have content props. Folders don't.
 			}
 			meta = common.FromAzFileMetadataToCommonMetadata(fullProperties.NewMetadata())
 		}
@@ -230,4 +229,5 @@ func newAzFileRootFolderEntity(rootDir *azfile.DirectoryURL, name string) azfile
 // azureFilesMetadataAdapter allows polymorphic treatment of File and Folder properties, since both implement the method
 type azfilePropertiesAdapter interface {
 	NewMetadata() azfile.Metadata
+	LastModified() time.Time
 }
