@@ -76,12 +76,17 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 		s.copyJobTemplate.PartNum++
 	}
 
+	// Escape paths on destinations where the characters are invalid
+	// And re-encode them where the characters are valid.
+	srcRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, true)
+	dstRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false)
+
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
 	s.copyJobTemplate.Transfers = append(s.copyJobTemplate.Transfers, storedObject.ToNewCopyTransfer(
 		false, // sync has no --decompress option
-		s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeSourceObjectName),
-		s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeDestinationObjectName),
+		srcRelativePath,
+		dstRelativePath,
 		s.preserveAccessTier,
 	))
 
