@@ -42,6 +42,7 @@ type azureFileSenderBase struct {
 	pipeline  pipeline.Pipeline
 	pacer     pacer
 	ctx       context.Context
+	sip       ISourceInfoProvider
 	// Headers and other info that we will apply to the destination
 	// object. For S2S, these come from the source service.
 	// When sending local data, they are computed based on
@@ -85,31 +86,6 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 
 	headers := props.SrcHTTPHeaders.ToAzFileHTTPHeaders()
 
-	// Prepare to transfer SDDLs from the source.
-	if sddlSIP, ok := sip.(ISDDLBearingSourceInfoProvider); ok {
-		// If both sides are files...
-		if fSIP, ok := sddlSIP.(*fileSourceInfoProvider); ok {
-			srcURL, err := url.Parse(info.Source)
-			common.PanicIfErr(err)
-
-			srcURLParts := azfile.NewFileURLParts(*srcURL)
-			dstURLParts := azfile.NewFileURLParts(*destURL)
-
-			// and happen to be the same account and share, we can get away with using the same key and save a trip.
-			if srcURLParts.Host == dstURLParts.Host && srcURLParts.ShareName == dstURLParts.ShareName {
-				headers.PermissionKey = fSIP.cachedPermissionKey
-			}
-		}
-
-		// If we didn't do the workaround, then let's get the SDDL and put it later.
-		if headers.PermissionKey == "" {
-			headers.PermissionString, err = sddlSIP.GetSDDL()
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
 	return &azureFileSenderBase{
 		jptm:            jptm,
 		fileURL:         azfile.NewFileURL(*destURL, p),
@@ -118,6 +94,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		pipeline:        p,
 		pacer:           pacer,
 		ctx:             ctx,
+		sip:             sip,
 		headersToApply:  headers,
 		metadataToApply: props.SrcMetadata.ToAzFileMetadata(),
 	}, nil
@@ -154,6 +131,32 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		u.headersToApply.ContentType = state.GetInferredContentType(u.jptm)
 	}
 
+	// Prepare to transfer SDDLs from the source.
+	if sddlSIP, ok := u.sip.(ISDDLBearingSourceInfoProvider); ok {
+		// If both sides are files...
+		if fSIP, ok := sddlSIP.(*fileSourceInfoProvider); ok {
+			srcURL, err := url.Parse(info.Source)
+			common.PanicIfErr(err)
+
+			srcURLParts := azfile.NewFileURLParts(*srcURL)
+			dstURLParts := azfile.NewFileURLParts(u.fileURL.URL())
+
+			// and happen to be the same account and share, we can get away with using the same key and save a trip.
+			if srcURLParts.Host == dstURLParts.Host && srcURLParts.ShareName == dstURLParts.ShareName {
+				u.headersToApply.PermissionKey = fSIP.cachedPermissionKey
+			}
+		}
+
+		// If we didn't do the workaround, then let's get the SDDL and put it later.
+		if u.headersToApply.PermissionKey == "" {
+			u.headersToApply.PermissionString, err = sddlSIP.GetSDDL()
+			if err != nil {
+				jptm.FailActiveUpload("Getting permissions", err)
+				return
+			}
+		}
+	}
+
 	if len(u.headersToApply.PermissionString) > filesServiceMaxSDDLSize {
 		gURLParts := common.NewGenericResourceURLParts(u.fileURL.URL(), common.ELocation.File())
 
@@ -162,6 +165,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		u.headersToApply.PermissionKey, err = sipm.PutSDDL(gURLParts.GetAccountName(), gURLParts.GetContainerName(), u.headersToApply.PermissionString, u.pipeline)
 		if err != nil {
 			jptm.FailActiveUpload("Putting permissions", err)
+			return
 		}
 
 		u.headersToApply.PermissionString = ""
