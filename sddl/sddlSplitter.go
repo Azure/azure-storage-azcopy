@@ -69,6 +69,9 @@ func (s *SDDLString) PortableString() string {
 var LiteralSIDRegex = regexp.MustCompile(`SID\(.*?\)`)
 var StringRegex = regexp.MustCompile(`("")|(".*?[^\\]")`)
 
+// PortableString returns a SDDL that's been ported from non-descript, well known SID strings (such as DU, DA, etc.)
+// to domain-specific strings. This allows us to not mix up the admins from one domain to another.
+// Azure Files requires that we do this.
 func (a *ACLList) PortableString() string {
 	output := a.Flags
 
