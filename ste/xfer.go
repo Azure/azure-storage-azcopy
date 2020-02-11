@@ -139,7 +139,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		case common.ELocation.File():
 			return newFileSourceInfoProvider
 		case common.ELocation.BlobFS():
-			return nil // As of the addition of SDDL downloads, this is called even on a download, but not used in anything other than the azure files downloader.
+			panic(blobFSNotS2S)
 		case common.ELocation.S3():
 			return newS3SourceInfoProvider
 		default:

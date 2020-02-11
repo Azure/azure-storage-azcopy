@@ -31,6 +31,7 @@ import (
 )
 
 type azureFilesDownloader struct {
+	jptm   IJobPartTransferMgr
 	txInfo TransferInfo
 	sip    ISourceInfoProvider
 }
@@ -43,6 +44,7 @@ func (bd *azureFilesDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline p
 	bd.txInfo = jptm.Info()
 	var err error
 	bd.sip, err = newFileSourceInfoProvider(jptm)
+	bd.jptm = jptm
 	common.PanicIfErr(err) // This literally will never return an error in the first place.
 	// It's not possible for newDefaultRemoteSourceInfoProvider to return an error,
 	// and it's not possible for newFileSourceInfoProvider to return an error either.
@@ -62,8 +64,7 @@ func (bd *azureFilesDownloader) Epilogue() {
 		err := spdl.PutSDDL(bd.sip.(ISDDLBearingSourceInfoProvider), bd.txInfo)
 
 		if err != nil {
-			// jptm.FailActiveDownload("Setting destination file SDDLs", err)
-			panic("failed to set sddls, " + err.Error())
+			bd.jptm.FailActiveDownload("Setting destination file SDDLs", err)
 		}
 	}
 }
