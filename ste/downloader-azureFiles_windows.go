@@ -8,7 +8,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// This file implements the windows-triggered downloaderPutsSDDL interface.
+// This file implements the windows-triggered sddlAwareDownloader interface.
 
 func (bd *azureFilesDownloader) PutSDDL(sip ISDDLBearingSourceInfoProvider, txInfo TransferInfo) error {
 	// Let's start by getting our SDDL and parsing it.

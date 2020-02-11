@@ -43,9 +43,9 @@ type downloader interface {
 	Epilogue()
 }
 
-// downloaderPutsSDDL is a windows-triggered interface.
+// sddlAwareDownloader is a windows-triggered interface.
 // Code outside of windows-specific files shouldn't implement this ever.
-type downloaderPutsSDDL interface {
+type sddlAwareDownloader interface {
 	downloader
 
 	PutSDDL(sip ISDDLBearingSourceInfoProvider, txInfo TransferInfo) error
