@@ -651,7 +651,7 @@ func validatePreserveNTFSACLs(toPreserve bool, fromTo common.FromTo) error {
 		return fmt.Errorf("preserve-ntfs-acls is set but the job is not between NTFS ACL aware resources")
 	}
 
-	if (fromTo.IsUpload() || fromTo.IsDownload()) && runtime.GOOS != "windows" {
+	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) && runtime.GOOS != "windows" {
 		return fmt.Errorf("preserve-ntfs-acls is set but ACL persistence for up/downloads is a windows-only feature")
 	}
 
