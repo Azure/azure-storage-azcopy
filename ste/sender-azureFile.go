@@ -131,44 +131,46 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		u.headersToApply.ContentType = state.GetInferredContentType(u.jptm)
 	}
 
-	// Prepare to transfer SDDLs from the source.
-	if sddlSIP, ok := u.sip.(ISDDLBearingSourceInfoProvider); ok {
-		// If both sides are files...
-		if fSIP, ok := sddlSIP.(*fileSourceInfoProvider); ok {
-			srcURL, err := url.Parse(info.Source)
-			common.PanicIfErr(err)
+	if info.PreserveNTFSACLs {
+		// Prepare to transfer SDDLs from the source.
+		if sddlSIP, ok := u.sip.(ISDDLBearingSourceInfoProvider); ok {
+			// If both sides are files...
+			if fSIP, ok := sddlSIP.(*fileSourceInfoProvider); ok {
+				srcURL, err := url.Parse(info.Source)
+				common.PanicIfErr(err)
 
-			srcURLParts := azfile.NewFileURLParts(*srcURL)
-			dstURLParts := azfile.NewFileURLParts(u.fileURL.URL())
+				srcURLParts := azfile.NewFileURLParts(*srcURL)
+				dstURLParts := azfile.NewFileURLParts(u.fileURL.URL())
 
-			// and happen to be the same account and share, we can get away with using the same key and save a trip.
-			if srcURLParts.Host == dstURLParts.Host && srcURLParts.ShareName == dstURLParts.ShareName {
-				u.headersToApply.PermissionKey = fSIP.cachedPermissionKey
+				// and happen to be the same account and share, we can get away with using the same key and save a trip.
+				if srcURLParts.Host == dstURLParts.Host && srcURLParts.ShareName == dstURLParts.ShareName {
+					u.headersToApply.PermissionKey = fSIP.cachedPermissionKey
+				}
+			}
+
+			// If we didn't do the workaround, then let's get the SDDL and put it later.
+			if u.headersToApply.PermissionKey == "" {
+				u.headersToApply.PermissionString, err = sddlSIP.GetSDDL()
+				if err != nil {
+					jptm.FailActiveUpload("Getting permissions", err)
+					return
+				}
 			}
 		}
 
-		// If we didn't do the workaround, then let's get the SDDL and put it later.
-		if u.headersToApply.PermissionKey == "" {
-			u.headersToApply.PermissionString, err = sddlSIP.GetSDDL()
+		if len(u.headersToApply.PermissionString) > filesServiceMaxSDDLSize {
+			gURLParts := common.NewGenericResourceURLParts(u.fileURL.URL(), common.ELocation.File())
+
+			sipm := u.jptm.SecurityInfoPersistenceManager()
+
+			u.headersToApply.PermissionKey, err = sipm.PutSDDL(gURLParts.GetAccountName(), gURLParts.GetContainerName(), u.headersToApply.PermissionString, u.pipeline)
 			if err != nil {
-				jptm.FailActiveUpload("Getting permissions", err)
+				jptm.FailActiveUpload("Putting permissions", err)
 				return
 			}
+
+			u.headersToApply.PermissionString = ""
 		}
-	}
-
-	if len(u.headersToApply.PermissionString) > filesServiceMaxSDDLSize {
-		gURLParts := common.NewGenericResourceURLParts(u.fileURL.URL(), common.ELocation.File())
-
-		sipm := u.jptm.SecurityInfoPersistenceManager()
-
-		u.headersToApply.PermissionKey, err = sipm.PutSDDL(gURLParts.GetAccountName(), gURLParts.GetContainerName(), u.headersToApply.PermissionString, u.pipeline)
-		if err != nil {
-			jptm.FailActiveUpload("Putting permissions", err)
-			return
-		}
-
-		u.headersToApply.PermissionString = ""
 	}
 
 	// Create Azure file with the source size

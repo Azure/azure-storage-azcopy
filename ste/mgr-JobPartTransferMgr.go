@@ -92,6 +92,8 @@ type TransferInfo struct {
 	SourceSize  int64
 	Destination string
 
+	PreserveNTFSACLs bool
+
 	// Transfer info for S2S copy
 	SrcProperties
 	S2SGetPropertiesInBackend      bool
@@ -247,6 +249,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		Source:                         src,
 		SourceSize:                     sourceSize,
 		Destination:                    dst,
+		PreserveNTFSACLs:               plan.PreserveNTFSACLs,
 		S2SGetPropertiesInBackend:      s2sGetPropertiesInBackend,
 		S2SSourceChangeValidation:      s2sSourceChangeValidation,
 		S2SInvalidMetadataHandleOption: s2sInvalidMetadataHandleOption,
