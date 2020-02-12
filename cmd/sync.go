@@ -569,7 +569,7 @@ func init() {
 
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", true, "True by default, look into sub-directories recursively when syncing between directories. (default true).")
-	syncCmd.PersistentFlags().BoolVar(&raw.preserveNTFSACLs, "preserve-ntfs-acls", false, "False by default. Preserves NTFS ACLs between aware resources (Windows and Azure Files at the moment)")
+	syncCmd.PersistentFlags().BoolVar(&raw.preserveNTFSACLs, "preserve-ntfs-acls", false, "False by default. Preserves NTFS ACLs between aware resources (Windows and Azure Files)")
 	syncCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage or downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
