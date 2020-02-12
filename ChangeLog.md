@@ -12,6 +12,10 @@
 1. AzCopy has upgraded to service revision `2019-02-02`. Users targeting local emulators, Azure Stack, or other private/special instances of Azure Storage may need to intentionally downgrade their service revision using the environment variable `AZCOPY_DEFAULT_SERVICE_API_VERSION`. Prior to this release, the default service revision was `2018-03-28`.
 1. For Azure Files to Azure Files transfers, --persist-ntfs-acls is available on non-Windows OSes.
 
+### Breaking changes
+
+1. To accommodate interfacing with JavaScript programs (and other languages that have similar issue with number precision), 
+   all the numbers in the JSON output have been converted to strings (i.e. with quotes around them).
 
 ## Version 10.3.3
 

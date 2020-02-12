@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"math/rand"
 	"strings"
 
@@ -71,6 +72,10 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *cookedCopyCmdArgs
 		}
 
 		return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
+	}
+
+	if ste.JobsAdmin != nil {
+		ste.JobsAdmin.LogToJobLog(FinalPartCreatedMessage)
 	}
 
 	// set the flag on cca, to indicate the enumeration is done

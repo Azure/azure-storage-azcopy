@@ -34,6 +34,9 @@ class Command(object):
                 self.add_flags("put-md5", "true")  # this is an upload
             else:
                 self.add_flags("check-md5", "FailIfDifferentOrMissing")
+        if ct == "create":
+            if len(self.args) == 1:
+                self.add_flags("generate-md5", "true") # We want to generate an MD5 on the way up.
 
         return self
 

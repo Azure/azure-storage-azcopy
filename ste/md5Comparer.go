@@ -61,8 +61,9 @@ func (c *md5Comparer) Check() error {
 	// missing (at the source)
 	if len(c.expected) == 0 {
 		switch c.validationOption {
+		// This code would never be triggered anymore due to the early check that now occurs in xfer-remoteToLocal.go
 		case common.EHashValidationOption.FailIfDifferentOrMissing():
-			return errExpectedMd5Missing
+			panic("Transfer should've pre-emptively failed with a missing MD5.")
 		case common.EHashValidationOption.FailIfDifferent(),
 			common.EHashValidationOption.LogOnly():
 			c.logAsMissing()

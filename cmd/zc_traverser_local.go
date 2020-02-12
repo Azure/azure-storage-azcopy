@@ -183,8 +183,9 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 				"",
 				singleFileInfo.ModTime(),
 				singleFileInfo.Size(),
-				nil, // Local MD5s are taken in the STE
-				blobTypeNA,
+				noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
+				noBlobProps,
+				noMetdata,
 				"", // Local has no such thing as containers
 			),
 			processor,
@@ -218,8 +219,9 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 						strings.ReplaceAll(relPath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
 						fileInfo.ModTime(),
 						fileInfo.Size(),
-						nil, // Local MD5s are taken in the STE
-						blobTypeNA,
+						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
+						noBlobProps,
+						noMetdata,
 						"", // Local has no such thing as containers
 					),
 					processor)
@@ -285,8 +287,9 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 						strings.ReplaceAll(relativePath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
 						singleFile.ModTime(),
 						singleFile.Size(),
-						nil, // Local MD5s are taken in the STE
-						blobTypeNA,
+						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
+						noBlobProps,
+						noMetdata,
 						"", // Local has no such thing as containers
 					),
 					processor)
