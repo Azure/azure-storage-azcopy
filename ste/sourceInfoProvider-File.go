@@ -75,8 +75,12 @@ func (p *fileSourceInfoProvider) GetSDDL() (string, error) {
 	// Call into SIPM and grab our SDDL string.
 	sipm := p.jptm.SecurityInfoPersistenceManager()
 
-	fURLParts := common.NewGenericResourceURLParts(*presigned, common.ELocation.File())
-	sddlString, err := sipm.GetSDDLFromID(fURLParts.GetAccountName(), fURLParts.GetContainerName(), key, p.jptm.SourceProviderPipeline())
+	// fURLParts := common.NewGenericResourceURLParts(*presigned, common.ELocation.File())
+	fURLParts := azfile.NewFileURLParts(*presigned)
+	fURLParts.DirectoryOrFilePath = ""
+	shareURL := azfile.NewShareURL(fURLParts.URL(), p.jptm.SourceProviderPipeline())
+
+	sddlString, err := sipm.GetSDDLFromID(key, shareURL)
 
 	return sddlString, err
 }

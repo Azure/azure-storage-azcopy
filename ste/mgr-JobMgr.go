@@ -24,7 +24,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
 	"runtime"
 	"strings"
 	"sync"
@@ -32,7 +31,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -331,31 +329,6 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 	if jm.initState == nil {
 		jm.initState = &jobMgrInitState{
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
-		}
-
-		// during a files->files S2S transfer, we need both accounts in the persistence manager.
-		if jpm.Plan().FromTo.From() == common.ELocation.File() {
-			bURL, err := url.Parse(string(jpm.Plan().SourceRoot[:jpm.Plan().SourceRootLength]) + "?" + sourceSAS)
-			common.PanicIfErr(err)
-
-			fURLParts := azfile.NewFileURLParts(*bURL)
-			fURLParts.DirectoryOrFilePath = ""
-			fURLParts.ShareName = ""
-
-			serviceURL := azfile.NewServiceURL(fURLParts.URL(), jpm.sourceProviderPipeline)
-			jm.initState.securityInfoPersistenceManager.PutServiceURL(serviceURL)
-		}
-
-		if jpm.Plan().FromTo.To() == common.ELocation.File() {
-			bURL, err := url.Parse(string(jpm.Plan().DestinationRoot[:jpm.Plan().DestinationRootLength]) + "?" + destinationSAS)
-			common.PanicIfErr(err)
-
-			fURLParts := azfile.NewFileURLParts(*bURL)
-			fURLParts.DirectoryOrFilePath = ""
-			fURLParts.ShareName = ""
-
-			serviceURL := azfile.NewServiceURL(fURLParts.URL(), jpm.pipeline)
-			jm.initState.securityInfoPersistenceManager.PutServiceURL(serviceURL)
 		}
 	}
 	jpm.jobMgrInitState = jm.initState

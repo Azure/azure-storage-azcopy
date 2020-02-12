@@ -159,11 +159,13 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		}
 
 		if len(u.headersToApply.PermissionString) > filesServiceMaxSDDLSize {
-			gURLParts := common.NewGenericResourceURLParts(u.fileURL.URL(), common.ELocation.File())
+			fURLParts := azfile.NewFileURLParts(u.fileURL.URL())
+			fURLParts.DirectoryOrFilePath = ""
+			shareURL := azfile.NewShareURL(fURLParts.URL(), u.pipeline)
 
 			sipm := u.jptm.SecurityInfoPersistenceManager()
 
-			u.headersToApply.PermissionKey, err = sipm.PutSDDL(gURLParts.GetAccountName(), gURLParts.GetContainerName(), u.headersToApply.PermissionString, u.pipeline)
+			u.headersToApply.PermissionKey, err = sipm.PutSDDL(u.headersToApply.PermissionString, shareURL)
 			if err != nil {
 				jptm.FailActiveUpload("Putting permissions", err)
 				return
