@@ -21,17 +21,18 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
-	inferredFromTo := inferFromTo(src, dst)
 	if userSpecifiedFromTo == "" {
+		inferredFromTo := inferFromTo(src, dst)
+
 		// If user didn't explicitly specify FromTo, use what was inferred (if possible)
 		if inferredFromTo == common.EFromTo.Unknown() {
 			return common.EFromTo.Unknown(), fmt.Errorf("the inferred source/destination combination is currently not supported. Please post an issue on Github if support for this scenario is desired")
@@ -39,20 +40,14 @@ func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 		return inferredFromTo, nil
 	}
 
-	// User explicitly specified FromTo, make sure it matches what we infer or accept it if we can't infer
+	// User explicitly specified FromTo, therefore, we should respect what they specified.
 	var userFromTo common.FromTo
 	err := userFromTo.Parse(userSpecifiedFromTo)
 	if err != nil {
 		return common.EFromTo.Unknown(), fmt.Errorf("invalid --from-to value specified: %q", userSpecifiedFromTo)
 	}
-	if inferredFromTo == common.EFromTo.Unknown() || inferredFromTo == userFromTo ||
-		userFromTo == common.EFromTo.BlobTrash() || userFromTo == common.EFromTo.FileTrash() || userFromTo == common.EFromTo.BlobFSTrash() {
-		// We couldn't infer the FromTo or what we inferred matches what the user specified
-		// We'll accept what the user specified
-		return userFromTo, nil
-	}
-	// inferredFromTo != raw.fromTo: What we inferred doesn't match what the user specified
-	return common.EFromTo.Unknown(), errors.New("the specified --from-to switch is inconsistent with the specified source/destination combination")
+
+	return userFromTo, nil
 }
 
 func inferFromTo(src, dst string) common.FromTo {
@@ -110,6 +105,8 @@ func inferFromTo(src, dst string) common.FromTo {
 	return common.EFromTo.Unknown()
 }
 
+var IPv4Regex = regexp.MustCompile(`\d+\.\d+\.\d+\.\d+`) // simple regex
+
 func inferArgumentLocation(arg string) common.Location {
 	if arg == pipeLocation {
 		return common.ELocation.Pipe()
@@ -130,6 +127,9 @@ func inferArgumentLocation(arg string) common.Location {
 				return common.ELocation.BlobFS()
 			case strings.Contains(host, benchmarkSourceHost):
 				return common.ELocation.Benchmark()
+				// enable targeting an emulator/stack
+			case IPv4Regex.MatchString(host):
+				return common.ELocation.Unknown()
 			}
 
 			if common.IsS3URL(*u) {

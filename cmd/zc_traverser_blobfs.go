@@ -94,19 +94,11 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 			"",
 			t.parseLMT(pathProperties.LastModified()),
 			pathProperties.ContentLength(),
-			pathProperties.ContentMD5(),
-			blobTypeNA,
+			md5OnlyAdapter{md5: pathProperties.ContentMD5()}, // not supplying full props, since we can't below, and it would be inconsistent to do so here
+			noBlobProps,
+			noMetdata, // not supplying metadata, since we can't below and it would be inconsistent to do so here
 			bfsURLParts.FileSystemName,
 		)
-
-		/* TODO: Enable this code segment in case we ever do BlobFS->Blob transfers.
-		Read below comment for info
-		storedObject.contentDisposition = pathProperties.ContentDisposition()
-		storedObject.cacheControl = pathProperties.CacheControl()
-		storedObject.contentLanguage = pathProperties.ContentLanguage()
-		storedObject.contentEncoding = pathProperties.ContentEncoding()
-		storedObject.contentType = pathProperties.ContentType()
-		storedObject.metadata = .... */
 
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter()
@@ -132,31 +124,21 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 
 		for _, v := range dlr.Paths {
 			if v.IsDirectory == nil {
+				// TODO: if we need to get full properties and metadata, then add call here to
+				//     dirUrl.NewFileURL(storedObject.relativePath).GetProperties(t.ctx)
+				//     AND consider also supporting alternate mechanism to get the props in the backend
+				//     using s2sGetPropertiesInBackend
 				storedObject := newStoredObject(
 					preprocessor,
 					getObjectNameOnly(*v.Name),
 					strings.TrimPrefix(*v.Name, searchPrefix),
 					v.LastModifiedTime(),
 					*v.ContentLength,
-					t.getContentMd5(t.ctx, dirUrl, v),
-					blobTypeNA,
+					md5OnlyAdapter{md5: t.getContentMd5(t.ctx, dirUrl, v)},
+					noBlobProps,
+					noMetdata,
 					bfsURLParts.FileSystemName,
 				)
-
-				/* TODO: Enable this code segment in the case we ever do BlobFS->Blob transfers.
-
-				I leave this here for the sake of feature parity in the future, and because it feels weird letting the other traversers have it but not this one.
-
-				pathProperties, err := dirUrl.NewFileURL(storedObject.relativePath).GetProperties(t.ctx)
-
-				if err == nil {
-					storedObject.contentDisposition = pathProperties.ContentDisposition()
-					storedObject.cacheControl = pathProperties.CacheControl()
-					storedObject.contentLanguage = pathProperties.ContentLanguage()
-					storedObject.contentEncoding = pathProperties.ContentEncoding()
-					storedObject.contentType = pathProperties.ContentType()
-				    storedObject.metadata ...
-				}*/
 
 				if t.incrementEnumerationCounter != nil {
 					t.incrementEnumerationCounter()

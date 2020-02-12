@@ -71,7 +71,7 @@ type IJobMgr interface {
 	// TODO: added for debugging purpose. remove later
 	ActiveConnections() int64
 	GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint)
-	TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32) []common.PerformanceAdvice
+	TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32, fromTo common.FromTo) []common.PerformanceAdvice
 	//Close()
 	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
 	setInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
@@ -276,7 +276,7 @@ func (jm *jobMgr) logPerfInfo(displayStrings []string, constraint common.PerfCon
 	jm.Log(pipeline.LogInfo, msg)
 }
 
-func (jm *jobMgr) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32) []common.PerformanceAdvice {
+func (jm *jobMgr) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32, fromTo common.FromTo) []common.PerformanceAdvice {
 	ja := JobsAdmin.(*jobsAdmin)
 	if !ja.provideBenchmarkResults {
 		return make([]common.PerformanceAdvice, 0)
@@ -306,7 +306,8 @@ func (jm *jobMgr) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32) 
 	}
 
 	dir := jm.atomicTransferDirection.AtomicLoad()
-	a := NewPerformanceAdvisor(jm.pipelineNetworkStats, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency, dir, averageBytesPerFile)
+	isToAzureFiles := fromTo.To() == common.ELocation.File()
+	a := NewPerformanceAdvisor(jm.pipelineNetworkStats, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency, dir, averageBytesPerFile, isToAzureFiles)
 	return a.GetAdvice()
 }
 
