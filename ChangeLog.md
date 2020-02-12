@@ -9,8 +9,8 @@
 
 ### Special notes
 
-1. AzCopy has upgraded to service revision `2019-02-02`. Users targeting local emulators, Azure Stack, or other private/special instances of Azure Storage may need to intentionally downgrade their service revision using the environment variable `AZCOPY_DEFAULT_SERVICE_API_VERSION`.
-1. On Linux and MacOS, ACL persistence functionality is also available for Files->Files S2S transfers.
+1. AzCopy has upgraded to service revision `2019-02-02`. Users targeting local emulators, Azure Stack, or other private/special instances of Azure Storage may need to intentionally downgrade their service revision using the environment variable `AZCOPY_DEFAULT_SERVICE_API_VERSION`. Prior to this release, the default service revision was `2018-03-28`.
+1. For Azure Files to Azure Files transfers, --persist-ntfs-acls is available on non-Windows OSes.
 
 
 ## Version 10.3.3

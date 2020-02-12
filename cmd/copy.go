@@ -444,6 +444,9 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	}
 
 	cooked.preserveNTFSACLs = raw.preserveNTFSACLs
+	if err = validatePreserveNTFSACLs(cooked.preserveNTFSACLs, cooked.fromTo); err != nil {
+		return cooked, err
+	}
 
 	// check for the flag value relative to fromTo location type
 	// Example1: for Local to Blob, preserve-last-modified-time flag should not be set to true
@@ -478,9 +481,6 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	case common.EFromTo.LocalBlob():
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading to Blob Storage")
-		}
-		if cooked.preserveNTFSACLs {
-			return cooked, fmt.Errorf("preserve-ntfs-acls is not supported while uploading to Blob Storage")
 		}
 		if cooked.s2sPreserveProperties {
 			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while uploading to Blob Storage")
@@ -518,13 +518,6 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 			return cooked, fmt.Errorf("blob-type is not supported on Azure File")
 		}
 	case common.EFromTo.BlobLocal(),
-		common.EFromTo.BlobFSLocal():
-		if cooked.preserveNTFSACLs {
-			return cooked, fmt.Errorf("preserve-ntfs-acls is not supported while downloading from Blob Storage or ADLSG2")
-		}
-
-		fallthrough
-	case common.EFromTo.BlobLocal(),
 		common.EFromTo.FileLocal(),
 		common.EFromTo.BlobFSLocal():
 		if cooked.followSymlinks {
@@ -555,12 +548,8 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	case common.EFromTo.BlobFile(),
 		common.EFromTo.S3Blob(),
 		common.EFromTo.BlobBlob(),
-		common.EFromTo.FileBlob():
-		if cooked.preserveNTFSACLs {
-			return cooked, fmt.Errorf("preserve-ntfs-acls is only supported between resources that are aware of NTFS ACLs (Files, Windows)")
-		}
-		fallthrough
-	case common.EFromTo.FileFile():
+		common.EFromTo.FileBlob(),
+		common.EFromTo.FileFile():
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while copying from service to service")
 		}
