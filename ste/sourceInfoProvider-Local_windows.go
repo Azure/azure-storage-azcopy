@@ -3,6 +3,8 @@
 package ste
 
 import (
+	"strings"
+
 	"golang.org/x/sys/windows"
 
 	"github.com/Azure/azure-storage-azcopy/sddl"
@@ -22,6 +24,10 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 
 	if err != nil {
 		return "", err
+	}
+
+	if strings.TrimSpace(fSDDL.String()) != strings.TrimSpace(sd.String()) {
+		panic("SDDL sanity check failed (parsed string output != original string.)")
 	}
 
 	return fSDDL.PortableString(), nil
