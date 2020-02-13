@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+var translateSID = OSTranslateSID // this layer of indirection is to support unit testing. TODO: it's ugly to set a global to test. Do somemthing better one day
+
 func IffInt(condition bool, tVal, fVal int) int {
 	if condition {
 		return tVal
@@ -36,7 +38,7 @@ func (s *SDDLString) PortableString() string {
 	output := ""
 
 	if s.OwnerSID != "" {
-		tx, err := TranslateSID(s.OwnerSID)
+		tx, err := translateSID(s.OwnerSID)
 
 		if err != nil {
 			output += "O:" + s.OwnerSID
@@ -46,7 +48,7 @@ func (s *SDDLString) PortableString() string {
 	}
 
 	if s.GroupSID != "" {
-		tx, err := TranslateSID(s.GroupSID)
+		tx, err := translateSID(s.GroupSID)
 
 		if err != nil {
 			output += "G:" + s.GroupSID
@@ -86,7 +88,7 @@ func (a *ACLList) PortableString() string {
 
 			if k == 5 {
 				// This section is a lone SID, so we can make a call to windows and translate it.
-				tx, err := TranslateSID(strings.TrimSpace(s))
+				tx, err := translateSID(strings.TrimSpace(s))
 
 				if err != nil {
 					output += s
@@ -157,7 +159,7 @@ func (a *ACLList) PortableString() string {
 								// We have to process the sid string now.
 								sidString := strings.TrimSuffix(strings.TrimPrefix(s[SIDStart:v], "SID("), ")")
 
-								tx, err := TranslateSID(strings.TrimSpace(sidString))
+								tx, err := translateSID(strings.TrimSpace(sidString))
 
 								// It seems like we should probably still add the string if we error out.
 								// However, this just gets handled exactly like we're not processing the SID.
