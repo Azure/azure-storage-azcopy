@@ -83,6 +83,7 @@ type IJobPartTransferMgr interface {
 	GetOverwritePrompter() *overwritePrompter
 	common.ILogger
 	DeleteSnapshotsOption() common.DeleteSnapshotsOption
+	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 }
 
 type TransferInfo struct {
@@ -90,6 +91,8 @@ type TransferInfo struct {
 	Source      string
 	SourceSize  int64
 	Destination string
+
+	PreserveNTFSACLs bool
 
 	// Transfer info for S2S copy
 	SrcProperties
@@ -246,6 +249,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		Source:                         src,
 		SourceSize:                     sourceSize,
 		Destination:                    dst,
+		PreserveNTFSACLs:               plan.PreserveNTFSACLs,
 		S2SGetPropertiesInBackend:      s2sGetPropertiesInBackend,
 		S2SSourceChangeValidation:      s2sSourceChangeValidation,
 		S2SInvalidMetadataHandleOption: s2sInvalidMetadataHandleOption,
@@ -780,4 +784,8 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 
 func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {
 	return jptm.jobPartMgr.SourceProviderPipeline()
+}
+
+func (jptm *jobPartTransferMgr) SecurityInfoPersistenceManager() *securityInfoPersistenceManager {
+	return jptm.jobPartMgr.SecurityInfoPersistenceManager()
 }

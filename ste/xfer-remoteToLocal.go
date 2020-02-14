@@ -33,12 +33,13 @@ import (
 
 // general-purpose "any remote persistence location" to local
 func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, df downloaderFactory) {
+	info := jptm.Info()
+
 	// step 1: create downloader instance for this transfer
 	// We are using a separate instance per transfer, in case some implementations need to hold per-transfer state
 	dl := df()
 
 	// step 2: get the source, destination info for the transfer.
-	info := jptm.Info()
 	fileSize := int64(info.SourceSize)
 	downloadChunkSize := int64(info.BlockSize)
 
@@ -101,6 +102,12 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 				jptm.SetStatus(common.ETransferStatus.Failed())
 			}
 		}
+		// Run the prologue anyway, as some downloaders (files) require this.
+		// Note that this doesn't actually have adverse effects (at the moment).
+		// For files, it just sets a few properties.
+		// For blobs, it sets up a page blob pacer if it's a page blob.
+		// For blobFS, it's a noop.
+		dl.Prologue(jptm, p)
 		epilogueWithCleanupDownload(jptm, dl, nil, nil) // need standard epilogue, rather than a quick exit, so we can preserve modification dates
 		return
 	}

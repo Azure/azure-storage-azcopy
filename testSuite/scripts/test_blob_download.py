@@ -65,7 +65,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         result = util.Command("testBlob").add_arguments(dest).add_arguments(src).execute_azcopy_verify()
         self.assertTrue(result)
 
-    # test_download_perserve_last_modified_time verifies the azcopy downloaded file
+    # test_download_preserve_last_modified_time verifies the azcopy downloaded file
     # and its modified time preserved locally on disk
     def test_blob_download_preserve_last_modified_time(self):
         # create a file of 2KB

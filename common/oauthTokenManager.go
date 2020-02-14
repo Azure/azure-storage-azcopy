@@ -468,6 +468,9 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
 	}
 
+	buf, _ := json.Marshal(oAuthTokenInfo)
+	fmt.Println(string(buf))
+
 	if persist {
 		err = uotm.credCache.SaveToken(oAuthTokenInfo)
 		if err != nil {

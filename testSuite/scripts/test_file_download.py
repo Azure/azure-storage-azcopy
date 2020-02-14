@@ -232,9 +232,9 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
     def test_8_1kb_file_in_dir_upload_download_azure_directory_non_recursive(self):
         self.util_test_n_1kb_file_in_dir_upload_download_azure_directory(8, "false")
 
-    # test_download_perserve_last_modified_time verifies the azcopy downloaded file
+    # test_download_preserve_last_modified_time verifies the azcopy downloaded file
     # and its modified time preserved locally on disk
-    def test_download_perserve_last_modified_time(self):
+    def test_download_preserve_last_modified_time(self):
         # create a file of 2KB
         filename = "test_upload_preserve_last_mtime.txt"
         file_path = util.create_test_file(filename, 2048)

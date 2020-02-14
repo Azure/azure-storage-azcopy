@@ -1,7 +1,16 @@
 
 # Change Log
 
-## Version 10.x.x
+## Version 10.4.0
+
+### New Features
+
+1. `azcopy copy` and `azcopy sync` now supports the persistence of ACLs between supported resources (Windows and Azure Files at the moment) using the --persist-ntfs-acls flag.
+
+### Special notes
+
+1. AzCopy has upgraded to service revision `2019-02-02`. Users targeting local emulators, Azure Stack, or other private/special instances of Azure Storage may need to intentionally downgrade their service revision using the environment variable `AZCOPY_DEFAULT_SERVICE_API_VERSION`. Prior to this release, the default service revision was `2018-03-28`.
+1. For Azure Files to Azure Files transfers, --persist-ntfs-acls is available on non-Windows OSes.
 
 ### Breaking changes
 

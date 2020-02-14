@@ -49,6 +49,7 @@ type IJobPartMgr interface {
 	common.ILogger
 	SourceProviderPipeline() pipeline.Pipeline
 	getOverwritePrompter() *overwritePrompter
+	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 }
 
 type serviceAPIVersionOverride struct{}
@@ -214,8 +215,9 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 // jobPartMgr represents the runtime information for a Job's Part
 type jobPartMgr struct {
 	// These fields represent the part's existence
-	jobMgr   IJobMgr // Refers to this part's Job (for logging, cancelling, etc.)
-	filename JobPartPlanFileName
+	jobMgr          IJobMgr // Refers to this part's Job (for logging, cancelling, etc.)
+	jobMgrInitState *jobMgrInitState
+	filename        JobPartPlanFileName
 
 	// sourceSAS defines the sas of the source of the Job. If the source is local Location, then sas is empty.
 	// Since sas is not persisted in JobPartPlan file, it stripped from the source and stored in memory in JobPart Manager
@@ -472,7 +474,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.jobMgr.HttpClient(),
 			statsAccForSip)
 	}
-	if fromTo == common.EFromTo.FileBlob() || fromTo == common.EFromTo.FileFile() {
+	// Consider the file-local SDDL transfer case.
+	if fromTo == common.EFromTo.FileBlob() || fromTo == common.EFromTo.FileFile() || fromTo == common.EFromTo.FileLocal() {
 		jpm.sourceProviderPipeline = NewFilePipeline(
 			azfile.NewAnonymousCredential(),
 			azfile.PipelineOptions{
@@ -626,6 +629,14 @@ func (jpm *jobPartMgr) ShouldPutMd5() bool {
 
 func (jpm *jobPartMgr) SAS() (string, string) {
 	return jpm.sourceSAS, jpm.destinationSAS
+}
+
+func (jpm *jobPartMgr) SecurityInfoPersistenceManager() *securityInfoPersistenceManager {
+	if jpm.jobMgrInitState == nil || jpm.jobMgrInitState.securityInfoPersistenceManager == nil {
+		panic("SIPM should have been initialized already")
+	}
+
+	return jpm.jobMgrInitState.securityInfoPersistenceManager
 }
 
 func (jpm *jobPartMgr) localDstData() *JobPartPlanDstLocal {

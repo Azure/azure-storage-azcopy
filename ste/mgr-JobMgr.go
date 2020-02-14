@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
@@ -94,6 +95,7 @@ func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID 
 		overwritePrompter:             newOverwritePrompter(),
 		pipelineNetworkStats:          newPipelineNetworkStats(JobsAdmin.(*jobsAdmin).concurrencyTuner), // let the stats coordinate with the concurrency tuner
 		exclusiveDestinationMapHolder: &atomic.Value{},
+		initMu:                        &sync.Mutex{},
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
 	jm.logJobsAdminMessages()
@@ -146,6 +148,11 @@ func (jm *jobMgr) logConcurrencyParameters() {
 		jm.concurrency.MaxOpenDownloadFiles))
 }
 
+// jobMgrInitState holds one-time init structures (such as SIPM), that initialize when the first part is added.
+type jobMgrInitState struct {
+	securityInfoPersistenceManager *securityInfoPersistenceManager
+}
+
 // jobMgr represents the runtime information for a Job
 type jobMgr struct {
 	// NOTE: for the 64 bit atomic functions to work on a 32 bit system, we have to guarantee the right 64-bit alignment
@@ -188,6 +195,9 @@ type jobMgr struct {
 
 	// only a single instance of the prompter is needed for all transfers
 	overwritePrompter *overwritePrompter
+
+	initMu    *sync.Mutex
+	initState *jobMgrInitState
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -314,6 +324,16 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 	jm.setFinalPartOrdered(partNum, jpm.planMMF.Plan().IsFinalPart)
 	jm.setDirection(jpm.Plan().FromTo)
 	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(partNum, jpm.Plan().FromTo)
+
+	jm.initMu.Lock()
+	defer jm.initMu.Unlock()
+	if jm.initState == nil {
+		jm.initState = &jobMgrInitState{
+			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
+		}
+	}
+	jpm.jobMgrInitState = jm.initState
+
 	if scheduleTransfers {
 		// If the schedule transfer is set to true
 		// Instead of the scheduling the Transfer for given JobPart

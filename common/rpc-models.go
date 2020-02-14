@@ -62,6 +62,7 @@ type CopyJobPartOrderRequest struct {
 	CommandString  string
 	CredentialInfo CredentialInfo
 
+	PreserveNTFSACLs               bool
 	S2SGetPropertiesInBackend      bool
 	S2SSourceChangeValidation      bool
 	DestLengthValidation           bool
