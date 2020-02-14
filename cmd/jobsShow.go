@@ -121,8 +121,6 @@ func PrintJobTransfers(listTransfersResponse common.ListJobTransfersResponse) {
 			folderChar := ""
 			if listTransfersResponse.Details[index].IsFolderProperties {
 				folderChar = "/"
-				// TODO: reviewers, is it OK that this is hard coded to fwd slash (even for windows local sources?)
-				// TODO: reviewers, would it be better to output something like "type: folder"?  I did't because it seemed verbose.
 			}
 			sb.WriteString("transfer--> source: " + listTransfersResponse.Details[index].Src + folderChar + " destination: " +
 				listTransfersResponse.Details[index].Dst + folderChar + " status " + listTransfersResponse.Details[index].TransferStatus.String() + "\n")

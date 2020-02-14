@@ -37,31 +37,6 @@ func remoteToLocal_folder(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer p
 		return
 	}
 
-	/* todo
-	// if the force Write flags is set to false or prompt
-	// then check the file exists at the remote location
-	// if it does, react accordingly
-	if jptm.GetOverwriteOption() != common.EOverwriteOption.True() {
-		_, err := os.Stat(info.Destination)
-		if err == nil {
-			// if the error is nil, then file exists locally
-			shouldOverwrite := false
-
-			// if necessary, prompt to confirm user's intent
-			if jptm.GetOverwriteOption() == common.EOverwriteOption.Prompt() {
-				shouldOverwrite = jptm.GetOverwritePrompter().shouldOverwrite(info.Destination)
-			}
-
-			if !shouldOverwrite {
-				// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
-				jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "File already exists, so will be skipped")
-				jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists())
-				jptm.ReportTransferDone()
-				return
-			}
-		}
-	}*/
-
 	// no chunks to schedule. Just run the folder handling operations
 	t := jptm.GetFolderCreationTracker()
 	defer t.StopTracking(info.Destination) // don't need it after this routine

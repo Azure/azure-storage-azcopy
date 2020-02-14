@@ -55,55 +55,6 @@ func anyToRemote_folder(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.
 	}
 	s := sBase.(IFolderSender)
 
-	/*TODO
-	// step 3: check overwrite option
-	// if the force Write flags is set to false or prompt
-	// then check the file exists at the remote location
-	// if it does, react accordingly
-	if jptm.GetOverwriteOption() != common.EOverwriteOption.True() {
-		TODO
-		//exists, existenceErr := s.RemoteFolderExists()
-		if existenceErr != nil {
-			jptm.LogSendError(info.Source, info.Destination, "Could not check existence at destination. "+existenceErr.Error(), 0)
-			jptm.SetStatus(common.ETransferStatus.Failed()) // is a real failure, not just a SkippedFileAlreadyExists, in this case
-			jptm.ReportTransferDone()
-			return
-		}
-		if exists {
-			shouldOverwrite := false
-			var shouldLogSkipMessage bool
-			var skipMessage string
-
-			if info.IsFolderPropertiesTransfer() {
-				// For folders, OverwriteOption = "prompt" is treated the same as OverwriteOption = "false"
-				// This is because "prompt" just gets too confusing for users if it can apply to two different things (files and folder properties)
-				skipMessage = "Folder already exists, so its properties won't be set"
-				shouldLogSkipMessage = true // TODO: suppress the skip message if preserve-ntfs-atttributes and preserve-ntfs-acls are both false, since there's no point in saying we're skipping something there, when there's nothing to actually
-			} else {
-				// if necessary, prompt to confirm user's intent
-				if jptm.GetOverwriteOption() == common.EOverwriteOption.Prompt() {
-					// remove the SAS before prompting the user
-					parsed, _ := url.Parse(info.Destination)
-					parsed.RawQuery = ""
-					shouldOverwrite = jptm.GetOverwritePrompter().shouldOverwrite(parsed.String())
-				}
-				shouldLogSkipMessage = !shouldOverwrite
-				skipMessage = "File already exists, so will be skipped"
-			}
-
-			if shouldLogSkipMessage {
-				// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
-				jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, skipMessage)
-			}
-			if !shouldOverwrite {
-				jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists()) // using same status for both files and folders, for simplicty
-				jptm.ReportTransferDone()
-				return
-			}
-		}
-	}
-	*/
-
 	// No chunks to schedule. Just run the folder handling operations.
 	// There are no checks for folders on LMT's changing while we read them. We need that for files,
 	// so we don't use and out-dated size to plan chunks, or read a mix of old and new data, but neither
