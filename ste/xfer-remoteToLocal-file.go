@@ -44,12 +44,14 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 
 // general-purpose "any remote persistence location" to local, for files
 func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, df downloaderFactory) {
+
+	info := jptm.Info()
+
 	// step 1: create downloader instance for this transfer
 	// We are using a separate instance per transfer, in case some implementations need to hold per-transfer state
 	dl := df()
 
 	// step 2: get the source, destination info for the transfer.
-	info := jptm.Info()
 	fileSize := int64(info.SourceSize)
 	downloadChunkSize := int64(info.BlockSize)
 
@@ -84,6 +86,17 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		}
 	}
 
+	if jptm.MD5ValidationOption() == common.EHashValidationOption.FailIfDifferentOrMissing() {
+		// We can make a check early on MD5 existence and fail the transfer if it's not present.
+		// This will save hours in the event a user has say, a several hundred gigabyte file.
+		if len(info.SrcHTTPHeaders.ContentMD5) == 0 {
+			jptm.LogDownloadError(info.Source, info.Destination, errExpectedMd5Missing.Error(), 0)
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
+			return
+		}
+	}
+
 	// step 4a: mark destination as modified before we take our first action there (which is to create the destination file)
 	jptm.SetDestinationIsModified()
 
@@ -101,6 +114,12 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 				jptm.SetStatus(common.ETransferStatus.Failed())
 			}
 		}
+		// Run the prologue anyway, as some downloaders (files) require this.
+		// Note that this doesn't actually have adverse effects (at the moment).
+		// For files, it just sets a few properties.
+		// For blobs, it sets up a page blob pacer if it's a page blob.
+		// For blobFS, it's a noop.
+		dl.Prologue(jptm, p)
 		epilogueWithCleanupDownload(jptm, dl, nil, nil) // need standard epilogue, rather than a quick exit, so we can preserve modification dates
 		return
 	}
@@ -312,9 +331,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 
 			if err != nil {
 				jptm.FailActiveDownload("Download length check", err)
-			}
-
-			if fi.Size() != info.SourceSize {
+			} else if fi.Size() != info.SourceSize {
 				jptm.FailActiveDownload("Download length check", errors.New("destination length did not match source length"))
 			}
 		}

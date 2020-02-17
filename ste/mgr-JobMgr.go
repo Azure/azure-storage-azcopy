@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
@@ -70,7 +71,7 @@ type IJobMgr interface {
 	// TODO: added for debugging purpose. remove later
 	ActiveConnections() int64
 	GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint)
-	TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32) []common.PerformanceAdvice
+	TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32, fromTo common.FromTo) []common.PerformanceAdvice
 	//Close()
 	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
 	setInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
@@ -96,6 +97,7 @@ func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID 
 		folderCreationTracker:         common.NewFolderCreationTracker(),
 		pipelineNetworkStats:          newPipelineNetworkStats(JobsAdmin.(*jobsAdmin).concurrencyTuner), // let the stats coordinate with the concurrency tuner
 		exclusiveDestinationMapHolder: &atomic.Value{},
+		initMu:                        &sync.Mutex{},
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
 	jm.logJobsAdminMessages()
@@ -152,6 +154,11 @@ func (jm *jobMgr) logConcurrencyParameters() {
 		jm.concurrency.MaxOpenDownloadFiles))
 }
 
+// jobMgrInitState holds one-time init structures (such as SIPM), that initialize when the first part is added.
+type jobMgrInitState struct {
+	securityInfoPersistenceManager *securityInfoPersistenceManager
+}
+
 // jobMgr represents the runtime information for a Job
 type jobMgr struct {
 	// NOTE: for the 64 bit atomic functions to work on a 32 bit system, we have to guarantee the right 64-bit alignment
@@ -197,6 +204,9 @@ type jobMgr struct {
 
 	// must have a single instance of this, for the whole job
 	folderCreationTracker common.FolderCreationTracker
+	
+	initMu    *sync.Mutex
+	initState *jobMgrInitState
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -275,7 +285,7 @@ func (jm *jobMgr) logPerfInfo(displayStrings []string, constraint common.PerfCon
 	jm.Log(pipeline.LogInfo, msg)
 }
 
-func (jm *jobMgr) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32) []common.PerformanceAdvice {
+func (jm *jobMgr) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32, fromTo common.FromTo) []common.PerformanceAdvice {
 	ja := JobsAdmin.(*jobsAdmin)
 	if !ja.provideBenchmarkResults {
 		return make([]common.PerformanceAdvice, 0)
@@ -305,7 +315,8 @@ func (jm *jobMgr) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32) 
 	}
 
 	dir := jm.atomicTransferDirection.AtomicLoad()
-	a := NewPerformanceAdvisor(jm.pipelineNetworkStats, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency, dir, averageBytesPerFile)
+	isToAzureFiles := fromTo.To() == common.ELocation.File()
+	a := NewPerformanceAdvisor(jm.pipelineNetworkStats, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency, dir, averageBytesPerFile, isToAzureFiles)
 	return a.GetAdvice()
 }
 
@@ -322,6 +333,16 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 	jm.setFinalPartOrdered(partNum, jpm.planMMF.Plan().IsFinalPart)
 	jm.setDirection(jpm.Plan().FromTo)
 	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(partNum, jpm.Plan().FromTo)
+
+	jm.initMu.Lock()
+	defer jm.initMu.Unlock()
+	if jm.initState == nil {
+		jm.initState = &jobMgrInitState{
+			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
+		}
+	}
+	jpm.jobMgrInitState = jm.initState
+
 	if scheduleTransfers {
 		// If the schedule transfer is set to true
 		// Instead of the scheduling the Transfer for given JobPart

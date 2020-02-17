@@ -24,13 +24,15 @@ import (
 	"context"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-file-go/azfile"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // Source info provider for Azure blob
 type fileSourceInfoProvider struct {
-	ctx context.Context
+	ctx                 context.Context
+	cachedPermissionKey string
 	defaultRemoteSourceInfoProvider
 }
 
@@ -47,6 +49,40 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 	ctx := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azfile.ServiceVersion)
 
 	return &fileSourceInfoProvider{defaultRemoteSourceInfoProvider: *base, ctx: ctx}, nil
+}
+
+func (p *fileSourceInfoProvider) GetSDDL() (string, error) {
+	presigned, err := p.PreSignedSourceURL()
+
+	if err != nil {
+		return "", err
+	}
+
+	// Get the key for SIPM
+	key := p.cachedPermissionKey
+
+	if key == "" {
+		fileURL := azfile.NewFileURL(*presigned, p.jptm.SourceProviderPipeline())
+		props, err := fileURL.GetProperties(p.ctx)
+
+		if err != nil {
+			return "", err
+		}
+
+		key = props.FilePermissionKey()
+	}
+
+	// Call into SIPM and grab our SDDL string.
+	sipm := p.jptm.SecurityInfoPersistenceManager()
+
+	// fURLParts := common.NewGenericResourceURLParts(*presigned, common.ELocation.File())
+	fURLParts := azfile.NewFileURLParts(*presigned)
+	fURLParts.DirectoryOrFilePath = ""
+	shareURL := azfile.NewShareURL(fURLParts.URL(), p.jptm.SourceProviderPipeline())
+
+	sddlString, err := sipm.GetSDDLFromID(key, shareURL)
+
+	return sddlString, err
 }
 
 func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
@@ -70,6 +106,9 @@ func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 				return nil, err
 			}
 
+			// We cache this as getting the SDDL is a separate operation.
+			p.cachedPermissionKey = properties.FilePermissionKey()
+
 			srcProperties = &SrcProperties{
 				SrcHTTPHeaders: common.ResourceHTTPHeaders{
 					ContentType:        properties.ContentType(),
@@ -87,6 +126,8 @@ func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 			if err != nil {
 				return nil, err
 			}
+			
+			p.cachedPermissionKey = properties.FilePermissionKey()
 
 			srcProperties = &SrcProperties{
 				SrcHTTPHeaders: common.ResourceHTTPHeaders{}, // no contentType etc for folders

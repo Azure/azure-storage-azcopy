@@ -509,7 +509,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	// is the case.
 	if part0PlanStatus == common.EJobStatus.Cancelled() {
 		js.JobStatus = part0PlanStatus
-		js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped)
+		js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped, part0.Plan().FromTo)
 		return js
 	}
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed
@@ -522,7 +522,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		js.JobStatus = js.JobStatus.EnhanceJobStatusInfo(js.TransfersSkipped > 0, js.TransfersFailed > 0,
 			js.TransfersCompleted > 0)
 
-		js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped)
+		js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped, part0.Plan().FromTo)
 
 	}
 

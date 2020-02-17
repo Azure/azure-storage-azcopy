@@ -3,18 +3,26 @@
 
 ## Version 10.4
 
-### Breaking changes
-
-1. The TransferStatus value `SkippedFileAlreadyExists` has been renamed `SkippedEntityExists` and may now be used both 
-   for when files are skipped and for when the setting of folder properties is skipped.  This affects the input and 
-   output of `azcopy jobs show` and the status values shown in the JSON output format.
-
 ### New features
 
+1. `azcopy copy` and `azcopy sync` now supports the persistence of ACLs between supported resources (Windows and Azure Files at the moment) using the --persist-ntfs-acls flag.
 1. AzCopy can now transfer empty folders, and transfer the properties of folders. This applies when both the source 
    and destination support real folders (Blob Storage does not, because it only supports virtual folders).  Status output
    from AzCopy jobs, `jobs list` and `jobs status`, now contain information about folders.  This includes new properties in the JSON
    output of copy, sync, list and jobs status commands, when `--output-type json` is used.
+   
+### Special notes
+
+1. AzCopy has upgraded to service revision `2019-02-02`. Users targeting local emulators, Azure Stack, or other private/special instances of Azure Storage may need to intentionally downgrade their service revision using the environment variable `AZCOPY_DEFAULT_SERVICE_API_VERSION`. Prior to this release, the default service revision was `2018-03-28`.
+1. For Azure Files to Azure Files transfers, --persist-ntfs-acls is available on non-Windows OSes.
+
+### Breaking changes
+
+1. To accommodate interfacing with JavaScript programs (and other languages that have similar issue with number precision), 
+   all the numbers in the JSON output have been converted to strings (i.e. with quotes around them).
+1. The TransferStatus value `SkippedFileAlreadyExists` has been renamed `SkippedEntityExists` and may now be used both 
+   for when files are skipped and for when the setting of folder properties is skipped.  This affects the input and 
+   output of `azcopy jobs show` and the status values shown in the JSON output format.
 
 ## Version 10.3.3
 

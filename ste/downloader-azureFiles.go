@@ -30,18 +30,47 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
-type azureFilesDownloader struct{}
+type azureFilesDownloader struct {
+	jptm   IJobPartTransferMgr
+	txInfo TransferInfo
+	sip    ISourceInfoProvider
+}
 
 func newAzureFilesDownloader() downloader {
 	return &azureFilesDownloader{}
 }
 
 func (bd *azureFilesDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
-	// noop
+	bd.txInfo = jptm.Info()
+	var err error
+	bd.sip, err = newFileSourceInfoProvider(jptm)
+	bd.jptm = jptm
+	common.PanicIfErr(err) // This literally will never return an error in the first place.
+	// It's not possible for newDefaultRemoteSourceInfoProvider to return an error,
+	// and it's not possible for newFileSourceInfoProvider to return an error either.
 }
 
 func (bd *azureFilesDownloader) Epilogue() {
-	//noop
+	info := bd.jptm.Info()
+
+	if info.PreserveNTFSACLs {
+		// We're about to call into Windows-specific code.
+		// Some functions here can't be called on other OSes, to the extent that they just aren't present in the library due to compile flags.
+		// In order to work around this, we'll do some trickery with interfaces.
+		// There is a windows-specific file (downloader-azureFiles_windows.go) that makes azureFilesDownloader satisfy the sddlAwareDownloader interface.
+		// This function isn't present on other OSes due to compile flags,
+		// so in that way, we can cordon off these sections that would otherwise require filler functions.
+		// To do that, we'll do some type wrangling:
+		// bd can't directly be wrangled from a struct, so we wrangle it to an interface, then do so.
+		if spdl, ok := interface{}(bd).(sddlAwareDownloader); ok {
+			// We don't need to worry about the sip not being a ISDDLBearingSourceInfoProvider as Azure Files always is.
+			err := spdl.PutSDDL(bd.sip.(ISDDLBearingSourceInfoProvider), bd.txInfo)
+
+			if err != nil {
+				bd.jptm.FailActiveDownload("Setting destination file SDDLs", err)
+			}
+		}
+	}
 }
 
 // GenerateDownloadFunc returns a chunk-func for file downloads

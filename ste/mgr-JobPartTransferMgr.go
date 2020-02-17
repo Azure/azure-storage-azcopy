@@ -82,6 +82,7 @@ type IJobPartTransferMgr interface {
 	GetFolderCreationTracker() common.FolderCreationTracker
 	common.ILogger
 	DeleteSnapshotsOption() common.DeleteSnapshotsOption
+	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 }
 
 type TransferInfo struct {
@@ -90,6 +91,7 @@ type TransferInfo struct {
 	SourceSize  int64
 	Destination string
 	EntityType  common.EntityType
+	PreserveNTFSACLs bool
 
 	// Transfer info for S2S copy
 	SrcProperties
@@ -266,6 +268,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		SourceSize:                     sourceSize,
 		Destination:                    dst,
 		EntityType:                     entityType,
+		PreserveNTFSACLs:               plan.PreserveNTFSACLs,
 		S2SGetPropertiesInBackend:      s2sGetPropertiesInBackend,
 		S2SSourceChangeValidation:      s2sSourceChangeValidation,
 		S2SInvalidMetadataHandleOption: s2sInvalidMetadataHandleOption,
@@ -794,4 +797,8 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 
 func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {
 	return jptm.jobPartMgr.SourceProviderPipeline()
+}
+
+func (jptm *jobPartTransferMgr) SecurityInfoPersistenceManager() *securityInfoPersistenceManager {
+	return jptm.jobPartMgr.SecurityInfoPersistenceManager()
 }

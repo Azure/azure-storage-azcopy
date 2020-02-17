@@ -43,6 +43,14 @@ type downloader interface {
 	Epilogue()
 }
 
+// sddlAwareDownloader is a windows-triggered interface.
+// Code outside of windows-specific files shouldn't implement this ever.
+type sddlAwareDownloader interface {
+	downloader
+
+	PutSDDL(sip ISDDLBearingSourceInfoProvider, txInfo TransferInfo) error
+}
+
 type downloaderFactory func() downloader
 
 func createDownloadChunkFunc(jptm IJobPartTransferMgr, id common.ChunkID, body func()) chunkFunc {

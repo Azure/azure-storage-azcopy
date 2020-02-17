@@ -139,17 +139,17 @@ func (d DirectoryURL) ListDirectorySegment(ctx context.Context, marker *string, 
 // It returns false if the directoryUrl is not able to get resource properties
 // It returns false if the url represent a file in the filesystem
 // TODO reconsider for SDK release
-func (d DirectoryURL) IsDirectory(ctx context.Context) bool {
+func (d DirectoryURL) IsDirectory(ctx context.Context) (bool, error) {
 	grep, err := d.GetProperties(ctx)
 	// If the error occurs while getting resource properties return false
 	if err != nil {
-		return false
+		return false, err
 	}
 	// return false if the resource type is not
 	if !strings.EqualFold(grep.XMsResourceType(), directoryResourceName) {
-		return false
+		return false, nil
 	}
-	return true
+	return true, nil
 }
 
 // NewFileUrl converts the current directory Url into the NewFileUrl

@@ -74,6 +74,12 @@ type IBlobSourceInfoProvider interface {
 	BlobType() azblob.BlobType
 }
 
+type ISDDLBearingSourceInfoProvider interface {
+	ISourceInfoProvider
+
+	GetSDDL() (string, error)
+}
+
 type sourceInfoProviderFactory func(jptm IJobPartTransferMgr) (ISourceInfoProvider, error)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
