@@ -468,8 +468,9 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
 	}
 
-	buf, _ := json.Marshal(oAuthTokenInfo)
-	fmt.Println(string(buf))
+	// to dump for diagnostic purposes:
+	// buf, _ := json.Marshal(oAuthTokenInfo)
+	// panic("don't check me in. Buf is " + string(buf))
 
 	if persist {
 		err = uotm.credCache.SaveToken(oAuthTokenInfo)
