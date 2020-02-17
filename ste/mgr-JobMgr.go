@@ -79,7 +79,6 @@ type IJobMgr interface {
 	HttpClient() *http.Client
 	PipelineNetworkStats() *pipelineNetworkStats
 	getOverwritePrompter() *overwritePrompter
-	getFolderCreationTracker() common.FolderCreationTracker
 	common.ILoggerCloser
 }
 
@@ -94,7 +93,6 @@ func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID 
 		chunkStatusLogger:             common.NewChunkStatusLogger(jobID, cpuMon, logFileFolder, enableChunkLogOutput),
 		concurrency:                   concurrency,
 		overwritePrompter:             newOverwritePrompter(),
-		folderCreationTracker:         common.NewFolderCreationTracker(),
 		pipelineNetworkStats:          newPipelineNetworkStats(JobsAdmin.(*jobsAdmin).concurrencyTuner), // let the stats coordinate with the concurrency tuner
 		exclusiveDestinationMapHolder: &atomic.Value{},
 		initMu:                        &sync.Mutex{},
@@ -106,10 +104,6 @@ func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID 
 
 func (jm *jobMgr) getOverwritePrompter() *overwritePrompter {
 	return jm.overwritePrompter
-}
-
-func (jm *jobMgr) getFolderCreationTracker() common.FolderCreationTracker {
-	return jm.folderCreationTracker
 }
 
 func (jm *jobMgr) reset(appCtx context.Context, commandString string) IJobMgr {
@@ -157,6 +151,7 @@ func (jm *jobMgr) logConcurrencyParameters() {
 // jobMgrInitState holds one-time init structures (such as SIPM), that initialize when the first part is added.
 type jobMgrInitState struct {
 	securityInfoPersistenceManager *securityInfoPersistenceManager
+	folderCreationTracker          common.FolderCreationTracker
 }
 
 // jobMgr represents the runtime information for a Job
@@ -204,7 +199,7 @@ type jobMgr struct {
 
 	// must have a single instance of this, for the whole job
 	folderCreationTracker common.FolderCreationTracker
-	
+
 	initMu    *sync.Mutex
 	initState *jobMgrInitState
 }
@@ -339,9 +334,10 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 	if jm.initState == nil {
 		jm.initState = &jobMgrInitState{
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
+			folderCreationTracker:          common.NewFolderCreationTracker(jpm.Plan().Fpo),
 		}
 	}
-	jpm.jobMgrInitState = jm.initState
+	jpm.jobMgrInitState = jm.initState // so jpm can use it as much as desired without locking (since the only mutation is the init in jobManager. As far as jobPartManager is concerned, the init state is read-only
 
 	if scheduleTransfers {
 		// If the schedule transfer is set to true

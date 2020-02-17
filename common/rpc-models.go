@@ -49,6 +49,7 @@ type CopyJobPartOrderRequest struct {
 	AutoDecompress bool            // if true, source data with encodings that represent compression are automatically decompressed when downloading
 	Priority       JobPriority     // priority of the task
 	FromTo         FromTo
+	Fpo            FolderPropertyOption // passed in from front-end to ensure that front-end and STE agree on the desired behaviour for the job
 	// list of blobTypes to exclude.
 	ExcludeBlobType []azblob.BlobType
 	SourceRoot      string
@@ -220,7 +221,7 @@ type TransferDetail struct {
 	Dst                string
 	IsFolderProperties bool
 	TransferStatus     TransferStatus
-	ErrorCode      int32 `json:",string"`
+	ErrorCode          int32 `json:",string"`
 }
 
 type CancelPauseResumeResponse struct {

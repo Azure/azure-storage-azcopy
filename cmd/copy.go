@@ -914,7 +914,8 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 
-	// initialize the fields that are constant across all job part orders
+	// initialize the fields that are constant across all job part orders,
+	// and for which we have sufficient info now to set them
 	jobPartOrder := common.CopyJobPartOrderRequest{
 		JobID:           cca.jobID,
 		FromTo:          cca.fromTo,

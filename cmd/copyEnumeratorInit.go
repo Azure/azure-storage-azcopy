@@ -200,7 +200,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	filters := cca.initModularFilters()
 
 	// decide our folder transfer strategy
-	fpo, message := newFolderPropertyOption(cca.fromTo.AreBothFolderAware(), cca.recursive, cca.stripTopDir, filters)
+	var message string
+	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.fromTo.AreBothFolderAware(), cca.recursive, cca.stripTopDir, filters)
 	glcm.Info(message)
 	ste.JobsAdmin.LogToJobLog(message)
 
@@ -242,7 +243,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			cca.autoDecompress && cca.fromTo.IsDownload(),
 			srcRelPath, dstRelPath,
 			cca.s2sPreserveAccessTier,
-			fpo,
+			jobPartOrder.Fpo,
 		)
 
 		if shouldSendToSte {
@@ -517,7 +518,7 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 func newFolderPropertyOption(bothFolderAware bool, recursive bool, stripTopDir bool, filters []objectFilter) (common.FolderPropertyOption, string) {
 	if bothFolderAware {
 		if !recursive {
-			return common.EFolderPropertiesOption.None(), // does't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
+			return common.EFolderPropertiesOption.NoFolders(), // does't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
 				"Any empty folders will not be transferred, because --recursive was not specified"
 		}
 
@@ -531,7 +532,7 @@ func newFolderPropertyOption(bothFolderAware bool, recursive bool, stripTopDir b
 			}
 		}
 		if !filtersOK {
-			return common.EFolderPropertiesOption.None(),
+			return common.EFolderPropertiesOption.NoFolders(),
 				"Any empty folders will not be transferred, because a file-focused filter is applied."
 		}
 
@@ -543,6 +544,6 @@ func newFolderPropertyOption(bothFolderAware bool, recursive bool, stripTopDir b
 		}
 	}
 
-	return common.EFolderPropertiesOption.None(),
+	return common.EFolderPropertiesOption.NoFolders(),
 		"Any empty folders will not be transferred, because source and/or destination doesn't have full folder support"
 }

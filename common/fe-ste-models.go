@@ -1222,8 +1222,12 @@ var EFolderPropertiesOption = FolderPropertyOption(0)
 // FolderPropertyOption controls which folders get their properties recorded in the Plan file
 type FolderPropertyOption uint8
 
-func (FolderPropertyOption) None() FolderPropertyOption { return FolderPropertyOption(0) }
+// no FPO has been selected.  Make sure the zero-like value is "unspecified" so that we detect
+// any code paths that that do not nominate any FPO
+func (FolderPropertyOption) Unspecified() FolderPropertyOption { return FolderPropertyOption(0) }
+
+func (FolderPropertyOption) NoFolders() FolderPropertyOption { return FolderPropertyOption(1) }
 func (FolderPropertyOption) AllFoldersExceptRoot() FolderPropertyOption {
-	return FolderPropertyOption(1)
+	return FolderPropertyOption(2)
 }
-func (FolderPropertyOption) AllFolders() FolderPropertyOption { return FolderPropertyOption(2) }
+func (FolderPropertyOption) AllFolders() FolderPropertyOption { return FolderPropertyOption(3) }

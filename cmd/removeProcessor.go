@@ -30,6 +30,7 @@ func newRemoveTransferProcessor(cca *cookedCopyCmdArgs, numOfTransfersPerPart in
 		JobID:         cca.jobID,
 		CommandString: cca.commandString,
 		FromTo:        cca.fromTo,
+		Fpo:           common.EFolderPropertiesOption.NoFolders(), // currently we don't offer any special folder-aware processing for remove (except for BlobFS removes, which are implemented separately as at early 2020)
 		SourceRoot:    consolidatePathSeparators(cca.source),
 
 		// authentication related
@@ -52,7 +53,6 @@ func newRemoveTransferProcessor(cca *cookedCopyCmdArgs, numOfTransfersPerPart in
 
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
-	folderPropertiesOption := common.EFolderPropertiesOption.None() // currently we don't offer any special folder-aware processing for remove (except for BlobFS removes, which are implemented separately as at early 2020)
 	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.source, cca.destination,
-		shouldEncodeSource, false, reportFirstPart, reportFinalPart, false, folderPropertiesOption)
+		shouldEncodeSource, false, reportFirstPart, reportFinalPart, false)
 }

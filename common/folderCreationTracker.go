@@ -34,10 +34,20 @@ type FolderCreationTracker interface {
 	StopTracking(folder string)
 }
 
-func NewFolderCreationTracker() FolderCreationTracker {
-	return &simpleFolderTracker{
-		mu:       &sync.Mutex{},
-		contents: make(map[string]struct{}),
+func NewFolderCreationTracker(fpo FolderPropertyOption) FolderCreationTracker {
+	switch fpo {
+	case EFolderPropertiesOption.AllFolders(),
+		EFolderPropertiesOption.AllFoldersExceptRoot():
+		return &simpleFolderTracker{
+			mu:       &sync.Mutex{},
+			contents: make(map[string]struct{}),
+		}
+	case EFolderPropertiesOption.NoFolders():
+		// can't use simpleFolderTracker here, because when no folders are processed,
+		// then StopTracking will never be called, so we'll just use more and more memory for the map
+		return &nullFolderTracker{}
+	default:
+		panic("unknown folderPropertiesOption")
 	}
 }
 
@@ -77,4 +87,20 @@ func (f *simpleFolderTracker) StopTracking(folder string) {
 	defer f.mu.Unlock()
 
 	delete(f.contents, folder)
+}
+
+type nullFolderTracker struct{}
+
+func (f *nullFolderTracker) RecordCreation(folder string) {
+	// no-op (the null tracker doesn't track anything)
+}
+
+func (f *nullFolderTracker) ShouldSetProperties(folder string, overwrite OverwriteOption) bool {
+	// There's no way this should ever be called, because we only create the nullTracker if we are
+	// NOT transferring folder info.
+	panic("wrong type of folder tracker has been instantiated. This type does not do any tracking")
+}
+
+func (f *nullFolderTracker) StopTracking(folder string) {
+	// noop (because we don't track anything)
 }

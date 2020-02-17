@@ -140,7 +140,7 @@ func (s *storedObject) ToNewCopyTransfer(
 	shouldSend := true
 	if s.entityType == common.EEntityType.Folder() {
 		switch folderPropertiesOption {
-		case common.EFolderPropertiesOption.None():
+		case common.EFolderPropertiesOption.NoFolders():
 			shouldSend = false
 		case common.EFolderPropertiesOption.AllFoldersExceptRoot():
 			shouldSend = !s.isSourceRootFolder()

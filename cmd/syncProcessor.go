@@ -41,6 +41,7 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 		JobID:           cca.jobID,
 		CommandString:   cca.commandString,
 		FromTo:          cca.fromTo,
+		Fpo:             fpo,
 		SourceRoot:      consolidatePathSeparators(cca.source),
 		DestinationRoot: consolidatePathSeparators(cca.destination),
 
@@ -73,7 +74,7 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
 	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.source, cca.destination,
-		shouldEncodeSource, shouldEncodeDestination, reportFirstPart, reportFinalPart, cca.preserveAccessTier, fpo)
+		shouldEncodeSource, shouldEncodeDestination, reportFirstPart, reportFinalPart, cca.preserveAccessTier)
 }
 
 // base for delete processors targeting different resources

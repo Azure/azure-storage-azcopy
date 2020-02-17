@@ -50,8 +50,7 @@ type copyTransferProcessor struct {
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
 	source string, destination string, shouldEscapeSourceObjectName bool, shouldEscapeDestinationObjectName bool,
-	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool,
-	folderPropertiesOption common.FolderPropertyOption) *copyTransferProcessor {
+	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool) *copyTransferProcessor {
 	return &copyTransferProcessor{
 		numOfTransfersPerPart:             numOfTransfersPerPart,
 		copyJobTemplate:                   copyJobTemplate,
@@ -62,7 +61,7 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 		reportFirstPartDispatched:         reportFirstPartDispatched,
 		reportFinalPartDispatched:         reportFinalPartDispatched,
 		preserveAccessTier:                preserveAccessTier,
-		folderPropertiesOption:            folderPropertiesOption,
+		folderPropertiesOption:            copyJobTemplate.Fpo,
 	}
 }
 

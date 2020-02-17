@@ -278,7 +278,11 @@ func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {
 }
 
 func (jpm *jobPartMgr) getFolderCreationTracker() common.FolderCreationTracker {
-	return jpm.jobMgr.getFolderCreationTracker()
+	if jpm.jobMgrInitState == nil || jpm.jobMgrInitState.folderCreationTracker == nil {
+		panic("folderCreationTracker should have been initialized already")
+	}
+
+	return jpm.jobMgrInitState.folderCreationTracker
 }
 
 func (jpm *jobPartMgr) Plan() *JobPartPlanHeader { return jpm.planMMF.Plan() }

@@ -159,6 +159,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		Priority:              order.Priority,
 		TTLAfterCompletion:    uint32(time.Time{}.Nanosecond()),
 		FromTo:                order.FromTo,
+		Fpo:                   order.Fpo,
 		CommandStringLength:   uint32(len(order.CommandString)),
 		NumTransfers:          uint32(len(order.Transfers)),
 		LogLevel:              order.LogLevel,

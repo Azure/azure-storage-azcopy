@@ -14,7 +14,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 11
+const DataSchemaVersion common.Version = 12
 
 const (
 	CustomHeaderMaxBytes = 256
@@ -38,20 +38,21 @@ func (mmf *JobPartPlanMMF) Unmap() { (*common.MMF)(mmf).Unmap() }
 // JobPartPlanHeader represents the header of Job Part's memory-mapped file
 type JobPartPlanHeader struct {
 	// Once set, the following fields are constants; they should never be modified
-	Version               common.Version         // The version of data schema format of header; see the dataSchemaVersion constant
-	StartTime             int64                  // The start time of this part
-	JobID                 common.JobID           // Job Part's JobID
-	PartNum               common.PartNumber      // Job Part's part number (0+)
-	SourceRootLength      uint16                 // The length of the source root path
-	SourceRoot            [1000]byte             // The root directory of the source
-	DestinationRootLength uint16                 // The length of the destination root path
-	DestinationRoot       [1000]byte             // The root directory of the destination
-	IsFinalPart           bool                   // True if this is the Job's last part; else false
-	ForceWrite            common.OverwriteOption // True if the existing blobs needs to be overwritten.
-	AutoDecompress        bool                   // if true, source data with encodings that represent compression are automatically decompressed when downloading
-	Priority              common.JobPriority     // The Job Part's priority
-	TTLAfterCompletion    uint32                 // Time to live after completion is used to persists the file on disk of specified time after the completion of JobPartOrder
-	FromTo                common.FromTo          // The location of the transfer's source & destination
+	Version               common.Version              // The version of data schema format of header; see the dataSchemaVersion constant
+	StartTime             int64                       // The start time of this part
+	JobID                 common.JobID                // Job Part's JobID
+	PartNum               common.PartNumber           // Job Part's part number (0+)
+	SourceRootLength      uint16                      // The length of the source root path
+	SourceRoot            [1000]byte                  // The root directory of the source
+	DestinationRootLength uint16                      // The length of the destination root path
+	DestinationRoot       [1000]byte                  // The root directory of the destination
+	IsFinalPart           bool                        // True if this is the Job's last part; else false
+	ForceWrite            common.OverwriteOption      // True if the existing blobs needs to be overwritten.
+	AutoDecompress        bool                        // if true, source data with encodings that represent compression are automatically decompressed when downloading
+	Priority              common.JobPriority          // The Job Part's priority
+	TTLAfterCompletion    uint32                      // Time to live after completion is used to persists the file on disk of specified time after the completion of JobPartOrder
+	FromTo                common.FromTo               // The location of the transfer's source & destination
+	Fpo                   common.FolderPropertyOption // option specifying how folders will be handled
 	CommandStringLength   uint32
 	NumTransfers          uint32              // The number of transfers in the Job part
 	LogLevel              common.LogLevel     // This Job Part's minimal log level
