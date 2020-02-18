@@ -64,7 +64,6 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 		return nil, err
 	}
 
-	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart)
 	includeFilters := buildIncludeFilters(cca.includePatterns)
 	excludeFilters := buildExcludeFilters(cca.excludePatterns, false)
 	excludePathFilters := buildExcludeFilters(cca.excludePathPatterns, true)
@@ -72,6 +71,15 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	// set up the filters in the right order
 	filters := append(includeFilters, excludeFilters...)
 	filters = append(filters, excludePathFilters...)
+
+	// decide our folder transfer strategy
+	// (Must enumerate folders when deleting from a folder-aware location. Can't do folder deletion just based on file
+	// deletion, because that would not handle folders that were empty at the start of the job).
+	fpo, message := newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters)
+	glcm.Info(message)
+	ste.JobsAdmin.LogToJobLog(message)
+
+	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo)
 
 	finalize := func() error {
 		jobInitiated, err := transferScheduler.dispatchFinalPart()
