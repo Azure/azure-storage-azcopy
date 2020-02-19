@@ -11,19 +11,27 @@ import (
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
-func DeleteFilePrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
-
-	info := jptm.Info()
-	// Get the source file url of file to delete
-	u, _ := url.Parse(info.Source)
-
-	srcFileUrl := azfile.NewFileURL(*u, p)
+func DeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
 		jptm.ReportTransferDone()
 		return
 	}
+	// schedule the work as a chunk, so it will run on the main goroutine pool, instead of the
+	// smaller "transfer initiation pool", where this code runs.
+	id := common.NewChunkID(jptm.Info().Source, 0, 0)
+	cf := createChunkFunc(true, jptm, id, func() { doDeleteFile(jptm, p) })
+	jptm.ScheduleChunks(cf)
+}
+
+func doDeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
+
+	info := jptm.Info()
+	// Get the source file url of file to delete
+	u, _ := url.Parse(info.Source)
+
+	srcFileUrl := azfile.NewFileURL(*u, p)
 
 	// Internal function which checks the transfer status and logs the msg respectively.
 	// Sets the transfer status and Report Transfer as Done.
