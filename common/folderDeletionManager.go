@@ -21,6 +21,7 @@
 package common
 
 import (
+	"context"
 	"path"
 	"strings"
 	"sync"
@@ -32,7 +33,7 @@ import (
 // In that case, FolderDeletionManager may call it again later.
 // Errors are not returned because of the delay to when deletion might happen, so
 // it's up to the func to do its own logging
-type FolderDeletionFunc func() bool
+type FolderDeletionFunc func(context.Context, ILogger) bool
 
 // FolderDeletionManager handles the fact that (in most locations) we can't delete folders that
 // still contain files.  So it allows us to request deletion of a folder, and have that be attempted
@@ -71,13 +72,15 @@ func (f *folderDeletionState) shouldDeleteNow() bool {
 	return deletionRequested && f.childCount == 0
 }
 
-func NewFolderDeletionManager(fpo FolderPropertyOption) FolderDeletionManager {
+func NewFolderDeletionManager(ctx context.Context, fpo FolderPropertyOption, logger ILogger) FolderDeletionManager {
 	switch fpo {
 	case EFolderPropertiesOption.AllFolders(),
 		EFolderPropertiesOption.AllFoldersExceptRoot():
 		return &standardFolderDeletionManager{
 			mu:       &sync.Mutex{},
 			contents: make(map[string]*folderDeletionState),
+			logger:   logger,
+			ctx:      ctx,
 		}
 	case EFolderPropertiesOption.NoFolders():
 		// no point in using a real implementation here, since it will just use memory and take time for no benefit
@@ -93,13 +96,14 @@ func NewFolderDeletionManager(fpo FolderPropertyOption) FolderDeletionManager {
 type standardFolderDeletionManager struct {
 	mu       *sync.Mutex                     // mutex is simpler than RWMutex because folderDeletionState has multiple mutable elements
 	contents map[string]*folderDeletionState // pointer so no need to put back INTO map after reading from map and mutating a field value
+	// have our own logger and context, because our deletions don't necessarily run when RequestDeletion is called
+	logger ILogger
+	ctx    context.Context
 }
 
 // getParent drops final part of path
 func (s *standardFolderDeletionManager) getParent(child string) string {
-	if queryStart := strings.Index(child, "?"); queryStart >= 0 {
-		child = child[0:queryStart] // drop SAS token TODO: do we have a function for this?
-	}
+	child = strings.Split(child, "?")[0] // drop SAS token
 
 	if strings.Index(child, "\\") >= 0 {
 		panic("this implementation only supports URLs")
@@ -168,7 +172,7 @@ func (s *standardFolderDeletionManager) RequestDeletion(folder string, deletionF
 }
 
 func (s *standardFolderDeletionManager) tryDeletion(folder string, deletionFunc FolderDeletionFunc) {
-	success := deletionFunc() // for safety, deletionFunc should be coded to do nothing, and return false, if the directory is not empty
+	success := deletionFunc(s.ctx, s.logger) // for safety, deletionFunc should be coded to do nothing, and return false, if the directory is not empty
 
 	if success {
 		s.mu.Lock()

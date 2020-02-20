@@ -51,6 +51,7 @@ type IJobPartMgr interface {
 	getOverwritePrompter() *overwritePrompter
 	getFolderCreationTracker() common.FolderCreationTracker
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
+	FolderDeletionManager() common.FolderDeletionManager
 }
 
 type serviceAPIVersionOverride struct{}
@@ -607,6 +608,14 @@ func (jpm *jobPartMgr) SecurityInfoPersistenceManager() *securityInfoPersistence
 	}
 
 	return jpm.jobMgrInitState.securityInfoPersistenceManager
+}
+
+func (jpm *jobPartMgr) FolderDeletionManager() common.FolderDeletionManager {
+	if jpm.jobMgrInitState == nil || jpm.jobMgrInitState.folderDeletionManager == nil {
+		panic("folder deletion manager should have been initialized already")
+	}
+
+	return jpm.jobMgrInitState.folderDeletionManager
 }
 
 func (jpm *jobPartMgr) localDstData() *JobPartPlanDstLocal {
