@@ -35,18 +35,23 @@ func DeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 
 	if info.EntityType == common.EEntityType.Folder() {
 
-		jptm.LogAtLevelForCurrentTransfer(pipeline.LogInfo, "Queuing folder, to be deleted after it's children are deleted")
-		jptm.FolderDeletionManager().RequestDeletion(
-			srcUrl,
-			func(ctx context.Context, logger common.ILogger) bool {
-				return doDeleteFolder(ctx, info.Source, p, logger)
-			},
-		)
-		// We have no choice but to report this as "done", because we are in a transfer initiation func,
-		// and can't just block here for ever.  Besides, we have made the decision that if the queued
-		// deletion fails, that's NOT a job failure. (E.g. could happen because someone else dropped a new file
-		// in there after we enumerated). Since the deferred action (by this definition) will never fail,
-		// it's correct to report success here.
+		au := azfile.NewFileURLParts(*srcUrl)
+		isFileShareRoot := au.DirectoryOrFilePath == ""
+		if !isFileShareRoot {
+			jptm.LogAtLevelForCurrentTransfer(pipeline.LogInfo, "Queuing folder, to be deleted after it's children are deleted")
+			jptm.FolderDeletionManager().RequestDeletion(
+				srcUrl,
+				func(ctx context.Context, logger common.ILogger) bool {
+					return doDeleteFolder(ctx, info.Source, p, logger)
+				},
+			)
+		}
+		// After requesting deletion, we have no choice but to report this as "done", because we are
+		// in a transfer initiation func, and can't just block here for ages until the deletion actually happens.
+		// Besides, we have made the decision that if the queued deletion fails, that's NOT a
+		// job failure. (E.g. could happen because someone else dropped a new file
+		// in there after we enumerated). Since the deferred action (by this definition)
+		// will never fail, it's correct to report success here.
 		jptm.SetStatus(common.ETransferStatus.Success())
 		jptm.ReportTransferDone()
 
@@ -120,7 +125,7 @@ func doDeleteFolder(ctx context.Context, folder string, p pipeline.Pipeline, log
 		return false
 	}
 
-	loggableName := strings.Split(folder, "?")[0]
+	loggableName := u.Path
 
 	logger.Log(pipeline.LogDebug, "About to attempt to delete folder "+loggableName)
 
