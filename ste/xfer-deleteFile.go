@@ -21,6 +21,7 @@ func DeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 	}
 
 	info := jptm.Info()
+	srcUrl, _ := url.Parse(info.Source)
 
 	// Register existence with the deletion manager. Do it now, before we make the chunk funcs,
 	// to maximize the extent to which the manager knows about as many children as possible (i.e.
@@ -30,12 +31,13 @@ func DeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 	// and then we find more children in the plan files. Such failed attempts are harmless, but cause
 	// unnecessary network round trips.
 	// We must do this for all entity types, because even folders are children of their parents
-	jptm.FolderDeletionManager().RecordChildExists(info.Source)
+	jptm.FolderDeletionManager().RecordChildExists(srcUrl)
 
 	if info.EntityType == common.EEntityType.Folder() {
+
 		jptm.LogAtLevelForCurrentTransfer(pipeline.LogInfo, "Queuing folder, to be deleted after it's children are deleted")
 		jptm.FolderDeletionManager().RequestDeletion(
-			info.Source,
+			srcUrl,
 			func(ctx context.Context, logger common.ILogger) bool {
 				return doDeleteFolder(ctx, info.Source, p, logger)
 			},
@@ -47,6 +49,7 @@ func DeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 		// it's correct to report success here.
 		jptm.SetStatus(common.ETransferStatus.Success())
 		jptm.ReportTransferDone()
+
 	} else {
 		// schedule the work as a chunk, so it will run on the main goroutine pool, instead of the
 		// smaller "transfer initiation pool", where this code runs.
@@ -60,16 +63,16 @@ func doDeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 
 	info := jptm.Info()
 	// Get the source file url of file to delete
-	u, _ := url.Parse(info.Source)
+	srcUrl, _ := url.Parse(info.Source)
 
-	srcFileUrl := azfile.NewFileURL(*u, p)
+	srcFileUrl := azfile.NewFileURL(*srcUrl, p)
 
 	// Internal function which checks the transfer status and logs the msg respectively.
 	// Sets the transfer status and Report Transfer as Done.
 	// Internal function is created to avoid redundancy of the above steps from several places in the api.
 	transferDone := func(status common.TransferStatus, err error) {
 		if status == common.ETransferStatus.Success() {
-			jptm.FolderDeletionManager().RecordChildDeleted(info.Source)
+			jptm.FolderDeletionManager().RecordChildDeleted(srcUrl)
 			// TODO: doing this only on success raises the possibility of the
 			//   FolderDeletionManager's internal may growing rather large if there are lots of failures
 			//   on a big folder tree. Is living with that preferable to the "incorrectness" of calling

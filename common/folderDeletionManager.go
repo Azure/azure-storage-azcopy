@@ -22,7 +22,7 @@ package common
 
 import (
 	"context"
-	"path"
+	"net/url"
 	"strings"
 	"sync"
 )
@@ -40,16 +40,18 @@ type FolderDeletionFunc func(context.Context, ILogger) bool
 // after the last file is removed.  Note that maybe the apparent last file isn't the last (e.g.
 // there are other files, still to be deleted, in future job parts), in which case any failed deletion
 // will be retried if there's a new "candidate last child" removed.
+// Takes URLs rather than strings because that ensures correct (un)escaping, and makes it clear that we
+// don't support Windows & MacOS local paths (which have cases insensitivity that we don't support here).
 type FolderDeletionManager interface {
 
 	// RecordChildExists takes a child name and records it counts it against the child's immediate parent
 	// Should be called for both types of child: folders and files.
 	// Only counts it against the immediate parent (that's all that's necessary)
-	RecordChildExists(childFileOrFolder string)
+	RecordChildExists(childFileOrFolder *url.URL)
 
 	// RecordChildDelete records that a file, previously passed to RecordChildExists, has now been deleted
 	// Only call for files, not folders
-	RecordChildDeleted(childFile string)
+	RecordChildDeleted(childFile *url.URL)
 
 	// RequestDeletion registers a function that will be called to delete the given folder, when that
 	// folder has no more known children.  May be called before, after or during the time that
@@ -57,7 +59,7 @@ type FolderDeletionManager interface {
 	//
 	// Warning: only pass in deletionFuncs that will do nothing and return FALSE if the
 	// folder is not yet empty. If they return false, they may be called again later.
-	RequestDeletion(folder string, deletionFunc FolderDeletionFunc)
+	RequestDeletion(folder *url.URL, deletionFunc FolderDeletionFunc)
 	// TODO: do we want this to report, so that we can log, any folders at the very end which still are not deleted?
 	//     or will we just leave such folders there, with no logged message other than any "per attempt" logging?
 }
@@ -101,16 +103,25 @@ type standardFolderDeletionManager struct {
 	ctx    context.Context
 }
 
-// getParent drops final part of path
-func (s *standardFolderDeletionManager) getParent(child string) string {
-	child = strings.Split(child, "?")[0] // drop SAS token
+func (s *standardFolderDeletionManager) clean(u *url.URL) string {
+	sasless := strings.Split(u.String(), "?")[0] // first ?, if it exists, is always start of query
+	cleaned, err := url.PathUnescape(sasless)
+	if err != nil {
+		panic("uncleanable url") // should never happen
+	}
+	return cleaned
+}
 
-	if strings.Index(child, "\\") >= 0 {
-		panic("this implementation only supports URLs")
-		// if we ever do deletion of local files (not likely?) we'll need to fix this
+// getParent drops final part of path (not using use path.Dir because it messes with the // in URLs)
+func (s *standardFolderDeletionManager) getParent(u *url.URL) (string, bool) {
+	if len(u.Path) == 0 {
+		return "", false // path is already empty, so we can't go up another level
 	}
 
-	return path.Dir(child) // this is deliberately not the os-aware filepath.Base
+	// trim off last portion of path (or all of the path, if it only has one component)
+	c := s.clean(u)
+	lastSlash := strings.LastIndex(c, "/")
+	return c[0:lastSlash], true
 }
 
 // getStateAlreadyLocked assumes the lock is already held
@@ -125,8 +136,11 @@ func (s *standardFolderDeletionManager) getStateAlreadyLocked(folder string) *fo
 	}
 }
 
-func (s *standardFolderDeletionManager) RecordChildExists(childFileOrFolder string) {
-	folder := s.getParent(childFileOrFolder)
+func (s *standardFolderDeletionManager) RecordChildExists(childFileOrFolder *url.URL) {
+	folder, ok := s.getParent(childFileOrFolder)
+	if !ok {
+		return // this is not a child of any parent, so there is nothing for us to do
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -134,8 +148,11 @@ func (s *standardFolderDeletionManager) RecordChildExists(childFileOrFolder stri
 	folderStatePtr.childCount++
 }
 
-func (s *standardFolderDeletionManager) RecordChildDeleted(childFile string) {
-	folder := s.getParent(childFile)
+func (s *standardFolderDeletionManager) RecordChildDeleted(childFile *url.URL) {
+	folder, ok := s.getParent(childFile)
+	if !ok {
+		return // this is not a child of any parent, so there is nothing for us to do
+	}
 
 	s.mu.Lock()
 	folderStatePtr, alreadyKnown := s.contents[folder]
@@ -159,15 +176,17 @@ func (s *standardFolderDeletionManager) RecordChildDeleted(childFile string) {
 	}
 }
 
-func (s *standardFolderDeletionManager) RequestDeletion(folder string, deletionFunc FolderDeletionFunc) {
+func (s *standardFolderDeletionManager) RequestDeletion(folder *url.URL, deletionFunc FolderDeletionFunc) {
+	folderStr := s.clean(folder)
+
 	s.mu.Lock()
-	folderStatePtr := s.getStateAlreadyLocked(folder)
+	folderStatePtr := s.getStateAlreadyLocked(folderStr)
 	folderStatePtr.deleter = deletionFunc
 	shouldDel := folderStatePtr.shouldDeleteNow() // test now in case there are no children
 	s.mu.Unlock()                                 // release lock before expensive deletion attempt
 
 	if shouldDel {
-		s.tryDeletion(folder, deletionFunc)
+		s.tryDeletion(folderStr, deletionFunc)
 	}
 }
 
@@ -179,7 +198,12 @@ func (s *standardFolderDeletionManager) tryDeletion(folder string, deletionFunc 
 		delete(s.contents, folder)
 		s.mu.Unlock()
 
-		s.RecordChildDeleted(folder) // folder is, itself, a child of its parent. So recurse.  This is the only place that RecordChildDeleted should be called with a FOLDER parameter
+		// folder is, itself, a child of its parent. So recurse.  This is the only place that RecordChildDeleted should be called with a FOLDER parameter
+		u, err := url.Parse(folder)
+		if err != nil {
+			panic("folder url not parsable") // should never happen, because we started with a URL
+		}
+		s.RecordChildDeleted(u)
 	}
 }
 
@@ -187,15 +211,15 @@ func (s *standardFolderDeletionManager) tryDeletion(folder string, deletionFunc 
 
 type nullFolderDeletionManager struct{}
 
-func (f *nullFolderDeletionManager) RecordChildExists(child string) {
+func (f *nullFolderDeletionManager) RecordChildExists(child *url.URL) {
 	// no-op
 }
 
-func (f *nullFolderDeletionManager) RecordChildDeleted(child string) {
+func (f *nullFolderDeletionManager) RecordChildDeleted(child *url.URL) {
 	// no-op
 }
 
-func (f *nullFolderDeletionManager) RequestDeletion(folder string, deletionFunc FolderDeletionFunc) {
+func (f *nullFolderDeletionManager) RequestDeletion(folder *url.URL, deletionFunc FolderDeletionFunc) {
 	// There's no way this should ever be called, because we only create the null deletion manager if we are
 	// NOT transferring folder info.
 	panic("wrong type of folder deletion manager has been instantiated. This type does not do anything")
