@@ -191,7 +191,8 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks(c *chk.C) {
 
 		fileCount++
 		return nil
-	}), chk.IsNil)
+	},
+		true), chk.IsNil)
 
 	// 3 files live in base, 3 files live in symlink
 	c.Assert(fileCount, chk.Equals, 6)
@@ -218,7 +219,8 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksBreakLoop(c *chk.C) {
 
 		fileCount++
 		return nil
-	}), chk.IsNil)
+	},
+		true), chk.IsNil)
 
 	c.Assert(fileCount, chk.Equals, 3)
 }
@@ -247,7 +249,8 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksDedupe(c *chk.C) {
 
 		fileCount++
 		return nil
-	}), chk.IsNil)
+	},
+		true), chk.IsNil)
 
 	c.Assert(fileCount, chk.Equals, 6)
 }
@@ -277,7 +280,8 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksMultitarget(c *chk.C) {
 
 		fileCount++
 		return nil
-	}), chk.IsNil)
+	},
+		true), chk.IsNil)
 
 	// 3 files live in base, 3 files live in first symlink, second & third symlink is ignored.
 	c.Assert(fileCount, chk.Equals, 6)
@@ -309,7 +313,8 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksToParentAndChild(c *chk.C) {
 
 		fileCount++
 		return nil
-	}), chk.IsNil)
+	},
+		true), chk.IsNil)
 
 	// 6 files total live under toroot. tochild should be ignored (or if tochild was traversed first, child will be ignored on toroot).
 	c.Assert(fileCount, chk.Equals, 6)

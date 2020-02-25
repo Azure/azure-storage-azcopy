@@ -203,7 +203,9 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	var message string
 	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.fromTo.AreBothFolderAware(), cca.recursive, cca.stripTopDir, filters)
 	glcm.Info(message)
-	ste.JobsAdmin.LogToJobLog(message)
+	if ste.JobsAdmin != nil {
+		ste.JobsAdmin.LogToJobLog(message)
+	}
 
 	processor := func(object storedObject) error {
 		// Start by resolving the name and creating the container
