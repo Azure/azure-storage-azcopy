@@ -24,7 +24,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -118,12 +117,17 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 	// Include the root dir in the enumeration results
 	// Our rule is that enumerators of folder-aware sources must always include the root folder's properties
 	contentProps, size := t.getFolderProps()
+	rootLmt := time.Time{} // if root is filesystem (no path) then we won't have any properties to get an LMT from.  Also, we won't actually end up syncing the folder, since its not really a folder, so it's OK to use a zero-like time here
+	if pathProperties != nil {
+		rootLmt = t.parseLMT(pathProperties.LastModified())
+	}
+
 	storedObject := newStoredObject(
 		preprocessor,
-		filepath.Base(bfsURLParts.DirectoryOrFilePath),
+		"",
 		"", // it IS the root, so has no name within the root
 		common.EEntityType.Folder(),
-		t.parseLMT(pathProperties.LastModified()),
+		rootLmt,
 		size,
 		contentProps,
 		noBlobProps,

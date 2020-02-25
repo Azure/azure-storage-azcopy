@@ -220,6 +220,11 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, en
 	if entityType == common.EEntityType.Folder() {
 		obj.size = 0
 		obj.lastModifiedTime = time.Time{}
+
+		if obj.isSourceRootFolder() {
+			obj.name = "" // make these consistent, even from enumerators that pass in an actual name for these (it doesn't really make sense to pass an actual name)
+		}
+
 	}
 
 	// in some cases we may be supplied with a func that will perform some modification on the basic object
