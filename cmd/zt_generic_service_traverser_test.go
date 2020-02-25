@@ -197,10 +197,17 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 
 	records := append(blobDummyProcessor.record, fileDummyProcessor.record...)
 
-	c.Assert(len(blobDummyProcessor.record), chk.Equals, len(localIndexer.indexMap)*len(containerList))
-	c.Assert(len(fileDummyProcessor.record), chk.Equals, len(localIndexer.indexMap)*len(containerList))
+	localTotalCount := len(localIndexer.indexMap)
+	localFileOnlyCount := 0
+	for _, x := range localIndexer.indexMap {
+		if x.entityType == common.EEntityType.File() {
+			localFileOnlyCount++
+		}
+	}
+	c.Assert(len(blobDummyProcessor.record), chk.Equals, localFileOnlyCount*len(containerList))
+	c.Assert(len(fileDummyProcessor.record), chk.Equals, localTotalCount*len(containerList))
 	if testS3 {
-		c.Assert(len(s3DummyProcessor.record), chk.Equals, len(localIndexer.indexMap)*len(containerList))
+		c.Assert(len(s3DummyProcessor.record), chk.Equals, localFileOnlyCount*len(containerList))
 		records = append(records, s3DummyProcessor.record...)
 	}
 
@@ -356,11 +363,19 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 
 	records := append(blobDummyProcessor.record, fileDummyProcessor.record...)
 
+	localTotalCount := len(localIndexer.indexMap)
+	localFileOnlyCount := 0
+	for _, x := range localIndexer.indexMap {
+		if x.entityType == common.EEntityType.File() {
+			localFileOnlyCount++
+		}
+	}
+
 	// Only two containers should match.
-	c.Assert(len(blobDummyProcessor.record), chk.Equals, len(localIndexer.indexMap)*2)
-	c.Assert(len(fileDummyProcessor.record), chk.Equals, len(localIndexer.indexMap)*2)
+	c.Assert(len(blobDummyProcessor.record), chk.Equals, localFileOnlyCount*2)
+	c.Assert(len(fileDummyProcessor.record), chk.Equals, localTotalCount*2)
 	if testS3 {
-		c.Assert(len(s3DummyProcessor.record), chk.Equals, len(localIndexer.indexMap)*2)
+		c.Assert(len(s3DummyProcessor.record), chk.Equals, localFileOnlyCount*2)
 		records = append(records, s3DummyProcessor.record...)
 	}
 

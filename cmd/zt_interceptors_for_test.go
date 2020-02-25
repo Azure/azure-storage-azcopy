@@ -137,3 +137,13 @@ func (d *dummyProcessor) process(storedObject storedObject) (err error) {
 	d.record = append(d.record, storedObject)
 	return
 }
+
+func (d *dummyProcessor) countFilesOnly() int {
+	n := 0
+	for _, x := range d.record {
+		if x.entityType == common.EEntityType.File() {
+			n++
+		}
+	}
+	return n
+}

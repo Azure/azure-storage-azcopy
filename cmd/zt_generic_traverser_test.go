@@ -81,13 +81,15 @@ func (s *genericTraverserSuite) TestFilesGetProperties(c *chk.C) {
 	// embed the check into the processor for ease of use
 	seenContentType := false
 	processor := func(object storedObject) error {
-		// test all attributes
-		c.Assert(object.contentType, chk.Equals, headers.ContentType)
-		c.Assert(object.contentEncoding, chk.Equals, headers.ContentEncoding)
-		c.Assert(object.contentLanguage, chk.Equals, headers.ContentLanguage)
-		c.Assert(object.contentDisposition, chk.Equals, headers.ContentDisposition)
-		c.Assert(object.cacheControl, chk.Equals, headers.CacheControl)
-		seenContentType = true
+		if object.entityType == common.EEntityType.File() {
+			// test all attributes (but only for files, since folders don't have them)
+			c.Assert(object.contentType, chk.Equals, headers.ContentType)
+			c.Assert(object.contentEncoding, chk.Equals, headers.ContentEncoding)
+			c.Assert(object.contentLanguage, chk.Equals, headers.ContentLanguage)
+			c.Assert(object.contentDisposition, chk.Equals, headers.ContentDisposition)
+			c.Assert(object.cacheControl, chk.Equals, headers.CacheControl)
+			seenContentType = true
+		}
 		return nil
 	}
 
@@ -540,24 +542,42 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 			c.Assert(err, chk.IsNil)
 		}
 
-		// make sure the results are the same
-		c.Assert(len(blobDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
-		c.Assert(len(fileDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
-		c.Assert(len(bfsDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
+		// make sure the results are as expected
+		localTotalCount := len(localIndexer.indexMap)
+		localFileOnlyCount := 0
+		for _, x := range localIndexer.indexMap {
+			if x.entityType == common.EEntityType.File() {
+				localFileOnlyCount++
+			}
+		}
+
+		c.Assert(len(blobDummyProcessor.record), chk.Equals, localFileOnlyCount)
+		if isRecursiveOn {
+			c.Assert(len(fileDummyProcessor.record), chk.Equals, localTotalCount)
+			c.Assert(len(bfsDummyProcessor.record), chk.Equals, localTotalCount)
+		} else {
+			// in real usage, folders get stripped out in ToNewCopyTransfer when non-recursive,
+			// but that doesn't run here in this test,
+			// so we have to count files only on the processor
+			c.Assert(fileDummyProcessor.countFilesOnly(), chk.Equals, localTotalCount)
+			c.Assert(bfsDummyProcessor.countFilesOnly(), chk.Equals, localTotalCount)
+		}
 
 		if s3Enabled {
-			c.Assert(len(s3DummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
+			c.Assert(len(s3DummyProcessor.record), chk.Equals, localFileOnlyCount)
 		}
 
 		// if s3dummyprocessor is empty, it's A-OK because no records will be tested
 		for _, storedObject := range append(append(append(blobDummyProcessor.record, fileDummyProcessor.record...), bfsDummyProcessor.record...), s3DummyProcessor.record...) {
-			correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
+			if isRecursiveOn || storedObject.entityType == common.EEntityType.File() { // folder enumeration knowingly NOT consistent when non-recursive (since the folders get stripped out by ToNewCopyTransfer when non-recursive anyway)
+				correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
 
-			c.Assert(present, chk.Equals, true)
-			c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
+				c.Assert(present, chk.Equals, true)
+				c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
 
-			if !isRecursiveOn {
-				c.Assert(strings.Contains(storedObject.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+				if !isRecursiveOn {
+					c.Assert(strings.Contains(storedObject.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+				}
 			}
 		}
 	}
@@ -665,22 +685,38 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 			c.Assert(len(s3DummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
 		}
 
-		// make sure the results are the same
-		c.Assert(len(blobDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
-		c.Assert(len(fileDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
-		c.Assert(len(bfsDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
+		// make sure the results are as expected
+		localTotalCount := len(localIndexer.indexMap)
+		localFileOnlyCount := 0
+		for _, x := range localIndexer.indexMap {
+			if x.entityType == common.EEntityType.File() {
+				localFileOnlyCount++
+			}
+		}
+		c.Assert(len(blobDummyProcessor.record), chk.Equals, localFileOnlyCount)
+		if isRecursiveOn {
+			c.Assert(len(fileDummyProcessor.record), chk.Equals, localTotalCount)
+			c.Assert(len(bfsDummyProcessor.record), chk.Equals, localTotalCount)
+		} else {
+			// only files matter when not recursive (since ToNewCopyTransfer strips out everything else when non-recursive)
+			c.Assert(fileDummyProcessor.countFilesOnly(), chk.Equals, localTotalCount)
+			c.Assert(bfsDummyProcessor.countFilesOnly(), chk.Equals, localTotalCount)
+		}
 		// if s3 testing is disabled the s3 dummy processors' records will be empty. This is OK for appending. Nothing will happen.
 		for _, storedObject := range append(append(append(blobDummyProcessor.record, fileDummyProcessor.record...), bfsDummyProcessor.record...), s3DummyProcessor.record...) {
-			correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
+			if isRecursiveOn || storedObject.entityType == common.EEntityType.File() { // folder enumeration knowingly NOT consistent when non-recursive (since the folders get stripped out by ToNewCopyTransfer when non-recursive anyway)
 
-			c.Assert(present, chk.Equals, true)
-			c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
-			// Say, here's a good question, why do we have this last check?
-			// None of the other tests have it.
-			c.Assert(correspondingLocalFile.isMoreRecentThan(storedObject), chk.Equals, true)
+				correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
 
-			if !isRecursiveOn {
-				c.Assert(strings.Contains(storedObject.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+				c.Assert(present, chk.Equals, true)
+				c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
+				// Say, here's a good question, why do we have this last check?
+				// None of the other tests have it.
+				c.Assert(correspondingLocalFile.isMoreRecentThan(storedObject), chk.Equals, true)
+
+				if !isRecursiveOn {
+					c.Assert(strings.Contains(storedObject.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+				}
 			}
 		}
 	}
