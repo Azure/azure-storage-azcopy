@@ -99,12 +99,53 @@ func (s *storedObject) isSourceRootFolder() bool {
 	return s.relativePath == "" && s.entityType == common.EEntityType.Folder()
 }
 
+// isCompatibleWithFpo serves as our universal filter for filtering out folders in the cases where we should not
+// process them. (If we didn't have a filter like this, we'd have to put the filtering into
+// every enumerator, which would complicated them.)
+// We can't just implement this filtering in ToNewCopyTransfer, because delete transfers (from sync)
+// do not pass through that routine.  So we need to make the filtering available in a separate function
+// so that the sync deletion code path(s) can access it.
+func (s *storedObject) isCompatibleWithFpo(fpo common.FolderPropertyOption) bool {
+	if s.entityType == common.EEntityType.File() {
+		return true
+	} else if s.entityType == common.EEntityType.Folder() {
+		switch fpo {
+		case common.EFolderPropertiesOption.NoFolders():
+			return false
+		case common.EFolderPropertiesOption.AllFoldersExceptRoot():
+			return !s.isSourceRootFolder()
+		case common.EFolderPropertiesOption.AllFolders():
+			return true
+		default:
+			panic("undefined folder properties option")
+		}
+	} else {
+		panic("undefined entity type")
+	}
+}
+
+// Returns a func that only calls inner if storedObject isCompatibleWithFpo
+// We use this, so that we can easily test for compatibility in the sync deletion code (which expects an objectProcessor)
+func newFpoAwareProcessor(fpo common.FolderPropertyOption, inner objectProcessor) objectProcessor {
+	return func(s storedObject) error {
+		if s.isCompatibleWithFpo(fpo) {
+			return inner(s)
+		} else {
+			return nil // nothing went wrong, because we didn't do anything
+		}
+	}
+}
+
 func (s *storedObject) ToNewCopyTransfer(
 	steWillAutoDecompress bool,
 	Source string,
 	Destination string,
 	preserveBlobTier bool,
 	folderPropertiesOption common.FolderPropertyOption) (transfer common.CopyTransfer, shouldSendToSte bool) {
+
+	if !s.isCompatibleWithFpo(folderPropertiesOption) {
+		return common.CopyTransfer{}, false
+	}
 
 	if steWillAutoDecompress {
 		Destination = stripCompressionExtension(Destination, s.contentEncoding)
@@ -131,27 +172,7 @@ func (s *storedObject) ToNewCopyTransfer(
 		t.BlobTier = s.blobAccessTier
 	}
 
-	// We should only send folder-type entities to the STE if they are in fact wanted in this job
-	// We check this here because its a centralized place - so we can do it once, and also we can be sure
-	// that its always done.
-	// (The alternative would have been to pass folderPropertiesOption into every folder-aware enumerator
-	// and have it modify its behaviour accordingly. But we already have quite a few flags that get passed into enumerators
-	// and so don't really want to complicate things with another).
-	shouldSend := true
-	if s.entityType == common.EEntityType.Folder() {
-		switch folderPropertiesOption {
-		case common.EFolderPropertiesOption.NoFolders():
-			shouldSend = false
-		case common.EFolderPropertiesOption.AllFoldersExceptRoot():
-			shouldSend = !s.isSourceRootFolder()
-		case common.EFolderPropertiesOption.AllFolders():
-			shouldSend = true
-		default:
-			panic("undefined folder properties option")
-		}
-	}
-
-	return t, shouldSend
+	return t, true
 }
 
 // stripCompressionExtension strips any file extension that corresponds to the
