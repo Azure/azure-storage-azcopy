@@ -176,9 +176,32 @@ type localFileDeleter struct {
 	rootPath string
 }
 
+// As at version 10.4.0, we intentionally don't delete directories in sync,
+// even if our folder properties option suggests we should.
+// Why? The key difficulties are as follows, and its the third one that we don't currently have a solution for.
+// 1. Timing (solvable in theory with FolderDeletionManager)
+// 2. Identifying which should be removed when source does not have concept of folders (e.g. BLob)
+//    Probably solution is to just respect the folder properties option setting (which we already do in our delete processors)
+// 3. In Azure Files case (and to a lesser extent on local disks) users may have ACLS or other properties
+//    set on the directories, and wish to retain those even tho the directories are empty. (Perhaps less of an issue
+//    when syncing from folder-aware sources that DOES NOT HAVE the directory. But still an issue when syncing from
+//    blob. E.g. we delete a folder because there's nothing in it right now, but really user wanted it there,
+//    and have set up custom ACLs on it for future use.  If we delete, they lose the custom ACL setup.
+// TODO: shall we add folder deletion support at some stage? (In cases where folderPropertiesOption says that folders should be processed)
+func shouldSyncRemoveFolders() bool {
+	return false
+}
+
 func (l *localFileDeleter) deleteFile(object storedObject) error {
-	glcm.Info("Deleting extra file: " + object.relativePath)
-	return os.Remove(common.GenerateFullPath(l.rootPath, object.relativePath))
+	if object.entityType == common.EEntityType.File() {
+		glcm.Info("Deleting extra file: " + object.relativePath)
+		return os.Remove(common.GenerateFullPath(l.rootPath, object.relativePath))
+	} else {
+		if shouldSyncRemoveFolders() {
+			panic("folder deletion enabled but not implemented")
+		}
+		return nil
+	}
 }
 
 func newSyncDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor, error) {
@@ -217,21 +240,29 @@ func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx cont
 }
 
 func (b *remoteResourceDeleter) delete(object storedObject) error {
-	glcm.Info("Deleting extra " + b.targetLocation.String() + ": " + object.relativePath)
-	switch b.targetLocation {
-	case common.ELocation.Blob():
-		blobURLParts := azblob.NewBlobURLParts(*b.rootURL)
-		blobURLParts.BlobName = path.Join(blobURLParts.BlobName, object.relativePath)
-		blobURL := azblob.NewBlobURL(blobURLParts.URL(), b.p)
-		_, err := blobURL.Delete(b.ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
-		return err
-	case common.ELocation.File():
-		fileURLParts := azfile.NewFileURLParts(*b.rootURL)
-		fileURLParts.DirectoryOrFilePath = path.Join(fileURLParts.DirectoryOrFilePath, object.relativePath)
-		fileURL := azfile.NewFileURL(fileURLParts.URL(), b.p)
-		_, err := fileURL.Delete(b.ctx)
-		return err
-	default:
-		panic("not implemented, check your code")
+	if object.entityType == common.EEntityType.File() {
+		// TODO: use b.targetLocation.String() in the next line, instead of "object", if we can make it come out as string
+		glcm.Info("Deleting extra object: " + object.relativePath)
+		switch b.targetLocation {
+		case common.ELocation.Blob():
+			blobURLParts := azblob.NewBlobURLParts(*b.rootURL)
+			blobURLParts.BlobName = path.Join(blobURLParts.BlobName, object.relativePath)
+			blobURL := azblob.NewBlobURL(blobURLParts.URL(), b.p)
+			_, err := blobURL.Delete(b.ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
+			return err
+		case common.ELocation.File():
+			fileURLParts := azfile.NewFileURLParts(*b.rootURL)
+			fileURLParts.DirectoryOrFilePath = path.Join(fileURLParts.DirectoryOrFilePath, object.relativePath)
+			fileURL := azfile.NewFileURL(fileURLParts.URL(), b.p)
+			_, err := fileURL.Delete(b.ctx)
+			return err
+		default:
+			panic("not implemented, check your code")
+		}
+	} else {
+		if shouldSyncRemoveFolders() {
+			panic("folder deletion enabled but not implemented")
+		}
+		return nil
 	}
 }
