@@ -106,7 +106,10 @@ def check_env_not_exist(key):
 
 def get_env_logged(key):
     value = os.environ.get(key)
-    print(key + " = " + re.sub("(?i)(?P<key>sig[ \t]*[:=][ \t]*)(?P<value>[^& ,;\t\n\r]+)", "sig=REDACTED", value))
+    if value is None:
+        print(key + " = None")
+    else:
+        print(key + " = " + re.sub("(?i)(?P<key>sig[ \t]*[:=][ \t]*)(?P<value>[^& ,;\t\n\r]+)", "sig=REDACTED", value))
     return value
 
 def init():
