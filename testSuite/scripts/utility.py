@@ -225,59 +225,40 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
         return False
 
     test_directory_path = new_dir_path
-
-    # set the filesystem url
     test_bfs_account_url = filesystem_url
     test_bfs_sas_account_url = filesystem_sas_url
-    # test_bfs_sas_account_url is the same place as test_bfs_sas_account_url in CI
-    if not clean_test_filesystem(test_bfs_account_url):
-        print("failed to clean test filesystem.")
     if not (test_bfs_account_url.endswith("/") and test_bfs_account_url.endwith("\\")):
         test_bfs_account_url = test_bfs_account_url + "/"
-
-    # cleaning the test container provided
-    # all blob inside the container will be deleted.
     test_container_url = container_sas
-    if not clean_test_container(test_container_url):
-        print("failed to clean test blob container.")
-
     test_oauth_container_url = container_oauth
     if not (test_oauth_container_url.endswith("/") and test_oauth_container_url.endwith("\\")):
         test_oauth_container_url = test_oauth_container_url + "/"
+    test_oauth_container_validate_sas_url = container_oauth_validate
+    test_premium_account_contaier_url = premium_container_sas
+    test_s2s_src_blob_account_url = s2s_src_blob_account_url
+    test_s2s_src_file_account_url = s2s_src_file_account_url
+    test_s2s_dst_blob_account_url = s2s_dst_blob_account_url
+    test_s2s_src_s3_service_url = s2s_src_s3_service_url
+    test_share_url = share_sas_url
+
+    if not clean_test_filesystem(test_bfs_account_url):
+        print("failed to clean test filesystem.")
+    if not clean_test_container(test_container_url):
+        print("failed to clean test blob container.")
     if not clean_test_container(test_oauth_container_url):
         print("failed to clean OAuth test blob container.")
-    
-    # No need to do cleanup on oauth validation URL.
-    # Removed this cleanup step because we use a container SAS.
-    # Therefore, we'd delete the container successfully with the container level SAS
-    # and just not be able to re-make it with the container SAS
-    test_oauth_container_validate_sas_url = container_oauth_validate
     if not clean_test_container(test_oauth_container_url):
         print("failed to clean OAuth container.")
-
-    test_premium_account_contaier_url = premium_container_sas
     if not clean_test_container(test_premium_account_contaier_url):
         print("failed to clean premium container.")
-
-    test_s2s_src_blob_account_url = s2s_src_blob_account_url
     if not clean_test_blob_account(test_s2s_src_blob_account_url):
         print("failed to clean s2s blob source account.")
-
-    test_s2s_src_file_account_url = s2s_src_file_account_url
     if not clean_test_file_account(test_s2s_src_file_account_url):
         print("failed to clean s2s file source account.")
-
-    test_s2s_dst_blob_account_url = s2s_dst_blob_account_url
     if not clean_test_blob_account(test_s2s_dst_blob_account_url):
         print("failed to clean s2s blob destination account.")
-
-    test_s2s_src_s3_service_url = s2s_src_s3_service_url
     if not clean_test_s3_account(test_s2s_src_s3_service_url):
         print("failed to clean s3 account.")
-
-    # cleaning the test share provided
-    # all files and directories inside the share will be deleted.
-    test_share_url = share_sas_url
     if not clean_test_share(test_share_url):
         print("failed to clean test share.")
 
