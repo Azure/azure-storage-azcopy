@@ -180,7 +180,7 @@ func (u *blobFSSenderBase) doEnsureDirExists(d azbfs.DirectoryURL) error {
 		// must always do this, regardless of whether we are called in a file-centric code path
 		// or a folder-centric one, since with the parallelism we use, we don't actually
 		// know which will happen first
-		dirUrl := u.dirURL().URL()
+		dirUrl := d.URL()
 		u.jptm.GetFolderCreationTracker().RecordCreation(dirUrl.String())
 	}
 	if stgErr, ok := err.(azbfs.StorageError); ok && stgErr.ServiceCode() == azbfs.ServiceCodePathAlreadyExists {
