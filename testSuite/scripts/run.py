@@ -98,6 +98,9 @@ def parse_config_file_set_env():
     os.environ['AWS_ACCESS_KEY_ID'] = config['CREDENTIALS']['AWS_ACCESS_KEY_ID']
     os.environ['AWS_SECRET_ACCESS_KEY'] = config['CREDENTIALS']['AWS_SECRET_ACCESS_KEY']
 
+    os.environ['OAUTH_AAD_ENDPOINT'] = config['CREDENTIALS']['OAUTH_AAD_ENDPOINT']
+    os.environ['S3_TESTS_OFF'] = config['CREDENTIALS']['S3_TESTS_OFF']
+
 def check_env_not_exist(key):
     if os.environ.get(key, '-1') == '-1':
         print('Environment variable: ' + key + ' not set.')
