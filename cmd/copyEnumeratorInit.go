@@ -490,7 +490,11 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 
 	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true
 
-	relativePath = "/" + strings.Replace(object.relativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+	if object.isSourceRootFolder() {
+		relativePath = "" // otherwise we get "/" from the line below, and that breaks some clients, e.g. blobFS
+	} else {
+		relativePath = "/" + strings.Replace(object.relativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+	}
 
 	if common.IffString(source, object.containerName, object.dstContainerName) != "" {
 		relativePath = `/` + common.IffString(source, object.containerName, object.dstContainerName) + relativePath
