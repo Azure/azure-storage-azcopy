@@ -433,6 +433,8 @@ Job %s Summary
 Files Scanned at Source: %v
 Files Scanned at Destination: %v
 Elapsed Time (Minutes): %v
+Number of Copy Transfers for Files: %v
+Number of Copy Transfers for Folder Properties: %v 
 Total Number Of Copy Transfers: %v
 Number of Copy Transfers Completed: %v
 Number of Copy Transfers Failed: %v
@@ -445,6 +447,8 @@ Final Job Status: %v%s%s
 				atomic.LoadUint64(&cca.atomicSourceFilesScanned),
 				atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
 				ste.ToFixed(duration.Minutes(), 4),
+				summary.FileTransfers,
+				summary.FolderPropertyTransfers,
 				summary.TotalTransfers,
 				summary.TransfersCompleted,
 				summary.TransfersFailed,

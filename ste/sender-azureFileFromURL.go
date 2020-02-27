@@ -64,7 +64,7 @@ func (u *urlToAzureFileCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 		if err := u.pacer.RequestTrafficAllocation(u.jptm.Context(), adjustedChunkSize); err != nil {
 			u.jptm.FailActiveUpload("Pacing block (global level)", err)
 		}
-		_, err := u.fileURL.UploadRangeFromURL(
+		_, err := u.fileURL().UploadRangeFromURL(
 			u.ctx, u.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize)
 		if err != nil {
 			u.jptm.FailActiveS2SCopy("Uploading range from URL", err)

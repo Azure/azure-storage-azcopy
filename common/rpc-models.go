@@ -49,6 +49,7 @@ type CopyJobPartOrderRequest struct {
 	AutoDecompress bool            // if true, source data with encodings that represent compression are automatically decompressed when downloading
 	Priority       JobPriority     // priority of the task
 	FromTo         FromTo
+	Fpo            FolderPropertyOption // passed in from front-end to ensure that front-end and STE agree on the desired behaviour for the job
 	// list of blobTypes to exclude.
 	ExcludeBlobType []azblob.BlobType
 	SourceRoot      string
@@ -150,7 +151,15 @@ type ListJobSummaryResponse struct {
 	// CompleteJobOrdered determines whether the Job has been completely ordered or not
 	CompleteJobOrdered bool
 	JobStatus          JobStatus
-	TotalTransfers     uint32 `json:",string"`
+
+	TotalTransfers uint32 `json:",string"` // = FileTransfers + FolderPropertyTransfers. It also = TransfersCompleted + TransfersFailed + TransfersSkipped
+	// FileTransfers and FolderPropertyTransfers just break the total down into the two types.
+	// The name FolderPropertyTransfers is used to emphasise that is is only counting transferring the properties and existence of
+	// folders. A "folder property transfer" does not include any files that may be in the folder. Those are counted as
+	// FileTransfers.
+	FileTransfers           uint32 `json:",string"`
+	FolderPropertyTransfers uint32 `json:",string"`
+
 	TransfersCompleted uint32 `json:",string"`
 	TransfersFailed    uint32 `json:",string"`
 	TransfersSkipped   uint32 `json:",string"`
@@ -208,10 +217,11 @@ type ResumeJobRequest struct {
 
 // represents the Details and details of a single transfer
 type TransferDetail struct {
-	Src            string
-	Dst            string
-	TransferStatus TransferStatus
-	ErrorCode      int32 `json:",string"`
+	Src                string
+	Dst                string
+	IsFolderProperties bool
+	TransferStatus     TransferStatus
+	ErrorCode          int32 `json:",string"`
 }
 
 type CancelPauseResumeResponse struct {

@@ -25,12 +25,12 @@ import (
 	"syscall"
 )
 
-func CreateFileOfSize(destinationPath string, fileSize int64) (*os.File, error) {
-	return CreateFileOfSizeWithWriteThroughOption(destinationPath, fileSize, false)
+func CreateFileOfSize(destinationPath string, fileSize int64, t FolderCreationTracker) (*os.File, error) {
+	return CreateFileOfSizeWithWriteThroughOption(destinationPath, fileSize, false, t)
 }
 
-func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int64, writeThrough bool) (*os.File, error) {
-	err := CreateParentDirectoryIfNotExist(destinationPath)
+func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int64, writeThrough bool, t FolderCreationTracker) (*os.File, error) {
+	err := CreateParentDirectoryIfNotExist(destinationPath, t)
 	if err != nil {
 		return nil, err
 	}

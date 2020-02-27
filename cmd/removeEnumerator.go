@@ -57,7 +57,7 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	}
 
 	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = initResourceTraverser(rawURL.String(), cca.fromTo.From(), &ctx, &cca.credentialInfo, nil, cca.listOfFilesChannel, cca.recursive, false, func() {})
+	sourceTraverser, err = initResourceTraverser(rawURL.String(), cca.fromTo.From(), &ctx, &cca.credentialInfo, nil, cca.listOfFilesChannel, cca.recursive, false, func(common.EntityType) {})
 
 	// report failure to create traverser
 	if err != nil {
@@ -160,8 +160,9 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
 		glcm.Exit(func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
 				summary := common.ListJobSummaryResponse{
-					JobStatus:          common.EJobStatus.Completed(),
-					TotalTransfers:     1,
+					JobStatus:      common.EJobStatus.Completed(),
+					TotalTransfers: 1,
+					// It's not meaningful to set FileTransfers or FolderPropertyTransfers because even if its a folder, its not really folder _properties_ which is what the name is
 					TransfersCompleted: 1,
 					PercentComplete:    100,
 				}

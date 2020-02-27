@@ -27,7 +27,7 @@ func (dus *DirectoryUrlSuite) TestCreateDeleteDirectory(c *chk.C) {
 
 	// Create a directory url from the fileSystem Url
 	dirUrl, _ := getDirectoryURLFromFileSystem(c, fsURL)
-	cResp, err := dirUrl.Create(context.Background())
+	cResp, err := dirUrl.Create(context.Background(), true)
 	defer deleteDirectory(c, dirUrl)
 
 	// Assert the directory create response header attributes
@@ -49,7 +49,7 @@ func (dus *DirectoryUrlSuite) TestCreateSubDir(c *chk.C) {
 
 	// Create the directory Url from fileSystem Url and create directory
 	dirUrl, _ := getDirectoryURLFromFileSystem(c, fsURL)
-	cResp, err := dirUrl.Create(context.Background())
+	cResp, err := dirUrl.Create(context.Background(), true)
 	defer deleteDirectory(c, dirUrl)
 
 	c.Assert(err, chk.IsNil)
@@ -62,7 +62,7 @@ func (dus *DirectoryUrlSuite) TestCreateSubDir(c *chk.C) {
 
 	// Create the sub-directory url from directory Url and create sub-directory
 	subDirUrl, _ := getDirectoryURLFromDirectory(c, dirUrl)
-	cResp, err = subDirUrl.Create(context.Background())
+	cResp, err = subDirUrl.Create(context.Background(), true)
 	defer deleteDirectory(c, subDirUrl)
 
 	c.Assert(err, chk.IsNil)
@@ -85,7 +85,7 @@ func (dus *DirectoryUrlSuite) TestDirectoryCreateAndGetProperties(c *chk.C) {
 
 	// Create directory url from fileSystemUrl and create directory
 	dirUrl, _ := getDirectoryURLFromFileSystem(c, fsURL)
-	cResp, err := dirUrl.Create(context.Background())
+	cResp, err := dirUrl.Create(context.Background(), true)
 	defer deleteDirectory(c, dirUrl)
 
 	c.Assert(err, chk.IsNil)
@@ -113,7 +113,7 @@ func (dus *DirectoryUrlSuite) TestCreateDirectoryAndFiles(c *chk.C) {
 	// Create the directoryUrl from fileSystemUrl
 	// and create directory
 	dirUrl, _ := getDirectoryURLFromFileSystem(c, fsURL)
-	cResp, err := dirUrl.Create(context.Background())
+	cResp, err := dirUrl.Create(context.Background(), true)
 	defer deleteDirectory(c, dirUrl)
 
 	c.Assert(err, chk.IsNil)
@@ -139,6 +139,35 @@ func (dus *DirectoryUrlSuite) TestCreateDirectoryAndFiles(c *chk.C) {
 
 }
 
+// TestReCreateDirectory tests the creation of directories that already exist
+func (dus *DirectoryUrlSuite) TestReCreateDirectory(c *chk.C) {
+	// Create the file system
+	fsu := getBfsServiceURL()
+	fsURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fsURL)
+
+	// Create the directoryUrl from fileSystemUrl and create directory
+	dirUrl, _ := getDirectoryURLFromFileSystem(c, fsURL)
+	cResp, err := dirUrl.Create(context.Background(), true)
+	defer deleteDirectory(c, dirUrl)
+	c.Assert(err, chk.IsNil)
+	c.Assert(cResp.StatusCode(), chk.Equals, http.StatusCreated)
+
+	// Re-create it (allowing overwrite)
+	// TODO: put some files in it before this, and make assertions about what happens to them after the re-creation
+	cResp, err = dirUrl.Create(context.Background(), true)
+	c.Assert(err, chk.IsNil)
+	c.Assert(cResp.StatusCode(), chk.Equals, http.StatusCreated)
+
+	// Attempt to re-create it (but do NOT allow overwrite)
+	cResp, err = dirUrl.Create(context.Background(), false) // <- false for re-create
+	c.Assert(err, chk.NotNil)
+	stgErr, ok := err.(azbfs.StorageError)
+	c.Assert(ok, chk.Equals, true)
+	c.Assert(stgErr.Response().StatusCode, chk.Equals, http.StatusConflict)
+	c.Assert(stgErr.ServiceCode(), chk.Equals, azbfs.ServiceCodePathAlreadyExists)
+}
+
 // TestDirectoryStructure tests creating dir, sub-dir inside dir and files
 // inside dirs and sub-dirs. Then verify the count of files / sub-dirs inside directory
 func (dus *DirectoryUrlSuite) TestDirectoryStructure(c *chk.C) {
@@ -149,7 +178,7 @@ func (dus *DirectoryUrlSuite) TestDirectoryStructure(c *chk.C) {
 
 	// Create a directory inside filesystem
 	dirUrl, _ := getDirectoryURLFromFileSystem(c, fsURL)
-	cResp, err := dirUrl.Create(context.Background())
+	cResp, err := dirUrl.Create(context.Background(), true)
 	defer deleteDirectory(c, dirUrl)
 
 	c.Assert(err, chk.IsNil)
@@ -162,7 +191,7 @@ func (dus *DirectoryUrlSuite) TestDirectoryStructure(c *chk.C) {
 
 	// Create a sub-dir inside the above create directory
 	subDirUrl, _ := getDirectoryURLFromDirectory(c, dirUrl)
-	cResp, err = subDirUrl.Create(context.Background())
+	cResp, err = subDirUrl.Create(context.Background(), true)
 	defer deleteDirectory(c, subDirUrl)
 
 	c.Assert(err, chk.IsNil)
@@ -225,7 +254,7 @@ func (dus *DirectoryUrlSuite) TestListDirectoryWithSpaces(c *chk.C) {
 
 	// Create a directory inside filesystem
 	dirUrl := fsURL.NewDirectoryURL("New Folder Test 2")
-	_, err := dirUrl.Create(context.Background())
+	_, err := dirUrl.Create(context.Background(), true)
 	defer deleteDirectory(c, dirUrl)
 
 	// Create a file inside directory

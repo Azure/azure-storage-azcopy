@@ -151,6 +151,7 @@ func (jm *jobMgr) logConcurrencyParameters() {
 // jobMgrInitState holds one-time init structures (such as SIPM), that initialize when the first part is added.
 type jobMgrInitState struct {
 	securityInfoPersistenceManager *securityInfoPersistenceManager
+	folderCreationTracker          common.FolderCreationTracker
 }
 
 // jobMgr represents the runtime information for a Job
@@ -195,6 +196,9 @@ type jobMgr struct {
 
 	// only a single instance of the prompter is needed for all transfers
 	overwritePrompter *overwritePrompter
+
+	// must have a single instance of this, for the whole job
+	folderCreationTracker common.FolderCreationTracker
 
 	initMu    *sync.Mutex
 	initState *jobMgrInitState
@@ -330,9 +334,10 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 	if jm.initState == nil {
 		jm.initState = &jobMgrInitState{
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
+			folderCreationTracker:          common.NewFolderCreationTracker(jpm.Plan().Fpo),
 		}
 	}
-	jpm.jobMgrInitState = jm.initState
+	jpm.jobMgrInitState = jm.initState // so jpm can use it as much as desired without locking (since the only mutation is the init in jobManager. As far as jobPartManager is concerned, the init state is read-only
 
 	if scheduleTransfers {
 		// If the schedule transfer is set to true

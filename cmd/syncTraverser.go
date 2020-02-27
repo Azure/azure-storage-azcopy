@@ -48,16 +48,18 @@ func newLocalTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (*localTrav
 		return nil, errors.New("illegal local path, no pattern matching allowed for sync command")
 	}
 
-	incrementEnumerationCounter := func() {
-		var counterAddr *uint64
+	incrementEnumerationCounter := func(entityType common.EntityType) {
+		if entityType == common.EEntityType.File() {
+			var counterAddr *uint64
 
-		if isSource {
-			counterAddr = &cca.atomicSourceFilesScanned
-		} else {
-			counterAddr = &cca.atomicDestinationFilesScanned
+			if isSource {
+				counterAddr = &cca.atomicSourceFilesScanned
+			} else {
+				counterAddr = &cca.atomicDestinationFilesScanned
+			}
+
+			atomic.AddUint64(counterAddr, 1)
 		}
-
-		atomic.AddUint64(counterAddr, 1)
 	}
 
 	// TODO: Implement this flag (followSymlinks).
@@ -98,16 +100,19 @@ func newBlobTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (t *blobTrav
 		return
 	}
 
-	incrementEnumerationCounter := func() {
-		var counterAddr *uint64
+	incrementEnumerationCounter := func(entityType common.EntityType) {
 
-		if isSource {
-			counterAddr = &cca.atomicSourceFilesScanned
-		} else {
-			counterAddr = &cca.atomicDestinationFilesScanned
+		if entityType == common.EEntityType.File() {
+			var counterAddr *uint64
+
+			if isSource {
+				counterAddr = &cca.atomicSourceFilesScanned
+			} else {
+				counterAddr = &cca.atomicDestinationFilesScanned
+			}
+
+			atomic.AddUint64(counterAddr, 1)
 		}
-
-		atomic.AddUint64(counterAddr, 1)
 	}
 
 	return newBlobTraverser(rawURL, p, ctx, cca.recursive, incrementEnumerationCounter), nil

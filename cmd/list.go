@@ -121,7 +121,7 @@ func HandleListContainerCommand(source string, location common.Location) (err er
 		}
 	}
 
-	traverser, err := initResourceTraverser(source, location, &ctx, &credentialInfo, nil, nil, true, false, func() {})
+	traverser, err := initResourceTraverser(source, location, &ctx, &credentialInfo, nil, nil, true, false, func(common.EntityType) {})
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())
@@ -131,7 +131,11 @@ func HandleListContainerCommand(source string, location common.Location) (err er
 	var sizeCount int64 = 0
 
 	processor := func(object storedObject) error {
-		objectSummary := object.relativePath + "; Content Length: "
+		path := object.relativePath
+		if object.entityType == common.EEntityType.Folder() {
+			path += "/" // TODO: reviewer: same questions as for jobs status: OK to hard code direction of slash? OK to use trailing slash to distinguish dirs from files?
+		}
+		objectSummary := path + "; Content Length: "
 
 		if level == level.Service() {
 			objectSummary = object.containerName + "/" + objectSummary

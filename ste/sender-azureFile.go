@@ -34,15 +34,27 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
+type URLHolder interface {
+	URL() url.URL
+	String() string
+}
+
+// azureFileSenderBase implements both IFolderSender and (most of) IFileSender.
+// Why implement both interfaces in the one type, even though they are largely unrelated? Because it
+// makes functions like newAzureFilesUploader easier to reason about, since they always return the same type.
+// It may also make it easier to describe what's needed when supporting an new backend - e.g. "to send to a new back end
+// you need a sender that implements IFileSender and, if the back end is folder aware, it should also implement IFolderSender"
+// (The alternative would be to have the likes of newAzureFilesUploader call sip.EntityType and return a different type
+// if the entity type is folder).
 type azureFileSenderBase struct {
-	jptm      IJobPartTransferMgr
-	fileURL   azfile.FileURL
-	chunkSize uint32
-	numChunks uint32
-	pipeline  pipeline.Pipeline
-	pacer     pacer
-	ctx       context.Context
-	sip       ISourceInfoProvider
+	jptm         IJobPartTransferMgr
+	fileOrDirURL URLHolder
+	chunkSize    uint32
+	numChunks    uint32
+	pipeline     pipeline.Pipeline
+	pacer        pacer
+	ctx          context.Context
+	sip          ISourceInfoProvider
 	// Headers and other info that we will apply to the destination
 	// object. For S2S, these come from the source service.
 	// When sending local data, they are computed based on
@@ -55,7 +67,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 
 	info := jptm.Info()
 
-	// compute chunk size
+	// compute chunk size (irrelevant but harmless for folders)
 	// If the given chunk Size for the Job is greater than maximum file chunk size i.e 4 MB
 	// then chunk size will be 4 MB.
 	chunkSize := info.BlockSize
@@ -67,7 +79,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		}
 	}
 
-	// compute num chunks
+	// compute num chunks (irrelevant but harmless for folders)
 	numChunks := getNumChunks(info.SourceSize, chunkSize)
 
 	// make sure URL is parsable
@@ -79,25 +91,47 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 	// due to the REST parity feature added in 2019-02-02, the File APIs are no longer backward compatible
 	// so we must use the latest SDK version to stay safe
 	ctx := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azfile.ServiceVersion)
+
 	props, err := sip.Properties()
 	if err != nil {
 		return nil, err
 	}
 
-	headers := props.SrcHTTPHeaders.ToAzFileHTTPHeaders()
+	var h URLHolder
+	if info.IsFolderPropertiesTransfer() {
+		h = azfile.NewDirectoryURL(*destURL, p)
+	} else {
+		h = azfile.NewFileURL(*destURL, p)
+	}
 
 	return &azureFileSenderBase{
 		jptm:            jptm,
-		fileURL:         azfile.NewFileURL(*destURL, p),
+		fileOrDirURL:    h,
 		chunkSize:       chunkSize,
 		numChunks:       numChunks,
 		pipeline:        p,
 		pacer:           pacer,
 		ctx:             ctx,
+		headersToApply:  props.SrcHTTPHeaders.ToAzFileHTTPHeaders(),
 		sip:             sip,
-		headersToApply:  headers,
 		metadataToApply: props.SrcMetadata.ToAzFileMetadata(),
 	}, nil
+}
+
+func (u *azureFileSenderBase) fileURL() azfile.FileURL {
+	return u.fileOrDirURL.(azfile.FileURL)
+}
+
+func (u *azureFileSenderBase) dirURL() azfile.DirectoryURL {
+	return u.fileOrDirURL.(azfile.DirectoryURL)
+}
+
+func (u *azureFileSenderBase) SendableEntityType() common.EntityType {
+	if _, ok := u.fileOrDirURL.(azfile.DirectoryURL); ok {
+		return common.EEntityType.Folder()
+	} else {
+		return common.EEntityType.File()
+	}
 }
 
 func (u *azureFileSenderBase) ChunkSize() uint32 {
@@ -109,7 +143,7 @@ func (u *azureFileSenderBase) NumChunks() uint32 {
 }
 
 func (u *azureFileSenderBase) RemoteFileExists() (bool, error) {
-	return remoteObjectExists(u.fileURL.GetProperties(u.ctx))
+	return remoteObjectExists(u.fileURL().GetProperties(u.ctx))
 }
 
 func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationModified bool) {
@@ -119,7 +153,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 	destinationModified = true
 
 	// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
-	err := AzureFileParentDirCreator{}.CreateParentDirToRoot(u.ctx, u.fileURL, u.pipeline)
+	err := AzureFileParentDirCreator{}.CreateParentDirToRoot(u.ctx, u.fileURL(), u.pipeline, u.jptm.GetFolderCreationTracker())
 	if err != nil {
 		jptm.FailActiveUpload("Creating parent directory", err)
 		return
@@ -140,7 +174,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 				common.PanicIfErr(err)
 
 				srcURLParts := azfile.NewFileURLParts(*srcURL)
-				dstURLParts := azfile.NewFileURLParts(u.fileURL.URL())
+				dstURLParts := azfile.NewFileURLParts(u.fileURL().URL())
 
 				// and happen to be the same account and share, we can get away with using the same key and save a trip.
 				if srcURLParts.Host == dstURLParts.Host && srcURLParts.ShareName == dstURLParts.ShareName {
@@ -159,7 +193,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		}
 
 		if len(u.headersToApply.PermissionString) > filesServiceMaxSDDLSize {
-			fURLParts := azfile.NewFileURLParts(u.fileURL.URL())
+			fURLParts := azfile.NewFileURLParts(u.fileURL().URL())
 			fURLParts.DirectoryOrFilePath = ""
 			shareURL := azfile.NewShareURL(fURLParts.URL(), u.pipeline)
 
@@ -176,7 +210,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 	}
 
 	// Create Azure file with the source size
-	_, err = u.fileURL.Create(u.ctx, info.SourceSize, u.headersToApply, u.metadataToApply)
+	_, err = u.fileURL().Create(u.ctx, info.SourceSize, u.headersToApply, u.metadataToApply)
 	if err != nil {
 		jptm.FailActiveUpload("Creating file", err)
 		return
@@ -195,15 +229,15 @@ func (u *azureFileSenderBase) Cleanup() {
 		// contents will be at an unknown stage of partial completeness
 		deletionContext, cancelFn := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancelFn()
-		_, err := u.fileURL.Delete(deletionContext)
+		_, err := u.fileURL().Delete(deletionContext)
 		if err != nil {
-			jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the (incomplete) file %s. Failed with error %s", u.fileURL.String(), err.Error()))
+			jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the (incomplete) file %s. Failed with error %s", u.fileOrDirURL.String(), err.Error()))
 		}
 	}
 }
 
 func (u *azureFileSenderBase) GetDestinationLength() (int64, error) {
-	prop, err := u.fileURL.GetProperties(u.ctx)
+	prop, err := u.fileURL().GetProperties(u.ctx)
 
 	if err != nil {
 		return -1, err
@@ -212,13 +246,22 @@ func (u *azureFileSenderBase) GetDestinationLength() (int64, error) {
 	return prop.ContentLength(), nil
 }
 
+func (u *azureFileSenderBase) EnsureFolderExists() error {
+	return AzureFileParentDirCreator{}.CreateDirToRoot(u.ctx, u.dirURL(), u.pipeline, u.jptm.GetFolderCreationTracker())
+}
+
+func (u *azureFileSenderBase) SetFolderProperties() error {
+	// TODO
+	return nil
+}
+
 // namespace for functions related to creating parent directories in Azure File
 // to avoid free floating global funcs
 type AzureFileParentDirCreator struct{}
 
 // getParentDirectoryURL gets parent directory URL of an Azure FileURL.
-func (AzureFileParentDirCreator) getParentDirectoryURL(fileURL azfile.FileURL, p pipeline.Pipeline) azfile.DirectoryURL {
-	u := fileURL.URL()
+func (AzureFileParentDirCreator) getParentDirectoryURL(uh URLHolder, p pipeline.Pipeline) azfile.DirectoryURL {
+	u := uh.URL()
 	u.Path = u.Path[:strings.LastIndex(u.Path, "/")]
 	return azfile.NewDirectoryURL(u, p)
 }
@@ -247,10 +290,14 @@ func (AzureFileParentDirCreator) splitWithoutToken(str string, token rune) []str
 }
 
 // CreateParentDirToRoot creates parent directories of the Azure file if file's parent directory doesn't exist.
-func (d AzureFileParentDirCreator) CreateParentDirToRoot(ctx context.Context, fileURL azfile.FileURL, p pipeline.Pipeline) error {
+func (d AzureFileParentDirCreator) CreateParentDirToRoot(ctx context.Context, fileURL azfile.FileURL, p pipeline.Pipeline, t common.FolderCreationTracker) error {
 	dirURL := d.getParentDirectoryURL(fileURL, p)
+	return d.CreateDirToRoot(ctx, dirURL, p, t)
+}
+
+// CreateDirToRoot Creates the dir (and parents as necessary) if it does not exist
+func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, dirURL azfile.DirectoryURL, p pipeline.Pipeline, t common.FolderCreationTracker) error {
 	dirURLExtension := common.FileURLPartsExtension{FileURLParts: azfile.NewFileURLParts(dirURL.URL())}
-	// Check whether parent dir of the file exists.
 	if _, err := dirURL.GetProperties(ctx); err != nil {
 		if stgErr, stgErrOk := err.(azfile.StorageError); stgErrOk && stgErr.Response() != nil &&
 			stgErr.Response().StatusCode == http.StatusNotFound { // At least need read and write permisson for destination
@@ -265,6 +312,13 @@ func (d AzureFileParentDirCreator) CreateParentDirToRoot(ctx context.Context, fi
 				curDirURL = curDirURL.NewDirectoryURL(segments[i])
 				// TODO: Persist permissions on folders.
 				_, err := curDirURL.Create(ctx, azfile.Metadata{}, "", "")
+				if err == nil {
+					// We did create it, so record that fact. I.e. THIS job created the folder.
+					// Must do it here, in the routine that is shared by both the folder and the file code,
+					// because due to the parallelism of AzCopy, we don't know which will get here first, file code, or folder code.
+					dirUrl := curDirURL.URL()
+					t.RecordCreation(dirUrl.String())
+				}
 				if verifiedErr := d.verifyAndHandleCreateErrors(err); verifiedErr != nil {
 					return verifiedErr
 				}

@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -46,8 +47,10 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
 	sourceTraverser, err := initResourceTraverser(src, cca.fromTo.From(), &ctx, &cca.credentialInfo,
-		nil, nil, cca.recursive, true, func() {
-			atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
+		nil, nil, cca.recursive, true, func(entityType common.EntityType) {
+			if entityType == common.EEntityType.File() {
+				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
+			}
 		})
 
 	if err != nil {
@@ -58,8 +61,10 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
 	destinationTraverser, err := initResourceTraverser(dst, cca.fromTo.To(), &ctx, &cca.credentialInfo,
-		nil, nil, cca.recursive, true, func() {
-			atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
+		nil, nil, cca.recursive, true, func(entityType common.EntityType) {
+			if entityType == common.EEntityType.File() {
+				atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
+			}
 		})
 	if err != nil {
 		return nil, err
@@ -69,8 +74,6 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	if sourceTraverser.isDirectory(true) != destinationTraverser.isDirectory(true) {
 		return nil, errors.New("sync must happen between source and destination of the same type, e.g. either file <-> file, or directory/container <-> directory/container")
 	}
-
-	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart)
 
 	// set up the filters in the right order
 	// Note: includeFilters and includeAttrFilters are ANDed
@@ -89,6 +92,15 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		filters = append(filters, excludeAttrFilters...)
 	}
 
+	// decide our folder transfer strategy
+	fpo, folderMessage := newFolderPropertyOption(cca.fromTo.AreBothFolderAware(), cca.recursive, true, filters) // sync always acts like stripTopDir=true
+	glcm.Info(folderMessage)
+	if ste.JobsAdmin != nil {
+		ste.JobsAdmin.LogToJobLog(folderMessage)
+	}
+
+	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo)
+
 	// set up the comparator so that the source/destination can be compared
 	indexer := newObjectIndexer()
 	var comparator objectProcessor
@@ -104,11 +116,12 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		if err != nil {
 			return nil, fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
 		}
+		destCleanerFunc := newFpoAwareProcessor(fpo, destinationCleaner.removeImmediately)
 
 		// when uploading, we can delete remote objects immediately, because as we traverse the remote location
 		// we ALREADY have available a complete map of everything that exists locally
 		// so as soon as we see a remote destination object we can know whether it exists in the local source
-		comparator = newSyncDestinationComparator(indexer, transferScheduler.scheduleCopyTransfer, destinationCleaner.removeImmediately).processIfNecessary
+		comparator = newSyncDestinationComparator(indexer, transferScheduler.scheduleCopyTransfer, destCleanerFunc).processIfNecessary
 		finalize = func() error {
 			// schedule every local file that doesn't exist at the destination
 			err = indexer.traverse(transferScheduler.scheduleCopyTransfer, filters)
@@ -144,9 +157,9 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 				if err != nil {
 					return err
 				}
-				deleteScheduler = deleter.removeImmediately
+				deleteScheduler = newFpoAwareProcessor(fpo, deleter.removeImmediately)
 			default:
-				deleteScheduler = newSyncLocalDeleteProcessor(cca).removeImmediately
+				deleteScheduler = newFpoAwareProcessor(fpo, newSyncLocalDeleteProcessor(cca).removeImmediately)
 			}
 
 			err = indexer.traverse(deleteScheduler, nil)

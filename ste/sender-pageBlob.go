@@ -140,6 +140,10 @@ func (s *pageBlobSenderBase) isInManagedDiskImportExportAccount() bool {
 	return isInManagedDiskImportExportAccount(s.destPageBlobURL.URL())
 }
 
+func (s *pageBlobSenderBase) SendableEntityType() common.EntityType {
+	return common.EEntityType.File()
+}
+
 func (s *pageBlobSenderBase) ChunkSize() uint32 {
 	return s.chunkSize
 }

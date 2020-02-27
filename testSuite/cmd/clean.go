@@ -320,7 +320,11 @@ func cleanFileSystem(fsURLStr string) {
 	fsURL := azbfs.NewFileSystemURL(*u, createBlobFSPipeline(*u))
 	// Instead of error checking the delete, error check the create.
 	// If the filesystem is deleted somehow, this recovers us from CI hell.
-	_, _ = fsURL.Delete(ctx)
+	_, err = fsURL.Delete(ctx)
+	if err != nil {
+		fmt.Println(fmt.Fprintf(os.Stdout, "error deleting the file system for cleaning, %v", err))
+		// don't fail just log
+	}
 
 	// Sleep seconds to wait the share deletion got succeeded
 	time.Sleep(45 * time.Second)

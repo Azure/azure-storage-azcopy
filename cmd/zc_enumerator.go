@@ -50,6 +50,7 @@ import (
 // ** DO NOT instantiate directly, always use newStoredObject ** (to make sure its fully populated and any preprocessor method runs)
 type storedObject struct {
 	name             string
+	entityType       common.EntityType
 	lastModifiedTime time.Time
 	size             int64
 	md5              []byte
@@ -64,9 +65,13 @@ type storedObject struct {
 
 	// partial path relative to its root directory
 	// example: rootDir=/var/a/b/c fullPath=/var/a/b/c/d/e/f.pdf => relativePath=d/e/f.pdf name=f.pdf
-	// note that sometimes the rootDir given by the user turns out to be a single file
+	// Note 1: sometimes the rootDir given by the user turns out to be a single file
 	// example: rootDir=/var/a/b/c/d/e/f.pdf fullPath=/var/a/b/c/d/e/f.pdf => relativePath=""
 	// in this case, since rootDir already points to the file, relatively speaking the path is nothing.
+	// In this case isSingleSourceFile returns true.
+	// Note 2: The other unusual case is the storedObject representing the folder properties of the root dir
+	// (if the source is folder-aware). In this case relativePath is also empty.
+	// In this case isSourceRootFolder returns true.
 	relativePath string
 	// container source, only included by account traversers.
 	containerName string
@@ -86,11 +91,61 @@ func (s *storedObject) isMoreRecentThan(storedObject2 storedObject) bool {
 	return s.lastModifiedTime.After(storedObject2.lastModifiedTime)
 }
 
+func (s *storedObject) isSingleSourceFile() bool {
+	return s.relativePath == "" && s.entityType == common.EEntityType.File()
+}
+
+func (s *storedObject) isSourceRootFolder() bool {
+	return s.relativePath == "" && s.entityType == common.EEntityType.Folder()
+}
+
+// isCompatibleWithFpo serves as our universal filter for filtering out folders in the cases where we should not
+// process them. (If we didn't have a filter like this, we'd have to put the filtering into
+// every enumerator, which would complicated them.)
+// We can't just implement this filtering in ToNewCopyTransfer, because delete transfers (from sync)
+// do not pass through that routine.  So we need to make the filtering available in a separate function
+// so that the sync deletion code path(s) can access it.
+func (s *storedObject) isCompatibleWithFpo(fpo common.FolderPropertyOption) bool {
+	if s.entityType == common.EEntityType.File() {
+		return true
+	} else if s.entityType == common.EEntityType.Folder() {
+		switch fpo {
+		case common.EFolderPropertiesOption.NoFolders():
+			return false
+		case common.EFolderPropertiesOption.AllFoldersExceptRoot():
+			return !s.isSourceRootFolder()
+		case common.EFolderPropertiesOption.AllFolders():
+			return true
+		default:
+			panic("undefined folder properties option")
+		}
+	} else {
+		panic("undefined entity type")
+	}
+}
+
+// Returns a func that only calls inner if storedObject isCompatibleWithFpo
+// We use this, so that we can easily test for compatibility in the sync deletion code (which expects an objectProcessor)
+func newFpoAwareProcessor(fpo common.FolderPropertyOption, inner objectProcessor) objectProcessor {
+	return func(s storedObject) error {
+		if s.isCompatibleWithFpo(fpo) {
+			return inner(s)
+		} else {
+			return nil // nothing went wrong, because we didn't do anything
+		}
+	}
+}
+
 func (s *storedObject) ToNewCopyTransfer(
 	steWillAutoDecompress bool,
 	Source string,
 	Destination string,
-	preserveBlobTier bool) common.CopyTransfer {
+	preserveBlobTier bool,
+	folderPropertiesOption common.FolderPropertyOption) (transfer common.CopyTransfer, shouldSendToSte bool) {
+
+	if !s.isCompatibleWithFpo(folderPropertiesOption) {
+		return common.CopyTransfer{}, false
+	}
 
 	if steWillAutoDecompress {
 		Destination = stripCompressionExtension(Destination, s.contentEncoding)
@@ -99,6 +154,7 @@ func (s *storedObject) ToNewCopyTransfer(
 	t := common.CopyTransfer{
 		Source:             Source,
 		Destination:        Destination,
+		EntityType:         s.entityType,
 		LastModifiedTime:   s.lastModifiedTime,
 		SourceSize:         s.size,
 		ContentType:        s.contentType,
@@ -116,7 +172,7 @@ func (s *storedObject) ToNewCopyTransfer(
 		t.BlobTier = s.blobAccessTier
 	}
 
-	return t
+	return t, true
 }
 
 // stripCompressionExtension strips any file extension that corresponds to the
@@ -151,14 +207,20 @@ type blobPropsProvider interface {
 	BlobType() azblob.BlobType
 	AccessTier() azblob.AccessTierType
 }
+
 // a constructor is used so that in case the storedObject has to change, the callers would get a compilation error
 // and it forces all necessary properties to be always supplied and not forgotten
-func newStoredObject(morpher objectMorpher, name string, relativePath string, lmt time.Time, size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) storedObject {
+func newStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time, size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) storedObject {
+	if strings.HasSuffix(relativePath, "\\") || strings.HasSuffix(relativePath, "/") {
+		panic("un-trimmed path provided to newStoredObject. This is not allowed") // since sync will get confused if it sometimes sees a path trimmed and sometimes untrimmed
+	}
+
 	obj := storedObject{
-		name:             name,
-		relativePath:     relativePath,
-		lastModifiedTime: lmt,
-		size:             size,
+		name:               name,
+		relativePath:       relativePath,
+		entityType:         entityType,
+		lastModifiedTime:   lmt,
+		size:               size,
 		cacheControl:       props.CacheControl(),
 		contentDisposition: props.ContentDisposition(),
 		contentEncoding:    props.ContentEncoding(),
@@ -168,7 +230,15 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, lm
 		blobType:           blobProps.BlobType(),
 		blobAccessTier:     blobProps.AccessTier(),
 		Metadata:           meta,
-		containerName:    containerName,
+		containerName:      containerName,
+	}
+
+	// Folders don't have size, and root ones shouldn't have names in the storedObject. Ensure those rules are consistently followed
+	if entityType == common.EEntityType.Folder() {
+		obj.size = 0
+		if obj.isSourceRootFolder() {
+			obj.name = "" // make these consistent, even from enumerators that pass in an actual name for these (it doesn't really make sense to pass an actual name)
+		}
 	}
 
 	// in some cases we may be supplied with a func that will perform some modification on the basic object
@@ -220,11 +290,13 @@ func recommendHttpsIfNecessary(url url.URL) {
 	}
 }
 
+type enumerationCounterFunc func(entityType common.EntityType)
+
 // source, location, recursive, and incrementEnumerationCounter are always required.
 // ctx, pipeline are only required for remote resources.
 // followSymlinks is only required for local resources (defaults to false)
 // errorOnDirWOutRecursive is used by copy.
-func initResourceTraverser(resource string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel chan string, recursive, getProperties bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
+func initResourceTraverser(resource string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel chan string, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (resourceTraverser, error) {
 	var output resourceTraverser
 	var p *pipeline.Pipeline
 
@@ -477,6 +549,7 @@ var noPreProccessor objectMorpher = nil
 type objectFilter interface {
 	doesSupportThisOS() (msg string, supported bool)
 	doesPass(storedObject storedObject) bool
+	appliesOnlyToFiles() bool
 }
 
 // -------------------------------------- Generic Enumerators -------------------------------------- \\
@@ -590,6 +663,15 @@ func passedFilters(filters []objectFilter, storedObject storedObject) bool {
 			if !supported {
 				glcm.Error(msg)
 			}
+
+			if filter.appliesOnlyToFiles() && storedObject.entityType != common.EEntityType.File() {
+				// don't pass folders to filters that only know how to deal with files
+				// As at Feb 2020, we have separate logic to weed out folder properties (and not even send them)
+				// if any filter applies only to files... but that logic runs after this point, so we need this
+				// protection here, just to make sure we don't pass the filter logic an object that it can't handle.
+				continue
+			}
+
 			if !filter.doesPass(storedObject) {
 				return false
 			}

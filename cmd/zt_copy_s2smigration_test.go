@@ -113,6 +113,11 @@ func validateS2STransfersAreScheduled(c *chk.C, srcDirName string, dstDirName st
 
 		srcRelativeFilePath = strings.Replace(srcRelativeFilePath, unescapedSrcDir, "", 1)
 		dstRelativeFilePath = strings.Replace(dstRelativeFilePath, unescapedDstDir, "", 1)
+		if unescapedDstDir == dstRelativeFilePath+"/" {
+			// Thing we were searching for is bigger than what we are searching in, due to ending end a /
+			// Happens for root dir
+			dstRelativeFilePath = ""
+		}
 
 		if debugMode {
 			fmt.Println("srcRelativeFilePath: ", srcRelativeFilePath)

@@ -31,8 +31,20 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
-// general-purpose "any remote persistence location" to local
+// xfer.go requires just a single xfer function for the whole job.
+// This routine serves that role for downloads and redirects for each transfer to a file or folder implementation
 func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, df downloaderFactory) {
+	info := jptm.Info()
+	if info.IsFolderPropertiesTransfer() {
+		remoteToLocal_folder(jptm, p, pacer)
+	} else {
+		remoteToLocal_file(jptm, p, pacer, df)
+	}
+}
+
+// general-purpose "any remote persistence location" to local, for files
+func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, df downloaderFactory) {
+
 	info := jptm.Info()
 
 	// step 1: create downloader instance for this transfer
@@ -67,7 +79,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 			if !shouldOverwrite {
 				// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
 				jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "File already exists, so will be skipped")
-				jptm.SetStatus(common.ETransferStatus.SkippedFileAlreadyExists())
+				jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists())
 				jptm.ReportTransferDone()
 				return
 			}
@@ -95,7 +107,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 		} else {
 			err := jptm.WaitUntilLockDestination(jptm.Context())
 			if err == nil {
-				err = createEmptyFile(info.Destination)
+				err = createEmptyFile(jptm, info.Destination)
 			}
 			if err != nil {
 				jptm.LogDownloadError(info.Source, info.Destination, "Empty File Creation error "+err.Error(), 0)
@@ -257,7 +269,7 @@ func createDestinationFile(jptm IJobPartTransferMgr, destination string, size in
 	}
 
 	var dstFile io.WriteCloser
-	dstFile, err = common.CreateFileOfSizeWithWriteThroughOption(destination, size, writeThrough)
+	dstFile, err = common.CreateFileOfSizeWithWriteThroughOption(destination, size, writeThrough, jptm.GetFolderCreationTracker())
 	if err != nil {
 		return nil, err
 	}
@@ -326,6 +338,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 	}
 
 	// Preserve modified time
+	// TODO: sort out how this releates to the new Files/NTFS specific property preservation
 	if jptm.IsLive() {
 		// TODO: the old version of this code did NOT consider it an error to be unable to set the modification date/time
 		// TODO: ...So I have preserved that behavior here.
@@ -342,6 +355,10 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 		}
 	}
 
+	commonDownloaderCompletion(jptm, info, common.EEntityType.File())
+}
+
+func commonDownloaderCompletion(jptm IJobPartTransferMgr, info TransferInfo, entityType common.EntityType) {
 	// note that we do not really know whether the context was canceled because of an error, or because the user asked for it
 	// if was an intentional cancel, the status is still "in progress", so we are still counting it as pending
 	// we leave these transfer status alone
@@ -353,7 +370,8 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 		if jptm.ShouldLog(pipeline.LogDebug) {
 			jptm.Log(pipeline.LogDebug, " Finalizing Transfer Cancellation/Failure")
 		}
-		if jptm.IsDeadInflight() && jptm.HoldsDestinationLock() {
+		// for files only, cleanup local file if applicable
+		if entityType == entityType.File() && jptm.IsDeadInflight() && jptm.HoldsDestinationLock() {
 			jptm.LogAtLevelForCurrentTransfer(pipeline.LogInfo, "Deleting incomplete destination file")
 
 			// the file created locally should be deleted
@@ -371,7 +389,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 
 		// Final logging
 		if jptm.ShouldLog(pipeline.LogInfo) { // TODO: question: can we remove these ShouldLogs?  Aren't they inside Log?
-			jptm.Log(pipeline.LogInfo, fmt.Sprintf("DOWNLOADSUCCESSFUL: %s", info.Destination))
+			jptm.Log(pipeline.LogInfo, fmt.Sprintf("DOWNLOADSUCCESSFUL: %s%s", info.entityTypeLogIndicator(), info.Destination))
 		}
 		if jptm.ShouldLog(pipeline.LogDebug) {
 			jptm.Log(pipeline.LogDebug, "Finalizing Transfer")
@@ -379,15 +397,15 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 	}
 
 	// must always do this, and do it last
-	jptm.UnlockDestination()
+	jptm.EnsureDestinationUnlocked()
 
 	// successful or unsuccessful, it's definitely over
 	jptm.ReportTransferDone()
 }
 
 // create an empty file and its parent directories, without any content
-func createEmptyFile(destinationPath string) error {
-	err := common.CreateParentDirectoryIfNotExist(destinationPath)
+func createEmptyFile(jptm IJobPartTransferMgr, destinationPath string) error {
+	err := common.CreateParentDirectoryIfNotExist(destinationPath, jptm.GetFolderCreationTracker())
 	if err != nil {
 		return err
 	}

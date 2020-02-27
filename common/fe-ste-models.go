@@ -23,6 +23,7 @@ package common
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"math"
 	"reflect"
 	"regexp"
@@ -436,6 +437,19 @@ func (l Location) IsLocal() bool {
 	}
 }
 
+// IsFolderAware returns true if the location has real folders (e.g. there's such a thing as an empty folder,
+// and folders may have properties). Folders are only virtual, and so not real, in Blob Storage.
+func (l Location) IsFolderAware() bool {
+	switch l {
+	case ELocation.BlobFS(), ELocation.File(), ELocation.Local():
+		return true
+	case ELocation.Blob(), ELocation.S3(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
+		return false
+	default:
+		panic("unexpected location, please specify if it is folder-aware")
+	}
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var EFromTo = FromTo(0)
@@ -522,6 +536,10 @@ func (ft *FromTo) IsUpload() bool {
 	return ft.From().IsLocal() && ft.To().IsRemote()
 }
 
+func (ft *FromTo) AreBothFolderAware() bool {
+	return ft.From().IsFolderAware() && ft.To().IsFolderAware()
+}
+
 // TODO: deletes are not covered by the above Is* routines
 
 var BenchmarkLmt = time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -591,7 +609,7 @@ func (TransferStatus) Failed() TransferStatus { return TransferStatus(-1) }
 // Transfer failed due to failure while Setting blob tier.
 func (TransferStatus) BlobTierFailure() TransferStatus { return TransferStatus(-2) }
 
-func (TransferStatus) SkippedFileAlreadyExists() TransferStatus { return TransferStatus(-3) }
+func (TransferStatus) SkippedEntityAlreadyExists() TransferStatus { return TransferStatus(-3) }
 
 func (TransferStatus) SkippedBlobHasSnapshots() TransferStatus { return TransferStatus(-4) }
 
@@ -854,6 +872,7 @@ const (
 type CopyTransfer struct {
 	Source           string
 	Destination      string
+	EntityType       EntityType
 	LastModifiedTime time.Time //represents the last modified time of source which ensures that source hasn't changed while transferring
 	SourceSize       int64     // size of the source entity in bytes.
 
@@ -1063,6 +1082,18 @@ func (h ResourceHTTPHeaders) ToAzFileHTTPHeaders() azfile.FileHTTPHeaders {
 	}
 }
 
+// ToBlobFSHTTPHeaders converts ResourceHTTPHeaders to BlobFS Headers.
+func (h ResourceHTTPHeaders) ToBlobFSHTTPHeaders() azbfs.BlobFSHTTPHeaders {
+	return azbfs.BlobFSHTTPHeaders{
+		ContentType: h.ContentType,
+		// ContentMD5 isn't in these headers. ContentMD5 is handled separately for BlobFS
+		ContentEncoding:    h.ContentEncoding,
+		ContentLanguage:    h.ContentLanguage,
+		ContentDisposition: h.ContentDisposition,
+		CacheControl:       h.CacheControl,
+	}
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var ETransferDirection = TransferDirection(0)
@@ -1174,3 +1205,29 @@ func GetCompressionType(contentEncoding string) (CompressionType, error) {
 		return ECompressionType.Unsupported(), fmt.Errorf("encoding type '%s' is not recognised as a supported encoding type for auto-decompression", contentEncoding)
 	}
 }
+
+/////////////////////////////////////////////////////////////////
+
+var EEntityType = EntityType(0)
+
+type EntityType uint8
+
+func (EntityType) File() EntityType   { return EntityType(0) }
+func (EntityType) Folder() EntityType { return EntityType(1) }
+
+////////////////////////////////////////////////////////////////
+
+var EFolderPropertiesOption = FolderPropertyOption(0)
+
+// FolderPropertyOption controls which folders get their properties recorded in the Plan file
+type FolderPropertyOption uint8
+
+// no FPO has been selected.  Make sure the zero-like value is "unspecified" so that we detect
+// any code paths that that do not nominate any FPO
+func (FolderPropertyOption) Unspecified() FolderPropertyOption { return FolderPropertyOption(0) }
+
+func (FolderPropertyOption) NoFolders() FolderPropertyOption { return FolderPropertyOption(1) }
+func (FolderPropertyOption) AllFoldersExceptRoot() FolderPropertyOption {
+	return FolderPropertyOption(2)
+}
+func (FolderPropertyOption) AllFolders() FolderPropertyOption { return FolderPropertyOption(3) }

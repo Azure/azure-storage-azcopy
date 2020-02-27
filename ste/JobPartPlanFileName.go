@@ -159,6 +159,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		Priority:              order.Priority,
 		TTLAfterCompletion:    uint32(time.Time{}.Nanosecond()),
 		FromTo:                order.FromTo,
+		Fpo:                   order.Fpo,
 		CommandStringLength:   uint32(len(order.CommandString)),
 		NumTransfers:          uint32(len(order.Transfers)),
 		LogLevel:              order.LogLevel,
@@ -240,6 +241,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			SrcOffset:      currentSrcStringOffset, // SrcOffset of the src string
 			SrcLength:      int16(len(order.Transfers[t].Source)),
 			DstLength:      int16(len(order.Transfers[t].Destination)),
+			EntityType:     order.Transfers[t].EntityType,
 			ModifiedTime:   order.Transfers[t].LastModifiedTime.UnixNano(),
 			SourceSize:     order.Transfers[t].SourceSize,
 			CompletionTime: 0,

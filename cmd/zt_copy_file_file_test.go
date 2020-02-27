@@ -74,7 +74,7 @@ func (s *cmdIntegrationSuite) TestFileCopyS2SWithSingleFile(c *chk.C) {
 			// put the filename in the destination dir name
 			// this is because validateS2STransfersAreScheduled dislikes when the relative paths differ
 			// In this case, the relative path should absolutely differ. (explicit file path -> implicit)
-			validateS2STransfersAreScheduled(c, "", "/" + strings.ReplaceAll(fileName, "%", "%25"), []string{""}, mockedRPC)
+			validateS2STransfersAreScheduled(c, "", "/"+strings.ReplaceAll(fileName, "%", "%25"), []string{""}, mockedRPC)
 		})
 	}
 }
@@ -103,14 +103,15 @@ func (s *cmdIntegrationSuite) TestFileCopyS2SWithShares(c *chk.C) {
 	raw.recursive = true
 
 	// all files at source should be copied to destination
+	expectedList := scenarioHelper{}.addFoldersToList(fileList, false) // since this is files-to-files and so folder aware
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(fileList))
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedList))
 
 		// validate that the right transfers were sent
-		validateS2STransfersAreScheduled(c, "/", "/", fileList, mockedRPC)
+		validateS2STransfersAreScheduled(c, "/", "/", expectedList, mockedRPC)
 	})
 
 	// turn off recursive, we should be getting an error
@@ -267,6 +268,7 @@ func (s *cmdIntegrationSuite) TestFileCopyS2SWithDirectory(c *chk.C) {
 	raw.recursive = true
 
 	expectedList := scenarioHelper{}.shaveOffPrefix(fileList, dirName+"/")
+	expectedList = scenarioHelper{}.addFoldersToList(expectedList, true) // since this is files-to-files and so folder aware
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		validateS2STransfersAreScheduled(c, "/", "/"+dirName+"/", expectedList, mockedRPC)

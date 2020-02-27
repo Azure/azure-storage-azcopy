@@ -41,7 +41,7 @@ type blobTraverser struct {
 	recursive bool
 
 	// a generic function to notify that a new stored object has been enumerated
-	incrementEnumerationCounter func()
+	incrementEnumerationCounter enumerationCounterFunc
 }
 
 func (t *blobTraverser) isDirectory(isSource bool) bool {
@@ -103,6 +103,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			preprocessor,
 			getObjectNameOnly(blobUrlParts.BlobName),
 			"",
+			common.EEntityType.File(),
 			blobProperties.LastModified(),
 			blobProperties.ContentLength(),
 			blobProperties,
@@ -112,7 +113,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		)
 
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter()
+			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
 
 		return processIfPassedFilters(filters, storedObject, processor)
@@ -161,6 +162,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 				preprocessor,
 				getObjectNameOnly(blobInfo.Name),
 				relativePath,
+				common.EEntityType.File(),
 				blobInfo.Properties.LastModified,
 				*blobInfo.Properties.ContentLength,
 				adapter,
@@ -170,7 +172,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			)
 
 			if t.incrementEnumerationCounter != nil {
-				t.incrementEnumerationCounter()
+				t.incrementEnumerationCounter(common.EEntityType.File())
 			}
 
 			processErr := processIfPassedFilters(filters, storedObject, processor)
@@ -185,7 +187,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 	return
 }
 
-func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive bool, incrementEnumerationCounter func()) (t *blobTraverser) {
+func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive bool, incrementEnumerationCounter enumerationCounterFunc) (t *blobTraverser) {
 	t = &blobTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, incrementEnumerationCounter: incrementEnumerationCounter}
 	return
 }

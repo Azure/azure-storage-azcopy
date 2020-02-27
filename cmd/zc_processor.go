@@ -44,7 +44,8 @@ type copyTransferProcessor struct {
 	reportFirstPartDispatched func(jobStarted bool)
 	reportFinalPartDispatched func()
 
-	preserveAccessTier bool
+	preserveAccessTier     bool
+	folderPropertiesOption common.FolderPropertyOption
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
@@ -60,10 +61,24 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 		reportFirstPartDispatched:         reportFirstPartDispatched,
 		reportFinalPartDispatched:         reportFinalPartDispatched,
 		preserveAccessTier:                preserveAccessTier,
+		folderPropertiesOption:            copyJobTemplate.Fpo,
 	}
 }
 
 func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) (err error) {
+
+	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(
+		false, // sync has no --decompress option
+		s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeSourceObjectName),
+		s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeDestinationObjectName),
+		s.preserveAccessTier,
+		s.folderPropertiesOption,
+	)
+
+	if !shouldSendToSte {
+		return nil // skip this one
+	}
+
 	if len(s.copyJobTemplate.Transfers) == s.numOfTransfersPerPart {
 		resp := s.sendPartToSte()
 
@@ -79,12 +94,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
-	s.copyJobTemplate.Transfers = append(s.copyJobTemplate.Transfers, storedObject.ToNewCopyTransfer(
-		false, // sync has no --decompress option
-		s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeSourceObjectName),
-		s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeDestinationObjectName),
-		s.preserveAccessTier,
-	))
+	s.copyJobTemplate.Transfers = append(s.copyJobTemplate.Transfers, copyTransfer)
 
 	return nil
 }
