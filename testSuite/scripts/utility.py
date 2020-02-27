@@ -241,7 +241,7 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
     test_s2s_src_s3_service_url = s2s_src_s3_service_url
     test_share_url = share_sas_url
 
-    if not clean_test_filesystem(test_bfs_account_url):
+    if not clean_test_filesystem(test_bfs_account_url.rstrip("/").rstrip("\\")):  # rstrip because clean fails if trailing /
         print("failed to clean test filesystem.")
     if not clean_test_container(test_container_url):
         print("failed to clean test blob container.")
