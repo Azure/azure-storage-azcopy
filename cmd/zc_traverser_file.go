@@ -139,9 +139,9 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 	directoryURL := azfile.NewDirectoryURL(targetURLParts.URL(), t.p)
 
 	// Our rule is that enumerators of folder-aware sources should include the root folder's properties.
-	// So include the root dir in the enumeration results (If we can be sure it exists. If we can't see its properties, there's no point in putting it in the list, since we'd have no information about it)
+	// So include the root dir/share in the enumeration results, if it exists or is just the share root.
 	_, err = directoryURL.GetProperties(t.ctx)
-	if err == nil {
+	if err == nil || targetURLParts.DirectoryOrFilePath == "" {
 		err = processEntity(newAzFileRootFolderEntity(&directoryURL, ""))
 		if err != nil {
 			return err
