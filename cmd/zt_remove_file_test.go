@@ -76,14 +76,19 @@ func (s *cmdIntegrationSuite) TestRemoveFilesUnderShare(c *chk.C) {
 	raw := getDefaultRemoveRawInput(rawShareURLWithSAS.String())
 	raw.recursive = true
 
+	includeRootInTransfers := true // this is our current behaviour (schedule it, but STE does nothing for that removal transfer).
+	// TODO: review
+
+	expectedRemovals := scenarioHelper{}.addFoldersToList(fileList, includeRootInTransfers)
+
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(fileList))
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedRemovals))
 
 		// validate that the right transfers were sent
-		validateRemoveTransfersAreScheduled(c, true, fileList, mockedRPC)
+		validateRemoveTransfersAreScheduled(c, true, expectedRemovals, mockedRPC)
 	})
 
 	// turn off recursive, this time only top files should be deleted
@@ -92,7 +97,7 @@ func (s *cmdIntegrationSuite) TestRemoveFilesUnderShare(c *chk.C) {
 
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(fileList))
+		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(expectedRemovals))
 
 		for _, transfer := range mockedRPC.transfers {
 			c.Assert(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
@@ -121,14 +126,23 @@ func (s *cmdIntegrationSuite) TestRemoveFilesUnderDirectory(c *chk.C) {
 	raw := getDefaultRemoveRawInput(rawDirectoryURLWithSAS.String())
 	raw.recursive = true
 
+	expectedDeletionMap := scenarioHelper{}.convertListToMap(
+		scenarioHelper{}.addFoldersToList(fileList, false),
+	)
+	delete(expectedDeletionMap, "dir1")
+	delete(expectedDeletionMap, "dir1/dir2")
+	delete(expectedDeletionMap, "dir1/dir2/dir3")
+	expectedDeletionMap[""] = 0 // add this one, because that's how dir1/dir2/dir3 appears, relative to the root (which itself)
+	expectedDeletions := scenarioHelper{}.convertMapKeysToList(expectedDeletionMap)
+
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(fileList))
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedDeletions))
 
 		// validate that the right transfers were sent
-		expectedTransfers := scenarioHelper{}.shaveOffPrefix(fileList, dirName)
+		expectedTransfers := scenarioHelper{}.shaveOffPrefix(expectedDeletions, dirName)
 		validateRemoveTransfersAreScheduled(c, true, expectedTransfers, mockedRPC)
 	})
 
@@ -138,7 +152,7 @@ func (s *cmdIntegrationSuite) TestRemoveFilesUnderDirectory(c *chk.C) {
 
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(fileList))
+		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(expectedDeletions))
 
 		for _, transfer := range mockedRPC.transfers {
 			c.Assert(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
