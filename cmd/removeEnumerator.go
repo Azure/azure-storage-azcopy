@@ -77,7 +77,9 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	// deletion, because that would not handle folders that were empty at the start of the job).
 	fpo, message := newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters)
 	glcm.Info(message)
-	ste.JobsAdmin.LogToJobLog(message)
+	if ste.JobsAdmin != nil {
+		ste.JobsAdmin.LogToJobLog(message)
+	}
 
 	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo)
 
