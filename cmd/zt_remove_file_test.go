@@ -263,8 +263,8 @@ func (s *cmdIntegrationSuite) TestRemoveListOfFilesAndDirectories(c *chk.C) {
 	defer deleteShare(c, shareURL)
 	individualFilesList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, shareURL, "")
 	filesUnderTopDir := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, shareURL, dirName+"/")
-	fileList := append(individualFilesList, filesUnderTopDir...)
-	c.Assert(len(fileList), chk.Not(chk.Equals), 0)
+	combined := append(individualFilesList, filesUnderTopDir...)
+	c.Assert(len(combined), chk.Not(chk.Equals), 0)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -284,14 +284,18 @@ func (s *cmdIntegrationSuite) TestRemoveListOfFilesAndDirectories(c *chk.C) {
 	listOfFiles = append(listOfFiles, "DONTKNOW")
 	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(c, listOfFiles)
 
+	expectedDeletions := append(
+		scenarioHelper{}.addFoldersToList(filesUnderTopDir, false), // this is a directory in the list of files list, so it will be recursively processed. Don't include root of megadir itself
+		individualFilesList..., // these are individual files in the files list (so not recursively processed)
+	)
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(fileList))
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedDeletions))
 
 		// validate that the right transfers were sent
-		validateRemoveTransfersAreScheduled(c, true, fileList, mockedRPC)
+		validateRemoveTransfersAreScheduled(c, true, expectedDeletions, mockedRPC)
 	})
 
 	// turn off recursive, this time only top files should be deleted
@@ -300,7 +304,7 @@ func (s *cmdIntegrationSuite) TestRemoveListOfFilesAndDirectories(c *chk.C) {
 
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(fileList))
+		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(expectedDeletions))
 
 		for _, transfer := range mockedRPC.transfers {
 			source, err := url.PathUnescape(transfer.Source)

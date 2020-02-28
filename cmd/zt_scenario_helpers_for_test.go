@@ -696,7 +696,12 @@ func validateRemoveTransfersAreScheduled(c *chk.C, isSrcEncoded bool, expectedTr
 		// look up the source from the expected transfers, make sure it exists
 		_, srcExist := lookupMap[srcRelativeFilePath]
 		c.Assert(srcExist, chk.Equals, true)
+
+		delete(lookupMap, srcRelativeFilePath)
 	}
+	//if len(lookupMap) > 0 {
+	//	panic("set breakpoint here to debug")
+	//}
 }
 
 func getDefaultSyncRawInput(src, dst string) rawSyncCmdArgs {

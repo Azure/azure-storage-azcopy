@@ -138,13 +138,17 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 	// get the directory URL so that we can list the files
 	directoryURL := azfile.NewDirectoryURL(targetURLParts.URL(), t.p)
 
-	// Include the root dir in the enumeration results
-	// Our rule is that enumerators of folder-aware sources must always include the root folder's properties
-	err = processEntity(newAzFileRootFolderEntity(&directoryURL, ""))
-	if err != nil {
-		return err
+	// Our rule is that enumerators of folder-aware sources should include the root folder's properties.
+	// So include the root dir in the enumeration results (If we can be sure it exists. If we can't see its properties, there's no point in putting it in the list, since we'd have no information about it)
+	_, err = directoryURL.GetProperties(t.ctx)
+	if err == nil {
+		err = processEntity(newAzFileRootFolderEntity(&directoryURL, ""))
+		if err != nil {
+			return err
+		}
 	}
 
+	// Enumerate its contents
 	dirStack := &directoryStack{}
 	dirStack.Push(directoryURL)
 	for currentDirURL, ok := dirStack.Pop(); ok; currentDirURL, ok = dirStack.Pop() {
