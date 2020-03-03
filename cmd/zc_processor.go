@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"net/url"
 
 	"github.com/pkg/errors"
@@ -43,7 +44,8 @@ type copyTransferProcessor struct {
 	reportFirstPartDispatched func(jobStarted bool)
 	reportFinalPartDispatched func()
 
-	preserveAccessTier bool
+	preserveAccessTier     bool
+	folderPropertiesOption common.FolderPropertyOption
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
@@ -59,10 +61,24 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 		reportFirstPartDispatched:         reportFirstPartDispatched,
 		reportFinalPartDispatched:         reportFinalPartDispatched,
 		preserveAccessTier:                preserveAccessTier,
+		folderPropertiesOption:            copyJobTemplate.Fpo,
 	}
 }
 
 func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) (err error) {
+
+	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(
+		false, // sync has no --decompress option
+		s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeSourceObjectName),
+		s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeDestinationObjectName),
+		s.preserveAccessTier,
+		s.folderPropertiesOption,
+	)
+
+	if !shouldSendToSte {
+		return nil // skip this one
+	}
+
 	if len(s.copyJobTemplate.Transfers) == s.numOfTransfersPerPart {
 		resp := s.sendPartToSte()
 
@@ -102,6 +118,7 @@ func (s *copyTransferProcessor) escapeIfNecessary(path string, shouldEscape bool
 }
 
 var NothingScheduledError = errors.New("no transfers were scheduled because no files matched the specified criteria")
+var FinalPartCreatedMessage = "Final job part has been created"
 
 func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err error) {
 	var resp common.CopyJobPartOrderResponse
@@ -115,6 +132,10 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 
 		return false, fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s",
 			s.copyJobTemplate.JobID, s.copyJobTemplate.PartNum, resp.ErrorMsg)
+	}
+
+	if ste.JobsAdmin != nil {
+		ste.JobsAdmin.LogToJobLog(FinalPartCreatedMessage)
 	}
 
 	if s.reportFinalPartDispatched != nil {

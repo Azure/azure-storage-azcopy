@@ -30,6 +30,7 @@ func newRemoveTransferProcessor(cca *cookedCopyCmdArgs, numOfTransfersPerPart in
 		JobID:         cca.jobID,
 		CommandString: cca.commandString,
 		FromTo:        cca.fromTo,
+		Fpo:           common.EFolderPropertiesOption.NoFolders(), // currently we don't offer any special folder-aware processing for remove (except for BlobFS removes, which are implemented separately as at early 2020)
 		SourceRoot:    consolidatePathSeparators(cca.source),
 
 		// authentication related

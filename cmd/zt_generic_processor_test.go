@@ -57,7 +57,7 @@ func (processorTestSuiteHelper) getExpectedTransferFromStoredObjectList(storedOb
 }
 
 func (processorTestSuiteHelper) getCopyJobTemplate() *common.CopyJobPartOrderRequest {
-	return &common.CopyJobPartOrderRequest{}
+	return &common.CopyJobPartOrderRequest{Fpo: common.EFolderPropertiesOption.NoFolders()}
 }
 
 func (s *genericProcessorSuite) TestCopyTransferProcessorMultipleFiles(c *chk.C) {
@@ -128,7 +128,7 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorSingleFile(c *chk.C) {
 		blobURL, filepath.Join(dstDirName, dstFileName), false, false, nil, nil, false)
 
 	// exercise the copy transfer processor
-	storedObject := newStoredObject(noPreProccessor, blobList[0], "", time.Now(), 0, noContentProps, noBlobProps, noMetdata, "")
+	storedObject := newStoredObject(noPreProccessor, blobList[0], "", common.EEntityType.File(), time.Now(), 0, noContentProps, noBlobProps, noMetdata, "")
 	err := copyProcessor.scheduleCopyTransfer(storedObject)
 	c.Assert(err, chk.IsNil)
 

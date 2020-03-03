@@ -26,12 +26,12 @@ import (
 	"unsafe"
 )
 
-func CreateFileOfSize(destinationPath string, fileSize int64) (*os.File, error) {
-	return CreateFileOfSizeWithWriteThroughOption(destinationPath, fileSize, false)
+func CreateFileOfSize(destinationPath string, fileSize int64, tracker FolderCreationTracker) (*os.File, error) {
+	return CreateFileOfSizeWithWriteThroughOption(destinationPath, fileSize, false, tracker)
 }
 
-func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int64, writeThrough bool) (*os.File, error) {
-	err := CreateParentDirectoryIfNotExist(destinationPath)
+func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int64, writeThrough bool, tracker FolderCreationTracker) (*os.File, error) {
+	err := CreateParentDirectoryIfNotExist(destinationPath, tracker)
 	if err != nil {
 		return nil, err
 	}

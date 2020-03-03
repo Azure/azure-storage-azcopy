@@ -97,14 +97,15 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithEmptyDestination(c *chk.C) {
 	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
 
 	// all files at source should be synced to destination
+	expectedList := scenarioHelper{}.addFoldersToList(fileList, false)
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(fileList))
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedList))
 
 		// validate that the right transfers were sent
-		validateS2SSyncTransfersAreScheduled(c, "", "", fileList, mockedRPC)
+		validateS2SSyncTransfersAreScheduled(c, "", "", expectedList, mockedRPC)
 	})
 
 	// turn off recursive, this time only top files should be transferred
@@ -175,7 +176,8 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithMismatchedDestination(c *chk.C)
 	c.Assert(len(fileList), chk.Not(chk.Equals), 0)
 
 	// set up the destination with half of the files from source
-	scenarioHelper{}.generateAzureFilesFromList(c, dstShareURL, fileList[0:len(fileList)/2])
+	filesAlreadyAtDestination := fileList[0 : len(fileList)/2]
+	scenarioHelper{}.generateAzureFilesFromList(c, dstShareURL, filesAlreadyAtDestination)
 	expectedOutput := fileList[len(fileList)/2:] // the missing half of source files should be transferred
 
 	// add some extra files that shouldn't be included
@@ -190,6 +192,15 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithMismatchedDestination(c *chk.C)
 	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
 	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
 	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
+
+	expectedOutputMap := scenarioHelper{}.convertListToMap(
+		scenarioHelper{}.addFoldersToList(expectedOutput, false))
+	everythingAlreadyAtDestination := scenarioHelper{}.convertListToMap(
+		scenarioHelper{}.addFoldersToList(filesAlreadyAtDestination, false))
+	for exists := range everythingAlreadyAtDestination {
+		delete(expectedOutputMap, exists) // remove directories that actually exist at destination
+	}
+	expectedOutput = scenarioHelper{}.convertMapKeysToList(expectedOutputMap)
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
@@ -426,20 +437,21 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SShareAndEmptyDir(c *chk.C) {
 	// construct the raw input to simulate user input
 	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
 	dirName := "emptydir"
-	_, err := dstShareURL.NewDirectoryURL(dirName).Create(context.Background(), azfile.Metadata{})
+	_, err := dstShareURL.NewDirectoryURL(dirName).Create(context.Background(), azfile.Metadata{}, "", "")
 	c.Assert(err, chk.IsNil)
 	dstDirURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, dstShareName, dirName)
 	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstDirURLWithSAS.String())
 
 	// verify that targeting a directory works fine
+	expectedList := scenarioHelper{}.addFoldersToList(fileList, false)
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(fileList))
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedList))
 
 		// validate that the right transfers were sent
-		validateS2SSyncTransfersAreScheduled(c, "", "", fileList, mockedRPC)
+		validateS2SSyncTransfersAreScheduled(c, "", "", expectedList, mockedRPC)
 	})
 
 	// turn off recursive, this time only top files should be transferred

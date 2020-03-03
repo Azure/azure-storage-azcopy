@@ -50,6 +50,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource")
 	}
 
+	jobPartOrder.PreserveNTFSACLs = cca.preserveNTFSACLs
+
 	// Infer on download so that we get LMT and MD5 on files download
 	// On S2S transfers the following rules apply:
 	// If preserve properties is enabled, but get properties in backend is disabled, turn it on
@@ -62,7 +64,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.DestLengthValidation = cca.CheckLength
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
 
-	traverser, err = initResourceTraverser(src, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, func() {})
+	traverser, err = initResourceTraverser(src, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, func(common.EntityType) {})
 
 	if err != nil {
 		return nil, err
@@ -196,6 +198,15 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	filters := cca.initModularFilters()
+
+	// decide our folder transfer strategy
+	var message string
+	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.fromTo.AreBothFolderAware(), cca.recursive, cca.stripTopDir, filters)
+	glcm.Info(message)
+	if ste.JobsAdmin != nil {
+		ste.JobsAdmin.LogToJobLog(message)
+	}
+
 	processor := func(object storedObject) error {
 		// Start by resolving the name and creating the container
 		if object.containerName != "" {
@@ -230,13 +241,18 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		srcRelPath := cca.makeEscapedRelativePath(true, isDestDir, object)
 		dstRelPath := cca.makeEscapedRelativePath(false, isDestDir, object)
 
-		transfer := object.ToNewCopyTransfer(
+		transfer, shouldSendToSte := object.ToNewCopyTransfer(
 			cca.autoDecompress && cca.fromTo.IsDownload(),
 			srcRelPath, dstRelPath,
 			cca.s2sPreserveAccessTier,
+			jobPartOrder.Fpo,
 		)
 
-		return addTransfer(&jobPartOrder, transfer, cca)
+		if shouldSendToSte {
+			return addTransfer(&jobPartOrder, transfer, cca)
+		} else {
+			return nil
+		}
 	}
 	finalizer := func() error {
 		return dispatchFinalPart(&jobPartOrder, cca)
@@ -259,7 +275,7 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst string, ctx *context.Context) 
 		return false
 	}
 
-	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, func() {})
+	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, func(common.EntityType) {})
 
 	if err != nil {
 		return false
@@ -478,14 +494,17 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 		return "" // ignore path encode rules
 	}
 
-	// source is a EXACT path to the file.
-	if object.relativePath == "" {
+	// source is a EXACT path to the file
+	if object.isSingleSourceFile() {
 		// If we're finding an object from the source, it returns "" if it's already got it.
 		// If we're finding an object on the destination and we get "", we need to hand it the object name (if it's pointing to a folder)
 		if source {
 			relativePath = ""
 		} else {
 			if dstIsDir {
+				// Our source points to a specific file (and so has no relative path)
+				// but our dest does not point to a specific file, it just points to a directory,
+				// and so relativePath needs the _name_ of the source.
 				relativePath = "/" + object.name
 			} else {
 				relativePath = ""
@@ -495,9 +514,13 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 		return pathEncodeRules(relativePath, cca.fromTo, source)
 	}
 
-	// If it's out here, the object is contained in a folder, or was found via a wildcard.
+	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true
 
-	relativePath = "/" + strings.Replace(object.relativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+	if object.isSourceRootFolder() {
+		relativePath = "" // otherwise we get "/" from the line below, and that breaks some clients, e.g. blobFS
+	} else {
+		relativePath = "/" + strings.Replace(object.relativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+	}
 
 	if common.IffString(source, object.containerName, object.dstContainerName) != "" {
 		relativePath = `/` + common.IffString(source, object.containerName, object.dstContainerName) + relativePath
@@ -513,6 +536,8 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 			// Realistically, err should never not be nil here.
 			if err == nil {
 				rootDir = ueRootDir
+			} else {
+				panic("unexpected un-escapeable rootDir name")
 			}
 		}
 
@@ -520,4 +545,37 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 	}
 
 	return pathEncodeRules(relativePath, cca.fromTo, source)
+}
+
+func newFolderPropertyOption(bothFolderAware bool, recursive bool, stripTopDir bool, filters []objectFilter) (common.FolderPropertyOption, string) {
+	if bothFolderAware {
+		if !recursive {
+			return common.EFolderPropertiesOption.NoFolders(), // does't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
+				"Any empty folders will not be transferred, because --recursive was not specified"
+		}
+
+		// check filters. Otherwise, if filter was say --include-pattern *.txt, we would transfer properties
+		// (but not contents) for every directory that contained NO text files.  Could make heaps of empty directories
+		// at the destination.
+		filtersOK := true
+		for _, f := range filters {
+			if f.appliesOnlyToFiles() {
+				filtersOK = false // we have a least one filter that doesn't apply to folders
+			}
+		}
+		if !filtersOK {
+			return common.EFolderPropertiesOption.NoFolders(),
+				"Any empty folders will not be transferred, because a file-focused filter is applied."
+		}
+
+		message := "Any empty folders will be transferred, because source and destination both support folders"
+		if stripTopDir {
+			return common.EFolderPropertiesOption.AllFoldersExceptRoot(), message
+		} else {
+			return common.EFolderPropertiesOption.AllFolders(), message
+		}
+	}
+
+	return common.EFolderPropertiesOption.NoFolders(),
+		"Any empty folders will not be transferred, because source and/or destination doesn't have full folder support"
 }

@@ -22,12 +22,16 @@
 
 package cmd
 
-type attrFilter struct {}
+type attrFilter struct{}
 
 func (f *attrFilter) doesSupportThisOS() (msg string, supported bool) {
 	msg = "'include-attributes' and 'exclude-attributes' are not supported on this OS. Abort."
 	supported = false
 	return
+}
+
+func (f *attrFilter) appliesOnlyToFiles() bool {
+	return true
 }
 
 func (f *attrFilter) doesPass(storedObject storedObject) bool {

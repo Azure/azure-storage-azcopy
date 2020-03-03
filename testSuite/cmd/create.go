@@ -292,7 +292,7 @@ func createShareOrDirectory(shareOrDirectoryURLStr string) {
 
 	dirURL := azfile.NewDirectoryURL(*u, p) // i.e. root directory, in share's case
 	if !isShare {
-		_, err := dirURL.Create(context.Background(), azfile.Metadata{})
+		_, err := dirURL.Create(context.Background(), azfile.Metadata{}, "", "")
 		if ignoreStorageConflictStatus(err) != nil {
 			fmt.Println("fail to create directory, ", err)
 			os.Exit(1)

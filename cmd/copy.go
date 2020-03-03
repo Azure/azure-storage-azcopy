@@ -108,6 +108,8 @@ type rawCopyCmdArgs struct {
 	logVerbosity  string
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType string
+	// Opt-in flag to persist NTFS ACLs to Azure Files.
+	preserveNTFSACLs bool
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
 	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
 	// to preserve full properties AzCopy needs to send one additional request per object/file.
@@ -431,6 +433,11 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
 
+	cooked.preserveNTFSACLs = raw.preserveNTFSACLs
+	if err = validatePreserveNTFSACLs(cooked.preserveNTFSACLs, cooked.fromTo); err != nil {
+		return cooked, err
+	}
+
 	// check for the flag value relative to fromTo location type
 	// Example1: for Local to Blob, preserve-last-modified-time flag should not be set to true
 	// Example2: for Blob to Local, follow-symlinks, blob-tier flags should not be provided with values.
@@ -446,6 +453,9 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
 			return cooked, fmt.Errorf("blob-tier is not supported while uploading to ADLS Gen 2")
 		}
+		if cooked.preserveNTFSACLs {
+			return cooked, fmt.Errorf("preserve-ntfs-acls is not supported while uploading to ADLS Gen 2")
+		}
 		if cooked.s2sPreserveProperties {
 			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while uploading")
 		}
@@ -460,19 +470,19 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		}
 	case common.EFromTo.LocalBlob():
 		if cooked.preserveLastModifiedTime {
-			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading")
+			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading to Blob Storage")
 		}
 		if cooked.s2sPreserveProperties {
-			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while uploading")
+			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while uploading to Blob Storage")
 		}
 		if cooked.s2sPreserveAccessTier {
-			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while uploading")
+			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while uploading to Blob Storage")
 		}
 		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
-			return cooked, fmt.Errorf("s2s-handle-invalid-metadata is not supported while uploading")
+			return cooked, fmt.Errorf("s2s-handle-invalid-metadata is not supported while uploading to Blob Storage")
 		}
 		if cooked.s2sSourceChangeValidation {
-			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
+			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading to Blob Storage")
 		}
 	case common.EFromTo.LocalFile():
 		if cooked.preserveLastModifiedTime {
@@ -525,11 +535,11 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		if cooked.s2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while downloading")
 		}
-	case common.EFromTo.BlobBlob(),
+	case common.EFromTo.BlobFile(),
+		common.EFromTo.S3Blob(),
+		common.EFromTo.BlobBlob(),
 		common.EFromTo.FileBlob(),
-		common.EFromTo.FileFile(),
-		common.EFromTo.BlobFile(),
-		common.EFromTo.S3Blob():
+		common.EFromTo.FileFile():
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while copying from service to service")
 		}
@@ -560,6 +570,13 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		return cooked, err
 	}
 
+	// Because of some of our defaults, these must live down here and can't be properly checked.
+	// TODO: Remove the above checks where they can't be done.
+	cooked.s2sPreserveProperties = raw.s2sPreserveProperties
+	cooked.s2sGetPropertiesInBackend = raw.s2sGetPropertiesInBackend
+	cooked.s2sPreserveAccessTier = raw.s2sPreserveAccessTier
+	cooked.s2sSourceChangeValidation = raw.s2sSourceChangeValidation
+
 	// If the user has provided some input with excludeBlobType flag, parse the input.
 	if len(raw.excludeBlobType) > 0 {
 		// Split the string using delimeter ';' and parse the individual blobType
@@ -573,11 +590,6 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 			cooked.excludeBlobType = append(cooked.excludeBlobType, eBlobType.ToAzBlobType())
 		}
 	}
-
-	cooked.s2sPreserveProperties = raw.s2sPreserveProperties
-	cooked.s2sGetPropertiesInBackend = raw.s2sGetPropertiesInBackend
-	cooked.s2sPreserveAccessTier = raw.s2sPreserveAccessTier
-	cooked.s2sSourceChangeValidation = raw.s2sSourceChangeValidation
 
 	err = cooked.s2sInvalidMetadataHandleOption.Parse(raw.s2sInvalidMetadataHandleOption)
 	if err != nil {
@@ -620,6 +632,20 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 	raw.md5ValidationOption = common.DefaultHashValidationOption.String()
 	raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
 	raw.forceWrite = common.EOverwriteOption.True().String()
+}
+
+func validatePreserveNTFSACLs(toPreserve bool, fromTo common.FromTo) error {
+	if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
+		fromTo == common.EFromTo.FileLocal() ||
+		fromTo == common.EFromTo.FileFile()) {
+		return fmt.Errorf("preserve-ntfs-acls is set but the job is not between NTFS ACL aware resources")
+	}
+
+	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) && runtime.GOOS != "windows" {
+		return fmt.Errorf("preserve-ntfs-acls is set but ACL persistence for up/downloads is a windows-only feature")
+	}
+
+	return nil
 }
 
 func validatePutMd5(putMd5 bool, fromTo common.FromTo) error {
@@ -705,6 +731,9 @@ type cookedCopyCmdArgs struct {
 	// this flag is set by the enumerator
 	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
 	isEnumerationComplete bool
+
+	// Whether the user wants to preserve the NTFS ACLs assigned to their files when moving between resources that are NTFS ACL aware.
+	preserveNTFSACLs bool
 
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
 	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
@@ -875,7 +904,8 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 
-	// initialize the fields that are constant across all job part orders
+	// initialize the fields that are constant across all job part orders,
+	// and for which we have sufficient info now to set them
 	jobPartOrder := common.CopyJobPartOrderRequest{
 		JobID:           cca.jobID,
 		FromTo:          cca.fromTo,
@@ -1113,7 +1143,9 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 
 Job %s summary
 Elapsed Time (Minutes): %v
-Total Number Of Transfers: %v
+Number of File Transfers: %v
+Number of Folder Property Transfers: %v
+Total Number of Transfers: %v
 Number of Transfers Completed: %v
 Number of Transfers Failed: %v
 Number of Transfers Skipped: %v
@@ -1122,6 +1154,8 @@ Final Job Status: %v%s%s
 `,
 					summary.JobID.String(),
 					ste.ToFixed(duration.Minutes(), 4),
+					summary.FileTransfers,
+					summary.FolderPropertyTransfers,
 					summary.TotalTransfers,
 					summary.TransfersCompleted,
 					summary.TransfersFailed,
@@ -1356,7 +1390,7 @@ func init() {
 	// This flag is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "Defines the location of text file which has the list of only files to be copied.")
 	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude these files when copying. This option supports wildcard characters (*)")
-	cpCmd.PersistentFlags().StringVar(&raw.forceWrite, "overwrite", "true", "Overwrite the conflicting files and blobs at the destination if this flag is set to true. (default 'true') Possible values include 'true', 'false', and 'prompt'.")
+	cpCmd.PersistentFlags().StringVar(&raw.forceWrite, "overwrite", "true", "Overwrite the conflicting files and blobs at the destination if this flag is set to true. (default 'true') Possible values include 'true', 'false', and 'prompt'. For destinations that support folders, any conflicting folder-level properties will be overwritten only if this flag is 'true'.")
 	cpCmd.PersistentFlags().BoolVar(&raw.autoDecompress, "decompress", false, "Automatically decompress files when downloading, if their content-encoding indicates that they are compressed. The supported content-encoding values are 'gzip' and 'deflate'. File extensions of '.gz'/'.gzip' or '.zz' aren't necessary, but will be removed if present.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Look into sub-directories recursively when uploading from local file system.")
 	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS.")
@@ -1377,6 +1411,7 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.cacheControl, "cache-control", "", "Set the cache-control header. Returned on download.")
 	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "Prevents AzCopy from detecting the content-type based on the extension or content of the file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveNTFSACLs, "preserve-ntfs-acls", false, "False by default. Perserves NTFS ACLs between aware resources (Windows and Azure Files)")
 	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob or file. (By default the hash is NOT created.) Only available when uploading.")
 	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "check-md5", common.DefaultHashValidationOption.String(), "Specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing. (default 'FailIfDifferent')")
 	cpCmd.PersistentFlags().StringVar(&raw.includeFileAttributes, "include-attributes", "", "(Windows only) Include files whose attributes match the attribute list. For example: A;S;R")

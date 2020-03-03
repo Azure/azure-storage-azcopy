@@ -24,13 +24,15 @@ import (
 	"context"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-file-go/azfile"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // Source info provider for Azure blob
 type fileSourceInfoProvider struct {
-	ctx context.Context
+	ctx                 context.Context
+	cachedPermissionKey string
 	defaultRemoteSourceInfoProvider
 }
 
@@ -49,6 +51,40 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 	return &fileSourceInfoProvider{defaultRemoteSourceInfoProvider: *base, ctx: ctx}, nil
 }
 
+func (p *fileSourceInfoProvider) GetSDDL() (string, error) {
+	presigned, err := p.PreSignedSourceURL()
+
+	if err != nil {
+		return "", err
+	}
+
+	// Get the key for SIPM
+	key := p.cachedPermissionKey
+
+	if key == "" {
+		fileURL := azfile.NewFileURL(*presigned, p.jptm.SourceProviderPipeline())
+		props, err := fileURL.GetProperties(p.ctx)
+
+		if err != nil {
+			return "", err
+		}
+
+		key = props.FilePermissionKey()
+	}
+
+	// Call into SIPM and grab our SDDL string.
+	sipm := p.jptm.SecurityInfoPersistenceManager()
+
+	// fURLParts := common.NewGenericResourceURLParts(*presigned, common.ELocation.File())
+	fURLParts := azfile.NewFileURLParts(*presigned)
+	fURLParts.DirectoryOrFilePath = ""
+	shareURL := azfile.NewShareURL(fURLParts.URL(), p.jptm.SourceProviderPipeline())
+
+	sddlString, err := sipm.GetSDDLFromID(key, shareURL)
+
+	return sddlString, err
+}
+
 func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 	srcProperties, err := p.defaultRemoteSourceInfoProvider.Properties()
 	if err != nil {
@@ -62,29 +98,54 @@ func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 			return nil, err
 		}
 
-		fileURL := azfile.NewFileURL(*presignedURL, p.jptm.SourceProviderPipeline())
-		properties, err := fileURL.GetProperties(p.ctx)
-		if err != nil {
-			return nil, err
-		}
+		switch p.EntityType() {
+		case common.EEntityType.File():
+			fileURL := azfile.NewFileURL(*presignedURL, p.jptm.SourceProviderPipeline())
+			properties, err := fileURL.GetProperties(p.ctx)
+			if err != nil {
+				return nil, err
+			}
 
-		srcProperties = &SrcProperties{
-			SrcHTTPHeaders: common.ResourceHTTPHeaders{
-				ContentType:        properties.ContentType(),
-				ContentEncoding:    properties.ContentEncoding(),
-				ContentDisposition: properties.ContentDisposition(),
-				ContentLanguage:    properties.ContentLanguage(),
-				CacheControl:       properties.CacheControl(),
-				ContentMD5:         properties.ContentMD5(),
-			},
-			SrcMetadata: common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata()),
+			// We cache this as getting the SDDL is a separate operation.
+			p.cachedPermissionKey = properties.FilePermissionKey()
+
+			srcProperties = &SrcProperties{
+				SrcHTTPHeaders: common.ResourceHTTPHeaders{
+					ContentType:        properties.ContentType(),
+					ContentEncoding:    properties.ContentEncoding(),
+					ContentDisposition: properties.ContentDisposition(),
+					ContentLanguage:    properties.ContentLanguage(),
+					CacheControl:       properties.CacheControl(),
+					ContentMD5:         properties.ContentMD5(),
+				},
+				SrcMetadata: common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata()),
+			}
+		case common.EEntityType.Folder():
+			dirURL := azfile.NewDirectoryURL(*presignedURL, p.jptm.SourceProviderPipeline())
+			properties, err := dirURL.GetProperties(p.ctx)
+			if err != nil {
+				return nil, err
+			}
+			
+			p.cachedPermissionKey = properties.FilePermissionKey()
+
+			srcProperties = &SrcProperties{
+				SrcHTTPHeaders: common.ResourceHTTPHeaders{}, // no contentType etc for folders
+				SrcMetadata:    common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata()),
+			}
+		default:
+			panic("unsupported entity type")
 		}
 	}
 
 	return srcProperties, nil
 }
 
-func (p *fileSourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
+func (p *fileSourceInfoProvider) GetFileLastModifiedTime() (time.Time, error) {
+	if p.EntityType() != common.EEntityType.File() {
+		panic("unsupported. Cannot get modification time on non-file object") // nothing should ever call this for a non-file
+	}
+
 	presignedURL, err := p.PreSignedSourceURL()
 	if err != nil {
 		return time.Time{}, err

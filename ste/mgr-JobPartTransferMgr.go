@@ -20,9 +20,7 @@ import (
 type IJobPartTransferMgr interface {
 	FromTo() common.FromTo
 	Info() TransferInfo
-	BlobDstData(dataFileToXfer []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata)
-	FileDstData(dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata)
-	BfsDstData(dataFileToXfer []byte) (headers azbfs.BlobFSHTTPHeaders)
+	ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata)
 	LastModifiedTime() time.Time
 	PreserveLastModifiedTime() (time.Time, bool)
 	ShouldPutMd5() bool
@@ -35,7 +33,7 @@ type IJobPartTransferMgr interface {
 	SlicePool() common.ByteSlicePooler
 	CacheLimiter() common.CacheLimiter
 	WaitUntilLockDestination(ctx context.Context) error
-	UnlockDestination()
+	EnsureDestinationUnlocked()
 	HoldsDestinationLock() bool
 	StartJobXfer()
 	GetOverwriteOption() common.OverwriteOption
@@ -81,8 +79,10 @@ type IJobPartTransferMgr interface {
 	ChunkStatusLogger() common.ChunkStatusLogger
 	LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string)
 	GetOverwritePrompter() *overwritePrompter
+	GetFolderCreationTracker() common.FolderCreationTracker
 	common.ILogger
 	DeleteSnapshotsOption() common.DeleteSnapshotsOption
+	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 }
 
 type TransferInfo struct {
@@ -90,6 +90,8 @@ type TransferInfo struct {
 	Source      string
 	SourceSize  int64
 	Destination string
+	EntityType  common.EntityType
+	PreserveNTFSACLs bool
 
 	// Transfer info for S2S copy
 	SrcProperties
@@ -105,6 +107,21 @@ type TransferInfo struct {
 	// NumChunks is the number of chunks in which transfer will be split into while uploading the transfer.
 	// NumChunks is not used in case of AppendBlob transfer.
 	NumChunks uint16
+}
+
+func (i TransferInfo) IsFolderPropertiesTransfer() bool {
+	return i.EntityType == common.EEntityType.Folder()
+}
+
+// entityTypeLogIndicator returns a string that can be used in logging to distinguish folder property transfers from "normal" transfers.
+// It's purpose is to avoid any confusion from folks seeing a folder name in the log and thinking, "But I don't have a file with that name".
+// It also makes it clear that the log record relates to the folder's properties, not its contained files.
+func (i TransferInfo) entityTypeLogIndicator() string {
+	if i.IsFolderPropertiesTransfer() {
+		return "(folder properties) "
+	} else {
+		return ""
+	}
 }
 
 type SrcProperties struct {
@@ -160,6 +177,10 @@ func (jptm *jobPartTransferMgr) GetOverwritePrompter() *overwritePrompter {
 	return jptm.jobPartMgr.getOverwritePrompter()
 }
 
+func (jptm *jobPartTransferMgr) GetFolderCreationTracker() common.FolderCreationTracker {
+	return jptm.jobPartMgr.getFolderCreationTracker()
+}
+
 func (jptm *jobPartTransferMgr) FromTo() common.FromTo {
 	return jptm.jobPartMgr.Plan().FromTo
 }
@@ -187,10 +208,10 @@ func (jptm *jobPartTransferMgr) GetSourceCompressionType() (common.CompressionTy
 
 func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	plan := jptm.jobPartMgr.Plan()
-	src, dst := plan.TransferSrcDstStrings(jptm.transferIndex)
+	src, dst, _ := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
 
-	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption :=
+	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType :=
 		plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
 	// If the length of destination SAS is greater than 0
@@ -246,6 +267,8 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		Source:                         src,
 		SourceSize:                     sourceSize,
 		Destination:                    dst,
+		EntityType:                     entityType,
+		PreserveNTFSACLs:               plan.PreserveNTFSACLs,
 		S2SGetPropertiesInBackend:      s2sGetPropertiesInBackend,
 		S2SSourceChangeValidation:      s2sSourceChangeValidation,
 		S2SInvalidMetadataHandleOption: s2sInvalidMetadataHandleOption,
@@ -323,7 +346,7 @@ func (jptm *jobPartTransferMgr) WaitUntilLockDestination(ctx context.Context) er
 	return err
 }
 
-func (jptm *jobPartTransferMgr) UnlockDestination() {
+func (jptm *jobPartTransferMgr) EnsureDestinationUnlocked() {
 	didHaveLock := atomic.CompareAndSwapUint32(&jptm.atomicDestLockHeldIndicator, 1, 0) // set to 0, but only if it is currently 1. Return true if changed
 	// only unlock if THIS jptm actually had the lock. (So that we don't make unwanted removals from fileCountLimiter)
 	if didHaveLock {
@@ -351,16 +374,8 @@ func (jptm *jobPartTransferMgr) ScheduleChunks(chunkFunc chunkFunc) {
 	jptm.jobPartMgr.ScheduleChunks(chunkFunc)
 }
 
-func (jptm *jobPartTransferMgr) BlobDstData(dataFileToXfer []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
-	return jptm.jobPartMgr.(*jobPartMgr).blobDstData(jptm.Info().Source, dataFileToXfer)
-}
-
-func (jptm *jobPartTransferMgr) FileDstData(dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
-	return jptm.jobPartMgr.(*jobPartMgr).fileDstData(jptm.Info().Source, dataFileToXfer)
-}
-
-func (jptm *jobPartTransferMgr) BfsDstData(dataFileToXfer []byte) (headers azbfs.BlobFSHTTPHeaders) {
-	return jptm.jobPartMgr.(*jobPartMgr).bfsDstData(jptm.Info().Source, dataFileToXfer)
+func (jptm *jobPartTransferMgr) ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata) {
+	return jptm.jobPartMgr.(*jobPartMgr).resourceDstData(jptm.Info().Source, dataFileToXfer)
 }
 
 // TODO refactor into something like jptm.IsLastModifiedTimeEqual() so that there is NO LastModifiedTime method and people therefore CAN'T do it wrong due to time zone
@@ -694,16 +709,18 @@ const (
 
 func (jptm *jobPartTransferMgr) LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string) {
 	// order of log elements here is mirrored, with some more added, in logTransferError
-	fullMsg := common.URLStringExtension(jptm.Info().Source).RedactSecretQueryParamForLogging() + " " +
+	info := jptm.Info()
+	fullMsg := common.URLStringExtension(info.Source).RedactSecretQueryParamForLogging() + " " + info.entityTypeLogIndicator() +
 		msg +
-		" Dst: " + common.URLStringExtension(jptm.Info().Destination).RedactSecretQueryParamForLogging()
+		" Dst: " + common.URLStringExtension(info.Destination).RedactSecretQueryParamForLogging()
 
 	jptm.Log(level, fullMsg)
 }
 
 func (jptm *jobPartTransferMgr) logTransferError(errorCode transferErrorCode, source, destination, errorMsg string, status int) {
 	// order of log elements here is mirrored, in subset, in LogForCurrentTransfer
-	msg := fmt.Sprintf("%v: ", errorCode) + common.URLStringExtension(source).RedactSecretQueryParamForLogging() +
+	info := jptm.Info() // TODO we are getting a lot of Info calls and its (presumably) not well-optimized.  Profile that?
+	msg := fmt.Sprintf("%v: %v", errorCode, info.entityTypeLogIndicator()) + common.URLStringExtension(source).RedactSecretQueryParamForLogging() +
 		fmt.Sprintf(" : %03d : %s\n   Dst: ", status, errorMsg) + common.URLStringExtension(destination).RedactSecretQueryParamForLogging()
 	jptm.Log(pipeline.LogError, msg)
 }
@@ -780,4 +797,8 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 
 func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {
 	return jptm.jobPartMgr.SourceProviderPipeline()
+}
+
+func (jptm *jobPartTransferMgr) SecurityInfoPersistenceManager() *securityInfoPersistenceManager {
+	return jptm.jobPartMgr.SecurityInfoPersistenceManager()
 }
