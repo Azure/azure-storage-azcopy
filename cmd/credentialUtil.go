@@ -300,6 +300,7 @@ func getCredentialInfoForLocation(ctx context.Context, location common.Location,
 		}
 	}
 
+	logAuthType(credInfo.CredentialType, resource)
 	return
 }
 
@@ -356,6 +357,19 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource string) error {
 	}
 
 	return nil
+}
+
+func logAuthType(ct common.CredentialType, resource string) {
+	resource = strings.Split(resource, "?")[0] // remove SAS
+	name := ct.String()
+	if name == common.ECredentialType.Anonymous().String() {
+		name = "URL/SAS" // make it clearer, since we use Anonymous for both SAS and public URLs
+	}
+	message := fmt.Sprintf("Authenticating to %s using %s")
+	if ste.JobsAdmin != nil {
+		ste.JobsAdmin.LogToJobLog(message)
+	}
+	glcm.Info(message)
 }
 
 // getCredentialType checks user provided info, and gets the proper credential type
