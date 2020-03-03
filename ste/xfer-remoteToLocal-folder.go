@@ -43,7 +43,7 @@ func remoteToLocal_folder(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer p
 
 	err := common.CreateDirectoryIfNotExist(info.Destination, t) // we may create it here, or possible there's already a file transfer for the folder that has created it, or maybe it already existed before this job
 	if err != nil {
-		jptm.FailActiveSend("ensuring destination folder exists", err)
+		jptm.FailActiveDownload("ensuring destination folder exists", err)
 	} else {
 		shouldSetProps := t.ShouldSetProperties(info.Destination, jptm.GetOverwriteOption())
 		if !shouldSetProps {
@@ -58,7 +58,7 @@ func remoteToLocal_folder(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer p
 		//    and set them
 		//
 		//		if err != nil {
-		//			jptm.FailActiveSend("setting folder properties", err)
+		//			jptm.FailActiveDownload("setting folder properties", err)
 		//}
 	}
 	commonDownloaderCompletion(jptm, info, common.EEntityType.Folder()) // for consistency, always run the standard epilogue
