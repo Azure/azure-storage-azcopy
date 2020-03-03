@@ -48,6 +48,8 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.AutoTuneToCpu(),
 	EEnvironmentVariable.CacheProxyLookup(),
 	EEnvironmentVariable.UserAgentPrefix(),
+	EEnvironmentVariable.AADAuthSuffixes(),
+	EEnvironmentVariable.S3AuthSuffixes(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
@@ -209,5 +211,28 @@ func (EnvironmentVariable) UserAgentPrefix() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_USER_AGENT_PREFIX",
 		Description: "Add a prefix to the default AzCopy User Agent, which is used for telemetry purposes. A space is automatically inserted.",
+	}
+}
+
+// TrustedAuthSuffixes identifies the domain suffixes to which we are willing to send Azure OAuth tokens.
+// In the rest of our code, we try to avoid dependencies on knowing these URLs.
+// That's to accommodate the likes of Azure Stack and local emulators, and also since in general
+// hard coding lists like this is a bad idea. However, we don't currently support OAuth against
+// Azure Stack and local emulators, and we feel this list is justified when used
+// in checkAuthSafeForTarget (but not, generally, any place else in our code).
+func (EnvironmentVariable) AADAuthSuffixes() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_AAD_AUTH_SUFFIXES",
+		DefaultValue: "*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net",
+		Description:  "Semi-colon delimited list of domain suffixes that AAD login tokens can be sent to. Should include Azure suffixes only. To restore default value, set this to an empty string.",
+	}
+}
+
+// S3AuthSuffixes serves the same purpose as AADAuthSuffixes, but for S3
+func (EnvironmentVariable) S3AuthSuffixes() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_S3_AUTH_SUFFIXES",
+		DefaultValue: "*.amazonaws.com;*.amazonaws.com.cn",
+		Description:  "Semi-colon delimited list of domain suffixes that S3 credentials can be sent to. Should include AWS suffixes only. To restore default value, set this to an empty string.",
 	}
 }

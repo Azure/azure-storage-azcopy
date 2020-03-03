@@ -286,6 +286,10 @@ func getCredentialInfoForLocation(ctx context.Context, location common.Location,
 		}
 	}
 
+	if err = checkAuthSafeForTarget(credInfo.CredentialType, resource); err != nil {
+		return common.CredentialInfo{}, false, err
+	}
+
 	if credInfo.CredentialType == common.ECredentialType.OAuthToken() {
 		uotm := GetUserOAuthTokenManagerInstance()
 
@@ -297,6 +301,61 @@ func getCredentialInfoForLocation(ctx context.Context, location common.Location,
 	}
 
 	return
+}
+
+// checkAuthSafeForTarget checks our "implicit" auth types (those that pick up creds from the environment
+// or a prior login) to make sure they are only being used in places where we know those auth types are safe.
+// This prevents, for example, us accidentally sending OAuth creds to some place they don't belong
+func checkAuthSafeForTarget(ct common.CredentialType, resource string) error {
+
+	isResourceInSuffixList := func(suffixes []string) (string, bool) {
+		u, err := url.Parse(resource)
+		if err != nil {
+			return "<unparsable>", false
+		}
+		host := strings.ToLower(u.Host)
+
+		for _, s := range suffixes {
+			s = strings.Trim(s, " *") // trim *.foo to .foo
+			s = strings.ToLower(s)
+			if strings.HasSuffix(host, s) {
+				return host, true
+			}
+		}
+		return host, false
+	}
+
+	switch ct {
+	case common.ECredentialType.Unknown(),
+		common.ECredentialType.Anonymous():
+		// these auth types don't pick up anything from environment vars, so they are not the focus of this routine
+		return nil
+	case common.ECredentialType.OAuthToken(),
+		common.ECredentialType.SharedKey():
+		// these are Azure auth types, so make sure the resource is known to be in Azure
+		envVar := common.EEnvironmentVariable.AADAuthSuffixes()
+		domainSuffixes := strings.Split(glcm.GetEnvironmentVariable(envVar), ";")
+		if host, ok := isResourceInSuffixList(domainSuffixes); !ok {
+			return fmt.Errorf(
+				"azure authentication to %s is not enabled in AzCopy. To enable, run 'AzCopy env' read the "+
+					"description of the environment variable %s, then set it if necessary", host, envVar.Name)
+		}
+
+	case common.ECredentialType.S3AccessKey():
+		// make sure the resource is known to be in AWS
+		envVar := common.EEnvironmentVariable.S3AuthSuffixes()
+		domainSuffixes := strings.Split(glcm.GetEnvironmentVariable(envVar), ";")
+		if host, ok := isResourceInSuffixList(domainSuffixes); !ok {
+			return fmt.Errorf(
+				"s3 authentication to %s is not enabled in AzCopy. To enable, run 'AzCopy env' read the "+
+					"description of the environment variable %s, then set it if necessary", host, envVar.Name)
+		}
+
+	default:
+		panic("unknown credential type")
+	}
+
+	return nil
 }
 
 // getCredentialType checks user provided info, and gets the proper credential type
@@ -352,8 +411,6 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo) (credentialType c
 	}
 
 	return credentialType, nil
-}
-
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
