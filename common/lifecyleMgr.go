@@ -2,7 +2,11 @@ package common
 
 import (
 	"bufio"
+	"crypto/md5"
+	"crypto/sha256"
 	"fmt"
+	"github.com/Azure/go-autorest/autorest/adal"
+	"io"
 	"os"
 	"os/signal"
 	"runtime"
@@ -45,6 +49,8 @@ type LifecycleMgr interface {
 	Init(OutputBuilder)                                          // let the user know the job has started and initial information like log location
 	Progress(OutputBuilder)                                      // print on the same line over and over again, not allowed to float up
 	Exit(OutputBuilder, ExitCode)                                // indicates successful execution exit after printing, allow user to specify exit code
+	OAuthLog(string)                                             // For debugging OAuth credentials issue
+	AdalTokenHash(token *adal.Token) string                      // To has adal tokens to log
 	Info(string)                                                 // simple print, allowed to float up
 	Error(string)                                                // indicates fatal error, exit after printing, exit code is always Failed (1)
 	Prompt(message string, details PromptDetails) ResponseOption // ask the user a question(after erasing the progress), then return the response
@@ -215,6 +221,44 @@ func (lcm *lifecycleMgr) Info(msg string) {
 		msgContent: infoMsg,
 		msgType:    eOutputMessageType.Info(),
 	}
+}
+
+func (lcm *lifecycleMgr) OAuthLog(msg string) {
+	lcm.Info("OAUTH LOG: " + msg)
+}
+
+func (lcm *lifecycleMgr) AdalTokenHash(token *adal.Token) string {
+	hash := sha256.New()
+	_, err := io.WriteString(hash, token.AccessToken)
+	if err != nil {
+		lcm.Error(err.Error())
+	}
+	_, err = io.WriteString(hash, token.ExpiresIn)
+	if err != nil {
+		lcm.Error(err.Error())
+	}
+	_, err = io.WriteString(hash, token.ExpiresOn)
+	if err != nil {
+		lcm.Error(err.Error())
+	}
+	_, err = io.WriteString(hash, token.NotBefore)
+	if err != nil {
+		lcm.Error(err.Error())
+	}
+	_, err = io.WriteString(hash, token.RefreshToken)
+	if err != nil {
+		lcm.Error(err.Error())
+	}
+	_, err = io.WriteString(hash, token.Resource)
+	if err != nil {
+		lcm.Error(err.Error())
+	}
+	_, err = io.WriteString(hash, token.Type)
+	if err != nil {
+		lcm.Error(err.Error())
+	}
+
+	return string(hash.Sum(nil)[:])
 }
 
 func (lcm *lifecycleMgr) Prompt(message string, details PromptDetails) ResponseOption {

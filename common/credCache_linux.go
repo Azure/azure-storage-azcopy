@@ -21,6 +21,7 @@
 package common
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"github.com/jiacfan/keyctl" // forked form "github.com/jsipprell/keyctl", todo: make a release to ensure stability
@@ -109,6 +110,7 @@ func (c *CredCache) LoadToken() (*OAuthTokenInfo, error) {
 
 // hasCachedTokenInternal returns if there is cached token in session key ring for current login session.
 func (c *CredCache) hasCachedTokenInternal() (bool, error) {
+	GetLifecycleMgr().OAuthLog("Checking if there is a cached token. Key name: " + c.keyName)
 	keyring, err := keyctl.SessionKeyring()
 	if err != nil {
 		return false, err
@@ -118,8 +120,10 @@ func (c *CredCache) hasCachedTokenInternal() (bool, error) {
 	// e.g. Error message: "required key not available"
 	// the source library could be updated to use keyctl_search
 	if err != nil {
+		GetLifecycleMgr().OAuthLog("No cached token found.")
 		return false, err
 	} else {
+		GetLifecycleMgr().OAuthLog("Cached token found")
 		return true, nil
 	}
 }
@@ -130,6 +134,7 @@ func (c *CredCache) removeCachedTokenInternal() error {
 	if err != nil {
 		return fmt.Errorf("failed to get keyring during removing cached token, %v", err)
 	}
+	GetLifecycleMgr().OAuthLog("Removing cached token. Keyname: " + c.keyName)
 	key, err := keyring.Search(c.keyName)
 	if err != nil {
 		if err == syscall.ENOKEY {
@@ -157,6 +162,7 @@ func (c *CredCache) saveTokenInternal(token OAuthTokenInfo) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal during saving token, %v", err)
 	}
+	GetLifecycleMgr().OAuthLog("Adal JSONified token hash before save: " + string(sha256.Sum256([]byte(b))[:]))
 	keyring, err := keyctl.SessionKeyring()
 	if err != nil {
 		return fmt.Errorf("failed to get keyring during saving token, %v", err)
@@ -197,6 +203,7 @@ func (c *CredCache) loadTokenInternal() (*OAuthTokenInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load token, %v", err)
 	}
+	GetLifecycleMgr().OAuthLog("ADAL JSONified token after load: " + string(sha256.Sum256([]byte(data))[:]))
 	token, err := jsonToTokenInfo(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal token during loading key, %v", err)

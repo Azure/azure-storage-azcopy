@@ -22,7 +22,9 @@ package common
 
 import (
 	"context"
+	"crypto/md5"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
@@ -429,13 +431,21 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 		activeDirectoryEndpoint = DefaultActiveDirectoryEndpoint
 	}
 
+	GetLifecycleMgr().OAuthLog("Finalized login info. AAD endpoint: " + activeDirectoryEndpoint +
+		" Tenant ID hash: " + string(sha256.Sum256([]byte(tenantID))[:]))
+
 	// Init OAuth config
+	GetLifecycleMgr().OAuthLog("Getting newOAuthConfig")
 	oauthConfig, err := adal.NewOAuthConfig(activeDirectoryEndpoint, tenantID)
 	if err != nil {
 		return nil, err
 	}
+	GetLifecycleMgr().OAuthLog("Got new OAuthConfig. Endpoints: " +
+		strings.Join([]string{oauthConfig.AuthorityEndpoint.String(), oauthConfig.AuthorizeEndpoint.String(),
+			oauthConfig.DeviceCodeEndpoint.String(), oauthConfig.TokenEndpoint.String()}, ","))
 
 	// Acquire the device code
+	GetLifecycleMgr().OAuthLog("Initiating Device Auth")
 	deviceCode, err := adal.InitiateDeviceAuth(
 		uotm.oauthClient,
 		*oauthConfig,
@@ -445,6 +455,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 		return nil, fmt.Errorf("failed to login with tenantID %q, Azure directory endpoint %q, %v",
 			tenantID, activeDirectoryEndpoint, err)
 	}
+	GetLifecycleMgr().OAuthLog("Device Auth Initiated")
 
 	// Display the authentication message
 	fmt.Println(*deviceCode.Message + "\n")
@@ -456,19 +467,25 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 
 	// Wait here until the user is authenticated
 	// TODO: check if adal Go SDK has new method which supports context, currently ctrl-C can stop the login in console interactively.
+	GetLifecycleMgr().OAuthLog("Waiting for Auth Completion")
 	token, err := adal.WaitForUserCompletion(uotm.oauthClient, deviceCode)
 	if err != nil {
 		return nil, fmt.Errorf("failed to login with tenantID %q, Azure directory endpoint %q, %v",
 			tenantID, activeDirectoryEndpoint, err)
 	}
+	GetLifecycleMgr().OAuthLog("Auth Completed")
 
 	oAuthTokenInfo := OAuthTokenInfo{
 		Token:                   *token,
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
 	}
+	GetLifecycleMgr().OAuthLog("OAuth Token Info. Token hash: " + GetLifecycleMgr().AdalTokenHash(token) +
+		" TenantId hash: " + string(sha256.Sum256([]byte(tenantID))[:]) + " ActiveDirectoryEndpoint: " +
+		activeDirectoryEndpoint)
 
 	if persist {
+		GetLifecycleMgr().OAuthLog("Persisting token info")
 		err = uotm.credCache.SaveToken(oAuthTokenInfo)
 		if err != nil {
 			return nil, err
@@ -495,7 +512,12 @@ func (uotm *UserOAuthTokenManager) getCachedTokenInfo(ctx context.Context) (*OAu
 	if err != nil {
 		return nil, fmt.Errorf("get cached token failed, %v", err)
 	}
+	GetLifecycleMgr().OAuthLog("OAuth Token Info after load. Token hash: " +
+		GetLifecycleMgr().AdalTokenHash(&tokenInfo.Token) +
+		" TenantId hash: " + string(sha256.Sum256([]byte(tokenInfo.Tenant))[:]) + " ActiveDirectoryEndpoint: " +
+		tokenInfo.ActiveDirectoryEndpoint)
 
+	GetLifecycleMgr().OAuthLog("Refreshing token")
 	freshToken, err := tokenInfo.Refresh(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get cached token failed to ensure token fresh, please log in with azcopy's login command again, %v", err)
@@ -503,10 +525,13 @@ func (uotm *UserOAuthTokenManager) getCachedTokenInfo(ctx context.Context) (*OAu
 
 	// Update token cache, if token is updated.
 	if freshToken.AccessToken != tokenInfo.AccessToken || freshToken.RefreshToken != tokenInfo.RefreshToken {
+		GetLifecycleMgr().OAuthLog("Fresh token found. Saving new token. Token hash: " + GetLifecycleMgr().AdalTokenHash(freshToken))
 		tokenInfo.Token = *freshToken
 		if err := uotm.credCache.SaveToken(*tokenInfo); err != nil {
 			return nil, err
 		}
+	} else {
+		GetLifecycleMgr().OAuthLog("Refreshed token is the same.")
 	}
 
 	return tokenInfo, nil
@@ -746,6 +771,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 
 // RefreshTokenWithUserCredential gets new token with user credential through refresh.
 func (credInfo *OAuthTokenInfo) RefreshTokenWithUserCredential(ctx context.Context) (*adal.Token, error) {
+	lcm.OAuthLog("Attempting to refresh token with user credential. Token hash: " + lcm.AdalTokenHash(&credInfo.Token))
 	oauthConfig, err := adal.NewOAuthConfig(credInfo.ActiveDirectoryEndpoint, credInfo.Tenant)
 	if err != nil {
 		return nil, err
@@ -767,6 +793,7 @@ func (credInfo *OAuthTokenInfo) RefreshTokenWithUserCredential(ctx context.Conte
 	}
 
 	newToken := spt.Token()
+	lcm.OAuthLog("New token hash: " + lcm.AdalTokenHash(&newToken))
 	return &newToken, nil
 }
 
