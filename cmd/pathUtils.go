@@ -170,9 +170,22 @@ func GetResourceRoot(resource string, location common.Location) (resourceBase st
 	}
 }
 
+func SplitResourceString(raw string, loc common.Location) (common.ResourceString, error) {
+	sasless, sas, err := splitAuthTokenFromResource(raw, loc)
+	if err != nil {
+		return common.ResourceString{}, nil
+	}
+	main, query := splitQueryFromSaslessResource(sasless, loc)
+	return common.ResourceString{
+		Value:      main,
+		SAS:        sas,
+		ExtraQuery: query,
+	}, nil
+}
+
 // resourceBase will always be returned regardless of the location.
 // resourceToken will be separated and returned depending on the location.
-func SplitAuthTokenFromResource(resource string, location common.Location) (resourceBase, resourceToken string, err error) {
+func splitAuthTokenFromResource(resource string, location common.Location) (resourceBase, resourceToken string, err error) {
 	switch location {
 	case common.ELocation.Local():
 		if resource == common.Dev_Null {
@@ -258,7 +271,7 @@ func SplitAuthTokenFromResource(resource string, location common.Location) (reso
 // such as a snapshot identifier, or other unparsed params. This splits those out,
 // so we can preserve them without having them get in the way of our use of
 // the resource root string. (e.g. don't want them right on the end of it, when we append stuff)
-func SplitQueryFromSaslessResource(resource string, loc common.Location) (mainUrl string, queryAndFragment string) {
+func splitQueryFromSaslessResource(resource string, loc common.Location) (mainUrl string, queryAndFragment string) {
 	if !loc.IsRemote() {
 		return resource, "" // only remote resources have query strings
 	}
@@ -289,21 +302,21 @@ func getPathBeforeFirstWildcard(path string) string {
 	}
 
 	firstWCIndex := strings.Index(path, "*")
-	result := consolidatePathSeparators(path[:firstWCIndex])
+	result := common.ConsolidatePathSeparators(path[:firstWCIndex])
 	lastSepIndex := strings.LastIndex(result, common.DeterminePathSeparator(path))
 	result = result[:lastSepIndex+1]
 
 	return result
 }
 
-func GetAccountRoot(path string, location common.Location) (string, error) {
+func GetAccountRoot(resource common.ResourceString, location common.Location) (string, error) {
 	switch location {
 	case common.ELocation.Local():
 		panic("attempted to get account root on local location")
 	case common.ELocation.Blob(),
 		common.ELocation.File(),
 		common.ELocation.BlobFS():
-		baseURL, err := url.Parse(path)
+		baseURL, err := resource.FullURL()
 
 		if err != nil {
 			return "", err

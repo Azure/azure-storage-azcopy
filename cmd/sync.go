@@ -102,15 +102,15 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	if cooked.fromTo == common.EFromTo.Unknown() {
 		return cooked, fmt.Errorf("Unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
 	} else if cooked.fromTo == common.EFromTo.LocalBlob() {
-		cooked.destination, cooked.destinationSAS, err = SplitAuthTokenFromResource(raw.dst, cooked.fromTo.To())
+		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
 	} else if cooked.fromTo == common.EFromTo.BlobLocal() {
-		cooked.source, cooked.sourceSAS, err = SplitAuthTokenFromResource(raw.src, cooked.fromTo.From())
+		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
 	} else if cooked.fromTo == common.EFromTo.BlobBlob() || cooked.fromTo == common.EFromTo.FileFile() {
-		cooked.destination, cooked.destinationSAS, err = SplitAuthTokenFromResource(raw.dst, cooked.fromTo.To())
+		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
-		cooked.source, cooked.sourceSAS, err = SplitAuthTokenFromResource(raw.src, cooked.fromTo.From())
+		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
 	} else {
 		return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, cooked.fromTo)
@@ -118,16 +118,14 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	// Do this check seperately so we don't end up with a bunch of code duplication when new src/dsts are added
 	if cooked.fromTo.From() == common.ELocation.Local() {
-		cooked.source = cleanLocalPath(raw.src)
-		cooked.source = common.ToExtendedPath(cooked.source)
+		cooked.source = common.ResourceString{Value: common.ToExtendedPath(cleanLocalPath(raw.src))}
 	} else if cooked.fromTo.To() == common.ELocation.Local() {
-		cooked.destination = cleanLocalPath(raw.dst)
-		cooked.destination = common.ToExtendedPath(cooked.destination)
+		cooked.destination = common.ResourceString{Value: common.ToExtendedPath(cleanLocalPath(raw.dst))}
 	}
 
 	// we do not support service level sync yet
 	if cooked.fromTo.From().IsRemote() {
-		err = raw.validateURLIsNotServiceLevel(cooked.source, cooked.fromTo.From())
+		err = raw.validateURLIsNotServiceLevel(cooked.source.Value, cooked.fromTo.From())
 		if err != nil {
 			return cooked, err
 		}
@@ -135,7 +133,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	// we do not support service level sync yet
 	if cooked.fromTo.To().IsRemote() {
-		err = raw.validateURLIsNotServiceLevel(cooked.destination, cooked.fromTo.To())
+		err = raw.validateURLIsNotServiceLevel(cooked.destination.Value, cooked.fromTo.To())
 		if err != nil {
 			return cooked, err
 		}
@@ -220,10 +218,8 @@ type cookedSyncCmdArgs struct {
 	// deletion count keeps track of how many extra files from the destination were removed
 	atomicDeletionCount uint32
 
-	source         string
-	sourceSAS      string
-	destination    string
-	destinationSAS string
+	source         common.ResourceString
+	destination    common.ResourceString
 	fromTo         common.FromTo
 	credentialInfo common.CredentialInfo
 
@@ -492,10 +488,10 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 	// For sync, only one side need credential.
 	cca.credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
 		fromTo:         cca.fromTo,
-		source:         cca.source,
-		destination:    cca.destination,
-		sourceSAS:      cca.sourceSAS,
-		destinationSAS: cca.destinationSAS,
+		source:         cca.source.Value,
+		destination:    cca.destination.Value,
+		sourceSAS:      cca.source.SAS,
+		destinationSAS: cca.destination.SAS,
 	})
 
 	if err != nil {

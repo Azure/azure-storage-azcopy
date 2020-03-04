@@ -39,9 +39,9 @@ func newLocalTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (*localTrav
 	var fullPath string
 
 	if isSource {
-		fullPath = cca.source
+		fullPath = cca.source.ValueLocal()
 	} else {
-		fullPath = cca.destination
+		fullPath = cca.destination.ValueLocal()
 	}
 
 	if strings.ContainsAny(strings.TrimPrefix(fullPath, common.EXTENDED_PATH_PREFIX), "*?") {
@@ -76,15 +76,9 @@ func newBlobTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (t *blobTrav
 	// figure out the right URL
 	var rawURL *url.URL
 	if isSource {
-		rawURL, err = url.Parse(cca.source)
-		if err == nil && cca.sourceSAS != "" {
-			copyHandlerUtil{}.appendQueryParamToUrl(rawURL, cca.sourceSAS)
-		}
+		rawURL, err = cca.source.FullURL()
 	} else {
-		rawURL, err = url.Parse(cca.destination)
-		if err == nil && cca.destinationSAS != "" {
-			copyHandlerUtil{}.appendQueryParamToUrl(rawURL, cca.destinationSAS)
-		}
+		rawURL, err = cca.destination.FullURL()
 	}
 
 	if err != nil {

@@ -42,13 +42,9 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 		CommandString:   cca.commandString,
 		FromTo:          cca.fromTo,
 		Fpo:             fpo,
-		SourceRoot:      consolidatePathSeparators(cca.source),
-		DestinationRoot: consolidatePathSeparators(cca.destination),
-
-		// authentication related
-		CredentialInfo: cca.credentialInfo,
-		SourceSAS:      cca.sourceSAS,
-		DestinationSAS: cca.destinationSAS,
+		SourceRoot:      cca.source.CloneWithConsolidatedSeparators(),
+		DestinationRoot: cca.destination.CloneWithConsolidatedSeparators(),
+		CredentialInfo:  cca.credentialInfo,
 
 		// flags
 		BlobAttributes: common.BlobTransferAttributes{
@@ -152,12 +148,12 @@ func (d *interactiveDeleteProcessor) promptForConfirmation(object storedObject) 
 }
 
 func newInteractiveDeleteProcessor(deleter objectProcessor, deleteDestination common.DeleteDestination,
-	objectTypeToDisplay string, objectLocationToDisplay string, incrementDeletionCounter func()) *interactiveDeleteProcessor {
+	objectTypeToDisplay string, objectLocationToDisplay common.ResourceString, incrementDeletionCounter func()) *interactiveDeleteProcessor {
 
 	return &interactiveDeleteProcessor{
 		deleter:                 deleter,
 		objectTypeToDisplay:     objectTypeToDisplay,
-		objectLocationToDisplay: objectLocationToDisplay,
+		objectLocationToDisplay: objectLocationToDisplay.Value,
 		incrementDeletionCount:  incrementDeletionCounter,
 		shouldPromptUser:        deleteDestination == common.EDeleteDestination.Prompt(),
 		shouldDelete:            deleteDestination == common.EDeleteDestination.True(), // if shouldPromptUser is true, this will start as false, but we will determine its value later
@@ -165,7 +161,7 @@ func newInteractiveDeleteProcessor(deleter objectProcessor, deleteDestination co
 }
 
 func newSyncLocalDeleteProcessor(cca *cookedSyncCmdArgs) *interactiveDeleteProcessor {
-	localDeleter := localFileDeleter{rootPath: cca.destination}
+	localDeleter := localFileDeleter{rootPath: cca.destination.ValueLocal()}
 	return newInteractiveDeleteProcessor(localDeleter.deleteFile, cca.deleteDestination, "local file", cca.destination, cca.incrementDeletionCount)
 }
 
@@ -202,11 +198,9 @@ func (l *localFileDeleter) deleteFile(object storedObject) error {
 }
 
 func newSyncDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor, error) {
-	rawURL, err := url.Parse(cca.destination)
+	rawURL, err := cca.destination.FullURL()
 	if err != nil {
 		return nil, err
-	} else if cca.destinationSAS != "" {
-		copyHandlerUtil{}.appendQueryParamToUrl(rawURL, cca.destinationSAS)
 	}
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)

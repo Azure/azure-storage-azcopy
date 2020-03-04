@@ -27,25 +27,16 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		glcm.Info("AWS S3 to Azure Blob copy is currently in preview. Validate the copy operation carefully before removing your data at source.")
 	}
 
-	dst, err := appendSASIfNecessary(cca.destination, cca.destinationSAS)
-	if err != nil {
-		return nil, err
-	}
-
-	src, err := appendSASIfNecessary(cca.source, cca.sourceSAS)
-	if err != nil {
-		return nil, err
-	}
-
-	var isPublic bool
 	srcCredInfo := common.CredentialInfo{}
+	var isPublic bool
+	var err error
 
-	if srcCredInfo, isPublic, err = getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, cca.sourceSAS, true); err != nil {
+	if srcCredInfo, isPublic, err = getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true); err != nil {
 		return nil, err
 		// If S2S and source takes OAuthToken as its cred type (OR) source takes anonymous as its cred type, but it's not public and there's no SAS
 	} else if cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() &&
 		(srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() ||
-			(srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && !isPublic && cca.sourceSAS == "")) {
+			(srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && !isPublic && cca.source.SAS == "")) {
 		// TODO: Generate a SAS token if it's blob -> *
 		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource")
 	}
@@ -64,7 +55,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.DestLengthValidation = cca.CheckLength
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
 
-	traverser, err = initResourceTraverser(src, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, func(common.EntityType) {})
+	traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, func(common.EntityType) {})
 
 	if err != nil {
 		return nil, err
@@ -77,15 +68,15 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	// Check if the destination is a directory so we can correctly decide where our files land
-	isDestDir := cca.isDestDirectory(dst, &ctx)
+	isDestDir := cca.isDestDirectory(cca.destination, &ctx)
 
-	srcLevel, err := determineLocationLevel(cca.source, cca.fromTo.From(), true)
+	srcLevel, err := determineLocationLevel(cca.source.Value, cca.fromTo.From(), true)
 
 	if err != nil {
 		return nil, err
 	}
 
-	dstLevel, err := determineLocationLevel(cca.destination, cca.fromTo.To(), false)
+	dstLevel, err := determineLocationLevel(cca.destination.Value, cca.fromTo.To(), false)
 
 	if err != nil {
 		return nil, err
@@ -120,7 +111,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	dstContainerName := ""
 	// Extract the existing destination container name
 	if cca.fromTo.To().IsRemote() {
-		dstContainerName, err = GetContainerName(dst, cca.fromTo.To())
+		dstContainerName, err = GetContainerName(cca.destination.Value, cca.fromTo.To())
 
 		if err != nil {
 			return nil, err
@@ -129,7 +120,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		// only create the destination container in S2S scenarios
 		if cca.fromTo.From().IsRemote() && dstContainerName != "" { // if the destination has a explicit container name
 			// Attempt to create the container. If we fail, fail silently.
-			err = cca.createDstContainer(dstContainerName, dst, ctx, existingContainers)
+			err = cca.createDstContainer(dstContainerName, cca.destination, ctx, existingContainers)
 
 			// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 			if _, ok := seenFailedContainers[dstContainerName]; err != nil && ste.JobsAdmin != nil && !ok {
@@ -159,7 +150,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						continue
 					}
 
-					err = cca.createDstContainer(bucketName, dst, ctx, existingContainers)
+					err = cca.createDstContainer(bucketName, cca.destination, ctx, existingContainers)
 
 					// if JobsAdmin is nil, we're probably in testing mode.
 					// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
@@ -173,7 +164,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					}
 				}
 			} else {
-				cName, err := GetContainerName(src, cca.fromTo.From())
+				cName, err := GetContainerName(cca.source.Value, cca.fromTo.From())
 
 				if err != nil || cName == "" {
 					// this will probably never be reached
@@ -183,7 +174,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				resName, err := containerResolver.ResolveName(cName)
 
 				if err == nil {
-					err = cca.createDstContainer(resName, dst, ctx, existingContainers)
+					err = cca.createDstContainer(resName, cca.destination, ctx, existingContainers)
 
 					if _, ok := seenFailedContainers[dstContainerName]; err != nil && ste.JobsAdmin != nil && !ok {
 						logDstContainerCreateFailureOnce.Do(func() {
@@ -263,7 +254,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 // This is condensed down into an individual function as we don't end up re-using the destination traverser at all.
 // This is just for the directory check.
-func (cca *cookedCopyCmdArgs) isDestDirectory(dst string, ctx *context.Context) bool {
+func (cca *cookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *context.Context) bool {
 	var err error
 	dstCredInfo := common.CredentialInfo{}
 
@@ -271,7 +262,7 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst string, ctx *context.Context) 
 		return false
 	}
 
-	if dstCredInfo, _, err = getCredentialInfoForLocation(*ctx, cca.fromTo.To(), cca.destination, cca.destinationSAS, true); err != nil {
+	if dstCredInfo, _, err = getCredentialInfoForLocation(*ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, true); err != nil {
 		return false
 	}
 
@@ -318,17 +309,17 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 	}
 
 	if len(cca.includeFileAttributes) != 0 {
-		filters = append(filters, buildAttrFilters(cca.includeFileAttributes, cca.source, true)...)
+		filters = append(filters, buildAttrFilters(cca.includeFileAttributes, cca.source.ValueLocal(), true)...)
 	}
 
 	if len(cca.excludeFileAttributes) != 0 {
-		filters = append(filters, buildAttrFilters(cca.excludeFileAttributes, cca.source, false)...)
+		filters = append(filters, buildAttrFilters(cca.excludeFileAttributes, cca.source.ValueLocal(), false)...)
 	}
 
 	return filters
 }
 
-func (cca *cookedCopyCmdArgs) createDstContainer(containerName, dstWithSAS string, ctx context.Context, existingContainers map[string]bool) (err error) {
+func (cca *cookedCopyCmdArgs) createDstContainer(containerName string, dstWithSAS common.ResourceString, ctx context.Context, existingContainers map[string]bool) (err error) {
 	if _, ok := existingContainers[containerName]; ok {
 		return
 	}
@@ -336,7 +327,7 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName, dstWithSAS strin
 
 	dstCredInfo := common.CredentialInfo{}
 
-	if dstCredInfo, _, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, cca.destinationSAS, false); err != nil {
+	if dstCredInfo, _, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false); err != nil {
 		return err
 	}
 
@@ -350,7 +341,7 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName, dstWithSAS strin
 	// TODO: Reduce code dupe somehow
 	switch cca.fromTo.To() {
 	case common.ELocation.Local():
-		err = os.MkdirAll(common.GenerateFullPath(cca.destination, containerName), os.ModeDir|os.ModePerm)
+		err = os.MkdirAll(common.GenerateFullPath(cca.destination.ValueLocal(), containerName), os.ModeDir|os.ModePerm)
 	case common.ELocation.Blob():
 		accountRoot, err := GetAccountRoot(dstWithSAS, cca.fromTo.To())
 
@@ -490,7 +481,7 @@ func pathEncodeRules(path string, fromTo common.FromTo, source bool) string {
 
 func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool, object storedObject) (relativePath string) {
 	// write straight to /dev/null, do not determine a indirect path
-	if !source && cca.destination == common.Dev_Null {
+	if !source && cca.destination.Value == common.Dev_Null {
 		return "" // ignore path encode rules
 	}
 
@@ -528,7 +519,7 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 		// We ONLY need to do this adjustment to the destination.
 		// The source SAS has already been removed. No need to convert it to a URL or whatever.
 		// Save to a directory
-		rootDir := filepath.Base(cca.source)
+		rootDir := filepath.Base(cca.source.Value)
 
 		if cca.fromTo.From().IsRemote() {
 			ueRootDir, err := url.PathUnescape(rootDir)

@@ -33,20 +33,11 @@ import (
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
 
 func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *syncEnumerator, err error) {
-	src, err := appendSASIfNecessary(cca.source, cca.sourceSAS)
-	if err != nil {
-		return nil, err
-	}
-
-	dst, err := appendSASIfNecessary(cca.destination, cca.destinationSAS)
-	if err != nil {
-		return nil, err
-	}
 
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
-	sourceTraverser, err := initResourceTraverser(src, cca.fromTo.From(), &ctx, &cca.credentialInfo,
+	sourceTraverser, err := initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &cca.credentialInfo,
 		nil, nil, cca.recursive, true, func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
@@ -60,7 +51,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
-	destinationTraverser, err := initResourceTraverser(dst, cca.fromTo.To(), &ctx, &cca.credentialInfo,
+	destinationTraverser, err := initResourceTraverser(cca.destination, cca.fromTo.To(), &ctx, &cca.credentialInfo,
 		nil, nil, cca.recursive, true, func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
@@ -81,14 +72,14 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// Same rule applies to excludeFilters and excludeAttrFilters
 	filters := buildIncludeFilters(cca.includePatterns)
 	if cca.fromTo.From() == common.ELocation.Local() {
-		includeAttrFilters := buildAttrFilters(cca.includeFileAttributes, src, true)
+		includeAttrFilters := buildAttrFilters(cca.includeFileAttributes, cca.source.ValueLocal(), true)
 		filters = append(filters, includeAttrFilters...)
 	}
 
 	filters = append(filters, buildExcludeFilters(cca.excludePatterns, false)...)
 	filters = append(filters, buildExcludeFilters(cca.excludePaths, true)...)
 	if cca.fromTo.From() == common.ELocation.Local() {
-		excludeAttrFilters := buildAttrFilters(cca.excludeFileAttributes, src, false)
+		excludeAttrFilters := buildAttrFilters(cca.excludeFileAttributes, cca.source.ValueLocal(), false)
 		filters = append(filters, excludeAttrFilters...)
 	}
 

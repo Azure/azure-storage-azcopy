@@ -225,18 +225,18 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	if err != nil {
 		return cooked, err
 	}
-	cooked.source = raw.src
-	cooked.destination = raw.dst
+	cooked.unparsedSource = raw.src
+	cooked.unparsedDest = raw.dst
 
-	if strings.EqualFold(cooked.destination, common.Dev_Null) && runtime.GOOS == "windows" {
-		cooked.destination = common.Dev_Null // map all capitalizations of "NUL"/"nul" to one because (on Windows) they all mean the same thing
+	if strings.EqualFold(cooked.unparsedDest, common.Dev_Null) && runtime.GOOS == "windows" {
+		cooked.unparsedDest = common.Dev_Null // map all capitalizations of "NUL"/"nul" to one because (on Windows) they all mean the same thing
 	}
 
 	cooked.fromTo = fromTo
 
 	// Check if source has a trailing wildcard on a URL
 	if fromTo.From().IsRemote() {
-		cooked.source, cooked.stripTopDir, err = raw.stripTrailingWildcardOnRemoteSource(fromTo.From())
+		cooked.unparsedSource, cooked.stripTopDir, err = raw.stripTrailingWildcardOnRemoteSource(fromTo.From())
 
 		if err != nil {
 			return cooked, err
@@ -264,7 +264,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	// cooked.stripTopDir is effectively a workaround for the lack of wildcards in remote sources.
 	// Local, however, still supports wildcards, and thus needs its top directory stripped whenever a wildcard is used.
 	// Thus, we check for wildcards and instruct the processor to strip the top dir later instead of repeatedly checking cca.source for wildcards.
-	if fromTo.From() == common.ELocation.Local() && strings.Contains(cooked.source, "*") {
+	if fromTo.From() == common.ELocation.Local() && strings.Contains(cooked.source.Value, "*") {
 		cooked.stripTopDir = true
 	}
 
@@ -424,7 +424,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 
 	cooked.CheckLength = raw.CheckLength
 	// length of devnull will be 0, thus this will always fail unless downloading an empty file
-	if cooked.destination == common.Dev_Null {
+	if cooked.destination.Value == common.Dev_Null {
 		cooked.CheckLength = false
 	}
 
@@ -666,11 +666,13 @@ func validateMd5Option(option common.HashValidationOption, fromTo common.FromTo)
 // represents the processed copy command input from the user
 type cookedCopyCmdArgs struct {
 	// from arguments
-	source         string
-	sourceSAS      string
-	destination    string
-	destinationSAS string
+	unparsedSource string
+	unparsedDest   string
 	fromTo         common.FromTo
+
+	// produced from their unparsed variants
+	source      common.ResourceString
+	destination common.ResourceString
 
 	// new include/exclude only apply to file names
 	// implemented for remove (and sync) only
@@ -788,9 +790,9 @@ func (cca *cookedCopyCmdArgs) process() error {
 // TODO discuss with Jeff what features should be supported by redirection, such as metadata, content-type, etc.
 func (cca *cookedCopyCmdArgs) processRedirectionCopy() error {
 	if cca.fromTo == common.EFromTo.PipeBlob() {
-		return cca.processRedirectionUpload(cca.destination, cca.blockSize)
+		return cca.processRedirectionUpload(cca.unparsedDest, cca.blockSize)
 	} else if cca.fromTo == common.EFromTo.BlobPipe() {
-		return cca.processRedirectionDownload(cca.source)
+		return cca.processRedirectionDownload(cca.unparsedSource)
 	}
 
 	return fmt.Errorf("unsupported redirection type: %s", cca.fromTo)
@@ -880,10 +882,10 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// For S2S copy, as azcopy-v10 use Put*FromUrl, only one credential is needed for destination.
 	if cca.credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
 		fromTo:         cca.fromTo,
-		source:         cca.source,
-		destination:    cca.destination,
-		sourceSAS:      cca.sourceSAS,
-		destinationSAS: cca.destinationSAS,
+		source:         cca.source.Value,
+		destination:    cca.destination.Value,
+		sourceSAS:      cca.source.SAS,
+		destinationSAS: cca.destination.SAS,
 	}); err != nil {
 		return err
 	}
@@ -931,11 +933,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			MD5ValidationOption:      cca.md5ValidationOption,
 			DeleteSnapshotsOption:    cca.deleteSnapshotsOption,
 		},
-		// source sas is stripped from the source given by the user and it will not be stored in the part plan file.
-		SourceSAS: cca.sourceSAS,
-
-		// destination sas is stripped from the destination given by the user and it will not be stored in the part plan file.
-		DestinationSAS: cca.destinationSAS,
 		CommandString:  cca.commandString,
 		CredentialInfo: cca.credentialInfo,
 	}
@@ -943,40 +940,38 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	from := cca.fromTo.From()
 	to := cca.fromTo.To()
 
+	// TODO: it's not pretty that we replace unparsed source/dest with the parsed versions here.
+	//   Should really be done in cookWithId. But historically it's always been done here.
+
 	// Strip the SAS from the source and destination whenever there is SAS exists in URL.
 	// Note: SAS could exists in source of S2S copy, even if the credential type is OAuth for destination.
-	cca.source, cca.sourceSAS, err = SplitAuthTokenFromResource(cca.source, from)
-
+	cca.source, err = SplitResourceString(cca.unparsedSource, from)
 	if err != nil {
 		return err
 	}
-
-	jobPartOrder.SourceSAS = cca.sourceSAS
-	fullSourceRoot, err := GetResourceRoot(cca.source, from)
+	cca.unparsedSource = "" // prevent any accidental use, now that it's been parsed
+	jobPartOrder.SourceRoot = cca.source
+	jobPartOrder.SourceRoot.Value, err = GetResourceRoot(cca.source.Value, from)
 	if err != nil {
 		return err
 	}
-	jobPartOrder.SourceRoot, jobPartOrder.SourceExtraQuery =
-		SplitQueryFromSaslessResource(fullSourceRoot, from)
 
 	// Stripping the trailing /* for local occurs much later than stripping the trailing /* for remote resources.
 	// TODO: Move these into the same place for maintainability.
-	if diff := strings.TrimPrefix(cca.source, jobPartOrder.SourceRoot); cca.fromTo.From().IsLocal() &&
+	if diff := strings.TrimPrefix(cca.source.Value, jobPartOrder.SourceRoot.Value); cca.fromTo.From().IsLocal() &&
 		diff == "*" || diff == common.OS_PATH_SEPARATOR+"*" || diff == common.AZCOPY_PATH_SEPARATOR_STRING+"*" {
 		// trim the /*
-		cca.source = jobPartOrder.SourceRoot
+		cca.source.Value = jobPartOrder.SourceRoot.Value
 		// set stripTopDir to true so that --list-of-files/--include-path play nice
 		cca.stripTopDir = true
 	}
 
-	cca.destination, cca.destinationSAS, err = SplitAuthTokenFromResource(cca.destination, to)
+	cca.destination, err = SplitResourceString(cca.unparsedDest, to)
 	if err != nil {
 		return err
 	}
-
-	jobPartOrder.DestinationSAS = cca.destinationSAS
-	jobPartOrder.DestinationRoot, jobPartOrder.DestExtraQuery =
-		SplitQueryFromSaslessResource(cca.destination, to)
+	cca.unparsedDest = "" // prevent accidental use, now that we've parsed it
+	jobPartOrder.DestinationRoot = cca.destination
 
 	// depending on the source and destination type, we process the cp command differently
 	// Create enumerator and do enumerating

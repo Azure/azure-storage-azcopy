@@ -87,22 +87,19 @@ func (l *listTraverser) traverse(preprocessor objectMorpher, processor objectPro
 	return nil
 }
 
-func newListTraverser(parent string, parentSAS string, parentType common.Location, credential *common.CredentialInfo, ctx *context.Context,
+func newListTraverser(parent common.ResourceString, parentType common.Location, credential *common.CredentialInfo, ctx *context.Context,
 	recursive, followSymlinks, getProperties bool, listChan chan string, incrementEnumerationCounter enumerationCounterFunc) resourceTraverser {
 	var traverserGenerator childTraverserGenerator
 
 	traverserGenerator = func(relativeChildPath string) (resourceTraverser, error) {
-		source := ""
+		source := parent.Clone()
 		if parentType != common.ELocation.Local() {
 			// assume child path is not URL-encoded yet, this is consistent with the behavior of previous implementation
-			childURL, _ := url.Parse(parent)
-			childURL.Path = common.GenerateFullPath(childURL.Path, relativeChildPath)
-
-			// append query to URL
-			source = copyHandlerUtil{}.appendQueryParamToUrl(childURL, parentSAS).String()
+			childURL, _ := url.Parse(parent.Value)
+			source.Value = common.GenerateFullPath(childURL.Path, relativeChildPath)
 		} else {
 			// is local, only generate the full path
-			source = common.GenerateFullPath(parent, relativeChildPath)
+			source.Value = common.GenerateFullPath(parent.Value, relativeChildPath)
 		}
 
 		// Construct a traverser that goes through the child

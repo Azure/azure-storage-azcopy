@@ -305,13 +305,6 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 	return
 }
 
-// Replace azcopy path separators (/) with the OS path separator
-func consolidatePathSeparators(path string) string {
-	pathSep := common.DeterminePathSeparator(path)
-
-	return strings.ReplaceAll(path, common.AZCOPY_PATH_SEPARATOR_STRING, pathSep)
-}
-
 func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter enumerationCounterFunc) *localTraverser {
 	traverser := localTraverser{
 		fullPath:                    cleanLocalPath(fullPath),

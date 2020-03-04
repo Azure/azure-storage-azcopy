@@ -88,27 +88,27 @@ type ListParameters struct {
 var parameters = ListParameters{}
 
 // HandleListContainerCommand handles the list container command
-func HandleListContainerCommand(source string, location common.Location) (err error) {
+func HandleListContainerCommand(unparsedSource string, location common.Location) (err error) {
 	// TODO: Temporarily use context.TODO(), this should be replaced with a root context from main.
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	credentialInfo := common.CredentialInfo{}
 
-	base, token, err := SplitAuthTokenFromResource(source, location)
+	source, err := SplitResourceString(unparsedSource, location)
 	if err != nil {
 		return err
 	}
 
-	level, err := determineLocationLevel(source, location, true)
+	level, err := determineLocationLevel(source.Value, location, true)
 
 	if err != nil {
 		return err
 	}
 
 	// Treat our check as a destination because the isSource flag was designed for S2S transfers.
-	if credentialInfo, _, err = getCredentialInfoForLocation(ctx, location, base, token, false); err != nil {
+	if credentialInfo, _, err = getCredentialInfoForLocation(ctx, location, source.Value, source.SAS, false); err != nil {
 		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
-	} else if location == location.File() && token == "" {
+	} else if location == location.File() && source.SAS == "" {
 		return errors.New("azure files requires a SAS token for authentication")
 	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
 		glcm.Info("List is using OAuth token for authentication.")
