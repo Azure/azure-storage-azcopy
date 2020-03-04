@@ -52,7 +52,7 @@ func (s *pathUtilsSuite) TestStripQueryFromSaslessUrl(c *chk.C) {
 		if t.isRemote {
 			loc = common.ELocation.File()
 		}
-		m, q := SplitQueryFromSaslessResource(t.full, loc)
+		m, q := splitQueryFromSaslessResource(t.full, loc)
 		c.Assert(m, chk.Equals, t.expectedMain)
 		c.Assert(q, chk.Equals, t.expectedQuery)
 	}
