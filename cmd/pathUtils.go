@@ -254,6 +254,33 @@ func SplitAuthTokenFromResource(resource string, location common.Location) (reso
 	}
 }
 
+// While there should be on SAS's in resource, it may have other query string elements,
+// such as a snapshot identifier, or other unparsed params. This splits those out,
+// so we can preserve them without having them get in the way of our use of
+// the resource root string. (e.g. don't want them right on the end of it, when we append stuff)
+func SplitQueryFromSaslessResource(resource string, loc common.Location) (mainUrl string, queryAndFragment string) {
+	if !loc.IsRemote() {
+		return resource, "" // only remote resources have query strings
+	}
+
+	if u, err := url.Parse(resource); err == nil && u.Query().Get("sig") != "" {
+		panic("this routine can only be called after the SAS has been removed")
+		// because, for security reasons, we don't want SASs returned in queryAndFragment, since
+		// we wil persist that (but we don't want to persist SAS's)
+	}
+
+	// Work directly with a string-based format, so that we get both snapshot identifiers AND any other unparsed params
+	// (types like BlobUrlParts handle those two things in separate properties, but return them together in the query string)
+	i := strings.Index(resource, "?") // only the first ? is syntactically significant in a URL
+	if i < 0 {
+		return resource, ""
+	} else if i == len(resource)-1 {
+		return resource[:i], ""
+	} else {
+		return resource[:i], resource[i+1:]
+	}
+}
+
 // All of the below functions only really do one thing at the moment.
 // They've been separated from copyEnumeratorInit.go in order to make the code more maintainable, should we want more destinations in the future.
 func getPathBeforeFirstWildcard(path string) string {

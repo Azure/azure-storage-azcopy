@@ -74,8 +74,14 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	if len(order.SourceRoot) > len(JobPartPlanHeader{}.SourceRoot) {
 		panic(fmt.Errorf("source root string is too large: %q", order.SourceRoot))
 	}
+	if len(order.SourceExtraQuery) > len(JobPartPlanHeader{}.SourceExtraQuery) {
+		panic(fmt.Errorf("source extra query strings too large: %q", order.SourceExtraQuery))
+	}
 	if len(order.DestinationRoot) > len(JobPartPlanHeader{}.DestinationRoot) {
 		panic(fmt.Errorf("destination root string is too large: %q", order.DestinationRoot))
+	}
+	if len(order.DestExtraQuery) > len(JobPartPlanHeader{}.DestExtraQuery) {
+		panic(fmt.Errorf("destination extra query strings too large: %q", order.DestExtraQuery))
 	}
 	if len(order.BlobAttributes.ContentType) > len(JobPartPlanDstBlob{}.ContentType) {
 		panic(fmt.Errorf("content type string is too large: %q", order.BlobAttributes.ContentType))
@@ -147,22 +153,24 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	//}
 	// Initialize the Job Part's Plan header
 	jpph := JobPartPlanHeader{
-		Version:               DataSchemaVersion,
-		StartTime:             time.Now().UnixNano(),
-		JobID:                 order.JobID,
-		PartNum:               order.PartNum,
-		SourceRootLength:      uint16(len(order.SourceRoot)),
-		DestinationRootLength: uint16(len(order.DestinationRoot)),
-		IsFinalPart:           order.IsFinalPart,
-		ForceWrite:            order.ForceWrite,
-		AutoDecompress:        order.AutoDecompress,
-		Priority:              order.Priority,
-		TTLAfterCompletion:    uint32(time.Time{}.Nanosecond()),
-		FromTo:                order.FromTo,
-		Fpo:                   order.Fpo,
-		CommandStringLength:   uint32(len(order.CommandString)),
-		NumTransfers:          uint32(len(order.Transfers)),
-		LogLevel:              order.LogLevel,
+		Version:                DataSchemaVersion,
+		StartTime:              time.Now().UnixNano(),
+		JobID:                  order.JobID,
+		PartNum:                order.PartNum,
+		SourceRootLength:       uint16(len(order.SourceRoot)),
+		SourceExtraQueryLength: uint16(len(order.SourceExtraQuery)),
+		DestinationRootLength:  uint16(len(order.DestinationRoot)),
+		DestExtraQueryLength:   uint16(len(order.DestExtraQuery)),
+		IsFinalPart:            order.IsFinalPart,
+		ForceWrite:             order.ForceWrite,
+		AutoDecompress:         order.AutoDecompress,
+		Priority:               order.Priority,
+		TTLAfterCompletion:     uint32(time.Time{}.Nanosecond()),
+		FromTo:                 order.FromTo,
+		Fpo:                    order.Fpo,
+		CommandStringLength:    uint32(len(order.CommandString)),
+		NumTransfers:           uint32(len(order.Transfers)),
+		LogLevel:               order.LogLevel,
 		DstBlobData: JobPartPlanDstBlob{
 			BlobType:                 order.BlobAttributes.BlobType,
 			NoGuessMimeType:          order.BlobAttributes.NoGuessMimeType,
@@ -193,7 +201,9 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 
 	// Copy any strings into their respective fields
 	copy(jpph.SourceRoot[:], order.SourceRoot)
+	copy(jpph.SourceExtraQuery[:], order.SourceExtraQuery)
 	copy(jpph.DestinationRoot[:], order.DestinationRoot)
+	copy(jpph.DestExtraQuery[:], order.DestExtraQuery)
 	copy(jpph.DstBlobData.ContentType[:], order.BlobAttributes.ContentType)
 	copy(jpph.DstBlobData.ContentEncoding[:], order.BlobAttributes.ContentEncoding)
 	copy(jpph.DstBlobData.ContentLanguage[:], order.BlobAttributes.ContentLanguage)

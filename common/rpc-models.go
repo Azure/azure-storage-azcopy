@@ -52,13 +52,17 @@ type CopyJobPartOrderRequest struct {
 	Fpo            FolderPropertyOption // passed in from front-end to ensure that front-end and STE agree on the desired behaviour for the job
 	// list of blobTypes to exclude.
 	ExcludeBlobType []azblob.BlobType
-	SourceRoot      string
-	DestinationRoot string
-	Transfers       []CopyTransfer
-	LogLevel        LogLevel
-	BlobAttributes  BlobTransferAttributes
-	SourceSAS       string
-	DestinationSAS  string
+
+	SourceRoot       string
+	SourceExtraQuery string // extra query params (that are not part of SAS) that should be included in the source URLs
+	DestinationRoot  string
+	DestExtraQuery   string // not sure this is needed by any real-world scenarios, but included for symmetry with SourceExtraQuery
+
+	Transfers      []CopyTransfer
+	LogLevel       LogLevel
+	BlobAttributes BlobTransferAttributes
+	SourceSAS      string
+	DestinationSAS string
 	// commandString hold the user given command which is logged to the Job log file
 	CommandString  string
 	CredentialInfo CredentialInfo

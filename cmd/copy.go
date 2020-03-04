@@ -952,7 +952,12 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	jobPartOrder.SourceSAS = cca.sourceSAS
-	jobPartOrder.SourceRoot, err = GetResourceRoot(cca.source, from)
+	fullSourceRoot, err := GetResourceRoot(cca.source, from)
+	if err != nil {
+		return err
+	}
+	jobPartOrder.SourceRoot, jobPartOrder.SourceExtraQuery =
+		SplitQueryFromSaslessResource(fullSourceRoot, from)
 
 	// Stripping the trailing /* for local occurs much later than stripping the trailing /* for remote resources.
 	// TODO: Move these into the same place for maintainability.
@@ -964,17 +969,14 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		cca.stripTopDir = true
 	}
 
-	if err != nil {
-		return err
-	}
-
 	cca.destination, cca.destinationSAS, err = SplitAuthTokenFromResource(cca.destination, to)
-	jobPartOrder.DestinationSAS = cca.destinationSAS
-	jobPartOrder.DestinationRoot = cca.destination
-
 	if err != nil {
 		return err
 	}
+
+	jobPartOrder.DestinationSAS = cca.destinationSAS
+	jobPartOrder.DestinationRoot, jobPartOrder.DestExtraQuery =
+		SplitQueryFromSaslessResource(cca.destination, to)
 
 	// depending on the source and destination type, we process the cp command differently
 	// Create enumerator and do enumerating
