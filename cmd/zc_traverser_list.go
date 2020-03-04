@@ -96,10 +96,11 @@ func newListTraverser(parent common.ResourceString, parentType common.Location, 
 		if parentType != common.ELocation.Local() {
 			// assume child path is not URL-encoded yet, this is consistent with the behavior of previous implementation
 			childURL, _ := url.Parse(parent.Value)
-			source.Value = common.GenerateFullPath(childURL.Path, relativeChildPath)
+			childURL.Path = common.GenerateFullPath(childURL.Path, relativeChildPath)
+			source.Value = childURL.String()
 		} else {
 			// is local, only generate the full path
-			source.Value = common.GenerateFullPath(parent.Value, relativeChildPath)
+			source.Value = common.GenerateFullPath(parent.ValueLocal(), relativeChildPath)
 		}
 
 		// Construct a traverser that goes through the child
