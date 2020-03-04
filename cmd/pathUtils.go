@@ -192,6 +192,8 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 			return resource, "", nil // don't mess with the special dev-null path, at all
 		}
 		return cleanLocalPath(common.ToExtendedPath(resource)), "", nil
+	case common.ELocation.Pipe():
+		return resource, "", nil
 	case common.ELocation.S3():
 		// Encoding +s as %20 (space) is important in S3 URLs as this is unsupported in Azure (but %20 can still be used as a space in S3 URLs)
 		var baseURL *url.URL
