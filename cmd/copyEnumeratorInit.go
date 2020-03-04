@@ -421,48 +421,74 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName, dstWithSAS strin
 	return
 }
 
-func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool, object storedObject) (relativePath string) {
-	var pathEncodeRules = func(path string) string {
-		loc := common.ELocation.Unknown()
+// Because some invalid characters weren't being properly encoded by url.PathEscape, we're going to instead manually encode them.
+var encodedInvalidCharacters = map[rune]string{
+	0x00: "%00",
+	'<':  "%3C",
+	'>':  "%3E",
+	'\\': "%5C",
+	'/':  "%2F",
+	':':  "%3A",
+	'"':  "%22",
+	'|':  "%7C",
+	'?':  "%3F",
+	'*':  "%2A",
+}
 
-		if source {
-			loc = cca.fromTo.From()
-		} else {
-			loc = cca.fromTo.To()
-		}
-		pathParts := strings.Split(path, common.AZCOPY_PATH_SEPARATOR_STRING)
+var reverseEncodedChars = map[string]rune{
+	"%00": 0x00,
+	"%3C": '<',
+	"%3E": '>',
+	"%5C": '\\',
+	"%2F": '/',
+	"%3A": ':',
+	"%22": '"',
+	"%7C": '|',
+	"%3F": '?',
+	"%2A": '*',
+}
 
-		// If downloading on Windows or uploading to files, encode unsafe characters.
-		if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") || (!source && loc == common.ELocation.File()) {
-			invalidChars := `<>\/:"|?*` + string(0x00)
+func pathEncodeRules(path string, fromTo common.FromTo, source bool) string {
+	loc := common.ELocation.Unknown()
 
-			for _, c := range strings.Split(invalidChars, "") {
-				for k, p := range pathParts {
-					pathParts[k] = strings.ReplaceAll(p, c, url.PathEscape(c))
-				}
+	if source {
+		loc = fromTo.From()
+	} else {
+		loc = fromTo.To()
+	}
+	pathParts := strings.Split(path, common.AZCOPY_PATH_SEPARATOR_STRING)
+
+	// If downloading on Windows or uploading to files, encode unsafe characters.
+	if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") || (!source && loc == common.ELocation.File()) {
+		// invalidChars := `<>\/:"|?*` + string(0x00)
+
+		for k, c := range encodedInvalidCharacters {
+			for part, p := range pathParts {
+				pathParts[part] = strings.ReplaceAll(p, string(k), c)
 			}
-
-			// If uploading from Windows or downloading from files, decode unsafe chars
-		} else if (!source && cca.fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") || (!source && cca.fromTo.From() == common.ELocation.File()) {
-			invalidChars := `<>\/:"|?*` + string(0x00)
-
-			for _, c := range strings.Split(invalidChars, "") {
-				for k, p := range pathParts {
-					pathParts[k] = strings.ReplaceAll(p, url.PathEscape(c), c)
-				}
-			}
 		}
 
-		if loc.IsRemote() {
+		// If uploading from Windows or downloading from files, decode unsafe chars
+	} else if (!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") || (!source && fromTo.From() == common.ELocation.File()) {
+
+		for encoded, c := range reverseEncodedChars {
 			for k, p := range pathParts {
-				pathParts[k] = url.PathEscape(p)
+				pathParts[k] = strings.ReplaceAll(p, encoded, string(c))
 			}
 		}
-
-		path = strings.Join(pathParts, "/")
-		return path
 	}
 
+	if loc.IsRemote() {
+		for k, p := range pathParts {
+			pathParts[k] = url.PathEscape(p)
+		}
+	}
+
+	path = strings.Join(pathParts, "/")
+	return path
+}
+
+func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool, object storedObject) (relativePath string) {
 	// write straight to /dev/null, do not determine a indirect path
 	if !source && cca.destination == common.Dev_Null {
 		return "" // ignore path encode rules
@@ -485,7 +511,7 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 			}
 		}
 
-		return pathEncodeRules(relativePath)
+		return pathEncodeRules(relativePath, cca.fromTo, source)
 	}
 
 	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true
@@ -518,7 +544,7 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 		relativePath = "/" + rootDir + relativePath
 	}
 
-	return pathEncodeRules(relativePath)
+	return pathEncodeRules(relativePath, cca.fromTo, source)
 }
 
 func newFolderPropertyOption(bothFolderAware bool, recursive bool, stripTopDir bool, filters []objectFilter) (common.FolderPropertyOption, string) {

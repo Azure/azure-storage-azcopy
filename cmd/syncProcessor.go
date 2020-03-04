@@ -68,13 +68,10 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 	reportFirstPart := func(jobStarted bool) { cca.setFirstPartOrdered() } // for compatibility with the way sync has always worked, we don't check jobStarted here
 	reportFinalPart := func() { cca.isEnumerationComplete = true }
 
-	shouldEncodeSource := cca.fromTo.From().IsRemote()
-	shouldEncodeDestination := cca.fromTo.To().IsRemote()
-
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
 	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.source, cca.destination,
-		shouldEncodeSource, shouldEncodeDestination, reportFirstPart, reportFinalPart, cca.preserveAccessTier)
+		reportFirstPart, reportFinalPart, cca.preserveAccessTier)
 }
 
 // base for delete processors targeting different resources
