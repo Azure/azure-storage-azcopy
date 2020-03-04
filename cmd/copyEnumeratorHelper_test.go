@@ -30,15 +30,11 @@ type copyEnumeratorHelperTestSuite struct{}
 var _ = chk.Suite(&copyEnumeratorHelperTestSuite{})
 
 func newLocalRes(path string) common.ResourceString {
-	r, err := SplitResourceString(path, common.ELocation.Local())
-	if err != nil {
-		panic("can't parse resource string")
-	}
-	return r
+	return common.ResourceString{Value: path}
 }
 
-func newRemoteRes(path string) common.ResourceString {
-	r, err := SplitResourceString(path, common.ELocation.Blob())
+func newRemoteRes(url string) common.ResourceString {
+	r, err := SplitResourceString(url, common.ELocation.Blob())
 	if err != nil {
 		panic("can't parse resource string")
 	}
