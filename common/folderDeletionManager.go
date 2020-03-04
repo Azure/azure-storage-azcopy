@@ -44,9 +44,9 @@ type FolderDeletionFunc func(context.Context, ILogger) bool
 // don't support Windows & MacOS local paths (which have cases insensitivity that we don't support here).
 type FolderDeletionManager interface {
 
-	// RecordChildExists takes a child name and records it counts it against the child's immediate parent
+	// RecordChildExists takes a child name and counts it against the child's immediate parent
 	// Should be called for both types of child: folders and files.
-	// Only counts it against the immediate parent (that's all that's necessary)
+	// Only counts it against the immediate parent (that's all that's necessary, because we recurse in tryDeletion)
 	RecordChildExists(childFileOrFolder *url.URL)
 
 	// RecordChildDelete records that a file, previously passed to RecordChildExists, has now been deleted
@@ -164,7 +164,7 @@ func (s *standardFolderDeletionManager) RecordChildDeleted(childFile *url.URL) {
 	}
 	folderStatePtr.childCount--
 	if folderStatePtr.childCount < 0 {
-		// should never happen. If it does it means someone called RequestDeletion and Recorded a child as deleted, without every registering the child as known
+		// should never happen. If it does it means someone called RequestDeletion and Recorded a child as deleted, without ever registering the child as known
 		folderStatePtr.childCount = 0
 	}
 	deletionFunc := folderStatePtr.deleter
