@@ -22,10 +22,10 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/ste"
-	"net/url"
 
 	"github.com/pkg/errors"
+
+	"github.com/Azure/azure-storage-azcopy/ste"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -36,10 +36,6 @@ type copyTransferProcessor struct {
 	source                string
 	destination           string
 
-	// specify whether source/destination object names need to be URL encoded before dispatching
-	shouldEscapeSourceObjectName      bool
-	shouldEscapeDestinationObjectName bool
-
 	// handles for progress tracking
 	reportFirstPartDispatched func(jobStarted bool)
 	reportFinalPartDispatched func()
@@ -49,19 +45,17 @@ type copyTransferProcessor struct {
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
-	source string, destination string, shouldEscapeSourceObjectName bool, shouldEscapeDestinationObjectName bool,
+	source string, destination string,
 	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool) *copyTransferProcessor {
 	return &copyTransferProcessor{
-		numOfTransfersPerPart:             numOfTransfersPerPart,
-		copyJobTemplate:                   copyJobTemplate,
-		source:                            source,
-		destination:                       destination,
-		shouldEscapeSourceObjectName:      shouldEscapeSourceObjectName,
-		shouldEscapeDestinationObjectName: shouldEscapeDestinationObjectName,
-		reportFirstPartDispatched:         reportFirstPartDispatched,
-		reportFinalPartDispatched:         reportFinalPartDispatched,
-		preserveAccessTier:                preserveAccessTier,
-		folderPropertiesOption:            copyJobTemplate.Fpo,
+		numOfTransfersPerPart:     numOfTransfersPerPart,
+		copyJobTemplate:           copyJobTemplate,
+		source:                    source,
+		destination:               destination,
+		reportFirstPartDispatched: reportFirstPartDispatched,
+		reportFinalPartDispatched: reportFinalPartDispatched,
+		preserveAccessTier:        preserveAccessTier,
+		folderPropertiesOption:    copyJobTemplate.Fpo,
 	}
 }
 
@@ -74,8 +68,8 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 
 	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(
 		false, // sync has no --decompress option
-		s.escapeIfNecessary(srcRelativePath, s.shouldEscapeSourceObjectName),
-		s.escapeIfNecessary(dstRelativePath, s.shouldEscapeDestinationObjectName),
+		srcRelativePath,
+		dstRelativePath,
 		s.preserveAccessTier,
 		s.folderPropertiesOption,
 	)
@@ -102,14 +96,6 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 	s.copyJobTemplate.Transfers = append(s.copyJobTemplate.Transfers, copyTransfer)
 
 	return nil
-}
-
-func (s *copyTransferProcessor) escapeIfNecessary(path string, shouldEscape bool) string {
-	if shouldEscape {
-		return url.PathEscape(path)
-	}
-
-	return path
 }
 
 var NothingScheduledError = errors.New("no transfers were scheduled because no files matched the specified criteria")
