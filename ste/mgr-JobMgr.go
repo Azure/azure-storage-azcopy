@@ -152,6 +152,7 @@ func (jm *jobMgr) logConcurrencyParameters() {
 type jobMgrInitState struct {
 	securityInfoPersistenceManager *securityInfoPersistenceManager
 	folderCreationTracker          common.FolderCreationTracker
+	folderDeletionManager          common.FolderDeletionManager
 }
 
 // jobMgr represents the runtime information for a Job
@@ -332,9 +333,11 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 	jm.initMu.Lock()
 	defer jm.initMu.Unlock()
 	if jm.initState == nil {
+		var logger common.ILogger = jm
 		jm.initState = &jobMgrInitState{
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
 			folderCreationTracker:          common.NewFolderCreationTracker(jpm.Plan().Fpo),
+			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
 		}
 	}
 	jpm.jobMgrInitState = jm.initState // so jpm can use it as much as desired without locking (since the only mutation is the init in jobManager. As far as jobPartManager is concerned, the init state is read-only

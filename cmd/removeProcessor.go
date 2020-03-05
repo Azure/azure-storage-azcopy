@@ -25,12 +25,12 @@ import (
 )
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
-func newRemoveTransferProcessor(cca *cookedCopyCmdArgs, numOfTransfersPerPart int) *copyTransferProcessor {
+func newRemoveTransferProcessor(cca *cookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption) *copyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:         cca.jobID,
 		CommandString: cca.commandString,
 		FromTo:        cca.fromTo,
-		Fpo:           common.EFolderPropertiesOption.NoFolders(), // currently we don't offer any special folder-aware processing for remove (except for BlobFS removes, which are implemented separately as at early 2020)
+		Fpo:           fpo,
 		SourceRoot:    consolidatePathSeparators(cca.source),
 
 		// authentication related

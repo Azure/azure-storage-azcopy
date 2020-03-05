@@ -83,14 +83,15 @@ type IJobPartTransferMgr interface {
 	common.ILogger
 	DeleteSnapshotsOption() common.DeleteSnapshotsOption
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
+	FolderDeletionManager() common.FolderDeletionManager
 }
 
 type TransferInfo struct {
-	BlockSize   uint32
-	Source      string
-	SourceSize  int64
-	Destination string
-	EntityType  common.EntityType
+	BlockSize        uint32
+	Source           string
+	SourceSize       int64
+	Destination      string
+	EntityType       common.EntityType
 	PreserveNTFSACLs bool
 
 	// Transfer info for S2S copy
@@ -801,4 +802,8 @@ func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {
 
 func (jptm *jobPartTransferMgr) SecurityInfoPersistenceManager() *securityInfoPersistenceManager {
 	return jptm.jobPartMgr.SecurityInfoPersistenceManager()
+}
+
+func (jptm *jobPartTransferMgr) FolderDeletionManager() common.FolderDeletionManager {
+	return jptm.jobPartMgr.FolderDeletionManager()
 }

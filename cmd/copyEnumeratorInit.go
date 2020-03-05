@@ -201,7 +201,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.fromTo.AreBothFolderAware(), cca.recursive, cca.stripTopDir, filters)
+	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters)
 	glcm.Info(message)
 	if ste.JobsAdmin != nil {
 		ste.JobsAdmin.LogToJobLog(message)
@@ -547,11 +547,13 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 	return pathEncodeRules(relativePath, cca.fromTo, source)
 }
 
-func newFolderPropertyOption(bothFolderAware bool, recursive bool, stripTopDir bool, filters []objectFilter) (common.FolderPropertyOption, string) {
-	if bothFolderAware {
+func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir bool, filters []objectFilter) (common.FolderPropertyOption, string) {
+	bothFolderAware := fromTo.AreBothFolderAware()
+	isRemoveFromFolderAware := fromTo == common.EFromTo.FileTrash()
+	if bothFolderAware || isRemoveFromFolderAware {
 		if !recursive {
 			return common.EFolderPropertiesOption.NoFolders(), // does't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
-				"Any empty folders will not be transferred, because --recursive was not specified"
+				"Any empty folders will not be processed, because --recursive was not specified"
 		}
 
 		// check filters. Otherwise, if filter was say --include-pattern *.txt, we would transfer properties
@@ -565,10 +567,13 @@ func newFolderPropertyOption(bothFolderAware bool, recursive bool, stripTopDir b
 		}
 		if !filtersOK {
 			return common.EFolderPropertiesOption.NoFolders(),
-				"Any empty folders will not be transferred, because a file-focused filter is applied."
+				"Any empty folders will not be processed, because a file-focused filter is applied."
 		}
 
-		message := "Any empty folders will be transferred, because source and destination both support folders"
+		message := "Any empty folders will be processed, because source and destination both support folders"
+		if isRemoveFromFolderAware {
+			message = "Any empty folders will be processed, because deletion is from a folder-aware location"
+		}
 		if stripTopDir {
 			return common.EFolderPropertiesOption.AllFoldersExceptRoot(), message
 		} else {
@@ -577,5 +582,5 @@ func newFolderPropertyOption(bothFolderAware bool, recursive bool, stripTopDir b
 	}
 
 	return common.EFolderPropertiesOption.NoFolders(),
-		"Any empty folders will not be transferred, because source and/or destination doesn't have full folder support"
+		"Any empty folders will not be processed, because source and/or destination doesn't have full folder support"
 }
