@@ -78,7 +78,7 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorMultipleFiles(c *chk.C)
 	for _, numOfParts := range []int{1, 3} {
 		numOfTransfersPerPart := len(sampleObjects) / numOfParts
 		copyProcessor := newCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), numOfTransfersPerPart,
-			containerURL.String(), dstDirName, false, false, nil, nil, false)
+			newRemoteRes(containerURL.String()), newLocalRes(dstDirName), nil, nil, false)
 
 		// go through the objects and make sure they are processed without error
 		for _, storedObject := range sampleObjects {
