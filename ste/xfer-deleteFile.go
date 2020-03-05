@@ -79,9 +79,11 @@ func doDeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		if status == common.ETransferStatus.Success() {
 			jptm.FolderDeletionManager().RecordChildDeleted(srcUrl)
 			// TODO: doing this only on success raises the possibility of the
-			//   FolderDeletionManager's internal may growing rather large if there are lots of failures
+			//   FolderDeletionManager's internal map growing rather large if there are lots of failures
 			//   on a big folder tree. Is living with that preferable to the "incorrectness" of calling
 			//   RecordChildDeleted when it wasn't actually deleted.  Yes, probably.  But think about it a bit more.
+			//	 We'll favor correctness over memory-efficiency for now, and leave the code as it is.
+			//   If we find that memory usage is an issue in cases with lots of failures, we can revisit in the future.
 		}
 		if jptm.ShouldLog(pipeline.LogInfo) {
 			if status == common.ETransferStatus.Failed() {

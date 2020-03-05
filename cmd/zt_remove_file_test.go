@@ -76,8 +76,10 @@ func (s *cmdIntegrationSuite) TestRemoveFilesUnderShare(c *chk.C) {
 	raw := getDefaultRemoveRawInput(rawShareURLWithSAS.String())
 	raw.recursive = true
 
-	includeRootInTransfers := true // this is our current behaviour (schedule it, but STE does nothing for that removal transfer).
-	// TODO: review
+	// this is our current behaviour (schedule it, but STE does nothing for
+	// any attempt to remove the share root. It will remove roots that are _directories_,
+	// i.e. not the file share itself).
+	includeRootInTransfers := true
 
 	expectedRemovals := scenarioHelper{}.addFoldersToList(fileList, includeRootInTransfers)
 
