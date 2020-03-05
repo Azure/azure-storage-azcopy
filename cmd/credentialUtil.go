@@ -257,53 +257,6 @@ type rawFromToInfo struct {
 	sourceSAS, destinationSAS string // Standalone SAS which might be provided
 }
 
-func getCredentialInfoForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool) (credInfo common.CredentialInfo, isPublic bool, err error) {
-	if resourceSAS != "" {
-		credInfo.CredentialType = common.ECredentialType.Anonymous()
-	} else if credInfo.CredentialType = GetCredTypeFromEnvVar(); credInfo.CredentialType == common.ECredentialType.Unknown() {
-		switch location {
-		case common.ELocation.Local(), common.ELocation.Benchmark():
-			credInfo.CredentialType = common.ECredentialType.Anonymous()
-		case common.ELocation.Blob():
-			if credInfo.CredentialType, isPublic, err = getBlobCredentialType(ctx, resource, isSource, resourceSAS != ""); err != nil {
-				return common.CredentialInfo{}, false, err
-			}
-		case common.ELocation.File():
-			if credInfo.CredentialType, err = getAzureFileCredentialType(); err != nil {
-				return common.CredentialInfo{}, false, err
-			}
-		case common.ELocation.BlobFS():
-			if credInfo.CredentialType, err = getBlobFSCredentialType(ctx, resource, resourceSAS != ""); err != nil {
-				return common.CredentialInfo{}, false, err
-			}
-		case common.ELocation.S3():
-			accessKeyID := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
-			secretAccessKey := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSSecretAccessKey())
-			if accessKeyID == "" || secretAccessKey == "" {
-				return common.CredentialInfo{}, false, errors.New("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables must be set before creating the S3 AccessKey credential")
-			}
-			credInfo.CredentialType = common.ECredentialType.S3AccessKey()
-		}
-	}
-
-	if err = checkAuthSafeForTarget(credInfo.CredentialType, resource); err != nil {
-		return common.CredentialInfo{}, false, err
-	}
-
-	if credInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		uotm := GetUserOAuthTokenManagerInstance()
-
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return credInfo, false, err
-		} else {
-			credInfo.OAuthTokenInfo = *tokenInfo
-		}
-	}
-
-	logAuthType(credInfo.CredentialType, resource)
-	return
-}
-
 // checkAuthSafeForTarget checks our "implicit" auth types (those that pick up creds from the environment
 // or a prior login) to make sure they are only being used in places where we know those auth types are safe.
 // This prevents, for example, us accidentally sending OAuth creds to some place they don't belong
@@ -372,6 +325,53 @@ func logAuthType(ct common.CredentialType, resource string) {
 	glcm.Info(message)
 }
 
+func getCredentialInfoForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool) (credInfo common.CredentialInfo, isPublic bool, err error) {
+	if resourceSAS != "" {
+		credInfo.CredentialType = common.ECredentialType.Anonymous()
+	} else if credInfo.CredentialType = GetCredTypeFromEnvVar(); credInfo.CredentialType == common.ECredentialType.Unknown() {
+		switch location {
+		case common.ELocation.Local(), common.ELocation.Benchmark():
+			credInfo.CredentialType = common.ECredentialType.Anonymous()
+		case common.ELocation.Blob():
+			if credInfo.CredentialType, isPublic, err = getBlobCredentialType(ctx, resource, isSource, resourceSAS != ""); err != nil {
+				return common.CredentialInfo{}, false, err
+			}
+		case common.ELocation.File():
+			if credInfo.CredentialType, err = getAzureFileCredentialType(); err != nil {
+				return common.CredentialInfo{}, false, err
+			}
+		case common.ELocation.BlobFS():
+			if credInfo.CredentialType, err = getBlobFSCredentialType(ctx, resource, resourceSAS != ""); err != nil {
+				return common.CredentialInfo{}, false, err
+			}
+		case common.ELocation.S3():
+			accessKeyID := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
+			secretAccessKey := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSSecretAccessKey())
+			if accessKeyID == "" || secretAccessKey == "" {
+				return common.CredentialInfo{}, false, errors.New("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables must be set before creating the S3 AccessKey credential")
+			}
+			credInfo.CredentialType = common.ECredentialType.S3AccessKey()
+		}
+	}
+
+	if err = checkAuthSafeForTarget(credInfo.CredentialType, resource); err != nil {
+		return common.CredentialInfo{}, false, err
+	}
+
+	if credInfo.CredentialType == common.ECredentialType.OAuthToken() {
+		uotm := GetUserOAuthTokenManagerInstance()
+
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+			return credInfo, false, err
+		} else {
+			credInfo.OAuthTokenInfo = *tokenInfo
+		}
+	}
+
+	logAuthType(credInfo.CredentialType, resource)
+	return
+}
+
 // getCredentialType checks user provided info, and gets the proper credential type
 // for current command.
 // kept around for legacy compatibility at the moment
@@ -425,6 +425,8 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo) (credentialType c
 	}
 
 	return credentialType, nil
+}
+
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
