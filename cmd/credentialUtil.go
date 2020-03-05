@@ -325,39 +325,49 @@ func logAuthType(ct common.CredentialType, resource string) {
 	glcm.Info(message)
 }
 
-func getCredentialInfoForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool) (credInfo common.CredentialInfo, isPublic bool, err error) {
+func getCredentialTypeForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool) (credType common.CredentialType, isPublic bool, err error) {
 	if resourceSAS != "" {
-		credInfo.CredentialType = common.ECredentialType.Anonymous()
-	} else if credInfo.CredentialType = GetCredTypeFromEnvVar(); credInfo.CredentialType == common.ECredentialType.Unknown() || location == common.ELocation.S3() {
+		credType = common.ECredentialType.Anonymous()
+	} else if credType = GetCredTypeFromEnvVar(); credType == common.ECredentialType.Unknown() || location == common.ELocation.S3() {
 		switch location {
 		case common.ELocation.Local(), common.ELocation.Benchmark():
-			credInfo.CredentialType = common.ECredentialType.Anonymous()
+			credType = common.ECredentialType.Anonymous()
 		case common.ELocation.Blob():
-			if credInfo.CredentialType, isPublic, err = getBlobCredentialType(ctx, resource, isSource, resourceSAS != ""); err != nil {
-				return common.CredentialInfo{}, false, err
+			if credType, isPublic, err = getBlobCredentialType(ctx, resource, isSource, resourceSAS != ""); err != nil {
+				return common.ECredentialType.Unknown(), false, err
 			}
 		case common.ELocation.File():
-			if credInfo.CredentialType, err = getAzureFileCredentialType(); err != nil {
-				return common.CredentialInfo{}, false, err
+			if credType, err = getAzureFileCredentialType(); err != nil {
+				return common.ECredentialType.Unknown(), false, err
 			}
 		case common.ELocation.BlobFS():
-			if credInfo.CredentialType, err = getBlobFSCredentialType(ctx, resource, resourceSAS != ""); err != nil {
-				return common.CredentialInfo{}, false, err
+			if credType, err = getBlobFSCredentialType(ctx, resource, resourceSAS != ""); err != nil {
+				return common.ECredentialType.Unknown(), false, err
 			}
 		case common.ELocation.S3():
 			accessKeyID := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
 			secretAccessKey := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSSecretAccessKey())
 			if accessKeyID == "" || secretAccessKey == "" {
-				return common.CredentialInfo{}, false, errors.New("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables must be set before creating the S3 AccessKey credential")
+				return common.ECredentialType.Unknown(), false, errors.New("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables must be set before creating the S3 AccessKey credential")
 			}
-			credInfo.CredentialType = common.ECredentialType.S3AccessKey()
+			credType = common.ECredentialType.S3AccessKey()
 		}
 	}
 
-	if err = checkAuthSafeForTarget(credInfo.CredentialType, resource); err != nil {
-		return common.CredentialInfo{}, false, err
+	if err = checkAuthSafeForTarget(credType, resource); err != nil {
+		return common.ECredentialType.Unknown(), false, err
 	}
 
+	logAuthType(credType, resource)
+	return
+}
+
+func getCredentialInfoForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool) (credInfo common.CredentialInfo, isPublic bool, err error) {
+
+	// get the type
+	credInfo.CredentialType, isPublic, err = getCredentialTypeForLocation(ctx, location, resource, resourceSAS, isSource)
+
+	// flesh out the rest of the fields, for those types that require it
 	if credInfo.CredentialType == common.ECredentialType.OAuthToken() {
 		uotm := GetUserOAuthTokenManagerInstance()
 
@@ -366,65 +376,40 @@ func getCredentialInfoForLocation(ctx context.Context, location common.Location,
 		} else {
 			credInfo.OAuthTokenInfo = *tokenInfo
 		}
+	} else if credInfo.CredentialType == common.ECredentialType.S3AccessKey() {
+		// TODO didn't seem to be any code for this in the original getCredentialInfoForLocation
+		//   but presumably we need some, based only on the fact that there are fields in credInfo for S3 stuff ,but maybe
+		//   those fields are never used?
 	}
 
-	logAuthType(credInfo.CredentialType, resource)
 	return
 }
 
 // getCredentialType checks user provided info, and gets the proper credential type
 // for current command.
-// kept around for legacy compatibility at the moment
-func getCredentialType(ctx context.Context, raw rawFromToInfo) (credentialType common.CredentialType, err error) {
-	// In the integration case, AzCopy directly use caller provided credential type if specified and not Unknown.
-	if credType := GetCredTypeFromEnvVar(); credType != common.ECredentialType.Unknown() {
-		return credType, nil
-	}
+// TODO: consider replace with calls to getCredentialInfoForLocation
+// (right now, we have tweaked this to be a wrapper for that function, but really should remove this one totally)
+func getCredentialType(ctx context.Context, raw rawFromToInfo) (credType common.CredentialType, err error) {
 
-	// Could be using oauth session mode or non-oauth scenario which uses SAS authentication or public endpoint,
-	// verify credential type with cached token info, src or dest resource URL.
-	switch raw.fromTo {
-	case common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob():
-		// For blob/file to blob copy, calculate credential type for destination (currently only support StageBlockFromURL)
-		// If the traditional approach(download+upload) need be supported, credential type should be calculated for both src and dest.
-		fallthrough
-	case common.EFromTo.LocalBlob(), common.EFromTo.PipeBlob(), common.EFromTo.BenchmarkBlob():
-		if credentialType, _, err = getBlobCredentialType(ctx, raw.destination, false, raw.destinationSAS != ""); err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-	case common.EFromTo.BlobTrash():
-		// For BlobTrash direction, use source as resource URL, and it should not be public access resource.
-		if credentialType, _, err = getBlobCredentialType(ctx, raw.source, false, raw.sourceSAS != ""); err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-	case common.EFromTo.BlobFSTrash():
-		if credentialType, err = getBlobFSCredentialType(ctx, raw.source, raw.sourceSAS != ""); err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-	case common.EFromTo.BlobLocal(), common.EFromTo.BlobPipe():
-		if credentialType, _, err = getBlobCredentialType(ctx, raw.source, true, raw.sourceSAS != ""); err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-	case common.EFromTo.LocalBlobFS(), common.EFromTo.BenchmarkBlobFS():
-		if credentialType, err = getBlobFSCredentialType(ctx, raw.destination, raw.destinationSAS != ""); err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-	case common.EFromTo.BlobFSLocal():
-		if credentialType, err = getBlobFSCredentialType(ctx, raw.source, raw.sourceSAS != ""); err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-	case common.EFromTo.LocalFile(), common.EFromTo.FileLocal(), common.EFromTo.FileTrash(), common.EFromTo.FilePipe(), common.EFromTo.PipeFile(), common.EFromTo.BenchmarkFile(),
-		common.EFromTo.FileFile(), common.EFromTo.BlobFile():
-		if credentialType, err = getAzureFileCredentialType(); err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
+	switch {
+	case raw.fromTo.To().IsRemote():
+		// we authenticate to the destination. Source is assumed to be SAS, or public, or a local resource
+		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.To(), raw.destination, raw.destinationSAS, false)
+	case raw.fromTo == common.EFromTo.BlobTrash() ||
+		raw.fromTo == common.EFromTo.BlobFSTrash() ||
+		raw.fromTo == common.EFromTo.FileTrash():
+		// For to Trash direction, use source as resource URL
+		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, raw.sourceSAS, true)
+	case raw.fromTo.From().IsRemote() && raw.fromTo.To().IsLocal():
+		// we authenticate to the source.
+		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, raw.sourceSAS, true)
 	default:
-		credentialType = common.ECredentialType.Anonymous()
+		credType = common.ECredentialType.Anonymous()
 		// Log the FromTo types which getCredentialType hasn't solved, in case of miss-use.
 		glcm.Info(fmt.Sprintf("Use anonymous credential by default for from-to '%v'", raw.fromTo))
 	}
 
-	return credentialType, nil
+	return
 }
 
 // ==============================================================================================
