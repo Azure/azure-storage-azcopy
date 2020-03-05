@@ -403,8 +403,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersSkipped, 20)
-        self.assertEquals(x.TransfersCompleted, 0)
+        self.assertEquals(x.TransfersSkipped, "20")
+        self.assertEquals(x.TransfersCompleted, "0")
 
         # refresh the lmts of the source files so that they appear newer
         for filename in os.listdir(dir_n_files_path):
@@ -423,8 +423,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersSkipped, 0)
-        self.assertEquals(x.TransfersCompleted, 20)
+        self.assertEquals(x.TransfersSkipped, "0")
+        self.assertEquals(x.TransfersCompleted, "20")
 
     def test_overwrite_flag_set_to_if_source_new_download(self):
         # creating directory with 20 files in it.
@@ -454,8 +454,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersSkipped, 0)
-        self.assertEquals(x.TransfersCompleted, 20)
+        self.assertEquals(x.TransfersSkipped, "0")
+        self.assertEquals(x.TransfersCompleted, "20")
 
         # case 2: local files are newer
         # download the directory again with force flag set to ifSourceNewer.
@@ -471,8 +471,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersSkipped, 20)
-        self.assertEquals(x.TransfersCompleted, 0)
+        self.assertEquals(x.TransfersSkipped, "20")
+        self.assertEquals(x.TransfersCompleted, "0")
 
         # re-uploading the directory with 20 files in it, to refresh the lmts of the source
         time.sleep(2)
@@ -492,8 +492,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersSkipped, 0)
-        self.assertEquals(x.TransfersCompleted, 20)
+        self.assertEquals(x.TransfersSkipped, "0")
+        self.assertEquals(x.TransfersCompleted, "20")
 
     # test_upload_block_blob_include_flag tests the include flag in the upload scenario
     def test_upload_block_blob_include_flag(self):
