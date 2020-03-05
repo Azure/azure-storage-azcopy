@@ -1,19 +1,28 @@
 
 # Change Log
+
 ## Version 10.4
 
 ### New features
 
-1. `azcopy copy` and `azcopy sync` now supports the persistence of ACLs between supported resources (Windows and Azure Files at the moment) using the --persist-ntfs-acls flag.
-1. AzCopy can now transfer empty folders, and transfer the properties of folders. This applies when both the source 
-   and destination support real folders (Blob Storage does not, because it only supports virtual folders).  Status output
-   from AzCopy jobs, `jobs list` and `jobs status`, now contain information about folders.  This includes new properties in the JSON
-   output of copy, sync, list and jobs status commands, when `--output-type json` is used.
-   
+1. `azcopy copy` and `azcopy sync` now supports the persistence of ACLs between supported resources (Windows and Azure Files at the moment) using the --persist-smb-acls (**name TBC**) flag.
+1. AzCopy can now transfer empty folders, and also (**coming in 10.4 GA**) transfer the properties of folders. This applies when both the source 
+and destination support real folders (Blob Storage does not, because it only supports virtual folders).
+1. Status output from AzCopy `copy`, `sync`, `jobs list`, and `jobs status` now contains information about folders.
+   This includes new properties in the JSON output of copy, sync, list and jobs status commands, when `--output-type
+   json` is used.
+1. Empty folders are deleted when using `azcopy rm` on Azure Files.
+1. Snapshots of Azure File Shares are supported, for read-only access, in `copy`,`sync` and `list`. To use, add a
+   `sharesnapshot` parameter at end of URL for your Azure Files source. Remember to separate it from the existing query
+   string parameters (i.e. the SAS token) with a `&`.  E.g.
+   `https://<youraccount>.file.core.windows.net/sharename?st=2020-03-03T20%3A53%3A48Z&se=2020-03-04T20%3A53%3A48Z&sp=rl&sv=2018-03-28&sr=s&sig=REDACTED&sharesnapshot=2020-03-03T20%3A24%3A13.0000000Z`
+1. Benchmark mode is now supported for Azure Files and ADLS Gen 2 (in addition to the existing benchmark supoprt for
+   Blob Storage).
+
 ### Special notes
 
 1. AzCopy has upgraded to service revision `2019-02-02`. Users targeting local emulators, Azure Stack, or other private/special instances of Azure Storage may need to intentionally downgrade their service revision using the environment variable `AZCOPY_DEFAULT_SERVICE_API_VERSION`. Prior to this release, the default service revision was `2018-03-28`.
-1. For Azure Files to Azure Files transfers, --persist-ntfs-acls is available on non-Windows OSes.
+1. For Azure Files to Azure Files transfers, --persist-smb-acls (**name TBC**) is available on non-Windows OSes. 
 
 ### Breaking changes
 
@@ -21,7 +30,20 @@
    all the numbers in the JSON output have been converted to strings (i.e. with quotes around them).
 1. The TransferStatus value `SkippedFileAlreadyExists` has been renamed `SkippedEntityExists` and may now be used both 
    for when files are skipped and for when the setting of folder properties is skipped.  This affects the input and 
-   output of `azcopy jobs show` and the status values shown in the JSON output format.
+   output of `azcopy jobs show` and the status values shown in the JSON output format from `copy` and `sync`.
+
+### Bug fixes
+
+1. Sources and destinations that are identified by their IPv4 address can now be used. This enables usage with storage
+   emulators.  Note that the `from-to` flag is typically needed when using such sources or destinations. E.g. `--from-to
+   BlobLocal` if downloading from a blob storage emulator to local disk.
+1. Filenames containing the character `:` can now safely be downloaded on Windows and uploaded to Azure Files
+1. Objects with names containing `+` can now safely be used in imported S3 object names
+1. The `check-length` flag is now exposed in benchmark mode, so that length checking can be turned off for more speed,
+   when benchmarking with small file sizes. (When using large file sizes, the overhead of the length check is
+   insignificant.)
+1. The in-app documentation for Service Principal Authentication has been corrected, to now include the application-id
+   parameter.
 
 ## Version 10.3.4
 
