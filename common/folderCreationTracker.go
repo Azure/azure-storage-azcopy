@@ -68,6 +68,7 @@ func (f *simpleFolderTracker) ShouldSetProperties(folder string, overwrite Overw
 	case EOverwriteOption.True():
 		return true
 	case EOverwriteOption.Prompt(), // "prompt" is treated as "false" because otherwise we'd have to display, and maintain state for, two different prompts - one for folders and one for files, since its too hard to find wording for ONE prompt to cover both cases. (And having two prompts would confuse users).
+		EOverwriteOption.IfSourceNewer(), // likewise "if source newer" is treated as "false"
 		EOverwriteOption.False():
 
 		f.mu.Lock()

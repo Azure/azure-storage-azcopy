@@ -105,8 +105,32 @@ func (u *blobFSSenderBase) NumChunks() uint32 {
 	return u.numChunks
 }
 
-func (u *blobFSSenderBase) RemoteFileExists() (bool, error) {
-	return remoteObjectExists(u.fileURL().GetProperties(u.jptm.Context()))
+// simply provides the parse lmt from the path properties
+// TODO it's not the best solution as usually the SDK should provide the time in parsed format already
+type blobFSLastModifiedTimeProvider struct {
+	lmt time.Time
+}
+
+func (b blobFSLastModifiedTimeProvider) LastModified() time.Time {
+	return b.lmt
+}
+
+func newBlobFSLastModifiedTimeProvider(props *azbfs.PathGetPropertiesResponse) blobFSLastModifiedTimeProvider {
+	var lmt time.Time
+	// parse the lmt if the props is not empty
+	if props != nil {
+		parsedLmt, err := time.Parse(time.RFC1123, props.LastModified())
+		if err == nil {
+			lmt = parsedLmt
+		}
+	}
+
+	return blobFSLastModifiedTimeProvider{lmt: lmt}
+}
+
+func (u *blobFSSenderBase) RemoteFileExists() (bool, time.Time, error) {
+	props, err := u.fileURL().GetProperties(u.jptm.Context())
+	return remoteObjectExists(newBlobFSLastModifiedTimeProvider(props), err)
 }
 
 func (u *blobFSSenderBase) Prologue(state common.PrologueState) (destinationModified bool) {

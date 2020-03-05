@@ -100,7 +100,7 @@ func (s *appendBlobSenderBase) NumChunks() uint32 {
 	return s.numChunks
 }
 
-func (s *appendBlobSenderBase) RemoteFileExists() (bool, error) {
+func (s *appendBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
 	return remoteObjectExists(s.destAppendBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}))
 }
 

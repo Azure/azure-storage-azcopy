@@ -152,7 +152,7 @@ func (s *pageBlobSenderBase) NumChunks() uint32 {
 	return s.numChunks
 }
 
-func (s *pageBlobSenderBase) RemoteFileExists() (bool, error) {
+func (s *pageBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
 	return remoteObjectExists(s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}))
 }
 

@@ -1,6 +1,5 @@
 
 # Change Log
-
 ## Version 10.4
 
 ### New features
@@ -23,6 +22,16 @@
 1. The TransferStatus value `SkippedFileAlreadyExists` has been renamed `SkippedEntityExists` and may now be used both 
    for when files are skipped and for when the setting of folder properties is skipped.  This affects the input and 
    output of `azcopy jobs show` and the status values shown in the JSON output format.
+
+## Version 10.3.4
+
+### New features
+
+1. Fixed feature parity issue by adding support for "ifSourceNewer" option on the `overwrite` flag. It serves as a replacement of the '\XO' flag in V8.
+
+### Bug fixes
+
+1. Fixed `jobs clean` command on Windows which was previously crashing when the `with-status` flag was used.
 
 ## Version 10.3.3
 
