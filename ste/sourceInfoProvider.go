@@ -78,6 +78,9 @@ type ISMBPropertyBearingSourceInfoProvider interface {
 	ISourceInfoProvider
 
 	GetSDDL() (string, error)
+	GetFileSMBCreationTime() (time.Time, error)
+	GetFileSMBLastWriteTime() (time.Time, error)
+	GetFileSMBAttributes() (uint32, error)
 }
 
 type sourceInfoProviderFactory func(jptm IJobPartTransferMgr) (ISourceInfoProvider, error)

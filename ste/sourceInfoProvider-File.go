@@ -87,14 +87,14 @@ func (p *fileSourceInfoProvider) GetFileSMBCreationTime() (time.Time, error) {
 	return timeAdapter.FileCreationTime(), nil
 }
 
-func (p *fileSourceInfoProvider) GetFileSMBAttributes() (azfile.FileAttributeFlags, error) {
+func (p *fileSourceInfoProvider) GetFileSMBAttributes() (uint32, error) {
 	props, err := p.getCachedProperties()
 
 	if err != nil {
 		return 0, err
 	}
 
-	return azfile.ParseFileAttributeFlagsString(props.FileAttributes()), nil
+	return uint32(azfile.ParseFileAttributeFlagsString(props.FileAttributes())), nil
 }
 
 // for reviewers: should we worry about proactively getting the latest version of this?
