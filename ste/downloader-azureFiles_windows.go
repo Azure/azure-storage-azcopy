@@ -10,7 +10,7 @@ import (
 
 // This file implements the windows-triggered sddlAwareDownloader interface.
 
-func (bd *azureFilesDownloader) PutSDDL(sip ISDDLBearingSourceInfoProvider, txInfo TransferInfo) error {
+func (bd *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
 	// Let's start by getting our SDDL and parsing it.
 	sddlString, err := sip.GetSDDL()
 	// TODO: be better at handling these errors.

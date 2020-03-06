@@ -63,8 +63,8 @@ func (bd *azureFilesDownloader) Epilogue() {
 		// To do that, we'll do some type wrangling:
 		// bd can't directly be wrangled from a struct, so we wrangle it to an interface, then do so.
 		if spdl, ok := interface{}(bd).(sddlAwareDownloader); ok {
-			// We don't need to worry about the sip not being a ISDDLBearingSourceInfoProvider as Azure Files always is.
-			err := spdl.PutSDDL(bd.sip.(ISDDLBearingSourceInfoProvider), bd.txInfo)
+			// We don't need to worry about the sip not being a ISMBPropertyBearingSourceInfoProvider as Azure Files always is.
+			err := spdl.PutSDDL(bd.sip.(ISMBPropertyBearingSourceInfoProvider), bd.txInfo)
 
 			if err != nil {
 				bd.jptm.FailActiveDownload("Setting destination file SDDLs", err)

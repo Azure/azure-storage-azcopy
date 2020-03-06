@@ -167,7 +167,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 
 	if info.PreserveNTFSACLs {
 		// Prepare to transfer SDDLs from the source.
-		if sddlSIP, ok := u.sip.(ISDDLBearingSourceInfoProvider); ok {
+		if sddlSIP, ok := u.sip.(ISMBPropertyBearingSourceInfoProvider); ok {
 			// If both sides are files...
 			if fSIP, ok := sddlSIP.(*fileSourceInfoProvider); ok {
 				srcURL, err := url.Parse(info.Source)

@@ -10,7 +10,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/sddl"
 )
 
-// This file os-triggers the ISDDLBearingSourceInfoProvider interface on a local SIP.
+// This file os-triggers the ISMBPropertyBearingSourceInfoProvider interface on a local SIP.
 
 func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	// We only need Owner, Group, and DACLs for azure files.

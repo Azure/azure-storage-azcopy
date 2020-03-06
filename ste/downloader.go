@@ -48,7 +48,7 @@ type downloader interface {
 type sddlAwareDownloader interface {
 	downloader
 
-	PutSDDL(sip ISDDLBearingSourceInfoProvider, txInfo TransferInfo) error
+	PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error
 }
 
 type downloaderFactory func() downloader

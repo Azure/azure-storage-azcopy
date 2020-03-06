@@ -74,7 +74,7 @@ type IBlobSourceInfoProvider interface {
 	BlobType() azblob.BlobType
 }
 
-type ISDDLBearingSourceInfoProvider interface {
+type ISMBPropertyBearingSourceInfoProvider interface {
 	ISourceInfoProvider
 
 	GetSDDL() (string, error)
