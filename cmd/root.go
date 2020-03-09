@@ -44,6 +44,13 @@ var cancelFromStdin bool
 var azcopyOutputFormat common.OutputFormat
 var cmdLineCapMegaBitsPerSecond uint32
 
+// It's not pretty that these next two are read directly by credential util.
+// But doing otherwise required us passing them around in many places, even though really
+// they can be thought of as "ambient" properties. That's the (weak?) justification for implementing
+// them as globals
+var cmdLineExtraSuffixesAAD string
+var cmdLineExtraSuffixesS3 string
+
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Version: common.AzcopyVersion, // will enable the user to see the version info in the standard posix way: --version
@@ -128,6 +135,11 @@ func init() {
 
 	rootCmd.PersistentFlags().Uint32Var(&cmdLineCapMegaBitsPerSecond, "cap-mbps", 0, "Caps the transfer rate, in megabits per second. Moment-by-moment throughput might vary slightly from the cap. If this option is set to zero, or it is omitted, the throughput isn't capped.")
 	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text", "Format of the command's output. The choices include: text, json. The default value is 'text'.")
+
+	rootCmd.PersistentFlags().StringVar(&cmdLineExtraSuffixesAAD, trustedSuffixesNameAAD, "", "Specifies additional domain suffixes where Azure Active Directory login tokens may be sent.  The default is '"+
+		trustedSuffixesAAD+"'. Any listed here are added to the default. For security, you should only put Azure domains here.  Separate multiple entries with semi-colons.")
+	rootCmd.PersistentFlags().StringVar(&cmdLineExtraSuffixesS3, trustedSuffixesNameS3, "", "Specifies additional domain suffixes where S3 credentials may be sent.  The default is '"+
+		trustedSuffixesS3+"'. Any listed here are added to the default. For security, you should only put S3 domains here.  Separate multiple entries with semi-colons.")
 
 	// Note: this is due to Windows not supporting signals properly
 	rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false, "Used by partner teams to send in `cancel` through stdin to stop a job.")

@@ -257,10 +257,23 @@ type rawFromToInfo struct {
 	sourceSAS, destinationSAS string // Standalone SAS which might be provided
 }
 
+const trustedSuffixesNameAAD = "trusted-aad-suffixes"
+const trustedSuffixesNameS3 = "trusted-s3-suffixes"
+const trustedSuffixesAAD = "*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net"
+const trustedSuffixesS3 = "*.amazonaws.com;*.amazonaws.com.cn"
+
 // checkAuthSafeForTarget checks our "implicit" auth types (those that pick up creds from the environment
 // or a prior login) to make sure they are only being used in places where we know those auth types are safe.
 // This prevents, for example, us accidentally sending OAuth creds to some place they don't belong
-func checkAuthSafeForTarget(ct common.CredentialType, resource string) error {
+func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD, extraSuffixesS3 string) error {
+
+	getSuffixes := func(list string, extras string) []string {
+		extras = strings.Trim(extras, " ")
+		if extras != "" {
+			list += ";" + extras
+		}
+		return strings.Split(list, ";")
+	}
 
 	isResourceInSuffixList := func(suffixes []string) (string, bool) {
 		u, err := url.Parse(resource)
@@ -287,22 +300,22 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource string) error {
 	case common.ECredentialType.OAuthToken(),
 		common.ECredentialType.SharedKey():
 		// these are Azure auth types, so make sure the resource is known to be in Azure
-		envVar := common.EEnvironmentVariable.AADAuthSuffixes()
-		domainSuffixes := strings.Split(glcm.GetEnvironmentVariable(envVar), ";")
+		domainSuffixes := getSuffixes(trustedSuffixesAAD, extraSuffixesAAD)
 		if host, ok := isResourceInSuffixList(domainSuffixes); !ok {
 			return fmt.Errorf(
-				"azure authentication to %s is not enabled in AzCopy. To enable, run 'AzCopy env' read the "+
-					"description of the environment variable %s, then set it if necessary", host, envVar.Name)
+				"azure authentication to %s is not enabled in AzCopy. To enable, view the documentation for "+
+					"the parameter --%s, by running 'AzCopy copy --help'. Then use that parameter in your command if necessary",
+				host, trustedSuffixesNameAAD)
 		}
 
 	case common.ECredentialType.S3AccessKey():
 		// make sure the resource is known to be in AWS
-		envVar := common.EEnvironmentVariable.S3AuthSuffixes()
-		domainSuffixes := strings.Split(glcm.GetEnvironmentVariable(envVar), ";")
+		domainSuffixes := getSuffixes(trustedSuffixesS3, extraSuffixesS3)
 		if host, ok := isResourceInSuffixList(domainSuffixes); !ok {
 			return fmt.Errorf(
-				"s3 authentication to %s is not enabled in AzCopy. To enable, run 'AzCopy env' read the "+
-					"description of the environment variable %s, then set it if necessary", host, envVar.Name)
+				"s3 authentication to %s is not enabled in AzCopy. To enable, view the documentation for "+
+					"the parameter --%s, by running 'AzCopy copy --help'. Then use that parameter in your command if necessary",
+				host, trustedSuffixesNameS3)
 		}
 
 	default:
@@ -318,7 +331,7 @@ func logAuthType(ct common.CredentialType, resource string) {
 	if name == common.ECredentialType.Anonymous().String() {
 		name = "URL/SAS" // make it clearer, since we use Anonymous for both SAS and public URLs
 	}
-	message := fmt.Sprintf("Authenticating to %s using %s")
+	message := fmt.Sprintf("Authenticating to %s using %s", resource, name)
 	if ste.JobsAdmin != nil {
 		ste.JobsAdmin.LogToJobLog(message)
 	}
@@ -354,7 +367,7 @@ func getCredentialTypeForLocation(ctx context.Context, location common.Location,
 		}
 	}
 
-	if err = checkAuthSafeForTarget(credType, resource); err != nil {
+	if err = checkAuthSafeForTarget(credType, resource, cmdLineExtraSuffixesAAD, cmdLineExtraSuffixesS3); err != nil {
 		return common.ECredentialType.Unknown(), false, err
 	}
 

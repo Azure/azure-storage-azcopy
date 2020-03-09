@@ -22,7 +22,17 @@ and destination support real folders (Blob Storage does not, because it only sup
 ### Special notes
 
 1. AzCopy has upgraded to service revision `2019-02-02`. Users targeting local emulators, Azure Stack, or other private/special instances of Azure Storage may need to intentionally downgrade their service revision using the environment variable `AZCOPY_DEFAULT_SERVICE_API_VERSION`. Prior to this release, the default service revision was `2018-03-28`.
-1. For Azure Files to Azure Files transfers, --persist-smb-acls (**name TBC**) is available on non-Windows OSes. 
+1. For Azure Files to Azure Files transfers, --persist-smb-acls (**name TBC**) is available on non-Windows OSes.
+1. AzCopy now includes a list of trusted domain suffixes for Azure Active Directory (AAD) authentication. 
+   After `azcopy login`, the resulting token will only be sent to locations that appear in the list. The list is:
+   `*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net`. 
+   If necessary, you can add to the the list with the command-line flag: `--trusted-aad-suffixes`. For security,
+   you should only add Azure domains.
+1. Similar to the above, AzCopy also includes a list of trusted domain suffixes for S3 authentication.  This is used 
+   with AzCopy's ability to import data from Amazon S3.  The S3 credentials that you use with AzCopy will only be 
+   sent to domains included in the list.  The list is `*.amazonaws.com;*.amazonaws.com.cn`.  If necessary, you can add to
+   the list with the command-line flag: `--trusted-s3-suffixes`. For security, you should only add AWS domains.
+ 
 
 ### Breaking changes
 
