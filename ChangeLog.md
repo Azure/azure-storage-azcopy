@@ -41,6 +41,8 @@ and destination support real folders (Blob Storage does not, because it only sup
 1. The TransferStatus value `SkippedFileAlreadyExists` has been renamed `SkippedEntityExists` and may now be used both 
    for when files are skipped and for when the setting of folder properties is skipped.  This affects the input and 
    output of `azcopy jobs show` and the status values shown in the JSON output format from `copy` and `sync`.
+1. The format and content of authentication information messages, e.g. "Using OAuth token for authentication" has been changed,
+   to include the URL being authenticated to, and to report all types of authentication, not just OAuth. 
 
 ### Bug fixes
 

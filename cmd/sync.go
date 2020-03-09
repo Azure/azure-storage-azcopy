@@ -505,10 +505,6 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
 	if cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		// Message user that they are using Oauth token for authentication,
-		// in case of silently using cached token without consciousness。
-		glcm.Info("Using OAuth token for authentication.")
-
 		uotm := GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {

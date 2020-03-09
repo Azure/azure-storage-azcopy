@@ -111,8 +111,6 @@ func HandleListContainerCommand(source string, location common.Location) (err er
 	} else if location == location.File() && token == "" {
 		return errors.New("azure files requires a SAS token for authentication")
 	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		glcm.Info("List is using OAuth token for authentication.")
-
 		uotm := GetUserOAuthTokenManagerInstance()
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
