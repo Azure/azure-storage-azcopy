@@ -325,18 +325,34 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 	return nil
 }
 
-func logAuthType(ct common.CredentialType, resource string) {
-	resource = strings.Split(resource, "?")[0] // remove SAS
+func logAuthType(ct common.CredentialType, location common.Location, isSource bool) {
+	if location == common.ELocation.Unknown() {
+		return // nothing to log
+	} else if location.IsLocal() {
+		return // don't log local ones, no point
+	} else if ct == common.ECredentialType.Anonymous() {
+		return // don't log these either (too cluttered and auth type is obvious from the URL)
+	}
+
+	resource := "destination"
+	if isSource {
+		resource = "source"
+	}
 	name := ct.String()
-	if name == common.ECredentialType.Anonymous().String() {
-		name = "URL/SAS" // make it clearer, since we use Anonymous for both SAS and public URLs
+	if ct == common.ECredentialType.OAuthToken() {
+		name = "Azure AD" // clarify the name to something users will recognize
 	}
 	message := fmt.Sprintf("Authenticating to %s using %s", resource, name)
-	if ste.JobsAdmin != nil {
-		ste.JobsAdmin.LogToJobLog(message)
+	if _, exists := authMessagesAlreadyLogged.Load(message); !exists {
+		authMessagesAlreadyLogged.Store(message, struct{}{}) // dedup because source is auth'd by both enumerator and STE
+		if ste.JobsAdmin != nil {
+			ste.JobsAdmin.LogToJobLog(message)
+		}
+		glcm.Info(message)
 	}
-	glcm.Info(message)
 }
+
+var authMessagesAlreadyLogged = &sync.Map{}
 
 func getCredentialTypeForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool) (credType common.CredentialType, isPublic bool, err error) {
 	if resourceSAS != "" {
@@ -371,7 +387,7 @@ func getCredentialTypeForLocation(ctx context.Context, location common.Location,
 		return common.ECredentialType.Unknown(), false, err
 	}
 
-	logAuthType(credType, resource)
+	logAuthType(credType, location, isSource)
 	return
 }
 
