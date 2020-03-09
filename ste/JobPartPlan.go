@@ -59,7 +59,8 @@ type JobPartPlanHeader struct {
 	DstBlobData           JobPartPlanDstBlob  // Additional data for blob destinations
 	DstLocalData          JobPartPlanDstLocal // Additional data for local destinations
 
-	PreserveNTFSACLs bool
+	PreserveSMBPermissions bool
+	PreserveSMBProperties  bool
 	// S2SGetPropertiesInBackend represents whether to enable get S3 objects' or Azure files' properties during s2s copy in backend.
 	S2SGetPropertiesInBackend bool
 	// S2SSourceChangeValidation represents whether user wants to check if source has changed after enumerating.

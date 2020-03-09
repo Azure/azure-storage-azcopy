@@ -51,7 +51,7 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 	// so we must use the latest SDK version to stay safe
 	ctx := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azfile.ServiceVersion)
 
-	return &fileSourceInfoProvider{defaultRemoteSourceInfoProvider: *base, ctx: ctx}, nil
+	return &fileSourceInfoProvider{defaultRemoteSourceInfoProvider: *base, ctx: ctx, cacheOnce: &sync.Once{}}, nil
 }
 
 // for reviewers: should we worry about caching these properties?
@@ -87,14 +87,14 @@ func (p *fileSourceInfoProvider) GetFileSMBCreationTime() (time.Time, error) {
 	return timeAdapter.FileCreationTime(), nil
 }
 
-func (p *fileSourceInfoProvider) GetFileSMBAttributes() (uint32, error) {
+func (p *fileSourceInfoProvider) GetFileSMBAttributes() (azfile.FileAttributeFlags, error) {
 	props, err := p.getCachedProperties()
 
 	if err != nil {
 		return 0, err
 	}
 
-	return uint32(azfile.ParseFileAttributeFlagsString(props.FileAttributes())), nil
+	return azfile.ParseFileAttributeFlagsString(props.FileAttributes()), nil
 }
 
 // for reviewers: should we worry about proactively getting the latest version of this?

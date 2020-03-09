@@ -4,11 +4,67 @@ package ste
 
 import (
 	"fmt"
+	"syscall"
 
 	"golang.org/x/sys/windows"
 )
 
-// This file implements the windows-triggered sddlAwareDownloader interface.
+// This file implements the windows-triggered smbPropertyAwareDownloader interface.
+
+func (bd *azureFilesDownloader) PutFileTimes(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
+	attribs, err := sip.GetFileSMBAttributes()
+
+	if err != nil {
+		return err
+	}
+
+	destPtr, err := syscall.UTF16PtrFromString(txInfo.Destination)
+
+	if err != nil {
+		return err
+	}
+
+	// This is a safe conversion.
+	err = windows.SetFileAttributes(destPtr, uint32(attribs))
+
+	if err != nil {
+		return err
+	}
+
+	// =========== set file times ===========
+
+	smbCreation, err := sip.GetFileSMBCreationTime()
+
+	if err != nil {
+		return err
+	}
+
+	// reviewers: We already persist last modified time (I think?) to some extent.
+	// Should we do it here as well??
+	smbLastWrite, err := sip.GetFileSMBLastWriteTime()
+
+	if err != nil {
+		return err
+	}
+
+	fd, err := windows.Open(txInfo.Destination, windows.O_RDWR, windows.S_IWRITE)
+
+	if err != nil {
+		return err
+	}
+
+	defer windows.Close(fd)
+
+	// windows.NsecToFileTime does the opposite of FileTime.Nanoseconds, and adjusts away the unix epoch for windows.
+	smbCreationFileTime := windows.NsecToFiletime(smbCreation.UnixNano())
+	smbLastWriteFileTime := windows.NsecToFiletime(smbLastWrite.UnixNano())
+
+	err = windows.SetFileTime(fd, &smbCreationFileTime, nil, &smbLastWriteFileTime)
+
+	fmt.Printf("attribs: %d lwtime: %s ctime: %s\n", attribs, smbLastWrite.Local(), smbCreation.Local())
+
+	return err
+}
 
 func (bd *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
 	// Let's start by getting our SDDL and parsing it.

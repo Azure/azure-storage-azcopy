@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-storage-file-go/azfile"
 	"golang.org/x/sys/windows"
 
 	"github.com/Azure/azure-storage-azcopy/sddl"
@@ -72,12 +73,13 @@ func (f localFileSourceInfoProvider) GetFileSMBLastWriteTime() (time.Time, error
 	return time.Unix(0, info.LastWriteTime.Nanoseconds()), nil
 }
 
-func (f localFileSourceInfoProvider) GetFileSMBAttributes() (uint32, error) {
+func (f localFileSourceInfoProvider) GetFileSMBAttributes() (azfile.FileAttributeFlags, error) {
 	info, err := f.getFileInformation()
 
 	if err != nil {
 		return 0, err
 	}
 
-	return info.FileAttributes, nil
+	// This is a safe conversion to a stricter typing.
+	return azfile.FileAttributeFlags(info.FileAttributes), nil
 }
