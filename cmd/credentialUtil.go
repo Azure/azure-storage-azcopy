@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/minio/minio-go/pkg/s3utils"
 	"net/http"
 	"net/url"
 	"strings"
@@ -258,14 +259,12 @@ type rawFromToInfo struct {
 }
 
 const trustedSuffixesNameAAD = "trusted-aad-suffixes"
-const trustedSuffixesNameS3 = "trusted-s3-suffixes"
 const trustedSuffixesAAD = "*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net"
-const trustedSuffixesS3 = "*.amazonaws.com;*.amazonaws.com.cn"
 
 // checkAuthSafeForTarget checks our "implicit" auth types (those that pick up creds from the environment
 // or a prior login) to make sure they are only being used in places where we know those auth types are safe.
 // This prevents, for example, us accidentally sending OAuth creds to some place they don't belong
-func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD, extraSuffixesS3 string) error {
+func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD string) error {
 
 	getSuffixes := func(list string, extras string) []string {
 		extras = strings.Trim(extras, " ")
@@ -309,13 +308,26 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 		}
 
 	case common.ECredentialType.S3AccessKey():
-		// make sure the resource is known to be in AWS
-		domainSuffixes := getSuffixes(trustedSuffixesS3, extraSuffixesS3)
-		if host, ok := isResourceInSuffixList(domainSuffixes); !ok {
+		// just check with minio. No need to have our own list of S3 domains, since minio effectively
+		// has that list already, we can't talk to anything outside that list because minio won't let us,
+		// and the parsing of s3 URL is non-trivial.  E.g. can't just look for the ending since
+		// something like https://someApi.execute-api.someRegion.amazonaws.com is AWS but is a customer-
+		// written code, not S3.
+		ok := false
+		host := "<unparseable url>"
+		u, err := url.Parse(resource)
+		if err == nil {
+			host = u.Host
+			parts, err := common.NewS3URLParts(*u) // strip any leading bucket name from URL, to get an endpoint we can pass to s3utils
+			if err == nil {
+				u, err := url.Parse("https://" + parts.Endpoint)
+				ok = err == nil && s3utils.IsAmazonEndpoint(*u)
+			}
+		}
+
+		if !ok {
 			return fmt.Errorf(
-				"s3 authentication to %s is not enabled in AzCopy. To enable, view the documentation for "+
-					"the parameter --%s, by running 'AzCopy copy --help'. Then use that parameter in your command if necessary",
-				host, trustedSuffixesNameS3)
+				"s3 authentication to %s is not currently suported in AzCopy", host)
 		}
 
 	default:
@@ -355,9 +367,13 @@ func logAuthType(ct common.CredentialType, location common.Location, isSource bo
 var authMessagesAlreadyLogged = &sync.Map{}
 
 func getCredentialTypeForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool) (credType common.CredentialType, isPublic bool, err error) {
+	return doGetCredentialTypeForLocation(ctx, location, resource, resourceSAS, isSource, GetCredTypeFromEnvVar)
+}
+
+func doGetCredentialTypeForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool, getForcedCredType func() common.CredentialType) (credType common.CredentialType, isPublic bool, err error) {
 	if resourceSAS != "" {
 		credType = common.ECredentialType.Anonymous()
-	} else if credType = GetCredTypeFromEnvVar(); credType == common.ECredentialType.Unknown() || location == common.ELocation.S3() {
+	} else if credType = getForcedCredType(); credType == common.ECredentialType.Unknown() || location == common.ELocation.S3() {
 		switch location {
 		case common.ELocation.Local(), common.ELocation.Benchmark():
 			credType = common.ECredentialType.Anonymous()
@@ -383,7 +399,7 @@ func getCredentialTypeForLocation(ctx context.Context, location common.Location,
 		}
 	}
 
-	if err = checkAuthSafeForTarget(credType, resource, cmdLineExtraSuffixesAAD, cmdLineExtraSuffixesS3); err != nil {
+	if err = checkAuthSafeForTarget(credType, resource, cmdLineExtraSuffixesAAD); err != nil {
 		return common.ECredentialType.Unknown(), false, err
 	}
 
