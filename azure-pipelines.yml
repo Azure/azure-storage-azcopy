@@ -32,7 +32,7 @@ jobs:
 
   - job: MacOS_Build
     pool:
-      vmImage: 'xcode11-macos10.14'
+      vmImage: 'macos10.14'
     steps:
       - task: GoTool@0
         inputs:
