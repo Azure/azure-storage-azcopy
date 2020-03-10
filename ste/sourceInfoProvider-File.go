@@ -220,15 +220,7 @@ func (p *fileSourceInfoProvider) GetFileLastModifiedTime() (time.Time, error) {
 		return time.Time{}, err
 	}
 
-	// for reviewers: Should we worry about this here?
-	smbLastWrite, err := p.GetFileSMBLastWriteTime()
-	if err != nil {
-		return time.Time{}, err
-	}
+	// We ignore smblastwrite because otherwise the tx will fail s2s
 
-	if properties.LastModified().After(smbLastWrite) {
-		return properties.LastModified(), nil
-	} else {
-		return smbLastWrite, nil
-	}
+	return properties.LastModified(), nil
 }
