@@ -406,9 +406,8 @@ func getCredentialInfoForLocation(ctx context.Context, location common.Location,
 			credInfo.OAuthTokenInfo = *tokenInfo
 		}
 	} else if credInfo.CredentialType == common.ECredentialType.S3AccessKey() {
-		// TODO didn't seem to be any code for this in the original getCredentialInfoForLocation
-		//   but presumably we need some, based only on the fact that there are fields in credInfo for S3 stuff ,but maybe
-		//   those fields are never used?
+		// nothing to do here. The extra fields for S3 are fleshed out at the time
+		// we make the S3Client
 	}
 
 	return
