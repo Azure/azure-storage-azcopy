@@ -199,15 +199,16 @@ func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (stri
 }
 
 // define a cleanup job
-func (raw rawBenchmarkCmdArgs) createCleanupJobArgs(benchmarkDest, logVerbosity string) (*cookedCopyCmdArgs, error) {
+func (raw rawBenchmarkCmdArgs) createCleanupJobArgs(benchmarkDest common.ResourceString, logVerbosity string) (*cookedCopyCmdArgs, error) {
 
 	rc := rawCopyCmdArgs{}
 
-	rc.src = benchmarkDest // the SOURCE for the deletion is the the dest from the benchmark
+	u, _ := benchmarkDest.FullURL() // don't check error, because it was parsed already in main job
+	rc.src = u.String()             // the SOURCE for the deletion is the the dest from the benchmark
 	rc.recursive = true
 	rc.logVerbosity = logVerbosity
 
-	switch inferArgumentLocation(benchmarkDest) {
+	switch inferArgumentLocation(rc.src) {
 	case common.ELocation.Blob():
 		rc.fromTo = common.EFromTo.BlobTrash().String()
 	case common.ELocation.File():

@@ -158,3 +158,14 @@ func GenerateFullPath(rootPath, childPath string) string {
 	// otherwise, make sure a path separator is inserted between the rootPath if necessary
 	return rootPath + rootSeparator + childPath
 }
+
+func GenerateFullPathWithQuery(rootPath, childPath, extraQuery string) string {
+	p := GenerateFullPath(rootPath, childPath)
+
+	extraQuery = strings.TrimLeft(extraQuery, "?")
+	if extraQuery == "" {
+		return p
+	} else {
+		return p + "?" + extraQuery
+	}
+}

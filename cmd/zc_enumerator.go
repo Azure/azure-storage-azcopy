@@ -296,13 +296,13 @@ type enumerationCounterFunc func(entityType common.EntityType)
 // ctx, pipeline are only required for remote resources.
 // followSymlinks is only required for local resources (defaults to false)
 // errorOnDirWOutRecursive is used by copy.
-func initResourceTraverser(resource string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel chan string, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (resourceTraverser, error) {
+func initResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel chan string, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (resourceTraverser, error) {
 	var output resourceTraverser
 	var p *pipeline.Pipeline
 
 	// Clean up the resource if it's a local path
 	if location == common.ELocation.Local() {
-		resource = cleanLocalPath(resource)
+		resource = common.ResourceString{Value: cleanLocalPath(resource.ValueLocal())}
 	}
 
 	// Initialize the pipeline if creds and ctx is provided
@@ -321,38 +321,30 @@ func initResourceTraverser(resource string, location common.Location, ctx *conte
 		toFollow = *followSymlinks
 	}
 
-	// Feed list of files channel into new list traverser, separate SAS.
+	// Feed list of files channel into new list traverser
 	if listofFilesChannel != nil {
-		sas := ""
-		if location.IsRemote() {
-			var err error
-			resource, sas, err = SplitAuthTokenFromResource(resource, location)
-
-			if err != nil {
-				return nil, err
-			}
-		} else {
+		if location.IsLocal() {
 			// First, ignore all escaped stars. Stars can be valid characters on many platforms (out of the 3 we support though, Windows is the only that cannot support it).
 			// In the future, should we end up supporting another OS that does not treat * as a valid character, we should turn these checks into a map-check against runtime.GOOS.
-			tmpResource := common.IffString(runtime.GOOS == "windows", resource, strings.ReplaceAll(resource, `\*`, ``))
+			tmpResource := common.IffString(runtime.GOOS == "windows", resource.ValueLocal(), strings.ReplaceAll(resource.ValueLocal(), `\*`, ``))
 			// check for remaining stars. We can't combine list traversers, and wildcarded list traversal occurs below.
 			if strings.Contains(tmpResource, "*") {
 				return nil, errors.New("cannot combine local wildcards with include-path or list-of-files")
 			}
 		}
 
-		output = newListTraverser(resource, sas, location, credential, ctx, recursive, toFollow, getProperties, listofFilesChannel, incrementEnumerationCounter)
+		output = newListTraverser(resource, location, credential, ctx, recursive, toFollow, getProperties, listofFilesChannel, incrementEnumerationCounter)
 		return output, nil
 	}
 
 	switch location {
 	case common.ELocation.Local():
-		_, err := os.Stat(resource)
+		_, err := os.Stat(resource.ValueLocal())
 
 		// If wildcard is present and this isn't an existing file/folder, glob and feed the globbed list into a list enum.
-		if strings.Index(resource, "*") != -1 && err != nil {
-			basePath := getPathBeforeFirstWildcard(resource)
-			matches, err := filepath.Glob(resource)
+		if strings.Index(resource.ValueLocal(), "*") != -1 && err != nil {
+			basePath := getPathBeforeFirstWildcard(resource.ValueLocal())
+			matches, err := filepath.Glob(resource.ValueLocal())
 
 			if err != nil {
 				return nil, fmt.Errorf("failed to glob: %s", err)
@@ -367,19 +359,20 @@ func initResourceTraverser(resource string, location common.Location, ctx *conte
 				}
 			}()
 
-			output = newListTraverser(cleanLocalPath(basePath), "", location, nil, nil, recursive, toFollow, getProperties, globChan, incrementEnumerationCounter)
+			baseResource := resource.CloneWithValue(cleanLocalPath(basePath))
+			output = newListTraverser(baseResource, location, nil, nil, recursive, toFollow, getProperties, globChan, incrementEnumerationCounter)
 		} else {
-			output = newLocalTraverser(resource, recursive, toFollow, incrementEnumerationCounter)
+			output = newLocalTraverser(resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter)
 		}
 	case common.ELocation.Benchmark():
-		ben, err := newBenchmarkTraverser(resource, incrementEnumerationCounter)
+		ben, err := newBenchmarkTraverser(resource.Value, incrementEnumerationCounter)
 		if err != nil {
 			return nil, err
 		}
 		output = ben
 
 	case common.ELocation.Blob():
-		resourceURL, err := url.Parse(resource)
+		resourceURL, err := resource.FullURL()
 		if err != nil {
 			return nil, err
 		}
@@ -403,7 +396,7 @@ func initResourceTraverser(resource string, location common.Location, ctx *conte
 			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
 		}
 	case common.ELocation.File():
-		resourceURL, err := url.Parse(resource)
+		resourceURL, err := resource.FullURL()
 		if err != nil {
 			return nil, err
 		}
@@ -426,7 +419,7 @@ func initResourceTraverser(resource string, location common.Location, ctx *conte
 			output = newFileTraverser(resourceURL, *p, *ctx, recursive, getProperties, incrementEnumerationCounter)
 		}
 	case common.ELocation.BlobFS():
-		resourceURL, err := url.Parse(resource)
+		resourceURL, err := resource.FullURL()
 		if err != nil {
 			return nil, err
 		}
@@ -453,7 +446,7 @@ func initResourceTraverser(resource string, location common.Location, ctx *conte
 			output = newBlobFSTraverser(resourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
 		}
 	case common.ELocation.S3():
-		resourceURL, err := url.Parse(resource)
+		resourceURL, err := resource.FullURL()
 		if err != nil {
 			return nil, err
 		}
@@ -497,21 +490,6 @@ func initResourceTraverser(resource string, location common.Location, ctx *conte
 	}
 
 	return output, nil
-}
-
-func appendSASIfNecessary(rawURL string, sasToken string) (string, error) {
-	if sasToken != "" {
-		parsedURL, err := url.Parse(rawURL)
-
-		if err != nil {
-			return rawURL, err
-		}
-
-		parsedURL = copyHandlerUtil{}.appendQueryParamToUrl(parsedURL, sasToken)
-		return parsedURL.String(), nil
-	}
-
-	return rawURL, nil
 }
 
 // given a storedObject, process it accordingly. Used for the "real work" of, say, creating a copyTransfer from the object

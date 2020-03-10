@@ -33,8 +33,8 @@ import (
 type copyTransferProcessor struct {
 	numOfTransfersPerPart int
 	copyJobTemplate       *common.CopyJobPartOrderRequest
-	source                string
-	destination           string
+	source                common.ResourceString
+	destination           common.ResourceString
 
 	// handles for progress tracking
 	reportFirstPartDispatched func(jobStarted bool)
@@ -45,7 +45,7 @@ type copyTransferProcessor struct {
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
-	source string, destination string,
+	source, destination common.ResourceString,
 	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool) *copyTransferProcessor {
 	return &copyTransferProcessor{
 		numOfTransfersPerPart:     numOfTransfersPerPart,

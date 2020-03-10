@@ -27,15 +27,12 @@ import (
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
 func newRemoveTransferProcessor(cca *cookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption) *copyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
-		JobID:         cca.jobID,
-		CommandString: cca.commandString,
-		FromTo:        cca.fromTo,
+		JobID:          cca.jobID,
+		CommandString:  cca.commandString,
+		FromTo:         cca.fromTo,
 		Fpo:           fpo,
-		SourceRoot:    consolidatePathSeparators(cca.source),
-
-		// authentication related
+		SourceRoot:     cca.source.CloneWithConsolidatedSeparators(), // TODO: why do we consolidate here, but not in "copy"? Is it needed in both places or neither? Or is copy just covering the same need differently?
 		CredentialInfo: cca.credentialInfo,
-		SourceSAS:      cca.sourceSAS,
 
 		// flags
 		LogLevel:       cca.logVerbosity,

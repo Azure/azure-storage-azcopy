@@ -25,39 +25,35 @@ import (
 	chk "gopkg.in/check.v1"
 )
 
-type copyEnumeratorHelperTestSuite struct{}
+type pathUtilsSuite struct{}
 
-var _ = chk.Suite(&copyEnumeratorHelperTestSuite{})
+var _ = chk.Suite(&pathUtilsSuite{})
 
-func newLocalRes(path string) common.ResourceString {
-	return common.ResourceString{Value: path}
-}
+func (s *pathUtilsSuite) TestStripQueryFromSaslessUrl(c *chk.C) {
+	tests := []struct {
+		full          string
+		isRemote      bool
+		expectedMain  string
+		expectedQuery string
+	}{
+		// remote urls
+		{"http://example.com/abc?foo=bar", true, "http://example.com/abc", "foo=bar"},
+		{"http://example.com/abc", true, "http://example.com/abc", ""},
+		{"http://example.com/abc?", true, "http://example.com/abc", ""}, // no query string if ? is at very end
 
-func newRemoteRes(url string) common.ResourceString {
-	r, err := SplitResourceString(url, common.ELocation.Blob())
-	if err != nil {
-		panic("can't parse resource string")
-	}
-	return r
-}
-
-func (s *copyEnumeratorHelperTestSuite) TestAddTransferPathRootsTrimmed(c *chk.C) {
-	// setup
-	request := common.CopyJobPartOrderRequest{
-		SourceRoot:      newLocalRes("a/b/"),
-		DestinationRoot: newLocalRes("y/z/"),
-	}
-
-	transfer := common.CopyTransfer{
-		Source:      "a/b/c.txt",
-		Destination: "y/z/c.txt",
+		// things that are not URLs, or not to be interpreted as such
+		{"http://foo/bar?eee", false, "http://foo/bar?eee", ""}, // note isRemote == false
+		{`c:\notUrl`, false, `c:\notUrl`, ""},
+		{`\\?\D:\longStyle\Windows\path`, false, `\\?\D:\longStyle\Windows\path`, ""},
 	}
 
-	// execute
-	err := addTransfer(&request, transfer, &cookedCopyCmdArgs{})
-
-	// assert
-	c.Assert(err, chk.IsNil)
-	c.Assert(request.Transfers[0].Source, chk.Equals, "c.txt")
-	c.Assert(request.Transfers[0].Destination, chk.Equals, "c.txt")
+	for _, t := range tests {
+		loc := common.ELocation.Local()
+		if t.isRemote {
+			loc = common.ELocation.File()
+		}
+		m, q := splitQueryFromSaslessResource(t.full, loc)
+		c.Assert(m, chk.Equals, t.expectedMain)
+		c.Assert(q, chk.Equals, t.expectedQuery)
+	}
 }

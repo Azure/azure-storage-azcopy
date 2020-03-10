@@ -25,7 +25,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -46,18 +45,9 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	var sourceTraverser resourceTraverser
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	rawURL, err := url.Parse(cca.source)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if cca.sourceSAS != "" {
-		copyHandlerUtil{}.appendQueryParamToUrl(rawURL, cca.sourceSAS)
-	}
 
 	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = initResourceTraverser(rawURL.String(), cca.fromTo.From(), &ctx, &cca.credentialInfo, nil, cca.listOfFilesChannel, cca.recursive, false, func(common.EntityType) {})
+	sourceTraverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &cca.credentialInfo, nil, cca.listOfFilesChannel, cca.recursive, false, func(common.EntityType) {})
 
 	// report failure to create traverser
 	if err != nil {
@@ -139,7 +129,7 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
 	}
 
 	// patterns are not supported
-	if strings.Contains(cca.source, "*") {
+	if strings.Contains(cca.source.Value, "*") {
 		return errors.New("pattern matches are not supported in this command")
 	}
 
@@ -150,13 +140,10 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
 	}
 
 	// attempt to parse the source url
-	sourceURL, err := url.Parse(cca.source)
+	sourceURL, err := cca.source.FullURL()
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
-
-	// append the SAS query to the newly parsed URL
-	sourceURL = gCopyUtil.appendQueryParamToUrl(sourceURL, cca.sourceSAS)
 
 	// parse the given source URL into parts, which separates the filesystem name and directory/file path
 	urlParts := azbfs.NewBfsURLParts(*sourceURL)

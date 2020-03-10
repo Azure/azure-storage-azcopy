@@ -68,15 +68,6 @@ func (util copyHandlerUtil) urlIsContainerOrVirtualDirectory(url *url.URL) bool 
 	}
 }
 
-func (util copyHandlerUtil) appendQueryParamToUrl(url *url.URL, queryParam string) *url.URL {
-	if len(url.RawQuery) > 0 {
-		url.RawQuery += "&" + queryParam
-	} else {
-		url.RawQuery = queryParam
-	}
-	return url
-}
-
 // redactSigQueryParam checks for the signature in the given rawquery part of the url
 // If the signature exists, it replaces the value of the signature with "REDACTED"
 // This api is used when SAS is written to log file to avoid exposing the user given SAS
