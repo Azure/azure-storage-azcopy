@@ -36,9 +36,9 @@ type ISourceInfoProvider interface {
 	// Properties returns source's properties.
 	Properties() (*SrcProperties, error)
 
-	// GetLastModifiedTime return source's latest last modified time.  Not used when
+	// GetLastModifiedTime returns the source's latest last modified time.  Not used when
 	// EntityType() == Folder
-	GetFileLastModifiedTime() (time.Time, error)
+	GetFreshFileLastModifiedTime() (time.Time, error)
 
 	IsLocal() bool
 
@@ -131,7 +131,7 @@ func (p *defaultRemoteSourceInfoProvider) RawSource() string {
 	return p.transferInfo.Source
 }
 
-func (p *defaultRemoteSourceInfoProvider) GetFileLastModifiedTime() (time.Time, error) {
+func (p *defaultRemoteSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
 	return p.jptm.LastModifiedTime(), nil
 }
 

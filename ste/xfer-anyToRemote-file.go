@@ -146,7 +146,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 	// 2) Source is remote, i.e. S2S copy case. And source's size is larger than one chunk. So verification can possibly save transfer's cost.
 	if copier, isS2SCopier := s.(s2sCopier); srcInfoProvider.IsLocal() ||
 		(isS2SCopier && info.S2SSourceChangeValidation && srcSize > int64(copier.ChunkSize())) {
-		lmt, err := srcInfoProvider.GetFileLastModifiedTime()
+		lmt, err := srcInfoProvider.GetFreshFileLastModifiedTime()
 		if err != nil {
 			jptm.LogSendError(info.Source, info.Destination, "Couldn't get source's last modified time-"+err.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
@@ -341,7 +341,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s IFileSender, si
 	if jptm.IsLive() {
 		if _, isS2SCopier := s.(s2sCopier); sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation) {
 			// Check the source to see if it was changed during transfer. If it was, mark the transfer as failed.
-			lmt, err := sip.GetFileLastModifiedTime()
+			lmt, err := sip.GetFreshFileLastModifiedTime()
 			if err != nil {
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", err)
 			}

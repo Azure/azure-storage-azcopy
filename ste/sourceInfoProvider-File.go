@@ -165,7 +165,7 @@ func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 	return srcProperties, nil
 }
 
-func (p *fileSourceInfoProvider) GetFileLastModifiedTime() (time.Time, error) {
+func (p *fileSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
 	if p.EntityType() != common.EEntityType.File() {
 		panic("unsupported. Cannot get modification time on non-file object") // nothing should ever call this for a non-file
 	}
