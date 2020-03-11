@@ -14,7 +14,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 10
+const DataSchemaVersion common.Version = 11
 
 const (
 	CustomHeaderMaxBytes = 256
@@ -274,6 +274,18 @@ type JobPartPlanDstLocal struct {
 
 // JobPartPlanTransfer represent the header of Job Part's Transfer in Memory Map File
 type JobPartPlanTransfer struct {
+
+	// these two atomic* fields are NOT constants
+
+	// atomicTransferStatus represents the status of current transfer (TransferInProgress, TransferFailed or TransfersCompleted)
+	// atomicTransferStatus should not be directly accessed anywhere except by transferStatus and setTransferStatus
+	atomicTransferStatus common.TransferStatus
+
+	// atomicErrorCode represents the storageError error code of the error with which the transfer got failed.
+	// atomicErrorCode has a default value (0) which means either there was no error or transfer failed because some non storageError.
+	// atomicErrorCode should not be directly accessed anywhere except by transferStatus and setTransferStatus
+	atomicErrorCode int32
+
 	// Once set, the following fields are constants; they should never be modified
 
 	// SrcOffset represents the actual start offset transfer header written in JobPartOrder file
@@ -302,18 +314,6 @@ type JobPartPlanTransfer struct {
 	SrcMetadataLength           int16
 	SrcBlobTypeLength           int16
 	SrcBlobTierLength           int16
-
-	// Any fields below this comment are NOT constants; they may change over as the transfer is processed.
-	// Care must be taken to read/write to these fields in a thread-safe way!
-
-	// atomicTransferStatus represents the status of current transfer (TransferInProgress, TransferFailed or TransfersCompleted)
-	// atomicTransferStatus should not be directly accessed anywhere except by transferStatus and setTransferStatus
-	atomicTransferStatus common.TransferStatus
-
-	// atomicErrorCode represents the storageError error code of the error with which the transfer got failed.
-	// atomicErrorCode has a default value (0) which means either there was no error or transfer failed because some non storageError.
-	// atomicErrorCode should not be directly accessed anywhere except by transferStatus and setTransferStatus
-	atomicErrorCode int32
 }
 
 // TransferStatus returns the transfer's status
