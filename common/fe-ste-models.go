@@ -409,7 +409,7 @@ func (Location) S3() Location        { return Location(6) }
 func (Location) Benchmark() Location { return Location(7) }
 
 func (l Location) String() string {
-	return enum.StringInt(uint32(l), reflect.TypeOf(l))
+	return enum.StringInt(l, reflect.TypeOf(l))
 }
 
 // fromToValue returns the fromTo enum value for given
