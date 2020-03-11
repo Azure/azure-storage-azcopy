@@ -50,36 +50,25 @@ func (f localFileSourceInfoProvider) getFileInformation() (windows.ByHandleFileI
 	return info, err
 }
 
-func (f localFileSourceInfoProvider) GetFileSMBCreationTime() (time.Time, error) {
+func (f localFileSourceInfoProvider) GetSMBProperties() (azfile.SMBPropertyHolder, error) {
 	info, err := f.getFileInformation()
 
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	// Nanoseconds returns Filetime in nanoseconds
-	// since Epoch (00:00:00 UTC, January 1, 1970).
-	// In simpler words: Unix time.
-	return time.Unix(0, info.CreationTime.Nanoseconds()), nil
+	return handleInfo{info}, err
 }
 
-func (f localFileSourceInfoProvider) GetFileSMBLastWriteTime() (time.Time, error) {
-	info, err := f.getFileInformation()
-
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	return time.Unix(0, info.LastWriteTime.Nanoseconds()), nil
+type handleInfo struct {
+	windows.ByHandleFileInformation
 }
 
-func (f localFileSourceInfoProvider) GetFileSMBAttributes() (azfile.FileAttributeFlags, error) {
-	info, err := f.getFileInformation()
+func (hi handleInfo) FileCreationTime() string {
+	return time.Unix(0, hi.CreationTime.Nanoseconds()).Format(azfile.ISO8601)
+}
 
-	if err != nil {
-		return 0, err
-	}
+func (hi handleInfo) FileLastWriteTime() string {
+	return time.Unix(0, hi.CreationTime.Nanoseconds()).Format(azfile.ISO8601)
+}
 
-	// This is a safe conversion to a stricter typing.
-	return azfile.FileAttributeFlags(info.FileAttributes), nil
+func (hi handleInfo) FileAttributes() string {
+	// Can't shorthand it because the function name overrides.
+	return azfile.FileAttributeFlags(hi.ByHandleFileInformation.FileAttributes).String()
 }

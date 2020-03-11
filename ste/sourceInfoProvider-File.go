@@ -75,49 +75,8 @@ func (p *fileSourceInfoProvider) getCachedProperties() (*azfile.FileGetPropertie
 	return p.cachedProperties, nil
 }
 
-func (p *fileSourceInfoProvider) GetFileSMBCreationTime() (time.Time, error) {
-	props, err := p.getCachedProperties()
-
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	timeAdapter := azfile.SMBTimeAdapter{PropertySource: props}
-
-	return timeAdapter.FileCreationTime(), nil
-}
-
-func (p *fileSourceInfoProvider) GetFileSMBAttributes() (azfile.FileAttributeFlags, error) {
-	props, err := p.getCachedProperties()
-
-	if err != nil {
-		return 0, err
-	}
-
-	return azfile.ParseFileAttributeFlagsString(props.FileAttributes()), nil
-}
-
-// for reviewers: should we worry about proactively getting the latest version of this?
-// If not, then we shouldn't worry about whether this is newer than the REST last write time
-func (p *fileSourceInfoProvider) GetFileSMBLastWriteTime() (time.Time, error) {
-	// Because this is subject to change quite often, it's worthwhile to get a not-cached version for this.
-	presigned, err := p.PreSignedSourceURL()
-
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	fileUrl := azfile.NewFileURL(*presigned, p.jptm.SourceProviderPipeline())
-
-	props, err := fileUrl.GetProperties(p.ctx)
-
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	timeAdapter := azfile.SMBTimeAdapter{PropertySource: props}
-
-	return timeAdapter.FileLastWriteTime(), nil
+func (p *fileSourceInfoProvider) GetSMBProperties() (azfile.SMBPropertyHolder, error) {
+	return p.getCachedProperties()
 }
 
 func (p *fileSourceInfoProvider) GetSDDL() (string, error) {

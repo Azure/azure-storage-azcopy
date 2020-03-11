@@ -5,18 +5,22 @@ package ste
 import (
 	"fmt"
 	"syscall"
+	"time"
 
+	"github.com/Azure/azure-storage-file-go/azfile"
 	"golang.org/x/sys/windows"
 )
 
 // This file implements the windows-triggered smbPropertyAwareDownloader interface.
 
 func (bd *azureFilesDownloader) PutFileTimes(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
-	attribs, err := sip.GetFileSMBAttributes()
+	propHolder, err := sip.GetSMBProperties()
 
 	if err != nil {
 		return err
 	}
+
+	attribs := azfile.ParseFileAttributeFlagsString(propHolder.FileAttributes())
 
 	destPtr, err := syscall.UTF16PtrFromString(txInfo.Destination)
 
@@ -33,7 +37,7 @@ func (bd *azureFilesDownloader) PutFileTimes(sip ISMBPropertyBearingSourceInfoPr
 
 	// =========== set file times ===========
 
-	smbCreation, err := sip.GetFileSMBCreationTime()
+	smbCreation, err := time.Parse(azfile.ISO8601, propHolder.FileCreationTime())
 
 	if err != nil {
 		return err
@@ -41,7 +45,7 @@ func (bd *azureFilesDownloader) PutFileTimes(sip ISMBPropertyBearingSourceInfoPr
 
 	// reviewers: We already persist last modified time (I think?) to some extent.
 	// Should we do it here as well??
-	smbLastWrite, err := sip.GetFileSMBLastWriteTime()
+	smbLastWrite, err := time.Parse(azfile.ISO8601, propHolder.FileLastWriteTime())
 
 	if err != nil {
 		return err
@@ -60,8 +64,6 @@ func (bd *azureFilesDownloader) PutFileTimes(sip ISMBPropertyBearingSourceInfoPr
 	smbLastWriteFileTime := windows.NsecToFiletime(smbLastWrite.UnixNano())
 
 	err = windows.SetFileTime(fd, &smbCreationFileTime, nil, &smbLastWriteFileTime)
-
-	fmt.Printf("attribs: %d lwtime: %s ctime: %s\n", attribs, smbLastWrite.Local(), smbCreation.Local())
 
 	return err
 }

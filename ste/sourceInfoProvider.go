@@ -21,11 +21,12 @@
 package ste
 
 import (
+	"net/url"
+	"time"
+
 	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/common"
-	"net/url"
-	"time"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
@@ -80,9 +81,10 @@ type ISMBPropertyBearingSourceInfoProvider interface {
 	ISourceInfoProvider
 
 	GetSDDL() (string, error)
-	GetFileSMBCreationTime() (time.Time, error)
-	GetFileSMBLastWriteTime() (time.Time, error)
-	GetFileSMBAttributes() (azfile.FileAttributeFlags, error)
+	// GetFileSMBCreationTime() (time.Time, error)
+	// GetFileSMBLastWriteTime() (time.Time, error)
+	// GetFileSMBAttributes() (azfile.FileAttributeFlags, error)
+	GetSMBProperties() (azfile.SMBPropertyHolder, error)
 }
 
 type sourceInfoProviderFactory func(jptm IJobPartTransferMgr) (ISourceInfoProvider, error)

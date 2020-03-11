@@ -214,34 +214,33 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 
 	if info.PreserveSMBProperties {
 		if smbSIP, ok := u.sip.(ISMBPropertyBearingSourceInfoProvider); ok {
-			attribs, err := smbSIP.GetFileSMBAttributes()
+			smbProps, err := smbSIP.GetSMBProperties()
 
 			if err != nil {
-				jptm.FailActiveUpload("Obtaining SMB attributes", err)
-				return
+				jptm.FailActiveSend("Obtaining SMB properties", err)
 			}
+
+			attribs := azfile.ParseFileAttributeFlagsString(smbProps.FileAttributes())
 
 			u.headersToApply.FileAttributes = &attribs
 
-			lwTime, err := smbSIP.GetFileSMBLastWriteTime()
+			lwTime, err := time.Parse(azfile.ISO8601, smbProps.FileLastWriteTime())
 
 			if err != nil {
-				jptm.FailActiveUpload("Obtaining SMB last write time", err)
+				jptm.FailActiveSend("Obtaining SMB last write time", err)
 				return
 			}
 
 			u.headersToApply.FileLastWriteTime = &lwTime
 
-			creationTime, err := smbSIP.GetFileSMBCreationTime()
+			creationTime, err := time.Parse(azfile.ISO8601, smbProps.FileCreationTime())
 
 			if err != nil {
-				jptm.FailActiveUpload("Obtaining SMB creation time", err)
+				jptm.FailActiveSend("Obtaining SMB creation time", err)
 				return
 			}
 
 			u.headersToApply.FileCreationTime = &creationTime
-
-			fmt.Printf("attribs: %d lwtime: %s ctime: %s\n", attribs, lwTime, creationTime)
 		}
 	}
 
