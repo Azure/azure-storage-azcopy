@@ -75,7 +75,7 @@ func (bd *azureFilesDownloader) Epilogue() {
 	if info.PreserveSMBProperties {
 		if spdl, ok := interface{}(bd).(smbPropertyAwareDownloader); ok {
 			// We don't need to worry about the sip not being a ISMBPropertyBearingSourceInfoProvider as Azure Files always is.
-			err := spdl.PutFileTimes(bd.sip.(ISMBPropertyBearingSourceInfoProvider), bd.txInfo)
+			err := spdl.PutFileSMBProperties(bd.sip.(ISMBPropertyBearingSourceInfoProvider), bd.txInfo)
 
 			if err != nil {
 				bd.jptm.FailActiveDownload("Setting destination file SMB properties", err)

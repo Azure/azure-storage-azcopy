@@ -70,7 +70,7 @@ func (f *attrFilter) doesPass(storedObject storedObject) bool {
 func buildAttrFilters(attributes []string, fullPath string, isIncludeFilter bool) []objectFilter {
 	var fileAttributes uint32
 	filters := make([]objectFilter, 0)
-	// Available attributes (NTFS) include:
+	// Available attributes (SMB) include:
 	// R = Read-only files
 	// A = Files ready for archiving
 	// S = System files

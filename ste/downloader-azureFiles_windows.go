@@ -13,7 +13,7 @@ import (
 
 // This file implements the windows-triggered smbPropertyAwareDownloader interface.
 
-func (bd *azureFilesDownloader) PutFileTimes(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
+func (bd *azureFilesDownloader) PutFileSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
 	propHolder, err := sip.GetSMBProperties()
 
 	if err != nil {
@@ -43,7 +43,6 @@ func (bd *azureFilesDownloader) PutFileTimes(sip ISMBPropertyBearingSourceInfoPr
 		return err
 	}
 
-	// reviewers: We already persist last modified time (I think?) to some extent.
 	// Should we do it here as well??
 	smbLastWrite, err := time.Parse(azfile.ISO8601, propHolder.FileLastWriteTime())
 

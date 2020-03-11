@@ -445,6 +445,11 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		return cooked, err
 	}
 
+	// Since we already don't support preserving LMT on upload or S2S, it's fine to limit this to download.
+	if cooked.fromTo.IsDownload() && cooked.preserveSMBProperties && cooked.preserveLastModifiedTime {
+		return cooked, errors.New("SMB properties include a last modified time. Please prefer either the SMB property or the REST property")
+	}
+
 	// check for the flag value relative to fromTo location type
 	// Example1: for Local to Blob, preserve-last-modified-time flag should not be set to true
 	// Example2: for Blob to Local, follow-symlinks, blob-tier flags should not be provided with values.
@@ -461,7 +466,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 			return cooked, fmt.Errorf("blob-tier is not supported while uploading to ADLS Gen 2")
 		}
 		if cooked.preserveSMBPermissions {
-			return cooked, fmt.Errorf("preserve-ntfs-acls is not supported while uploading to ADLS Gen 2")
+			return cooked, fmt.Errorf("preserve-smb-permissions is not supported while uploading to ADLS Gen 2")
 		}
 		if cooked.s2sPreserveProperties {
 			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while uploading")
@@ -645,11 +650,11 @@ func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, fl
 	if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
 		fromTo == common.EFromTo.FileLocal() ||
 		fromTo == common.EFromTo.FileFile()) {
-		return fmt.Errorf("%s is set but the job is not between aware resources", flagName)
+		return fmt.Errorf("%s is set but the job is not between SMB-aware resources", flagName)
 	}
 
 	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) && runtime.GOOS != "windows" {
-		return fmt.Errorf("%s is set but persistence for up/downloads is a windows-only feature", flagName)
+		return fmt.Errorf("%s is set but persistence for up/downloads is a Windows-only feature", flagName)
 	}
 
 	return nil
@@ -739,7 +744,7 @@ type cookedCopyCmdArgs struct {
 	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
 	isEnumerationComplete bool
 
-	// Whether the user wants to preserve the SMB ACLs assigned to their files when moving between resources that are NTFS ACL aware.
+	// Whether the user wants to preserve the SMB ACLs assigned to their files when moving between resources that are SMB ACL aware.
 	preserveSMBPermissions bool
 	// Whether the user wants to perserve the SMB properties ...
 	preserveSMBProperties bool

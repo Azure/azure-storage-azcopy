@@ -343,7 +343,6 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 	}
 
 	// Preserve modified time
-	// TODO: sort out how this releates to the new Files/NTFS specific property preservation
 	if jptm.IsLive() {
 		// TODO: the old version of this code did NOT consider it an error to be unable to set the modification date/time
 		// TODO: ...So I have preserved that behavior here.

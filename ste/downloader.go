@@ -50,7 +50,7 @@ type smbPropertyAwareDownloader interface {
 
 	PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error
 
-	PutFileTimes(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error
+	PutFileSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error
 }
 
 type downloaderFactory func() downloader
