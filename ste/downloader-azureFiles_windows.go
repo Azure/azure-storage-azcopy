@@ -5,9 +5,7 @@ package ste
 import (
 	"fmt"
 	"syscall"
-	"time"
 
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"golang.org/x/sys/windows"
 )
 
@@ -20,7 +18,7 @@ func (bd *azureFilesDownloader) PutFileSMBProperties(sip ISMBPropertyBearingSour
 		return err
 	}
 
-	attribs := azfile.ParseFileAttributeFlagsString(propHolder.FileAttributes())
+	attribs := propHolder.FileAttributes()
 
 	destPtr, err := syscall.UTF16PtrFromString(txInfo.Destination)
 
@@ -37,18 +35,10 @@ func (bd *azureFilesDownloader) PutFileSMBProperties(sip ISMBPropertyBearingSour
 
 	// =========== set file times ===========
 
-	smbCreation, err := time.Parse(azfile.ISO8601, propHolder.FileCreationTime())
-
-	if err != nil {
-		return err
-	}
+	smbCreation := propHolder.FileCreationTime()
 
 	// Should we do it here as well??
-	smbLastWrite, err := time.Parse(azfile.ISO8601, propHolder.FileLastWriteTime())
-
-	if err != nil {
-		return err
-	}
+	smbLastWrite := propHolder.FileLastWriteTime()
 
 	fd, err := windows.Open(txInfo.Destination, windows.O_RDWR, windows.S_IWRITE)
 

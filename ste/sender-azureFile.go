@@ -220,25 +220,15 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 				jptm.FailActiveSend("Obtaining SMB properties", err)
 			}
 
-			attribs := azfile.ParseFileAttributeFlagsString(smbProps.FileAttributes())
+			attribs := smbProps.FileAttributes()
 
 			u.headersToApply.FileAttributes = &attribs
 
-			lwTime, err := time.Parse(azfile.ISO8601, smbProps.FileLastWriteTime())
-
-			if err != nil {
-				jptm.FailActiveSend("Obtaining SMB last write time", err)
-				return
-			}
+			lwTime := smbProps.FileLastWriteTime()
 
 			u.headersToApply.FileLastWriteTime = &lwTime
 
-			creationTime, err := time.Parse(azfile.ISO8601, smbProps.FileCreationTime())
-
-			if err != nil {
-				jptm.FailActiveSend("Obtaining SMB creation time", err)
-				return
-			}
+			creationTime := smbProps.FileCreationTime()
 
 			u.headersToApply.FileCreationTime = &creationTime
 		}

@@ -50,7 +50,7 @@ func (f localFileSourceInfoProvider) getFileInformation() (windows.ByHandleFileI
 	return info, err
 }
 
-func (f localFileSourceInfoProvider) GetSMBProperties() (azfile.SMBPropertyHolder, error) {
+func (f localFileSourceInfoProvider) GetSMBProperties() (TypedSMBPropertyHolder, error) {
 	info, err := f.getFileInformation()
 
 	return handleInfo{info}, err
@@ -60,15 +60,15 @@ type handleInfo struct {
 	windows.ByHandleFileInformation
 }
 
-func (hi handleInfo) FileCreationTime() string {
-	return time.Unix(0, hi.CreationTime.Nanoseconds()).Format(azfile.ISO8601)
+func (hi handleInfo) FileCreationTime() time.Time {
+	return time.Unix(0, hi.CreationTime.Nanoseconds())
 }
 
-func (hi handleInfo) FileLastWriteTime() string {
-	return time.Unix(0, hi.CreationTime.Nanoseconds()).Format(azfile.ISO8601)
+func (hi handleInfo) FileLastWriteTime() time.Time {
+	return time.Unix(0, hi.CreationTime.Nanoseconds())
 }
 
-func (hi handleInfo) FileAttributes() string {
+func (hi handleInfo) FileAttributes() azfile.FileAttributeFlags {
 	// Can't shorthand it because the function name overrides.
-	return azfile.FileAttributeFlags(hi.ByHandleFileInformation.FileAttributes).String()
+	return azfile.FileAttributeFlags(hi.ByHandleFileInformation.FileAttributes)
 }

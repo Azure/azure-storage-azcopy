@@ -75,8 +75,10 @@ func (p *fileSourceInfoProvider) getCachedProperties() (*azfile.FileGetPropertie
 	return p.cachedProperties, nil
 }
 
-func (p *fileSourceInfoProvider) GetSMBProperties() (azfile.SMBPropertyHolder, error) {
-	return p.getCachedProperties()
+func (p *fileSourceInfoProvider) GetSMBProperties() (TypedSMBPropertyHolder, error) {
+	cachedProps, err := p.getCachedProperties()
+
+	return &azfile.SMBPropertyAdapter{PropertySource: cachedProps}, err
 }
 
 func (p *fileSourceInfoProvider) GetSDDL() (string, error) {

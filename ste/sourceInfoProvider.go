@@ -77,14 +77,17 @@ type IBlobSourceInfoProvider interface {
 	BlobType() azblob.BlobType
 }
 
+type TypedSMBPropertyHolder interface {
+	FileCreationTime() time.Time
+	FileLastWriteTime() time.Time
+	FileAttributes() azfile.FileAttributeFlags
+}
+
 type ISMBPropertyBearingSourceInfoProvider interface {
 	ISourceInfoProvider
 
 	GetSDDL() (string, error)
-	// GetFileSMBCreationTime() (time.Time, error)
-	// GetFileSMBLastWriteTime() (time.Time, error)
-	// GetFileSMBAttributes() (azfile.FileAttributeFlags, error)
-	GetSMBProperties() (azfile.SMBPropertyHolder, error)
+	GetSMBProperties() (TypedSMBPropertyHolder, error)
 }
 
 type sourceInfoProviderFactory func(jptm IJobPartTransferMgr) (ISourceInfoProvider, error)
