@@ -51,10 +51,11 @@ type rawSyncCmdArgs struct {
 	legacyInclude         string // for warning messages only
 	legacyExclude         string // for warning messages only
 
-	preserveNTFSACLs    bool
-	followSymlinks      bool
-	putMd5              bool
-	md5ValidationOption string
+	preserveSMBPermissions bool
+	preserveSMBProperties  bool
+	followSymlinks         bool
+	putMd5                 bool
+	md5ValidationOption    string
 	// this flag indicates the user agreement with respect to deleting the extra files at the destination
 	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
 	// otherwise the user is prompted to make a decision
@@ -175,8 +176,13 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		return cooked, err
 	}
 
-	cooked.preserveNTFSACLs = raw.preserveNTFSACLs
-	if err = validatePreserveNTFSACLs(cooked.preserveNTFSACLs, cooked.fromTo); err != nil {
+	cooked.preserveSMBPermissions = raw.preserveSMBPermissions
+	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBPermissions, cooked.fromTo, "preserve-smb-permissions"); err != nil {
+		return cooked, err
+	}
+
+	cooked.preserveSMBProperties = raw.preserveSMBProperties
+	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBProperties, cooked.fromTo, "preserve-smb-properties"); err != nil {
 		return cooked, err
 	}
 
@@ -233,11 +239,12 @@ type cookedSyncCmdArgs struct {
 	excludeFileAttributes []string
 
 	// options
-	preserveNTFSACLs    bool
-	putMd5              bool
-	md5ValidationOption common.HashValidationOption
-	blockSize           uint32
-	logVerbosity        common.LogLevel
+	preserveSMBPermissions bool
+	preserveSMBProperties  bool
+	putMd5                 bool
+	md5ValidationOption    common.HashValidationOption
+	blockSize              uint32
+	logVerbosity           common.LogLevel
 
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
@@ -565,7 +572,8 @@ func init() {
 
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", true, "True by default, look into sub-directories recursively when syncing between directories. (default true).")
-	syncCmd.PersistentFlags().BoolVar(&raw.preserveNTFSACLs, "preserve-ntfs-acls", false, "False by default. Preserves NTFS ACLs between aware resources (Windows and Azure Files)")
+	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files)")
+	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBProperties, "preserve-smb-properties", false, "False by default. Preserves SMB properties (last write time, creation time, attribute bits) between aware resources (Windows and Azure Files)")
 	syncCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage or downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")

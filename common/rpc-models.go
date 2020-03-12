@@ -129,7 +129,8 @@ type CopyJobPartOrderRequest struct {
 	CommandString  string // commandString hold the user given command which is logged to the Job log file
 	CredentialInfo CredentialInfo
 
-	PreserveNTFSACLs               bool
+	PreserveSMBPermissions         bool
+	PreserveSMBProperties          bool
 	S2SGetPropertiesInBackend      bool
 	S2SSourceChangeValidation      bool
 	DestLengthValidation           bool

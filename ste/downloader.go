@@ -43,12 +43,14 @@ type downloader interface {
 	Epilogue()
 }
 
-// sddlAwareDownloader is a windows-triggered interface.
+// smbPropertyAwareDownloader is a windows-triggered interface.
 // Code outside of windows-specific files shouldn't implement this ever.
-type sddlAwareDownloader interface {
+type smbPropertyAwareDownloader interface {
 	downloader
 
-	PutSDDL(sip ISDDLBearingSourceInfoProvider, txInfo TransferInfo) error
+	PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error
+
+	PutFileSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error
 }
 
 type downloaderFactory func() downloader

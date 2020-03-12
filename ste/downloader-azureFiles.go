@@ -53,21 +53,32 @@ func (bd *azureFilesDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline p
 func (bd *azureFilesDownloader) Epilogue() {
 	info := bd.jptm.Info()
 
-	if info.PreserveNTFSACLs {
+	if info.PreserveSMBPermissions {
 		// We're about to call into Windows-specific code.
 		// Some functions here can't be called on other OSes, to the extent that they just aren't present in the library due to compile flags.
 		// In order to work around this, we'll do some trickery with interfaces.
-		// There is a windows-specific file (downloader-azureFiles_windows.go) that makes azureFilesDownloader satisfy the sddlAwareDownloader interface.
+		// There is a windows-specific file (downloader-azureFiles_windows.go) that makes azureFilesDownloader satisfy the smbPropertyAwareDownloader interface.
 		// This function isn't present on other OSes due to compile flags,
 		// so in that way, we can cordon off these sections that would otherwise require filler functions.
 		// To do that, we'll do some type wrangling:
 		// bd can't directly be wrangled from a struct, so we wrangle it to an interface, then do so.
-		if spdl, ok := interface{}(bd).(sddlAwareDownloader); ok {
-			// We don't need to worry about the sip not being a ISDDLBearingSourceInfoProvider as Azure Files always is.
-			err := spdl.PutSDDL(bd.sip.(ISDDLBearingSourceInfoProvider), bd.txInfo)
+		if spdl, ok := interface{}(bd).(smbPropertyAwareDownloader); ok {
+			// We don't need to worry about the sip not being a ISMBPropertyBearingSourceInfoProvider as Azure Files always is.
+			err := spdl.PutSDDL(bd.sip.(ISMBPropertyBearingSourceInfoProvider), bd.txInfo)
 
 			if err != nil {
 				bd.jptm.FailActiveDownload("Setting destination file SDDLs", err)
+			}
+		}
+	}
+
+	if info.PreserveSMBProperties {
+		if spdl, ok := interface{}(bd).(smbPropertyAwareDownloader); ok {
+			// We don't need to worry about the sip not being a ISMBPropertyBearingSourceInfoProvider as Azure Files always is.
+			err := spdl.PutFileSMBProperties(bd.sip.(ISMBPropertyBearingSourceInfoProvider), bd.txInfo)
+
+			if err != nil {
+				bd.jptm.FailActiveDownload("Setting destination file SMB properties", err)
 			}
 		}
 	}

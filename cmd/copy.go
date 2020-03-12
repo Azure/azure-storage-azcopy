@@ -108,8 +108,10 @@ type rawCopyCmdArgs struct {
 	logVerbosity  string
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType string
-	// Opt-in flag to persist NTFS ACLs to Azure Files.
-	preserveNTFSACLs bool
+	// Opt-in flag to persist SMB ACLs to Azure Files.
+	preserveSMBPermissions bool
+	// Opt-in flag to persist additional SMB properties to Azure Files.
+	preserveSMBProperties bool
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
 	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
 	// to preserve full properties AzCopy needs to send one additional request per object/file.
@@ -447,8 +449,13 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
 
-	cooked.preserveNTFSACLs = raw.preserveNTFSACLs
-	if err = validatePreserveNTFSACLs(cooked.preserveNTFSACLs, cooked.fromTo); err != nil {
+	cooked.preserveSMBPermissions = raw.preserveSMBPermissions
+	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBPermissions, cooked.fromTo, "preserve-smb-permissions"); err != nil {
+		return cooked, err
+	}
+
+	cooked.preserveSMBProperties = raw.preserveSMBProperties
+	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBProperties, cooked.fromTo, "preserve-smb-properties"); err != nil {
 		return cooked, err
 	}
 
@@ -467,8 +474,8 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
 			return cooked, fmt.Errorf("blob-tier is not supported while uploading to ADLS Gen 2")
 		}
-		if cooked.preserveNTFSACLs {
-			return cooked, fmt.Errorf("preserve-ntfs-acls is not supported while uploading to ADLS Gen 2")
+		if cooked.preserveSMBPermissions {
+			return cooked, fmt.Errorf("preserve-smb-permissions is not supported while uploading to ADLS Gen 2")
 		}
 		if cooked.s2sPreserveProperties {
 			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while uploading")
@@ -648,15 +655,15 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 	raw.forceWrite = common.EOverwriteOption.True().String()
 }
 
-func validatePreserveNTFSACLs(toPreserve bool, fromTo common.FromTo) error {
+func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, flagName string) error {
 	if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
 		fromTo == common.EFromTo.FileLocal() ||
 		fromTo == common.EFromTo.FileFile()) {
-		return fmt.Errorf("preserve-ntfs-acls is set but the job is not between NTFS ACL aware resources")
+		return fmt.Errorf("%s is set but the job is not between SMB-aware resources", flagName)
 	}
 
 	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) && runtime.GOOS != "windows" {
-		return fmt.Errorf("preserve-ntfs-acls is set but ACL persistence for up/downloads is a windows-only feature")
+		return fmt.Errorf("%s is set but persistence for up/downloads is a Windows-only feature", flagName)
 	}
 
 	return nil
@@ -744,8 +751,10 @@ type cookedCopyCmdArgs struct {
 	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
 	isEnumerationComplete bool
 
-	// Whether the user wants to preserve the NTFS ACLs assigned to their files when moving between resources that are NTFS ACL aware.
-	preserveNTFSACLs bool
+	// Whether the user wants to preserve the SMB ACLs assigned to their files when moving between resources that are SMB ACL aware.
+	preserveSMBPermissions bool
+	// Whether the user wants to perserve the SMB properties ...
+	preserveSMBProperties bool
 
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
 	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
@@ -1399,7 +1408,8 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.cacheControl, "cache-control", "", "Set the cache-control header. Returned on download.")
 	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "Prevents AzCopy from detecting the content-type based on the extension or content of the file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveNTFSACLs, "preserve-ntfs-acls", false, "False by default. Perserves NTFS ACLs between aware resources (Windows and Azure Files)")
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files)")
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBProperties, "preserve-smb-properties", false, "False by default. Preserves SMB properties (last write time, creation time, attribute bits) between aware resources (Windows and Azure Files)")
 	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob or file. (By default the hash is NOT created.) Only available when uploading.")
 	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "check-md5", common.DefaultHashValidationOption.String(), "Specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing. (default 'FailIfDifferent')")
 	cpCmd.PersistentFlags().StringVar(&raw.includeFileAttributes, "include-attributes", "", "(Windows only) Include files whose attributes match the attribute list. For example: A;S;R")

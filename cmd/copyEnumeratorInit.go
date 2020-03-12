@@ -41,7 +41,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource")
 	}
 
-	jobPartOrder.PreserveNTFSACLs = cca.preserveNTFSACLs
+	jobPartOrder.PreserveSMBPermissions = cca.preserveSMBPermissions
+	jobPartOrder.PreserveSMBProperties = cca.preserveSMBProperties
 
 	// Infer on download so that we get LMT and MD5 on files download
 	// On S2S transfers the following rules apply:

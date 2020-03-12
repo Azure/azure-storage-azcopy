@@ -437,7 +437,7 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SShareAndEmptyDir(c *chk.C) {
 	// construct the raw input to simulate user input
 	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
 	dirName := "emptydir"
-	_, err := dstShareURL.NewDirectoryURL(dirName).Create(context.Background(), azfile.Metadata{}, "", "")
+	_, err := dstShareURL.NewDirectoryURL(dirName).Create(context.Background(), azfile.Metadata{}, azfile.SMBProperties{})
 	c.Assert(err, chk.IsNil)
 	dstDirURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, dstShareName, dirName)
 	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstDirURLWithSAS.String())

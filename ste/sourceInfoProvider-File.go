@@ -22,6 +22,7 @@ package ste
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -33,6 +34,8 @@ import (
 type fileSourceInfoProvider struct {
 	ctx                 context.Context
 	cachedPermissionKey string
+	cacheOnce           *sync.Once
+	cachedProperties    *azfile.FileGetPropertiesResponse
 	defaultRemoteSourceInfoProvider
 }
 
@@ -48,7 +51,34 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 	// so we must use the latest SDK version to stay safe
 	ctx := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azfile.ServiceVersion)
 
-	return &fileSourceInfoProvider{defaultRemoteSourceInfoProvider: *base, ctx: ctx}, nil
+	return &fileSourceInfoProvider{defaultRemoteSourceInfoProvider: *base, ctx: ctx, cacheOnce: &sync.Once{}}, nil
+}
+
+// for reviewers: should we worry about caching these properties?
+func (p *fileSourceInfoProvider) getCachedProperties() (*azfile.FileGetPropertiesResponse, error) {
+	presigned, err := p.PreSignedSourceURL()
+
+	if err != nil {
+		return nil, err
+	}
+
+	p.cacheOnce.Do(func() {
+		fileURL := azfile.NewFileURL(*presigned, p.jptm.SourceProviderPipeline())
+
+		p.cachedProperties, err = fileURL.GetProperties(p.ctx)
+	})
+
+	if err != nil {
+		return p.cachedProperties, err
+	}
+
+	return p.cachedProperties, nil
+}
+
+func (p *fileSourceInfoProvider) GetSMBProperties() (TypedSMBPropertyHolder, error) {
+	cachedProps, err := p.getCachedProperties()
+
+	return &azfile.SMBPropertyAdapter{PropertySource: cachedProps}, err
 }
 
 func (p *fileSourceInfoProvider) GetSDDL() (string, error) {
@@ -59,18 +89,13 @@ func (p *fileSourceInfoProvider) GetSDDL() (string, error) {
 	}
 
 	// Get the key for SIPM
-	key := p.cachedPermissionKey
+	props, err := p.getCachedProperties()
 
-	if key == "" {
-		fileURL := azfile.NewFileURL(*presigned, p.jptm.SourceProviderPipeline())
-		props, err := fileURL.GetProperties(p.ctx)
-
-		if err != nil {
-			return "", err
-		}
-
-		key = props.FilePermissionKey()
+	if err != nil {
+		return "", err
 	}
+
+	key := props.FilePermissionKey()
 
 	// Call into SIPM and grab our SDDL string.
 	sipm := p.jptm.SecurityInfoPersistenceManager()
@@ -100,8 +125,7 @@ func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 
 		switch p.EntityType() {
 		case common.EEntityType.File():
-			fileURL := azfile.NewFileURL(*presignedURL, p.jptm.SourceProviderPipeline())
-			properties, err := fileURL.GetProperties(p.ctx)
+			properties, err := p.getCachedProperties()
 			if err != nil {
 				return nil, err
 			}
@@ -126,7 +150,7 @@ func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 			if err != nil {
 				return nil, err
 			}
-			
+
 			p.cachedPermissionKey = properties.FilePermissionKey()
 
 			srcProperties = &SrcProperties{
@@ -141,7 +165,7 @@ func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 	return srcProperties, nil
 }
 
-func (p *fileSourceInfoProvider) GetFileLastModifiedTime() (time.Time, error) {
+func (p *fileSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
 	if p.EntityType() != common.EEntityType.File() {
 		panic("unsupported. Cannot get modification time on non-file object") // nothing should ever call this for a non-file
 	}
@@ -156,6 +180,8 @@ func (p *fileSourceInfoProvider) GetFileLastModifiedTime() (time.Time, error) {
 	if err != nil {
 		return time.Time{}, err
 	}
+
+	// We ignore smblastwrite because otherwise the tx will fail s2s
 
 	return properties.LastModified(), nil
 }

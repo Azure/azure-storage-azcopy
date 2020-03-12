@@ -50,7 +50,7 @@ func (p *blobSourceInfoProvider) BlobType() azblob.BlobType {
 	return p.transferInfo.SrcBlobType
 }
 
-func (p *blobSourceInfoProvider) GetFileLastModifiedTime() (time.Time, error) {
+func (p *blobSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
 	presignedURL, err := p.PreSignedSourceURL()
 	if err != nil {
 		return time.Time{}, err

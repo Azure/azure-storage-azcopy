@@ -87,12 +87,13 @@ type IJobPartTransferMgr interface {
 }
 
 type TransferInfo struct {
-	BlockSize        uint32
-	Source           string
-	SourceSize       int64
-	Destination      string
-	EntityType       common.EntityType
-	PreserveNTFSACLs bool
+	BlockSize              uint32
+	Source                 string
+	SourceSize             int64
+	Destination            string
+	EntityType             common.EntityType
+	PreserveSMBPermissions bool
+	PreserveSMBProperties  bool
 
 	// Transfer info for S2S copy
 	SrcProperties
@@ -269,7 +270,8 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		SourceSize:                     sourceSize,
 		Destination:                    dst,
 		EntityType:                     entityType,
-		PreserveNTFSACLs:               plan.PreserveNTFSACLs,
+		PreserveSMBPermissions:         plan.PreserveSMBPermissions,
+		PreserveSMBProperties:          plan.PreserveSMBProperties,
 		S2SGetPropertiesInBackend:      s2sGetPropertiesInBackend,
 		S2SSourceChangeValidation:      s2sSourceChangeValidation,
 		S2SInvalidMetadataHandleOption: s2sInvalidMetadataHandleOption,
