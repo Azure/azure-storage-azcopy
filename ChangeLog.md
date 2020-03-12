@@ -22,7 +22,12 @@ and destination support real folders (Blob Storage does not, because it only sup
 ### Special notes
 
 1. AzCopy has upgraded to service revision `2019-02-02`. Users targeting local emulators, Azure Stack, or other private/special instances of Azure Storage may need to intentionally downgrade their service revision using the environment variable `AZCOPY_DEFAULT_SERVICE_API_VERSION`. Prior to this release, the default service revision was `2018-03-28`.
-1. For Azure Files to Azure Files transfers, --persist-smb-acls (**name TBC**) is available on non-Windows OSes. 
+1. For Azure Files to Azure Files transfers, --persist-smb-acls (**name TBC**) is available on non-Windows OSes.
+1. AzCopy now includes a list of trusted domain suffixes for Azure Active Directory (AAD) authentication. 
+   After `azcopy login`, the resulting token will only be sent to locations that appear in the list. The list is:
+   `*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net`. 
+   If necessary, you can add to the the list with the command-line flag: `--trusted-aad-suffixes`. For security,
+   you should only add Azure domains. 
 
 ### Breaking changes
 
@@ -31,6 +36,8 @@ and destination support real folders (Blob Storage does not, because it only sup
 1. The TransferStatus value `SkippedFileAlreadyExists` has been renamed `SkippedEntityExists` and may now be used both 
    for when files are skipped and for when the setting of folder properties is skipped.  This affects the input and 
    output of `azcopy jobs show` and the status values shown in the JSON output format from `copy` and `sync`.
+1. The format and content of authentication information messages, in the JSON output format, e.g.
+   "Using OAuth token for authentication" has been changed.
 
 ### Bug fixes
 
