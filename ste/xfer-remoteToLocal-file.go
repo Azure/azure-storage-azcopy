@@ -36,7 +36,7 @@ import (
 func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, df downloaderFactory) {
 	info := jptm.Info()
 	if info.IsFolderPropertiesTransfer() {
-		remoteToLocal_folder(jptm, p, pacer)
+		remoteToLocal_folder(jptm, p, pacer, df)
 	} else {
 		remoteToLocal_file(jptm, p, pacer, df)
 	}
@@ -291,7 +291,7 @@ func createDestinationFile(jptm IJobPartTransferMgr, destination string, size in
 }
 
 // complete epilogue. Handles both success and failure
-func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, activeDstFile io.WriteCloser, cw common.ChunkedFileWriter) {
+func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl fileDownloader, activeDstFile io.WriteCloser, cw common.ChunkedFileWriter) {
 	info := jptm.Info()
 
 	// allow our usual state tracking mechanism to keep count of how many epilogues are running at any given instant, for perf diagnostics

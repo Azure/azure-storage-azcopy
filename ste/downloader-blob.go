@@ -40,7 +40,7 @@ type blobDownloader struct {
 	pageRangeOptimizer *pageRangeOptimizer
 }
 
-func newBlobDownloader() downloader {
+func newBlobDownloader() downloaderBase {
 	return &blobDownloader{
 		filePacer: newNullAutoPacer(), // defer creation of real one, if needed, to Prologue
 	}
@@ -134,6 +134,10 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 			return
 		}
 	})
+}
+
+func (bd *blobDownloader) SetFolderProperties(jptm IJobPartTransferMgr) error {
+	panic("folders cannot be downloaded from Blob Storage, so this method should never be called")
 }
 
 type dummyReader struct{}

@@ -32,7 +32,7 @@ import (
 
 type blobFSDownloader struct{}
 
-func newBlobFSDownloader() downloader {
+func newBlobFSDownloader() downloaderBase {
 	return &blobFSDownloader{}
 }
 
@@ -88,4 +88,9 @@ func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPi
 			return
 		}
 	})
+}
+
+func (bd *blobFSDownloader) SetFolderProperties(jptm IJobPartTransferMgr) error {
+	// no-op
+	return nil
 }

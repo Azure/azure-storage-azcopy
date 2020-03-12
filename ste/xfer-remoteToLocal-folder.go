@@ -26,7 +26,7 @@ import (
 )
 
 // general-purpose "any remote persistence location" to local, for folders
-func remoteToLocal_folder(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
+func remoteToLocal_folder(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, df downloaderFactory) {
 
 	info := jptm.Info()
 
@@ -36,6 +36,8 @@ func remoteToLocal_folder(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer p
 		jptm.ReportTransferDone()
 		return
 	}
+
+	dl := df()
 
 	// no chunks to schedule. Just run the folder handling operations
 	t := jptm.GetFolderCreationTracker()
@@ -53,13 +55,10 @@ func remoteToLocal_folder(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer p
 			return
 		}
 
-		// TODO: in the later PR (to come) about actually transferring properties
-		//    we need to get the properties from somewhere (a source info provider, presumably?)
-		//    and set them
-		//
-		//		if err != nil {
-		//			jptm.FailActiveDownload("setting folder properties", err)
-		//}
+		err = dl.SetFolderProperties(jptm)
+		if err != nil {
+			jptm.FailActiveDownload("setting folder properties", err)
+		}
 	}
 	commonDownloaderCompletion(jptm, info, common.EEntityType.Folder()) // for consistency, always run the standard epilogue
 
