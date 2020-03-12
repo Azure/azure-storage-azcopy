@@ -445,11 +445,6 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		return cooked, err
 	}
 
-	// Since we already don't support preserving LMT on upload or S2S, it's fine to limit this to download.
-	if cooked.fromTo.IsDownload() && cooked.preserveSMBProperties && cooked.preserveLastModifiedTime {
-		return cooked, errors.New("SMB properties include a last modified time. Please use either --preserve-smb-properties OR --preserve-last-modified-time")
-	}
-
 	// check for the flag value relative to fromTo location type
 	// Example1: for Local to Blob, preserve-last-modified-time flag should not be set to true
 	// Example2: for Blob to Local, follow-symlinks, blob-tier flags should not be provided with values.
