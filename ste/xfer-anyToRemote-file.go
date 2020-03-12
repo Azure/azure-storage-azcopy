@@ -70,14 +70,13 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 		panic("configuration error. Source Info Provider does not have File entity type")
 	}
 
-	sBase, err := senderFactory(jptm, info.Destination, p, pacer, srcInfoProvider)
+	s, err := senderFactory(jptm, info.Destination, p, pacer, srcInfoProvider)
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
 	}
-	s := sBase.(IFileSender)
 
 	// step 2b. Read chunk size and count from the sender (since it may have applied its own defaults and/or calculations to produce these values
 	numChunks := s.NumChunks()
@@ -331,7 +330,7 @@ func isDummyChunkInEmptyFile(startIndex int64, fileSize int64) bool {
 }
 
 // Complete epilogue. Handles both success and failure.
-func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s IFileSender, sip ISourceInfoProvider) {
+func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, sip ISourceInfoProvider) {
 	info := jptm.Info()
 	// allow our usual state tracking mechanism to keep count of how many epilogues are running at any given instant, for perf diagnostics
 	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)

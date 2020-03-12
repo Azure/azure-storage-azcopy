@@ -170,3 +170,11 @@ func (s *appendBlobSenderBase) Cleanup() {
 		}
 	}
 }
+
+func (s *appendBlobSenderBase) EnsureFolderExists() error {
+	panic("Blob Storage does not support folders, so this method should never be called")
+}
+
+func (s *appendBlobSenderBase) SetFolderProperties() error {
+	panic("Blob Storage does not support folders, so this method should never be called")
+}

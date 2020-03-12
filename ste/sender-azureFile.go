@@ -126,14 +126,6 @@ func (u *azureFileSenderBase) dirURL() azfile.DirectoryURL {
 	return u.fileOrDirURL.(azfile.DirectoryURL)
 }
 
-func (u *azureFileSenderBase) SendableEntityType() common.EntityType {
-	if _, ok := u.fileOrDirURL.(azfile.DirectoryURL); ok {
-		return common.EEntityType.Folder()
-	} else {
-		return common.EEntityType.File()
-	}
-}
-
 func (u *azureFileSenderBase) ChunkSize() uint32 {
 	return u.chunkSize
 }

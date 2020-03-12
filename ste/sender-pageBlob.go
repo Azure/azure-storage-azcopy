@@ -263,3 +263,11 @@ func (s *pageBlobSenderBase) Cleanup() {
 		}
 	}
 }
+
+func (s *pageBlobSenderBase) EnsureFolderExists() error {
+	panic("Blob Storage does not support folders, so this method should never be called")
+}
+
+func (s *pageBlobSenderBase) SetFolderProperties() error {
+	panic("Blob Storage does not support folders, so this method should never be called")
+}
