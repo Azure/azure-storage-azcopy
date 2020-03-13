@@ -12,7 +12,7 @@ import (
 // This file implements the windows-triggered smbPropertyAwareDownloader interface.
 
 // works for both folders and files
-func (_ *azureFilesDownloader) PutFileSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
+func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
 	propHolder, err := sip.GetSMBProperties()
 
 	if err != nil {
@@ -59,7 +59,7 @@ func (_ *azureFilesDownloader) PutFileSMBProperties(sip ISMBPropertyBearingSourc
 }
 
 // works for both folders and files
-func (_ *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
+func (*azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
 	// Let's start by getting our SDDL and parsing it.
 	sddlString, err := sip.GetSDDL()
 	// TODO: be better at handling these errors.
