@@ -32,7 +32,7 @@ import (
 
 type blobFSDownloader struct{}
 
-func newBlobFSDownloader() downloaderBase {
+func newBlobFSDownloader() downloader {
 	return &blobFSDownloader{}
 }
 
@@ -91,6 +91,6 @@ func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPi
 }
 
 func (bd *blobFSDownloader) SetFolderProperties(jptm IJobPartTransferMgr) error {
-	// no-op
+	// no-op (BlobFS is folder aware, but we don't currently preserve properties from its folders)
 	return nil
 }

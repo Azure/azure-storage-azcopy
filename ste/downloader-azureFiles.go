@@ -36,7 +36,7 @@ type azureFilesDownloader struct {
 	sip    ISourceInfoProvider
 }
 
-func newAzureFilesDownloader() downloaderBase {
+func newAzureFilesDownloader() downloader {
 	return &azureFilesDownloader{}
 }
 

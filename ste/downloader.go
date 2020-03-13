@@ -25,8 +25,8 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
-// Abstraction of the methods needed to download from a remote location
-type fileDownloader interface {
+// Abstraction of the methods needed to download files/blobs from a remote location
+type downloader interface {
 	// Prologue does any necessary first-time setup
 	Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline)
 
@@ -40,15 +40,10 @@ type fileDownloader interface {
 	Epilogue()
 }
 
+// folderDownloader is a downloader that can also process folder properties
 type folderDownloader interface {
+	downloader
 	SetFolderProperties(jptm IJobPartTransferMgr) error
-}
-
-//It seems the most simple option simple to say that all downloaders must implement all methods
-//Those that don't support folders should panic in SetFolderProperties (since it will never be called on them)
-type downloaderBase interface {
-	fileDownloader
-	folderDownloader
 }
 
 // smbPropertyAwareDownloader is a windows-triggered interface.
@@ -59,7 +54,7 @@ type smbPropertyAwareDownloader interface {
 	PutFileSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error
 }
 
-type downloaderFactory func() downloaderBase
+type downloaderFactory func() downloader
 
 func createDownloadChunkFunc(jptm IJobPartTransferMgr, id common.ChunkID, body func()) chunkFunc {
 	// If uploading, we set the chunk status to done as soon as the chunkFunc completes.
