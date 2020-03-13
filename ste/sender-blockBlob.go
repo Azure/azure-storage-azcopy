@@ -212,11 +212,3 @@ func (s *blockBlobSenderBase) generateEncodedBlockID() string {
 	blockID := common.NewUUID().String()
 	return base64.StdEncoding.EncodeToString([]byte(blockID))
 }
-
-func (s *blockBlobSenderBase) EnsureFolderExists() error {
-	panic("Blob Storage does not support folders, so this method should never be called")
-}
-
-func (s *blockBlobSenderBase) SetFolderProperties() error {
-	panic("Blob Storage does not support folders, so this method should never be called")
-}

@@ -21,7 +21,6 @@
 package ste
 
 import (
-	"errors"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -40,7 +39,10 @@ func remoteToLocal_folder(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer p
 
 	dl, ok := df().(folderDownloader)
 	if !ok {
-		jptm.FailActiveDownload("converting downloader to folderDownloader", errors.New("downloader implementation does not support folders"))
+		jptm.LogDownloadError(info.Source, info.Destination, "downloader implementation does not support folders", 0)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
 	}
 
 	// no chunks to schedule. Just run the folder handling operations

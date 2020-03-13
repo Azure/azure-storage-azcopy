@@ -31,7 +31,7 @@ type blobFSUploader struct {
 	md5Channel chan []byte
 }
 
-func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
+func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
 	senderBase, err := newBlobFSSenderBase(jptm, destination, p, pacer, sip)
 	if err != nil {
 		return nil, err

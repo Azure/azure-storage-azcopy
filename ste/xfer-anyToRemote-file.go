@@ -202,7 +202,7 @@ var jobCancelledLocalPrefetchErr = errors.New("job was cancelled; Pre-fetching s
 // is harmless (and a good thing, to avoid excessive RAM usage).
 // To take advantage of the good sequential read performance provided by many file systems,
 // and to be able to compute an MD5 hash for the file, we work sequentially through the file here.
-func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common.CloseableReaderAt, srcSize int64, s IFileSender, sourceFileFactory common.ChunkReaderSourceFactory, srcInfoProvider ISourceInfoProvider) {
+func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common.CloseableReaderAt, srcSize int64, s sender, sourceFileFactory common.ChunkReaderSourceFactory, srcInfoProvider ISourceInfoProvider) {
 	// For generic send
 	chunkSize := s.ChunkSize()
 	numChunks := s.NumChunks()
@@ -330,7 +330,7 @@ func isDummyChunkInEmptyFile(startIndex int64, fileSize int64) bool {
 }
 
 // Complete epilogue. Handles both success and failure.
-func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, sip ISourceInfoProvider) {
+func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISourceInfoProvider) {
 	info := jptm.Info()
 	// allow our usual state tracking mechanism to keep count of how many epilogues are running at any given instant, for perf diagnostics
 	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
@@ -374,7 +374,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 }
 
 // commonSenderCompletion is used for both files and folders
-func commonSenderCompletion(jptm IJobPartTransferMgr, s ISenderBase, info TransferInfo) {
+func commonSenderCompletion(jptm IJobPartTransferMgr, s sender, info TransferInfo) {
 
 	jptm.EnsureDestinationUnlocked()
 

@@ -35,7 +35,7 @@ type blockBlobUploader struct {
 	md5Channel chan []byte
 }
 
-func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
+func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
 	senderBase, err := newBlockBlobSenderBase(jptm, destination, p, pacer, sip, azblob.AccessTierNone)
 	if err != nil {
 		return nil, err

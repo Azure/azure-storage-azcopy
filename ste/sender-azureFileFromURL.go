@@ -32,7 +32,7 @@ type urlToAzureFileCopier struct {
 	srcURL url.URL
 }
 
-func newURLToAzureFileCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
+func newURLToAzureFileCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
 	srcInfoProvider := sip.(IRemoteSourceInfoProvider) // "downcast" to the type we know it really has
 
 	senderBase, err := newAzureFileSenderBase(jptm, destination, p, pacer, sip)

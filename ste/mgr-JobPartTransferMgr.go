@@ -615,7 +615,10 @@ func (jptm *jobPartTransferMgr) FailActiveSend(where string, err error) {
 	} else if isCopy {
 		jptm.FailActiveS2SCopy(where, err)
 	} else {
-		panic("invalid state, FailActiveSend used by illegal direction")
+		// we used to panic here, but that was hard to maintain, e.g. if there was a failure path that wasn't exercised
+		// by test suite, and it reached this point in the code, we'd get a panic, but really it's better to just fail the
+		// transfer
+		jptm.FailActiveDownload(where+" (check operation type, is it really download?)", err)
 	}
 }
 

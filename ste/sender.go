@@ -31,9 +31,9 @@ import (
 )
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
-// IFileSender is the abstraction that contains common sender behavior, for sending files/blobs.
+// sender is the abstraction that contains common sender behavior, for sending files/blobs.
 /////////////////////////////////////////////////////////////////////////////////////////////////
-type IFileSender interface {
+type sender interface {
 	// ChunkSize returns the chunk size that should be used
 	ChunkSize() uint32
 
@@ -67,21 +67,14 @@ type IFileSender interface {
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
-// IFolderSender is the abstraction that contains common sender behavior, for sending folders
+// folderSender is a sender that also knows how to send folder property information
 /////////////////////////////////////////////////////////////////////////////////////////////////
-type IFolderSender interface {
+type folderSender interface {
 	EnsureFolderExists() error
 	SetFolderProperties() error
 }
 
-// its clearest to say that all senders must implement both interfaces, with those that don't support folders
-// just panicing in the folder-related methods (which will never be called on those types).
-type ISenderBase interface {
-	IFileSender
-	IFolderSender
-}
-
-type senderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error)
+type senderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 // For copying folder properties, many of the ISender of the methods needed to copy one file from URL to a remote location
@@ -91,7 +84,7 @@ type senderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline
 // Abstraction of the methods needed to copy one file from URL to a remote location
 /////////////////////////////////////////////////////////////////////////////////////////////////
 type s2sCopier interface {
-	ISenderBase
+	sender
 
 	// GenerateCopyFunc returns a func() that will copy the specified portion of the source URL file to the remote location.
 	GenerateCopyFunc(chunkID common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc
@@ -103,7 +96,7 @@ type s2sCopierFactory func(jptm IJobPartTransferMgr, srcInfoProvider IRemoteSour
 // Abstraction of the methods needed to upload one file to a remote location
 /////////////////////////////////////////////////////////////////////////////////////////////////
 type uploader interface {
-	ISenderBase
+	sender
 
 	// GenerateUploadFunc returns a func() that will upload the specified portion of the local file to the remote location
 	// Instead of taking local file as a parameter, it takes a helper that will read from the file. That keeps details of
@@ -188,7 +181,7 @@ func createChunkFunc(setDoneStatusOnExit bool, jptm IJobPartTransferMgr, id comm
 }
 
 // newBlobUploader detects blob type and creates a uploader manually
-func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
+func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
 	override := jptm.BlobTypeOverride()
 	intendedType := override.ToAzBlobType()
 
