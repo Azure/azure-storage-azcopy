@@ -3,8 +3,6 @@
 package ste
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
-	"reflect"
 	"strings"
 	"syscall"
 	"time"
@@ -39,16 +37,19 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 }
 
 func (f localFileSourceInfoProvider) getFileInformation() (windows.ByHandleFileInformation, error) {
-	tfrInfo := f.jptm.Info()
-	backupSemantics := tfrInfo.EntityType == common.EEntityType.Folder() // Windows API requires that this flag is set, when reading directory properties
 
-	sysfd, err := common.OpenWithOptions(tfrInfo.Source, windows.O_RDONLY, 0, false, backupSemantics)
-	fd := castToWinHandle(sysfd)
-	defer windows.Close(fd)
-
+	srcPtr, err := syscall.UTF16PtrFromString(f.jptm.Info().Source)
 	if err != nil {
 		return windows.ByHandleFileInformation{}, err
 	}
+	// custom open call, because must specify FILE_FLAG_BACKUP_SEMANTICS when getting information of folders (else GetFileInformationByHandle will fail)
+	fd, err := windows.CreateFile(srcPtr,
+		windows.GENERIC_READ, windows.FILE_SHARE_READ, nil,
+		windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+	if err != nil {
+		return windows.ByHandleFileInformation{}, err
+	}
+	defer windows.Close(fd)
 
 	var info windows.ByHandleFileInformation
 
@@ -78,20 +79,4 @@ func (hi handleInfo) FileLastWriteTime() time.Time {
 func (hi handleInfo) FileAttributes() azfile.FileAttributeFlags {
 	// Can't shorthand it because the function name overrides.
 	return azfile.FileAttributeFlags(hi.ByHandleFileInformation.FileAttributes)
-}
-
-var castToWinHandle func(handle syscall.Handle) windows.Handle
-
-func init() {
-	// check that we really can cast (safely) between these handle types
-	// Because, in theory, if one was ever redefined to be a different width, Go would still allow the cast
-	// but it it would be unsafe.  That's MOST unlikely to ever happen, but we may as well check it.
-	var s syscall.Handle
-	var w syscall.Handle
-	if reflect.TypeOf(s).Bits() != reflect.TypeOf(w).Bits() {
-		panic("unsafe handle cast")
-	}
-	castToWinHandle = func(sh syscall.Handle) windows.Handle {
-		return windows.Handle(sh)
-	}
 }
