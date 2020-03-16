@@ -22,6 +22,7 @@ package common
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/jiacfan/keyctl" // forked form "github.com/jsipprell/keyctl", todo: make a release to ensure stability
@@ -162,7 +163,8 @@ func (c *CredCache) saveTokenInternal(token OAuthTokenInfo) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal during saving token, %v", err)
 	}
-	GetLifecycleMgr().OAuthLog("Adal JSONified token hash before save: " + string(sha256.Sum256([]byte(b))[:]))
+	sum := sha256.Sum256([]byte(b))
+	GetLifecycleMgr().OAuthLog("Adal JSONified token hash before save: " + hex.EncodeToString(sum[:]))
 	keyring, err := keyctl.SessionKeyring()
 	if err != nil {
 		return fmt.Errorf("failed to get keyring during saving token, %v", err)
@@ -203,7 +205,8 @@ func (c *CredCache) loadTokenInternal() (*OAuthTokenInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load token, %v", err)
 	}
-	GetLifecycleMgr().OAuthLog("ADAL JSONified token after load: " + string(sha256.Sum256([]byte(data))[:]))
+	sum := sha256.Sum256(data)
+	GetLifecycleMgr().OAuthLog("ADAL JSONified token after load: " + hex.EncodeToString(sum[:]))
 	token, err := jsonToTokenInfo(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal token during loading key, %v", err)

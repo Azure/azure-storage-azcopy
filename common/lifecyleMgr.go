@@ -2,8 +2,8 @@ package common
 
 import (
 	"bufio"
-	"crypto/md5"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"io"
@@ -258,7 +258,7 @@ func (lcm *lifecycleMgr) AdalTokenHash(token *adal.Token) string {
 		lcm.Error(err.Error())
 	}
 
-	return string(hash.Sum(nil)[:])
+	return hex.EncodeToString(hash.Sum(nil)[:])
 }
 
 func (lcm *lifecycleMgr) Prompt(message string, details PromptDetails) ResponseOption {

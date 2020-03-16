@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
@@ -189,8 +190,9 @@ func (lca loginCmdArgs) process() error {
 		// For MSI login, info success message to user.
 		glcm.Info("Login with identity succeeded.")
 	default:
+		sum := sha256.Sum256([]byte(lca.tenantID))
 		glcm.OAuthLog("Attempting OAuth user login. AAD endpoint: " + lca.aadEndpoint +
-			" Tenant ID hash: " + string(sha256.Sum256([]byte(lca.tenantID))[:]))
+			" Tenant ID hash: " + hex.EncodeToString(sum[:]))
 		if _, err := uotm.UserLogin(lca.tenantID, lca.aadEndpoint, true); err != nil {
 			return err
 		}

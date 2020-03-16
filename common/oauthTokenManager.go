@@ -22,10 +22,10 @@ package common
 
 import (
 	"context"
-	"crypto/md5"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -431,8 +431,9 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 		activeDirectoryEndpoint = DefaultActiveDirectoryEndpoint
 	}
 
+	sum := sha256.Sum256([]byte(tenantID))
 	GetLifecycleMgr().OAuthLog("Finalized login info. AAD endpoint: " + activeDirectoryEndpoint +
-		" Tenant ID hash: " + string(sha256.Sum256([]byte(tenantID))[:]))
+		" Tenant ID hash: " + hex.EncodeToString(sum[:]))
 
 	// Init OAuth config
 	GetLifecycleMgr().OAuthLog("Getting newOAuthConfig")
@@ -480,8 +481,9 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
 	}
+	sum = sha256.Sum256([]byte(tenantID))
 	GetLifecycleMgr().OAuthLog("OAuth Token Info. Token hash: " + GetLifecycleMgr().AdalTokenHash(token) +
-		" TenantId hash: " + string(sha256.Sum256([]byte(tenantID))[:]) + " ActiveDirectoryEndpoint: " +
+		" TenantId hash: " + hex.EncodeToString(sum[:]) + " ActiveDirectoryEndpoint: " +
 		activeDirectoryEndpoint)
 
 	if persist {
@@ -512,9 +514,11 @@ func (uotm *UserOAuthTokenManager) getCachedTokenInfo(ctx context.Context) (*OAu
 	if err != nil {
 		return nil, fmt.Errorf("get cached token failed, %v", err)
 	}
+
+	sum := sha256.Sum256([]byte(tokenInfo.Tenant))
 	GetLifecycleMgr().OAuthLog("OAuth Token Info after load. Token hash: " +
 		GetLifecycleMgr().AdalTokenHash(&tokenInfo.Token) +
-		" TenantId hash: " + string(sha256.Sum256([]byte(tokenInfo.Tenant))[:]) + " ActiveDirectoryEndpoint: " +
+		" TenantId hash: " + hex.EncodeToString(sum[:]) + " ActiveDirectoryEndpoint: " +
 		tokenInfo.ActiveDirectoryEndpoint)
 
 	GetLifecycleMgr().OAuthLog("Refreshing token")
