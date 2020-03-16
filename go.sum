@@ -12,6 +12,8 @@ github.com/Azure/azure-storage-file-go v0.6.1-0.20200311215419-02291a0d17c6 h1:H
 github.com/Azure/azure-storage-file-go v0.6.1-0.20200311215419-02291a0d17c6/go.mod h1:3w3mufGcMjcOJ3w+4Gs+5wsSgkT7xDwWWqMMIrXtW4c=
 github.com/Azure/azure-storage-file-go v0.6.1-0.20200315220355-8d0b5469a2a2 h1:wu0o9nz4iq7HZ5ex+u9NCbU7USDnHDGbSw8wwaoF2gE=
 github.com/Azure/azure-storage-file-go v0.6.1-0.20200315220355-8d0b5469a2a2/go.mod h1:3w3mufGcMjcOJ3w+4Gs+5wsSgkT7xDwWWqMMIrXtW4c=
+github.com/Azure/azure-storage-file-go v0.6.1-0.20200316024536-22d605a21a03 h1:18YKp1NT1heiaoSre1YAN5ZCwg6nA3Vj1SuyOCyjjag=
+github.com/Azure/azure-storage-file-go v0.6.1-0.20200316024536-22d605a21a03/go.mod h1:3w3mufGcMjcOJ3w+4Gs+5wsSgkT7xDwWWqMMIrXtW4c=
 github.com/Azure/go-autorest v10.15.2+incompatible h1:oZpnRzZie83xGV5txbT1aa/7zpCPvURGhV6ThJij2bs=
 github.com/Azure/go-autorest v10.15.2+incompatible/go.mod h1:r+4oMnoxhatjLLJ6zxSWATqVooLgysK6ZNox3g/xq24=
 github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda h1:NOo6+gM9NNPJ3W56nxOKb4164LEw094U0C8zYQM8mQU=
