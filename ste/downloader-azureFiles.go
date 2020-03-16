@@ -64,9 +64,12 @@ func (bd *azureFilesDownloader) preserveAttributes() (stage string, err error) {
 		// bd can't directly be wrangled from a struct, so we wrangle it to an interface, then do so.
 		if spdl, ok := interface{}(bd).(smbPropertyAwareDownloader); ok {
 			// We don't need to worry about the sip not being a ISMBPropertyBearingSourceInfoProvider as Azure Files always is.
-			err := spdl.PutSDDL(bd.sip.(ISMBPropertyBearingSourceInfoProvider), bd.txInfo)
-
-			if err != nil {
+			err = spdl.PutSDDL(bd.sip.(ISMBPropertyBearingSourceInfoProvider), bd.txInfo)
+			if err == errorNoSddlFound {
+				bd.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, "No SMB permissions were downloaded because none were found at the source")
+			} else if err == errorCantSetLocalSystemSddl {
+				bd.jptm.LogAtLevelForCurrentTransfer(pipeline.LogInfo, "Can't set SMB permissions. Permissions from source may be defaults that can't be applied locally")
+			} else if err != nil {
 				return "Setting destination file SDDLs", err
 			}
 		}

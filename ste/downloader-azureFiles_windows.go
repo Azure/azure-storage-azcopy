@@ -3,7 +3,9 @@
 package ste
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 	"syscall"
 
 	"golang.org/x/sys/windows"
@@ -14,7 +16,6 @@ import (
 // works for both folders and files
 func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
 	propHolder, err := sip.GetSMBProperties()
-
 	if err != nil {
 		return err
 	}
@@ -22,14 +23,12 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 	attribs := propHolder.FileAttributes()
 
 	destPtr, err := syscall.UTF16PtrFromString(txInfo.Destination)
-
 	if err != nil {
 		return err
 	}
 
 	// This is a safe conversion.
 	err = windows.SetFileAttributes(destPtr, uint32(attribs))
-
 	if err != nil {
 		return err
 	}
@@ -59,6 +58,9 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 	return err
 }
 
+var errorNoSddlFound = errors.New("no SDDL found")
+var errorCantSetLocalSystemSddl = errors.New("failure setting local system as owner (possible old SDDL from source)")
+
 // works for both folders and files
 func (*azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
 	// Let's start by getting our SDDL and parsing it.
@@ -67,6 +69,10 @@ func (*azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, 
 	// GetSDDL will fail on a file-level SAS token.
 	if err != nil {
 		return fmt.Errorf("getting source SDDL: %s", err)
+	}
+	if sddlString == "" {
+		// nothing to do (no key returned)
+		return errorNoSddlFound
 	}
 
 	// We don't need to worry about making the SDDL string portable as this is expected for persistence into Azure Files in the first place.
@@ -100,6 +106,11 @@ func (*azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, 
 		dacl,
 		nil,
 	)
+
+	if err != nil && strings.HasPrefix(sddlString, "O:SYG:SYD:") {
+		// TODO: awaiting replies re where this SSDL comes from
+		return errorCantSetLocalSystemSddl
+	}
 
 	return err
 }

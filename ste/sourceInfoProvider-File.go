@@ -113,6 +113,9 @@ func (p *fileSourceInfoProvider) GetSDDL() (string, error) {
 		return "", err
 	}
 	key := props.FilePermissionKey()
+	if key == "" {
+		return "", nil
+	}
 
 	// Call into SIPM and grab our SDDL string.
 	sipm := p.jptm.SecurityInfoPersistenceManager()
