@@ -41,12 +41,13 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 	// Should we do it here as well??
 	smbLastWrite := propHolder.FileLastWriteTime()
 
-	fd, err := windows.Open(txInfo.Destination, windows.O_RDWR, windows.S_IWRITE)
-
+	// need custom CreateFile call because need FILE_WRITE_ATTRIBUTES
+	fd, err := windows.CreateFile(destPtr,
+		windows.FILE_WRITE_ATTRIBUTES, windows.FILE_SHARE_READ, nil,
+		windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
 	if err != nil {
 		return err
 	}
-
 	defer windows.Close(fd)
 
 	// windows.NsecToFileTime does the opposite of FileTime.Nanoseconds, and adjusts away the unix epoch for windows.
