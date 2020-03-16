@@ -36,7 +36,7 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 		return nil, err
 	}
 
-	fd, err := OpenWithWriteThroughSetting(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, DEFAULT_FILE_PERM, writeThrough)
+	fd, err := OpenWithOptions(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, DEFAULT_FILE_PERM, writeThrough, false)
 	if err != nil {
 		return nil, err
 	}
@@ -59,10 +59,13 @@ func makeInheritSa() *syscall.SecurityAttributes {
 }
 
 const FILE_ATTRIBUTE_WRITE_THROUGH = 0x80000000
+const FILE_ATTRIBUTE_BACKUP_SEMANTICS = 0x02000000
 
-// Copied from syscall.open, but modified to allow setting of writeThrough option
+// Copied from syscall.open, but modified to allow setting of writeThrough option and the
+// FILE_FLAG_BACKUP_SEMANTICS (which is required for getting properties of directories, and which
+// may also be useful in future for allowing AzCopy to read file content with backup semantics)
 // Param "perm" is unused both here and in the original Windows version of this routine.
-func OpenWithWriteThroughSetting(path string, mode int, perm uint32, writeThrough bool) (fd syscall.Handle, err error) {
+func OpenWithOptions(path string, mode int, perm uint32, writeThrough bool, backupSemantics bool) (fd syscall.Handle, err error) {
 	if len(path) == 0 {
 		return syscall.InvalidHandle, syscall.ERROR_FILE_NOT_FOUND
 	}
@@ -109,6 +112,9 @@ func OpenWithWriteThroughSetting(path string, mode int, perm uint32, writeThroug
 	attr = syscall.FILE_ATTRIBUTE_NORMAL
 	if writeThrough {
 		attr |= FILE_ATTRIBUTE_WRITE_THROUGH
+	}
+	if backupSemantics {
+		attr |= FILE_ATTRIBUTE_BACKUP_SEMANTICS
 	}
 	h, e := syscall.CreateFile(pathp, access, sharemode, sa, createmode, attr, 0)
 	return h, e

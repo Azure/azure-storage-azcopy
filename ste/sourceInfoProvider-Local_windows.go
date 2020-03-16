@@ -3,7 +3,10 @@
 package ste
 
 import (
+	"github.com/Azure/azure-storage-azcopy/common"
+	"reflect"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -36,7 +39,11 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 }
 
 func (f localFileSourceInfoProvider) getFileInformation() (windows.ByHandleFileInformation, error) {
-	fd, err := windows.Open(f.jptm.Info().Source, windows.O_RDONLY, 0)
+	tfrInfo := f.jptm.Info()
+	backupSemantics := tfrInfo.EntityType == common.EEntityType.Folder() // Windows API requires that this flag is set, when reading directory properties
+
+	sysfd, err := common.OpenWithOptions(tfrInfo.Source, windows.O_RDONLY, 0, false, backupSemantics)
+	fd := castToWinHandle(sysfd)
 	defer windows.Close(fd)
 
 	if err != nil {
@@ -71,4 +78,20 @@ func (hi handleInfo) FileLastWriteTime() time.Time {
 func (hi handleInfo) FileAttributes() azfile.FileAttributeFlags {
 	// Can't shorthand it because the function name overrides.
 	return azfile.FileAttributeFlags(hi.ByHandleFileInformation.FileAttributes)
+}
+
+var castToWinHandle func(handle syscall.Handle) windows.Handle
+
+func init() {
+	// check that we really can cast (safely) between these handle types
+	// Because, in theory, if one was ever redefined to be a different width, Go would still allow the cast
+	// but it it would be unsafe.  That's MOST unlikely to ever happen, but we may as well check it.
+	var s syscall.Handle
+	var w syscall.Handle
+	if reflect.TypeOf(s).Bits() != reflect.TypeOf(w).Bits() {
+		panic("unsafe handle cast")
+	}
+	castToWinHandle = func(sh syscall.Handle) windows.Handle {
+		return windows.Handle(sh)
+	}
 }
