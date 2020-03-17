@@ -170,9 +170,15 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		return
 	}
 
+	// Turn off readonly at creation time (because if its set at creation time, we won't be
+	// able to upload any data to the file!). We'll set it in epilogue, if necessary.
+	creationHeaders := u.headersToApply
+	revisedAttribs := creationHeaders.FileAttributes.Remove(azfile.FileAttributeReadonly)
+	creationHeaders.FileAttributes = &revisedAttribs
+
 	err = u.DoWithOverrideReadOnly(u.ctx,
 		func() (interface{}, error) {
-			return u.fileURL().Create(u.ctx, info.SourceSize, u.headersToApply, u.metadataToApply)
+			return u.fileURL().Create(u.ctx, info.SourceSize, creationHeaders, u.metadataToApply)
 		},
 		u.fileOrDirURL)
 	if err != nil {
@@ -284,6 +290,17 @@ func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info TransferInfo, destU
 		u.headersToApply.FileCreationTime = &creationTime
 	}
 	return "", nil
+}
+
+func (u *azureFileSenderBase) Epilogue() {
+	if u.headersToApply.FileAttributes.Has(azfile.FileAttributeReadonly) {
+		// we apply (all) the headers again, because we deliberately omitted the readonly
+		// at creation time.  This is an extra round trip, but we can live with that for the readonly case.
+		_, err := u.fileURL().SetHTTPHeaders(u.ctx, u.headersToApply)
+		if err != nil {
+			u.jptm.FailActiveSend("Setting read-only attribute", err)
+		}
+	}
 }
 
 func (u *azureFileSenderBase) Cleanup() {
