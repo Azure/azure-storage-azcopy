@@ -325,6 +325,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 
 	if (len(raw.include) > 0 || len(raw.exclude) > 0) && cooked.fromTo == common.EFromTo.BlobFSTrash() {
 		return cooked, fmt.Errorf("include/exclude flags are not supported for this destination")
+		// note there's another, more rigorous check, in removeBfsResources()
 	}
 
 	// warn on exclude unsupported wildcards here. Include have to be later, to cover list-of-files
