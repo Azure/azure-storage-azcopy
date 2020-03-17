@@ -99,7 +99,8 @@ func doDeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	}
 
 	// Delete the source file
-	err := azureFileSenderBase{}.DoWithOverrideReadOnly(jptm.Context(),
+	helper := &azureFileSenderBase{}
+	err := helper.DoWithOverrideReadOnly(jptm.Context(),
 		func() (interface{}, error) { return srcFileUrl.Delete(jptm.Context()) },
 		srcFileUrl)
 	if err != nil {
@@ -135,7 +136,8 @@ func doDeleteFolder(ctx context.Context, folder string, p pipeline.Pipeline, log
 	logger.Log(pipeline.LogDebug, "About to attempt to delete folder "+loggableName)
 
 	dirUrl := azfile.NewDirectoryURL(*u, p)
-	err = azureFileSenderBase{}.DoWithOverrideReadOnly(ctx,
+	helper := &azureFileSenderBase{}
+	err = helper.DoWithOverrideReadOnly(ctx,
 		func() (interface{}, error) { return dirUrl.Delete(ctx) },
 		dirUrl)
 	if err == nil {
