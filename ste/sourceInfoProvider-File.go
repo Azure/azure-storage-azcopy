@@ -30,12 +30,28 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
+type richSMBPropertyHolder interface {
+	azfile.SMBPropertyHolder
+	FilePermissionKey() string
+	NewMetadata() azfile.Metadata
+	LastModified() time.Time
+}
+
+type contentPropsProvider interface {
+	CacheControl() string
+	ContentDisposition() string
+	ContentEncoding() string
+	ContentLanguage() string
+	ContentType() string
+	ContentMD5() []byte
+}
+
 // Source info provider for Azure blob
 type fileSourceInfoProvider struct {
 	ctx                 context.Context
 	cachedPermissionKey string
 	cacheOnce           *sync.Once
-	cachedProperties    *azfile.FileGetPropertiesResponse
+	cachedProperties    richSMBPropertyHolder // use interface because may be file or directory properties
 	defaultRemoteSourceInfoProvider
 }
 
@@ -54,25 +70,34 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 	return &fileSourceInfoProvider{defaultRemoteSourceInfoProvider: *base, ctx: ctx, cacheOnce: &sync.Once{}}, nil
 }
 
-// for reviewers: should we worry about caching these properties?
-func (p *fileSourceInfoProvider) getCachedProperties() (*azfile.FileGetPropertiesResponse, error) {
+func (p *fileSourceInfoProvider) getFreshProperties() (richSMBPropertyHolder, error) {
 	presigned, err := p.PreSignedSourceURL()
-
 	if err != nil {
 		return nil, err
 	}
 
-	p.cacheOnce.Do(func() {
+	switch p.EntityType() {
+	case common.EEntityType.File():
 		fileURL := azfile.NewFileURL(*presigned, p.jptm.SourceProviderPipeline())
+		return fileURL.GetProperties(p.ctx)
+	case common.EEntityType.Folder():
+		dirURL := azfile.NewDirectoryURL(*presigned, p.jptm.SourceProviderPipeline())
+		return dirURL.GetProperties(p.ctx)
+	default:
+		panic("unexpected case")
+	}
+}
 
-		p.cachedProperties, err = fileURL.GetProperties(p.ctx)
+// cached because we use it for both GetSMBProperties and GetSDDL, and in some cases (e.g. small files,
+// or enough transactions that transaction costs matter) saving IOPS matters
+func (p *fileSourceInfoProvider) getCachedProperties() (richSMBPropertyHolder, error) {
+	var err error
+
+	p.cacheOnce.Do(func() {
+		p.cachedProperties, err = p.getFreshProperties()
 	})
 
-	if err != nil {
-		return p.cachedProperties, err
-	}
-
-	return p.cachedProperties, nil
+	return p.cachedProperties, err
 }
 
 func (p *fileSourceInfoProvider) GetSMBProperties() (TypedSMBPropertyHolder, error) {
@@ -82,25 +107,22 @@ func (p *fileSourceInfoProvider) GetSMBProperties() (TypedSMBPropertyHolder, err
 }
 
 func (p *fileSourceInfoProvider) GetSDDL() (string, error) {
-	presigned, err := p.PreSignedSourceURL()
-
-	if err != nil {
-		return "", err
-	}
-
 	// Get the key for SIPM
 	props, err := p.getCachedProperties()
-
 	if err != nil {
 		return "", err
 	}
-
 	key := props.FilePermissionKey()
+	if key == "" {
+		return "", nil
+	}
 
 	// Call into SIPM and grab our SDDL string.
 	sipm := p.jptm.SecurityInfoPersistenceManager()
-
-	// fURLParts := common.NewGenericResourceURLParts(*presigned, common.ELocation.File())
+	presigned, err := p.PreSignedSourceURL()
+	if err != nil {
+		return "", err
+	}
 	fURLParts := azfile.NewFileURLParts(*presigned)
 	fURLParts.DirectoryOrFilePath = ""
 	shareURL := azfile.NewShareURL(fURLParts.URL(), p.jptm.SourceProviderPipeline())
@@ -118,41 +140,29 @@ func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 
 	// Get properties in backend.
 	if p.transferInfo.S2SGetPropertiesInBackend {
-		presignedURL, err := p.PreSignedSourceURL()
+
+		properties, err := p.getCachedProperties()
 		if err != nil {
 			return nil, err
 		}
+		// TODO: is it OK that this does not get set if s2sGetPropertiesInBackend is false?  Probably yes, because it's only a cached value, and getPropertiesInBackend is always false of AzFiles anyway at present (early 2020)
+		p.cachedPermissionKey = properties.FilePermissionKey() // We cache this as getting the SDDL is a separate operation.
 
 		switch p.EntityType() {
 		case common.EEntityType.File():
-			properties, err := p.getCachedProperties()
-			if err != nil {
-				return nil, err
-			}
-
-			// We cache this as getting the SDDL is a separate operation.
-			p.cachedPermissionKey = properties.FilePermissionKey()
-
+			fileProps := properties.(contentPropsProvider)
 			srcProperties = &SrcProperties{
 				SrcHTTPHeaders: common.ResourceHTTPHeaders{
-					ContentType:        properties.ContentType(),
-					ContentEncoding:    properties.ContentEncoding(),
-					ContentDisposition: properties.ContentDisposition(),
-					ContentLanguage:    properties.ContentLanguage(),
-					CacheControl:       properties.CacheControl(),
-					ContentMD5:         properties.ContentMD5(),
+					ContentType:        fileProps.ContentType(),
+					ContentEncoding:    fileProps.ContentEncoding(),
+					ContentDisposition: fileProps.ContentDisposition(),
+					ContentLanguage:    fileProps.ContentLanguage(),
+					CacheControl:       fileProps.CacheControl(),
+					ContentMD5:         fileProps.ContentMD5(),
 				},
 				SrcMetadata: common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata()),
 			}
 		case common.EEntityType.Folder():
-			dirURL := azfile.NewDirectoryURL(*presignedURL, p.jptm.SourceProviderPipeline())
-			properties, err := dirURL.GetProperties(p.ctx)
-			if err != nil {
-				return nil, err
-			}
-
-			p.cachedPermissionKey = properties.FilePermissionKey()
-
 			srcProperties = &SrcProperties{
 				SrcHTTPHeaders: common.ResourceHTTPHeaders{}, // no contentType etc for folders
 				SrcMetadata:    common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata()),
@@ -170,18 +180,11 @@ func (p *fileSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, erro
 		panic("unsupported. Cannot get modification time on non-file object") // nothing should ever call this for a non-file
 	}
 
-	presignedURL, err := p.PreSignedSourceURL()
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	fileURL := azfile.NewFileURL(*presignedURL, p.jptm.SourceProviderPipeline())
-	properties, err := fileURL.GetProperties(p.ctx)
+	properties, err := p.getFreshProperties()
 	if err != nil {
 		return time.Time{}, err
 	}
 
 	// We ignore smblastwrite because otherwise the tx will fail s2s
-
 	return properties.LastModified(), nil
 }

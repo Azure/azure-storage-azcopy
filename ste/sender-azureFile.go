@@ -126,14 +126,6 @@ func (u *azureFileSenderBase) dirURL() azfile.DirectoryURL {
 	return u.fileOrDirURL.(azfile.DirectoryURL)
 }
 
-func (u *azureFileSenderBase) SendableEntityType() common.EntityType {
-	if _, ok := u.fileOrDirURL.(azfile.DirectoryURL); ok {
-		return common.EEntityType.Folder()
-	} else {
-		return common.EEntityType.File()
-	}
-}
-
 func (u *azureFileSenderBase) ChunkSize() uint32 {
 	return u.chunkSize
 }
@@ -165,73 +157,16 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		u.headersToApply.ContentType = state.GetInferredContentType(u.jptm)
 	}
 
-	if info.PreserveSMBPermissions {
-		// Prepare to transfer SDDLs from the source.
-		if sddlSIP, ok := u.sip.(ISMBPropertyBearingSourceInfoProvider); ok {
-			// If both sides are files...
-			if fSIP, ok := sddlSIP.(*fileSourceInfoProvider); ok {
-				srcURL, err := url.Parse(info.Source)
-				common.PanicIfErr(err)
-
-				srcURLParts := azfile.NewFileURLParts(*srcURL)
-				dstURLParts := azfile.NewFileURLParts(u.fileURL().URL())
-
-				// and happen to be the same account and share, we can get away with using the same key and save a trip.
-				if srcURLParts.Host == dstURLParts.Host && srcURLParts.ShareName == dstURLParts.ShareName {
-					u.headersToApply.PermissionKey = &fSIP.cachedPermissionKey
-				}
-			}
-
-			// If we didn't do the workaround, then let's get the SDDL and put it later.
-			if u.headersToApply.PermissionKey == nil || *u.headersToApply.PermissionKey == "" {
-				pString, err := sddlSIP.GetSDDL()
-				u.headersToApply.PermissionString = &pString
-				if err != nil {
-					jptm.FailActiveUpload("Getting permissions", err)
-					return
-				}
-			}
-		}
-
-		if len(*u.headersToApply.PermissionString) > filesServiceMaxSDDLSize {
-			fURLParts := azfile.NewFileURLParts(u.fileURL().URL())
-			fURLParts.DirectoryOrFilePath = ""
-			shareURL := azfile.NewShareURL(fURLParts.URL(), u.pipeline)
-
-			sipm := u.jptm.SecurityInfoPersistenceManager()
-
-			pkey, err := sipm.PutSDDL(*u.headersToApply.PermissionString, shareURL)
-			u.headersToApply.PermissionKey = &pkey
-			if err != nil {
-				jptm.FailActiveUpload("Putting permissions", err)
-				return
-			}
-
-			ePermString := ""
-			u.headersToApply.PermissionString = &ePermString
-		}
+	stage, err := u.addPermissionsToHeaders(info, u.fileURL().URL())
+	if err != nil {
+		jptm.FailActiveSend(stage, err)
+		return
 	}
 
-	if info.PreserveSMBProperties {
-		if smbSIP, ok := u.sip.(ISMBPropertyBearingSourceInfoProvider); ok {
-			smbProps, err := smbSIP.GetSMBProperties()
-
-			if err != nil {
-				jptm.FailActiveSend("Obtaining SMB properties", err)
-			}
-
-			attribs := smbProps.FileAttributes()
-
-			u.headersToApply.FileAttributes = &attribs
-
-			lwTime := smbProps.FileLastWriteTime()
-
-			u.headersToApply.FileLastWriteTime = &lwTime
-
-			creationTime := smbProps.FileCreationTime()
-
-			u.headersToApply.FileCreationTime = &creationTime
-		}
+	stage, err = u.addSMBPropertiesToHeaders(info, u.fileURL().URL())
+	if err != nil {
+		jptm.FailActiveSend(stage, err)
+		return
 	}
 
 	// Create Azure file with the source size
@@ -242,6 +177,78 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 	}
 
 	return
+}
+
+func (u *azureFileSenderBase) addPermissionsToHeaders(info TransferInfo, destUrl url.URL) (stage string, err error) {
+	if !info.PreserveSMBPermissions {
+		return "", nil
+	}
+
+	// Prepare to transfer SDDLs from the source.
+	if sddlSIP, ok := u.sip.(ISMBPropertyBearingSourceInfoProvider); ok {
+		// If both sides are Azure Files...
+		if fSIP, ok := sddlSIP.(*fileSourceInfoProvider); ok {
+			srcURL, err := url.Parse(info.Source)
+			common.PanicIfErr(err)
+
+			srcURLParts := azfile.NewFileURLParts(*srcURL)
+			dstURLParts := azfile.NewFileURLParts(destUrl)
+
+			// and happen to be the same account and share, we can get away with using the same key and save a trip.
+			if srcURLParts.Host == dstURLParts.Host && srcURLParts.ShareName == dstURLParts.ShareName {
+				u.headersToApply.PermissionKey = &fSIP.cachedPermissionKey
+			}
+		}
+
+		// If we didn't do the workaround, then let's get the SDDL and put it later.
+		if u.headersToApply.PermissionKey == nil || *u.headersToApply.PermissionKey == "" {
+			pString, err := sddlSIP.GetSDDL()
+			u.headersToApply.PermissionString = &pString
+			if err != nil {
+				return "Getting permissions", err
+			}
+		}
+	}
+
+	if len(*u.headersToApply.PermissionString) > filesServiceMaxSDDLSize {
+		fURLParts := azfile.NewFileURLParts(destUrl)
+		fURLParts.DirectoryOrFilePath = ""
+		shareURL := azfile.NewShareURL(fURLParts.URL(), u.pipeline)
+
+		sipm := u.jptm.SecurityInfoPersistenceManager()
+		pkey, err := sipm.PutSDDL(*u.headersToApply.PermissionString, shareURL)
+		u.headersToApply.PermissionKey = &pkey
+		if err != nil {
+			return "Putting permissions", err
+		}
+
+		ePermString := ""
+		u.headersToApply.PermissionString = &ePermString
+	}
+	return "", nil
+}
+
+func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info TransferInfo, destUrl url.URL) (stage string, err error) {
+	if !info.PreserveSMBProperties {
+		return "", nil
+	}
+	if smbSIP, ok := u.sip.(ISMBPropertyBearingSourceInfoProvider); ok {
+		smbProps, err := smbSIP.GetSMBProperties()
+
+		if err != nil {
+			return "Obtaining SMB properties", err
+		}
+
+		attribs := smbProps.FileAttributes()
+		u.headersToApply.FileAttributes = &attribs
+
+		lwTime := smbProps.FileLastWriteTime()
+		u.headersToApply.FileLastWriteTime = &lwTime
+
+		creationTime := smbProps.FileCreationTime()
+		u.headersToApply.FileCreationTime = &creationTime
+	}
+	return "", nil
 }
 
 func (u *azureFileSenderBase) Cleanup() {
@@ -276,8 +283,25 @@ func (u *azureFileSenderBase) EnsureFolderExists() error {
 }
 
 func (u *azureFileSenderBase) SetFolderProperties() error {
-	// TODO
-	return nil
+	info := u.jptm.Info()
+
+	_, err := u.addPermissionsToHeaders(info, u.dirURL().URL())
+	if err != nil {
+		return err
+	}
+
+	_, err = u.addSMBPropertiesToHeaders(info, u.dirURL().URL())
+	if err != nil {
+		return err
+	}
+
+	_, err = u.dirURL().SetMetadata(u.ctx, u.metadataToApply)
+	if err != nil {
+		return err
+	}
+
+	_, err = u.dirURL().SetProperties(u.ctx, u.headersToApply.SMBProperties)
+	return err
 }
 
 // namespace for functions related to creating parent directories in Azure File

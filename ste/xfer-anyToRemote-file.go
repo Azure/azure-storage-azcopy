@@ -70,14 +70,13 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 		panic("configuration error. Source Info Provider does not have File entity type")
 	}
 
-	sBase, err := senderFactory(jptm, info.Destination, p, pacer, srcInfoProvider)
+	s, err := senderFactory(jptm, info.Destination, p, pacer, srcInfoProvider)
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
 	}
-	s := sBase.(IFileSender)
 
 	// step 2b. Read chunk size and count from the sender (since it may have applied its own defaults and/or calculations to produce these values
 	numChunks := s.NumChunks()
@@ -203,7 +202,7 @@ var jobCancelledLocalPrefetchErr = errors.New("job was cancelled; Pre-fetching s
 // is harmless (and a good thing, to avoid excessive RAM usage).
 // To take advantage of the good sequential read performance provided by many file systems,
 // and to be able to compute an MD5 hash for the file, we work sequentially through the file here.
-func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common.CloseableReaderAt, srcSize int64, s IFileSender, sourceFileFactory common.ChunkReaderSourceFactory, srcInfoProvider ISourceInfoProvider) {
+func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common.CloseableReaderAt, srcSize int64, s sender, sourceFileFactory common.ChunkReaderSourceFactory, srcInfoProvider ISourceInfoProvider) {
 	// For generic send
 	chunkSize := s.ChunkSize()
 	numChunks := s.NumChunks()
@@ -331,7 +330,7 @@ func isDummyChunkInEmptyFile(startIndex int64, fileSize int64) bool {
 }
 
 // Complete epilogue. Handles both success and failure.
-func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s IFileSender, sip ISourceInfoProvider) {
+func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISourceInfoProvider) {
 	info := jptm.Info()
 	// allow our usual state tracking mechanism to keep count of how many epilogues are running at any given instant, for perf diagnostics
 	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
@@ -375,7 +374,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s IFileSender, si
 }
 
 // commonSenderCompletion is used for both files and folders
-func commonSenderCompletion(jptm IJobPartTransferMgr, s ISenderBase, info TransferInfo) {
+func commonSenderCompletion(jptm IJobPartTransferMgr, s sender, info TransferInfo) {
 
 	jptm.EnsureDestinationUnlocked()
 

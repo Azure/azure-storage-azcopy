@@ -40,7 +40,7 @@ func newAzureFilesDownloader() downloader {
 	return &azureFilesDownloader{}
 }
 
-func (bd *azureFilesDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
+func (bd *azureFilesDownloader) init(jptm IJobPartTransferMgr) {
 	bd.txInfo = jptm.Info()
 	var err error
 	bd.sip, err = newFileSourceInfoProvider(jptm)
@@ -50,7 +50,10 @@ func (bd *azureFilesDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline p
 	// and it's not possible for newFileSourceInfoProvider to return an error either.
 }
 
-func (bd *azureFilesDownloader) Epilogue() {
+var errorNoSddlFound = errors.New("no SDDL found")
+var errorCantSetLocalSystemSddl = errors.New("failure setting local system as owner (possible old SDDL from source)")
+
+func (bd *azureFilesDownloader) preserveAttributes() (stage string, err error) {
 	info := bd.jptm.Info()
 
 	if info.PreserveSMBPermissions {
@@ -64,10 +67,13 @@ func (bd *azureFilesDownloader) Epilogue() {
 		// bd can't directly be wrangled from a struct, so we wrangle it to an interface, then do so.
 		if spdl, ok := interface{}(bd).(smbPropertyAwareDownloader); ok {
 			// We don't need to worry about the sip not being a ISMBPropertyBearingSourceInfoProvider as Azure Files always is.
-			err := spdl.PutSDDL(bd.sip.(ISMBPropertyBearingSourceInfoProvider), bd.txInfo)
-
-			if err != nil {
-				bd.jptm.FailActiveDownload("Setting destination file SDDLs", err)
+			err = spdl.PutSDDL(bd.sip.(ISMBPropertyBearingSourceInfoProvider), bd.txInfo)
+			if err == errorNoSddlFound {
+				bd.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, "No SMB permissions were downloaded because none were found at the source")
+			} else if err == errorCantSetLocalSystemSddl {
+				bd.jptm.LogAtLevelForCurrentTransfer(pipeline.LogInfo, "Can't set SMB permissions. Permissions from source may be defaults that can't be applied locally")
+			} else if err != nil {
+				return "Setting destination file SDDLs", err
 			}
 		}
 	}
@@ -75,17 +81,29 @@ func (bd *azureFilesDownloader) Epilogue() {
 	if info.PreserveSMBProperties {
 		if spdl, ok := interface{}(bd).(smbPropertyAwareDownloader); ok {
 			// We don't need to worry about the sip not being a ISMBPropertyBearingSourceInfoProvider as Azure Files always is.
-			err := spdl.PutFileSMBProperties(bd.sip.(ISMBPropertyBearingSourceInfoProvider), bd.txInfo)
+			err := spdl.PutSMBProperties(bd.sip.(ISMBPropertyBearingSourceInfoProvider), bd.txInfo)
 
 			if err != nil {
-				bd.jptm.FailActiveDownload("Setting destination file SMB properties", err)
+				return "Setting destination file SMB properties", err
 			}
 		}
+	}
+
+	return "", nil
+}
+
+func (bd *azureFilesDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
+	bd.init(jptm)
+}
+
+func (bd *azureFilesDownloader) Epilogue() {
+	stage, err := bd.preserveAttributes()
+	if err != nil {
+		bd.jptm.FailActiveDownload(stage, err)
 	}
 }
 
 // GenerateDownloadFunc returns a chunk-func for file downloads
-
 func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
 
@@ -124,4 +142,10 @@ func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, s
 			return
 		}
 	})
+}
+
+func (bd *azureFilesDownloader) SetFolderProperties(jptm IJobPartTransferMgr) error {
+	bd.init(jptm) // since Prologue doesn't get called for folders
+	_, err := bd.preserveAttributes()
+	return err
 }

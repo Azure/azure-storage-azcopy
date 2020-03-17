@@ -214,6 +214,6 @@ func (u *blobFSSenderBase) doEnsureDirExists(d azbfs.DirectoryURL) error {
 }
 
 func (u *blobFSSenderBase) SetFolderProperties() error {
-	// TODO
+	// we don't currently preserve any properties for BlobFS folders
 	return nil
 }

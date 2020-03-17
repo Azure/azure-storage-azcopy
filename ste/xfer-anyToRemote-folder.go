@@ -46,14 +46,20 @@ func anyToRemote_folder(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.
 		panic("configuration error. Source Info Provider does not have Folder entity type")
 	}
 
-	sBase, err := senderFactory(jptm, info.Destination, p, pacer, srcInfoProvider)
+	baseSender, err := senderFactory(jptm, info.Destination, p, pacer, srcInfoProvider)
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
 	}
-	s := sBase.(IFolderSender)
+	s, ok := baseSender.(folderSender)
+	if !ok {
+		jptm.LogSendError(info.Source, info.Destination, "sender implementation does not support folders", 0)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
+	}
 
 	// No chunks to schedule. Just run the folder handling operations.
 	// There are no checks for folders on LMT's changing while we read them. We need that for files,
@@ -80,5 +86,5 @@ func anyToRemote_folder(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.
 		}
 	}
 
-	commonSenderCompletion(jptm, s, info) // for consistency, always run the standard epilogue
+	commonSenderCompletion(jptm, baseSender, info) // for consistency, always run the standard epilogue
 }

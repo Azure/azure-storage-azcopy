@@ -193,7 +193,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters)
+	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters, cca.preserveSMBProperties, cca.preserveSMBPermissions)
 	glcm.Info(message)
 	if ste.JobsAdmin != nil {
 		ste.JobsAdmin.LogToJobLog(message)
@@ -539,13 +539,32 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 	return pathEncodeRules(relativePath, cca.fromTo, source)
 }
 
-func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir bool, filters []objectFilter) (common.FolderPropertyOption, string) {
+// we assume that preserveSmbPermissions and preserveSmbProperties have already been validated, such that they are only true if both resource types support them
+func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir bool, filters []objectFilter, preserveSmbProperties, preserveSmbPermissions bool) (common.FolderPropertyOption, string) {
+
+	getSuffix := func(willProcess bool) string {
+		willProcessString := common.IffString(willProcess, "will be processed", "will not be processed")
+
+		template := ". For the same reason, %s defined on folders %s"
+		switch {
+		case preserveSmbPermissions && preserveSmbProperties:
+			return fmt.Sprintf(template, "properties and permissions", willProcessString)
+		case preserveSmbProperties:
+			return fmt.Sprintf(template, "properties", willProcessString)
+		case preserveSmbPermissions:
+			return fmt.Sprintf(template, "permissions", willProcessString)
+		default:
+			return "" // no preserve flags set, so we have nothing to say about them
+		}
+	}
+
 	bothFolderAware := fromTo.AreBothFolderAware()
 	isRemoveFromFolderAware := fromTo == common.EFromTo.FileTrash()
 	if bothFolderAware || isRemoveFromFolderAware {
 		if !recursive {
 			return common.EFolderPropertiesOption.NoFolders(), // does't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
-				"Any empty folders will not be processed, because --recursive was not specified"
+				"Any empty folders will not be processed, because --recursive was not specified" +
+					getSuffix(false)
 		}
 
 		// check filters. Otherwise, if filter was say --include-pattern *.txt, we would transfer properties
@@ -559,13 +578,15 @@ func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir b
 		}
 		if !filtersOK {
 			return common.EFolderPropertiesOption.NoFolders(),
-				"Any empty folders will not be processed, because a file-focused filter is applied."
+				"Any empty folders will not be processed, because a file-focused filter is applied" +
+					getSuffix(false)
 		}
 
 		message := "Any empty folders will be processed, because source and destination both support folders"
 		if isRemoveFromFolderAware {
 			message = "Any empty folders will be processed, because deletion is from a folder-aware location"
 		}
+		message += getSuffix(true)
 		if stripTopDir {
 			return common.EFolderPropertiesOption.AllFoldersExceptRoot(), message
 		} else {
@@ -574,5 +595,7 @@ func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir b
 	}
 
 	return common.EFolderPropertiesOption.NoFolders(),
-		"Any empty folders will not be processed, because source and/or destination doesn't have full folder support"
+		"Any empty folders will not be processed, because source and/or destination doesn't have full folder support" +
+			getSuffix(false)
+
 }

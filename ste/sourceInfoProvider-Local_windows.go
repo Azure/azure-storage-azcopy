@@ -4,6 +4,7 @@ package ste
 
 import (
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -36,12 +37,19 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 }
 
 func (f localFileSourceInfoProvider) getFileInformation() (windows.ByHandleFileInformation, error) {
-	fd, err := windows.Open(f.jptm.Info().Source, windows.O_RDONLY, 0)
-	defer windows.Close(fd)
 
+	srcPtr, err := syscall.UTF16PtrFromString(f.jptm.Info().Source)
 	if err != nil {
 		return windows.ByHandleFileInformation{}, err
 	}
+	// custom open call, because must specify FILE_FLAG_BACKUP_SEMANTICS when getting information of folders (else GetFileInformationByHandle will fail)
+	fd, err := windows.CreateFile(srcPtr,
+		windows.GENERIC_READ, windows.FILE_SHARE_READ, nil,
+		windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+	if err != nil {
+		return windows.ByHandleFileInformation{}, err
+	}
+	defer windows.Close(fd)
 
 	var info windows.ByHandleFileInformation
 

@@ -4,6 +4,7 @@ package ste
 
 import (
 	"fmt"
+	"strings"
 	"syscall"
 
 	"golang.org/x/sys/windows"
@@ -11,9 +12,9 @@ import (
 
 // This file implements the windows-triggered smbPropertyAwareDownloader interface.
 
-func (bd *azureFilesDownloader) PutFileSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
+// works for both folders and files
+func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
 	propHolder, err := sip.GetSMBProperties()
-
 	if err != nil {
 		return err
 	}
@@ -21,14 +22,12 @@ func (bd *azureFilesDownloader) PutFileSMBProperties(sip ISMBPropertyBearingSour
 	attribs := propHolder.FileAttributes()
 
 	destPtr, err := syscall.UTF16PtrFromString(txInfo.Destination)
-
 	if err != nil {
 		return err
 	}
 
 	// This is a safe conversion.
 	err = windows.SetFileAttributes(destPtr, uint32(attribs))
-
 	if err != nil {
 		return err
 	}
@@ -40,12 +39,13 @@ func (bd *azureFilesDownloader) PutFileSMBProperties(sip ISMBPropertyBearingSour
 	// Should we do it here as well??
 	smbLastWrite := propHolder.FileLastWriteTime()
 
-	fd, err := windows.Open(txInfo.Destination, windows.O_RDWR, windows.S_IWRITE)
-
+	// need custom CreateFile call because need FILE_WRITE_ATTRIBUTES
+	fd, err := windows.CreateFile(destPtr,
+		windows.FILE_WRITE_ATTRIBUTES, windows.FILE_SHARE_READ, nil,
+		windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
 	if err != nil {
 		return err
 	}
-
 	defer windows.Close(fd)
 
 	// windows.NsecToFileTime does the opposite of FileTime.Nanoseconds, and adjusts away the unix epoch for windows.
@@ -57,13 +57,18 @@ func (bd *azureFilesDownloader) PutFileSMBProperties(sip ISMBPropertyBearingSour
 	return err
 }
 
-func (bd *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
+// works for both folders and files
+func (*azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
 	// Let's start by getting our SDDL and parsing it.
 	sddlString, err := sip.GetSDDL()
 	// TODO: be better at handling these errors.
 	// GetSDDL will fail on a file-level SAS token.
 	if err != nil {
 		return fmt.Errorf("getting source SDDL: %s", err)
+	}
+	if sddlString == "" {
+		// nothing to do (no key returned)
+		return errorNoSddlFound
 	}
 
 	// We don't need to worry about making the SDDL string portable as this is expected for persistence into Azure Files in the first place.
@@ -97,6 +102,11 @@ func (bd *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvide
 		dacl,
 		nil,
 	)
+
+	if err != nil && strings.HasPrefix(sddlString, "O:SYG:SY") {
+		// TODO: awaiting replies re where this SSDL comes from
+		return errorCantSetLocalSystemSddl
+	}
 
 	return err
 }

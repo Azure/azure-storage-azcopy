@@ -36,7 +36,7 @@ import (
 func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, df downloaderFactory) {
 	info := jptm.Info()
 	if info.IsFolderPropertiesTransfer() {
-		remoteToLocal_folder(jptm, p, pacer)
+		remoteToLocal_folder(jptm, p, pacer, df)
 	} else {
 		remoteToLocal_file(jptm, p, pacer, df)
 	}
