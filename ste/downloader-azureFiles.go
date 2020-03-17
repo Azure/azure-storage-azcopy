@@ -50,6 +50,9 @@ func (bd *azureFilesDownloader) init(jptm IJobPartTransferMgr) {
 	// and it's not possible for newFileSourceInfoProvider to return an error either.
 }
 
+var errorNoSddlFound = errors.New("no SDDL found")
+var errorCantSetLocalSystemSddl = errors.New("failure setting local system as owner (possible old SDDL from source)")
+
 func (bd *azureFilesDownloader) preserveAttributes() (stage string, err error) {
 	info := bd.jptm.Info()
 

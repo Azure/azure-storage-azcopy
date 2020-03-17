@@ -58,9 +58,6 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 	return err
 }
 
-var errorNoSddlFound = errors.New("no SDDL found")
-var errorCantSetLocalSystemSddl = errors.New("failure setting local system as owner (possible old SDDL from source)")
-
 // works for both folders and files
 func (*azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
 	// Let's start by getting our SDDL and parsing it.
