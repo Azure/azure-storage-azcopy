@@ -52,6 +52,7 @@ type JobPartPlanHeader struct {
 	DestExtraQuery         [1000]byte                  // Extra query params applicable to the dest
 	IsFinalPart            bool                        // True if this is the Job's last part; else false
 	ForceWrite             common.OverwriteOption      // True if the existing blobs needs to be overwritten.
+	ForceIfReadOnly        bool                        // Supplements ForceWrite with an additional setting for Azure Files. If true, the read-only attribute will be cleared before we overwrite
 	AutoDecompress         bool                        // if true, source data with encodings that represent compression are automatically decompressed when downloading
 	Priority               common.JobPriority          // The Job Part's priority
 	TTLAfterCompletion     uint32                      // Time to live after completion is used to persists the file on disk of specified time after the completion of JobPartOrder

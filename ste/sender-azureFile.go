@@ -180,7 +180,8 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		func() (interface{}, error) {
 			return u.fileURL().Create(u.ctx, info.SourceSize, creationHeaders, u.metadataToApply)
 		},
-		u.fileOrDirURL)
+		u.fileOrDirURL,
+		u.jptm.GetForceIfReadOnly())
 	if err != nil {
 		jptm.FailActiveUpload("Creating file", err)
 		return
@@ -192,9 +193,10 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 // DoWithOverrideReadOnly performs the given action, and forces it to happen even if the target is read only.
 // NOTE that all SMB attributes (and other headers?) on the target will be lost, so only use this if you don't need them any more
 // (e.g. you are about to delete the resource, or you are going to reset the attributes/headers)
-func (*azureFileSenderBase) DoWithOverrideReadOnly(ctx context.Context, action func() (interface{}, error), targetFileOrDir URLHolder) error {
+func (*azureFileSenderBase) DoWithOverrideReadOnly(ctx context.Context, action func() (interface{}, error), targetFileOrDir URLHolder, enableForcing bool) error {
 	// try the action
 	_, err := action()
+
 	failedAsReadOnly := false
 	if strErr, ok := err.(azfile.StorageError); ok && strErr.ServiceCode() == azfile.ServiceCodeReadOnlyAttribute {
 		failedAsReadOnly = true
@@ -203,7 +205,12 @@ func (*azureFileSenderBase) DoWithOverrideReadOnly(ctx context.Context, action f
 		return err
 	}
 
-	// if failed due to target being readonly, clear all the attributes (including the RO flag)
+	// did fail as readonly, but forcing is not enabled
+	if !enableForcing {
+		return errors.New("target is readonly. To force the action to proceed, add --force-if-read-only to the command line")
+	}
+
+	// did fail as readonly, and forcing is enabled
 	if f, ok := targetFileOrDir.(azfile.FileURL); ok {
 		_, err = f.SetHTTPHeaders(ctx, azfile.FileHTTPHeaders{}) // clear the headers
 	} else if d, ok := targetFileOrDir.(azfile.DirectoryURL); ok {
@@ -354,7 +361,8 @@ func (u *azureFileSenderBase) SetFolderProperties() error {
 
 	err = u.DoWithOverrideReadOnly(u.ctx,
 		func() (interface{}, error) { return u.dirURL().SetProperties(u.ctx, u.headersToApply.SMBProperties) },
-		u.fileOrDirURL)
+		u.fileOrDirURL,
+		u.jptm.GetForceIfReadOnly())
 	return err
 }
 
