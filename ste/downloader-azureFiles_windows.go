@@ -107,7 +107,7 @@ func (*azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, 
 		nil,
 	)
 
-	if err != nil && strings.HasPrefix(sddlString, "O:SYG:SYD:") {
+	if err != nil && strings.HasPrefix(sddlString, "O:SYG:SY") {
 		// TODO: awaiting replies re where this SSDL comes from
 		return errorCantSetLocalSystemSddl
 	}
