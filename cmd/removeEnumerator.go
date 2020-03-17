@@ -124,8 +124,9 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
 	ctx := context.Background()
 
 	// return an error if the unsupported options are passed in
-	if len(cca.includePatterns)+len(cca.excludePatterns) > 0 {
-		return errors.New("include/exclude options are not supported")
+	if len(cca.initModularFilters()) > 0 {
+		return errors.New("filter options, such as include/exclude, are not supported for this destination")
+		// because we just ignore them and delete the root
 	}
 
 	// patterns are not supported
