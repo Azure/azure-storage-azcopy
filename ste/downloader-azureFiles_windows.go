@@ -3,7 +3,6 @@
 package ste
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"syscall"
