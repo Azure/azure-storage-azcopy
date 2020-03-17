@@ -99,7 +99,9 @@ func doDeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	}
 
 	// Delete the source file
-	_, err := srcFileUrl.Delete(jptm.Context())
+	err := azureFileSenderBase{}.DoWithOverrideReadOnly(jptm.Context(),
+		func() (interface{}, error) { return srcFileUrl.Delete(jptm.Context()) },
+		srcFileUrl)
 	if err != nil {
 		// If the delete failed with err 404, i.e resource not found, then mark the transfer as success.
 		if strErr, ok := err.(azfile.StorageError); ok {
@@ -122,6 +124,7 @@ func doDeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 }
 
 func doDeleteFolder(ctx context.Context, folder string, p pipeline.Pipeline, logger common.ILogger) bool {
+
 	u, err := url.Parse(folder)
 	if err != nil {
 		return false
@@ -132,7 +135,9 @@ func doDeleteFolder(ctx context.Context, folder string, p pipeline.Pipeline, log
 	logger.Log(pipeline.LogDebug, "About to attempt to delete folder "+loggableName)
 
 	dirUrl := azfile.NewDirectoryURL(*u, p)
-	_, err = dirUrl.Delete(ctx)
+	err = azureFileSenderBase{}.DoWithOverrideReadOnly(ctx,
+		func() (interface{}, error) { return dirUrl.Delete(ctx) },
+		dirUrl)
 	if err == nil {
 		logger.Log(pipeline.LogInfo, "Empty folder deleted "+loggableName) // not using capitalized DELETE SUCCESSFUL here because we can't use DELETE ERROR for folder delete failures (since there may be a retry if we delete more files, but we don't know that at time of logging)
 		return true

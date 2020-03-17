@@ -22,6 +22,7 @@ package ste
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -169,14 +170,48 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		return
 	}
 
-	// Create Azure file with the source size
-	_, err = u.fileURL().Create(u.ctx, info.SourceSize, u.headersToApply, u.metadataToApply)
+	err = u.DoWithOverrideReadOnly(u.ctx,
+		func() (interface{}, error) {
+			return u.fileURL().Create(u.ctx, info.SourceSize, u.headersToApply, u.metadataToApply)
+		},
+		u.fileOrDirURL)
 	if err != nil {
 		jptm.FailActiveUpload("Creating file", err)
 		return
 	}
 
 	return
+}
+
+// DoWithOverrideReadOnly performs the given action, and forces it to happen even if the target is read only.
+// NOTE that all SMB attributes (and other headers?) on the target will be lost, so only use this if you don't need them any more
+// (e.g. you are about to delete the resource, or you are going to reset the attributes/headers)
+func (*azureFileSenderBase) DoWithOverrideReadOnly(ctx context.Context, action func() (interface{}, error), targetFileOrDir URLHolder) error {
+	// try the action
+	_, err := action()
+	failedAsReadOnly := false
+	if strErr, ok := err.(azfile.StorageError); ok && strErr.ServiceCode() == azfile.ServiceCodeReadOnlyAttribute {
+		failedAsReadOnly = true
+	}
+	if !failedAsReadOnly {
+		return err
+	}
+
+	// if failed due to target being readonly, clear all the attributes (including the RO flag)
+	if f, ok := targetFileOrDir.(azfile.FileURL); ok {
+		_, err = f.SetHTTPHeaders(ctx, azfile.FileHTTPHeaders{}) // clear the headers
+	} else if d, ok := targetFileOrDir.(azfile.DirectoryURL); ok {
+		_, err = d.SetProperties(ctx, azfile.SMBProperties{}) // clear the properties
+	} else {
+		err = errors.New("cannot remove read-only attribute from unknown target type")
+	}
+	if err != nil {
+		return err
+	}
+
+	// retry the action
+	_, err = action()
+	return err
 }
 
 func (u *azureFileSenderBase) addPermissionsToHeaders(info TransferInfo, destUrl url.URL) (stage string, err error) {
@@ -300,7 +335,9 @@ func (u *azureFileSenderBase) SetFolderProperties() error {
 		return err
 	}
 
-	_, err = u.dirURL().SetProperties(u.ctx, u.headersToApply.SMBProperties)
+	err = u.DoWithOverrideReadOnly(u.ctx,
+		func() (interface{}, error) { return u.dirURL().SetProperties(u.ctx, u.headersToApply.SMBProperties) },
+		u.fileOrDirURL)
 	return err
 }
 
