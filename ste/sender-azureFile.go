@@ -300,7 +300,7 @@ func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info TransferInfo, destU
 }
 
 func (u *azureFileSenderBase) Epilogue() {
-	if u.headersToApply.FileAttributes.Has(azfile.FileAttributeReadonly) {
+	if u.jptm.IsLive() && u.headersToApply.FileAttributes.Has(azfile.FileAttributeReadonly) {
 		// we apply (all) the headers again, because we deliberately omitted the readonly
 		// at creation time.  This is an extra round trip, but we can live with that for the readonly case.
 		_, err := u.fileURL().SetHTTPHeaders(u.ctx, u.headersToApply)

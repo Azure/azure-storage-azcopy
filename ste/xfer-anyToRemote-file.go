@@ -350,6 +350,8 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 		}
 	}
 
+	// TODO: should we refactor to force this to accept jptm isLive as a parameter, to encourage it to be checked?
+	//  or should we redefine epilogue to be success-path only, and only call it in that case?
 	s.Epilogue() // Perform service-specific cleanup before jptm cleanup. Some services may actually require setup to make the file actually appear.
 
 	if jptm.IsLive() && info.DestLengthValidation {
