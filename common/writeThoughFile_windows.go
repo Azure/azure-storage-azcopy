@@ -21,9 +21,11 @@
 package common
 
 import (
+	"errors"
 	"fmt"
 	"golang.org/x/sys/windows"
 	"os"
+	"reflect"
 	"syscall"
 	"unsafe"
 )
@@ -179,4 +181,76 @@ func OpenWithWriteThroughSetting(path string, mode int, perm uint32, writeThroug
 	}
 	h, e := syscall.CreateFile(pathp, access, sharemode, sa, createmode, attr, 0)
 	return h, e
+}
+
+// SetBackupMode optionally enables special priviledges on Windows.
+// For a description, see https://docs.microsoft.com/en-us/windows-hardware/drivers/ifs/privileges
+// and run this: whoami /priv
+// from an Administrative command prompt (where lots of privileges should exist, but be disabled)
+// and compare with running the same command from a non-admin prompt, where they won't even exist.
+// Note that this is particularly useful in two contexts:
+// 1. Uploading data where normal file system ACLs would prevent AzCopy from reading it. Simply run
+// AzCopy as an account that has SeBackupPrivilege (typically an administrator account using
+// an elevated command prompt) and set the AzCopy flag for this routine to be called.
+// 2. Downloading where you are preserving SMB permissions, and some of the permissions include
+// owners that are NOT the same account as the one running AzCopy.  Again, run AzCopy
+// from a elevated admin command prompt, and use this routine to enable SeRestorePrivilege.  Then
+// AzCopy will be able to set the owners.
+func SetBackupMode(enable bool, fromTo FromTo) error {
+	if !enable {
+		return nil
+	}
+
+	var privName string
+	switch {
+	case fromTo.IsUpload():
+		privName = "SeBackupPrivilege"
+	case fromTo.IsDownload():
+		privName = "SeRestorePrivilege"
+	default:
+		panic("unsupported fromTo in SetBackupMode")
+	}
+
+	// get process token
+	procHandle := windows.CurrentProcess() // no need to close this one
+	var procToken windows.Token
+	err := windows.OpenProcessToken(procHandle, windows.TOKEN_ADJUST_PRIVILEGES|windows.TOKEN_QUERY, &procToken)
+	if err != nil {
+		return err
+	}
+	defer procToken.Close()
+
+	// prepare token privs structure
+	privStr, err := syscall.UTF16PtrFromString(privName)
+	if err != nil {
+		return err
+	}
+	tokenPrivs := windows.Tokenprivileges{PrivilegeCount: 1}
+	tokenPrivs.Privileges[0].Attributes = windows.SE_PRIVILEGE_ENABLED
+	err = windows.LookupPrivilegeValue(nil, privStr, &tokenPrivs.Privileges[0].Luid)
+	if err != nil {
+		return err
+	}
+
+	// Get a structure to receive the old value of every privilege that was changed.
+	// This is the only way we can tell that windows.AdjustTokenPrivileges actually did anything, because
+	// the underlying API can return a success result but a non-successful last error (and Go doesn't expect that,
+	// so doesn't pick it up in Gos implementation of windows.AdjustTokenPrivileges.
+	oldPrivs := windows.Tokenprivileges{}
+	oldPrivsSize := uint32(reflect.TypeOf(oldPrivs).Size()) // it's all struct-y, with an array (not a slice) so everything is inline and size will include everything
+	var requiredReturnLen uint32
+
+	// adjust our privileges
+	err = windows.AdjustTokenPrivileges(procToken, false, &tokenPrivs, oldPrivsSize, &oldPrivs, &requiredReturnLen)
+	if err != nil {
+		return err
+	}
+	if oldPrivs.PrivilegeCount != 1 {
+		// Only the successful changes are returned in the old state
+		// If there were none, that means it didn't work
+		return errors.New("could not activate '" + BackupModeFlagName + "' mode.  Probably the account running AzCopy does not have " +
+			privName + " so AzCopy could not activate that privilege. Administrators usually have that privilege, but only when they are in an elevated command prompt. " +
+			"To check which privileges an account has, run this from a command line: whoami /priv")
+	}
+	return nil
 }

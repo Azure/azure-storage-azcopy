@@ -57,7 +57,6 @@ func (bd *azureFilesDownloader) isInitialized() bool {
 }
 
 var errorNoSddlFound = errors.New("no SDDL found")
-var errorCantSetLocalSystemSddl = errors.New("failure setting local system as owner (possible old SDDL from source)")
 
 func (bd *azureFilesDownloader) preserveAttributes() (stage string, err error) {
 	info := bd.jptm.Info()
@@ -76,8 +75,6 @@ func (bd *azureFilesDownloader) preserveAttributes() (stage string, err error) {
 			err = spdl.PutSDDL(bd.sip.(ISMBPropertyBearingSourceInfoProvider), bd.txInfo)
 			if err == errorNoSddlFound {
 				bd.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, "No SMB permissions were downloaded because none were found at the source")
-			} else if err == errorCantSetLocalSystemSddl {
-				bd.jptm.LogAtLevelForCurrentTransfer(pipeline.LogInfo, "Can't set SMB permissions. Permissions from source may be defaults that can't be applied locally")
 			} else if err != nil {
 				return "Setting destination file SDDLs", err
 			}
