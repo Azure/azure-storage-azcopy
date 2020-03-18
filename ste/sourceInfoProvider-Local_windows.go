@@ -3,8 +3,8 @@
 package ste
 
 import (
+	"github.com/Azure/azure-storage-azcopy/common"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -36,30 +36,8 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	return fSDDL.PortableString(), nil
 }
 
-func (f localFileSourceInfoProvider) getFileInformation() (windows.ByHandleFileInformation, error) {
-
-	srcPtr, err := syscall.UTF16PtrFromString(f.jptm.Info().Source)
-	if err != nil {
-		return windows.ByHandleFileInformation{}, err
-	}
-	// custom open call, because must specify FILE_FLAG_BACKUP_SEMANTICS when getting information of folders (else GetFileInformationByHandle will fail)
-	fd, err := windows.CreateFile(srcPtr,
-		windows.GENERIC_READ, windows.FILE_SHARE_READ, nil,
-		windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
-	if err != nil {
-		return windows.ByHandleFileInformation{}, err
-	}
-	defer windows.Close(fd)
-
-	var info windows.ByHandleFileInformation
-
-	err = windows.GetFileInformationByHandle(fd, &info)
-
-	return info, err
-}
-
 func (f localFileSourceInfoProvider) GetSMBProperties() (TypedSMBPropertyHolder, error) {
-	info, err := f.getFileInformation()
+	info, err := common.GetFileInformation(f.jptm.Info().Source)
 
 	return handleInfo{info}, err
 }

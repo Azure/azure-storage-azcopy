@@ -663,8 +663,11 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
 	targetIsFiles := fromTo.To() == common.ELocation.File() ||
 		fromTo == common.EFromTo.FileTrash()
-	if toForce && !targetIsFiles {
-		return errors.New("force-if-read-only is only supported when the target is Azure Files")
+	targetIsWindowsFS := fromTo.To() == common.ELocation.Local() &&
+		runtime.GOOS == "windows"
+	targetIsOK := targetIsFiles || targetIsWindowsFS
+	if toForce && !targetIsOK {
+		return errors.New("force-if-read-only is only supported when the target is Azure Files or a Windows file system")
 	}
 	return nil
 }
@@ -1426,7 +1429,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files)")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBProperties, "preserve-smb-properties", false, "False by default. Preserves SMB properties (last write time, creation time, attribute bits) between aware resources (Windows and Azure Files). Only the attribute bits supported by Azure Files will be transferred; any others will be ignored.")
-	cpCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing Azure Files file or folder, force the overwrite to work even if the existing object is has its read-only attribute set")
+	cpCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
 	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob or file. (By default the hash is NOT created.) Only available when uploading.")
 	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "check-md5", common.DefaultHashValidationOption.String(), "Specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing. (default 'FailIfDifferent')")
 	cpCmd.PersistentFlags().StringVar(&raw.includeFileAttributes, "include-attributes", "", "(Windows only) Include files whose attributes match the attribute list. For example: A;S;R")

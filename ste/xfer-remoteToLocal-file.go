@@ -274,7 +274,7 @@ func createDestinationFile(jptm IJobPartTransferMgr, destination string, size in
 	}
 
 	var dstFile io.WriteCloser
-	dstFile, err = common.CreateFileOfSizeWithWriteThroughOption(destination, size, writeThrough, jptm.GetFolderCreationTracker())
+	dstFile, err = common.CreateFileOfSizeWithWriteThroughOption(destination, size, writeThrough, jptm.GetFolderCreationTracker(), jptm.GetForceIfReadOnly())
 	if err != nil {
 		return nil, err
 	}
