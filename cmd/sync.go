@@ -40,6 +40,7 @@ type rawSyncCmdArgs struct {
 	src       string
 	dst       string
 	recursive bool
+
 	// options from flags
 	blockSizeMB           float64
 	logVerbosity          string
@@ -54,6 +55,7 @@ type rawSyncCmdArgs struct {
 	preserveSMBPermissions bool
 	preserveSMBProperties  bool
 	followSymlinks         bool
+	backupMode             bool
 	putMd5                 bool
 	md5ValidationOption    string
 	// this flag indicates the user agreement with respect to deleting the extra files at the destination
@@ -157,6 +159,11 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		return cooked, err
 	}
 
+	cooked.backupMode = raw.backupMode
+	if err = validateBackupMode(cooked.backupMode, cooked.fromTo); err != nil {
+		return cooked, err
+	}
+
 	// determine whether we should prompt the user to delete extra files
 	err = cooked.deleteDestination.Parse(raw.deleteDestination)
 	if err != nil {
@@ -252,6 +259,7 @@ type cookedSyncCmdArgs struct {
 	blockSize              uint32
 	logVerbosity           common.LogLevel
 	forceIfReadOnly        bool
+	backupMode             bool
 
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
@@ -498,6 +506,11 @@ Final Job Status: %v%s%s
 func (cca *cookedSyncCmdArgs) process() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
+	err = common.SetBackupMode(cca.backupMode, cca.fromTo)
+	if err != nil {
+		return err
+	}
+
 	// verifies credential type and initializes credential info.
 	// For sync, only one side need credential.
 	cca.credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
@@ -579,9 +592,10 @@ func init() {
 
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", true, "True by default, look into sub-directories recursively when syncing between directories. (default true).")
-	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files)")
+	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files). For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy.")
 	syncCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBProperties, "preserve-smb-properties", false, "False by default. Preserves SMB properties (last write time, creation time, attribute bits) between aware resources (Windows and Azure Files). Only the attribute bits supported by Azure Files will be transferred, any others will be ignored.")
+	syncCmd.PersistentFlags().BoolVar(&raw.backupMode, common.BackupModeFlagName, false, "Activates Windows' SeBackupPrivilege for uploads, or SeRestorePrivilege for downloads, to allow AzCopy to see read all files, regardless of their file system permissions, and to restore all permissions. Requires that the account running AzCopy already has these permissions (e.g. has Administrator rights), because all this flag does is activate them")
 	syncCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage or downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")

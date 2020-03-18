@@ -4,7 +4,7 @@ package ste
 
 import (
 	"fmt"
-	"strings"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"syscall"
 
 	"golang.org/x/sys/windows"
@@ -103,9 +103,9 @@ func (*azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, 
 		nil,
 	)
 
-	if err != nil && strings.HasPrefix(sddlString, "O:SYG:SY") {
-		// TODO: awaiting replies re where this SSDL comes from
-		return errorCantSetLocalSystemSddl
+	if err != nil {
+		return fmt.Errorf("permissions could not be restored. It may help to run from a elevated command prompt, and set the %s flag. Error message was: %w",
+			common.BackupModeFlagName, err)
 	}
 
 	return err

@@ -113,6 +113,8 @@ type rawCopyCmdArgs struct {
 	preserveSMBPermissions bool
 	// Opt-in flag to persist additional SMB properties to Azure Files.
 	preserveSMBProperties bool
+	// Flag to enable Window's special priviledges
+	backupMode bool
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
 	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
 	// to preserve full properties AzCopy needs to send one additional request per object/file.
@@ -465,6 +467,11 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		return cooked, err
 	}
 
+	cooked.backupMode = raw.backupMode
+	if err = validateBackupMode(cooked.backupMode, cooked.fromTo); err != nil {
+		return cooked, err
+	}
+
 	// check for the flag value relative to fromTo location type
 	// Example1: for Local to Blob, preserve-last-modified-time flag should not be set to true
 	// Example2: for Blob to Local, follow-symlinks, blob-tier flags should not be provided with values.
@@ -687,6 +694,20 @@ func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, fl
 	return nil
 }
 
+func validateBackupMode(backupMode bool, fromTo common.FromTo) error {
+	if !backupMode {
+		return nil
+	}
+	if runtime.GOOS != "windows" {
+		return errors.New(common.BackupModeFlagName + " mode is only supported on Windows")
+	}
+	if fromTo.IsUpload() || fromTo.IsDownload() {
+		return nil
+	} else {
+		return errors.New(common.BackupModeFlagName + " mode is only supported for uploads and downloads")
+	}
+}
+
 func validatePutMd5(putMd5 bool, fromTo common.FromTo) error {
 	if putMd5 && !fromTo.IsUpload() {
 		return fmt.Errorf("put-md5 is set but the job is not an upload")
@@ -775,6 +796,9 @@ type cookedCopyCmdArgs struct {
 	// Whether the user wants to perserve the SMB properties ...
 	preserveSMBProperties bool
 
+	// Whether to enable Windows special privileges
+	backupMode bool
+
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
 	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
 	// to preserve full properties AzCopy needs to send one additional request per object/file.
@@ -812,6 +836,12 @@ func (cca *cookedCopyCmdArgs) isRedirection() bool {
 }
 
 func (cca *cookedCopyCmdArgs) process() error {
+
+	err := common.SetBackupMode(cca.backupMode, cca.fromTo)
+	if err != nil {
+		return err
+	}
+
 	if cca.isRedirection() {
 		err := cca.processRedirectionCopy()
 
@@ -1428,9 +1458,10 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.cacheControl, "cache-control", "", "Set the cache-control header. Returned on download.")
 	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "Prevents AzCopy from detecting the content-type based on the extension or content of the file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files)")
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files). For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBProperties, "preserve-smb-properties", false, "False by default. Preserves SMB properties (last write time, creation time, attribute bits) between aware resources (Windows and Azure Files). Only the attribute bits supported by Azure Files will be transferred; any others will be ignored.")
 	cpCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
+	cpCmd.PersistentFlags().BoolVar(&raw.backupMode, common.BackupModeFlagName, false, "Activates Windows' SeBackupPrivilege for uploads, or SeRestorePrivilege for downloads, to allow AzCopy to see read all files, regardless of their file system permissions, and to restore all permissions. Requires that the account running AzCopy already has these permissions (e.g. has Administrator rights), because all this flag does is activate them")
 	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob or file. (By default the hash is NOT created.) Only available when uploading.")
 	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "check-md5", common.DefaultHashValidationOption.String(), "Specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing. (default 'FailIfDifferent')")
 	cpCmd.PersistentFlags().StringVar(&raw.includeFileAttributes, "include-attributes", "", "(Windows only) Include files whose attributes match the attribute list. For example: A;S;R")

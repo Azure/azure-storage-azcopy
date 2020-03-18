@@ -52,3 +52,8 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 	}
 	return f, nil
 }
+
+func SetBackupMode(enable bool, fromTo FromTo) error {
+	// n/a on this platform
+	return nil
+}

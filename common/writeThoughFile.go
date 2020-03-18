@@ -26,6 +26,8 @@ import (
 	"strings"
 )
 
+const BackupModeFlagName = "backup" // original name, backup mode, matches the name used for the same thing in Robocopy
+
 // The regex doesn't require a / on the ending, it just requires something similar to the following
 // C:
 // C:/
