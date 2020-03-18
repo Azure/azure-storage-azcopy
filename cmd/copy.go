@@ -661,8 +661,10 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 }
 
 func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
-	if toForce && fromTo.To() != common.ELocation.File() {
-		return errors.New("force-if-read-only is only supported when the destination is Azure Files")
+	targetIsFiles := fromTo.To() == common.ELocation.File() ||
+		fromTo == common.EFromTo.FileTrash()
+	if toForce && !targetIsFiles {
+		return errors.New("force-if-read-only is only supported when the target is Azure Files")
 	}
 	return nil
 }

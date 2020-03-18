@@ -173,8 +173,10 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 	// Turn off readonly at creation time (because if its set at creation time, we won't be
 	// able to upload any data to the file!). We'll set it in epilogue, if necessary.
 	creationHeaders := u.headersToApply
-	revisedAttribs := creationHeaders.FileAttributes.Remove(azfile.FileAttributeReadonly)
-	creationHeaders.FileAttributes = &revisedAttribs
+	if creationHeaders.FileAttributes != nil {
+		revisedAttribs := creationHeaders.FileAttributes.Remove(azfile.FileAttributeReadonly)
+		creationHeaders.FileAttributes = &revisedAttribs
+	}
 
 	err = u.DoWithOverrideReadOnly(u.ctx,
 		func() (interface{}, error) {
@@ -211,10 +213,13 @@ func (*azureFileSenderBase) DoWithOverrideReadOnly(ctx context.Context, action f
 	}
 
 	// did fail as readonly, and forcing is enabled
+	none := azfile.FileAttributeNone
 	if f, ok := targetFileOrDir.(azfile.FileURL); ok {
-		_, err = f.SetHTTPHeaders(ctx, azfile.FileHTTPHeaders{}) // clear the headers
+		h := azfile.FileHTTPHeaders{}
+		h.FileAttributes = &none // clear the attribs
+		_, err = f.SetHTTPHeaders(ctx, h)
 	} else if d, ok := targetFileOrDir.(azfile.DirectoryURL); ok {
-		_, err = d.SetProperties(ctx, azfile.SMBProperties{}) // clear the properties
+		_, err = d.SetProperties(ctx, azfile.SMBProperties{FileAttributes: &none})
 	} else {
 		err = errors.New("cannot remove read-only attribute from unknown target type")
 	}
@@ -300,7 +305,9 @@ func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info TransferInfo, destU
 }
 
 func (u *azureFileSenderBase) Epilogue() {
-	if u.jptm.IsLive() && u.headersToApply.FileAttributes.Has(azfile.FileAttributeReadonly) {
+	if u.jptm.IsLive() &&
+		u.headersToApply.FileAttributes != nil &&
+		u.headersToApply.FileAttributes.Has(azfile.FileAttributeReadonly) {
 		// we apply (all) the headers again, because we deliberately omitted the readonly
 		// at creation time.  This is an extra round trip, but we can live with that for the readonly case.
 		_, err := u.fileURL().SetHTTPHeaders(u.ctx, u.headersToApply)
