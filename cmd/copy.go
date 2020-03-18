@@ -84,7 +84,8 @@ type rawCopyCmdArgs struct {
 	autoDecompress    bool
 	// forceWrite flag is used to define the User behavior
 	// to overwrite the existing blobs or not.
-	forceWrite string
+	forceWrite      string
+	forceIfReadOnly bool
 
 	// options from flags
 	blockSizeMB              float64
@@ -265,6 +266,10 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	cooked.fromTo = fromTo
 	cooked.recursive = raw.recursive
 	cooked.followSymlinks = raw.followSymlinks
+	cooked.forceIfReadOnly = raw.forceIfReadOnly
+	if err = validateForceIfReadOnly(cooked.forceIfReadOnly, cooked.fromTo); err != nil {
+		return cooked, err
+	}
 
 	// copy&transform flags to type-safety
 	err = cooked.forceWrite.Parse(raw.forceWrite)
@@ -656,6 +661,18 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 	raw.forceWrite = common.EOverwriteOption.True().String()
 }
 
+func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
+	targetIsFiles := fromTo.To() == common.ELocation.File() ||
+		fromTo == common.EFromTo.FileTrash()
+	targetIsWindowsFS := fromTo.To() == common.ELocation.Local() &&
+		runtime.GOOS == "windows"
+	targetIsOK := targetIsFiles || targetIsWindowsFS
+	if toForce && !targetIsOK {
+		return errors.New("force-if-read-only is only supported when the target is Azure Files or a Windows file system")
+	}
+	return nil
+}
+
 func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, flagName string) error {
 	if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
 		fromTo == common.EFromTo.FileLocal() ||
@@ -706,7 +723,8 @@ type cookedCopyCmdArgs struct {
 	recursive          bool
 	stripTopDir        bool
 	followSymlinks     bool
-	forceWrite         common.OverwriteOption
+	forceWrite         common.OverwriteOption // says whether we should try to overwrite
+	forceIfReadOnly    bool                   // says whether we should _force_ any overwrites (triggered by forceWrite) to work on Azure Files objects that are set to read-only
 	autoDecompress     bool
 
 	// options from flags
@@ -929,6 +947,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		JobID:           cca.jobID,
 		FromTo:          cca.fromTo,
 		ForceWrite:      cca.forceWrite,
+		ForceIfReadOnly: cca.forceIfReadOnly,
 		AutoDecompress:  cca.autoDecompress,
 		Priority:        common.EJobPriority.Normal(),
 		LogLevel:        cca.logVerbosity,
@@ -1411,6 +1430,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files)")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBProperties, "preserve-smb-properties", false, "False by default. Preserves SMB properties (last write time, creation time, attribute bits) between aware resources (Windows and Azure Files). Only the attribute bits supported by Azure Files will be transferred; any others will be ignored.")
+	cpCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
 	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob or file. (By default the hash is NOT created.) Only available when uploading.")
 	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "check-md5", common.DefaultHashValidationOption.String(), "Specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing. (default 'FailIfDifferent')")
 	cpCmd.PersistentFlags().StringVar(&raw.includeFileAttributes, "include-attributes", "", "(Windows only) Include files whose attributes match the attribute list. For example: A;S;R")

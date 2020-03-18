@@ -62,6 +62,8 @@ type rawSyncCmdArgs struct {
 	deleteDestination string
 
 	s2sPreserveAccessTier bool
+
+	forceIfReadOnly bool
 }
 
 func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -150,6 +152,10 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	cooked.followSymlinks = raw.followSymlinks
 	cooked.recursive = raw.recursive
+	cooked.forceIfReadOnly = raw.forceIfReadOnly
+	if err = validateForceIfReadOnly(cooked.forceIfReadOnly, cooked.fromTo); err != nil {
+		return cooked, err
+	}
 
 	// determine whether we should prompt the user to delete extra files
 	err = cooked.deleteDestination.Parse(raw.deleteDestination)
@@ -245,6 +251,7 @@ type cookedSyncCmdArgs struct {
 	md5ValidationOption    common.HashValidationOption
 	blockSize              uint32
 	logVerbosity           common.LogLevel
+	forceIfReadOnly        bool
 
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
@@ -573,6 +580,7 @@ func init() {
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", true, "True by default, look into sub-directories recursively when syncing between directories. (default true).")
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files)")
+	syncCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBProperties, "preserve-smb-properties", false, "False by default. Preserves SMB properties (last write time, creation time, attribute bits) between aware resources (Windows and Azure Files). Only the attribute bits supported by Azure Files will be transferred, any others will be ignored.")
 	syncCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage or downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")

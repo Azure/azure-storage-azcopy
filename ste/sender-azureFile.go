@@ -22,6 +22,7 @@ package ste
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -169,14 +170,68 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		return
 	}
 
-	// Create Azure file with the source size
-	_, err = u.fileURL().Create(u.ctx, info.SourceSize, u.headersToApply, u.metadataToApply)
+	// Turn off readonly at creation time (because if its set at creation time, we won't be
+	// able to upload any data to the file!). We'll set it in epilogue, if necessary.
+	creationHeaders := u.headersToApply
+	if creationHeaders.FileAttributes != nil {
+		revisedAttribs := creationHeaders.FileAttributes.Remove(azfile.FileAttributeReadonly)
+		creationHeaders.FileAttributes = &revisedAttribs
+	}
+
+	err = u.DoWithOverrideReadOnly(u.ctx,
+		func() (interface{}, error) {
+			return u.fileURL().Create(u.ctx, info.SourceSize, creationHeaders, u.metadataToApply)
+		},
+		u.fileOrDirURL,
+		u.jptm.GetForceIfReadOnly())
 	if err != nil {
 		jptm.FailActiveUpload("Creating file", err)
 		return
 	}
 
 	return
+}
+
+// DoWithOverrideReadOnly performs the given action, and forces it to happen even if the target is read only.
+// NOTE that all SMB attributes (and other headers?) on the target will be lost, so only use this if you don't need them any more
+// (e.g. you are about to delete the resource, or you are going to reset the attributes/headers)
+func (*azureFileSenderBase) DoWithOverrideReadOnly(ctx context.Context, action func() (interface{}, error), targetFileOrDir URLHolder, enableForcing bool) error {
+	// try the action
+	_, err := action()
+
+	failedAsReadOnly := false
+	if strErr, ok := err.(azfile.StorageError); ok && strErr.ServiceCode() == azfile.ServiceCodeReadOnlyAttribute {
+		failedAsReadOnly = true
+	}
+	if !failedAsReadOnly {
+		return err
+	}
+
+	// did fail as readonly, but forcing is not enabled
+	if !enableForcing {
+		return errors.New("target is readonly. To force the action to proceed, add --force-if-read-only to the command line")
+	}
+
+	// did fail as readonly, and forcing is enabled
+	none := azfile.FileAttributeNone
+	if f, ok := targetFileOrDir.(azfile.FileURL); ok {
+		h := azfile.FileHTTPHeaders{}
+		h.FileAttributes = &none // clear the attribs
+		_, err = f.SetHTTPHeaders(ctx, h)
+	} else if d, ok := targetFileOrDir.(azfile.DirectoryURL); ok {
+		// this code path probably isn't used, since ReadOnly (in Windows file systems at least)
+		// only applies to the files in a folder, not to the folder itself. But we'll leave the code here, for now.
+		_, err = d.SetProperties(ctx, azfile.SMBProperties{FileAttributes: &none})
+	} else {
+		err = errors.New("cannot remove read-only attribute from unknown target type")
+	}
+	if err != nil {
+		return err
+	}
+
+	// retry the action
+	_, err = action()
+	return err
 }
 
 func (u *azureFileSenderBase) addPermissionsToHeaders(info TransferInfo, destUrl url.URL) (stage string, err error) {
@@ -251,6 +306,19 @@ func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info TransferInfo, destU
 	return "", nil
 }
 
+func (u *azureFileSenderBase) Epilogue() {
+	if u.jptm.IsLive() &&
+		u.headersToApply.FileAttributes != nil &&
+		u.headersToApply.FileAttributes.Has(azfile.FileAttributeReadonly) {
+		// we apply (all) the headers again, because we deliberately omitted the readonly
+		// at creation time.  This is an extra round trip, but we can live with that for the readonly case.
+		_, err := u.fileURL().SetHTTPHeaders(u.ctx, u.headersToApply)
+		if err != nil {
+			u.jptm.FailActiveSend("Setting read-only attribute", err)
+		}
+	}
+}
+
 func (u *azureFileSenderBase) Cleanup() {
 	jptm := u.jptm
 
@@ -300,7 +368,10 @@ func (u *azureFileSenderBase) SetFolderProperties() error {
 		return err
 	}
 
-	_, err = u.dirURL().SetProperties(u.ctx, u.headersToApply.SMBProperties)
+	err = u.DoWithOverrideReadOnly(u.ctx,
+		func() (interface{}, error) { return u.dirURL().SetProperties(u.ctx, u.headersToApply.SMBProperties) },
+		u.fileOrDirURL,
+		u.jptm.GetForceIfReadOnly())
 	return err
 }
 

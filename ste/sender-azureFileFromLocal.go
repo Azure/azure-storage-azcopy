@@ -77,6 +77,8 @@ func (u *azureFileUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 }
 
 func (u *azureFileUploader) Epilogue() {
+	u.azureFileSenderBase.Epilogue()
+
 	jptm := u.jptm
 
 	// set content MD5 (only way to do this is to re-PUT all the headers, this time with the MD5 included)
@@ -86,9 +88,8 @@ func (u *azureFileUploader) Epilogue() {
 				return nil
 			}
 
-			epilogueHeaders := u.headersToApply
-			epilogueHeaders.ContentMD5 = md5Hash
-			_, err := u.fileURL().SetHTTPHeaders(u.ctx, epilogueHeaders)
+			u.headersToApply.ContentMD5 = md5Hash
+			_, err := u.fileURL().SetHTTPHeaders(u.ctx, u.headersToApply)
 			return err
 		})
 	}

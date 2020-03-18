@@ -26,12 +26,9 @@ import (
 	"os"
 )
 
-// create a file, given its path and length
-func CreateFileOfSize(destinationPath string, fileSize int64, t FolderCreationTracker) (*os.File, error) {
-	return CreateFileOfSizeWithWriteThroughOption(destinationPath, fileSize, false, t)
-}
+func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int64, writeThrough bool, t FolderCreationTracker, forceIfReadOnly bool) (*os.File, error) {
+	// forceIfReadOnly is not used on this OS
 
-func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int64, writeThrough bool, t FolderCreationTracker) (*os.File, error) {
 	err := CreateParentDirectoryIfNotExist(destinationPath, t)
 	if err != nil {
 		return nil, err

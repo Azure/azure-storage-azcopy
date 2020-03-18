@@ -50,6 +50,12 @@ func (bd *azureFilesDownloader) init(jptm IJobPartTransferMgr) {
 	// and it's not possible for newFileSourceInfoProvider to return an error either.
 }
 
+func (bd *azureFilesDownloader) isInitialized() bool {
+	// TODO: only day, do we really want this object to be able to exist in an uninitizalide state?
+	//   Could/should we refactor the construction...?
+	return bd.jptm != nil
+}
+
 var errorNoSddlFound = errors.New("no SDDL found")
 var errorCantSetLocalSystemSddl = errors.New("failure setting local system as owner (possible old SDDL from source)")
 
@@ -97,9 +103,14 @@ func (bd *azureFilesDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline p
 }
 
 func (bd *azureFilesDownloader) Epilogue() {
-	stage, err := bd.preserveAttributes()
-	if err != nil {
-		bd.jptm.FailActiveDownload(stage, err)
+	if !bd.isInitialized() {
+		return // nothing we can do
+	}
+	if bd.jptm.IsLive() {
+		stage, err := bd.preserveAttributes()
+		if err != nil {
+			bd.jptm.FailActiveDownload(stage, err)
+		}
 	}
 }
 

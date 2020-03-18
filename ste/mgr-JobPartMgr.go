@@ -28,6 +28,7 @@ type IJobPartMgr interface {
 	StartJobXfer(jptm IJobPartTransferMgr)
 	ReportTransferDone() uint32
 	GetOverwriteOption() common.OverwriteOption
+	GetForceIfReadOnly() bool
 	AutoDecompress() bool
 	ScheduleChunks(chunkFunc chunkFunc)
 	RescheduleTransfer(jptm IJobPartTransferMgr)
@@ -564,6 +565,10 @@ func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {
 
 func (jpm *jobPartMgr) GetOverwriteOption() common.OverwriteOption {
 	return jpm.Plan().ForceWrite
+}
+
+func (jpm *jobPartMgr) GetForceIfReadOnly() bool {
+	return jpm.Plan().ForceIfReadOnly
 }
 
 func (jpm *jobPartMgr) AutoDecompress() bool {

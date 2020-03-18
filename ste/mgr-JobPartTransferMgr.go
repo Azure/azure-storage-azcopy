@@ -37,6 +37,7 @@ type IJobPartTransferMgr interface {
 	HoldsDestinationLock() bool
 	StartJobXfer()
 	GetOverwriteOption() common.OverwriteOption
+	GetForceIfReadOnly() bool
 	ShouldDecompress() bool
 	GetSourceCompressionType() (common.CompressionType, error)
 	ReportChunkDone(id common.ChunkID) (lastChunk bool, chunksDone uint32)
@@ -193,6 +194,10 @@ func (jptm *jobPartTransferMgr) StartJobXfer() {
 
 func (jptm *jobPartTransferMgr) GetOverwriteOption() common.OverwriteOption {
 	return jptm.jobPartMgr.GetOverwriteOption()
+}
+
+func (jptm *jobPartTransferMgr) GetForceIfReadOnly() bool {
+	return jptm.jobPartMgr.GetForceIfReadOnly()
 }
 
 func (jptm *jobPartTransferMgr) ShouldDecompress() bool {

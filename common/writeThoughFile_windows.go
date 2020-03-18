@@ -21,25 +21,92 @@
 package common
 
 import (
+	"fmt"
+	"golang.org/x/sys/windows"
 	"os"
 	"syscall"
 	"unsafe"
 )
 
-func CreateFileOfSize(destinationPath string, fileSize int64, tracker FolderCreationTracker) (*os.File, error) {
-	return CreateFileOfSizeWithWriteThroughOption(destinationPath, fileSize, false, tracker)
+func GetFileInformation(path string) (windows.ByHandleFileInformation, error) {
+
+	srcPtr, err := syscall.UTF16PtrFromString(path)
+	if err != nil {
+		return windows.ByHandleFileInformation{}, err
+	}
+	// custom open call, because must specify FILE_FLAG_BACKUP_SEMANTICS when getting information of folders (else GetFileInformationByHandle will fail)
+	fd, err := windows.CreateFile(srcPtr,
+		windows.GENERIC_READ, windows.FILE_SHARE_READ, nil,
+		windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+	if err != nil {
+		return windows.ByHandleFileInformation{}, err
+	}
+	defer windows.Close(fd)
+
+	var info windows.ByHandleFileInformation
+
+	err = windows.GetFileInformationByHandle(fd, &info)
+
+	return info, err
 }
 
-func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int64, writeThrough bool, tracker FolderCreationTracker) (*os.File, error) {
+func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int64, writeThrough bool, tracker FolderCreationTracker, forceIfReadOnly bool) (*os.File, error) {
+	const FILE_ATTRIBUTE_READONLY = 1
+
+	doOpen := func() (syscall.Handle, error) {
+		return OpenWithWriteThroughSetting(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, DEFAULT_FILE_PERM, writeThrough)
+	}
+
+	hasReadOnlyFlag := func() bool {
+		fi, err := GetFileInformation(destinationPath)
+		if err != nil {
+			return false
+		}
+		return fi.FileAttributes&FILE_ATTRIBUTE_READONLY == FILE_ATTRIBUTE_READONLY
+	}
+
+	tryClearReadOnlyFlag := func() bool {
+		fi, err := GetFileInformation(destinationPath)
+		if err != nil {
+			return false
+		}
+		destPtr, err := syscall.UTF16PtrFromString(destinationPath)
+		if err != nil {
+			return false
+		}
+
+		// Clear the RO flag (and no others)
+		// In the worst-case scenario, if this succeeds but the file open still fails,
+		// we will leave the file in a state where this flag (and this flag only) has been
+		// cleared. (But then, given the download implementation as at 10.3.x,
+		// we'll try to clean up by deleting the file at the end of our job anyway, so we won't be
+		// leaving damaged trash around if the delete works).
+		// TODO: is that acceptable? Seems overkill to re-instate the attribute if the open fails...
+		newAttrs := fi.FileAttributes &^ FILE_ATTRIBUTE_READONLY
+		err = windows.SetFileAttributes(destPtr, newAttrs)
+		return err == nil
+	}
+
 	err := CreateParentDirectoryIfNotExist(destinationPath, tracker)
 	if err != nil {
 		return nil, err
 	}
 
-	fd, err := OpenWithWriteThroughSetting(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, DEFAULT_FILE_PERM, writeThrough)
+	fd, err := doOpen()
+	if err != nil && hasReadOnlyFlag() {
+		if forceIfReadOnly {
+			if tryClearReadOnlyFlag() {
+				// do the open again
+				fd, err = doOpen()
+			}
+		} else {
+			return nil, fmt.Errorf("destination file has read-only flag so access will be denied. Try setting --force-if-read-only on command line. Error was %w", err)
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
+
 	f := os.NewFile(uintptr(fd), destinationPath)
 	if f == nil {
 		return nil, os.ErrInvalid

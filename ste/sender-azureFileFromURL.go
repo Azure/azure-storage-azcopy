@@ -73,4 +73,6 @@ func (u *urlToAzureFileCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 	})
 }
 
-func (u *urlToAzureFileCopier) Epilogue() {}
+func (u *urlToAzureFileCopier) Epilogue() {
+	u.azureFileSenderBase.Epilogue()
+}

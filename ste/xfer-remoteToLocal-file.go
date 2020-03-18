@@ -274,7 +274,7 @@ func createDestinationFile(jptm IJobPartTransferMgr, destination string, size in
 	}
 
 	var dstFile io.WriteCloser
-	dstFile, err = common.CreateFileOfSizeWithWriteThroughOption(destination, size, writeThrough, jptm.GetFolderCreationTracker())
+	dstFile, err = common.CreateFileOfSizeWithWriteThroughOption(destination, size, writeThrough, jptm.GetFolderCreationTracker(), jptm.GetForceIfReadOnly())
 	if err != nil {
 		return nil, err
 	}
@@ -328,6 +328,8 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 	}
 
 	if dl != nil {
+		// TODO: should we refactor to force this to accept jptm isLive as a parameter, to encourage it to be checked?
+		//  or should we redefine epilogue to be success-path only, and only call it in that case?
 		dl.Epilogue() // it can release resources here
 
 		// check length if enabled (except for dev null and decompression case, where that's impossible)
