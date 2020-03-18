@@ -219,6 +219,8 @@ func (*azureFileSenderBase) DoWithOverrideReadOnly(ctx context.Context, action f
 		h.FileAttributes = &none // clear the attribs
 		_, err = f.SetHTTPHeaders(ctx, h)
 	} else if d, ok := targetFileOrDir.(azfile.DirectoryURL); ok {
+		// this code path probably isn't used, since ReadOnly (in Windows file systems at least)
+		// only applies to the files in a folder, not to the folder itself. But we'll leave the code here, for now.
 		_, err = d.SetProperties(ctx, azfile.SMBProperties{FileAttributes: &none})
 	} else {
 		err = errors.New("cannot remove read-only attribute from unknown target type")
