@@ -248,7 +248,7 @@ func SetBackupMode(enable bool, fromTo FromTo) error {
 	if oldPrivs.PrivilegeCount != 1 {
 		// Only the successful changes are returned in the old state
 		// If there were none, that means it didn't work
-		return errors.New("could not activate " + BackupModeFlagName + " mode.  Probably the account running AzCopy does not have " +
+		return errors.New("could not activate '" + BackupModeFlagName + "' mode.  Probably the account running AzCopy does not have " +
 			privName + " so AzCopy could not activate that privilege. Administrators usually have that privilege, but only when they are in an elevated command prompt. " +
 			"To check which privileges an account has, run this from a command line: whoami /priv")
 	}

@@ -104,7 +104,7 @@ func (*azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, 
 	)
 
 	if err != nil {
-		return fmt.Errorf("permissions could not be restored. It may help to run from a elevated command prompt, and set the %s flag. Error message was: %w",
+		return fmt.Errorf("permissions could not be restored. It may help to run from a elevated command prompt, and set the '%s' flag. Error message was: %w",
 			common.BackupModeFlagName, err)
 	}
 
