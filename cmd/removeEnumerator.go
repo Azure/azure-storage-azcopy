@@ -32,8 +32,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 var NothingToRemoveError = errors.New("nothing found to remove")
@@ -97,24 +95,6 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	}
 
 	return newCopyEnumerator(sourceTraverser, filters, transferScheduler.scheduleCopyTransfer, finalize), nil
-}
-
-type directoryStack []azfile.DirectoryURL
-
-func (s *directoryStack) Push(d azfile.DirectoryURL) {
-	*s = append(*s, d)
-}
-
-func (s *directoryStack) Pop() (*azfile.DirectoryURL, bool) {
-	l := len(*s)
-
-	if l == 0 {
-		return nil, false
-	} else {
-		e := (*s)[l-1]
-		*s = (*s)[:l-1]
-		return &e, true
-	}
 }
 
 // TODO move after ADLS/Blob interop goes public
