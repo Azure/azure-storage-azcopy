@@ -87,10 +87,18 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 			return
 		}
 
-		// if there's no data at the source, skip this chunk
-		if c.pageRangeOptimizer != nil && !c.pageRangeOptimizer.doesRangeContainData(
-			azblob.PageRange{Start: id.OffsetInFile(), End: id.OffsetInFile() + adjustedChunkSize - 1}) {
-			return
+		// if there's no data at the source (and the destination for managed disks), skip this chunk
+		pageRange := azblob.PageRange{Start: id.OffsetInFile(), End: id.OffsetInFile() + adjustedChunkSize - 1}
+		if c.pageRangeOptimizer != nil && !c.pageRangeOptimizer.doesRangeContainData(pageRange) {
+			var destContainsData bool
+
+			if c.destPageRangeOptimizer != nil {
+				destContainsData = c.destPageRangeOptimizer.doesRangeContainData(pageRange)
+			}
+
+			if !destContainsData {
+				return
+			}
 		}
 
 		// control rate of sending (since page blobs can effectively have per-blob throughput limits)
