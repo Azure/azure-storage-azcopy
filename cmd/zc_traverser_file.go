@@ -93,7 +93,9 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 
 	// else, its not just one file
 
-	processEntity := func(f azfileEntity) error {
+	// This func must be threadsafe/goroutine safe
+	convertToStoredObject := func(input parallel.InputObject) (parallel.OutputObject, error) {
+		f := input.(azfileEntity)
 		// compute the relative path of the file with respect to the target directory
 		fileURLParts := azfile.NewFileURLParts(f.url)
 		relativePath := strings.TrimPrefix(fileURLParts.DirectoryOrFilePath, targetURLParts.DirectoryOrFilePath)
@@ -109,7 +111,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			var fullProperties azfilePropertiesAdapter
 			fullProperties, err = f.propertyGetter(t.ctx)
 			if err != nil {
-				return err
+				return storedObject{}, err
 			}
 			lmt = fullProperties.LastModified()
 			if f.entityType == common.EEntityType.File() {
@@ -117,7 +119,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			}
 			meta = common.FromAzFileMetadataToCommonMetadata(fullProperties.NewMetadata())
 		}
-		storedObject := newStoredObject(
+		return newStoredObject(
 			preprocessor,
 			getObjectNameOnly(f.name),
 			relativePath,
@@ -128,12 +130,14 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			noBlobProps,
 			meta,
 			targetURLParts.ShareName,
-		)
+		), nil
+	}
 
+	processStoredObject := func(s storedObject) error {
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(f.entityType)
+			t.incrementEnumerationCounter(s.entityType)
 		}
-		return processIfPassedFilters(filters, storedObject, processor)
+		return processIfPassedFilters(filters, s, processor)
 	}
 
 	// get the directory URL so that we can list the files
@@ -143,14 +147,18 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 	// So include the root dir/share in the enumeration results, if it exists or is just the share root.
 	_, err = directoryURL.GetProperties(t.ctx)
 	if err == nil || targetURLParts.DirectoryOrFilePath == "" {
-		err = processEntity(newAzFileRootFolderEntity(directoryURL, ""))
+		s, err := convertToStoredObject(newAzFileRootFolderEntity(directoryURL, ""))
+		if err != nil {
+			return err
+		}
+		err = processStoredObject(s.(storedObject))
 		if err != nil {
 			return err
 		}
 	}
 
 	// Define how to enumerate its contents
-	// This method must be threadsafe/goroutine safe
+	// This func must be threadsafe/goroutine safe
 	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry)) error {
 		currentDirURL := dir.(azfile.DirectoryURL)
 		for marker := (azfile.Marker{}); marker.NotDone(); {
@@ -173,19 +181,26 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		return nil
 	}
 
-	// run the actual enumeration
-	parallelism := 16 // TODO: environment var
-	crawlCtx, cancelCrawl := context.WithCancel(t.ctx)
-	ch := parallel.Crawl(crawlCtx, directoryURL, enumerateOneDir, parallelism)
-	for x := range ch {
-		item, crawlErr := x.Item()
-		if crawlErr != nil {
-			cancelCrawl()
-			return crawlErr
+	// run the actual enumeration.
+	// First part is a parallel directory crawl
+	parallelism := 32 // TODO: environment var
+	workerContext, cancelWorkers := context.WithCancel(t.ctx)
+	cCrawled := parallel.Crawl(workerContext, directoryURL, enumerateOneDir, parallelism)
+
+	// Second part is parallel conversion of the directories and files to stored objects
+	// This is necessary because the conversion to stored object may hit the network and therefore be slow in not parallelized
+	// TODO: can we remove that network round trip one day? Currently we need it because of the way the LMT checks work.
+	cTransformed := parallel.Transform(workerContext, cCrawled, convertToStoredObject, parallelism)
+
+	for x := range cTransformed {
+		item, workerError := x.Item()
+		if workerError != nil {
+			cancelWorkers()
+			return workerError
 		}
-		processErr := processEntity(item.(azfileEntity))
+		processErr := processStoredObject(item.(storedObject))
 		if processErr != nil {
-			cancelCrawl()
+			cancelWorkers()
 			return processErr
 		}
 	}

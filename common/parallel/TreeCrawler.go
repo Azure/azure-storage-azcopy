@@ -27,7 +27,7 @@ import (
 )
 
 type crawler struct {
-	output      chan CrawlResult
+	output      chan ErrorableItem
 	workerBody  EnumerateOneDirFunc
 	parallelism int
 	cond        *sync.Cond
@@ -44,17 +44,17 @@ type CrawlResult struct {
 	err  error
 }
 
-func (r *CrawlResult) Item() (Directory, error) {
+func (r CrawlResult) Item() (interface{}, error) {
 	return r.item, r.err
 }
 
 // must be safe to be simultaneously called by multiple go-routines, each with a different dir
 type EnumerateOneDirFunc func(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry)) error
 
-func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int) <-chan CrawlResult {
+func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int) <-chan ErrorableItem {
 	c := &crawler{
 		unstartedDirs: make(chan Directory, 1000),
-		output:        make(chan CrawlResult, 1000),
+		output:        make(chan ErrorableItem, 1000),
 		workerBody:    worker,
 		parallelism:   parallelism,
 		cond:          sync.NewCond(&sync.Mutex{}),
