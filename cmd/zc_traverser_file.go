@@ -183,13 +183,15 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 
 	// run the actual enumeration.
 	// First part is a parallel directory crawl
-	parallelism := 32 // TODO: environment var
+	// Second part is parallel conversion of the directories and files to stored objects. This is necessary because the conversion to stored object may hit the network and therefore be slow in not parallelized
+	parallelism := 1
+	if enumerationParallelism > 1 {
+		parallelism = enumerationParallelism / 2 // half for crawl, half for transform
+	}
 	workerContext, cancelWorkers := context.WithCancel(t.ctx)
+
 	cCrawled := parallel.Crawl(workerContext, directoryURL, enumerateOneDir, parallelism)
 
-	// Second part is parallel conversion of the directories and files to stored objects
-	// This is necessary because the conversion to stored object may hit the network and therefore be slow in not parallelized
-	// TODO: can we remove that network round trip one day? Currently we need it because of the way the LMT checks work.
 	cTransformed := parallel.Transform(workerContext, cCrawled, convertToStoredObject, parallelism)
 
 	for x := range cTransformed {
