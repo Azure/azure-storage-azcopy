@@ -108,7 +108,7 @@ type PerformanceAdvisor struct {
 	serverBusyPercentageOther      float32
 	iops                           int
 	mbps                           int64
-	capMbps                        int64 // 0 if no cap
+	capMbps                        float64 // 0 if no cap
 	finalConcurrencyTunerReason    string
 	finalConcurrency               int
 	azureVmCores                   int // 0 if not azure VM
@@ -117,7 +117,7 @@ type PerformanceAdvisor struct {
 	avgBytesPerFile                int64
 }
 
-func NewPerformanceAdvisor(stats *pipelineNetworkStats, commandLineMbpsCap int64, mbps int64, finalReason string, finalConcurrency int, dir common.TransferDirection, avgBytesPerFile int64) *PerformanceAdvisor {
+func NewPerformanceAdvisor(stats *pipelineNetworkStats, commandLineMbpsCap float64, mbps int64, finalReason string, finalConcurrency int, dir common.TransferDirection, avgBytesPerFile int64) *PerformanceAdvisor {
 	p := &PerformanceAdvisor{
 		capMbps:                     commandLineMbpsCap,
 		mbps:                        mbps,

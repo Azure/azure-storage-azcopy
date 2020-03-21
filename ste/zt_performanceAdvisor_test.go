@@ -61,7 +61,7 @@ func (s *perfAdvisorSuite) TestPerfAdvisor(c *chk.C) {
 		networkErrorPercentage         float32
 		finalConcurrencyTunerReason    string
 		avgFileSize                    int64
-		capMbps                        int64 // 0 if no cap
+		capMbps                        float64 // 0 if no cap
 		mbps                           int64
 		azureVmCores                   int // 0 if not azure VM
 		expectedPrimaryResult          AdviceType
