@@ -5,8 +5,10 @@
 
 ### New features
 
-1. `azcopy copy` and `azcopy sync` now supports the persistence of ACLs between supported resources (Windows and Azure Files at the moment) using the --persist-smb-acls (**name TBC**) flag.
-1. AzCopy can now transfer empty folders, and also (**coming in 10.4 GA**) transfer the properties of folders. This applies when both the source 
+1. `azcopy copy` now supports the persistence of ACLs between supported resources (Windows and Azure Files at the moment) using the --persist-smb-permissions flag.
+1. `azcopy copy` now supports the persistence of SMB property info between supported resources (Windows and Azure Files) 
+using the --persist-smb-info flag. The information that can be preserved is Created Time, Last Write Time and Attributes (e.g. Read Only).
+1. AzCopy can now transfer empty folders, and also transfer the properties of folders. This applies when both the source 
 and destination support real folders (Blob Storage does not, because it only supports virtual folders).
 1. Status output from AzCopy `copy`, `sync`, `jobs list`, and `jobs status` now contains information about folders.
    This includes new properties in the JSON output of copy, sync, list and jobs status commands, when `--output-type
@@ -22,7 +24,8 @@ and destination support real folders (Blob Storage does not, because it only sup
 ### Special notes
 
 1. AzCopy has upgraded to service revision `2019-02-02`. Users targeting local emulators, Azure Stack, or other private/special instances of Azure Storage may need to intentionally downgrade their service revision using the environment variable `AZCOPY_DEFAULT_SERVICE_API_VERSION`. Prior to this release, the default service revision was `2018-03-28`.
-1. For Azure Files to Azure Files transfers, --persist-smb-acls (**name TBC**) is available on non-Windows OSes.
+1. For Azure Files to Azure Files transfers, --persist-smb-permissions and --persist-smb-info are available on all OS's. 
+(But for for uploads and downloads, those flags are only available on Windows.)
 1. AzCopy now includes a list of trusted domain suffixes for Azure Active Directory (AAD) authentication. 
    After `azcopy login`, the resulting token will only be sent to locations that appear in the list. The list is:
    `*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net`. 

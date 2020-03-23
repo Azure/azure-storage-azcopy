@@ -284,7 +284,7 @@ func (u *azureFileSenderBase) addPermissionsToHeaders(info TransferInfo, destUrl
 }
 
 func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info TransferInfo, destUrl url.URL) (stage string, err error) {
-	if !info.PreserveSMBProperties {
+	if !info.PreserveSMBInfo {
 		return "", nil
 	}
 	if smbSIP, ok := u.sip.(ISMBPropertyBearingSourceInfoProvider); ok {

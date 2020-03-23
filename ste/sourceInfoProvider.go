@@ -22,6 +22,7 @@ package ste
 
 import (
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -88,6 +89,11 @@ type ISMBPropertyBearingSourceInfoProvider interface {
 
 	GetSDDL() (string, error)
 	GetSMBProperties() (TypedSMBPropertyHolder, error)
+}
+
+type ICustomLocalOpener interface {
+	ISourceInfoProvider
+	Open(path string) (*os.File, error)
 }
 
 type sourceInfoProviderFactory func(jptm IJobPartTransferMgr) (ISourceInfoProvider, error)

@@ -191,7 +191,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			MD5VerificationOption:    order.BlobAttributes.MD5ValidationOption, // here because it relates to downloads (file destination)
 		},
 		PreserveSMBPermissions: order.PreserveSMBPermissions,
-		PreserveSMBProperties:  order.PreserveSMBProperties,
+		PreserveSMBInfo:        order.PreserveSMBInfo,
 		// For S2S copy, per JobPartPlan info
 		S2SGetPropertiesInBackend:      order.S2SGetPropertiesInBackend,
 		S2SSourceChangeValidation:      order.S2SSourceChangeValidation,
