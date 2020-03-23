@@ -5,7 +5,7 @@
 
 ### New features
 
-1. `azcopy copy` and `azcopy sync` now supports the persistence of ACLs between supported resources (Windows and Azure Files at the moment) using the --persist-smb-permissions flag.
+1. `azcopy copy` now supports the persistence of ACLs between supported resources (Windows and Azure Files at the moment) using the --persist-smb-permissions flag.
 1. `azcopy copy` now supports the persistence of SMB property info between supported resources (Windows and Azure Files) 
 using the --persist-smb-info flag. The information that can be preserved is Created Time, Last Write Time and Attributes (e.g. Read Only).
 1. AzCopy can now transfer empty folders, and also transfer the properties of folders. This applies when both the source 

@@ -190,12 +190,12 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	}
 
 	cooked.preserveSMBPermissions = raw.preserveSMBPermissions
-	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBPermissions, cooked.fromTo, "preserve-smb-permissions"); err != nil {
+	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBPermissions, cooked.fromTo, nil, "preserve-smb-permissions"); err != nil {
 		return cooked, err
 	}
 
 	cooked.preserveSMBInfo = raw.preserveSMBInfo
-	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, "preserve-smb-info"); err != nil {
+	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, nil, "preserve-smb-info"); err != nil {
 		return cooked, err
 	}
 
@@ -592,10 +592,15 @@ func init() {
 
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", true, "True by default, look into sub-directories recursively when syncing between directories. (default true).")
-	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files). For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy.")
-	syncCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
-	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", false, "False by default. Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). Only the attribute bits supported by Azure Files will be transferred; any others will be ignored.")
-	syncCmd.PersistentFlags().BoolVar(&raw.backupMode, common.BackupModeFlagName, false, "Activates Windows' SeBackupPrivilege for uploads, or SeRestorePrivilege for downloads, to allow AzCopy to see read all files, regardless of their file system permissions, and to restore all permissions. Requires that the account running AzCopy already has these permissions (e.g. has Administrator rights), because all this flag does is activate them")
+
+	// TODO: enable (and test) the following when we sort out what sync will do for files and folders where only
+	//    the attributes, name-value-metadata (AzureFiles), or SDDL has changed, but there's been no file content change.
+	// TODO: when we sort that out, also enable it for copy with IfSourceNewer
+	//syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files). For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy.")
+	//syncCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
+	//syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", false, "False by default. Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). Only the attribute bits supported by Azure Files will be transferred; any others will be ignored.")
+	//syncCmd.PersistentFlags().BoolVar(&raw.backupMode, common.BackupModeFlagName, false, "Activates Windows' SeBackupPrivilege for uploads, or SeRestorePrivilege for downloads, to allow AzCopy to see read all files, regardless of their file system permissions, and to restore all permissions. Requires that the account running AzCopy already has these permissions (e.g. has Administrator rights), because all this flag does is activate them")
+
 	syncCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage or downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")

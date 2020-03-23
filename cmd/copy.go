@@ -459,12 +459,12 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	}
 
 	cooked.preserveSMBPermissions = raw.preserveSMBPermissions
-	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBPermissions, cooked.fromTo, "preserve-smb-permissions"); err != nil {
+	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBPermissions, cooked.fromTo, &cooked.forceWrite, "preserve-smb-permissions"); err != nil {
 		return cooked, err
 	}
 
 	cooked.preserveSMBInfo = raw.preserveSMBInfo
-	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, "preserve-smb-info"); err != nil {
+	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, &cooked.forceWrite, "preserve-smb-info"); err != nil {
 		return cooked, err
 	}
 
@@ -681,7 +681,7 @@ func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
 	return nil
 }
 
-func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, flagName string) error {
+func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, overwrite *common.OverwriteOption, flagName string) error {
 	if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
 		fromTo == common.EFromTo.FileLocal() ||
 		fromTo == common.EFromTo.FileFile()) {
@@ -690,6 +690,10 @@ func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, fl
 
 	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) && runtime.GOOS != "windows" {
 		return fmt.Errorf("%s is set but persistence for up/downloads is a Windows-only feature", flagName)
+	}
+
+	if toPreserve && overwrite != nil && *overwrite == common.EOverwriteOption.IfSourceNewer() {
+		return fmt.Errorf("%s is set, but it is not currently supported when overwrite mode is IfSourceNewer", flagName)
 	}
 
 	return nil
