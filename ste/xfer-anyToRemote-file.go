@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"hash"
 	"net/url"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -132,7 +133,11 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 		sourceFileFactory = srcInfoProvider.(ILocalSourceInfoProvider).OpenSourceFile // all local providers must implement this interface
 		srcFile, err = sourceFileFactory()
 		if err != nil {
-			jptm.LogSendError(info.Source, info.Destination, "Couldn't open source-"+err.Error(), 0)
+			suffix := ""
+			if strings.Contains(err.Error(), "Access is denied") && runtime.GOOS == "windows" {
+				suffix = " See --" + common.BackupModeFlagName + " flag if you need to read all files regardless of their permissions"
+			}
+			jptm.LogSendError(info.Source, info.Destination, "Couldn't open source. "+err.Error()+suffix, 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
 			return
