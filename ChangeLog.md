@@ -10,6 +10,12 @@
 using the --persist-smb-info flag. The information that can be preserved is Created Time, Last Write Time and Attributes (e.g. Read Only).
 1. AzCopy can now transfer empty folders, and also transfer the properties of folders. This applies when both the source 
 and destination support real folders (Blob Storage does not, because it only supports virtual folders).
+1. On Windows, AzCopy can now activate the special privileges `SeBackupPrivilege` and `SeRestorePrivilege`.  Most admin-level 
+accounts have these privileges in a deactivated state.  If you run AzCopy from an elevated command prompt,
+and supply the new flag `--backup`, AzCopy will activate the privileges. At upload time, this allows AzCopy to read files 
+which you wouldn't otherwise have permission to see. At download time, it works with the `--preserve-smb-permissions` flag
+to allow preservation of permissions where the Owner is not the user running AzCopy.  The `--backup` flag will report a failure 
+if the privileges cannot be activated (e.g. because you aren't running from a elevated Admin prompt). 
 1. Status output from AzCopy `copy`, `sync`, `jobs list`, and `jobs status` now contains information about folders.
    This includes new properties in the JSON output of copy, sync, list and jobs status commands, when `--output-type
    json` is used.
@@ -23,7 +29,9 @@ and destination support real folders (Blob Storage does not, because it only sup
 
 ### Special notes
 
-1. AzCopy has upgraded to service revision `2019-02-02`. Users targeting local emulators, Azure Stack, or other private/special instances of Azure Storage may need to intentionally downgrade their service revision using the environment variable `AZCOPY_DEFAULT_SERVICE_API_VERSION`. Prior to this release, the default service revision was `2018-03-28`.
+1. AzCopy has upgraded to service revision `2019-02-02`. Users targeting local emulators, Azure Stack, or other private/special
+ instances of Azure Storage may need to intentionally downgrade their service revision using the environment variable 
+ `AZCOPY_DEFAULT_SERVICE_API_VERSION`. Prior to this release, the default service revision was `2018-03-28`.
 1. For Azure Files to Azure Files transfers, --persist-smb-permissions and --persist-smb-info are available on all OS's. 
 (But for for uploads and downloads, those flags are only available on Windows.)
 1. AzCopy now includes a list of trusted domain suffixes for Azure Active Directory (AAD) authentication. 
@@ -44,6 +52,7 @@ and destination support real folders (Blob Storage does not, because it only sup
 
 ### Bug fixes
 
+1. AzCopy's scanning of Azure Files sources, for download or Service to Service transfers, is now much faster.
 1. Sources and destinations that are identified by their IPv4 address can now be used. This enables usage with storage
    emulators.  Note that the `from-to` flag is typically needed when using such sources or destinations. E.g. `--from-to
    BlobLocal` if downloading from a blob storage emulator to local disk.
@@ -54,6 +63,10 @@ and destination support real folders (Blob Storage does not, because it only sup
    insignificant.)
 1. The in-app documentation for Service Principal Authentication has been corrected, to now include the application-id
    parameter.
+1. ALL filter types are now disallowed when running `azcopy rm` against ADLS Gen2 endpoints. Previously 
+include/exclude patterns were disallowed, but exclude-path was not. That was incorrect. All should have been
+disallowed because none (other than include-path) are respected. 
+   
 
 ## Version 10.3.4
 
