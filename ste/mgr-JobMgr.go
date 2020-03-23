@@ -145,6 +145,11 @@ func (jm *jobMgr) logConcurrencyParameters() {
 	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent transfer initiation routines: %d (%s)",
 		jm.concurrency.TransferInitiationPoolSize.Value,
 		jm.concurrency.TransferInitiationPoolSize.GetDescription()))
+
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max enumeration routines: %d (%s)",
+		jm.concurrency.EnumerationPoolSize.Value,
+		jm.concurrency.EnumerationPoolSize.GetDescription()))
+
 	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max open files when downloading: %d (auto-computed)",
 		jm.concurrency.MaxOpenDownloadFiles))
 }

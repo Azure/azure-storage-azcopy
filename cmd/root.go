@@ -90,6 +90,7 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		enumerationParallelism = concurrencySettings.EnumerationPoolSize.Value
 
 		// spawn a routine to fetch and compare the local application's version against the latest version available
 		// if there's a newer version that can be used, then write the suggestion to stderr

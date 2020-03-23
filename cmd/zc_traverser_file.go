@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common/parallel"
 	"net/url"
 	"strings"
 	"time"
@@ -92,7 +93,9 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 
 	// else, its not just one file
 
-	processEntity := func(f azfileEntity) error {
+	// This func must be threadsafe/goroutine safe
+	convertToStoredObject := func(input parallel.InputObject) (parallel.OutputObject, error) {
+		f := input.(azfileEntity)
 		// compute the relative path of the file with respect to the target directory
 		fileURLParts := azfile.NewFileURLParts(f.url)
 		relativePath := strings.TrimPrefix(fileURLParts.DirectoryOrFilePath, targetURLParts.DirectoryOrFilePath)
@@ -108,7 +111,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			var fullProperties azfilePropertiesAdapter
 			fullProperties, err = f.propertyGetter(t.ctx)
 			if err != nil {
-				return err
+				return storedObject{}, err
 			}
 			lmt = fullProperties.LastModified()
 			if f.entityType == common.EEntityType.File() {
@@ -116,7 +119,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			}
 			meta = common.FromAzFileMetadataToCommonMetadata(fullProperties.NewMetadata())
 		}
-		storedObject := newStoredObject(
+		return newStoredObject(
 			preprocessor,
 			getObjectNameOnly(f.name),
 			relativePath,
@@ -127,12 +130,14 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			noBlobProps,
 			meta,
 			targetURLParts.ShareName,
-		)
+		), nil
+	}
 
+	processStoredObject := func(s storedObject) error {
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(f.entityType)
+			t.incrementEnumerationCounter(s.entityType)
 		}
-		return processIfPassedFilters(filters, storedObject, processor)
+		return processIfPassedFilters(filters, s, processor)
 	}
 
 	// get the directory URL so that we can list the files
@@ -142,46 +147,63 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 	// So include the root dir/share in the enumeration results, if it exists or is just the share root.
 	_, err = directoryURL.GetProperties(t.ctx)
 	if err == nil || targetURLParts.DirectoryOrFilePath == "" {
-		err = processEntity(newAzFileRootFolderEntity(&directoryURL, ""))
+		s, err := convertToStoredObject(newAzFileRootFolderEntity(directoryURL, ""))
+		if err != nil {
+			return err
+		}
+		err = processStoredObject(s.(storedObject))
 		if err != nil {
 			return err
 		}
 	}
 
-	// Enumerate its contents
-	dirStack := &directoryStack{}
-	dirStack.Push(directoryURL)
-	for currentDirURL, ok := dirStack.Pop(); ok; currentDirURL, ok = dirStack.Pop() {
-		// Perform list files and directories.
+	// Define how to enumerate its contents
+	// This func must be threadsafe/goroutine safe
+	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry)) error {
+		currentDirURL := dir.(azfile.DirectoryURL)
 		for marker := (azfile.Marker{}); marker.NotDone(); {
 			lResp, err := currentDirURL.ListFilesAndDirectoriesSegment(t.ctx, marker, azfile.ListFilesAndDirectoriesOptions{})
 			if err != nil {
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
-
-			// Process the files and folders we listed
-			fs := make([]azfileEntity, 0, len(lResp.FileItems)+len(lResp.DirectoryItems))
 			for _, fileInfo := range lResp.FileItems {
-				fs = append(fs, newAzFileFileEntity(currentDirURL, fileInfo))
+				enqueueOutput(newAzFileFileEntity(currentDirURL, fileInfo))
 			}
 			for _, dirInfo := range lResp.DirectoryItems {
-				fs = append(fs, newAzFileChildFolderEntity(currentDirURL, dirInfo.Name))
-			}
-			for _, f := range fs {
-				processErr := processEntity(f)
-				if processErr != nil {
-					return processErr
-				}
-			}
-
-			// If recursive is turned on, add sub directories.
-			if t.recursive {
-				for _, dirInfo := range lResp.DirectoryItems {
-					d := currentDirURL.NewDirectoryURL(dirInfo.Name)
-					dirStack.Push(d)
+				enqueueOutput(newAzFileChildFolderEntity(currentDirURL, dirInfo.Name))
+				if t.recursive {
+					// If recursive is turned on, add sub directories to be processed
+					enqueueDir(currentDirURL.NewDirectoryURL(dirInfo.Name))
 				}
 			}
 			marker = lResp.NextMarker
+		}
+		return nil
+	}
+
+	// run the actual enumeration.
+	// First part is a parallel directory crawl
+	// Second part is parallel conversion of the directories and files to stored objects. This is necessary because the conversion to stored object may hit the network and therefore be slow in not parallelized
+	parallelism := 1
+	if enumerationParallelism > 1 {
+		parallelism = enumerationParallelism / 2 // half for crawl, half for transform
+	}
+	workerContext, cancelWorkers := context.WithCancel(t.ctx)
+
+	cCrawled := parallel.Crawl(workerContext, directoryURL, enumerateOneDir, parallelism)
+
+	cTransformed := parallel.Transform(workerContext, cCrawled, convertToStoredObject, parallelism)
+
+	for x := range cTransformed {
+		item, workerError := x.Item()
+		if workerError != nil {
+			cancelWorkers()
+			return workerError
+		}
+		processErr := processStoredObject(item.(storedObject))
+		if processErr != nil {
+			cancelWorkers()
+			return processErr
 		}
 	}
 
@@ -202,7 +224,7 @@ type azfileEntity struct {
 	entityType     common.EntityType
 }
 
-func newAzFileFileEntity(containingDir *azfile.DirectoryURL, fileInfo azfile.FileItem) azfileEntity {
+func newAzFileFileEntity(containingDir azfile.DirectoryURL, fileInfo azfile.FileItem) azfileEntity {
 	fu := containingDir.NewFileURL(fileInfo.Name)
 	return azfileEntity{
 		fileInfo.Name,
@@ -213,12 +235,12 @@ func newAzFileFileEntity(containingDir *azfile.DirectoryURL, fileInfo azfile.Fil
 	}
 }
 
-func newAzFileChildFolderEntity(containingDir *azfile.DirectoryURL, dirName string) azfileEntity {
+func newAzFileChildFolderEntity(containingDir azfile.DirectoryURL, dirName string) azfileEntity {
 	du := containingDir.NewDirectoryURL(dirName)
-	return newAzFileRootFolderEntity(&du, dirName) // now that we have du, the logic is same as if it was the root
+	return newAzFileRootFolderEntity(du, dirName) // now that we have du, the logic is same as if it was the root
 }
 
-func newAzFileRootFolderEntity(rootDir *azfile.DirectoryURL, name string) azfileEntity {
+func newAzFileRootFolderEntity(rootDir azfile.DirectoryURL, name string) azfileEntity {
 	return azfileEntity{
 		name,
 		0,
