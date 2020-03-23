@@ -94,7 +94,7 @@ type TransferInfo struct {
 	Destination            string
 	EntityType             common.EntityType
 	PreserveSMBPermissions bool
-	PreserveSMBProperties  bool
+	PreserveSMBInfo        bool
 
 	// Transfer info for S2S copy
 	SrcProperties
@@ -276,7 +276,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		Destination:                    dst,
 		EntityType:                     entityType,
 		PreserveSMBPermissions:         plan.PreserveSMBPermissions,
-		PreserveSMBProperties:          plan.PreserveSMBProperties,
+		PreserveSMBInfo:                plan.PreserveSMBInfo,
 		S2SGetPropertiesInBackend:      s2sGetPropertiesInBackend,
 		S2SSourceChangeValidation:      s2sSourceChangeValidation,
 		S2SInvalidMetadataHandleOption: s2sInvalidMetadataHandleOption,

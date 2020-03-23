@@ -42,7 +42,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	jobPartOrder.PreserveSMBPermissions = cca.preserveSMBPermissions
-	jobPartOrder.PreserveSMBProperties = cca.preserveSMBProperties
+	jobPartOrder.PreserveSMBInfo = cca.preserveSMBInfo
 
 	// Infer on download so that we get LMT and MD5 on files download
 	// On S2S transfers the following rules apply:
@@ -193,7 +193,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters, cca.preserveSMBProperties, cca.preserveSMBPermissions)
+	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters, cca.preserveSMBInfo, cca.preserveSMBPermissions)
 	glcm.Info(message)
 	if ste.JobsAdmin != nil {
 		ste.JobsAdmin.LogToJobLog(message)
@@ -539,17 +539,17 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 	return pathEncodeRules(relativePath, cca.fromTo, source)
 }
 
-// we assume that preserveSmbPermissions and preserveSmbProperties have already been validated, such that they are only true if both resource types support them
-func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir bool, filters []objectFilter, preserveSmbProperties, preserveSmbPermissions bool) (common.FolderPropertyOption, string) {
+// we assume that preserveSmbPermissions and preserveSmbInfo have already been validated, such that they are only true if both resource types support them
+func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir bool, filters []objectFilter, preserveSmbInfo, preserveSmbPermissions bool) (common.FolderPropertyOption, string) {
 
 	getSuffix := func(willProcess bool) string {
 		willProcessString := common.IffString(willProcess, "will be processed", "will not be processed")
 
 		template := ". For the same reason, %s defined on folders %s"
 		switch {
-		case preserveSmbPermissions && preserveSmbProperties:
+		case preserveSmbPermissions && preserveSmbInfo:
 			return fmt.Sprintf(template, "properties and permissions", willProcessString)
-		case preserveSmbProperties:
+		case preserveSmbInfo:
 			return fmt.Sprintf(template, "properties", willProcessString)
 		case preserveSmbPermissions:
 			return fmt.Sprintf(template, "permissions", willProcessString)

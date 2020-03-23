@@ -350,7 +350,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 		// TODO: ...So I have preserved that behavior here.
 		// TODO: question: But is that correct?
 		lastModifiedTime, preserveLastModifiedTime := jptm.PreserveLastModifiedTime()
-		if preserveLastModifiedTime && !info.PreserveSMBProperties {
+		if preserveLastModifiedTime && !info.PreserveSMBInfo {
 			err := os.Chtimes(jptm.Info().Destination, lastModifiedTime, lastModifiedTime)
 			if err != nil {
 				jptm.LogError(info.Destination, "Changing Modified Time ", err)

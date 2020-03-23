@@ -131,7 +131,7 @@ type CopyJobPartOrderRequest struct {
 	CredentialInfo CredentialInfo
 
 	PreserveSMBPermissions         bool
-	PreserveSMBProperties          bool
+	PreserveSMBInfo                bool
 	S2SGetPropertiesInBackend      bool
 	S2SSourceChangeValidation      bool
 	DestLengthValidation           bool
