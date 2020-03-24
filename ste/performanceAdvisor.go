@@ -232,7 +232,7 @@ func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 	const mbpsThreshold = 0.9
 	if p.capMbps > 0 && float32(p.mbps) > mbpsThreshold*float32(p.capMbps) {
 		addAdvice(EAdviceType.MbpsCapped(),
-			"Throughput has been capped at %d Mbps with a command line parameter, and the measured throughput was "+
+			"Throughput has been capped at %f Mbps with a command line parameter, and the measured throughput was "+
 				"close to the cap. "+
 				"(This message is shown by AzCopy if a command-line cap is set and the measured throughput is "+
 				"over %.0f%% of the cap.)", p.capMbps, mbpsThreshold*100)
