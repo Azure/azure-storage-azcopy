@@ -4,7 +4,11 @@ package ste
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/sddl"
+
 	"syscall"
 
 	"golang.org/x/sys/windows"
@@ -71,6 +75,21 @@ func (*azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, 
 		return errorNoSddlFound
 	}
 
+	parsed, err := sddl.ParseSDDL(sddlString)
+
+	if err != nil {
+		return fmt.Errorf("parsing source SDDL: %s", err)
+	}
+
+	var securityInfoFlags windows.SECURITY_INFORMATION = windows.OWNER_SECURITY_INFORMATION | windows.GROUP_SECURITY_INFORMATION | windows.DACL_SECURITY_INFORMATION
+
+	// Protected ACLs see no inheritance whatsoever.
+	// All we have to do to move to robocopy-like functionality is add the protected info flag to every operation.
+	// Until then, we have xcopy like functionality.
+	if strings.Contains(parsed.DACL.Flags, "P") {
+		securityInfoFlags |= windows.PROTECTED_DACL_SECURITY_INFORMATION
+	}
+
 	// We don't need to worry about making the SDDL string portable as this is expected for persistence into Azure Files in the first place.
 	// Let's have sys/x/windows parse it.
 	sd, err := windows.SecurityDescriptorFromString(sddlString)
@@ -96,7 +115,7 @@ func (*azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, 
 	// Then let's set the security info.
 	err = windows.SetNamedSecurityInfo(txInfo.Destination,
 		windows.SE_FILE_OBJECT,
-		windows.OWNER_SECURITY_INFORMATION|windows.GROUP_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION,
+		securityInfoFlags,
 		owner,
 		group,
 		dacl,
