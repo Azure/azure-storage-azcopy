@@ -50,7 +50,7 @@ func ToFixed(num float64, precision int) float64 {
 }
 
 // MainSTE initializes the Storage Transfer Engine
-func MainSTE(concurrency ConcurrencySettings, targetRateInMegaBitsPerSec int64, azcopyJobPlanFolder, azcopyLogPathFolder string, providePerfAdvice bool) error {
+func MainSTE(concurrency ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder, azcopyLogPathFolder string, providePerfAdvice bool) error {
 	// Initialize the JobsAdmin, resurrect Job plan files
 	initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec, azcopyJobPlanFolder, azcopyLogPathFolder, providePerfAdvice)
 	// No need to read the existing JobPartPlan files since Azcopy is running in process
