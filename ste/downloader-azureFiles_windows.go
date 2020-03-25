@@ -4,6 +4,8 @@ package ste
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -69,7 +71,7 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 }
 
 // works for both folders and files
-func (*azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
+func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
 	// Let's start by getting our SDDL and parsing it.
 	sddlString, err := sip.GetSDDL()
 	// TODO: be better at handling these errors.
@@ -96,10 +98,23 @@ func (*azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, 
 
 	var securityInfoFlags windows.SECURITY_INFORMATION = windows.OWNER_SECURITY_INFORMATION | windows.GROUP_SECURITY_INFORMATION | windows.DACL_SECURITY_INFORMATION
 
+	// remove everything down to the if statement to return to xcopy functionality
+	// Obtain the destination root and figure out if we're at the top level of the transfer.
+	plan := a.jptm.Plan()
+	destRoot := string(plan.DestinationRoot[:plan.DestinationRootLength])
+	relPath, err := filepath.Rel(destRoot, txInfo.Destination)
+
+	if err != nil {
+		// This should never ever happen.
+		panic("couldn't find relative path from root")
+	}
+
+	// Golang did not cooperate with backslashes with filepath.SplitList.
+	splitPath := strings.Split(relPath, common.DeterminePathSeparator(relPath))
+
 	// Protected ACLs see no inheritance whatsoever.
-	// All we have to do to move to robocopy-like functionality is add the protected info flag to every operation.
-	// Until then, we have xcopy like functionality.
-	if (ctl & windows.SE_DACL_PROTECTED) != 0 {
+	// remove the second half of the if statement to return to xcopy functionality
+	if (ctl&windows.SE_DACL_PROTECTED) != 0 || len(splitPath) == 1 {
 		securityInfoFlags |= windows.PROTECTED_DACL_SECURITY_INFORMATION
 	}
 
