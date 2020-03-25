@@ -142,7 +142,22 @@ func (s *blockBlobSenderBase) Epilogue() {
 		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", blockIDs))
 
 		// commit the blocks.
-		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}); err != nil {
+		doCommit := func() error {
+			_, commitErr := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{})
+			return commitErr
+		}
+		err := doCommit()
+		if strErr, ok := err.(azblob.StorageError); ok && strErr.ServiceCode() == azblob.ServiceCodeInvalidBlockList {
+			// Experimental debugging code, to be shipped in release 10.4.
+			// Wait a bit (actually a lot) and retry.
+			time.Sleep(20 * time.Second)
+			err = doCommit()
+			if err == nil {
+				// Log that it worked. Since the outcome of the second call, either positive or negative, will help us understand the rare cases where the first call has failed
+				jptm.LogAtLevelForCurrentTransfer(pipeline.LogInfo, "PUTBLOCKLISTRETRYSUCCESSFUL The putBlockList operation was retried and was successful. There is no error here. This line simply records that the retry was successful.")
+			}
+		}
+		if err != nil {
 			jptm.FailActiveSend("Committing block list", err)
 			return
 		}
