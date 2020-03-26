@@ -27,6 +27,7 @@ import (
 	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
@@ -87,6 +88,12 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	if cca.fromTo.From() == common.ELocation.Local() {
 		excludeAttrFilters := buildAttrFilters(cca.excludeFileAttributes, src, false)
 		filters = append(filters, excludeAttrFilters...)
+	}
+	// after making all filters, log any search prefix computed from them
+	if ste.JobsAdmin != nil {
+		if prefixFilter := filterSet(filters).GetEnumerationPreFilter(); prefixFilter != "" {
+			ste.JobsAdmin.LogToJobLog("Search prefix, which may be used to optimize scanning, is: " + prefixFilter) // "May be used" because we don't know here which enumerators will use it
+		}
 	}
 
 	// set up the comparator so that the source/destination can be compared
