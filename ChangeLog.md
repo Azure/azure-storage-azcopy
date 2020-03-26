@@ -9,7 +9,7 @@
 first `*` will be used as a server-side prefix, to filter the search results more efficiently. E.g. "--include-path abc*" will be implemented 
 as a prefix search for "abc". In a more complex example, "--include-path abc\*123", will be implemented as a prefix search for "abc", followed
 by client-side filtering to find exact matches to abc\*123.
-2. When processing over a million files, AzCopy will report on its progress once a minute instead of once every 2 seconds.  This reduces the CPU 
+2. When processing over a million files, AzCopy will report on its progress once ever 2 minutes instead of once every 2 seconds.  This reduces the CPU 
 load associated with progress reporting.
 
 ## Version 10.3.4

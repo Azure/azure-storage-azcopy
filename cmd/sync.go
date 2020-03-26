@@ -380,7 +380,7 @@ func (cca *cookedSyncCmdArgs) getJsonOfSyncJobSummary(summary common.ListJobSumm
 	return string(jsonOutput)
 }
 
-func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
+func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
 	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 	var summary common.ListJobSummaryResponse
 	var throughput float64
@@ -390,6 +390,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	if cca.firstPartOrdered() {
 		Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
 		jobDone = summary.JobStatus.IsJobDone()
+		totalKnownCount = summary.TotalTransfers
 
 		// compute the average throughput for the last time interval
 		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(base10Mega))
@@ -472,6 +473,8 @@ Final Job Status: %v%s%s
 			summary.TotalTransfers-summary.TransfersCompleted-summary.TransfersFailed,
 			summary.TotalTransfers, perfString, ste.ToFixed(throughput, 4), diskString)
 	})
+
+	return
 }
 
 func (cca *cookedSyncCmdArgs) process() (err error) {
