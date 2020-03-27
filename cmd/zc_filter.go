@@ -197,7 +197,19 @@ type filterSet []objectFilter
 // be found. (The implementation may return "" even in cases where such a prefix does exist, but in at least the simplest
 // cases, it should return a non-empty prefix.)
 // The result can be used to optimize enumeration, since anything without this prefix will fail the filterSet
-func (fs filterSet) GetEnumerationPreFilter() string {
+func (fs filterSet) GetEnumerationPreFilter(recursive bool) string {
+	if recursive {
+		return ""
+		// we don't/can't support recursive cases yet, with a strict prefix-based search.
+		// Because if the filter is, say "a*", then, then a prefix of "a"
+		// will find: enumerationroot/afoo and enumerationroot/abar
+		// but it will not find: enumerationroot/virtualdir/afoo
+		// even though we want --include-pattern to find that.
+		// So, in recursive cases, we just don't use this prefix-based optimization.
+		// TODO: consider whether we need to support some way to separately invoke prefix-based optimization
+		//   and filtering.  E.g. by a directory-by-directory enumeration (with prefix only within directory),
+		//   using the prefix feature in ListBlobs.
+	}
 	prefix := ""
 	for _, f := range fs {
 		if participatingFilter, ok := f.(preFilterProvider); ok {
