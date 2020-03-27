@@ -208,6 +208,10 @@ func (EnvironmentVariable) CredentialType() EnvironmentVariable {
 	return EnvironmentVariable{Name: "AZCOPY_CRED_TYPE"}
 }
 
+func (EnvironmentVariable) SourceCredentialType() EnvironmentVariable {
+	return EnvironmentVariable{Name: "AZCOPY_SRC_CRED_TYPE"}
+}
+
 func (EnvironmentVariable) DefaultServiceApiVersion() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:         "AZCOPY_DEFAULT_SERVICE_API_VERSION",

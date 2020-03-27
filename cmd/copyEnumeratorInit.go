@@ -263,7 +263,7 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	if dstCredInfo, _, err = getCredentialInfoForLocation(*ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, true); err != nil {
+	if dstCredInfo, _, err = getCredentialInfoForLocation(*ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false); err != nil {
 		return false
 	}
 
