@@ -297,8 +297,10 @@ func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info TransferInfo, destU
 		attribs := smbProps.FileAttributes()
 		u.headersToApply.FileAttributes = &attribs
 
-		lwTime := smbProps.FileLastWriteTime()
-		u.headersToApply.FileLastWriteTime = &lwTime
+		if info.ShouldTransferLastWriteTime() {
+			lwTime := smbProps.FileLastWriteTime()
+			u.headersToApply.FileLastWriteTime = &lwTime
+		}
 
 		creationTime := smbProps.FileCreationTime()
 		u.headersToApply.FileCreationTime = &creationTime
