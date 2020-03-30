@@ -24,7 +24,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/ste"
 	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/common"
