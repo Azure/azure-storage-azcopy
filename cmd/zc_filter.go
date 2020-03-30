@@ -128,7 +128,7 @@ func (f *includeFilter) doesPass(storedObject storedObject) bool {
 		matched := false
 
 		var err error
-		matched, err = path.Match(pattern, checkItem)
+		matched, err = path.Match(pattern, checkItem) // note: getEnumerationPreFilter below encodes assumptions about the valid wildcards used here
 
 		// if the pattern failed to match with an error, then we assume the pattern is invalid
 		// and ignore it
@@ -146,6 +146,24 @@ func (f *includeFilter) doesPass(storedObject storedObject) bool {
 	return false
 }
 
+// getEnumerationPreFilter returns a prefix, if any, which can be used service-side to pre-select
+// things that will pass the filter. E.g. if there's exactly one include pattern, and it is
+// "foo*bar", then this routine will return "foo", since only things starting with "foo" can pass the filters.
+// Service side enumeration code can be given that prefix, to optimize the enumeration.
+func (f *includeFilter) getEnumerationPreFilter() string {
+	if len(f.patterns) == 1 {
+		pat := f.patterns[0]
+		if strings.ContainsAny(pat, "?[\\") {
+			// this pattern doesn't just use a *, so it's too complex for us to optimize with a prefix
+			return ""
+		}
+		return strings.Split(pat, "*")[0]
+	} else {
+		// for simplicity, we won't even try computing a common prefix for all patterns (even though that might help in theory in some cases)
+		return ""
+	}
+}
+
 func buildIncludeFilters(patterns []string) []objectFilter {
 	validPatterns := make([]string, 0)
 	for _, pattern := range patterns {
@@ -155,4 +173,39 @@ func buildIncludeFilters(patterns []string) []objectFilter {
 	}
 
 	return []objectFilter{&includeFilter{patterns: validPatterns}}
+}
+
+type filterSet []objectFilter
+
+// GetEnumerationPreFilter returns a prefix that is common to all the include filters, or "" if no such prefix can
+// be found. (The implementation may return "" even in cases where such a prefix does exist, but in at least the simplest
+// cases, it should return a non-empty prefix.)
+// The result can be used to optimize enumeration, since anything without this prefix will fail the filterSet
+func (fs filterSet) GetEnumerationPreFilter(recursive bool) string {
+	if recursive {
+		return ""
+		// we don't/can't support recursive cases yet, with a strict prefix-based search.
+		// Because if the filter is, say "a*", then, then a prefix of "a"
+		// will find: enumerationroot/afoo and enumerationroot/abar
+		// but it will not find: enumerationroot/virtualdir/afoo
+		// even though we want --include-pattern to find that.
+		// So, in recursive cases, we just don't use this prefix-based optimization.
+		// TODO: consider whether we need to support some way to separately invoke prefix-based optimization
+		//   and filtering.  E.g. by a directory-by-directory enumeration (with prefix only within directory),
+		//   using the prefix feature in ListBlobs.
+	}
+	prefix := ""
+	for _, f := range fs {
+		if participatingFilter, ok := f.(preFilterProvider); ok {
+			// this filter knows how to participate in our scheme
+			if prefix == "" {
+				prefix = participatingFilter.getEnumerationPreFilter()
+			} else {
+				// prefix already has a value, which means there must be two participating filters, and we can't handle that.
+				// Normally this won't happen, because there's only one includeFilter on matter how many include patterns have been supplied.
+				return ""
+			}
+		}
+	}
+	return prefix
 }
