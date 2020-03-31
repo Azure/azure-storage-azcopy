@@ -100,8 +100,7 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 
 	// remove everything down to the if statement to return to xcopy functionality
 	// Obtain the destination root and figure out if we're at the top level of the transfer.
-	plan := a.jptm.Plan()
-	destRoot := string(plan.DestinationRoot[:plan.DestinationRootLength])
+	destRoot := a.jptm.GetDestinationRoot()
 	relPath, err := filepath.Rel(destRoot, txInfo.Destination)
 
 	if err != nil {
@@ -112,9 +111,13 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 	// Golang did not cooperate with backslashes with filepath.SplitList.
 	splitPath := strings.Split(relPath, common.DeterminePathSeparator(relPath))
 
-	// Protected ACLs see no inheritance whatsoever.
-	// remove the second half of the if statement to return to xcopy functionality
-	if (ctl&windows.SE_DACL_PROTECTED) != 0 || len(splitPath) == 1 {
+	// To achieve robocopy like functionality, and maintain the ability to add new permissions in the middle of the copied file tree,
+	//     we choose to protect both already protected files at the source, and to protect the entire root folder of the transfer.
+	//     Protected files and folders experience no inheritance from their parents (but children do experience inheritance)
+	isProtectedAtSource := (ctl & windows.SE_DACL_PROTECTED) != 0
+	isAtTransferRoot := len(splitPath) == 1
+
+	if isProtectedAtSource || isAtTransferRoot {
 		securityInfoFlags |= windows.PROTECTED_DACL_SECURITY_INFORMATION
 	}
 
