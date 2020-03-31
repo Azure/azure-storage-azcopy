@@ -61,13 +61,13 @@ func (s *credentialUtilSuite) TestCheckAuthSafeForTarget(c *chk.C) {
 		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://somethingelseinaws.amazonaws.com", "", false},
 
 		// As should these (they are nothing to do with the expected URLs)
-		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://example.com", "", false},
-		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://example.com", "", false},
+		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://abc.example.com", "", false},
+		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://abc.example.com", "", false},
 		// Test that we don't want to send an S3 access key to a blob resource type.
-		{common.ECredentialType.S3AccessKey(), common.ELocation.Blob(), "http://example.com", "", false},
+		{common.ECredentialType.S3AccessKey(), common.ELocation.Blob(), "http://abc.example.com", "", false},
 
 		// But the same Azure one should pass if the user opts in to them (we don't support any similar override for S3)
-		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://example.com", "*.foo.com;*.example.com", false},
+		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://abc.example.com", "*.foo.com;*.example.com", true},
 	}
 
 	for i, t := range tests {
@@ -77,7 +77,7 @@ func (s *credentialUtilSuite) TestCheckAuthSafeForTarget(c *chk.C) {
 }
 
 func (s *credentialUtilSuite) TestCheckAuthSafeForTargetIsCalledWhenGettingAuthType(c *chk.C) {
-	mockGetCredTypeFromEnvVar := func(isSource bool) common.CredentialType {
+	mockGetCredTypeFromEnvVar := func() common.CredentialType {
 		return common.ECredentialType.OAuthToken() // force it to OAuth, which is the case we want to test
 	}
 
