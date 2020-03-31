@@ -298,14 +298,10 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 		return nil
 	case common.ECredentialType.OAuthToken(),
 		common.ECredentialType.SharedKey():
-		// Files doesn't currently support OAuth.
-		// TODO: When adding files OAuth support to AzCopy eventually, fix this if statement.
-		if resourceType != common.ELocation.Blob() && resourceType != common.ELocation.BlobFS() {
+		// Files doesn't currently support OAuth, but it's a valid azure endpoint anyway, so it'll pass the check.
+		if resourceType != common.ELocation.Blob() && resourceType != common.ELocation.BlobFS() && resourceType != common.ELocation.File() {
 			// There may be a reason for files->blob to specify this.
-			// Files doesn't take OAuth currently, anyway.
-			// And for storage explorer, they just always supply it.
-			// We however, disinclude S3 from this list because S3 is a remote non-azure resource.
-			if resourceType == common.ELocation.Local() || resourceType == common.ELocation.File() {
+			if resourceType == common.ELocation.Local() {
 				return nil
 			}
 
@@ -389,10 +385,10 @@ func getCredentialTypeForLocation(ctx context.Context, location common.Location,
 	return doGetCredentialTypeForLocation(ctx, location, resource, resourceSAS, isSource, GetCredTypeFromEnvVar)
 }
 
-func doGetCredentialTypeForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool, getForcedCredType func(isSource bool) common.CredentialType) (credType common.CredentialType, isPublic bool, err error) {
+func doGetCredentialTypeForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool, getForcedCredType func() common.CredentialType) (credType common.CredentialType, isPublic bool, err error) {
 	if resourceSAS != "" {
 		credType = common.ECredentialType.Anonymous()
-	} else if credType = getForcedCredType(isSource); credType == common.ECredentialType.Unknown() || location == common.ELocation.S3() {
+	} else if credType = getForcedCredType(); credType == common.ECredentialType.Unknown() || location == common.ELocation.S3() {
 		switch location {
 		case common.ELocation.Local(), common.ELocation.Benchmark():
 			credType = common.ECredentialType.Anonymous()
