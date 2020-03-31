@@ -26,6 +26,10 @@ if the privileges cannot be activated (e.g. because you aren't running from a el
    `https://<youraccount>.file.core.windows.net/sharename?st=2020-03-03T20%3A53%3A48Z&se=2020-03-04T20%3A53%3A48Z&sp=rl&sv=2018-03-28&sr=s&sig=REDACTED&sharesnapshot=2020-03-03T20%3A24%3A13.0000000Z`
 1. Benchmark mode is now supported for Azure Files and ADLS Gen 2 (in addition to the existing benchmark supoprt for
    Blob Storage).
+1. A special performance optimimization is introduced, but only for NON-recursive cases in this release.  An `--include-pattern` that contains only `*` wildcards will be performance optimized when 
+   querying blob storage without the recursive flag. The section before the first `*` will be used as a server-side prefix, to filter the search results more efficiently. E.g. `--include-pattern abc*` will be implemented 
+as a prefix search for "abc". In a more complex example, `--include-pattern abc*123`, will be implemented as a prefix search for `abc`, followed by normal filtering for all matches of `abc*123`.  To non-recursively process blobs
+contained directly in a container or virtual directory include `/*` at the end of the URL (before the query string).  E.g. `http://account.blob.core.windows.net/container/*?<SAS>`.
 
 ### Special notes
 
@@ -39,6 +43,7 @@ if the privileges cannot be activated (e.g. because you aren't running from a el
    `*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net`. 
    If necessary, you can add to the the list with the command-line flag: `--trusted-microsoft-suffixes`. For security,
    you should only add Microsoft Azure domains. 
+1. When transferring over a million files, AzCopy will reduces its progress reporting frequency from every 2 seconds to every 2 minutes.   
 
 ### Breaking changes
 

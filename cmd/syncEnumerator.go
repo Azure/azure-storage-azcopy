@@ -24,10 +24,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/ste"
 	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
@@ -81,6 +81,12 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	if cca.fromTo.From() == common.ELocation.Local() {
 		excludeAttrFilters := buildAttrFilters(cca.excludeFileAttributes, cca.source.ValueLocal(), false)
 		filters = append(filters, excludeAttrFilters...)
+	}
+	// after making all filters, log any search prefix computed from them
+	if ste.JobsAdmin != nil {
+		if prefixFilter := filterSet(filters).GetEnumerationPreFilter(cca.recursive); prefixFilter != "" {
+			ste.JobsAdmin.LogToJobLog("Search prefix, which may be used to optimize scanning, is: " + prefixFilter) // "May be used" because we don't know here which enumerators will use it
+		}
 	}
 
 	// decide our folder transfer strategy
