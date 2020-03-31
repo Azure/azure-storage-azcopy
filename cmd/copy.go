@@ -705,7 +705,7 @@ func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, ov
 
 func crossValidateSymlinksAndPermissions(followSymlinks, preservePermissions bool) error {
 	if followSymlinks && preservePermissions {
-		return errors.New("cannot follow symlinks when preserving permissions (since the correct permission inheritance behaviour for symlink targets is hard to define)")
+		return errors.New("cannot follow symlinks when preserving permissions (since the correct permission inheritance behaviour for symlink targets is undefined)")
 	}
 	return nil
 }
