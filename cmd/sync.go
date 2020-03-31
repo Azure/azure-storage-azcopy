@@ -153,6 +153,9 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	}
 
 	cooked.followSymlinks = raw.followSymlinks
+	if err = crossValidateSymlinksAndPermissions(cooked.followSymlinks, true /* replace with real value when available */); err != nil {
+		return cooked, err
+	}
 	cooked.recursive = raw.recursive
 	cooked.forceIfReadOnly = raw.forceIfReadOnly
 	if err = validateForceIfReadOnly(cooked.forceIfReadOnly, cooked.fromTo); err != nil {
