@@ -37,8 +37,8 @@ if the privileges cannot be activated (e.g. because you aren't running from a el
 1. AzCopy now includes a list of trusted domain suffixes for Azure Active Directory (AAD) authentication. 
    After `azcopy login`, the resulting token will only be sent to locations that appear in the list. The list is:
    `*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net`. 
-   If necessary, you can add to the the list with the command-line flag: `--trusted-aad-suffixes`. For security,
-   you should only add Azure domains. 
+   If necessary, you can add to the the list with the command-line flag: `--trusted-microsoft-suffixes`. For security,
+   you should only add Microsoft Azure domains. 
 
 ### Breaking changes
 

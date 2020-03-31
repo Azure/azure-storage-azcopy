@@ -468,6 +468,10 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		return cooked, err
 	}
 
+	if err = crossValidateSymlinksAndPermissions(cooked.followSymlinks, cooked.preserveSMBPermissions); err != nil {
+		return cooked, err
+	}
+
 	cooked.backupMode = raw.backupMode
 	if err = validateBackupMode(cooked.backupMode, cooked.fromTo); err != nil {
 		return cooked, err
@@ -696,6 +700,13 @@ func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, ov
 		return fmt.Errorf("%s is set, but it is not currently supported when overwrite mode is IfSourceNewer", flagName)
 	}
 
+	return nil
+}
+
+func crossValidateSymlinksAndPermissions(followSymlinks, preservePermissions bool) error {
+	if followSymlinks && preservePermissions {
+		return errors.New("cannot follow symlinks when preserving permissions (since the correct permission inheritance behaviour for symlink targets is undefined)")
+	}
 	return nil
 }
 
