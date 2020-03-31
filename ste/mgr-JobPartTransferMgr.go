@@ -85,7 +85,7 @@ type IJobPartTransferMgr interface {
 	DeleteSnapshotsOption() common.DeleteSnapshotsOption
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 	FolderDeletionManager() common.FolderDeletionManager
-	Plan() *JobPartPlanHeader
+	GetDestinationRoot() string
 }
 
 type TransferInfo struct {
@@ -819,6 +819,7 @@ func (jptm *jobPartTransferMgr) FolderDeletionManager() common.FolderDeletionMan
 	return jptm.jobPartMgr.FolderDeletionManager()
 }
 
-func (jptm *jobPartTransferMgr) Plan() *JobPartPlanHeader {
-	return jptm.jobPartMgr.Plan()
+func (jptm *jobPartTransferMgr) GetDestinationRoot() string {
+	p := jptm.jobPartMgr.Plan()
+	return string(p.DestinationRoot[:p.DestinationRootLength])
 }
