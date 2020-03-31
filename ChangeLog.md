@@ -41,8 +41,8 @@ contained directly in a container or virtual directory include `/*` at the end o
 1. AzCopy now includes a list of trusted domain suffixes for Azure Active Directory (AAD) authentication. 
    After `azcopy login`, the resulting token will only be sent to locations that appear in the list. The list is:
    `*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net`. 
-   If necessary, you can add to the the list with the command-line flag: `--trusted-aad-suffixes`. For security,
-   you should only add Azure domains. 
+   If necessary, you can add to the the list with the command-line flag: `--trusted-microsoft-suffixes`. For security,
+   you should only add Microsoft Azure domains. 
 1. When transferring over a million files, AzCopy will reduces its progress reporting frequency from every 2 seconds to every 2 minutes.   
 
 ### Breaking changes
