@@ -66,7 +66,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 	// then check the file exists at the remote location
 	// if it does, react accordingly
 	if jptm.GetOverwriteOption() != common.EOverwriteOption.True() {
-		dstProps, err := os.Stat(info.Destination)
+		dstProps, err := common.OSStat(info.Destination)
 		if err == nil {
 			// if the error is nil, then file exists locally
 			shouldOverwrite := false
@@ -334,7 +334,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 
 		// check length if enabled (except for dev null and decompression case, where that's impossible)
 		if jptm.IsLive() && info.DestLengthValidation && info.Destination != common.Dev_Null && !jptm.ShouldDecompress() {
-			fi, err := os.Stat(info.Destination)
+			fi, err := common.OSStat(info.Destination)
 
 			if err != nil {
 				jptm.FailActiveDownload("Download length check", err)
@@ -415,7 +415,7 @@ func createEmptyFile(jptm IJobPartTransferMgr, destinationPath string) error {
 	if err != nil {
 		return err
 	}
-	f, err := os.OpenFile(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, common.DEFAULT_FILE_PERM)
+	f, err := common.OSOpenFile(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, common.DEFAULT_FILE_PERM)
 	if err != nil {
 		return err
 	}

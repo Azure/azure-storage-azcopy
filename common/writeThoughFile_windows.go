@@ -38,7 +38,7 @@ func GetFileInformation(path string) (windows.ByHandleFileInformation, error) {
 	}
 	// custom open call, because must specify FILE_FLAG_BACKUP_SEMANTICS when getting information of folders (else GetFileInformationByHandle will fail)
 	fd, err := windows.CreateFile(srcPtr,
-		windows.GENERIC_READ, windows.FILE_SHARE_READ, nil,
+		windows.GENERIC_READ, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil,
 		windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
 	if err != nil {
 		return windows.ByHandleFileInformation{}, err
@@ -55,7 +55,7 @@ func GetFileInformation(path string) (windows.ByHandleFileInformation, error) {
 func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int64, writeThrough bool, tracker FolderCreationTracker, forceIfReadOnly bool) (*os.File, error) {
 	const FILE_ATTRIBUTE_READONLY = 1
 
-	doOpen := func() (syscall.Handle, error) {
+	doOpen := func() (windows.Handle, error) {
 		return OpenWithWriteThroughSetting(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, DEFAULT_FILE_PERM, writeThrough)
 	}
 
@@ -120,8 +120,8 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 	return f, nil
 }
 
-func makeInheritSa() *syscall.SecurityAttributes {
-	var sa syscall.SecurityAttributes
+func makeInheritSa() *windows.SecurityAttributes {
+	var sa windows.SecurityAttributes
 	sa.Length = uint32(unsafe.Sizeof(sa))
 	sa.InheritHandle = 1
 	return &sa
@@ -130,56 +130,59 @@ func makeInheritSa() *syscall.SecurityAttributes {
 const FILE_ATTRIBUTE_WRITE_THROUGH = 0x80000000
 
 // Copied from syscall.open, but modified to allow setting of writeThrough option
+// Also modified to conform with the windows package, to enable file backup semantics.
+// Furthermore, all of the os, syscall, and windows packages line up. So, putting in os.O_RDWR or whatever of that nature into mode works fine.
 // Param "perm" is unused both here and in the original Windows version of this routine.
-func OpenWithWriteThroughSetting(path string, mode int, perm uint32, writeThrough bool) (fd syscall.Handle, err error) {
+func OpenWithWriteThroughSetting(path string, mode int, perm uint32, writeThrough bool) (fd windows.Handle, err error) {
 	if len(path) == 0 {
-		return syscall.InvalidHandle, syscall.ERROR_FILE_NOT_FOUND
+		return windows.InvalidHandle, windows.ERROR_FILE_NOT_FOUND
 	}
 	pathp, err := syscall.UTF16PtrFromString(path)
 	if err != nil {
-		return syscall.InvalidHandle, err
+		return windows.InvalidHandle, err
 	}
 	var access uint32
-	switch mode & (syscall.O_RDONLY | syscall.O_WRONLY | syscall.O_RDWR) {
-	case syscall.O_RDONLY:
-		access = syscall.GENERIC_READ
-	case syscall.O_WRONLY:
-		access = syscall.GENERIC_WRITE
-	case syscall.O_RDWR:
-		access = syscall.GENERIC_READ | syscall.GENERIC_WRITE
+	switch mode & (windows.O_RDONLY | windows.O_WRONLY | windows.O_RDWR) {
+	case windows.O_RDONLY:
+		access = windows.GENERIC_READ
+	case windows.O_WRONLY:
+		access = windows.GENERIC_WRITE
+	case windows.O_RDWR:
+		access = windows.GENERIC_READ | windows.GENERIC_WRITE
 	}
-	if mode&syscall.O_CREAT != 0 {
-		access |= syscall.GENERIC_WRITE
+
+	if mode&windows.O_CREAT != 0 {
+		access |= windows.GENERIC_WRITE
 	}
-	if mode&syscall.O_APPEND != 0 {
-		access &^= syscall.GENERIC_WRITE
-		access |= syscall.FILE_APPEND_DATA
+	if mode&windows.O_APPEND != 0 {
+		access &^= windows.GENERIC_WRITE
+		access |= windows.FILE_APPEND_DATA
 	}
-	sharemode := uint32(syscall.FILE_SHARE_READ | syscall.FILE_SHARE_WRITE)
-	var sa *syscall.SecurityAttributes
+	sharemode := uint32(windows.FILE_SHARE_READ | windows.FILE_SHARE_WRITE)
+	var sa *windows.SecurityAttributes
 	if mode&syscall.O_CLOEXEC == 0 {
 		sa = makeInheritSa()
 	}
 	var createmode uint32
 	switch {
-	case mode&(syscall.O_CREAT|syscall.O_EXCL) == (syscall.O_CREAT | syscall.O_EXCL):
-		createmode = syscall.CREATE_NEW
-	case mode&(syscall.O_CREAT|syscall.O_TRUNC) == (syscall.O_CREAT | syscall.O_TRUNC):
-		createmode = syscall.CREATE_ALWAYS
-	case mode&syscall.O_CREAT == syscall.O_CREAT:
-		createmode = syscall.OPEN_ALWAYS
-	case mode&syscall.O_TRUNC == syscall.O_TRUNC:
-		createmode = syscall.TRUNCATE_EXISTING
+	case mode&(windows.O_CREAT|windows.O_EXCL) == (windows.O_CREAT | windows.O_EXCL):
+		createmode = windows.CREATE_NEW
+	case mode&(windows.O_CREAT|windows.O_TRUNC) == (windows.O_CREAT | windows.O_TRUNC):
+		createmode = windows.CREATE_ALWAYS
+	case mode&windows.O_CREAT == windows.O_CREAT:
+		createmode = windows.OPEN_ALWAYS
+	case mode&windows.O_TRUNC == windows.O_TRUNC:
+		createmode = windows.TRUNCATE_EXISTING
 	default:
-		createmode = syscall.OPEN_EXISTING
+		createmode = windows.OPEN_EXISTING
 	}
 
 	var attr uint32
-	attr = syscall.FILE_ATTRIBUTE_NORMAL
+	attr = windows.FILE_ATTRIBUTE_NORMAL | windows.FILE_FLAG_BACKUP_SEMANTICS
 	if writeThrough {
 		attr |= FILE_ATTRIBUTE_WRITE_THROUGH
 	}
-	h, e := syscall.CreateFile(pathp, access, sharemode, sa, createmode, attr, 0)
+	h, e := windows.CreateFile(pathp, access, sharemode, sa, createmode, attr, 0)
 	return h, e
 }
 
@@ -201,12 +204,15 @@ func SetBackupMode(enable bool, fromTo FromTo) error {
 		return nil
 	}
 
-	var privName string
+	var privList []string
 	switch {
 	case fromTo.IsUpload():
-		privName = "SeBackupPrivilege"
+		privList = []string{"SeBackupPrivilege"}
 	case fromTo.IsDownload():
-		privName = "SeRestorePrivilege"
+		// For downloads, we need both privileges.
+		// This is _probably_ because restoring file times requires we open the file with FILE_WRITE_ATTRIBUTES (where there's no FILE_READ_ATTRIBUTES)
+		// Thus, a read is _probably_ implied, and in scenarios where the ACL denies privileges, is denied without SeBackupPrivilege.
+		privList = []string{"SeBackupPrivilege", "SeRestorePrivilege"}
 	default:
 		panic("unsupported fromTo in SetBackupMode")
 	}
@@ -220,37 +226,40 @@ func SetBackupMode(enable bool, fromTo FromTo) error {
 	}
 	defer procToken.Close()
 
-	// prepare token privs structure
-	privStr, err := syscall.UTF16PtrFromString(privName)
-	if err != nil {
-		return err
-	}
-	tokenPrivs := windows.Tokenprivileges{PrivilegeCount: 1}
-	tokenPrivs.Privileges[0].Attributes = windows.SE_PRIVILEGE_ENABLED
-	err = windows.LookupPrivilegeValue(nil, privStr, &tokenPrivs.Privileges[0].Luid)
-	if err != nil {
-		return err
+	for _, privName := range privList {
+		// prepare token privs structure
+		privStr, err := syscall.UTF16PtrFromString(privName)
+		if err != nil {
+			return err
+		}
+		tokenPrivs := windows.Tokenprivileges{PrivilegeCount: 1}
+		tokenPrivs.Privileges[0].Attributes = windows.SE_PRIVILEGE_ENABLED
+		err = windows.LookupPrivilegeValue(nil, privStr, &tokenPrivs.Privileges[0].Luid)
+		if err != nil {
+			return err
+		}
+
+		// Get a structure to receive the old value of every privilege that was changed.
+		// This is the only way we can tell that windows.AdjustTokenPrivileges actually did anything, because
+		// the underlying API can return a success result but a non-successful last error (and Go doesn't expect that,
+		// so doesn't pick it up in Gos implementation of windows.AdjustTokenPrivileges.
+		oldPrivs := windows.Tokenprivileges{}
+		oldPrivsSize := uint32(reflect.TypeOf(oldPrivs).Size()) // it's all struct-y, with an array (not a slice) so everything is inline and size will include everything
+		var requiredReturnLen uint32
+
+		// adjust our privileges
+		err = windows.AdjustTokenPrivileges(procToken, false, &tokenPrivs, oldPrivsSize, &oldPrivs, &requiredReturnLen)
+		if err != nil {
+			return err
+		}
+		if oldPrivs.PrivilegeCount != 1 {
+			// Only the successful changes are returned in the old state
+			// If there were none, that means it didn't work
+			return errors.New("could not activate '" + BackupModeFlagName + "' mode.  Probably the account running AzCopy does not have " +
+				privName + " so AzCopy could not activate that privilege. Administrators usually have that privilege, but only when they are in an elevated command prompt. " +
+				"To check which privileges an account has, run this from a command line: whoami /priv")
+		}
 	}
 
-	// Get a structure to receive the old value of every privilege that was changed.
-	// This is the only way we can tell that windows.AdjustTokenPrivileges actually did anything, because
-	// the underlying API can return a success result but a non-successful last error (and Go doesn't expect that,
-	// so doesn't pick it up in Gos implementation of windows.AdjustTokenPrivileges.
-	oldPrivs := windows.Tokenprivileges{}
-	oldPrivsSize := uint32(reflect.TypeOf(oldPrivs).Size()) // it's all struct-y, with an array (not a slice) so everything is inline and size will include everything
-	var requiredReturnLen uint32
-
-	// adjust our privileges
-	err = windows.AdjustTokenPrivileges(procToken, false, &tokenPrivs, oldPrivsSize, &oldPrivs, &requiredReturnLen)
-	if err != nil {
-		return err
-	}
-	if oldPrivs.PrivilegeCount != 1 {
-		// Only the successful changes are returned in the old state
-		// If there were none, that means it didn't work
-		return errors.New("could not activate '" + BackupModeFlagName + "' mode.  Probably the account running AzCopy does not have " +
-			privName + " so AzCopy could not activate that privilege. Administrators usually have that privilege, but only when they are in an elevated command prompt. " +
-			"To check which privileges an account has, run this from a command line: whoami /priv")
-	}
 	return nil
 }

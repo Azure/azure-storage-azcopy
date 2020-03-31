@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"unsafe"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 
@@ -19,20 +20,20 @@ import (
 func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
 	propHolder, err := sip.GetSMBProperties()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed get SMB properties: %w", err)
 	}
 
 	attribs := propHolder.FileAttributes()
 
 	destPtr, err := syscall.UTF16PtrFromString(txInfo.Destination)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed convert destination string to UTF16 pointer: %w", err)
 	}
 
 	// This is a safe conversion.
 	err = windows.SetFileAttributes(destPtr, uint32(attribs))
 	if err != nil {
-		return err
+		return fmt.Errorf("attempted file set attributes: %w", err)
 	}
 
 	// =========== set file times ===========
@@ -42,12 +43,16 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 	// Should we do it here as well??
 	smbLastWrite := propHolder.FileLastWriteTime()
 
+	var sa windows.SecurityAttributes
+	sa.Length = uint32(unsafe.Sizeof(sa))
+	sa.InheritHandle = 1
+
 	// need custom CreateFile call because need FILE_WRITE_ATTRIBUTES
 	fd, err := windows.CreateFile(destPtr,
-		windows.FILE_WRITE_ATTRIBUTES, windows.FILE_SHARE_READ, nil,
+		windows.FILE_WRITE_ATTRIBUTES, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, &sa,
 		windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
 	if err != nil {
-		return err
+		return fmt.Errorf("attempted file open: %w", err)
 	}
 	defer windows.Close(fd)
 
@@ -56,6 +61,10 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 	smbLastWriteFileTime := windows.NsecToFiletime(smbLastWrite.UnixNano())
 
 	err = windows.SetFileTime(fd, &smbCreationFileTime, nil, &smbLastWriteFileTime)
+
+	if err != nil {
+		err = fmt.Errorf("attempted update file times: %w", err)
+	}
 
 	return err
 }

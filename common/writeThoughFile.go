@@ -50,10 +50,12 @@ func CreateDirectoryIfNotExist(directory string, tracker FolderCreationTracker) 
 	}
 
 	// try to create the root directory if the source does
-	if _, err := os.Stat(directory); err != nil {
+	if _, err := OSStat(directory); err != nil {
 		// if the error is present, try to create the directory
 		// stat errors can be present in write-only scenarios, when the directory isn't present, etc.
 		// as a result, we care more about the mkdir error than the stat error, because that's the tell.
+		// It'd seem that mkdirall would be necessary to port like osstat and osopenfile for new folders in a already no-access dest,
+		//     But in testing, this isn't the case.
 		err := os.MkdirAll(directory, os.ModePerm)
 		// if MkdirAll succeeds, no error is dropped-- it is nil.
 		// therefore, returning here is perfectly acceptable as it either succeeds (or it doesn't)

@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -339,7 +338,7 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 
 	switch location {
 	case common.ELocation.Local():
-		_, err := os.Stat(resource.ValueLocal())
+		_, err := common.OSStat(resource.ValueLocal())
 
 		// If wildcard is present and this isn't an existing file/folder, glob and feed the globbed list into a list enum.
 		if strings.Index(resource.ValueLocal(), "*") != -1 && err != nil {

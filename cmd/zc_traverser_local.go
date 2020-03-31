@@ -45,7 +45,7 @@ func (t *localTraverser) isDirectory(bool) bool {
 		return true
 	}
 
-	props, err := os.Stat(t.fullPath)
+	props, err := common.OSStat(t.fullPath)
 
 	if err != nil {
 		return false
@@ -55,7 +55,7 @@ func (t *localTraverser) isDirectory(bool) bool {
 }
 
 func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
-	fileInfo, err := os.Stat(t.fullPath)
+	fileInfo, err := common.OSStat(t.fullPath)
 
 	if err != nil {
 		return nil, false, err
@@ -263,7 +263,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 						}
 
 						// Replace the current FileInfo with
-						singleFile, err = os.Stat(result)
+						singleFile, err = common.OSStat(result)
 
 						if err != nil {
 							return err
