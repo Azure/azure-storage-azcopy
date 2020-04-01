@@ -53,21 +53,23 @@ func GetFileInformation(path string) (windows.ByHandleFileInformation, error) {
 }
 
 func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int64, writeThrough bool, tracker FolderCreationTracker, forceIfReadOnly bool) (*os.File, error) {
-	const FILE_ATTRIBUTE_READONLY = 1
+	const FILE_ATTRIBUTE_READONLY = windows.FILE_ATTRIBUTE_READONLY
+	const FILE_ATTRIBUTE_HIDDEN = windows.FILE_ATTRIBUTE_HIDDEN
 
 	doOpen := func() (windows.Handle, error) {
 		return OpenWithWriteThroughSetting(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, DEFAULT_FILE_PERM, writeThrough)
 	}
 
-	hasReadOnlyFlag := func() bool {
+	getFlagMatches := func(flags uint32) (matches uint32, allFlags uint32, retry bool) {
 		fi, err := GetFileInformation(destinationPath)
 		if err != nil {
-			return false
+			return 0, 0, false
 		}
-		return fi.FileAttributes&FILE_ATTRIBUTE_READONLY == FILE_ATTRIBUTE_READONLY
+		o := fi.FileAttributes & flags
+		return o, fi.FileAttributes, o != 0 // != 0 indicates we have at least one of these flags.
 	}
 
-	tryClearReadOnlyFlag := func() bool {
+	tryClearFlagSet := func(toClear uint32) bool {
 		fi, err := GetFileInformation(destinationPath)
 		if err != nil {
 			return false
@@ -77,16 +79,28 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 			return false
 		}
 
-		// Clear the RO flag (and no others)
+		// Clear the flags asked (and no others)
 		// In the worst-case scenario, if this succeeds but the file open still fails,
 		// we will leave the file in a state where this flag (and this flag only) has been
 		// cleared. (But then, given the download implementation as at 10.3.x,
 		// we'll try to clean up by deleting the file at the end of our job anyway, so we won't be
 		// leaving damaged trash around if the delete works).
 		// TODO: is that acceptable? Seems overkill to re-instate the attribute if the open fails...
-		newAttrs := fi.FileAttributes &^ FILE_ATTRIBUTE_READONLY
+		newAttrs := fi.FileAttributes &^ toClear
 		err = windows.SetFileAttributes(destPtr, newAttrs)
 		return err == nil
+	}
+
+	getIssueFlagStrings := func(flags uint32) string {
+		if flags&(FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_READONLY) == (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_READONLY) {
+			return "hidden and read-only (try --force-if-read-only on the command line) flags"
+		} else if flags&FILE_ATTRIBUTE_HIDDEN == FILE_ATTRIBUTE_HIDDEN {
+			return "a hidden flag"
+		} else if flags&FILE_ATTRIBUTE_READONLY == FILE_ATTRIBUTE_READONLY {
+			return "a read-only flag (try --force-if-read-only on the command line)"
+		} else {
+			return fmt.Sprintf("no known flags that could cause issue (current set: %x)", flags)
+		}
 	}
 
 	err := CreateParentDirectoryIfNotExist(destinationPath, tracker)
@@ -95,14 +109,22 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 	}
 
 	fd, err := doOpen()
-	if err != nil && hasReadOnlyFlag() {
+	if err != nil {
+		// Because a hidden file isn't necessarily a intentional lock on a file, we choose to make it a default override.
+		toMatchSet := FILE_ATTRIBUTE_HIDDEN
+		// But, by the opposite nature, readonly is a intentional lock, so we make it a required option.
 		if forceIfReadOnly {
-			if tryClearReadOnlyFlag() {
-				// do the open again
-				fd, err = doOpen()
-			}
+			toMatchSet |= FILE_ATTRIBUTE_READONLY
+		}
+
+		// Let's check what we might need to clear, and if we should retry
+		toClearFlagSet, allFlags, toRetry := getFlagMatches(FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN)
+
+		// If we don't choose to retry, and we fail to clear the flag set, return an error
+		if toRetry && tryClearFlagSet(toClearFlagSet) {
+			fd, err = doOpen()
 		} else {
-			return nil, fmt.Errorf("destination file has read-only flag so access will be denied. Try setting --force-if-read-only on command line. Error was %w", err)
+			return nil, fmt.Errorf("destination file has " + getIssueFlagStrings(allFlags) + " and azcopy was unable to clear the flag(s), so access will be denied.")
 		}
 	}
 	if err != nil {
