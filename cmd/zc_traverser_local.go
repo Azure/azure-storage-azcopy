@@ -220,8 +220,9 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 						seenDirs.Record(result)
 						return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
 					} else {
-						// Output resulting path of symlink and symlink source
-						glcm.Info(fmt.Sprintf("Ignored already seen directory located at %s (found at %s)", filePath, common.GenerateFullPath(fullPath, computedRelativePath)))
+						// We can't output a warning here (and versions 10.3.x never did)
+						// because we'll hit this for the directory that is the direct (root) target of any symlink, so any warning here would be a red herring.
+						// In theory there might be cases when a warning here would be correct - but they are rare and too hard to identify in our code
 						return nil
 					}
 				} else {
