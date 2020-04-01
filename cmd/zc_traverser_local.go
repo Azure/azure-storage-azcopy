@@ -68,6 +68,32 @@ func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
 	return fileInfo, true, nil
 }
 
+type seenPathsRecorder interface {
+	Record(path string)
+	HasSeen(path string) bool
+}
+
+type nullSeenPathsRecorder struct{}
+
+func (*nullSeenPathsRecorder) Record(_ string) {
+	// no-op
+}
+func (*nullSeenPathsRecorder) HasSeen(_ string) bool {
+	return false // in the null case, there are no symlinks in play, so no cycles, so we have never seen the path before
+}
+
+type realSeenPathsRecorder struct {
+	m map[string]struct{}
+}
+
+func (r *realSeenPathsRecorder) Record(path string) {
+	r.m[path] = struct{}{}
+}
+func (r *realSeenPathsRecorder) HasSeen(path string) bool {
+	_, ok := r.m[path]
+	return ok
+}
+
 // WalkWithSymlinks is a symlinks-aware version of filePath.Walk.
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
@@ -89,7 +115,12 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 	}
 
 	walkQueue := []walkItem{{fullPath: fullPath, relativeBase: ""}}
-	seenPaths := map[string]bool{} // do NOT put fullPath: true into the map at this time, because we want to match the semantics of filepath.Walk, where the walkfunc is called for the root
+
+	// do NOT put fullPath: true into the map at this time, because we want to match the semantics of filepath.Walk, where the walkfunc is called for the root
+	var seenPaths seenPathsRecorder = &nullSeenPathsRecorder{} // uses no RAM
+	if followSymlinks {
+		seenPaths = &realSeenPathsRecorder{make(map[string]struct{})} // have to use the RAM if we are dealing with symlinks, to prevent cycles
+	}
 
 	for len(walkQueue) > 0 {
 		queueItem := walkQueue[0]
@@ -124,9 +155,9 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 					glcm.Info(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
 				}
 
-				if _, ok := seenPaths[result]; !ok {
-					seenPaths[result] = true
-					seenPaths[slPath] = true // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
+				if !seenPaths.HasSeen(result) {
+					seenPaths.Record(result)
+					seenPaths.Record(slPath) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
 					walkQueue = append(walkQueue, walkItem{
 						fullPath:     result,
 						relativeBase: computedRelativePath,
@@ -143,8 +174,8 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 					return nil
 				}
 
-				if _, ok := seenPaths[result]; !ok {
-					seenPaths[result] = true
+				if !seenPaths.HasSeen(result) {
+					seenPaths.Record(result)
 					return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
 				} else {
 					// Output resulting path of symlink and symlink source
