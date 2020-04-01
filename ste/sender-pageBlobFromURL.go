@@ -34,8 +34,8 @@ import (
 type urlToPageBlobCopier struct {
 	pageBlobSenderBase
 
-	srcURL             url.URL
-	pageRangeOptimizer *pageRangeOptimizer // nil if src is not a page blob
+	srcURL                   url.URL
+	sourcePageRangeOptimizer *pageRangeOptimizer // nil if src is not a page blob
 }
 
 func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
@@ -63,16 +63,16 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipe
 	}
 
 	return &urlToPageBlobCopier{
-		pageBlobSenderBase: *senderBase,
-		srcURL:             *srcURL,
-		pageRangeOptimizer: pageRangeOptimizer}, nil
+		pageBlobSenderBase:       *senderBase,
+		srcURL:                   *srcURL,
+		sourcePageRangeOptimizer: pageRangeOptimizer}, nil
 }
 
 func (c *urlToPageBlobCopier) Prologue(ps common.PrologueState) (destinationModified bool) {
 	destinationModified = c.pageBlobSenderBase.Prologue(ps)
 
-	if c.pageRangeOptimizer != nil {
-		c.pageRangeOptimizer.fetchPages()
+	if c.sourcePageRangeOptimizer != nil {
+		c.sourcePageRangeOptimizer.fetchPages()
 	}
 
 	return
@@ -89,7 +89,7 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 
 		// if there's no data at the source (and the destination for managed disks), skip this chunk
 		pageRange := azblob.PageRange{Start: id.OffsetInFile(), End: id.OffsetInFile() + adjustedChunkSize - 1}
-		if c.pageRangeOptimizer != nil && !c.pageRangeOptimizer.doesRangeContainData(pageRange) {
+		if c.sourcePageRangeOptimizer != nil && !c.sourcePageRangeOptimizer.doesRangeContainData(pageRange) {
 			var destContainsData bool
 
 			if c.destPageRangeOptimizer != nil {

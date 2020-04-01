@@ -57,7 +57,9 @@ type pageBlobSenderBase struct {
 	// destPageRangeOptimizer is necessary for managed disk imports,
 	// as it helps us identify where we actually need to write all zeroes to.
 	// Previously, if a page prefetched all zeroes, we'd ignore it.
-	// This would cause corruption on managed disks.
+	// In a edge-case scenario (where two different VHDs had been uploaded to the same md impexp URL),
+	// there was a potential for us to not zero out 512b segments that we'd prefetched all zeroes for.
+	// This only posed danger when there was already data in one of these segments.
 	destPageRangeOptimizer *pageRangeOptimizer
 }
 
