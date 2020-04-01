@@ -146,7 +146,10 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 			computedRelativePath = cleanLocalPath(common.GenerateFullPath(queueItem.relativeBase, computedRelativePath))
 			computedRelativePath = strings.TrimPrefix(computedRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
-			if followSymlinks && fileInfo.Mode()&os.ModeSymlink != 0 {
+			if fileInfo.Mode()&os.ModeSymlink != 0 {
+				if !followSymlinks {
+					return nil // skip it
+				}
 				result, err := filepath.EvalSymlinks(filePath)
 
 				if err != nil {
