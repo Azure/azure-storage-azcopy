@@ -166,7 +166,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 					return nil
 				}
 
-				rStat, err := os.Stat(result) // TODO: do we really need this, or can we just use fileInfo?
+				rStat, err := os.Stat(result)
 				if err != nil {
 					glcm.Info(fmt.Sprintf("Failed to get properties of symlink target at %s: %s", result, err))
 					return nil
@@ -180,6 +180,8 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 							fullPath:     result,
 							relativeBase: computedRelativePath,
 						})
+						// enumerate the FOLDER now (since its presence in seenDirs will prevent its properties getting enumerated later)
+						return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
 					} else {
 						glcm.Info(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
 					}

@@ -181,13 +181,21 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks_ToFolder(c *chk.C) {
 
 	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, fileNames)
 	scenarioHelper{}.generateLocalFilesFromList(c, symlinkTmpDir, fileNames)
-	trySymlink(symlinkTmpDir, filepath.Join(tmpDir, "so long and thanks for all the fish"), c)
+	dirLinkName := "so long and thanks for all the fish"
+	time.Sleep(2 * time.Second) // to be sure to get different LMT for link, compared to root, so we can make assertions later about whose fileInfo we get
+	trySymlink(symlinkTmpDir, filepath.Join(tmpDir, dirLinkName), c)
 
 	fileCount := 0
+	sawLinkTargetDir := false
 	c.Assert(WalkWithSymlinks(tmpDir, func(path string, fi os.FileInfo, err error) error {
 		c.Assert(err, chk.IsNil)
 
 		if fi.IsDir() {
+			if fi.Name() == dirLinkName {
+				sawLinkTargetDir = true
+				s, _ := os.Stat(symlinkTmpDir)
+				c.Assert(fi.ModTime().UTC(), chk.Equals, s.ModTime().UTC())
+			}
 			return nil
 		}
 
@@ -198,6 +206,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks_ToFolder(c *chk.C) {
 
 	// 3 files live in base, 3 files live in symlink
 	c.Assert(fileCount, chk.Equals, 6)
+	c.Assert(sawLinkTargetDir, chk.Equals, true)
 }
 
 // Next test is temporarily disabled, to avoid changing functionality near 10.4 release date
