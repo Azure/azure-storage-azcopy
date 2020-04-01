@@ -48,7 +48,12 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 		smbCreationFileTime := windows.NsecToFiletime(smbCreation.UnixNano())
 		smbLastWriteFileTime := windows.NsecToFiletime(smbLastWrite.UnixNano())
 
-		return windows.SetFileTime(fd, &smbCreationFileTime, nil, &smbLastWriteFileTime)
+		pLastWriteTime := &smbLastWriteFileTime
+		if !txInfo.ShouldTransferLastWriteTime() {
+			pLastWriteTime = nil
+		}
+
+		return windows.SetFileTime(fd, &smbCreationFileTime, nil, pLastWriteTime)
 	}
 
 	// =========== set file times before we set attributes, to make sure the time-setting doesn't
