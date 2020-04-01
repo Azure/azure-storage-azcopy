@@ -94,6 +94,15 @@ func (r *realSeenPathsRecorder) HasSeen(path string) bool {
 	return ok
 }
 
+type symlinkTargetFileInfo struct {
+	os.FileInfo
+	name string
+}
+
+func (s symlinkTargetFileInfo) Name() string {
+	return s.name // override the name
+}
+
 // WalkWithSymlinks is a symlinks-aware version of filePath.Walk.
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
@@ -117,9 +126,11 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 	walkQueue := []walkItem{{fullPath: fullPath, relativeBase: ""}}
 
 	// do NOT put fullPath: true into the map at this time, because we want to match the semantics of filepath.Walk, where the walkfunc is called for the root
-	var seenPaths seenPathsRecorder = &nullSeenPathsRecorder{} // uses no RAM
+	// Only track seen directories (not directories + files) because including files would greatly increase RAM usage on large folder trees,
+	// and is unnecessary because symlinks to individual files can't create cycles.
+	var seenDirs seenPathsRecorder = &nullSeenPathsRecorder{} // uses no RAM
 	if followSymlinks {
-		seenPaths = &realSeenPathsRecorder{make(map[string]struct{})} // have to use the RAM if we are dealing with symlinks, to prevent cycles
+		seenDirs = &realSeenPathsRecorder{make(map[string]struct{})} // have to use the RAM if we are dealing with symlinks, to prevent cycles
 	}
 
 	for len(walkQueue) > 0 {
@@ -153,20 +164,41 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 				slPath, err := filepath.Abs(filePath)
 				if err != nil {
 					glcm.Info(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
+					return nil
 				}
 
-				if !seenPaths.HasSeen(result) {
-					seenPaths.Record(result)
-					seenPaths.Record(slPath) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
-					walkQueue = append(walkQueue, walkItem{
-						fullPath:     result,
-						relativeBase: computedRelativePath,
-					})
+				rStat, err := os.Stat(result) // TODO: do we really need this, or can we just use fileInfo?
+				if err != nil {
+					glcm.Info(fmt.Sprintf("Failed to get properties of symlink target at %s: %s", result, err))
+					return nil
+				}
+
+				if rStat.IsDir() {
+					if !seenDirs.HasSeen(result) {
+						seenDirs.Record(result)
+						seenDirs.Record(slPath) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
+						walkQueue = append(walkQueue, walkItem{
+							fullPath:     result,
+							relativeBase: computedRelativePath,
+						})
+					} else {
+						glcm.Info(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
+					}
 				} else {
-					glcm.Info(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
+					// It's a symlink to a file. Just process the file because there's no danger of cycles with links to individual files.
+					// (this does create the inconsistency that if there are two symlinks to the same file we will process it twice,
+					// but if there are two symlinks to the same directory we will process it only once. Beceause only directories are
+					// deduped to break cycles.  For now, we are living with the inconsistency. The alternative would be to "burn" more
+					// RAM by putting filepaths into seenDirs too, but that could be a non-trivial amount of RAM in big directories trees).
+
+					// Make file info that has name of source, and stats of dest (to mirror what os.Stat calls on source will give us later)
+					// TODO: do we really need this, or can we just use fileInfo directly?
+					targetFi := symlinkTargetFileInfo{rStat, fileInfo.Name()}
+					return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), targetFi, fileError)
 				}
 				return nil
 			} else {
+				// not a symlink
 				result, err := filepath.Abs(filePath)
 
 				if err != nil {
@@ -174,13 +206,17 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 					return nil
 				}
 
-				if !seenPaths.HasSeen(result) {
-					seenPaths.Record(result)
-					return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
+				if fileInfo.IsDir() {
+					if !seenDirs.HasSeen(result) {
+						seenDirs.Record(result)
+						return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
+					} else {
+						// Output resulting path of symlink and symlink source
+						glcm.Info(fmt.Sprintf("Ignored already seen directory located at %s (found at %s)", filePath, common.GenerateFullPath(fullPath, computedRelativePath)))
+						return nil
+					}
 				} else {
-					// Output resulting path of symlink and symlink source
-					glcm.Info(fmt.Sprintf("Ignored already seen file located at %s (found at %s)", filePath, common.GenerateFullPath(fullPath, computedRelativePath)))
-					return nil
+					return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
 				}
 			}
 		})

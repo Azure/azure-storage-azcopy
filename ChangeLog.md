@@ -72,7 +72,6 @@ contained directly in a container or virtual directory include `/*` at the end o
 include/exclude patterns were disallowed, but exclude-path was not. That was incorrect. All should have been
 disallowed because none (other than include-path) are respected. 
    
-
 ## Version 10.3.4
 
 ### New features
