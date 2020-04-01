@@ -22,13 +22,12 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
-
-	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type localTraverser struct {
@@ -185,16 +184,21 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 						glcm.Info(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
 					}
 				} else {
-					// It's a symlink to a file. Just process the file because there's no danger of cycles with links to individual files.
-					// (this does create the inconsistency that if there are two symlinks to the same file we will process it twice,
-					// but if there are two symlinks to the same directory we will process it only once. Beceause only directories are
-					// deduped to break cycles.  For now, we are living with the inconsistency. The alternative would be to "burn" more
-					// RAM by putting filepaths into seenDirs too, but that could be a non-trivial amount of RAM in big directories trees).
+					glcm.Info(fmt.Sprintf("Symlinks to individual files are not currently supported, so will ignore file at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
+					// TODO: remove the above info call and enable the below, with suitable multi-OS testing
+					//    including enable the test: TestWalkWithSymlinks_ToFile
+					/*
+						// It's a symlink to a file. Just process the file because there's no danger of cycles with links to individual files.
+						// (this does create the inconsistency that if there are two symlinks to the same file we will process it twice,
+						// but if there are two symlinks to the same directory we will process it only once. Beceause only directories are
+						// deduped to break cycles.  For now, we are living with the inconsistency. The alternative would be to "burn" more
+						// RAM by putting filepaths into seenDirs too, but that could be a non-trivial amount of RAM in big directories trees).
 
-					// Make file info that has name of source, and stats of dest (to mirror what os.Stat calls on source will give us later)
-					// TODO: do we really need this, or can we just use fileInfo directly?
-					targetFi := symlinkTargetFileInfo{rStat, fileInfo.Name()}
-					return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), targetFi, fileError)
+						// Make file info that has name of source, and stats of dest (to mirror what os.Stat calls on source will give us later)
+						// TODO: do we really need this, or can we just use fileInfo directly?
+						targetFi := symlinkTargetFileInfo{rStat, fileInfo.Name()}
+						return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), targetFi, fileError)
+					*/
 				}
 				return nil
 			} else {

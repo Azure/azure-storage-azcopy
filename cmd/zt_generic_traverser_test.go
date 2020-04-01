@@ -200,6 +200,8 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks_ToFolder(c *chk.C) {
 	c.Assert(fileCount, chk.Equals, 6)
 }
 
+// Next test is temporarily disabled, to avoid changing functionality near 10.4 release date
+/*
 // symlinks are not just to folders. They may be to individual files
 func (s *genericTraverserSuite) TestWalkWithSymlinks_ToFile(c *chk.C) {
 	mainDirFilenames := []string{"iAmANormalFile.txt"}
@@ -237,6 +239,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks_ToFile(c *chk.C) {
 	// processing them both. For efficiency of dedupe algorithm, we only dedupe directories, not files).
 	c.Assert(fileCount, chk.Equals, 3)
 }
+*/
 
 // Test cancel symlink loop functionality
 func (s *genericTraverserSuite) TestWalkWithSymlinksBreakLoop(c *chk.C) {
