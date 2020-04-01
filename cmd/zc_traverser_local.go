@@ -193,16 +193,19 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 					// TODO: remove the above info call and enable the below, with suitable multi-OS testing
 					//    including enable the test: TestWalkWithSymlinks_ToFile
 					/*
-						// It's a symlink to a file. Just process the file because there's no danger of cycles with links to individual files.
-						// (this does create the inconsistency that if there are two symlinks to the same file we will process it twice,
-						// but if there are two symlinks to the same directory we will process it only once. Beceause only directories are
-						// deduped to break cycles.  For now, we are living with the inconsistency. The alternative would be to "burn" more
-						// RAM by putting filepaths into seenDirs too, but that could be a non-trivial amount of RAM in big directories trees).
+							// It's a symlink to a file. Just process the file because there's no danger of cycles with links to individual files.
+							// (this does create the inconsistency that if there are two symlinks to the same file we will process it twice,
+							// but if there are two symlinks to the same directory we will process it only once. Because only directories are
+							// deduped to break cycles.  For now, we are living with the inconsistency. The alternative would be to "burn" more
+							// RAM by putting filepaths into seenDirs too, but that could be a non-trivial amount of RAM in big directories trees).
 
-						// Make file info that has name of source, and stats of dest (to mirror what os.Stat calls on source will give us later)
-						// TODO: do we really need this, or can we just use fileInfo directly?
-						targetFi := symlinkTargetFileInfo{rStat, fileInfo.Name()}
-						return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), targetFi, fileError)
+							// TODO: this code here won't handle the case of (file-type symlink) -> (another file-type symlink) -> file
+						    //    But do we WANT to handle that?  (since it opens us to risk of file->file cycles, and we are deliberately NOT
+						    //    putting files in our map, to reduce RAM usage).  Maybe just detect if the target of a file symlink its itself a symlink
+						    //    and skip those cases with an error message?
+							// Make file info that has name of source, and stats of dest (to mirror what os.Stat calls on source will give us later)
+							targetFi := symlinkTargetFileInfo{rStat, fileInfo.Name()}
+							return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), targetFi, fileError)
 					*/
 				}
 				return nil
