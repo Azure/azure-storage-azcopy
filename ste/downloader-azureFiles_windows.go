@@ -4,14 +4,13 @@ package ste
 
 import (
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"unsafe"
 
-	"github.com/Azure/azure-storage-azcopy/common"
-
 	"golang.org/x/sys/windows"
+	"syscall"
 )
 
 // This file implements the windows-triggered smbPropertyAwareDownloader interface.
@@ -23,50 +22,64 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 		return fmt.Errorf("failed get SMB properties: %w", err)
 	}
 
-	attribs := propHolder.FileAttributes()
-
 	destPtr, err := syscall.UTF16PtrFromString(txInfo.Destination)
 	if err != nil {
 		return fmt.Errorf("failed convert destination string to UTF16 pointer: %w", err)
 	}
 
-	// This is a safe conversion.
-	err = windows.SetFileAttributes(destPtr, uint32(attribs))
-	if err != nil {
-		return fmt.Errorf("attempted file set attributes: %w", err)
+	setAttributes := func() error {
+		attribs := propHolder.FileAttributes()
+		// This is a safe conversion.
+		err := windows.SetFileAttributes(destPtr, uint32(attribs))
+		if err != nil {
+			return fmt.Errorf("attempted file set attributes: %w", err)
+		}
+		return nil
 	}
 
-	// =========== set file times ===========
+	setDates := func() error {
+		smbCreation := propHolder.FileCreationTime()
 
-	smbCreation := propHolder.FileCreationTime()
+		// Should we do it here as well??
+		smbLastWrite := propHolder.FileLastWriteTime()
 
-	// Should we do it here as well??
-	smbLastWrite := propHolder.FileLastWriteTime()
+		var sa windows.SecurityAttributes
+		sa.Length = uint32(unsafe.Sizeof(sa))
+		sa.InheritHandle = 1
 
-	var sa windows.SecurityAttributes
-	sa.Length = uint32(unsafe.Sizeof(sa))
-	sa.InheritHandle = 1
+		// need custom CreateFile call because need FILE_WRITE_ATTRIBUTES
+		fd, err := windows.CreateFile(destPtr,
+			windows.FILE_WRITE_ATTRIBUTES, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, &sa,
+			windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+		if err != nil {
+			return fmt.Errorf("attempted file open: %w", err)
+		}
+		defer windows.Close(fd)
 
-	// need custom CreateFile call because need FILE_WRITE_ATTRIBUTES
-	fd, err := windows.CreateFile(destPtr,
-		windows.FILE_WRITE_ATTRIBUTES, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, &sa,
-		windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
-	if err != nil {
-		return fmt.Errorf("attempted file open: %w", err)
+		// windows.NsecToFileTime does the opposite of FileTime.Nanoseconds, and adjusts away the unix epoch for windows.
+		smbCreationFileTime := windows.NsecToFiletime(smbCreation.UnixNano())
+		smbLastWriteFileTime := windows.NsecToFiletime(smbLastWrite.UnixNano())
+
+		pLastWriteTime := &smbLastWriteFileTime
+		if !txInfo.ShouldTransferLastWriteTime() {
+			pLastWriteTime = nil
+		}
+
+		err = windows.SetFileTime(fd, &smbCreationFileTime, nil, pLastWriteTime)
+		if err != nil {
+			err = fmt.Errorf("attempted update file times: %w", err)
+		}
+		return nil
 	}
-	defer windows.Close(fd)
 
-	// windows.NsecToFileTime does the opposite of FileTime.Nanoseconds, and adjusts away the unix epoch for windows.
-	smbCreationFileTime := windows.NsecToFiletime(smbCreation.UnixNano())
-	smbLastWriteFileTime := windows.NsecToFiletime(smbLastWrite.UnixNano())
-
-	err = windows.SetFileTime(fd, &smbCreationFileTime, nil, &smbLastWriteFileTime)
-
+	// =========== set file times before we set attributes, to make sure the time-setting doesn't
+	// reset archive attribute.  There's currently no risk of the attribute-setting messing with the times,
+	// because we only set the last (content) "write time", not the last (metadata) "change time" =====
+	err = setDates()
 	if err != nil {
-		err = fmt.Errorf("attempted update file times: %w", err)
+		return err
 	}
-
-	return err
+	return setAttributes()
 }
 
 // works for both folders and files

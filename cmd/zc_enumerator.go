@@ -529,6 +529,10 @@ type objectFilter interface {
 	appliesOnlyToFiles() bool
 }
 
+type preFilterProvider interface {
+	getEnumerationPreFilter() string
+}
+
 // -------------------------------------- Generic Enumerators -------------------------------------- \\
 // the following enumerators must be instantiated with configurations
 // they define the work flow in the most generic terms

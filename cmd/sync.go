@@ -408,7 +408,7 @@ func (cca *cookedSyncCmdArgs) getJsonOfSyncJobSummary(summary common.ListJobSumm
 	return string(jsonOutput)
 }
 
-func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
+func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
 	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 	var summary common.ListJobSummaryResponse
 	var throughput float64
@@ -418,6 +418,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	if cca.firstPartOrdered() {
 		Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
 		jobDone = summary.JobStatus.IsJobDone()
+		totalKnownCount = summary.TotalTransfers
 
 		// compute the average throughput for the last time interval
 		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(base10Mega))
@@ -504,6 +505,8 @@ Final Job Status: %v%s%s
 			summary.TotalTransfers-summary.TransfersCompleted-summary.TransfersFailed,
 			summary.TotalTransfers, perfString, ste.ToFixed(throughput, 4), diskString)
 	})
+
+	return
 }
 
 func (cca *cookedSyncCmdArgs) process() (err error) {
@@ -599,9 +602,13 @@ func init() {
 	// TODO: enable (and test) the following when we sort out what sync will do for files and folders where only
 	//    the attributes, name-value-metadata (AzureFiles), or SDDL has changed, but there's been no file content change.
 	// TODO: when we sort that out, also enable it for copy with IfSourceNewer
-	//syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files). For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy.")
+	//syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files). For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 	//syncCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
-	//syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", false, "False by default. Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). Only the attribute bits supported by Azure Files will be transferred; any others will be ignored.")
+	// TODO: if/when we enable preserve-smb-info for sync, think about what the transfer of LMTs means for both files and FOLDERS
+	//   Note that for folders we don't currently preserve LMTs, because that's not feasible in large download scenarios (and because folder LMTs
+	//   don't generally convey useful information).  However, we need to think through what this will mean when we enable preserve-smb-info
+	//   for sync.  Will folder sync just work fine as it does now, with no preservation of folder LMTs?
+	//syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (see TO DO on line above!) false, "False by default. Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is not preserved for folders. ")
 	//syncCmd.PersistentFlags().BoolVar(&raw.backupMode, common.BackupModeFlagName, false, "Activates Windows' SeBackupPrivilege for uploads, or SeRestorePrivilege for downloads, to allow AzCopy to see read all files, regardless of their file system permissions, and to restore all permissions. Requires that the account running AzCopy already has these permissions (e.g. has Administrator rights), because all this flag does is activate them")
 
 	syncCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage or downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
