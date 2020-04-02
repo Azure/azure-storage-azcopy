@@ -264,7 +264,7 @@ const trustedSuffixesAAD = "*.core.windows.net;*.core.chinacloudapi.cn;*.core.cl
 // checkAuthSafeForTarget checks our "implicit" auth types (those that pick up creds from the environment
 // or a prior login) to make sure they are only being used in places where we know those auth types are safe.
 // This prevents, for example, us accidentally sending OAuth creds to some place they don't belong
-func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD string) error {
+func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD string, resourceType common.Location) error {
 
 	getSuffixes := func(list string, extras string) []string {
 		extras = strings.Trim(extras, " ")
@@ -298,6 +298,16 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 		return nil
 	case common.ECredentialType.OAuthToken(),
 		common.ECredentialType.SharedKey():
+		// Files doesn't currently support OAuth, but it's a valid azure endpoint anyway, so it'll pass the check.
+		if resourceType != common.ELocation.Blob() && resourceType != common.ELocation.BlobFS() && resourceType != common.ELocation.File() {
+			// There may be a reason for files->blob to specify this.
+			if resourceType == common.ELocation.Local() {
+				return nil
+			}
+
+			return fmt.Errorf("azure OAuth authentication to %s is not enabled in AzCopy", resourceType.String())
+		}
+
 		// these are Azure auth types, so make sure the resource is known to be in Azure
 		domainSuffixes := getSuffixes(trustedSuffixesAAD, extraSuffixesAAD)
 		if host, ok := isResourceInSuffixList(domainSuffixes); !ok {
@@ -308,6 +318,11 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 		}
 
 	case common.ECredentialType.S3AccessKey():
+		if resourceType != common.ELocation.S3() {
+			//noinspection ALL
+			return fmt.Errorf("S3 access key authentication to %s is not enabled in AzCopy", resourceType.String())
+		}
+
 		// just check with minio. No need to have our own list of S3 domains, since minio effectively
 		// has that list already, we can't talk to anything outside that list because minio won't let us,
 		// and the parsing of s3 URL is non-trivial.  E.g. can't just look for the ending since
@@ -399,7 +414,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		}
 	}
 
-	if err = checkAuthSafeForTarget(credType, resource, cmdLineExtraSuffixesAAD); err != nil {
+	if err = checkAuthSafeForTarget(credType, resource, cmdLineExtraSuffixesAAD, location); err != nil {
 		return common.ECredentialType.Unknown(), false, err
 	}
 

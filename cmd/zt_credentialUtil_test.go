@@ -34,40 +34,44 @@ var _ = chk.Suite(&credentialUtilSuite{})
 func (s *credentialUtilSuite) TestCheckAuthSafeForTarget(c *chk.C) {
 	tests := []struct {
 		ct               common.CredentialType
+		resourceType     common.Location
 		resource         string
 		extraSuffixesAAD string
 		expectedOK       bool
 	}{
 		// these auth types deliberately don't get checked, i.e. always should be considered safe
-		{common.ECredentialType.Unknown(), "http://nowhere.com", "", true},
-		{common.ECredentialType.Anonymous(), "http://nowhere.com", "", true},
+		// invalid URLs are supposedly overridden as the resource type specified via --fromTo in this scenario
+		{common.ECredentialType.Unknown(), common.ELocation.Blob(), "http://nowhere.com", "", true},
+		{common.ECredentialType.Anonymous(), common.ELocation.Blob(), "http://nowhere.com", "", true},
 
 		// these ones get checked, so these should pass:
-		{common.ECredentialType.OAuthToken(), "http://myaccount.blob.core.windows.net", "", true},
-		{common.ECredentialType.OAuthToken(), "http://myaccount.blob.core.chinacloudapi.cn", "", true},
-		{common.ECredentialType.OAuthToken(), "http://myaccount.blob.core.cloudapi.de", "", true},
-		{common.ECredentialType.OAuthToken(), "http://myaccount.blob.core.core.usgovcloudapi.net", "", true},
-		{common.ECredentialType.SharedKey(), "http://myaccount.dfs.core.windows.net", "", true},
-		{common.ECredentialType.S3AccessKey(), "http://something.s3.eu-central-1.amazonaws.com", "", true},
-		{common.ECredentialType.S3AccessKey(), "http://something.s3.cn-north-1.amazonaws.com.cn", "", true},
-		{common.ECredentialType.S3AccessKey(), "http://s3.eu-central-1.amazonaws.com", "", true},
-		{common.ECredentialType.S3AccessKey(), "http://s3.cn-north-1.amazonaws.com.cn", "", true},
-		{common.ECredentialType.S3AccessKey(), "http://s3.amazonaws.com", "", true},
+		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.windows.net", "", true},
+		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.chinacloudapi.cn", "", true},
+		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.cloudapi.de", "", true},
+		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://myaccount.blob.core.core.usgovcloudapi.net", "", true},
+		{common.ECredentialType.SharedKey(), common.ELocation.BlobFS(), "http://myaccount.dfs.core.windows.net", "", true},
+		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://something.s3.eu-central-1.amazonaws.com", "", true},
+		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://something.s3.cn-north-1.amazonaws.com.cn", "", true},
+		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://s3.eu-central-1.amazonaws.com", "", true},
+		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://s3.cn-north-1.amazonaws.com.cn", "", true},
+		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://s3.amazonaws.com", "", true},
 
 		// These should fail (they are not storage)
-		{common.ECredentialType.OAuthToken(), "http://somethingelseinazure.windows.net", "", false},
-		{common.ECredentialType.S3AccessKey(), "http://somethingelseinaws.amazonaws.com", "", false},
+		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://somethingelseinazure.windows.net", "", false},
+		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://somethingelseinaws.amazonaws.com", "", false},
 
 		// As should these (they are nothing to do with the expected URLs)
-		{common.ECredentialType.OAuthToken(), "http://example.com", "", false},
-		{common.ECredentialType.S3AccessKey(), "http://example.com", "", false},
+		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://abc.example.com", "", false},
+		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://abc.example.com", "", false},
+		// Test that we don't want to send an S3 access key to a blob resource type.
+		{common.ECredentialType.S3AccessKey(), common.ELocation.Blob(), "http://abc.example.com", "", false},
 
 		// But the same Azure one should pass if the user opts in to them (we don't support any similar override for S3)
-		{common.ECredentialType.OAuthToken(), "http://example.com", "*.foo.com;*.example.com", false},
+		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://abc.example.com", "*.foo.com;*.example.com", true},
 	}
 
 	for i, t := range tests {
-		err := checkAuthSafeForTarget(t.ct, t.resource, t.extraSuffixesAAD)
+		err := checkAuthSafeForTarget(t.ct, t.resource, t.extraSuffixesAAD, t.resourceType)
 		c.Assert(err == nil, chk.Equals, t.expectedOK, chk.Commentf("Failed on test %d for resource %s", i, t.resource))
 	}
 }
