@@ -125,11 +125,10 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 	walkQueue := []walkItem{{fullPath: fullPath, relativeBase: ""}}
 
 	// do NOT put fullPath: true into the map at this time, because we want to match the semantics of filepath.Walk, where the walkfunc is called for the root
-	// Only track seen directories (not directories + files) because including files would greatly increase RAM usage on large folder trees,
-	// and is unnecessary because symlinks to individual files can't create cycles.
-	var seenDirs seenPathsRecorder = &nullSeenPathsRecorder{} // uses no RAM
+	// When following symlinks, our current implementation tracks folders and files.  Which may consume GB's of RAM when there are 10s of millions of files.
+	var seenPaths seenPathsRecorder = &nullSeenPathsRecorder{} // uses no RAM
 	if followSymlinks {
-		seenDirs = &realSeenPathsRecorder{make(map[string]struct{})} // have to use the RAM if we are dealing with symlinks, to prevent cycles
+		seenPaths = &realSeenPathsRecorder{make(map[string]struct{})} // have to use the RAM if we are dealing with symlinks, to prevent cycles
 	}
 
 	for len(walkQueue) > 0 {
@@ -176,9 +175,9 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 				}
 
 				if rStat.IsDir() {
-					if !seenDirs.HasSeen(result) {
-						seenDirs.Record(result)
-						seenDirs.Record(slPath) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
+					if !seenPaths.HasSeen(result) {
+						seenPaths.Record(result)
+						seenPaths.Record(slPath) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
 						walkQueue = append(walkQueue, walkItem{
 							fullPath:     result,
 							relativeBase: computedRelativePath,
@@ -218,18 +217,18 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 					return nil
 				}
 
-				if fileInfo.IsDir() {
-					if !seenDirs.HasSeen(result) {
-						seenDirs.Record(result)
-						return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
-					} else {
+				if !seenPaths.HasSeen(result) {
+					seenPaths.Record(result)
+					return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
+				} else {
+					if fileInfo.IsDir() {
 						// We can't output a warning here (and versions 10.3.x never did)
 						// because we'll hit this for the directory that is the direct (root) target of any symlink, so any warning here would be a red herring.
 						// In theory there might be cases when a warning here would be correct - but they are rare and too hard to identify in our code
-						return nil
+					} else {
+						glcm.Info(fmt.Sprintf("Ignored already seen file located at %s (found at %s)", filePath, common.GenerateFullPath(fullPath, computedRelativePath)))
 					}
-				} else {
-					return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
+					return nil
 				}
 			}
 		})
