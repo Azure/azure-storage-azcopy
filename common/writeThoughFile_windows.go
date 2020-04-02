@@ -210,17 +210,19 @@ func OpenWithWriteThroughSetting(path string, mode int, perm uint32, writeThroug
 
 // SetBackupMode optionally enables special priviledges on Windows.
 // For a description, see https://docs.microsoft.com/en-us/windows-hardware/drivers/ifs/privileges
+// and https://superuser.com/a/1430372
 // and run this: whoami /priv
 // from an Administrative command prompt (where lots of privileges should exist, but be disabled)
 // and compare with running the same command from a non-admin prompt, where they won't even exist.
 // Note that this is particularly useful in two contexts:
 // 1. Uploading data where normal file system ACLs would prevent AzCopy from reading it. Simply run
 // AzCopy as an account that has SeBackupPrivilege (typically an administrator account using
-// an elevated command prompt) and set the AzCopy flag for this routine to be called.
+// an elevated command prompt, or a member of the "Backup Operators" group)
+//  and set the AzCopy flag for this routine to be called.
 // 2. Downloading where you are preserving SMB permissions, and some of the permissions include
 // owners that are NOT the same account as the one running AzCopy.  Again, run AzCopy
-// from a elevated admin command prompt, and use this routine to enable SeRestorePrivilege.  Then
-// AzCopy will be able to set the owners.
+// from a elevated admin command prompt (or as a member of the "Backup Operators" group),
+// and use this routine to enable SeRestorePrivilege.  Then AzCopy will be able to set the owners.
 func SetBackupMode(enable bool, fromTo FromTo) error {
 	if !enable {
 		return nil
@@ -279,7 +281,7 @@ func SetBackupMode(enable bool, fromTo FromTo) error {
 			// If there were none, that means it didn't work
 			return errors.New("could not activate '" + BackupModeFlagName + "' mode.  Probably the account running AzCopy does not have " +
 				privName + " so AzCopy could not activate that privilege. Administrators usually have that privilege, but only when they are in an elevated command prompt. " +
-				"To check which privileges an account has, run this from a command line: whoami /priv")
+				"Members of the 'Backup Operators' security group also have that privilege. To check which privileges an account has, run this from a command line: whoami /priv")
 		}
 	}
 

@@ -11,11 +11,13 @@ using the --persist-smb-info flag. The information that can be preserved is Crea
 1. AzCopy can now transfer empty folders, and also transfer the properties of folders. This applies when both the source 
 and destination support real folders (Blob Storage does not, because it only supports virtual folders).
 1. On Windows, AzCopy can now activate the special privileges `SeBackupPrivilege` and `SeRestorePrivilege`.  Most admin-level 
-accounts have these privileges in a deactivated state.  If you run AzCopy from an elevated command prompt,
-and supply the new flag `--backup`, AzCopy will activate the privileges. At upload time, this allows AzCopy to read files 
+accounts have these privileges in a deactivated state, as do all members of the "Backup Operators" security group.  
+If you run AzCopy as one of those users 
+and supply the new flag `--backup`, AzCopy will activate the privileges. (Use an elevated command prompt, if running as Admin).
+At upload time, this allows AzCopy to read files 
 which you wouldn't otherwise have permission to see. At download time, it works with the `--preserve-smb-permissions` flag
 to allow preservation of permissions where the Owner is not the user running AzCopy.  The `--backup` flag will report a failure 
-if the privileges cannot be activated (e.g. because you aren't running from a elevated Admin prompt). 
+if the privileges cannot be activated.   
 1. Status output from AzCopy `copy`, `sync`, `jobs list`, and `jobs status` now contains information about folders.
    This includes new properties in the JSON output of copy, sync, list and jobs status commands, when `--output-type
    json` is used.
