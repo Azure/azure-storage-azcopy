@@ -24,7 +24,7 @@ func (f localFileSourceInfoProvider) Open(path string) (*os.File, error) {
 	}
 	// custom open call, because must specify FILE_FLAG_BACKUP_SEMANTICS to make --backup mode work properly (i.e. our use of SeBackupPrivilege)
 	fd, err := windows.CreateFile(srcPtr,
-		windows.GENERIC_READ, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil,
+		windows.GENERIC_READ, windows.FILE_SHARE_READ, nil,
 		windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
 	if err != nil {
 		return nil, err

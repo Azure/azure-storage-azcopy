@@ -124,7 +124,7 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 		if toRetry && tryClearFlagSet(toClearFlagSet) {
 			fd, err = doOpen()
 		} else {
-			return nil, fmt.Errorf("destination file has " + getIssueFlagStrings(allFlags) + " and azcopy was unable to clear the flag(s), so access will be denied.")
+			return nil, fmt.Errorf("destination file has "+getIssueFlagStrings(allFlags)+" and azcopy was unable to clear the flag(s), so access will be denied: %w", err)
 		}
 	}
 	if err != nil {
@@ -180,7 +180,7 @@ func OpenWithWriteThroughSetting(path string, mode int, perm uint32, writeThroug
 		access &^= windows.GENERIC_WRITE
 		access |= windows.FILE_APPEND_DATA
 	}
-	sharemode := uint32(windows.FILE_SHARE_READ | windows.FILE_SHARE_WRITE)
+	sharemode := uint32(windows.FILE_SHARE_READ)
 	var sa *windows.SecurityAttributes
 	if mode&syscall.O_CLOEXEC == 0 {
 		sa = makeInheritSa()
