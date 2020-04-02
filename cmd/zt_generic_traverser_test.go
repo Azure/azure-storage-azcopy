@@ -171,7 +171,7 @@ func (s *genericTraverserSuite) TestS3GetProperties(c *chk.C) {
 }
 
 // Test follow symlink functionality
-func (s *genericTraverserSuite) TestWalkWithSymlinks(c *chk.C) {
+func (s *genericTraverserSuite) TestWalkWithSymlinks_ToFolder(c *chk.C) {
 	fileNames := []string{"March 20th is international happiness day.txt", "wonderwall but it goes on and on and on.mp3", "bonzi buddy.exe"}
 	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(tmpDir)
@@ -181,13 +181,21 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks(c *chk.C) {
 
 	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, fileNames)
 	scenarioHelper{}.generateLocalFilesFromList(c, symlinkTmpDir, fileNames)
-	trySymlink(symlinkTmpDir, filepath.Join(tmpDir, "so long and thanks for all the fish"), c)
+	dirLinkName := "so long and thanks for all the fish"
+	time.Sleep(2 * time.Second) // to be sure to get different LMT for link, compared to root, so we can make assertions later about whose fileInfo we get
+	trySymlink(symlinkTmpDir, filepath.Join(tmpDir, dirLinkName), c)
 
 	fileCount := 0
+	sawLinkTargetDir := false
 	c.Assert(WalkWithSymlinks(tmpDir, func(path string, fi os.FileInfo, err error) error {
 		c.Assert(err, chk.IsNil)
 
 		if fi.IsDir() {
+			if fi.Name() == dirLinkName {
+				sawLinkTargetDir = true
+				s, _ := os.Stat(symlinkTmpDir)
+				c.Assert(fi.ModTime().UTC(), chk.Equals, s.ModTime().UTC())
+			}
 			return nil
 		}
 
@@ -198,7 +206,49 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks(c *chk.C) {
 
 	// 3 files live in base, 3 files live in symlink
 	c.Assert(fileCount, chk.Equals, 6)
+	c.Assert(sawLinkTargetDir, chk.Equals, true)
 }
+
+// Next test is temporarily disabled, to avoid changing functionality near 10.4 release date
+/*
+// symlinks are not just to folders. They may be to individual files
+func (s *genericTraverserSuite) TestWalkWithSymlinks_ToFile(c *chk.C) {
+	mainDirFilenames := []string{"iAmANormalFile.txt"}
+	symlinkTargetFilenames := []string{"iAmASymlinkTargetFile.txt"}
+	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(tmpDir)
+	symlinkTmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(symlinkTmpDir)
+	c.Assert(tmpDir, chk.Not(chk.Equals), symlinkTmpDir)
+
+	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, mainDirFilenames)
+	scenarioHelper{}.generateLocalFilesFromList(c, symlinkTmpDir, symlinkTargetFilenames)
+	trySymlink(filepath.Join(symlinkTmpDir, symlinkTargetFilenames[0]), filepath.Join(tmpDir, "iPointToTheSymlink"), c)
+	trySymlink(filepath.Join(symlinkTmpDir, symlinkTargetFilenames[0]), filepath.Join(tmpDir, "iPointToTheSameSymlink"), c)
+
+	fileCount := 0
+	c.Assert(WalkWithSymlinks(tmpDir, func(path string, fi os.FileInfo, err error) error {
+		c.Assert(err, chk.IsNil)
+
+		if fi.IsDir() {
+			return nil
+		}
+
+		fileCount++
+		if fi.Name() != "iAmANormalFile.txt" {
+			c.Assert(strings.HasPrefix(path, tmpDir), chk.Equals, true)                  // the file appears to have the location of the symlink source (not the dest)
+			c.Assert(strings.HasPrefix(filepath.Base(path), "iPoint"), chk.Equals, true) // the file appears to have the name of the symlink source (not the dest)
+			c.Assert(strings.HasPrefix(fi.Name(), "iPoint"), chk.Equals, true)           // and it still appears to have that name when we look it the fileInfo
+		}
+		return nil
+	},
+		true), chk.IsNil)
+
+	// 1 file is in base, 2 are pointed to by a symlink (the fact that both point to the same file is does NOT prevent us
+	// processing them both. For efficiency of dedupe algorithm, we only dedupe directories, not files).
+	c.Assert(fileCount, chk.Equals, 3)
+}
+*/
 
 // Test cancel symlink loop functionality
 func (s *genericTraverserSuite) TestWalkWithSymlinksBreakLoop(c *chk.C) {
