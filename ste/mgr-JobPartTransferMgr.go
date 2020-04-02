@@ -85,6 +85,7 @@ type IJobPartTransferMgr interface {
 	DeleteSnapshotsOption() common.DeleteSnapshotsOption
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 	FolderDeletionManager() common.FolderDeletionManager
+	GetDestinationRoot() string
 }
 
 type TransferInfo struct {
@@ -114,6 +115,20 @@ type TransferInfo struct {
 
 func (i TransferInfo) IsFolderPropertiesTransfer() bool {
 	return i.EntityType == common.EEntityType.Folder()
+}
+
+// We don't preserve LMTs on folders.
+// The main reason is that preserving folder LMTs at download time is very difficult, because it requires us to keep track of when the
+// last file has been saved in each folder OR just do all the folders at the very end.
+// This is because if we modify the contents of a folder after setting its LMT, then the LMT will change because Windows and Linux
+//(and presumably MacOS) automatically update the folder LMT when the contents are changed.
+// The possible solutions to this problem may become difficult on very large jobs (e.g. 10s or hundreds of millions of files,
+// with millions of directories).
+// The secondary reason is that folder LMT's don't actually tell the user anything particularly useful. Specifically,
+// they do NOT tell you when the folder contents (recursively) were last updated: in Azure Files they are never updated
+// when folder contents change; and in NTFS they are only updated when immediate children are changed (not grandchildren).
+func (i TransferInfo) ShouldTransferLastWriteTime() bool {
+	return !i.IsFolderPropertiesTransfer()
 }
 
 // entityTypeLogIndicator returns a string that can be used in logging to distinguish folder property transfers from "normal" transfers.
@@ -816,4 +831,9 @@ func (jptm *jobPartTransferMgr) SecurityInfoPersistenceManager() *securityInfoPe
 
 func (jptm *jobPartTransferMgr) FolderDeletionManager() common.FolderDeletionManager {
 	return jptm.jobPartMgr.FolderDeletionManager()
+}
+
+func (jptm *jobPartTransferMgr) GetDestinationRoot() string {
+	p := jptm.jobPartMgr.Plan()
+	return string(p.DestinationRoot[:p.DestinationRootLength])
 }

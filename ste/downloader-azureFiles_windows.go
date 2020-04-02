@@ -4,8 +4,11 @@ package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"path/filepath"
+	"strings"
 	"syscall"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 
 	"golang.org/x/sys/windows"
 )
@@ -19,46 +22,56 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 		return err
 	}
 
-	attribs := propHolder.FileAttributes()
-
 	destPtr, err := syscall.UTF16PtrFromString(txInfo.Destination)
 	if err != nil {
 		return err
 	}
 
-	// This is a safe conversion.
-	err = windows.SetFileAttributes(destPtr, uint32(attribs))
+	setAttributes := func() error {
+		attribs := propHolder.FileAttributes()
+		// This is a safe conversion.
+		return windows.SetFileAttributes(destPtr, uint32(attribs))
+	}
+
+	setDates := func() error {
+		smbCreation := propHolder.FileCreationTime()
+
+		// Should we do it here as well??
+		smbLastWrite := propHolder.FileLastWriteTime()
+
+		// need custom CreateFile call because need FILE_WRITE_ATTRIBUTES
+		fd, err := windows.CreateFile(destPtr,
+			windows.FILE_WRITE_ATTRIBUTES, windows.FILE_SHARE_READ, nil,
+			windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+		if err != nil {
+			return err
+		}
+		defer windows.Close(fd)
+
+		// windows.NsecToFileTime does the opposite of FileTime.Nanoseconds, and adjusts away the unix epoch for windows.
+		smbCreationFileTime := windows.NsecToFiletime(smbCreation.UnixNano())
+		smbLastWriteFileTime := windows.NsecToFiletime(smbLastWrite.UnixNano())
+
+		pLastWriteTime := &smbLastWriteFileTime
+		if !txInfo.ShouldTransferLastWriteTime() {
+			pLastWriteTime = nil
+		}
+
+		return windows.SetFileTime(fd, &smbCreationFileTime, nil, pLastWriteTime)
+	}
+
+	// =========== set file times before we set attributes, to make sure the time-setting doesn't
+	// reset archive attribute.  There's currently no risk of the attribute-setting messing with the times,
+	// because we only set the last (content) "write time", not the last (metadata) "change time" =====
+	err = setDates()
 	if err != nil {
 		return err
 	}
-
-	// =========== set file times ===========
-
-	smbCreation := propHolder.FileCreationTime()
-
-	// Should we do it here as well??
-	smbLastWrite := propHolder.FileLastWriteTime()
-
-	// need custom CreateFile call because need FILE_WRITE_ATTRIBUTES
-	fd, err := windows.CreateFile(destPtr,
-		windows.FILE_WRITE_ATTRIBUTES, windows.FILE_SHARE_READ, nil,
-		windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
-	if err != nil {
-		return err
-	}
-	defer windows.Close(fd)
-
-	// windows.NsecToFileTime does the opposite of FileTime.Nanoseconds, and adjusts away the unix epoch for windows.
-	smbCreationFileTime := windows.NsecToFiletime(smbCreation.UnixNano())
-	smbLastWriteFileTime := windows.NsecToFiletime(smbLastWrite.UnixNano())
-
-	err = windows.SetFileTime(fd, &smbCreationFileTime, nil, &smbLastWriteFileTime)
-
-	return err
+	return setAttributes()
 }
 
 // works for both folders and files
-func (*azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
+func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
 	// Let's start by getting our SDDL and parsing it.
 	sddlString, err := sip.GetSDDL()
 	// TODO: be better at handling these errors.
@@ -76,6 +89,36 @@ func (*azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, 
 	sd, err := windows.SecurityDescriptorFromString(sddlString)
 	if err != nil {
 		return fmt.Errorf("parsing SDDL: %s", err)
+	}
+
+	ctl, _, err := sd.Control()
+	if err != nil {
+		return fmt.Errorf("getting control bits: %w", err)
+	}
+
+	var securityInfoFlags windows.SECURITY_INFORMATION = windows.OWNER_SECURITY_INFORMATION | windows.GROUP_SECURITY_INFORMATION | windows.DACL_SECURITY_INFORMATION
+
+	// remove everything down to the if statement to return to xcopy functionality
+	// Obtain the destination root and figure out if we're at the top level of the transfer.
+	destRoot := a.jptm.GetDestinationRoot()
+	relPath, err := filepath.Rel(destRoot, txInfo.Destination)
+
+	if err != nil {
+		// This should never ever happen.
+		panic("couldn't find relative path from root")
+	}
+
+	// Golang did not cooperate with backslashes with filepath.SplitList.
+	splitPath := strings.Split(relPath, common.DeterminePathSeparator(relPath))
+
+	// To achieve robocopy like functionality, and maintain the ability to add new permissions in the middle of the copied file tree,
+	//     we choose to protect both already protected files at the source, and to protect the entire root folder of the transfer.
+	//     Protected files and folders experience no inheritance from their parents (but children do experience inheritance)
+	isProtectedAtSource := (ctl & windows.SE_DACL_PROTECTED) != 0
+	isAtTransferRoot := len(splitPath) == 1
+
+	if isProtectedAtSource || isAtTransferRoot {
+		securityInfoFlags |= windows.PROTECTED_DACL_SECURITY_INFORMATION
 	}
 
 	owner, _, err := sd.Owner()
@@ -96,7 +139,7 @@ func (*azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, 
 	// Then let's set the security info.
 	err = windows.SetNamedSecurityInfo(txInfo.Destination,
 		windows.SE_FILE_OBJECT,
-		windows.OWNER_SECURITY_INFORMATION|windows.GROUP_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION,
+		securityInfoFlags,
 		owner,
 		group,
 		dacl,

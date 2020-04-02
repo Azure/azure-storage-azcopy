@@ -258,7 +258,7 @@ type rawFromToInfo struct {
 	sourceSAS, destinationSAS string // Standalone SAS which might be provided
 }
 
-const trustedSuffixesNameAAD = "trusted-aad-suffixes"
+const trustedSuffixesNameAAD = "trusted-microsoft-suffixes"
 const trustedSuffixesAAD = "*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net"
 
 // checkAuthSafeForTarget checks our "implicit" auth types (those that pick up creds from the environment
