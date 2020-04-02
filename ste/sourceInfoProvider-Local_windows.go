@@ -4,7 +4,9 @@ package ste
 
 import (
 	"github.com/Azure/azure-storage-azcopy/common"
+	"os"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -13,7 +15,28 @@ import (
 	"github.com/Azure/azure-storage-azcopy/sddl"
 )
 
-// This file os-triggers the ISMBPropertyBearingSourceInfoProvider interface on a local SIP.
+// This file os-triggers the ISMBPropertyBearingSourceInfoProvider and CustomLocalOpener interfaces on a local SIP.
+
+func (f localFileSourceInfoProvider) Open(path string) (*os.File, error) {
+	srcPtr, err := syscall.UTF16PtrFromString(path)
+	if err != nil {
+		return nil, err
+	}
+	// custom open call, because must specify FILE_FLAG_BACKUP_SEMANTICS to make --backup mode work properly (i.e. our use of SeBackupPrivilege)
+	fd, err := windows.CreateFile(srcPtr,
+		windows.GENERIC_READ, windows.FILE_SHARE_READ, nil,
+		windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	file := os.NewFile(uintptr(fd), path)
+	if file == nil {
+		return nil, os.ErrInvalid
+	}
+
+	return file, nil
+}
 
 func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	// We only need Owner, Group, and DACLs for azure files.

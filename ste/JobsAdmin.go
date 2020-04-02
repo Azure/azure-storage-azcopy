@@ -107,7 +107,7 @@ var JobsAdmin interface {
 	RequestTuneSlowly()
 }
 
-func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targetRateInMegaBitsPerSec int64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {
+func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {
 	if JobsAdmin != nil {
 		panic("initJobsAdmin was already called once")
 	}
@@ -145,7 +145,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 	var pacer pacerAdmin = newNullAutoPacer()
 	if targetRateInMegaBitsPerSec > 0 {
 		// use the "networking mega" (based on powers of 10, not powers of 2, since that's what mega means in networking context)
-		targetRateInBytesPerSec := targetRateInMegaBitsPerSec * 1000 * 1000 / 8
+		targetRateInBytesPerSec := int64(targetRateInMegaBitsPerSec * 1000 * 1000 / 8)
 		unusedExpectedCoarseRequestByteCount := uint32(0)
 		pacer = newTokenBucketPacer(targetRateInBytesPerSec, unusedExpectedCoarseRequestByteCount)
 		// Note: as at July 2019, we don't currently have a shutdown method/event on JobsAdmin where this pacer
@@ -500,7 +500,7 @@ type jobsAdmin struct {
 	fileCountLimiter            common.CacheLimiter
 	workaroundJobLoggingChannel chan string
 	concurrencyTuner            ConcurrencyTuner
-	commandLineMbpsCap          int64
+	commandLineMbpsCap          float64
 	provideBenchmarkResults     bool
 	cpuMonitor                  common.CPUMonitor
 }

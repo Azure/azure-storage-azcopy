@@ -15,6 +15,8 @@ import (
 	minio "github.com/minio/minio-go"
 )
 
+var enumerationParallelism = 1
+
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
 func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
 	// Remove the source and destination roots from the path to save space in the plan files

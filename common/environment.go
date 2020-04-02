@@ -100,6 +100,14 @@ func (EnvironmentVariable) TransferInitiationPoolSize() EnvironmentVariable {
 	}
 }
 
+func (EnvironmentVariable) EnumerationPoolSize() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_CONCURRENT_SCAN",
+		Description: "Controls the (max) degree of parallelism used during enumeration. Only affects parallelized enumerators",
+		Hidden:      true, // hidden for now. We might not need to make it public? E.g. if we just cap it to the concurrency value or something?
+	}
+}
+
 func (EnvironmentVariable) OptimizeSparsePageBlobTransfers() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:         "AZCOPY_OPTIMIZE_SPARSE_PAGE_BLOB",

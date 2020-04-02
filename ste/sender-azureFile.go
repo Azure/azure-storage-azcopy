@@ -284,7 +284,7 @@ func (u *azureFileSenderBase) addPermissionsToHeaders(info TransferInfo, destUrl
 }
 
 func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info TransferInfo, destUrl url.URL) (stage string, err error) {
-	if !info.PreserveSMBProperties {
+	if !info.PreserveSMBInfo {
 		return "", nil
 	}
 	if smbSIP, ok := u.sip.(ISMBPropertyBearingSourceInfoProvider); ok {
@@ -297,8 +297,10 @@ func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info TransferInfo, destU
 		attribs := smbProps.FileAttributes()
 		u.headersToApply.FileAttributes = &attribs
 
-		lwTime := smbProps.FileLastWriteTime()
-		u.headersToApply.FileLastWriteTime = &lwTime
+		if info.ShouldTransferLastWriteTime() {
+			lwTime := smbProps.FileLastWriteTime()
+			u.headersToApply.FileLastWriteTime = &lwTime
+		}
 
 		creationTime := smbProps.FileCreationTime()
 		u.headersToApply.FileCreationTime = &creationTime
@@ -307,14 +309,20 @@ func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info TransferInfo, destU
 }
 
 func (u *azureFileSenderBase) Epilogue() {
-	if u.jptm.IsLive() &&
-		u.headersToApply.FileAttributes != nil &&
-		u.headersToApply.FileAttributes.Has(azfile.FileAttributeReadonly) {
-		// we apply (all) the headers again, because we deliberately omitted the readonly
-		// at creation time.  This is an extra round trip, but we can live with that for the readonly case.
+	// when readonly=true we deliberately omit it a creation time, so must set it here
+	resendReadOnly := u.headersToApply.FileAttributes != nil &&
+		u.headersToApply.FileAttributes.Has(azfile.FileAttributeReadonly)
+
+	// when archive bit is false, it must be set in a separate call (like we do here). As at March 2020,
+	// the Service does not respect attempts to set it to false at time of creating the file.
+	resendArchive := u.headersToApply.FileAttributes != nil &&
+		u.headersToApply.FileAttributes.Has(azfile.FileAttributeArchive) == false
+
+	if u.jptm.IsLive() && (resendReadOnly || resendArchive) && u.jptm.Info().PreserveSMBInfo {
+		//This is an extra round trip, but we can live with that for these relatively rare cases
 		_, err := u.fileURL().SetHTTPHeaders(u.ctx, u.headersToApply)
 		if err != nil {
-			u.jptm.FailActiveSend("Setting read-only attribute", err)
+			u.jptm.FailActiveSend("Applying final attribute settings", err)
 		}
 	}
 }
