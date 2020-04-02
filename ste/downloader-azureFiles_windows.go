@@ -4,13 +4,14 @@ package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"unsafe"
 
+	"github.com/Azure/azure-storage-azcopy/common"
+
 	"golang.org/x/sys/windows"
-	"syscall"
 )
 
 // This file implements the windows-triggered smbPropertyAwareDownloader interface.
