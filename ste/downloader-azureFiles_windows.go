@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"unsafe"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 
@@ -19,18 +20,22 @@ import (
 func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
 	propHolder, err := sip.GetSMBProperties()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed get SMB properties: %w", err)
 	}
 
 	destPtr, err := syscall.UTF16PtrFromString(txInfo.Destination)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed convert destination string to UTF16 pointer: %w", err)
 	}
 
 	setAttributes := func() error {
 		attribs := propHolder.FileAttributes()
 		// This is a safe conversion.
-		return windows.SetFileAttributes(destPtr, uint32(attribs))
+		err := windows.SetFileAttributes(destPtr, uint32(attribs))
+		if err != nil {
+			return fmt.Errorf("attempted file set attributes: %w", err)
+		}
+		return nil
 	}
 
 	setDates := func() error {
@@ -39,12 +44,16 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 		// Should we do it here as well??
 		smbLastWrite := propHolder.FileLastWriteTime()
 
+		var sa windows.SecurityAttributes
+		sa.Length = uint32(unsafe.Sizeof(sa))
+		sa.InheritHandle = 1
+
 		// need custom CreateFile call because need FILE_WRITE_ATTRIBUTES
 		fd, err := windows.CreateFile(destPtr,
-			windows.FILE_WRITE_ATTRIBUTES, windows.FILE_SHARE_READ, nil,
+			windows.FILE_WRITE_ATTRIBUTES, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, &sa,
 			windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
 		if err != nil {
-			return err
+			return fmt.Errorf("attempted file open: %w", err)
 		}
 		defer windows.Close(fd)
 
@@ -57,7 +66,11 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 			pLastWriteTime = nil
 		}
 
-		return windows.SetFileTime(fd, &smbCreationFileTime, nil, pLastWriteTime)
+		err = windows.SetFileTime(fd, &smbCreationFileTime, nil, pLastWriteTime)
+		if err != nil {
+			err = fmt.Errorf("attempted update file times: %w", err)
+		}
+		return nil
 	}
 
 	// =========== set file times before we set attributes, to make sure the time-setting doesn't

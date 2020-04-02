@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -43,7 +42,7 @@ func determineLocationLevel(location string, locationType common.Location, sourc
 			return level, nil // Return the assumption.
 		}
 
-		fi, err := os.Stat(location)
+		fi, err := common.OSStat(location)
 
 		if err != nil {
 			return level, nil // Return the assumption.

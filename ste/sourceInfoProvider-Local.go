@@ -69,7 +69,7 @@ func (f localFileSourceInfoProvider) OpenSourceFile() (common.CloseableReaderAt,
 }
 
 func (f localFileSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
-	i, err := os.Stat(f.jptm.Info().Source)
+	i, err := common.OSStat(f.jptm.Info().Source)
 	if err != nil {
 		return time.Time{}, err
 	}
