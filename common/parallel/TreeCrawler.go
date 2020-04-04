@@ -31,9 +31,10 @@ type crawler struct {
 	workerBody  EnumerateOneDirFunc
 	parallelism int
 	cond        *sync.Cond
-	// the following is protected by cond (and must only be accessed when cond.L is held)
+	// the following are protected by cond (and must only be accessed when cond.L is held)
 	unstartedDirs      []Directory // not a channel, because channels have length limits, and those get in our way
 	dirInProgressCount int64
+	lastAutoShutdown   time.Time
 }
 
 type Directory interface{}
@@ -87,18 +88,18 @@ func (c *crawler) runWorkersToCompletion(ctx context.Context) {
 	wg := &sync.WaitGroup{}
 	for i := 0; i < c.parallelism; i++ {
 		wg.Add(1)
-		go c.workerLoop(ctx, wg)
+		go c.workerLoop(ctx, wg, i)
 	}
 	wg.Wait()
 }
 
-func (c *crawler) workerLoop(ctx context.Context, wg *sync.WaitGroup) {
+func (c *crawler) workerLoop(ctx context.Context, wg *sync.WaitGroup, workerIndex int) {
 	defer wg.Done()
 
 	var err error
 	mayHaveMore := true
 	for mayHaveMore && ctx.Err() == nil {
-		mayHaveMore, err = c.processOneDirectory(ctx)
+		mayHaveMore, err = c.processOneDirectory(ctx, workerIndex)
 		if err != nil {
 			c.output <- CrawlResult{err: err}
 			// output the error, but we don't necessarily stop the enumeration (e.g. it might be one unreadable dir)
@@ -106,7 +107,7 @@ func (c *crawler) workerLoop(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-func (c *crawler) processOneDirectory(ctx context.Context) (bool, error) {
+func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (bool, error) {
 	var toExamine Directory
 	stop := false
 
@@ -163,9 +164,25 @@ func (c *crawler) processOneDirectory(ctx context.Context) (bool, error) {
 	c.cond.L.Lock()
 	defer c.cond.L.Unlock()
 
-	c.unstartedDirs = append(c.unstartedDirs, foundDirectories...)
-	c.dirInProgressCount--                        // we were doing something, and now we have finished it
-	c.cond.Broadcast()                            // let other workers know that the state has changed
+	c.unstartedDirs = append(c.unstartedDirs, foundDirectories...) // do NOT try to wait here if unstartedDirs is getting big. May cause deadlocks, due to all workers waiting and none processing the queue
+	c.dirInProgressCount--                                         // we were doing something, and now we have finished it
+	c.cond.Broadcast()                                             // let other workers know that the state has changed
+
+	// If our queue of unstarted stuff is getting really huge,
+	// reduce our parallelism in the hope of preventing further excessive RAM growth.
+	// (It's impossible to know exactly what to do here, because we don't know whether more workers would _clear_
+	// the queue more quickly; or _add to_ the queue more quickly.  It depends on whether the directories we process
+	// next contain mostly directories or if they are "leaf" directories containing mostly just files.  But,
+	// if we slowly reduce parallelism the end state is roughly equivalent to a single-threaded depth-first traversal, which
+	// is generally fine in terms of memory usage on most folder structures)
+	const maxQueueDirectories = 1000 * 1000
+	shouldShutSelfDown := len(c.unstartedDirs) > maxQueueDirectories && // we are getting way too much stuff queued up
+		workerIndex > (c.parallelism/4) && // never shut down the last ones, since we need something left to clear the queue in the case where we fall back to basically single-threaded depth-wise traversal
+		time.Since(c.lastAutoShutdown) > time.Second // adjust slightly gradually
+	if shouldShutSelfDown {
+		c.lastAutoShutdown = time.Now()
+		return false, bodyErr
+	}
 
 	return true, bodyErr // true because, as far as we know, the work is not finished. And err because it was the err (if any) from THIS dir
 }
