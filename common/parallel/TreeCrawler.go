@@ -172,12 +172,12 @@ func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (boo
 	// reduce our parallelism in the hope of preventing further excessive RAM growth.
 	// (It's impossible to know exactly what to do here, because we don't know whether more workers would _clear_
 	// the queue more quickly; or _add to_ the queue more quickly.  It depends on whether the directories we process
-	// next contain mostly directories or if they are "leaf" directories containing mostly just files.  But,
+	// next contain mostly child directories or if they are "leaf" directories containing mostly just files.  But,
 	// if we slowly reduce parallelism the end state is roughly equivalent to a single-threaded depth-first traversal, which
 	// is generally fine in terms of memory usage on most folder structures)
 	const maxQueueDirectories = 1000 * 1000
 	shouldShutSelfDown := len(c.unstartedDirs) > maxQueueDirectories && // we are getting way too much stuff queued up
-		workerIndex > (c.parallelism/4) && // never shut down the last ones, since we need something left to clear the queue in the case where we fall back to basically single-threaded depth-wise traversal
+		workerIndex > (c.parallelism/4) && // never shut down the last ones, since we need something left to clear the queue
 		time.Since(c.lastAutoShutdown) > time.Second // adjust slightly gradually
 	if shouldShutSelfDown {
 		c.lastAutoShutdown = time.Now()
