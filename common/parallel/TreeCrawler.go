@@ -32,7 +32,7 @@ type crawler struct {
 	parallelism int
 	cond        *sync.Cond
 	// the following is protected by cond (and must only be accessed when cond.L is held)
-	unstartedDirs      chan Directory // protected by cond.L because we use len() on this, and need to hold lock while making len-based decisions
+	unstartedDirs      []Directory // not a channel, because channels have length limits, and those get in our way
 	dirInProgressCount int64
 }
 
@@ -53,7 +53,7 @@ type EnumerateOneDirFunc func(dir Directory, enqueueDir func(Directory), enqueue
 
 func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int) <-chan ErrorableItem {
 	c := &crawler{
-		unstartedDirs: make(chan Directory, 1000),
+		unstartedDirs: make([]Directory, 0, 1024),
 		output:        make(chan ErrorableItem, 1000),
 		workerBody:    worker,
 		parallelism:   parallelism,
@@ -77,7 +77,7 @@ func (c *crawler) start(ctx context.Context, root Directory) {
 	}
 	go heartbeat()
 
-	c.unstartedDirs <- root
+	c.unstartedDirs = append(c.unstartedDirs, root)
 	c.runWorkersToCompletion(ctx)
 	close(c.output)
 	close(done)
@@ -125,11 +125,17 @@ func (c *crawler) processOneDirectory(ctx context.Context) (bool, error) {
 		// if we have something to do now, grab it. Else we must be all finished with nothing more to do (ever)
 		stop = ctx.Err() != nil
 		if !stop {
-			select {
-			case toExamine = <-c.unstartedDirs:
+			if len(c.unstartedDirs) > 0 {
+				// Pop dir from end of list
+				// We take the last one because that gives more of a depth-first flavour to our processing
+				// which (we think) will prevent c.unstartedDirs getting really large on a broad directory tree.
+				lastIndex := len(c.unstartedDirs) - 1
+				toExamine = c.unstartedDirs[lastIndex]
+				c.unstartedDirs = c.unstartedDirs[0:lastIndex]
+
 				c.dirInProgressCount++ // record that we are working on something
 				c.cond.Broadcast()     // and let other threads know of that fact
-			default:
+			} else {
 				if c.dirInProgressCount > 0 {
 					// something has gone wrong in the design of this algorithm, because we should only get here if all done now
 					panic("assertion failure: should be no more dirs in progress here")
@@ -156,11 +162,10 @@ func (c *crawler) processOneDirectory(ctx context.Context) (bool, error) {
 	// finally, update shared state (inside the lock)
 	c.cond.L.Lock()
 	defer c.cond.L.Unlock()
-	for _, d := range foundDirectories {
-		c.unstartedDirs <- d
-	}
-	c.dirInProgressCount-- // we were doing something, and now we have finished it
-	c.cond.Broadcast()     // let other workers know that the state has changed
+
+	c.unstartedDirs = append(c.unstartedDirs, foundDirectories...)
+	c.dirInProgressCount--                        // we were doing something, and now we have finished it
+	c.cond.Broadcast()                            // let other workers know that the state has changed
 
 	return true, bodyErr // true because, as far as we know, the work is not finished. And err because it was the err (if any) from THIS dir
 }
