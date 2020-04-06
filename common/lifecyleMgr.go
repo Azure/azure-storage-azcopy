@@ -459,6 +459,7 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 			select {
 			case <-lcm.cancelChannel:
 				doCancel()
+				continue // to exit on next pass through loop
 			default:
 				newCount = jc.ReportProgressOrExit(lcm)
 			}
