@@ -721,6 +721,14 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		bfsDummyProcessor := dummyProcessor{}
 		err = bfsTraverser.traverse(noPreProccessor, bfsDummyProcessor.process, nil)
 
+		localTotalCount := len(localIndexer.indexMap)
+		localFileOnlyCount := 0
+		for _, x := range localIndexer.indexMap {
+			if x.entityType == common.EEntityType.File() {
+				localFileOnlyCount++
+			}
+		}
+
 		s3DummyProcessor := dummyProcessor{}
 		if s3Enabled {
 			// construct and run a S3 traverser
@@ -732,17 +740,10 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 			c.Assert(err, chk.IsNil)
 
 			// check that the results are the same length
-			c.Assert(len(s3DummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
+			c.Assert(len(s3DummyProcessor.record), chk.Equals, localFileOnlyCount)
 		}
 
 		// make sure the results are as expected
-		localTotalCount := len(localIndexer.indexMap)
-		localFileOnlyCount := 0
-		for _, x := range localIndexer.indexMap {
-			if x.entityType == common.EEntityType.File() {
-				localFileOnlyCount++
-			}
-		}
 		c.Assert(len(blobDummyProcessor.record), chk.Equals, localFileOnlyCount)
 		if isRecursiveOn {
 			c.Assert(len(fileDummyProcessor.record), chk.Equals, localTotalCount)
