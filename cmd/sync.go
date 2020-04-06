@@ -53,6 +53,7 @@ type rawSyncCmdArgs struct {
 	legacyExclude         string // for warning messages only
 
 	preserveSMBPermissions bool
+	preserveOwner          bool
 	preserveSMBInfo        bool
 	followSymlinks         bool
 	backupMode             bool
@@ -192,10 +193,14 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		return cooked, err
 	}
 
-	cooked.preserveSMBPermissions = raw.preserveSMBPermissions
-	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBPermissions, cooked.fromTo, nil, "preserve-smb-permissions"); err != nil {
+	if err = validatePreserveSMBPropertyOption(raw.preserveSMBPermissions, cooked.fromTo, nil, "preserve-smb-permissions"); err != nil {
 		return cooked, err
 	}
+	// TODO: the check on raw.preserveSMBPermissions on the next line can be removed once we have full support for these properties in sync
+	if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); raw.preserveSMBPermissions && err != nil {
+		return cooked, err
+	}
+	cooked.preserveSMBPermissions = common.NewPreservePermissionsOption(raw.preserveSMBPermissions, raw.preserveOwner, cooked.fromTo)
 
 	cooked.preserveSMBInfo = raw.preserveSMBInfo
 	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, nil, "preserve-smb-info"); err != nil {
@@ -255,7 +260,7 @@ type cookedSyncCmdArgs struct {
 	excludeFileAttributes []string
 
 	// options
-	preserveSMBPermissions bool
+	preserveSMBPermissions common.PreservePermissionsOption
 	preserveSMBInfo        bool
 	putMd5                 bool
 	md5ValidationOption    common.HashValidationOption
@@ -608,6 +613,7 @@ func init() {
 	//   Note that for folders we don't currently preserve LMTs, because that's not feasible in large download scenarios (and because folder LMTs
 	//   don't generally convey useful information).  However, we need to think through what this will mean when we enable preserve-smb-info
 	//   for sync.  Will folder sync just work fine as it does now, with no preservation of folder LMTs?
+	//syncCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault, "Only has an effect in downloads, and only when --preserve-smb-permissions is used. If true (the default), the file Owner and Group are preserved in downloads. If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group will be based on the user running AzCopy")
 	//syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (see TO DO on line above!) false, "False by default. Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is not preserved for folders. ")
 	//syncCmd.PersistentFlags().BoolVar(&raw.backupMode, common.BackupModeFlagName, false, "Activates Windows' SeBackupPrivilege for uploads, or SeRestorePrivilege for downloads, to allow AzCopy to see read all files, regardless of their file system permissions, and to restore all permissions. Requires that the account running AzCopy already has these permissions (e.g. has Administrator rights or is a member of the 'Backup Operators' group). All this flag does is activate privileges that the account already has")
 

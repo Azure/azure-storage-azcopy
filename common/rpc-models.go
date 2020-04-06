@@ -130,7 +130,7 @@ type CopyJobPartOrderRequest struct {
 	CommandString  string // commandString hold the user given command which is logged to the Job log file
 	CredentialInfo CredentialInfo
 
-	PreserveSMBPermissions         bool
+	PreserveSMBPermissions         PreservePermissionsOption
 	PreserveSMBInfo                bool
 	S2SGetPropertiesInBackend      bool
 	S2SSourceChangeValidation      bool

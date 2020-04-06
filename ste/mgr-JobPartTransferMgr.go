@@ -94,7 +94,7 @@ type TransferInfo struct {
 	SourceSize             int64
 	Destination            string
 	EntityType             common.EntityType
-	PreserveSMBPermissions bool
+	PreserveSMBPermissions common.PreservePermissionsOption
 	PreserveSMBInfo        bool
 
 	// Transfer info for S2S copy
