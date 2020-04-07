@@ -2,11 +2,12 @@ package common
 
 import (
 	"bytes"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"net/http"
 	"net/url"
 	"runtime"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
@@ -32,9 +33,59 @@ type URLExtension struct {
 func (u URLExtension) URLWithPlusDecodedInPath() url.URL {
 	// url.RawPath is not always present. Which is likely, if we're _just_ using +.
 	if u.RawPath != "" {
-		// If we're working with raw paths, replace only pluses in the raw path.
-		u.RawPath = strings.ReplaceAll(u.RawPath, "+", " ")
-		u.Path = url.PathEscape(u.RawPath)
+		// If we're working with a raw path, then we need to be extra super careful about what we change.
+		// Thus, we'll follow both paths and account for encoding.
+		// rawIndex is our location in the rawPath, index is our location in the path.
+		rawIndex, index := 0, 0
+
+		// We convert to rune arrays because strings aren't mutable in Go.
+		path, rawPath := []rune(u.Path), []rune(u.RawPath)
+
+		for rawIndex < len(rawPath) && index < len(path) {
+			rawChar := rawPath[rawIndex]
+			char := path[index]
+
+			// Check that the characters are the exact same.
+			// If rawIndex is encoded (%XX), increment by an additional two before we loop again.
+			isRawEncoded := rawChar != char
+
+			// This check wouldn't trigger in a string like aaaa%aaaaa but it'd be a fine indicator for something more complex.
+			if isRawEncoded && rawChar != '%' {
+				panic("safe encoding swap sanity check hit-- indexes are not equivalent.")
+			}
+
+			// We want to ignore encoded characters-- They're usually meant literally, which'd produce a bug if we replaced them.
+			if isRawEncoded {
+				rawIndex += 2
+			} else {
+				// Replace pluses with spaces, as this function does.
+				if char == '+' {
+					path[index] = ' '
+					// We must change the raw path to using %20 otherwise, when go stringifies, it can't properly calculate the original, and encodes the literal path.
+					rawPath = append(
+						append(
+							// To insert extra characters
+							// first, reallocate to a new array.
+							append(make([]rune, 0), rawPath[:rawIndex]...),
+							// append the extra characters
+							[]rune("%20")...),
+						// then append the remaining characters
+						rawPath[rawIndex+1:]...)
+					rawIndex += 2 // since we encoded the character, let's bump up two.
+				}
+			}
+
+			// Increment our indexes to move to the next character.
+			rawIndex++
+			index++
+		}
+
+		if rawIndex != len(rawPath) || index != len(path) {
+			panic("sanity check, both indexes are not at the end of the rawpath and path strings")
+		}
+
+		// return path and rawpath back to the url struct
+		u.Path, u.RawPath = string(path), string(rawPath)
 	} else if u.Path != "" {
 		// If we're working with no encoded characters, just replace the pluses in the path and move on.
 		u.Path = strings.ReplaceAll(u.Path, "+", " ")
