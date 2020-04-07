@@ -1232,3 +1232,46 @@ func (FolderPropertyOption) AllFoldersExceptRoot() FolderPropertyOption {
 	return FolderPropertyOption(2)
 }
 func (FolderPropertyOption) AllFolders() FolderPropertyOption { return FolderPropertyOption(3) }
+
+///////////////////////////////////////////////////////////////////////
+
+var EPreservePermissionsOption = PreservePermissionsOption(0)
+
+type PreservePermissionsOption uint8
+
+func (PreservePermissionsOption) None() PreservePermissionsOption { return PreservePermissionsOption(0) }
+func (PreservePermissionsOption) ACLsOnly() PreservePermissionsOption {
+	return PreservePermissionsOption(1)
+}
+func (PreservePermissionsOption) OwnershipAndACLs() PreservePermissionsOption {
+	return PreservePermissionsOption(2)
+}
+
+func NewPreservePermissionsOption(preserve, includeOwnership bool, fromTo FromTo) PreservePermissionsOption {
+	if preserve {
+		if fromTo.IsDownload() {
+			// downloads are the only time we respect includeOwnership
+			if includeOwnership {
+				return EPreservePermissionsOption.OwnershipAndACLs()
+			} else {
+				return EPreservePermissionsOption.ACLsOnly()
+			}
+		}
+		// for uploads and S2S, we always include ownership
+		return EPreservePermissionsOption.OwnershipAndACLs()
+	}
+
+	return EPreservePermissionsOption.None()
+}
+
+func (p PreservePermissionsOption) IsTruthy() bool {
+	switch p {
+	case EPreservePermissionsOption.ACLsOnly(),
+		EPreservePermissionsOption.OwnershipAndACLs():
+		return true
+	case EPreservePermissionsOption.None():
+		return false
+	default:
+		panic("unknown permissions option")
+	}
+}

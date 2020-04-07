@@ -61,7 +61,7 @@ var errorNoSddlFound = errors.New("no SDDL found")
 func (bd *azureFilesDownloader) preserveAttributes() (stage string, err error) {
 	info := bd.jptm.Info()
 
-	if info.PreserveSMBPermissions {
+	if info.PreserveSMBPermissions.IsTruthy() {
 		// We're about to call into Windows-specific code.
 		// Some functions here can't be called on other OSes, to the extent that they just aren't present in the library due to compile flags.
 		// In order to work around this, we'll do some trickery with interfaces.

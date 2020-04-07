@@ -235,7 +235,7 @@ func (*azureFileSenderBase) DoWithOverrideReadOnly(ctx context.Context, action f
 }
 
 func (u *azureFileSenderBase) addPermissionsToHeaders(info TransferInfo, destUrl url.URL) (stage string, err error) {
-	if !info.PreserveSMBPermissions {
+	if !info.PreserveSMBPermissions.IsTruthy() {
 		return "", nil
 	}
 

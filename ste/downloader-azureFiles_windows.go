@@ -109,7 +109,7 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 		return fmt.Errorf("getting control bits: %w", err)
 	}
 
-	var securityInfoFlags windows.SECURITY_INFORMATION = windows.OWNER_SECURITY_INFORMATION | windows.GROUP_SECURITY_INFORMATION | windows.DACL_SECURITY_INFORMATION
+	var securityInfoFlags windows.SECURITY_INFORMATION = windows.DACL_SECURITY_INFORMATION
 
 	// remove everything down to the if statement to return to xcopy functionality
 	// Obtain the destination root and figure out if we're at the top level of the transfer.
@@ -134,14 +134,19 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 		securityInfoFlags |= windows.PROTECTED_DACL_SECURITY_INFORMATION
 	}
 
-	owner, _, err := sd.Owner()
-	if err != nil {
-		return fmt.Errorf("reading owner property of SDDL: %s", err)
-	}
+	var owner *windows.SID = nil
+	var group *windows.SID = nil
 
-	group, _, err := sd.Group()
-	if err != nil {
-		return fmt.Errorf("reading group property of SDDL: %s", err)
+	if txInfo.PreserveSMBPermissions == common.EPreservePermissionsOption.OwnershipAndACLs() {
+		securityInfoFlags |= windows.OWNER_SECURITY_INFORMATION | windows.GROUP_SECURITY_INFORMATION
+		owner, _, err = sd.Owner()
+		if err != nil {
+			return fmt.Errorf("reading owner property of SDDL: %s", err)
+		}
+		group, _, err = sd.Group()
+		if err != nil {
+			return fmt.Errorf("reading group property of SDDL: %s", err)
+		}
 	}
 
 	dacl, _, err := sd.DACL()
@@ -160,8 +165,10 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 	)
 
 	if err != nil {
-		return fmt.Errorf("permissions could not be restored. It may help to run from a elevated command prompt, and set the '%s' flag. Error message was: %w",
-			common.BackupModeFlagName, err)
+		return fmt.Errorf("permissions could not be restored. It may help to add --%s=false to the AzCopy command line (so that ACLS will be preserved but ownership will not). "+
+			" Or, if you want to preserve ownership, then run from a elevated command prompt or from an account in the Backup Operators group, and set the '%s' flag."+
+			" Error message was: %w",
+			common.PreserveOwnerFlagName, common.BackupModeFlagName, err)
 	}
 
 	return err
