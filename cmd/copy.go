@@ -675,6 +675,7 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 	raw.md5ValidationOption = common.DefaultHashValidationOption.String()
 	raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
 	raw.forceWrite = common.EOverwriteOption.True().String()
+	raw.preserveOwner = common.PreserveOwnerDefault
 }
 
 func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
