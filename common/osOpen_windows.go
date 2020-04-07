@@ -30,5 +30,7 @@ func OSStat(name string) (os.FileInfo, error) {
 		return nil, err
 	}
 
+	defer f.Close()
+
 	return f.Stat()
 }
