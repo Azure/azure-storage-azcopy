@@ -461,7 +461,7 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 			return nil, errors.New("a valid context must be supplied to create a S3 traverser")
 		}
 
-		if s3URLParts.RawBucketName == "" || strings.Contains(s3URLParts.RawBucketName, "*") {
+		if s3URLParts.BucketName == "" || strings.Contains(s3URLParts.BucketName, "*") {
 			// TODO convert to path style URL
 
 			if !recursive {

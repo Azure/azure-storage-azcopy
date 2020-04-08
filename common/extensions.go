@@ -33,6 +33,10 @@ type URLExtension struct {
 func (u URLExtension) URLWithPlusDecodedInPath() url.URL {
 	// url.RawPath is not always present. Which is likely, if we're _just_ using +.
 	if u.RawPath != "" {
+		if u.RawPath != u.EscapedPath() {
+			panic("sanity check: lost user input meaning on URL")
+		}
+
 		var err error
 		u.RawPath = strings.ReplaceAll(u.RawPath, "+", "%20")
 		u.Path, err = url.PathUnescape(u.RawPath)

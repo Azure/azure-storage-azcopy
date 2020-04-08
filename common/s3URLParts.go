@@ -45,7 +45,6 @@ type S3URLParts struct {
 	Host           string // Ex: "s3.amazonaws.com", "s3-eu-west-1.amazonaws.com", "bucket.s3-eu-west-1.amazonaws.com"
 	Endpoint       string // Ex: "s3.amazonaws.com", "s3-eu-west-1.amazonaws.com"
 	BucketName     string // Ex: "MyBucket"
-	RawBucketName  string // Handles encoded characters (particularly useful for wildcards)
 	ObjectKey      string // Ex: "hello.txt", "foo/bar"
 	Version        string
 	Region         string // Ex: endpoint region, e.g. "eu-west-1"
@@ -119,11 +118,6 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 
 		if bucketEndIndex := strings.Index(path, "/"); bucketEndIndex != -1 {
 			up.BucketName = path[:bucketEndIndex]
-			if rawPath != "" {
-				up.RawBucketName = rawPath[:strings.Index(rawPath, "/")]
-			} else {
-				up.RawBucketName = up.BucketName
-			}
 			up.ObjectKey = path[bucketEndIndex+1:]
 		} else {
 			up.BucketName = path
