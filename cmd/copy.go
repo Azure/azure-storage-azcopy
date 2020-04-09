@@ -111,6 +111,7 @@ type rawCopyCmdArgs struct {
 	excludeBlobType string
 	// Opt-in flag to persist SMB ACLs to Azure Files.
 	preserveSMBPermissions bool
+	preserveOwner          bool // works in conjunction with perserveSmbPermissions
 	// Opt-in flag to persist additional SMB properties to Azure Files. Named ...info instead of ...properties
 	// because the latter was similar enough to preserveSMBPermissions to induce user error
 	preserveSMBInfo bool
@@ -458,17 +459,20 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
 
-	cooked.preserveSMBPermissions = raw.preserveSMBPermissions
-	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBPermissions, cooked.fromTo, &cooked.forceWrite, "preserve-smb-permissions"); err != nil {
+	if err = validatePreserveSMBPropertyOption(raw.preserveSMBPermissions, cooked.fromTo, &cooked.forceWrite, "preserve-smb-permissions"); err != nil {
 		return cooked, err
 	}
+	if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); err != nil {
+		return cooked, err
+	}
+	cooked.preserveSMBPermissions = common.NewPreservePermissionsOption(raw.preserveSMBPermissions, raw.preserveOwner, cooked.fromTo)
 
 	cooked.preserveSMBInfo = raw.preserveSMBInfo
 	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, &cooked.forceWrite, "preserve-smb-info"); err != nil {
 		return cooked, err
 	}
 
-	if err = crossValidateSymlinksAndPermissions(cooked.followSymlinks, cooked.preserveSMBPermissions); err != nil {
+	if err = crossValidateSymlinksAndPermissions(cooked.followSymlinks, cooked.preserveSMBPermissions.IsTruthy()); err != nil {
 		return cooked, err
 	}
 
@@ -492,7 +496,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
 			return cooked, fmt.Errorf("blob-tier is not supported while uploading to ADLS Gen 2")
 		}
-		if cooked.preserveSMBPermissions {
+		if cooked.preserveSMBPermissions.IsTruthy() {
 			return cooked, fmt.Errorf("preserve-smb-permissions is not supported while uploading to ADLS Gen 2")
 		}
 		if cooked.s2sPreserveProperties {
@@ -671,6 +675,7 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 	raw.md5ValidationOption = common.DefaultHashValidationOption.String()
 	raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
 	raw.forceWrite = common.EOverwriteOption.True().String()
+	raw.preserveOwner = common.PreserveOwnerDefault
 }
 
 func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
@@ -700,6 +705,16 @@ func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, ov
 		return fmt.Errorf("%s is set, but it is not currently supported when overwrite mode is IfSourceNewer", flagName)
 	}
 
+	return nil
+}
+
+func validatePreserveOwner(preserve bool, fromTo common.FromTo) error {
+	if fromTo.IsDownload() {
+		return nil // it can be used in downloads
+	}
+	if preserve != common.PreserveOwnerDefault {
+		return fmt.Errorf("flag --%s can only be used on downloads", common.PreserveOwnerFlagName)
+	}
 	return nil
 }
 
@@ -808,7 +823,7 @@ type cookedCopyCmdArgs struct {
 	isEnumerationComplete bool
 
 	// Whether the user wants to preserve the SMB ACLs assigned to their files when moving between resources that are SMB ACL aware.
-	preserveSMBPermissions bool
+	preserveSMBPermissions common.PreservePermissionsOption
 	// Whether the user wants to perserve the SMB properties ...
 	preserveSMBInfo bool
 
@@ -1478,6 +1493,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "Prevents AzCopy from detecting the content-type based on the extension or content of the file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files). For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault, "Only has an effect in downloads, and only when --preserve-smb-permissions is used. If true (the default), the file Owner and Group are preserved in downloads. If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group will be based on the user running AzCopy")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", false, "False by default. Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
 	cpCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
 	cpCmd.PersistentFlags().BoolVar(&raw.backupMode, common.BackupModeFlagName, false, "Activates Windows' SeBackupPrivilege for uploads, or SeRestorePrivilege for downloads, to allow AzCopy to see read all files, regardless of their file system permissions, and to restore all permissions. Requires that the account running AzCopy already has these permissions (e.g. has Administrator rights or is a member of the 'Backup Operators' group). All this flag does is activate privileges that the account already has")

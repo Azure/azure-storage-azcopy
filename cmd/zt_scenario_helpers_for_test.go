@@ -728,6 +728,7 @@ func getDefaultCopyRawInput(src string, dst string) rawCopyCmdArgs {
 		md5ValidationOption:            common.DefaultHashValidationOption.String(),
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
 		forceWrite:                     common.EOverwriteOption.True().String(),
+		preserveOwner:                  common.PreserveOwnerDefault,
 	}
 }
 
@@ -751,5 +752,6 @@ func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 		md5ValidationOption:            common.DefaultHashValidationOption.String(),
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
 		forceWrite:                     common.EOverwriteOption.True().String(),
+		preserveOwner:                  common.PreserveOwnerDefault,
 	}
 }

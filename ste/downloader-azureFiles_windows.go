@@ -4,6 +4,8 @@ package ste
 
 import (
 	"fmt"
+	"github.com/Azure/azure-storage-file-go/azfile"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -109,7 +111,7 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 		return fmt.Errorf("getting control bits: %w", err)
 	}
 
-	var securityInfoFlags windows.SECURITY_INFORMATION = windows.OWNER_SECURITY_INFORMATION | windows.GROUP_SECURITY_INFORMATION | windows.DACL_SECURITY_INFORMATION
+	var securityInfoFlags windows.SECURITY_INFORMATION = windows.DACL_SECURITY_INFORMATION
 
 	// remove everything down to the if statement to return to xcopy functionality
 	// Obtain the destination root and figure out if we're at the top level of the transfer.
@@ -127,21 +129,31 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 	// To achieve robocopy like functionality, and maintain the ability to add new permissions in the middle of the copied file tree,
 	//     we choose to protect both already protected files at the source, and to protect the entire root folder of the transfer.
 	//     Protected files and folders experience no inheritance from their parents (but children do experience inheritance)
+	//     To protect the root folder of the transfer, it's not enough to just look at "isTransferRoot" because, in the
+	//     case of downloading a complete share, with strip-top-dir = false (i.e. no trailing /* on the URL), the thing at the transfer
+	//     root is the share, and currently (April 2019) we can't get permissions for the share itself.  So we have to "lock"/protect
+	//     the permissions one level down in that case (i.e. for its children).  But in the case of downloading from a directory (not the share root)
+	//     then we DO need the check on isAtTransferRoot.
 	isProtectedAtSource := (ctl & windows.SE_DACL_PROTECTED) != 0
 	isAtTransferRoot := len(splitPath) == 1
 
-	if isProtectedAtSource || isAtTransferRoot {
+	if isProtectedAtSource || isAtTransferRoot || a.parentIsShareRoot(txInfo.Source) {
 		securityInfoFlags |= windows.PROTECTED_DACL_SECURITY_INFORMATION
 	}
 
-	owner, _, err := sd.Owner()
-	if err != nil {
-		return fmt.Errorf("reading owner property of SDDL: %s", err)
-	}
+	var owner *windows.SID = nil
+	var group *windows.SID = nil
 
-	group, _, err := sd.Group()
-	if err != nil {
-		return fmt.Errorf("reading group property of SDDL: %s", err)
+	if txInfo.PreserveSMBPermissions == common.EPreservePermissionsOption.OwnershipAndACLs() {
+		securityInfoFlags |= windows.OWNER_SECURITY_INFORMATION | windows.GROUP_SECURITY_INFORMATION
+		owner, _, err = sd.Owner()
+		if err != nil {
+			return fmt.Errorf("reading owner property of SDDL: %s", err)
+		}
+		group, _, err = sd.Group()
+		if err != nil {
+			return fmt.Errorf("reading group property of SDDL: %s", err)
+		}
 	}
 
 	dacl, _, err := sd.DACL()
@@ -160,9 +172,24 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 	)
 
 	if err != nil {
-		return fmt.Errorf("permissions could not be restored. It may help to run from a elevated command prompt, and set the '%s' flag. Error message was: %w",
-			common.BackupModeFlagName, err)
+		return fmt.Errorf("permissions could not be restored. It may help to add --%s=false to the AzCopy command line (so that ACLS will be preserved but ownership will not). "+
+			" Or, if you want to preserve ownership, then run from a elevated command prompt or from an account in the Backup Operators group, and set the '%s' flag."+
+			" Error message was: %w",
+			common.PreserveOwnerFlagName, common.BackupModeFlagName, err)
 	}
 
 	return err
+}
+
+// TODO: this method may become obsolete if/when we are able to get permissions from the share root
+func (a *azureFilesDownloader) parentIsShareRoot(source string) bool {
+	u, err := url.Parse(source)
+	if err != nil {
+		return false
+	}
+	f := azfile.NewFileURLParts(*u)
+	path := f.DirectoryOrFilePath
+	sep := common.DeterminePathSeparator(path)
+	splitPath := strings.Split(strings.Trim(path, sep), sep)
+	return path != "" && len(splitPath) == 1
 }

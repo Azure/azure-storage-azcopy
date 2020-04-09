@@ -179,6 +179,8 @@ func (p *pageRangeOptimizer) fetchPages() {
 // check whether a particular given range is worth transferring, i.e. whether there's data at the source
 func (p *pageRangeOptimizer) doesRangeContainData(givenRange azblob.PageRange) bool {
 	// if we have no page list stored, then assume there's data everywhere
+	// (this is particularly important when we are using this code not just for performance, but also
+	// for correctness - as we do when using on the destination of a managed disk upload)
 	if p.srcPageList == nil {
 		return true
 	}
