@@ -91,13 +91,9 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 	}
 
 	path := u.Path
-	rawPath := u.RawPath
 	// Remove the initial '/' if exists
 	if path != "" && path[0] == '/' {
 		path = path[1:]
-	}
-	if rawPath != "" && rawPath[0] == '/' {
-		rawPath = rawPath[1:]
 	}
 
 	up := S3URLParts{
