@@ -5,9 +5,9 @@
 
 ### New features
 
-1. `azcopy copy` now supports the persistence of ACLs between supported resources (Windows and Azure Files at the moment) using the --persist-smb-permissions flag.
+1. `azcopy copy` now supports the persistence of ACLs between supported resources (Windows and Azure Files) using the `--persist-smb-permissions` flag.
 1. `azcopy copy` now supports the persistence of SMB property info between supported resources (Windows and Azure Files) 
-using the --persist-smb-info flag. The information that can be preserved is Created Time, Last Write Time and Attributes (e.g. Read Only).
+using the `--persist-smb-info` flag. The information that can be preserved is Created Time, Last Write Time and Attributes (e.g. Read Only).
 1. AzCopy can now transfer empty folders, and also transfer the properties of folders. This applies when both the source 
 and destination support real folders (Blob Storage does not, because it only supports virtual folders).
 1. On Windows, AzCopy can now activate the special privileges `SeBackupPrivilege` and `SeRestorePrivilege`.  Most admin-level 
@@ -26,15 +26,17 @@ if the privileges cannot be activated.
    `sharesnapshot` parameter at end of URL for your Azure Files source. Remember to separate it from the existing query
    string parameters (i.e. the SAS token) with a `&`.  E.g.
    `https://<youraccount>.file.core.windows.net/sharename?st=2020-03-03T20%3A53%3A48Z&se=2020-03-04T20%3A53%3A48Z&sp=rl&sv=2018-03-28&sr=s&sig=REDACTED&sharesnapshot=2020-03-03T20%3A24%3A13.0000000Z`
-1. Benchmark mode is now supported for Azure Files and ADLS Gen 2 (in addition to the existing benchmark supoprt for
+1. Benchmark mode is now supported for Azure Files and ADLS Gen 2 (in addition to the existing benchmark support for
    Blob Storage).
-1. A special performance optimimization is introduced, but only for NON-recursive cases in this release.  An `--include-pattern` that contains only `*` wildcards will be performance optimized when 
+1. A special performance optimization is introduced, but only for NON-recursive cases in this release.  An `--include-pattern` that contains only `*` wildcards will be performance optimized when 
    querying blob storage without the recursive flag. The section before the first `*` will be used as a server-side prefix, to filter the search results more efficiently. E.g. `--include-pattern abc*` will be implemented 
 as a prefix search for "abc". In a more complex example, `--include-pattern abc*123`, will be implemented as a prefix search for `abc`, followed by normal filtering for all matches of `abc*123`.  To non-recursively process blobs
 contained directly in a container or virtual directory include `/*` at the end of the URL (before the query string).  E.g. `http://account.blob.core.windows.net/container/*?<SAS>`.
+1. The `--cap-mbps` parameter now parses floating-point numbers. This will allow you to limit your maximum throughput to a fraction of a megabit per second.
 
 ### Special notes
 
+1. A more user-friendly error message is returned when an unknown source/destination combination is supplied
 1. AzCopy has upgraded to service revision `2019-02-02`. Users targeting local emulators, Azure Stack, or other private/special
  instances of Azure Storage may need to intentionally downgrade their service revision using the environment variable 
  `AZCOPY_DEFAULT_SERVICE_API_VERSION`. Prior to this release, the default service revision was `2018-03-28`.
@@ -59,6 +61,10 @@ contained directly in a container or virtual directory include `/*` at the end o
 
 ### Bug fixes
 
+1. AzCopy can now overwrite even Read-Only and Hidden files when downloading to Windows. (The read-only case requires the use of 
+   the new `--force-if-read-only` flag.)
+1. Fixed a nil dereference when a prefetching error occurs in a upload
+1. Fixed a nil dereference when attempting to close a log file while log-level is none
 1. AzCopy's scanning of Azure Files sources, for download or Service to Service transfers, is now much faster.
 1. Sources and destinations that are identified by their IPv4 address can now be used. This enables usage with storage
    emulators.  Note that the `from-to` flag is typically needed when using such sources or destinations. E.g. `--from-to
