@@ -88,31 +88,29 @@ type ListParameters struct {
 var parameters = ListParameters{}
 
 // HandleListContainerCommand handles the list container command
-func HandleListContainerCommand(source string, location common.Location) (err error) {
+func HandleListContainerCommand(unparsedSource string, location common.Location) (err error) {
 	// TODO: Temporarily use context.TODO(), this should be replaced with a root context from main.
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	credentialInfo := common.CredentialInfo{}
 
-	base, token, err := SplitAuthTokenFromResource(source, location)
+	source, err := SplitResourceString(unparsedSource, location)
 	if err != nil {
 		return err
 	}
 
-	level, err := determineLocationLevel(source, location, true)
+	level, err := determineLocationLevel(source.Value, location, true)
 
 	if err != nil {
 		return err
 	}
 
 	// Treat our check as a destination because the isSource flag was designed for S2S transfers.
-	if credentialInfo, _, err = getCredentialInfoForLocation(ctx, location, base, token, false); err != nil {
+	if credentialInfo, _, err = getCredentialInfoForLocation(ctx, location, source.Value, source.SAS, false); err != nil {
 		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
-	} else if location == location.File() && token == "" {
+	} else if location == location.File() && source.SAS == "" {
 		return errors.New("azure files requires a SAS token for authentication")
 	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		glcm.Info("List is using OAuth token for authentication.")
-
 		uotm := GetUserOAuthTokenManagerInstance()
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
@@ -121,7 +119,7 @@ func HandleListContainerCommand(source string, location common.Location) (err er
 		}
 	}
 
-	traverser, err := initResourceTraverser(source, location, &ctx, &credentialInfo, nil, nil, true, false, func() {})
+	traverser, err := initResourceTraverser(source, location, &ctx, &credentialInfo, nil, nil, true, false, func(common.EntityType) {})
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())
@@ -131,7 +129,11 @@ func HandleListContainerCommand(source string, location common.Location) (err er
 	var sizeCount int64 = 0
 
 	processor := func(object storedObject) error {
-		objectSummary := object.relativePath + "; Content Length: "
+		path := object.relativePath
+		if object.entityType == common.EEntityType.Folder() {
+			path += "/" // TODO: reviewer: same questions as for jobs status: OK to hard code direction of slash? OK to use trailing slash to distinguish dirs from files?
+		}
+		objectSummary := path + "; Content Length: "
 
 		if level == level.Service() {
 			objectSummary = object.containerName + "/" + objectSummary

@@ -88,6 +88,10 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 		soleChunkFuncSemaphore: semaphore.NewWeighted(1)}, nil
 }
 
+func (s *appendBlobSenderBase) SendableEntityType() common.EntityType {
+	return common.EEntityType.File()
+}
+
 func (s *appendBlobSenderBase) ChunkSize() uint32 {
 	return s.chunkSize
 }

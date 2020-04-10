@@ -1137,21 +1137,29 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         cpCmd = util.Command("copy").add_arguments(srcBucketURL).add_arguments(dstBucketURL). \
             add_flags("log-level", "info").add_flags("recursive", "true")
 
-        if preserveProperties == False:
+        if not preserveProperties:
             cpCmd.add_flags("s2s-preserve-properties", "false")
 
         result = cpCmd.execute_azcopy_copy_command()
+        self.assertTrue(result)
 
         # Downloading the copied file for validation
         validate_dir_name = "validate_copy_file_from_%s_bucket_to_%s_bucket_propertyandmetadata_%s" % (srcType, dstType, preserveProperties)
         local_validate_dest_dir = util.create_test_dir(validate_dir_name)
         local_validate_dest = local_validate_dest_dir + fileName
+        # Because the MD5 is checked early, we need to clear the check-md5 flag.
         if srcType == "S3":
             result = util.Command("copy").add_arguments(dstFileURL).add_arguments(local_validate_dest). \
-                add_flags("log-level", "info").execute_azcopy_copy_command()
+                add_flags("log-level", "info")  # Temporarily set result to Command for the sake of modifying the md5 check
+            if not preserveProperties:
+                result.flags["check-md5"] = "NoCheck"
+            result = result.execute_azcopy_copy_command()  # Wrangle result to a bool for checking
         else:
             result = util.Command("copy").add_arguments(srcFileURL).add_arguments(local_validate_dest). \
-                add_flags("log-level", "info").execute_azcopy_copy_command()
+                add_flags("log-level", "info")  # Temporarily set result to Command for the sake of modifying the md5 check
+            if not preserveProperties:
+                result.flags["check-md5"] = "NoCheck"
+            result = result.execute_azcopy_copy_command()  # Wrangle result to a bool for checking
         self.assertTrue(result)
 
         # TODO: test different targets according to dstType

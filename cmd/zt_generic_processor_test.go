@@ -57,7 +57,7 @@ func (processorTestSuiteHelper) getExpectedTransferFromStoredObjectList(storedOb
 }
 
 func (processorTestSuiteHelper) getCopyJobTemplate() *common.CopyJobPartOrderRequest {
-	return &common.CopyJobPartOrderRequest{}
+	return &common.CopyJobPartOrderRequest{Fpo: common.EFolderPropertiesOption.NoFolders()}
 }
 
 func (s *genericProcessorSuite) TestCopyTransferProcessorMultipleFiles(c *chk.C) {
@@ -78,7 +78,7 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorMultipleFiles(c *chk.C)
 	for _, numOfParts := range []int{1, 3} {
 		numOfTransfersPerPart := len(sampleObjects) / numOfParts
 		copyProcessor := newCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), numOfTransfersPerPart,
-			containerURL.String(), dstDirName, false, false, nil, nil, false)
+			newRemoteRes(containerURL.String()), newLocalRes(dstDirName), nil, nil, false)
 
 		// go through the objects and make sure they are processed without error
 		for _, storedObject := range sampleObjects {
@@ -125,10 +125,10 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorSingleFile(c *chk.C) {
 	// set up the processor
 	blobURL := containerURL.NewBlockBlobURL(blobList[0]).String()
 	copyProcessor := newCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), 2,
-		blobURL, filepath.Join(dstDirName, dstFileName), false, false, nil, nil, false)
+		newRemoteRes(blobURL), newLocalRes(filepath.Join(dstDirName, dstFileName)), nil, nil, false)
 
 	// exercise the copy transfer processor
-	storedObject := newStoredObject(noPreProccessor, blobList[0], "", time.Now(), 0, nil, blobTypeNA, "")
+	storedObject := newStoredObject(noPreProccessor, blobList[0], "", common.EEntityType.File(), time.Now(), 0, noContentProps, noBlobProps, noMetdata, "")
 	err := copyProcessor.scheduleCopyTransfer(storedObject)
 	c.Assert(err, chk.IsNil)
 

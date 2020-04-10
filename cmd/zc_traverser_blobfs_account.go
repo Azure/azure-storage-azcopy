@@ -41,7 +41,7 @@ type BlobFSAccountTraverser struct {
 	cachedFileSystems []string
 
 	// a generic function to notify that a new stored object has been enumerated
-	incrementEnumerationCounter func()
+	incrementEnumerationCounter enumerationCounterFunc
 }
 
 func (t *BlobFSAccountTraverser) isDirectory(isSource bool) bool {
@@ -120,7 +120,7 @@ func (t *BlobFSAccountTraverser) traverse(preprocessor objectMorpher, processor 
 	return nil
 }
 
-func newBlobFSAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, incrementEnumerationCounter func()) (t *BlobFSAccountTraverser) {
+func newBlobFSAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, incrementEnumerationCounter enumerationCounterFunc) (t *BlobFSAccountTraverser) {
 	bfsURLParts := azbfs.NewBfsURLParts(*rawURL)
 	fsPattern := bfsURLParts.FileSystemName
 

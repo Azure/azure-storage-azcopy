@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"math/rand"
 	"strings"
 
@@ -14,11 +15,13 @@ import (
 	minio "github.com/minio/minio-go"
 )
 
+var enumerationParallelism = 1
+
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
 func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
 	// Remove the source and destination roots from the path to save space in the plan files
-	transfer.Source = strings.TrimPrefix(transfer.Source, e.SourceRoot)
-	transfer.Destination = strings.TrimPrefix(transfer.Destination, e.DestinationRoot)
+	transfer.Source = strings.TrimPrefix(transfer.Source, e.SourceRoot.Value)
+	transfer.Destination = strings.TrimPrefix(transfer.Destination, e.DestinationRoot.Value)
 
 	// dispatch the transfers once the number reaches NumOfFilesPerDispatchJobPart
 	// we do this so that in the case of large transfer, the transfer engine can get started
@@ -71,6 +74,10 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *cookedCopyCmdArgs
 		}
 
 		return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
+	}
+
+	if ste.JobsAdmin != nil {
+		ste.JobsAdmin.LogToJobLog(FinalPartCreatedMessage)
 	}
 
 	// set the flag on cca, to indicate the enumeration is done

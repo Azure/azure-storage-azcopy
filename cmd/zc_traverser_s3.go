@@ -42,7 +42,7 @@ type s3Traverser struct {
 	s3Client   *minio.Client
 
 	// A generic function to notify that a new stored object has been enumerated
-	incrementEnumerationCounter func()
+	incrementEnumerationCounter enumerationCounterFunc
 }
 
 func (t *s3Traverser) isDirectory(isSource bool) bool {
@@ -75,26 +75,19 @@ func (t *s3Traverser) traverse(preprocessor objectMorpher, processor objectProce
 		// Otherwise, treat it as a directory.
 		// According to IsDirectorySyntactically, objects and folders can share names
 		if err == nil {
+			// We had to statObject anyway, get ALL the info.
+			oie := common.ObjectInfoExtension{ObjectInfo: oi}
 			storedObject := newStoredObject(
 				preprocessor,
 				objectName,
 				"",
+				common.EEntityType.File(),
 				oi.LastModified,
 				oi.Size,
-				nil,
-				blobTypeNA,
+				&oie,
+				noBlobProps,
+				oie.NewCommonMetadata(),
 				t.s3URLParts.BucketName)
-
-			// We had to statObject anyway, get ALL the info.
-			oie := common.ObjectInfoExtension{ObjectInfo: oi}
-
-			storedObject.contentType = oi.ContentType
-			storedObject.md5 = oie.ContentMD5()
-			storedObject.cacheControl = oie.CacheControl()
-			storedObject.contentLanguage = oie.ContentLanguage()
-			storedObject.contentDisposition = oie.ContentDisposition()
-			storedObject.contentEncoding = oie.ContentEncoding()
-			storedObject.Metadata = oie.NewCommonMetadata()
 
 			err = processIfPassedFilters(
 				filters,
@@ -141,33 +134,26 @@ func (t *s3Traverser) traverse(preprocessor objectMorpher, processor objectProce
 			continue
 		}
 
+		// default to empty props, but retrieve real ones if required
+		oie := common.ObjectInfoExtension{ObjectInfo: minio.ObjectInfo{}}
+		if t.getProperties {
+			oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
+			if err != nil {
+				return err
+			}
+			oie = common.ObjectInfoExtension{ObjectInfo: oi}
+		}
 		storedObject := newStoredObject(
 			preprocessor,
 			objectName,
 			relativePath,
+			common.EEntityType.File(),
 			objectInfo.LastModified,
 			objectInfo.Size,
-			nil,
-			blobTypeNA,
+			&oie,
+			noBlobProps,
+			oie.NewCommonMetadata(),
 			t.s3URLParts.BucketName)
-
-		if t.getProperties {
-			oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
-
-			if err != nil {
-				return err
-			}
-
-			oie := common.ObjectInfoExtension{ObjectInfo: oi}
-
-			storedObject.contentType = oi.ContentType
-			storedObject.md5 = oie.ContentMD5()
-			storedObject.cacheControl = oie.CacheControl()
-			storedObject.contentLanguage = oie.ContentLanguage()
-			storedObject.contentDisposition = oie.ContentDisposition()
-			storedObject.contentEncoding = oie.ContentEncoding()
-			storedObject.Metadata = oie.NewCommonMetadata()
-		}
 
 		err = processIfPassedFilters(filters,
 			storedObject,
@@ -180,7 +166,7 @@ func (t *s3Traverser) traverse(preprocessor objectMorpher, processor objectProce
 	return
 }
 
-func newS3Traverser(rawURL *url.URL, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter func()) (t *s3Traverser, err error) {
+func newS3Traverser(rawURL *url.URL, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (t *s3Traverser, err error) {
 	t = &s3Traverser{rawURL: rawURL, ctx: ctx, recursive: recursive, getProperties: getProperties, incrementEnumerationCounter: incrementEnumerationCounter}
 
 	// initialize S3 client and URL parts

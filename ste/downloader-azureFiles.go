@@ -30,22 +30,89 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
-type azureFilesDownloader struct{}
+type azureFilesDownloader struct {
+	jptm   IJobPartTransferMgr
+	txInfo TransferInfo
+	sip    ISourceInfoProvider
+}
 
 func newAzureFilesDownloader() downloader {
 	return &azureFilesDownloader{}
 }
 
+func (bd *azureFilesDownloader) init(jptm IJobPartTransferMgr) {
+	bd.txInfo = jptm.Info()
+	var err error
+	bd.sip, err = newFileSourceInfoProvider(jptm)
+	bd.jptm = jptm
+	common.PanicIfErr(err) // This literally will never return an error in the first place.
+	// It's not possible for newDefaultRemoteSourceInfoProvider to return an error,
+	// and it's not possible for newFileSourceInfoProvider to return an error either.
+}
+
+func (bd *azureFilesDownloader) isInitialized() bool {
+	// TODO: only day, do we really want this object to be able to exist in an uninitizalide state?
+	//   Could/should we refactor the construction...?
+	return bd.jptm != nil
+}
+
+var errorNoSddlFound = errors.New("no SDDL found")
+
+func (bd *azureFilesDownloader) preserveAttributes() (stage string, err error) {
+	info := bd.jptm.Info()
+
+	if info.PreserveSMBPermissions.IsTruthy() {
+		// We're about to call into Windows-specific code.
+		// Some functions here can't be called on other OSes, to the extent that they just aren't present in the library due to compile flags.
+		// In order to work around this, we'll do some trickery with interfaces.
+		// There is a windows-specific file (downloader-azureFiles_windows.go) that makes azureFilesDownloader satisfy the smbPropertyAwareDownloader interface.
+		// This function isn't present on other OSes due to compile flags,
+		// so in that way, we can cordon off these sections that would otherwise require filler functions.
+		// To do that, we'll do some type wrangling:
+		// bd can't directly be wrangled from a struct, so we wrangle it to an interface, then do so.
+		if spdl, ok := interface{}(bd).(smbPropertyAwareDownloader); ok {
+			// We don't need to worry about the sip not being a ISMBPropertyBearingSourceInfoProvider as Azure Files always is.
+			err = spdl.PutSDDL(bd.sip.(ISMBPropertyBearingSourceInfoProvider), bd.txInfo)
+			if err == errorNoSddlFound {
+				bd.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, "No SMB permissions were downloaded because none were found at the source")
+			} else if err != nil {
+				return "Setting destination file SDDLs", err
+			}
+		}
+	}
+
+	if info.PreserveSMBInfo {
+		// must be done AFTER we preserve the permissions (else some of the flags/dates set here may be lost)
+		if spdl, ok := interface{}(bd).(smbPropertyAwareDownloader); ok {
+			// We don't need to worry about the sip not being a ISMBPropertyBearingSourceInfoProvider as Azure Files always is.
+			err := spdl.PutSMBProperties(bd.sip.(ISMBPropertyBearingSourceInfoProvider), bd.txInfo)
+
+			if err != nil {
+				return "Setting destination file SMB properties", err
+			}
+		}
+	}
+
+	return "", nil
+}
+
 func (bd *azureFilesDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
-	// noop
+	bd.init(jptm)
 }
 
 func (bd *azureFilesDownloader) Epilogue() {
-	//noop
+	if !bd.isInitialized() {
+		return // nothing we can do
+	}
+	if bd.jptm.IsLive() {
+		stage, err := bd.preserveAttributes()
+		if err != nil {
+			bd.jptm.FailActiveDownload(stage, err)
+		}
+	}
 }
 
 // GenerateDownloadFunc returns a chunk-func for file downloads
-
 func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
 
@@ -84,4 +151,10 @@ func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, s
 			return
 		}
 	})
+}
+
+func (bd *azureFilesDownloader) SetFolderProperties(jptm IJobPartTransferMgr) error {
+	bd.init(jptm) // since Prologue doesn't get called for folders
+	_, err := bd.preserveAttributes()
+	return err
 }

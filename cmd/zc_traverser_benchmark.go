@@ -28,10 +28,10 @@ import (
 type benchmarkTraverser struct {
 	fileCount                   uint
 	bytesPerFile                int64
-	incrementEnumerationCounter func()
+	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func newBenchmarkTraverser(source string, incrementEnumerationCounter func()) (*benchmarkTraverser, error) {
+func newBenchmarkTraverser(source string, incrementEnumerationCounter enumerationCounterFunc) (*benchmarkTraverser, error) {
 	fc, bpf, err := benchmarkSourceHelper{}.FromUrl(source)
 	if err != nil {
 		return nil, err
@@ -58,17 +58,19 @@ func (t *benchmarkTraverser) traverse(preprocessor objectMorpher, processor obje
 		relativePath := name
 
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter()
+			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
 
 		err = processIfPassedFilters(filters, newStoredObject(
 			preprocessor,
 			name,
 			relativePath,
+			common.EEntityType.File(),
 			common.BenchmarkLmt,
 			t.bytesPerFile,
-			nil,
-			blobTypeNA,
+			noContentProps,
+			noBlobProps,
+			noMetdata,
 			""), processor)
 		if err != nil {
 			return err

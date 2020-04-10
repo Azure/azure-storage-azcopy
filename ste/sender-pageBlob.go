@@ -53,6 +53,14 @@ type pageBlobSenderBase struct {
 	// Using a automatic pacer here lets us find the right rate for this particular page blob, at which
 	// we won't be trying to move the faster than the Service wants us to.
 	filePacer autopacer
+
+	// destPageRangeOptimizer is necessary for managed disk imports,
+	// as it helps us identify where we actually need to write all zeroes to.
+	// Previously, if a page prefetched all zeroes, we'd ignore it.
+	// In a edge-case scenario (where two different VHDs had been uploaded to the same md impexp URL),
+	// there was a potential for us to not zero out 512b segments that we'd prefetched all zeroes for.
+	// This only posed danger when there was already data in one of these segments.
+	destPageRangeOptimizer *pageRangeOptimizer
 }
 
 const (
@@ -89,6 +97,14 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 
 	destPageBlobURL := azblob.NewPageBlobURL(*destURL, p)
 
+	// This is only necessary if our destination is a managed disk impexp account.
+	// Read the in struct explanation if necessary.
+	var destRangeOptimizer *pageRangeOptimizer
+	if isInManagedDiskImportExportAccount(*destURL) {
+		destRangeOptimizer = newPageRangeOptimizer(destPageBlobURL,
+			context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion))
+	}
+
 	props, err := srcInfoProvider.Properties()
 	if err != nil {
 		return nil, err
@@ -103,16 +119,17 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 	}
 
 	s := &pageBlobSenderBase{
-		jptm:            jptm,
-		destPageBlobURL: destPageBlobURL,
-		srcSize:         srcSize,
-		chunkSize:       chunkSize,
-		numChunks:       numChunks,
-		pacer:           pacer,
-		headersToApply:  props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
-		metadataToApply: props.SrcMetadata.ToAzBlobMetadata(),
-		destBlobTier:    destBlobTier,
-		filePacer:       newNullAutoPacer(), // defer creation of real one to Prologue
+		jptm:                   jptm,
+		destPageBlobURL:        destPageBlobURL,
+		srcSize:                srcSize,
+		chunkSize:              chunkSize,
+		numChunks:              numChunks,
+		pacer:                  pacer,
+		headersToApply:         props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
+		metadataToApply:        props.SrcMetadata.ToAzBlobMetadata(),
+		destBlobTier:           destBlobTier,
+		filePacer:              newNullAutoPacer(), // defer creation of real one to Prologue
+		destPageRangeOptimizer: destRangeOptimizer,
 	}
 
 	if s.isInManagedDiskImportExportAccount() && jptm.ShouldPutMd5() {
@@ -138,6 +155,10 @@ func isInLegacyDiskExportAccount(u url.URL) bool {
 
 func (s *pageBlobSenderBase) isInManagedDiskImportExportAccount() bool {
 	return isInManagedDiskImportExportAccount(s.destPageBlobURL.URL())
+}
+
+func (s *pageBlobSenderBase) SendableEntityType() common.EntityType {
+	return common.EEntityType.File()
 }
 
 func (s *pageBlobSenderBase) ChunkSize() uint32 {
@@ -189,6 +210,9 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 			s.jptm.FailActiveSend("Checking size of managed disk blob", sizeErr)
 			return
 		}
+
+		// Next, grab the page ranges on the destination.
+		s.destPageRangeOptimizer.fetchPages()
 
 		s.jptm.Log(pipeline.LogInfo, "Blob is managed disk import/export blob, so no Create call is required") // the blob always already exists
 		return

@@ -27,28 +27,22 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		glcm.Info("AWS S3 to Azure Blob copy is currently in preview. Validate the copy operation carefully before removing your data at source.")
 	}
 
-	dst, err := appendSASIfNecessary(cca.destination, cca.destinationSAS)
-	if err != nil {
-		return nil, err
-	}
-
-	src, err := appendSASIfNecessary(cca.source, cca.sourceSAS)
-	if err != nil {
-		return nil, err
-	}
-
-	var isPublic bool
 	srcCredInfo := common.CredentialInfo{}
+	var isPublic bool
+	var err error
 
-	if srcCredInfo, isPublic, err = getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, cca.sourceSAS, true); err != nil {
+	if srcCredInfo, isPublic, err = getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true); err != nil {
 		return nil, err
 		// If S2S and source takes OAuthToken as its cred type (OR) source takes anonymous as its cred type, but it's not public and there's no SAS
 	} else if cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() &&
 		(srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() ||
-			(srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && !isPublic && cca.sourceSAS == "")) {
+			(srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && !isPublic && cca.source.SAS == "")) {
 		// TODO: Generate a SAS token if it's blob -> *
 		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource")
 	}
+
+	jobPartOrder.PreserveSMBPermissions = cca.preserveSMBPermissions
+	jobPartOrder.PreserveSMBInfo = cca.preserveSMBInfo
 
 	// Infer on download so that we get LMT and MD5 on files download
 	// On S2S transfers the following rules apply:
@@ -62,7 +56,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.DestLengthValidation = cca.CheckLength
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
 
-	traverser, err = initResourceTraverser(src, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, func() {})
+	traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, func(common.EntityType) {})
 
 	if err != nil {
 		return nil, err
@@ -75,15 +69,15 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	// Check if the destination is a directory so we can correctly decide where our files land
-	isDestDir := cca.isDestDirectory(dst, &ctx)
+	isDestDir := cca.isDestDirectory(cca.destination, &ctx)
 
-	srcLevel, err := determineLocationLevel(cca.source, cca.fromTo.From(), true)
+	srcLevel, err := determineLocationLevel(cca.source.Value, cca.fromTo.From(), true)
 
 	if err != nil {
 		return nil, err
 	}
 
-	dstLevel, err := determineLocationLevel(cca.destination, cca.fromTo.To(), false)
+	dstLevel, err := determineLocationLevel(cca.destination.Value, cca.fromTo.To(), false)
 
 	if err != nil {
 		return nil, err
@@ -118,7 +112,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	dstContainerName := ""
 	// Extract the existing destination container name
 	if cca.fromTo.To().IsRemote() {
-		dstContainerName, err = GetContainerName(dst, cca.fromTo.To())
+		dstContainerName, err = GetContainerName(cca.destination.Value, cca.fromTo.To())
 
 		if err != nil {
 			return nil, err
@@ -127,7 +121,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		// only create the destination container in S2S scenarios
 		if cca.fromTo.From().IsRemote() && dstContainerName != "" { // if the destination has a explicit container name
 			// Attempt to create the container. If we fail, fail silently.
-			err = cca.createDstContainer(dstContainerName, dst, ctx, existingContainers)
+			err = cca.createDstContainer(dstContainerName, cca.destination, ctx, existingContainers)
 
 			// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 			if _, ok := seenFailedContainers[dstContainerName]; err != nil && ste.JobsAdmin != nil && !ok {
@@ -157,7 +151,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						continue
 					}
 
-					err = cca.createDstContainer(bucketName, dst, ctx, existingContainers)
+					err = cca.createDstContainer(bucketName, cca.destination, ctx, existingContainers)
 
 					// if JobsAdmin is nil, we're probably in testing mode.
 					// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
@@ -171,7 +165,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					}
 				}
 			} else {
-				cName, err := GetContainerName(src, cca.fromTo.From())
+				cName, err := GetContainerName(cca.source.Value, cca.fromTo.From())
 
 				if err != nil || cName == "" {
 					// this will probably never be reached
@@ -181,7 +175,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				resName, err := containerResolver.ResolveName(cName)
 
 				if err == nil {
-					err = cca.createDstContainer(resName, dst, ctx, existingContainers)
+					err = cca.createDstContainer(resName, cca.destination, ctx, existingContainers)
 
 					if _, ok := seenFailedContainers[dstContainerName]; err != nil && ste.JobsAdmin != nil && !ok {
 						logDstContainerCreateFailureOnce.Do(func() {
@@ -196,6 +190,15 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	filters := cca.initModularFilters()
+
+	// decide our folder transfer strategy
+	var message string
+	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters, cca.preserveSMBInfo, cca.preserveSMBPermissions.IsTruthy())
+	glcm.Info(message)
+	if ste.JobsAdmin != nil {
+		ste.JobsAdmin.LogToJobLog(message)
+	}
+
 	processor := func(object storedObject) error {
 		// Start by resolving the name and creating the container
 		if object.containerName != "" {
@@ -230,13 +233,18 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		srcRelPath := cca.makeEscapedRelativePath(true, isDestDir, object)
 		dstRelPath := cca.makeEscapedRelativePath(false, isDestDir, object)
 
-		transfer := object.ToNewCopyTransfer(
+		transfer, shouldSendToSte := object.ToNewCopyTransfer(
 			cca.autoDecompress && cca.fromTo.IsDownload(),
 			srcRelPath, dstRelPath,
 			cca.s2sPreserveAccessTier,
+			jobPartOrder.Fpo,
 		)
 
-		return addTransfer(&jobPartOrder, transfer, cca)
+		if shouldSendToSte {
+			return addTransfer(&jobPartOrder, transfer, cca)
+		} else {
+			return nil
+		}
 	}
 	finalizer := func() error {
 		return dispatchFinalPart(&jobPartOrder, cca)
@@ -247,7 +255,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 // This is condensed down into an individual function as we don't end up re-using the destination traverser at all.
 // This is just for the directory check.
-func (cca *cookedCopyCmdArgs) isDestDirectory(dst string, ctx *context.Context) bool {
+func (cca *cookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *context.Context) bool {
 	var err error
 	dstCredInfo := common.CredentialInfo{}
 
@@ -255,11 +263,11 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst string, ctx *context.Context) 
 		return false
 	}
 
-	if dstCredInfo, _, err = getCredentialInfoForLocation(*ctx, cca.fromTo.To(), cca.destination, cca.destinationSAS, true); err != nil {
+	if dstCredInfo, _, err = getCredentialInfoForLocation(*ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false); err != nil {
 		return false
 	}
 
-	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, func() {})
+	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, func(common.EntityType) {})
 
 	if err != nil {
 		return false
@@ -302,11 +310,11 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 	}
 
 	if len(cca.includeFileAttributes) != 0 {
-		filters = append(filters, buildAttrFilters(cca.includeFileAttributes, cca.source, true)...)
+		filters = append(filters, buildAttrFilters(cca.includeFileAttributes, cca.source.ValueLocal(), true)...)
 	}
 
 	if len(cca.excludeFileAttributes) != 0 {
-		filters = append(filters, buildAttrFilters(cca.excludeFileAttributes, cca.source, false)...)
+		filters = append(filters, buildAttrFilters(cca.excludeFileAttributes, cca.source.ValueLocal(), false)...)
 	}
 
 	// finally, log any search prefix computed from these
@@ -319,7 +327,7 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 	return filters
 }
 
-func (cca *cookedCopyCmdArgs) createDstContainer(containerName, dstWithSAS string, ctx context.Context, existingContainers map[string]bool) (err error) {
+func (cca *cookedCopyCmdArgs) createDstContainer(containerName string, dstWithSAS common.ResourceString, ctx context.Context, existingContainers map[string]bool) (err error) {
 	if _, ok := existingContainers[containerName]; ok {
 		return
 	}
@@ -327,7 +335,7 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName, dstWithSAS strin
 
 	dstCredInfo := common.CredentialInfo{}
 
-	if dstCredInfo, _, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, cca.destinationSAS, false); err != nil {
+	if dstCredInfo, _, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false); err != nil {
 		return err
 	}
 
@@ -341,7 +349,7 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName, dstWithSAS strin
 	// TODO: Reduce code dupe somehow
 	switch cca.fromTo.To() {
 	case common.ELocation.Local():
-		err = os.MkdirAll(common.GenerateFullPath(cca.destination, containerName), os.ModeDir|os.ModePerm)
+		err = os.MkdirAll(common.GenerateFullPath(cca.destination.ValueLocal(), containerName), os.ModeDir|os.ModePerm)
 	case common.ELocation.Blob():
 		accountRoot, err := GetAccountRoot(dstWithSAS, cca.fromTo.To())
 
@@ -412,73 +420,106 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName, dstWithSAS strin
 	return
 }
 
-func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool, object storedObject) (relativePath string) {
-	var pathEncodeRules = func(path string) string {
-		loc := common.ELocation.Unknown()
+// Because some invalid characters weren't being properly encoded by url.PathEscape, we're going to instead manually encode them.
+var encodedInvalidCharacters = map[rune]string{
+	0x00: "%00",
+	'<':  "%3C",
+	'>':  "%3E",
+	'\\': "%5C",
+	'/':  "%2F",
+	':':  "%3A",
+	'"':  "%22",
+	'|':  "%7C",
+	'?':  "%3F",
+	'*':  "%2A",
+}
 
-		if source {
-			loc = cca.fromTo.From()
-		} else {
-			loc = cca.fromTo.To()
-		}
-		pathParts := strings.Split(path, common.AZCOPY_PATH_SEPARATOR_STRING)
+var reverseEncodedChars = map[string]rune{
+	"%00": 0x00,
+	"%3C": '<',
+	"%3E": '>',
+	"%5C": '\\',
+	"%2F": '/',
+	"%3A": ':',
+	"%22": '"',
+	"%7C": '|',
+	"%3F": '?',
+	"%2A": '*',
+}
 
-		// If downloading on Windows or uploading to files, encode unsafe characters.
-		if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") || (!source && loc == common.ELocation.File()) {
-			invalidChars := `<>\/:"|?*` + string(0x00)
+func pathEncodeRules(path string, fromTo common.FromTo, source bool) string {
+	loc := common.ELocation.Unknown()
 
-			for _, c := range strings.Split(invalidChars, "") {
-				for k, p := range pathParts {
-					pathParts[k] = strings.ReplaceAll(p, c, url.PathEscape(c))
-				}
+	if source {
+		loc = fromTo.From()
+	} else {
+		loc = fromTo.To()
+	}
+	pathParts := strings.Split(path, common.AZCOPY_PATH_SEPARATOR_STRING)
+
+	// If downloading on Windows or uploading to files, encode unsafe characters.
+	if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") || (!source && loc == common.ELocation.File()) {
+		// invalidChars := `<>\/:"|?*` + string(0x00)
+
+		for k, c := range encodedInvalidCharacters {
+			for part, p := range pathParts {
+				pathParts[part] = strings.ReplaceAll(p, string(k), c)
 			}
-
-			// If uploading from Windows or downloading from files, decode unsafe chars
-		} else if (!source && cca.fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") || (!source && cca.fromTo.From() == common.ELocation.File()) {
-			invalidChars := `<>\/:"|?*` + string(0x00)
-
-			for _, c := range strings.Split(invalidChars, "") {
-				for k, p := range pathParts {
-					pathParts[k] = strings.ReplaceAll(p, url.PathEscape(c), c)
-				}
-			}
 		}
 
-		if loc.IsRemote() {
+		// If uploading from Windows or downloading from files, decode unsafe chars
+	} else if (!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") || (!source && fromTo.From() == common.ELocation.File()) {
+
+		for encoded, c := range reverseEncodedChars {
 			for k, p := range pathParts {
-				pathParts[k] = url.PathEscape(p)
+				pathParts[k] = strings.ReplaceAll(p, encoded, string(c))
 			}
 		}
-
-		path = strings.Join(pathParts, "/")
-		return path
 	}
 
+	if loc.IsRemote() {
+		for k, p := range pathParts {
+			pathParts[k] = url.PathEscape(p)
+		}
+	}
+
+	path = strings.Join(pathParts, "/")
+	return path
+}
+
+func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool, object storedObject) (relativePath string) {
 	// write straight to /dev/null, do not determine a indirect path
-	if !source && cca.destination == common.Dev_Null {
+	if !source && cca.destination.Value == common.Dev_Null {
 		return "" // ignore path encode rules
 	}
 
-	// source is a EXACT path to the file.
-	if object.relativePath == "" {
+	// source is a EXACT path to the file
+	if object.isSingleSourceFile() {
 		// If we're finding an object from the source, it returns "" if it's already got it.
 		// If we're finding an object on the destination and we get "", we need to hand it the object name (if it's pointing to a folder)
 		if source {
 			relativePath = ""
 		} else {
 			if dstIsDir {
+				// Our source points to a specific file (and so has no relative path)
+				// but our dest does not point to a specific file, it just points to a directory,
+				// and so relativePath needs the _name_ of the source.
 				relativePath = "/" + object.name
 			} else {
 				relativePath = ""
 			}
 		}
 
-		return pathEncodeRules(relativePath)
+		return pathEncodeRules(relativePath, cca.fromTo, source)
 	}
 
-	// If it's out here, the object is contained in a folder, or was found via a wildcard.
+	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true
 
-	relativePath = "/" + strings.Replace(object.relativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+	if object.isSourceRootFolder() {
+		relativePath = "" // otherwise we get "/" from the line below, and that breaks some clients, e.g. blobFS
+	} else {
+		relativePath = "/" + strings.Replace(object.relativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+	}
 
 	if common.IffString(source, object.containerName, object.dstContainerName) != "" {
 		relativePath = `/` + common.IffString(source, object.containerName, object.dstContainerName) + relativePath
@@ -486,7 +527,7 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 		// We ONLY need to do this adjustment to the destination.
 		// The source SAS has already been removed. No need to convert it to a URL or whatever.
 		// Save to a directory
-		rootDir := filepath.Base(cca.source)
+		rootDir := filepath.Base(cca.source.Value)
 
 		if cca.fromTo.From().IsRemote() {
 			ueRootDir, err := url.PathUnescape(rootDir)
@@ -494,11 +535,74 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 			// Realistically, err should never not be nil here.
 			if err == nil {
 				rootDir = ueRootDir
+			} else {
+				panic("unexpected un-escapeable rootDir name")
 			}
 		}
 
 		relativePath = "/" + rootDir + relativePath
 	}
 
-	return pathEncodeRules(relativePath)
+	return pathEncodeRules(relativePath, cca.fromTo, source)
+}
+
+// we assume that preserveSmbPermissions and preserveSmbInfo have already been validated, such that they are only true if both resource types support them
+func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir bool, filters []objectFilter, preserveSmbInfo, preserveSmbPermissions bool) (common.FolderPropertyOption, string) {
+
+	getSuffix := func(willProcess bool) string {
+		willProcessString := common.IffString(willProcess, "will be processed", "will not be processed")
+
+		template := ". For the same reason, %s defined on folders %s"
+		switch {
+		case preserveSmbPermissions && preserveSmbInfo:
+			return fmt.Sprintf(template, "properties and permissions", willProcessString)
+		case preserveSmbInfo:
+			return fmt.Sprintf(template, "properties", willProcessString)
+		case preserveSmbPermissions:
+			return fmt.Sprintf(template, "permissions", willProcessString)
+		default:
+			return "" // no preserve flags set, so we have nothing to say about them
+		}
+	}
+
+	bothFolderAware := fromTo.AreBothFolderAware()
+	isRemoveFromFolderAware := fromTo == common.EFromTo.FileTrash()
+	if bothFolderAware || isRemoveFromFolderAware {
+		if !recursive {
+			return common.EFolderPropertiesOption.NoFolders(), // does't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
+				"Any empty folders will not be processed, because --recursive was not specified" +
+					getSuffix(false)
+		}
+
+		// check filters. Otherwise, if filter was say --include-pattern *.txt, we would transfer properties
+		// (but not contents) for every directory that contained NO text files.  Could make heaps of empty directories
+		// at the destination.
+		filtersOK := true
+		for _, f := range filters {
+			if f.appliesOnlyToFiles() {
+				filtersOK = false // we have a least one filter that doesn't apply to folders
+			}
+		}
+		if !filtersOK {
+			return common.EFolderPropertiesOption.NoFolders(),
+				"Any empty folders will not be processed, because a file-focused filter is applied" +
+					getSuffix(false)
+		}
+
+		message := "Any empty folders will be processed, because source and destination both support folders"
+		if isRemoveFromFolderAware {
+			message = "Any empty folders will be processed, because deletion is from a folder-aware location"
+		}
+		message += getSuffix(true)
+		if stripTopDir {
+			return common.EFolderPropertiesOption.AllFoldersExceptRoot(), message
+		} else {
+			return common.EFolderPropertiesOption.AllFolders(), message
+		}
+	}
+
+	return common.EFolderPropertiesOption.NoFolders(),
+		"Any empty folders will not be processed, because source and/or destination doesn't have full folder support" +
+			getSuffix(false)
+
 }

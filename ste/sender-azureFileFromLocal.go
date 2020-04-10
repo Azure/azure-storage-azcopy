@@ -32,7 +32,7 @@ type azureFileUploader struct {
 	md5Channel chan []byte
 }
 
-func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
+func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
 	senderBase, err := newAzureFileSenderBase(jptm, destination, p, pacer, sip)
 	if err != nil {
 		return nil, err
@@ -68,7 +68,7 @@ func (u *azureFileUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 		// upload the byte range represented by this chunk
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newPacedRequestBody(u.ctx, reader, u.pacer)
-		_, err := u.fileURL.UploadRange(u.ctx, id.OffsetInFile(), body, nil)
+		_, err := u.fileURL().UploadRange(u.ctx, id.OffsetInFile(), body, nil)
 		if err != nil {
 			jptm.FailActiveUpload("Uploading range", err)
 			return
@@ -77,6 +77,8 @@ func (u *azureFileUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 }
 
 func (u *azureFileUploader) Epilogue() {
+	u.azureFileSenderBase.Epilogue()
+
 	jptm := u.jptm
 
 	// set content MD5 (only way to do this is to re-PUT all the headers, this time with the MD5 included)
@@ -86,9 +88,8 @@ func (u *azureFileUploader) Epilogue() {
 				return nil
 			}
 
-			epilogueHeaders := u.headersToApply
-			epilogueHeaders.ContentMD5 = md5Hash
-			_, err := u.fileURL.SetHTTPHeaders(u.ctx, epilogueHeaders)
+			u.headersToApply.ContentMD5 = md5Hash
+			_, err := u.fileURL().SetHTTPHeaders(u.ctx, u.headersToApply)
 			return err
 		})
 	}

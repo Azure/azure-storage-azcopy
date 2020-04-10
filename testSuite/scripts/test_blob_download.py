@@ -20,7 +20,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         src = file_path
         dst = util.test_container_url
         result = util.Command("copy").add_arguments(src).add_arguments(dst). \
-            add_flags("log-level", "info").add_flags("put-md5", "true").execute_azcopy_copy_command()
+            add_flags("log-level", "info").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # verify the uploaded blob
@@ -32,8 +32,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         # note we have no tests to verify the success of check-md5. TODO: remove this when fault induction is introduced
         src = util.get_resource_sas(filename)
         dst = os.devnull
-        result = util.Command("copy").add_arguments(src).add_arguments(dst).add_flags("log-level", "info"). \
-            add_flags("check-md5", "FailIfDifferentOrMissing")
+        result = util.Command("copy").add_arguments(src).add_arguments(dst).add_flags("log-level", "info")
 
     # test_download_1kb_blob verifies the download of 1Kb blob using azcopy.
     def test_download_1kb_blob(self):
@@ -66,7 +65,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         result = util.Command("testBlob").add_arguments(dest).add_arguments(src).execute_azcopy_verify()
         self.assertTrue(result)
 
-    # test_download_perserve_last_modified_time verifies the azcopy downloaded file
+    # test_download_preserve_last_modified_time verifies the azcopy downloaded file
     # and its modified time preserved locally on disk
     def test_blob_download_preserve_last_modified_time(self):
         # create a file of 2KB
@@ -310,8 +309,8 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         # and recursive is set to false, files inside dir will be download
         # and not files inside the sub-dir
         # Number of Expected Transfer should be 10
-        self.assertEquals(x.TransfersCompleted, 10)
-        self.assertEquals(x.TransfersFailed, 0)
+        self.assertEquals(x.TransfersCompleted, "10")
+        self.assertEquals(x.TransfersFailed, "0")
 
         # create the resource sas
         dir_sas = util.get_resource_sas(dir_name + "/sub_dir_download_wildcard_recursive_false_1/*")
@@ -330,8 +329,8 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         # and recursive is set to false, .txt files inside sub-dir inside the dir
         # will be downloaded
         # Number of Expected Transfer should be 10
-        self.assertEquals(x.TransfersCompleted, 10)
-        self.assertEquals(x.TransfersFailed, 0)
+        self.assertEquals(x.TransfersCompleted, "10")
+        self.assertEquals(x.TransfersFailed, "0")
 
     def test_blob_download_wildcard_recursive_true_1(self):
         #This test verifies the azcopy behavior when wildcards are
@@ -378,8 +377,8 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         # and recursive is set to true, all files inside dir and
         # inside sub-dirs will be download
         # Number of Expected Transfer should be 30
-        self.assertEquals(x.TransfersCompleted, 30)
-        self.assertEquals(x.TransfersFailed, 0)
+        self.assertEquals(x.TransfersCompleted, "30")
+        self.assertEquals(x.TransfersFailed, "0")
 
         # create the resource sas
         dir_sas_with_wildcard = util.get_resource_sas(dir_name + "/*")
@@ -399,8 +398,8 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         # and recursive is set to true, files immediately inside will not be downloaded
         # but files inside sub-dir logs and sub-dir inside logs i.e abc inside dir will be downloaded
         # Number of Expected Transfer should be 20
-        self.assertEquals(x.TransfersCompleted, 20)
-        self.assertEquals(x.TransfersFailed, 0)
+        self.assertEquals(x.TransfersCompleted, "20")
+        self.assertEquals(x.TransfersFailed, "0")
 
         # prepare testing paths
         log_path = os.path.join(dir_path, "logs/")
@@ -460,8 +459,8 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         except:
             self.fail('error parsing the output in Json Format')
         # since entire directory is downloaded
-        self.assertEquals(x.TransfersCompleted, 30)
-        self.assertEquals(x.TransfersFailed, 0)
+        self.assertEquals(x.TransfersCompleted, "30")
+        self.assertEquals(x.TransfersFailed, "0")
 
         # create the resource sas
         dir_sas = util.get_resource_sas(dir_name)
@@ -479,5 +478,5 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         except:
             self.fail('error parsing the output in Json Format')
         #since only logs sub-directory is downloaded, transfers will be 20
-        self.assertEquals(x.TransfersCompleted, 20)
-        self.assertEquals(x.TransfersFailed, 0)
+        self.assertEquals(x.TransfersCompleted, "20")
+        self.assertEquals(x.TransfersFailed, "0")

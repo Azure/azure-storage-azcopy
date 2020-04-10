@@ -83,6 +83,7 @@ func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 		s2sSourceChangeValidation:      defaultS2SSourceChangeValidation,
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
 		forceWrite:                     common.EOverwriteOption.True().String(),
+		preserveOwner:                  common.PreserveOwnerDefault,
 	}
 }
 
@@ -113,6 +114,11 @@ func validateS2STransfersAreScheduled(c *chk.C, srcDirName string, dstDirName st
 
 		srcRelativeFilePath = strings.Replace(srcRelativeFilePath, unescapedSrcDir, "", 1)
 		dstRelativeFilePath = strings.Replace(dstRelativeFilePath, unescapedDstDir, "", 1)
+		if unescapedDstDir == dstRelativeFilePath+"/" {
+			// Thing we were searching for is bigger than what we are searching in, due to ending end a /
+			// Happens for root dir
+			dstRelativeFilePath = ""
+		}
 
 		if debugMode {
 			fmt.Println("srcRelativeFilePath: ", srcRelativeFilePath)

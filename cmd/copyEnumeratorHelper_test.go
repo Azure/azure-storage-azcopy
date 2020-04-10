@@ -29,11 +29,23 @@ type copyEnumeratorHelperTestSuite struct{}
 
 var _ = chk.Suite(&copyEnumeratorHelperTestSuite{})
 
+func newLocalRes(path string) common.ResourceString {
+	return common.ResourceString{Value: path}
+}
+
+func newRemoteRes(url string) common.ResourceString {
+	r, err := SplitResourceString(url, common.ELocation.Blob())
+	if err != nil {
+		panic("can't parse resource string")
+	}
+	return r
+}
+
 func (s *copyEnumeratorHelperTestSuite) TestAddTransferPathRootsTrimmed(c *chk.C) {
 	// setup
 	request := common.CopyJobPartOrderRequest{
-		SourceRoot:      "a/b/",
-		DestinationRoot: "y/z/",
+		SourceRoot:      newLocalRes("a/b/"),
+		DestinationRoot: newLocalRes("y/z/"),
 	}
 
 	transfer := common.CopyTransfer{

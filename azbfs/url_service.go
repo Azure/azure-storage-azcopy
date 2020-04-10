@@ -2,7 +2,9 @@ package azbfs
 
 import (
 	"context"
+	"errors"
 	"net/url"
+	"path"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 )
@@ -69,4 +71,18 @@ func appendToURLPath(u url.URL, name string) url.URL {
 	}
 	u.Path += name
 	return u
+}
+
+func removeLastSectionOfPath(u url.URL) (url.URL, error) {
+	if len(u.Path) == 0 {
+		return url.URL{}, errors.New("cannot remove from path because it is empty")
+	}
+
+	trimmedPath := path.Dir(u.Path)
+	if trimmedPath == "." {
+		trimmedPath = "" // should never happen, given what we pass in, but just in case, let's not return the file-system-ish dot
+	}
+
+	u.Path = trimmedPath
+	return u, nil
 }

@@ -30,6 +30,8 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
+
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
@@ -64,15 +66,6 @@ func (util copyHandlerUtil) urlIsContainerOrVirtualDirectory(url *url.URL) bool 
 		// Otherwise, it's just a blob.
 		return strings.HasSuffix(url.Path, "/") || strings.Count(url.Path[1:], "/") <= 1
 	}
-}
-
-func (util copyHandlerUtil) appendQueryParamToUrl(url *url.URL, queryParam string) *url.URL {
-	if len(url.RawQuery) > 0 {
-		url.RawQuery += "&" + queryParam
-	} else {
-		url.RawQuery = queryParam
-	}
-	return url
 }
 
 // redactSigQueryParam checks for the signature in the given rawquery part of the url
@@ -131,11 +124,20 @@ func (util copyHandlerUtil) ConstructCommandStringFromArgs() string {
 
 func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, url *url.URL, p pipeline.Pipeline) bool {
 	if util.urlIsContainerOrVirtualDirectory(url) {
+
 		return true
 	}
 	// Need to get the resource properties and verify if it is a file or directory
 	dirURL := azbfs.NewDirectoryURL(*url, p)
-	return dirURL.IsDirectory(context.Background())
+	isDir, err := dirURL.IsDirectory(context.Background())
+
+	if err != nil {
+		if ste.JobsAdmin != nil {
+			ste.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to check if destination is a folder or a file (ADLSg2). Assuming the destination is a file: %s", err))
+		}
+	}
+
+	return isDir
 }
 
 func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *url.URL, p pipeline.Pipeline) bool {
@@ -148,6 +150,10 @@ func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *ur
 	directoryURL := azfile.NewDirectoryURL(*url, p)
 	_, err := directoryURL.GetProperties(ctx)
 	if err != nil {
+		if ste.JobsAdmin != nil {
+			ste.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err))
+		}
+
 		return false
 	}
 

@@ -150,9 +150,9 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	// main computeJobXfer logic
 	switch {
 	case fromTo == common.EFromTo.BlobTrash():
-		return DeleteBlobPrologue
+		return DeleteBlob
 	case fromTo == common.EFromTo.FileTrash():
-		return DeleteFilePrologue
+		return DeleteFile
 	default:
 		if fromTo.IsDownload() {
 			return parameterizeDownload(remoteToLocal, getDownloader(fromTo.From()))

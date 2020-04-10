@@ -99,6 +99,10 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		muBlockIDs:       &sync.Mutex{}}, nil
 }
 
+func (s *blockBlobSenderBase) SendableEntityType() common.EntityType {
+	return common.EEntityType.File()
+}
+
 func (s *blockBlobSenderBase) ChunkSize() uint32 {
 	return s.chunkSize
 }
