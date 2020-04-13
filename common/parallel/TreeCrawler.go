@@ -27,7 +27,7 @@ import (
 )
 
 type crawler struct {
-	output      chan ErrorableItem
+	output      chan CrawlResult
 	workerBody  EnumerateOneDirFunc
 	parallelism int
 	cond        *sync.Cond
@@ -52,10 +52,12 @@ func (r CrawlResult) Item() (interface{}, error) {
 // must be safe to be simultaneously called by multiple go-routines, each with a different dir
 type EnumerateOneDirFunc func(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry)) error
 
-func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int) <-chan ErrorableItem {
+// Crawl crawls an abstract directory tree, using the supplied enumeration function.  May be use for whatever
+// that function can enumerate (i.e. not necessarily a local file system, just anything tree-structured)
+func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int) <-chan CrawlResult {
 	c := &crawler{
 		unstartedDirs: make([]Directory, 0, 1024),
-		output:        make(chan ErrorableItem, 1000),
+		output:        make(chan CrawlResult, 1000),
 		workerBody:    worker,
 		parallelism:   parallelism,
 		cond:          sync.NewCond(&sync.Mutex{}),
