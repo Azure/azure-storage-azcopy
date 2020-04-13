@@ -158,7 +158,10 @@ func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (boo
 		foundDirectories = append(foundDirectories, d)
 	}
 	addOutput := func(e DirectoryEntry) {
-		c.output <- CrawlResult{item: e}
+		select {
+		case c.output <- CrawlResult{item: e}:
+		case <-ctx.Done(): // don't block on full channel if cancelled
+		}
 	}
 	bodyErr := c.workerBody(toExamine, addDir, addOutput) // this is the worker body supplied by our caller
 
