@@ -38,6 +38,7 @@ type EnvironmentVariable struct {
 var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ConcurrencyValue(),
 	EEnvironmentVariable.TransferInitiationPoolSize(),
+	EEnvironmentVariable.EnumerationPoolSize(),
 	EEnvironmentVariable.LogLocation(),
 	EEnvironmentVariable.JobPlanLocation(),
 	EEnvironmentVariable.BufferGB(),
@@ -103,8 +104,7 @@ func (EnvironmentVariable) TransferInitiationPoolSize() EnvironmentVariable {
 func (EnvironmentVariable) EnumerationPoolSize() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_CONCURRENT_SCAN",
-		Description: "Controls the (max) degree of parallelism used during enumeration. Only affects parallelized enumerators",
-		Hidden:      true, // hidden for now. We might not need to make it public? E.g. if we just cap it to the concurrency value or something?
+		Description: "Controls the (max) degree of parallelism used during scanning. Only affects parallelized enumerators, which include Azure Files and Local File Systems.",
 	}
 }
 
