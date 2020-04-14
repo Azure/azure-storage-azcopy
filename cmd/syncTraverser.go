@@ -39,25 +39,27 @@ func newLocalTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (*localTrav
 	var fullPath string
 
 	if isSource {
-		fullPath = cca.source
+		fullPath = cca.source.ValueLocal()
 	} else {
-		fullPath = cca.destination
+		fullPath = cca.destination.ValueLocal()
 	}
 
 	if strings.ContainsAny(strings.TrimPrefix(fullPath, common.EXTENDED_PATH_PREFIX), "*?") {
 		return nil, errors.New("illegal local path, no pattern matching allowed for sync command")
 	}
 
-	incrementEnumerationCounter := func() {
-		var counterAddr *uint64
+	incrementEnumerationCounter := func(entityType common.EntityType) {
+		if entityType == common.EEntityType.File() {
+			var counterAddr *uint64
 
-		if isSource {
-			counterAddr = &cca.atomicSourceFilesScanned
-		} else {
-			counterAddr = &cca.atomicDestinationFilesScanned
+			if isSource {
+				counterAddr = &cca.atomicSourceFilesScanned
+			} else {
+				counterAddr = &cca.atomicDestinationFilesScanned
+			}
+
+			atomic.AddUint64(counterAddr, 1)
 		}
-
-		atomic.AddUint64(counterAddr, 1)
 	}
 
 	// TODO: Implement this flag (followSymlinks).
@@ -74,15 +76,9 @@ func newBlobTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (t *blobTrav
 	// figure out the right URL
 	var rawURL *url.URL
 	if isSource {
-		rawURL, err = url.Parse(cca.source)
-		if err == nil && cca.sourceSAS != "" {
-			copyHandlerUtil{}.appendQueryParamToUrl(rawURL, cca.sourceSAS)
-		}
+		rawURL, err = cca.source.FullURL()
 	} else {
-		rawURL, err = url.Parse(cca.destination)
-		if err == nil && cca.destinationSAS != "" {
-			copyHandlerUtil{}.appendQueryParamToUrl(rawURL, cca.destinationSAS)
-		}
+		rawURL, err = cca.destination.FullURL()
 	}
 
 	if err != nil {
@@ -98,16 +94,19 @@ func newBlobTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (t *blobTrav
 		return
 	}
 
-	incrementEnumerationCounter := func() {
-		var counterAddr *uint64
+	incrementEnumerationCounter := func(entityType common.EntityType) {
 
-		if isSource {
-			counterAddr = &cca.atomicSourceFilesScanned
-		} else {
-			counterAddr = &cca.atomicDestinationFilesScanned
+		if entityType == common.EEntityType.File() {
+			var counterAddr *uint64
+
+			if isSource {
+				counterAddr = &cca.atomicSourceFilesScanned
+			} else {
+				counterAddr = &cca.atomicDestinationFilesScanned
+			}
+
+			atomic.AddUint64(counterAddr, 1)
 		}
-
-		atomic.AddUint64(counterAddr, 1)
 	}
 
 	return newBlobTraverser(rawURL, p, ctx, cca.recursive, incrementEnumerationCounter), nil

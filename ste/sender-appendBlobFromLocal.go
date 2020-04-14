@@ -32,7 +32,7 @@ type appendBlobUploader struct {
 	md5Channel chan []byte
 }
 
-func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
+func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
 	senderBase, err := newAppendBlobSenderBase(jptm, destination, p, pacer, sip)
 	if err != nil {
 		return nil, err

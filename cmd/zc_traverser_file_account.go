@@ -39,7 +39,7 @@ type fileAccountTraverser struct {
 	getProperties bool
 
 	// a generic function to notify that a new stored object has been enumerated
-	incrementEnumerationCounter func()
+	incrementEnumerationCounter enumerationCounterFunc
 }
 
 func (t *fileAccountTraverser) isDirectory(isSource bool) bool {
@@ -117,7 +117,7 @@ func (t *fileAccountTraverser) traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newFileAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, getProperties bool, incrementEnumerationCounter func()) (t *fileAccountTraverser) {
+func newFileAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (t *fileAccountTraverser) {
 	fURLparts := azfile.NewFileURLParts(*rawURL)
 	sPattern := fURLparts.ShareName
 

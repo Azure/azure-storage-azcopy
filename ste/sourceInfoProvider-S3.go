@@ -165,10 +165,14 @@ func (p *s3SourceInfoProvider) IsLocal() bool {
 	return false
 }
 
-func (p *s3SourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
+func (p *s3SourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
 	objectInfo, err := p.s3Client.StatObject(p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, minio.StatObjectOptions{})
 	if err != nil {
 		return time.Time{}, err
 	}
 	return objectInfo.LastModified, nil
+}
+
+func (p *s3SourceInfoProvider) EntityType() common.EntityType {
+	return common.EEntityType.File() // no real folders exist in S3
 }

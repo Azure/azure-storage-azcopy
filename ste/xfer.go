@@ -76,6 +76,11 @@ func expectFailureXferDecorator(targetFunction newJobXfer) newJobXfer {
 
 			// Shorten our paths so the error isn't obnoxious in the case of ultra-long paths
 			shortenPath := func(loc string, locType common.Location) string {
+        // Ignore unknown locations, nothing to do.
+				if locType == common.ELocation.Unknown() {
+					return ""
+				}
+
 				// Trim the query. We're only interested in the path.
 				if locType.IsRemote() {
 					u, err := url.Parse(loc)
@@ -100,7 +105,9 @@ func expectFailureXferDecorator(targetFunction newJobXfer) newJobXfer {
 				jptm.LogUploadError(shortSrc, shortDst, info.FailureReason, 0)
 			} else if fromTo.IsS2S() {
 				jptm.LogS2SCopyError(shortSrc, shortDst, info.FailureReason, 0)
-			}
+      } else if fromTo.To() == common.ELocation.Unknown() {
+        jptm.LogError(shortSrc, "DELETE ERROR", info.FailureReason)
+      }
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
 
@@ -201,9 +208,9 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	// main computeJobXfer logic
 	switch {
 	case fromTo == common.EFromTo.BlobTrash():
-		baseXfer = DeleteBlobPrologue
+		baseXfer = DeleteBlob
 	case fromTo == common.EFromTo.FileTrash():
-		baseXfer = DeleteFilePrologue
+		baseXfer = DeleteFile
 	default:
 		if fromTo.IsDownload() {
 			baseXfer = parameterizeDownload(remoteToLocal, getDownloader(fromTo.From()))

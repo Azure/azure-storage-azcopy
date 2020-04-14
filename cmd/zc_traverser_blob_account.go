@@ -38,7 +38,7 @@ type blobAccountTraverser struct {
 	cachedContainers []string
 
 	// a generic function to notify that a new stored object has been enumerated
-	incrementEnumerationCounter func()
+	incrementEnumerationCounter enumerationCounterFunc
 }
 
 func (t *blobAccountTraverser) isDirectory(isSource bool) bool {
@@ -118,7 +118,7 @@ func (t *blobAccountTraverser) traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, incrementEnumerationCounter func()) (t *blobAccountTraverser) {
+func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, incrementEnumerationCounter enumerationCounterFunc) (t *blobAccountTraverser) {
 	bURLParts := azblob.NewBlobURLParts(*rawURL)
 	cPattern := bURLParts.ContainerName
 

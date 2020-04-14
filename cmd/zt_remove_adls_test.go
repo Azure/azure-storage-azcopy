@@ -43,7 +43,7 @@ func (s *cmdIntegrationSuite) TestRemoveFilesystem(c *chk.C) {
 
 	// set up directory + file as children of the filesystem to delete
 	dirURL := fsURL.NewDirectoryURL(generateName("dir", 0))
-	_, err := dirURL.Create(ctx)
+	_, err := dirURL.Create(ctx, true)
 	c.Assert(err, chk.IsNil)
 	fileURL := dirURL.NewFileURL(generateName("file", 0))
 	_, err = fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{})
@@ -78,7 +78,7 @@ func (s *cmdIntegrationSuite) TestRemoveDirectory(c *chk.C) {
 	// set up the directory to be deleted
 	dirName := generateName("dir", 0)
 	dirURL := fsURL.NewDirectoryURL(dirName)
-	_, err := dirURL.Create(ctx)
+	_, err := dirURL.Create(ctx, true)
 	c.Assert(err, chk.IsNil)
 	fileURL := dirURL.NewFileURL(generateName("file", 0))
 	_, err = fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{})
@@ -120,7 +120,7 @@ func (s *cmdIntegrationSuite) TestRemoveFile(c *chk.C) {
 	// set up the parent of the file to be deleted
 	parentDirName := generateName("dir", 0)
 	parentDirURL := fsURL.NewDirectoryURL(parentDirName)
-	_, err := parentDirURL.Create(ctx)
+	_, err := parentDirURL.Create(ctx, true)
 	c.Assert(err, chk.IsNil)
 
 	// set up the file to be deleted
@@ -158,7 +158,7 @@ func (s *cmdIntegrationSuite) TestRemoveListOfALDSFilesAndDirectories(c *chk.C) 
 	// set up the first file to be deleted, it sits inside top level dir
 	parentDirName := generateName("dir", 0)
 	parentDirURL := fsURL.NewDirectoryURL(parentDirName)
-	_, err := parentDirURL.Create(ctx)
+	_, err := parentDirURL.Create(ctx, true)
 	c.Assert(err, chk.IsNil)
 	fileName1 := generateName("file1", 0)
 	fileURL1 := parentDirURL.NewFileURL(fileName1)

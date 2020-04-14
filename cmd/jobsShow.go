@@ -118,8 +118,12 @@ func PrintJobTransfers(listTransfersResponse common.ListJobTransfersResponse) {
 		var sb strings.Builder
 		sb.WriteString("----------- Transfers for JobId " + listTransfersResponse.JobID.String() + " -----------\n")
 		for index := 0; index < len(listTransfersResponse.Details); index++ {
-			sb.WriteString("transfer--> source: " + listTransfersResponse.Details[index].Src + " destination: " +
-				listTransfersResponse.Details[index].Dst + " status " + listTransfersResponse.Details[index].TransferStatus.String() + "\n")
+			folderChar := ""
+			if listTransfersResponse.Details[index].IsFolderProperties {
+				folderChar = "/"
+			}
+			sb.WriteString("transfer--> source: " + listTransfersResponse.Details[index].Src + folderChar + " destination: " +
+				listTransfersResponse.Details[index].Dst + folderChar + " status " + listTransfersResponse.Details[index].TransferStatus.String() + "\n")
 		}
 
 		return sb.String()
@@ -143,8 +147,10 @@ func PrintJobProgressSummary(summary common.ListJobSummaryResponse) {
 		}
 
 		return fmt.Sprintf(
-			"\nJob %s summary\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nPercent Complete (approx): %.1f\nFinal Job Status: %v\n",
+			"\nJob %s summary\nNumber of File Transfers: %v\nNumber of Folder Property Transfers: %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nPercent Complete (approx): %.1f\nFinal Job Status: %v\n",
 			summary.JobID.String(),
+			summary.FileTransfers,
+			summary.FolderPropertyTransfers,
 			summary.TotalTransfers,
 			summary.TransfersCompleted,
 			summary.TransfersFailed,

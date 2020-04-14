@@ -100,10 +100,6 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 	if credentialInfo.CredentialType, err = cookedArgs.getCredentialType(ctx); err != nil {
 		return err
 	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		// Message user that they are using Oauth token for authentication,
-		// in case of silently using cached token without consciousness。
-		glcm.Info("Make is using OAuth token for authentication.")
-
 		uotm := GetUserOAuthTokenManagerInstance()
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err

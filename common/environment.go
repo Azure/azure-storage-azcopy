@@ -32,6 +32,9 @@ type EnvironmentVariable struct {
 }
 
 // This array needs to be updated when a new public environment variable is added
+// Things are here, rather than in command line parameters for one of two reasons:
+// 1. They are optional and obscure (e.g. performance tuning parameters) or
+// 2. They are authentication secrets, which we do not accept on the command line
 var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ConcurrencyValue(),
 	EEnvironmentVariable.TransferInitiationPoolSize(),
@@ -94,6 +97,14 @@ func (EnvironmentVariable) TransferInitiationPoolSize() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_CONCURRENT_FILES",
 		Description: "Overrides the (approximate) number of files that are in progress at any one time, by controlling how many files we concurrently initiate transfers for.",
+	}
+}
+
+func (EnvironmentVariable) EnumerationPoolSize() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_CONCURRENT_SCAN",
+		Description: "Controls the (max) degree of parallelism used during enumeration. Only affects parallelized enumerators",
+		Hidden:      true, // hidden for now. We might not need to make it public? E.g. if we just cap it to the concurrency value or something?
 	}
 }
 
@@ -200,7 +211,7 @@ func (EnvironmentVariable) CredentialType() EnvironmentVariable {
 func (EnvironmentVariable) DefaultServiceApiVersion() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:         "AZCOPY_DEFAULT_SERVICE_API_VERSION",
-		DefaultValue: "2018-03-28",
+		DefaultValue: "2019-02-02",
 		Description:  "Overrides the service API version so that AzCopy could accommodate custom environments such as Azure Stack.",
 	}
 }

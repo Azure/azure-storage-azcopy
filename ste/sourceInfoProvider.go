@@ -21,9 +21,13 @@
 package ste
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
+	"os"
 	"time"
+
+	"github.com/Azure/azure-storage-file-go/azfile"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
@@ -33,10 +37,13 @@ type ISourceInfoProvider interface {
 	// Properties returns source's properties.
 	Properties() (*SrcProperties, error)
 
-	// GetLastModifiedTime return source's latest last modified time.
-	GetLastModifiedTime() (time.Time, error)
+	// GetLastModifiedTime returns the source's latest last modified time.  Not used when
+	// EntityType() == Folder
+	GetFreshFileLastModifiedTime() (time.Time, error)
 
 	IsLocal() bool
+
+	EntityType() common.EntityType
 }
 
 type ILocalSourceInfoProvider interface {
@@ -69,6 +76,24 @@ type IBlobSourceInfoProvider interface {
 
 	// BlobType returns source's blob type.
 	BlobType() azblob.BlobType
+}
+
+type TypedSMBPropertyHolder interface {
+	FileCreationTime() time.Time
+	FileLastWriteTime() time.Time
+	FileAttributes() azfile.FileAttributeFlags
+}
+
+type ISMBPropertyBearingSourceInfoProvider interface {
+	ISourceInfoProvider
+
+	GetSDDL() (string, error)
+	GetSMBProperties() (TypedSMBPropertyHolder, error)
+}
+
+type ICustomLocalOpener interface {
+	ISourceInfoProvider
+	Open(path string) (*os.File, error)
 }
 
 type sourceInfoProviderFactory func(jptm IJobPartTransferMgr) (ISourceInfoProvider, error)
@@ -112,6 +137,10 @@ func (p *defaultRemoteSourceInfoProvider) RawSource() string {
 	return p.transferInfo.Source
 }
 
-func (p *defaultRemoteSourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
+func (p *defaultRemoteSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
 	return p.jptm.LastModifiedTime(), nil
+}
+
+func (p *defaultRemoteSourceInfoProvider) EntityType() common.EntityType {
+	return p.transferInfo.EntityType
 }

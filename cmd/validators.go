@@ -21,39 +21,39 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
-	inferredFromTo := inferFromTo(src, dst)
 	if userSpecifiedFromTo == "" {
+		inferredFromTo := inferFromTo(src, dst)
+
 		// If user didn't explicitly specify FromTo, use what was inferred (if possible)
 		if inferredFromTo == common.EFromTo.Unknown() {
-			return common.EFromTo.Unknown(), fmt.Errorf("the inferred source/destination combination is currently not supported. Please post an issue on Github if support for this scenario is desired")
+			return common.EFromTo.Unknown(), fmt.Errorf("the inferred source/destination combination could not be identified, or is currently not supported")
 		}
 		return inferredFromTo, nil
 	}
 
-	// User explicitly specified FromTo, make sure it matches what we infer or accept it if we can't infer
+	// User explicitly specified FromTo, therefore, we should respect what they specified.
 	var userFromTo common.FromTo
 	err := userFromTo.Parse(userSpecifiedFromTo)
 	if err != nil {
-		return common.EFromTo.Unknown(), fmt.Errorf("invalid --from-to value specified: %q", userSpecifiedFromTo)
+		return common.EFromTo.Unknown(), fmt.Errorf("invalid --from-to value specified: %q. "+fromToHelpText, userSpecifiedFromTo)
+
 	}
-	if inferredFromTo == common.EFromTo.Unknown() || inferredFromTo == userFromTo ||
-		userFromTo == common.EFromTo.BlobTrash() || userFromTo == common.EFromTo.FileTrash() || userFromTo == common.EFromTo.BlobFSTrash() {
-		// We couldn't infer the FromTo or what we inferred matches what the user specified
-		// We'll accept what the user specified
-		return userFromTo, nil
-	}
-	// inferredFromTo != raw.fromTo: What we inferred doesn't match what the user specified
-	return common.EFromTo.Unknown(), errors.New("the specified --from-to switch is inconsistent with the specified source/destination combination")
+
+	return userFromTo, nil
 }
+
+const fromToHelpText = "Valid values are two-word phases of the form BlobLocal, LocalBlob etc.  Use the word 'Blob' for Blob Storage, " +
+	"'Local' for the local file system, 'File' for Azure Files, and 'BlobFS' for ADLS Gen2. " +
+	"If you need a combination that is not supported yet, please log an issue on the AzCopy GitHub issues list."
 
 func inferFromTo(src, dst string) common.FromTo {
 	// Try to infer the 1st argument
@@ -61,7 +61,7 @@ func inferFromTo(src, dst string) common.FromTo {
 	if srcLocation == srcLocation.Unknown() {
 		glcm.Info("Cannot infer source location of " +
 			common.URLStringExtension(src).RedactSecretQueryParamForLogging() +
-			". Please specify the --from-to switch")
+			". Please specify the --from-to switch. " + fromToHelpText)
 		return common.EFromTo.Unknown()
 	}
 
@@ -69,7 +69,7 @@ func inferFromTo(src, dst string) common.FromTo {
 	if dstLocation == dstLocation.Unknown() {
 		glcm.Info("Cannot infer destination location of " +
 			common.URLStringExtension(dst).RedactSecretQueryParamForLogging() +
-			". Please specify the --from-to switch")
+			". Please specify the --from-to switch. " + fromToHelpText)
 		return common.EFromTo.Unknown()
 	}
 
@@ -107,8 +107,18 @@ func inferFromTo(src, dst string) common.FromTo {
 	case srcLocation == common.ELocation.Benchmark() && dstLocation == common.ELocation.BlobFS():
 		return common.EFromTo.BenchmarkBlobFS()
 	}
+
+	glcm.Info("The parameters you supplied were " +
+		"Source: '" + common.URLStringExtension(src).RedactSecretQueryParamForLogging() + "' of type " + srcLocation.String() +
+		", and Destination: '" + common.URLStringExtension(dst).RedactSecretQueryParamForLogging() + "' of type " + dstLocation.String())
+	glcm.Info("Based on the parameters supplied, a valid source-destination combination could not " +
+		"automatically be found. Please check the parameters you supplied.  If they are correct, please " +
+		"specify an exact source and destination type using the --from-to switch. " + fromToHelpText)
+
 	return common.EFromTo.Unknown()
 }
+
+var IPv4Regex = regexp.MustCompile(`\d+\.\d+\.\d+\.\d+`) // simple regex
 
 func inferArgumentLocation(arg string) common.Location {
 	if arg == pipeLocation {
@@ -130,6 +140,9 @@ func inferArgumentLocation(arg string) common.Location {
 				return common.ELocation.BlobFS()
 			case strings.Contains(host, benchmarkSourceHost):
 				return common.ELocation.Benchmark()
+				// enable targeting an emulator/stack
+			case IPv4Regex.MatchString(host):
+				return common.ELocation.Unknown()
 			}
 
 			if common.IsS3URL(*u) {
