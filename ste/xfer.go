@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"errors"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -76,7 +77,7 @@ func expectFailureXferDecorator(targetFunction newJobXfer) newJobXfer {
 
 			// Shorten our paths so the error isn't obnoxious in the case of ultra-long paths
 			shortenPath := func(loc string, locType common.Location) string {
-        // Ignore unknown locations, nothing to do.
+				// Ignore unknown locations, nothing to do.
 				if locType == common.ELocation.Unknown() {
 					return ""
 				}
@@ -105,9 +106,9 @@ func expectFailureXferDecorator(targetFunction newJobXfer) newJobXfer {
 				jptm.LogUploadError(shortSrc, shortDst, info.FailureReason, 0)
 			} else if fromTo.IsS2S() {
 				jptm.LogS2SCopyError(shortSrc, shortDst, info.FailureReason, 0)
-      } else if fromTo.To() == common.ELocation.Unknown() {
-        jptm.LogError(shortSrc, "DELETE ERROR", info.FailureReason)
-      }
+			} else if fromTo.To() == common.ELocation.Unknown() {
+				jptm.LogError(shortSrc, "DELETE ERROR", errors.New(info.FailureReason))
+			}
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
 
