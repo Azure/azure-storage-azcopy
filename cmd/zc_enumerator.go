@@ -55,8 +55,7 @@ type storedObject struct {
 	md5              []byte
 	blobType         azblob.BlobType // will be "None" when unknown or not applicable
 
-	expectedFailure bool
-	failureReason   string
+	failureReason string
 
 	// all of these will be empty when unknown or not applicable.
 	contentDisposition string
@@ -108,7 +107,7 @@ func (s *storedObject) isSourceRootFolder() bool {
 // do not pass through that routine.  So we need to make the filtering available in a separate function
 // so that the sync deletion code path(s) can access it.
 func (s *storedObject) isCompatibleWithFpo(fpo common.FolderPropertyOption) bool {
-	if s.entityType == common.EEntityType.File() {
+	if s.entityType == common.EEntityType.File() || s.entityType == common.EEntityType.TransferFailure() {
 		return true
 	} else if s.entityType == common.EEntityType.Folder() {
 		switch fpo {
@@ -159,7 +158,6 @@ func (s *storedObject) ToNewCopyTransfer(
 		EntityType:         s.entityType,
 		LastModifiedTime:   s.lastModifiedTime,
 		SourceSize:         s.size,
-		ExpectedFailure:    s.expectedFailure,
 		FailureReason:      s.failureReason,
 		ContentType:        s.contentType,
 		ContentEncoding:    s.contentEncoding,
@@ -258,6 +256,7 @@ func newForcedErrorStoredObject(err, name, relativePath, containerName string) s
 		nil, // No need for a morpher on a intended failure
 		name,
 		relativePath,
+		common.EEntityType.TransferFailure(),
 		time.Now(),
 		0,              // A intended failure has no size,
 		noContentProps, // and no content properties
@@ -266,7 +265,6 @@ func newForcedErrorStoredObject(err, name, relativePath, containerName string) s
 		containerName,
 	)
 
-	so.expectedFailure = true
 	so.failureReason = err
 
 	return so

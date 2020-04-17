@@ -162,7 +162,7 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length uint32) string {
 // TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder
 // TODO: Refactor return type to an object
 func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType, blobTier azblob.AccessTierType,
-	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType, expectFailure bool, expectFailureReason string) {
+	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType, expectFailureReason string) {
 	var err error
 	t := jpph.Transfer(transferIndex)
 
@@ -170,7 +170,6 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 	s2sSourceChangeValidation = jpph.S2SSourceChangeValidation
 	s2sInvalidMetadataHandleOption = jpph.S2SInvalidMetadataHandleOption
 	DestLengthValidation = jpph.DestLengthValidation
-	expectFailure = t.ExpectedFailure
 
 	offset := t.SrcOffset + int64(t.SrcLength) + int64(t.DstLength)
 
@@ -178,7 +177,7 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 		expectFailureReason = jpph.getString(offset, uint32(t.FailureReasonLength))
 		offset += int64(t.FailureReasonLength)
 	}
-  
+
 	entityType = t.EntityType
 
 	if t.SrcContentTypeLength != 0 {
@@ -315,8 +314,7 @@ type JobPartPlanTransfer struct {
 	SourceSize int64
 	// CompletionTime represents the time at which transfer was completed
 	CompletionTime uint64
-	// ExpectedFailure and FailureReason specify when a transfer is supposed to fail, and why it's supposed to fail.
-	ExpectedFailure     bool
+	// FailureReason specifies why a transfer is supposed to fail-- denoted by the entity type TransferFailure
 	FailureReasonLength uint16
 
 	// For S2S copy, per Transfer source's properties

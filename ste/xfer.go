@@ -71,7 +71,7 @@ func expectFailureXferDecorator(targetFunction newJobXfer) newJobXfer {
 		info := jptm.Info()
 
 		// Pre-emptively fail if requested.
-		if info.ExpectFailure {
+		if info.EntityType == common.EEntityType.TransferFailure() {
 			// Get the fromto
 			fromTo := jptm.FromTo()
 

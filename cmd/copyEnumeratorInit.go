@@ -125,14 +125,19 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				"", "",
 				dstContainerName)
 
-			dummyTransfer := dummyObj.ToNewCopyTransfer(
+			dummyTransfer, shouldSendToSTE := dummyObj.ToNewCopyTransfer(
 				cca.autoDecompress && cca.fromTo.IsDownload(),
 				"", dstContainerName,
-				cca.s2sPreserveAccessTier)
+				cca.s2sPreserveAccessTier,
+				jobPartOrder.Fpo)
 
 			seenFailedContainers[dstContainerName] = true
 
-			return addTransfer(&jobPartOrder, dummyTransfer, cca)
+			if shouldSendToSTE {
+				return addTransfer(&jobPartOrder, dummyTransfer, cca)
+			} else {
+				return nil
+			}
 		}
 
 		return nil
@@ -205,7 +210,6 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 				resName, err := containerResolver.ResolveName(cName)
 
-				// Ignore the error in resolution, it'll get logged later.
 				if err == nil {
 					err = cca.createDstContainer(resName, cca.destination, ctx, existingContainers)
 

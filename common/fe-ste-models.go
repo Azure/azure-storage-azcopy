@@ -887,8 +887,7 @@ type CopyTransfer struct {
 	Metadata           Metadata
 
 	// Intended failure info
-	ExpectedFailure bool
-	FailureReason   string
+	FailureReason string
 
 	// Properties for S2S blob copy
 	BlobType azblob.BlobType
@@ -1219,6 +1218,9 @@ type EntityType uint8
 
 func (EntityType) File() EntityType   { return EntityType(0) }
 func (EntityType) Folder() EntityType { return EntityType(1) }
+
+// The TransferFailure entity type exists to allow through transfer failures of any type (and replace the intendedFailure flag of the job plan file.
+func (EntityType) TransferFailure() EntityType { return EntityType(3) }
 
 ////////////////////////////////////////////////////////////////
 

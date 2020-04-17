@@ -249,8 +249,8 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	for t := range order.Transfers {
 		if uint32(len(order.Transfers[t].Source)) > uint32(math.MaxUint32) || uint32(len(order.Transfers[t].Destination)) > maxDestLength {
 			// If the order wasn't already going to fail, let's fail it.
-			if !order.Transfers[t].ExpectedFailure {
-				order.Transfers[t].ExpectedFailure = true
+			if order.Transfers[t].EntityType != common.EEntityType.TransferFailure() {
+				order.Transfers[t].EntityType = common.EEntityType.TransferFailure()
 
 				// shorten the path name a bit so the log isn't so obnoxious
 				shortName := order.Transfers[t].Source
@@ -273,8 +273,8 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		}
 		if srcMetadataLength > uint32(math.MaxUint32) {
 			// If the order wasn't already going to fail, let's fail it.
-			if !order.Transfers[t].ExpectedFailure {
-				order.Transfers[t].ExpectedFailure = true
+			if order.Transfers[t].EntityType != common.EEntityType.TransferFailure() {
+				order.Transfers[t].EntityType = common.EEntityType.TransferFailure()
 				order.Transfers[t].FailureReason = fmt.Sprintf("The metadata on source file %s exceeds azcopy's current maximum metadata length, and cannot be processed.", order.Transfers[t].Source)
 			}
 		}
@@ -288,7 +288,6 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			SourceSize:     order.Transfers[t].SourceSize,
 			CompletionTime: 0,
 
-			ExpectedFailure:     order.Transfers[t].ExpectedFailure,
 			FailureReasonLength: uint16(len(order.Transfers[t].FailureReason)),
 
 			// For S2S copy, per Transfer source's properties

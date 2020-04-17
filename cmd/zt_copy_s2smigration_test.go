@@ -84,7 +84,7 @@ func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 		s2sInvalidMetadataHandleOption:          defaultS2SInvalideMetadataHandleOption.String(),
 		forceWrite:                              common.EOverwriteOption.True().String(),
 		preserveOwner:                           common.PreserveOwnerDefault,
-    internalDisableContainerFailureTransfer: true,
+		internalDisableContainerFailureTransfer: true,
 	}
 }
 
@@ -286,7 +286,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 		foundInvalid := false
 
 		for _, v := range mockedRPC.transfers {
-			if v.ExpectedFailure == true && strings.Contains(v.FailureReason, "invalid name") {
+			if v.EntityType == common.EEntityType.TransferFailure() && strings.Contains(v.FailureReason, "invalid name") {
 				foundInvalid = true
 			}
 		}
