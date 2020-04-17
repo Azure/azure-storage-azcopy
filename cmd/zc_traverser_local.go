@@ -103,12 +103,6 @@ func (s symlinkTargetFileInfo) Name() string {
 	return s.name // override the name
 }
 
-type customFileOpener struct{}
-
-func (customFileOpener) Open(name string) (*os.File, error) {
-	return common.OSOpenFile(name, os.O_RDONLY, common.DEFAULT_FILE_PERM)
-}
-
 // WalkWithSymlinks is a symlinks-aware, parallelized, version of filePath.Walk.
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
@@ -145,9 +139,9 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 
 		// walk contents of this queueItem in parallel
 		// (for simplicity of coding, we don't parallelize across multiple queueItems)
-		parallel.Walk(queueItem.fullPath, customFileOpener{}, enumerationParallelism, func(filePath string, fileInfo os.FileInfo, fileError error) error {
+		parallel.Walk(queueItem.fullPath, enumerationParallelism, func(filePath string, fileInfo os.FileInfo, fileError error) error {
 			if fileError != nil {
-				glcm.Info(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError))
+				glcm.Info(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError))
 				return nil
 			}
 

@@ -61,7 +61,7 @@ func (s *fileSystemCrawlerSuite) TestParallelEnumeration(c *chk.C) {
 
 	// our parallel walk
 	parallelResults := make(map[string]struct{})
-	_ = Walk(dir, DefaultFileOpener{}, 16, func(path string, _ os.FileInfo, fileErr error) error {
+	Walk(dir, 16, func(path string, _ os.FileInfo, fileErr error) error {
 		if fileErr == nil {
 			parallelResults[path] = struct{}{}
 		}
@@ -92,4 +92,16 @@ func (s *fileSystemCrawlerSuite) TestParallelEnumeration(c *chk.C) {
 		c.Error("unexpected extra " + key)
 		c.Fail()
 	}
+}
+
+func (s *fileSystemCrawlerSuite) TestRootErrorsAreSignalled(c *chk.C) {
+	receivedError := false
+	nonExistentDir := filepath.Join(os.TempDir(), "Big random-named directory that almost certainly doesn't exist 85784362628398473732827384")
+	Walk(nonExistentDir, 16, func(path string, _ os.FileInfo, fileErr error) error {
+		if fileErr != nil && path == nonExistentDir {
+			receivedError = true
+		}
+		return nil
+	})
+	c.Assert(receivedError, chk.Equals, true)
 }

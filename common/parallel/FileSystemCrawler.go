@@ -27,17 +27,6 @@ import (
 	"path/filepath"
 )
 
-// FileOpener is a pluggable implementation of file open
-type FileOpener interface {
-	Open(name string) (*os.File, error)
-}
-
-type DefaultFileOpener struct{}
-
-func (DefaultFileOpener) Open(name string) (*os.File, error) {
-	return os.Open(name)
-}
-
 type FileSystemEntry struct {
 	fullPath string
 	info     os.FileInfo
@@ -47,11 +36,11 @@ type FileSystemEntry struct {
 // It does not follow symlinks.
 // The items in the CrawResult output channel are FileSystemEntry s.
 // For a wrapper that makes this look more like filepath.Walk, see parallel.Walk.
-func CrawlLocalDirectory(ctx context.Context, root string, opener FileOpener, parallelism int) <-chan CrawlResult {
+func CrawlLocalDirectory(ctx context.Context, root string, parallelism int) <-chan CrawlResult {
 	return Crawl(ctx,
 		root,
 		func(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry)) error {
-			return enumerateOneFileSystemDirectory(opener, dir, enqueueDir, enqueueOutput)
+			return enumerateOneFileSystemDirectory(dir, enqueueDir, enqueueOutput)
 		},
 		parallelism,
 	)
@@ -59,56 +48,63 @@ func CrawlLocalDirectory(ctx context.Context, root string, opener FileOpener, pa
 
 // Walk is similar to filepath.Walk.
 // But note the following difference is how WalkFunc is used:
-// 1. If fileError passed to walkFunc is not nil, then here the filePath passed to that function will be ""
-//    (whereas with filepath.Walk it will/may have a value)
+// 1. If fileError passed to walkFunc is not nil, then here the filePath passed to that function will usually be ""
+//    (whereas with filepath.Walk it will usually (always?) have a value)
 // 2. If the return value of walkFunc function is not nil, enumeration will always stop, not matter what the type of the error.
 //    (Unlike filepath.WalkFunc, where returning filePath.SkipDir is handled as a special case)
-func Walk(root string, opener FileOpener, parallelism int, walkFn filepath.WalkFunc) error {
+func Walk(root string, parallelism int, walkFn filepath.WalkFunc) {
+	signalRootError := func(e error) {
+		_ = walkFn(root, nil, e)
+	}
+
 	root, err := filepath.Abs(root)
 	if err != nil {
-		return err
+		signalRootError(err)
+		return
 	}
 
 	// Call walkfunc on the root.  This is necessary for compatibility with filePath.Walk
 	// TODO: add at a test that CrawlLocalDirectory does NOT include the root (i.e. add test to define that behaviour)
-	r, err := opener.Open(root)
+	r, err := os.Open(root) // for directories, we don't need a special open with FILE_FLAG_BACKUP_SEMANTICS, because directory opening uses FindFirst which doesn't need that flag. https://blog.differentpla.net/blog/2007/05/25/findfirstfile-and-se_backup_name
 	if err != nil {
-		return err
+		signalRootError(err)
+		return
 	}
 	rs, err := r.Stat()
 	if err != nil {
-		return err
+		signalRootError(err)
+		return
 	}
 	err = walkFn(root, rs, nil)
 	if err != nil {
-		return err
+		signalRootError(err)
+		return
 	}
+	_ = r.Close()
 
 	// walk the stuff inside the root
 	ctx, cancel := context.WithCancel(context.Background())
-	ch := CrawlLocalDirectory(ctx, root, opener, parallelism)
+	ch := CrawlLocalDirectory(ctx, root, parallelism)
 	for crawlResult := range ch {
 		entry, err := crawlResult.Item()
 		if err == nil {
 			fsEntry := entry.(FileSystemEntry)
 			err = walkFn(fsEntry.fullPath, fsEntry.info, nil)
 		} else {
-			err = walkFn("", nil, err)
+			err = walkFn("", nil, err) // cannot supply path here, because crawlResult probably doesn't have one, due to the error
 		}
 		if err != nil {
 			cancel()
-			return err
+			return
 		}
 	}
-
-	return nil
 }
 
 // enumerateOneFileSystemDirectory is an implementation of EnumerateOneDirFunc specifically for the local file system
-func enumerateOneFileSystemDirectory(opener FileOpener, dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry)) error {
+func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry)) error {
 	dirString := dir.(string)
 
-	d, err := opener.Open(dirString)
+	d, err := os.Open(dirString) // for directories, we don't need a special open with FILE_FLAG_BACKUP_SEMANTICS, because directory opening uses FindFirst which doesn't need that flag. https://blog.differentpla.net/blog/2007/05/25/findfirstfile-and-se_backup_name
 	if err != nil {
 		return err
 	}
