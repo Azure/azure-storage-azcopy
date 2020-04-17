@@ -278,10 +278,11 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 	rawSrcS3BucketURL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName) // Use default region
 	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
 	raw := getDefaultRawCopyInput(rawSrcS3BucketURL.String(), rawDstBlobServiceURLWithSAS.String())
+	raw.internalDisableContainerFailureTransfer = false
 
 	// bucket should not be resolved, and objects should not be scheduled for transfer
 	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.NotNil)
+		c.Assert(err, chk.IsNil)
 
 		foundInvalid := false
 
