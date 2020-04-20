@@ -21,6 +21,7 @@
 package common
 
 import (
+	"net/url"
 	"sync"
 )
 
@@ -30,8 +31,12 @@ import (
 // by the current job)
 type FolderCreationTracker interface {
 	RecordCreation(folder string)
-	ShouldSetProperties(folder string, overwrite OverwriteOption) bool
+	ShouldSetProperties(folder string, overwrite OverwriteOption, prompter prompter) bool
 	StopTracking(folder string)
+}
+
+type prompter interface {
+	ShouldOverwrite(objectPath string, objectType EntityType) bool
 }
 
 func NewFolderCreationTracker(fpo FolderPropertyOption) FolderCreationTracker {
@@ -63,18 +68,27 @@ func (f *simpleFolderTracker) RecordCreation(folder string) {
 	f.contents[folder] = struct{}{}
 }
 
-func (f *simpleFolderTracker) ShouldSetProperties(folder string, overwrite OverwriteOption) bool {
+func (f *simpleFolderTracker) ShouldSetProperties(folder string, overwrite OverwriteOption, prompter prompter) bool {
 	switch overwrite {
 	case EOverwriteOption.True():
 		return true
-	case EOverwriteOption.Prompt(), // "prompt" is treated as "false" because otherwise we'd have to display, and maintain state for, two different prompts - one for folders and one for files, since its too hard to find wording for ONE prompt to cover both cases. (And having two prompts would confuse users).
-		EOverwriteOption.IfSourceNewer(), // likewise "if source newer" is treated as "false"
+	case EOverwriteOption.Prompt(),
+		EOverwriteOption.IfSourceNewer(), // TODO discuss if this case should be treated differently than false
 		EOverwriteOption.False():
 
 		f.mu.Lock()
 		defer f.mu.Unlock()
 
 		_, exists := f.contents[folder] // should only set properties if this job created the folder (i.e. it's in the map)
+
+		// prompt only if we didn't create this folder
+		if overwrite == EOverwriteOption.Prompt() && !exists {
+			// get rid of SAS before prompting
+			parsedURL, _ := url.Parse(folder)
+			parsedURL.RawQuery = ""
+			return prompter.ShouldOverwrite(parsedURL.String(), EEntityType.Folder())
+		}
+
 		return exists
 
 	default:
@@ -96,7 +110,7 @@ func (f *nullFolderTracker) RecordCreation(folder string) {
 	// no-op (the null tracker doesn't track anything)
 }
 
-func (f *nullFolderTracker) ShouldSetProperties(folder string, overwrite OverwriteOption) bool {
+func (f *nullFolderTracker) ShouldSetProperties(folder string, overwrite OverwriteOption, prompter prompter) bool {
 	// There's no way this should ever be called, because we only create the nullTracker if we are
 	// NOT transferring folder info.
 	panic("wrong type of folder tracker has been instantiated. This type does not do any tracking")

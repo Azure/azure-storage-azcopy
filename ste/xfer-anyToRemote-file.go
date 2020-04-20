@@ -108,7 +108,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 				// remove the SAS before prompting the user
 				parsed, _ := url.Parse(info.Destination)
 				parsed.RawQuery = ""
-				shouldOverwrite = jptm.GetOverwritePrompter().shouldOverwrite(parsed.String())
+				shouldOverwrite = jptm.GetOverwritePrompter().ShouldOverwrite(parsed.String(), common.EEntityType.File())
 			} else if jptm.GetOverwriteOption() == common.EOverwriteOption.IfSourceNewer() {
 				// only overwrite if source lmt is newer (after) the destination
 				if jptm.LastModifiedTime().After(dstLmt) {

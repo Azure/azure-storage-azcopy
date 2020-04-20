@@ -39,13 +39,13 @@ type overwritePrompter struct {
 	savedResponse bool
 }
 
-func (o *overwritePrompter) shouldOverwrite(objectPath string) (shouldOverwrite bool) {
+func (o *overwritePrompter) ShouldOverwrite(objectPath string, objectType common.EntityType) (shouldOverwrite bool) {
 	// only one routine can ask the question or check the saved response at a time
 	o.lock.Lock()
 	defer o.lock.Unlock()
 
 	if o.shouldPromptUser {
-		shouldOverwrite = o.promptForConfirmation(objectPath)
+		shouldOverwrite = o.promptForConfirmation(objectPath, objectType)
 	} else {
 		shouldOverwrite = o.savedResponse
 	}
@@ -53,9 +53,16 @@ func (o *overwritePrompter) shouldOverwrite(objectPath string) (shouldOverwrite 
 	return
 }
 
-func (o *overwritePrompter) promptForConfirmation(objectPath string) (shouldDelete bool) {
-	answer := common.GetLifecycleMgr().Prompt(fmt.Sprintf("%s already exists at the destination. "+
-		"Do you wish to overwrite?", objectPath),
+func (o *overwritePrompter) promptForConfirmation(objectPath string, objectType common.EntityType) (shouldOverwrite bool) {
+	question := fmt.Sprintf("%s already exists at the destination. "+
+		"Do you wish to overwrite?", objectPath)
+
+	if objectType == common.EEntityType.Folder() {
+		question = fmt.Sprintf("Folder %s already exists at the destination. "+
+			"Do you wish to overwrite? (Its properties will be updated)", objectPath)
+	}
+
+	answer := common.GetLifecycleMgr().Prompt(question,
 		common.PromptDetails{
 			PromptType:   common.EPromptType.Overwrite(),
 			PromptTarget: objectPath,
