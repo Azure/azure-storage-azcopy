@@ -597,7 +597,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		// For s3 and file, only hot block blob tier is supported.
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
-			return cooked, fmt.Errorf("blob-tier is not supported while copying from sevice to service")
+			return cooked, fmt.Errorf("blob-tier is not supported while copying from service to service")
 		}
 		if cooked.noGuessMimeType {
 			return cooked, fmt.Errorf("no-guess-mime-type is not supported while copying from service to service")
