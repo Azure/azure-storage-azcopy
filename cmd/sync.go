@@ -522,15 +522,10 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return err
 	}
 
-	// verifies credential type and initializes credential info.
-	// For sync, only one side need credential.
-	cca.credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
-		fromTo:         cca.fromTo,
-		source:         cca.source.Value,
-		destination:    cca.destination.Value,
-		sourceSAS:      cca.source.SAS,
-		destinationSAS: cca.destination.SAS,
-	})
+	// Verifies credential type and initializes credential info.
+	// Note that this is for the destination.
+	cca.credentialInfo, _, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(),
+		cca.destination.Value, cca.destination.SAS, false)
 
 	if err != nil {
 		return err
