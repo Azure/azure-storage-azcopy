@@ -29,6 +29,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/minio/minio-go"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
@@ -68,4 +70,5 @@ func GetAzCopyAppPath() string {
 func init() {
 	//Catch everything that uses http.DefaultTransport with ieproxy.GetProxyFunc()
 	http.DefaultTransport.(*http.Transport).Proxy = common.GlobalProxyLookup
+	minio.DefaultTransport.(*http.Transport).Proxy = common.GlobalProxyLookup
 }
