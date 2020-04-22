@@ -428,9 +428,10 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, dirURL a
 	dirURLExtension := common.FileURLPartsExtension{FileURLParts: azfile.NewFileURLParts(dirURL.URL())}
 	if _, err := dirURL.GetProperties(ctx); err != nil {
 		if stgErr, stgErrOk := err.(azfile.StorageError); stgErrOk && stgErr.Response() != nil &&
-			stgErr.Response().StatusCode == http.StatusNotFound { // At least need read and write permisson for destination
-			// File's parent directory doesn't exist, try to create the parent directories.
-			// Split directories as segments.
+			(stgErr.Response().StatusCode == http.StatusNotFound ||
+				stgErr.Response().StatusCode == http.StatusForbidden) {
+			// Either the parent directory does not exist, or we may not have read permissions.
+			// Try to create the parent directories. Split directories as segments.
 			segments := d.splitWithoutToken(dirURLExtension.DirectoryOrFilePath, '/')
 
 			shareURL := azfile.NewShareURL(dirURLExtension.GetShareURL(), p)
