@@ -41,6 +41,25 @@ var s2sAccessTierFailureLogStdout sync.Once
 // This routine serves that role for uploads and S2S copies, and redirects for each transfer to a file or folder implementation
 func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 	info := jptm.Info()
+	fromTo := jptm.FromTo()
+
+	// Ensure that the transfer isn't the same item, and fail it if it is.
+	// This scenario can only happen with S2S. We'll parse the URLs and compare the host and path.
+	if fromTo.IsS2S() {
+		srcURL, err := url.Parse(info.Source)
+		common.PanicIfErr(err)
+		dstURL, err := url.Parse(info.Destination)
+		common.PanicIfErr(err)
+
+		if srcURL.Hostname() == dstURL.Hostname() &&
+			srcURL.EscapedPath() == dstURL.EscapedPath() {
+			jptm.LogSendError(info.Source, info.Destination, "Transfer source and destination are the same, which would cause data loss. Aborting transfer.", 0)
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
+			return
+		}
+	}
+
 	if info.IsFolderPropertiesTransfer() {
 		anyToRemote_folder(jptm, info, p, pacer, senderFactory, sipf)
 	} else {
