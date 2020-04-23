@@ -22,6 +22,7 @@ package ste
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -33,10 +34,10 @@ type overwritePrompter struct {
 
 	// whether we should still ask the user for permission to overwrite the destination
 	// if false, the user has already specified a "for all" answer
-	shouldPromptUser bool
+	shouldPromptUser map[common.EntityType]bool
 
 	// if the user made a "for all" selection, save the response here
-	savedResponse bool
+	savedResponse map[common.EntityType]bool
 }
 
 func (o *overwritePrompter) ShouldOverwrite(objectPath string, objectType common.EntityType) (shouldOverwrite bool) {
@@ -44,10 +45,10 @@ func (o *overwritePrompter) ShouldOverwrite(objectPath string, objectType common
 	o.lock.Lock()
 	defer o.lock.Unlock()
 
-	if o.shouldPromptUser {
+	if o.shouldPromptUser[objectType] {
 		shouldOverwrite = o.promptForConfirmation(objectPath, objectType)
 	} else {
-		shouldOverwrite = o.savedResponse
+		shouldOverwrite = o.savedResponse[objectType]
 	}
 
 	return
@@ -59,7 +60,7 @@ func (o *overwritePrompter) promptForConfirmation(objectPath string, objectType 
 
 	if objectType == common.EEntityType.Folder() {
 		question = fmt.Sprintf("Folder %s already exists at the destination. "+
-			"Do you wish to overwrite? (Its properties will be updated)", objectPath)
+			"Do you wish to overwrite its properties?", objectPath)
 	}
 
 	answer := common.GetLifecycleMgr().Prompt(question,
@@ -78,17 +79,17 @@ func (o *overwritePrompter) promptForConfirmation(objectPath string, objectType 
 		common.GetLifecycleMgr().Info(fmt.Sprintf("Confirmed. %s will be overwritten.", objectPath))
 		return true
 	case common.EResponseOption.YesForAll():
-		common.GetLifecycleMgr().Info("Confirmed. All future conflicts will be overwritten.")
-		o.shouldPromptUser = false
-		o.savedResponse = true
+		common.GetLifecycleMgr().Info(fmt.Sprintf("Confirmed. All future %s conflicts will be overwritten.", strings.ToLower(objectType.String())))
+		o.shouldPromptUser[objectType] = false
+		o.savedResponse[objectType] = true
 		return true
 	case common.EResponseOption.No():
 		common.GetLifecycleMgr().Info(fmt.Sprintf("%s will be skipped", objectPath))
 		return false
 	case common.EResponseOption.NoForAll():
-		common.GetLifecycleMgr().Info("No overwriting will happen from now onwards.")
-		o.shouldPromptUser = false
-		o.savedResponse = false
+		common.GetLifecycleMgr().Info(fmt.Sprintf("No %s overwriting will happen from now onwards.", strings.ToLower(objectType.String())))
+		o.shouldPromptUser[objectType] = false
+		o.savedResponse[objectType] = false
 		return false
 	default:
 		common.GetLifecycleMgr().Info(fmt.Sprintf("Unrecognizable answer, skipping %s.", objectPath))
@@ -98,8 +99,14 @@ func (o *overwritePrompter) promptForConfirmation(objectPath string, objectType 
 
 func newOverwritePrompter() *overwritePrompter {
 	return &overwritePrompter{
-		lock:             &sync.Mutex{},
-		shouldPromptUser: true,
-		savedResponse:    false,
+		lock: &sync.Mutex{},
+		shouldPromptUser: map[common.EntityType]bool{
+			common.EEntityType.Folder(): true,
+			common.EEntityType.File():   true,
+		},
+		savedResponse: map[common.EntityType]bool{
+			common.EEntityType.Folder(): false,
+			common.EEntityType.File():   false,
+		},
 	}
 }
