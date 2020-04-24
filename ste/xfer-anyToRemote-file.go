@@ -32,7 +32,6 @@ import (
 	"sync"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
@@ -363,18 +362,22 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 
 	if jptm.IsLive() && info.DestLengthValidation {
 		_, isS2SCopier := s.(s2sCopier)
+		shouldCheckLength := true
 		destLength, err := s.GetDestinationLength()
 
-		if stgErr, stgErrOk := err.(azfile.StorageError); stgErrOk && stgErr.Response() != nil {
-			wrapped := fmt.Errorf("could not read destination length. If destination is write-only, use --check-length=false on the AzCopy command line. %w", err)
-			if stgErr.Response().StatusCode != http.StatusForbidden {
-				// We ignore this error, because the destination may be write-only
+		if resp, respOk := err.(pipeline.Response); respOk && resp.Response() != nil &&
+			resp.Response().StatusCode != http.StatusForbidden {
+			shouldCheckLength = false
+		}
+		if shouldCheckLength {
+			if err != nil {
+				wrapped := fmt.Errorf("could not read destination length. If destination is write-only, use --check-length=false on the AzCopy command line. %w", err)
 				jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", wrapped)
 			}
-		}
 
-		if err == nil && destLength != jptm.Info().SourceSize {
-			jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check", errors.New("destination length does not match source length"))
+			if destLength != jptm.Info().SourceSize {
+				jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check", errors.New("destination length does not match source length"))
+			}
 		}
 	}
 
