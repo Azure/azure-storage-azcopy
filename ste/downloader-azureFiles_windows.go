@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"unsafe"
 
@@ -84,6 +85,8 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 	}
 	return setAttributes()
 }
+
+var globalSetAclMu = &sync.Mutex{}
 
 // works for both folders and files
 func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
@@ -162,6 +165,12 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 	}
 
 	// Then let's set the security info.
+	// TODO: review and potentially remove the use of the global mutex here, once we finish drilling into issues
+	//   observed when setting ACLs concurrently on a test UNC share.
+	//   BTW, testing indicates no measurable perf difference, between using the mutex and not, in the cases tested.
+	//   So it's safe to leave it here for now.
+	globalSetAclMu.Lock()
+	defer globalSetAclMu.Unlock()
 	err = windows.SetNamedSecurityInfo(txInfo.Destination,
 		windows.SE_FILE_OBJECT,
 		securityInfoFlags,

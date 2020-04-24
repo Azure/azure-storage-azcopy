@@ -1,6 +1,13 @@
 
 # Change Log
 
+## Version 10.4.1
+
+### Bug fixes
+
+1. When downloading from Azure Files to Windows with the `--preserve-smb-permissions` flag, sometimes 
+the resulting permissions were not correct. 
+
 ## Version 10.4
 
 ### New features
