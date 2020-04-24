@@ -87,7 +87,12 @@ func (o *overwritePrompter) promptForConfirmation(objectPath string, objectType 
 		common.GetLifecycleMgr().Info(fmt.Sprintf("%s will be skipped", objectPath))
 		return false
 	case common.EResponseOption.NoForAll():
-		common.GetLifecycleMgr().Info(fmt.Sprintf("No %s overwriting will happen from now onwards.", strings.ToLower(objectType.String())))
+		name := strings.ToLower(objectType.String())
+		if objectType == common.EEntityType.Folder() {
+			name += " properties"
+		}
+
+		common.GetLifecycleMgr().Info(fmt.Sprintf("No %s will be overwritten from now onwards.", name))
 		o.shouldPromptUser[objectType] = false
 		o.savedResponse[objectType] = false
 		return false
