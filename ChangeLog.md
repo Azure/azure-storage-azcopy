@@ -3,10 +3,15 @@
 
 ## Version 10.4.1
 
+### New features
+
+1. Added overwrite prompt support for folder property transfers.
+
 ### Bug fixes
 
 1. When downloading from Azure Files to Windows with the `--preserve-smb-permissions` flag, sometimes 
-the resulting permissions were not correct. 
+the resulting permissions were not correct. This was fixed by limiting the concurrent SetNamedSecurityInfo operations.
+1. Added check to avoid overwriting the file itself when performing copy operations.
 
 ## Version 10.4
 
