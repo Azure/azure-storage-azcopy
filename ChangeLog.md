@@ -6,6 +6,7 @@
 ### New features
 
 1. Added overwrite prompt support for folder property transfers.
+1. Perform proxy lookup when the source is S3.
 
 ### Bug fixes
 
