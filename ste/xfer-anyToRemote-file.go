@@ -37,6 +37,7 @@ import (
 
 // This sync.Once is present to ensure we output information about a S2S access tier preservation failure to stdout once
 var s2sAccessTierFailureLogStdout sync.Once
+var checkLengthFailureOnReadOnlyDst sync.Once
 
 // xfer.go requires just a single xfer function for the whole job.
 // This routine serves that role for uploads and S2S copies, and redirects for each transfer to a file or folder implementation
@@ -366,12 +367,19 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 		destLength, err := s.GetDestinationLength()
 
 		if resp, respOk := err.(pipeline.Response); respOk && resp.Response() != nil &&
-			resp.Response().StatusCode != http.StatusForbidden {
+			resp.Response().StatusCode == http.StatusForbidden {
+			// The destination is write-only. Cannot verify length
 			shouldCheckLength = false
+			checkLengthFailureOnReadOnlyDst.Do( func() {
+				if jptm.ShouldLog(pipeline.LogError) {
+					jptm.Log(pipeline.LogError, fmt.Sprintf("Could not read destination length. If destination is write-only use --check-length=false on the AzCopy command line. %s", err))
+				}
+			})
 		}
+
 		if shouldCheckLength {
 			if err != nil {
-				wrapped := fmt.Errorf("could not read destination length. If destination is write-only, use --check-length=false on the AzCopy command line. %w", err)
+				wrapped := fmt.Errorf("Could not read destination length. %w", err)
 				jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", wrapped)
 			}
 
