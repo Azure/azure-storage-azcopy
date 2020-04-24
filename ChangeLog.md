@@ -86,6 +86,7 @@ contained directly in a container or virtual directory include `/*` at the end o
 1. ALL filter types are now disallowed when running `azcopy rm` against ADLS Gen2 endpoints. Previously 
 include/exclude patterns were disallowed, but exclude-path was not. That was incorrect. All should have been
 disallowed because none (other than include-path) are respected. 
+1. Fixed empty page range optimization when uploading Managed Disks. In an edge case, there was previously a risk of data corruption if the user uploaded two different images into the same Managed Disk resource one after the other.
    
 ## Version 10.3.4
 
