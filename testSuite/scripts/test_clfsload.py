@@ -23,7 +23,7 @@ class LoadUserScenario(unittest.TestCase):
 
         # invoke the load command
         state_path = os.path.join(util.test_directory_path, "clfsload-state")
-        result = util.Command("load").add_arguments(dir_path).add_arguments(util.test_container_url). \
+        result = util.Command("load clfs").add_arguments(dir_path).add_arguments(util.test_container_url). \
             add_flags("max-errors", "8").add_flags("state-path", state_path).add_flags("preserve-hardlinks", "true") \
             .add_flags("compression-type", "LZ4").execute_azcopy_copy_command()
         self.assertTrue(result)
