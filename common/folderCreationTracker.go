@@ -90,8 +90,12 @@ func (f *simpleFolderTracker) ShouldSetProperties(folder string, overwrite Overw
 			if !strings.HasPrefix(folder, EXTENDED_PATH_PREFIX) {
 				// get rid of SAS before prompting
 				parsedURL, _ := url.Parse(folder)
-				parsedURL.RawQuery = ""
-				cleanedFolderPath = parsedURL.String()
+
+				// really make sure that it's not a local path
+				if parsedURL.Scheme != "" && parsedURL.Host != "" {
+					parsedURL.RawQuery = ""
+					cleanedFolderPath = parsedURL.String()
+				}
 			}
 			return prompter.ShouldOverwrite(cleanedFolderPath, EEntityType.Folder())
 		}

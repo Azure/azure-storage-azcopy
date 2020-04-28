@@ -56,8 +56,6 @@ func CreateDirectoryIfNotExist(directory string, tracker FolderCreationTracker) 
 		// if the error is present, try to create the directory
 		// stat errors can be present in write-only scenarios, when the directory isn't present, etc.
 		// as a result, we care more about the mkdir error than the stat error, because that's the tell.
-		// It'd seem that mkdirall would be necessary to port like osstat and osopenfile for new folders in a already no-access dest,
-		// But in testing, this isn't the case.
 		// first make sure the parent directory exists but we ignore any error that comes back
 		CreateParentDirectoryIfNotExist(directory, tracker)
 
@@ -74,6 +72,7 @@ func CreateDirectoryIfNotExist(directory string, tracker FolderCreationTracker) 
 			// make the _same_ wrong overwrite decision for all the files too (not just folders). So this is, at least,
 			// consistent.
 			tracker.RecordCreation(directory)
+			return nil
 		}
 
 		// another routine might have created the directory at the same time
