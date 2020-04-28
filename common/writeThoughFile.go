@@ -51,18 +51,22 @@ func CreateDirectoryIfNotExist(directory string, tracker FolderCreationTracker) 
 		return nil
 	}
 
-	// try to create the root directory if the source does
+	// try to create the directory if it does not already exist
 	if _, err := OSStat(directory); err != nil {
 		// if the error is present, try to create the directory
 		// stat errors can be present in write-only scenarios, when the directory isn't present, etc.
 		// as a result, we care more about the mkdir error than the stat error, because that's the tell.
 		// It'd seem that mkdirall would be necessary to port like osstat and osopenfile for new folders in a already no-access dest,
-		//     But in testing, this isn't the case.
-		err := os.MkdirAll(directory, os.ModePerm)
-		// if MkdirAll succeeds, no error is dropped-- it is nil.
-		// therefore, returning here is perfectly acceptable as it either succeeds (or it doesn't)
+		// But in testing, this isn't the case.
+		// first make sure the parent directory exists but we ignore any error that comes back
+		CreateParentDirectoryIfNotExist(directory, tracker)
 
-		if err == nil {
+		// then create the directory
+		mkDirErr := os.Mkdir(directory, os.ModePerm)
+
+		// if Mkdir succeeds, no error is dropped-- it is nil.
+		// therefore, returning here is perfectly acceptable as it either succeeds (or it doesn't)
+		if mkDirErr == nil {
 			// To run our folder overwrite logic, we have to know if this current job created the folder.
 			// As per the comments above, we are technically wrong here in a write-only scenario (maybe it already
 			// existed and our Stat failed).  But using overwrite=false on a write-only destination doesn't make
@@ -71,7 +75,16 @@ func CreateDirectoryIfNotExist(directory string, tracker FolderCreationTracker) 
 			// consistent.
 			tracker.RecordCreation(directory)
 		}
-		return err
+
+		// another routine might have created the directory at the same time
+		// check whether the directory now exists
+		if _, err := OSStat(directory); err != nil {
+			// no other routine succeeded
+			// return the original error we got from Mkdir
+			return mkDirErr
+		}
+
+		return nil
 	} else { // if err is nil, we return err. if err has an error, we return it.
 		return nil
 	}
