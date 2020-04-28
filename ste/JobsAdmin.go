@@ -258,16 +258,17 @@ func (ja *jobsAdmin) QueueJobParts(jpm IJobPartMgr) {
 
 // 1 single goroutine runs this method and InitJobsAdmin  kicks that goroutine off.
 func (ja *jobsAdmin) scheduleJobParts() {
-	startedPoolSizer := false
+	poolSizeOnce := &sync.Once{}
+
 	for {
 		jobPart := <-ja.xferChannels.partsChannel
 
-		if !startedPoolSizer {
+		poolSizeOnce.Do(func() {
 			// spin up a GR to co-ordinate dynamic sizing of the main pool
 			// It will automatically spin up the right number of chunk processors
 			go ja.poolSizer(ja.concurrencyTuner)
-			startedPoolSizer = true
-		}
+		})
+
 		// If the job manager is not found for the JobId of JobPart
 		// taken from partsChannel
 		// there is an error in our code
