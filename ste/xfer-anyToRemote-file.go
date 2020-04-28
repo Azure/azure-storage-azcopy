@@ -371,9 +371,8 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 			// The destination is write-only. Cannot verify length
 			shouldCheckLength = false
 			checkLengthFailureOnReadOnlyDst.Do( func() {
-				if jptm.ShouldLog(pipeline.LogError) {
-					jptm.Log(pipeline.LogError, fmt.Sprintf("Could not read destination length. If destination is write-only use --check-length=false on the AzCopy command line. %s", err))
-				}
+				var glcm = common.GetLifecycleMgr()
+				glcm.Info(fmt.Sprintf("Could not read destination length. If destination is write-only use --check-length=false on the AzCopy command line."))
 			})
 		}
 
@@ -381,9 +380,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 			if err != nil {
 				wrapped := fmt.Errorf("Could not read destination length. %w", err)
 				jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", wrapped)
-			}
-
-			if destLength != jptm.Info().SourceSize {
+			} else if destLength != jptm.Info().SourceSize {
 				jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check", errors.New("destination length does not match source length"))
 			}
 		}
