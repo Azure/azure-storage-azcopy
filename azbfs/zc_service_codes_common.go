@@ -99,6 +99,9 @@ const (
 	// ServiceCodeOutOfRangeQueryParameterValue means a query parameter specified in the request URI is outside the permissible range (400).
 	ServiceCodeOutOfRangeQueryParameterValue ServiceCodeType = "OutOfRangeQueryParameterValue"
 
+	/// ServiceCodePathAlreadyExists means that the path (e.g. when trying to create a directory) already exists
+	ServiceCodePathAlreadyExists ServiceCodeType = "PathAlreadyExists"
+
 	// ServiceCodeRequestBodyTooLarge means the size of the request body exceeds the maximum size permitted (413).
 	ServiceCodeRequestBodyTooLarge ServiceCodeType = "RequestBodyTooLarge"
 

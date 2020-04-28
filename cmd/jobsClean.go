@@ -25,8 +25,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 func init() {

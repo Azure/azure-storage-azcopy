@@ -47,10 +47,16 @@ func (s *perfAdvisorSuite) TestPerfAdvisor(c *chk.C) {
 	netErrors := EAdviceType.NetworkErrors()
 	vmSize := EAdviceType.VMSize()
 	smallFilesOrNetwork := EAdviceType.SmallFilesOrNetwork()
+	fileShareOrNetwork := EAdviceType.FileShareOrNetwork()
 
-	// file sizes
-	const normal = 8 * 1024 * 1024
-	const small = 32 * 1024
+	// file sizes and types
+	type fileSpec struct {
+		avgFileSize int64
+		isAzFiles   bool
+	}
+	normal := fileSpec{8 * 1024 * 1024, false}       //blob
+	small := fileSpec{32 * 1024, false}              //blob
+	azFilesNormal := fileSpec{8 * 1024 * 1024, true} //AzureFiles
 
 	// define test cases
 	cases := []struct {
@@ -60,8 +66,8 @@ func (s *perfAdvisorSuite) TestPerfAdvisor(c *chk.C) {
 		serverBusyPercentageOther      float32
 		networkErrorPercentage         float32
 		finalConcurrencyTunerReason    string
-		avgFileSize                    int64
-		capMbps                        int64 // 0 if no cap
+		fileSpec                       fileSpec
+		capMbps                        float64 // 0 if no cap
 		mbps                           int64
 		azureVmCores                   int // 0 if not azure VM
 		expectedPrimaryResult          AdviceType
@@ -90,11 +96,13 @@ func (s *perfAdvisorSuite) TestPerfAdvisor(c *chk.C) {
 		{"vmSize1        ", 0, 0, 0, 0, concurrencyReasonAtOptimum, normal, 0, 376, 1, vmSize, none, none, none},
 		{"vmSize2        ", 0, 0, 0, 0, concurrencyReasonAtOptimum, normal, 0, 10500, 16, vmSize, none, none, none},
 		{"smallFiles     ", 0, 0, 0, 0, concurrencyReasonAtOptimum, small, 0, 10000, 0, smallFilesOrNetwork, none, none, none},
+		{"azureFiles     ", 0, 0, 0, 0, concurrencyReasonAtOptimum, azFilesNormal, 0, 500, 0, fileShareOrNetwork, none, none, none},
 
 		// these test cases look at combinations
 		{"badStatsAndCap1", 8, 7, 7, 7, concurrencyReasonAtOptimum, normal, 1000, 999, 0, iops, throughput, mbpsCapped, netOK}, // note no netError because we ignore those if throttled
 		{"badStatsAndCap2", 8, 7, 7, 7, concurrencyReasonSeeking, normal, 1000, 999, 0, iops, throughput, mbpsCapped, netOK},   // netOK not concNotEnoughTime because net is not the bottleneck
 		{"combinedThrottl", 0.5, 0.5, 0.5, 0, concurrencyReasonAtOptimum, normal, 0, 1000, 0, otherBusy, netOK, none, none},
+		{"combinedAzFiles", 0.5, 0.5, 0.5, 0, concurrencyReasonAtOptimum, azFilesNormal, 0, 1000, 0, otherBusy, netOK, none, none},
 		{"notVmSize      ", 0, 8, 0, 0, concurrencyReasonAtOptimum, normal, 0, 10500, 16, throughput, netOK, none, none},
 		{"smallFilesOK   ", 0, 8, 0, 0, concurrencyReasonAtOptimum, small, 0, 10500, 0, throughput, netOK, none, none},
 	}
@@ -113,7 +121,8 @@ func (s *perfAdvisorSuite) TestPerfAdvisor(c *chk.C) {
 			finalConcurrency:               123, // just informational, not used for computations
 			azureVmCores:                   cs.azureVmCores,
 			azureVmSizeName:                "DS1", // just informational, not used for computations
-			avgBytesPerFile:                cs.avgFileSize,
+			avgBytesPerFile:                cs.fileSpec.avgFileSize,
+			isToAzureFiles:                 cs.fileSpec.isAzFiles,
 		}
 		obtained := a.GetAdvice()
 		expectedCount := 1

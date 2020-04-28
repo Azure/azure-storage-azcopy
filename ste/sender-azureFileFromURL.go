@@ -32,7 +32,7 @@ type urlToAzureFileCopier struct {
 	srcURL url.URL
 }
 
-func newURLToAzureFileCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
+func newURLToAzureFileCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
 	srcInfoProvider := sip.(IRemoteSourceInfoProvider) // "downcast" to the type we know it really has
 
 	senderBase, err := newAzureFileSenderBase(jptm, destination, p, pacer, sip)
@@ -64,7 +64,7 @@ func (u *urlToAzureFileCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 		if err := u.pacer.RequestTrafficAllocation(u.jptm.Context(), adjustedChunkSize); err != nil {
 			u.jptm.FailActiveUpload("Pacing block (global level)", err)
 		}
-		_, err := u.fileURL.UploadRangeFromURL(
+		_, err := u.fileURL().UploadRangeFromURL(
 			u.ctx, u.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize)
 		if err != nil {
 			u.jptm.FailActiveS2SCopy("Uploading range from URL", err)
@@ -73,4 +73,6 @@ func (u *urlToAzureFileCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 	})
 }
 
-func (u *urlToAzureFileCopier) Epilogue() {}
+func (u *urlToAzureFileCopier) Epilogue() {
+	u.azureFileSenderBase.Epilogue()
+}

@@ -25,8 +25,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Azure/azure-storage-file-go/azfile"
-
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
@@ -45,7 +43,7 @@ func (s *syncProcessorSuite) TestLocalDeleter(c *chk.C) {
 
 	// construct the cooked input to simulate user input
 	cca := &cookedSyncCmdArgs{
-		destination:       dstDirName,
+		destination:       newLocalRes(dstDirName),
 		deleteDestination: common.EDeleteDestination.True(),
 	}
 
@@ -81,10 +79,8 @@ func (s *syncProcessorSuite) TestBlobDeleter(c *chk.C) {
 
 	// construct the cooked input to simulate user input
 	rawContainerURL := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	parts := azblob.NewBlobURLParts(rawContainerURL)
 	cca := &cookedSyncCmdArgs{
-		destination:       containerURL.String(),
-		destinationSAS:    parts.SAS.Encode(),
+		destination:       newRemoteRes(rawContainerURL.String()),
 		credentialInfo:    common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()},
 		deleteDestination: common.EDeleteDestination.True(),
 		fromTo:            common.EFromTo.LocalBlob(),
@@ -119,10 +115,8 @@ func (s *syncProcessorSuite) TestFileDeleter(c *chk.C) {
 
 	// construct the cooked input to simulate user input
 	rawShareSAS := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
-	parts := azfile.NewFileURLParts(rawShareSAS)
 	cca := &cookedSyncCmdArgs{
-		destination:       shareURL.String(),
-		destinationSAS:    parts.SAS.Encode(),
+		destination:       newRemoteRes(rawShareSAS.String()),
 		credentialInfo:    common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()},
 		deleteDestination: common.EDeleteDestination.True(),
 		fromTo:            common.EFromTo.FileFile(),

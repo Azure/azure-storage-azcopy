@@ -88,6 +88,10 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 		soleChunkFuncSemaphore: semaphore.NewWeighted(1)}, nil
 }
 
+func (s *appendBlobSenderBase) SendableEntityType() common.EntityType {
+	return common.EEntityType.File()
+}
+
 func (s *appendBlobSenderBase) ChunkSize() uint32 {
 	return s.chunkSize
 }
@@ -96,7 +100,7 @@ func (s *appendBlobSenderBase) NumChunks() uint32 {
 	return s.numChunks
 }
 
-func (s *appendBlobSenderBase) RemoteFileExists() (bool, error) {
+func (s *appendBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
 	return remoteObjectExists(s.destAppendBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}))
 }
 

@@ -422,8 +422,8 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 
 // for the lifecycleMgr to babysit a job, it must be given a controller to get information about the job
 type WorkController interface {
-	Cancel(mgr LifecycleMgr)               // handle to cancel the work
-	ReportProgressOrExit(mgr LifecycleMgr) // print the progress status, optionally exit the application if work is done
+	Cancel(mgr LifecycleMgr)                                        // handle to cancel the work
+	ReportProgressOrExit(mgr LifecycleMgr) (totalKnownCount uint32) // print the progress status, optionally exit the application if work is done
 }
 
 // AllowReinitiateProgressReporting must be called before running an cleanup job, to allow the initiation of that job's
@@ -441,20 +441,47 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 	// this go routine never returns
 	// it will terminate the whole process eventually when the work is complete
 	go func() {
+		const progressFrequencyThreshold = 1000000
+		var oldCount, newCount uint32
+
 		// cancelChannel will be notified when os receives os.Interrupt and os.Kill signals
 		signal.Notify(lcm.cancelChannel, os.Interrupt, os.Kill)
+
+		cancelCalled := false
+
+		doCancel := func() {
+			cancelCalled = true
+			lcm.Info("Cancellation requested. Beginning clean shutdown...")
+			jc.Cancel(lcm)
+		}
 
 		for {
 			select {
 			case <-lcm.cancelChannel:
-				lcm.Info("Cancellation requested. Beginning clean shutdown...")
-				jc.Cancel(lcm)
+				doCancel()
+				continue // to exit on next pass through loop
 			default:
-				jc.ReportProgressOrExit(lcm)
+				newCount = jc.ReportProgressOrExit(lcm)
+			}
+
+			wait := 2 * time.Second
+			if newCount >= progressFrequencyThreshold && !cancelCalled {
+				// report less on progress  - to save on the CPU costs of doing so and because, if there are this many files,
+				// its going to be a long job anyway, so no need to report so often
+				wait = 2 * time.Minute
+				if oldCount < progressFrequencyThreshold {
+					lcm.Info(fmt.Sprintf("Reducing progress output frequency to %v, because there are over %d files", wait, progressFrequencyThreshold))
+				}
 			}
 
 			// wait a bit before fetching job status again, as fetching has costs associated with it on the backend
-			time.Sleep(2 * time.Second)
+			select {
+			case <-lcm.cancelChannel:
+				doCancel()
+			case <-time.After(wait):
+			}
+
+			oldCount = newCount
 		}
 	}()
 }

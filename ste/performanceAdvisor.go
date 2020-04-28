@@ -81,6 +81,10 @@ func (AdviceType) NetworkNotBottleneck() AdviceType {
 		"Performance is not limited by network bandwidth"}
 }
 
+func (AdviceType) FileShareOrNetwork() AdviceType {
+	return AdviceType{"FileShareOrNetwork",
+		"Throughput may have been limited by File Share throughput limits, or by the network "}
+}
 func (AdviceType) MbpsCapped() AdviceType {
 	return AdviceType{"MbpsCapped",
 		"Maximum throughput was limited by a command-line parameter"}
@@ -108,16 +112,21 @@ type PerformanceAdvisor struct {
 	serverBusyPercentageOther      float32
 	iops                           int
 	mbps                           int64
-	capMbps                        int64 // 0 if no cap
+	capMbps                        float64 // 0 if no cap
 	finalConcurrencyTunerReason    string
 	finalConcurrency               int
 	azureVmCores                   int // 0 if not azure VM
 	azureVmSizeName                string
 	direction                      common.TransferDirection
 	avgBytesPerFile                int64
+
+	// Azure files Standard does not appear to return 503's for Server Busy, so our current code can't tell the
+	// difference between slow network and slow Service, when connecting to Standard Azure Files accounts,
+	// so we use this flag to display a message that hedges our bets between the two possibilities.
+	isToAzureFiles bool
 }
 
-func NewPerformanceAdvisor(stats *pipelineNetworkStats, commandLineMbpsCap int64, mbps int64, finalReason string, finalConcurrency int, dir common.TransferDirection, avgBytesPerFile int64) *PerformanceAdvisor {
+func NewPerformanceAdvisor(stats *pipelineNetworkStats, commandLineMbpsCap float64, mbps int64, finalReason string, finalConcurrency int, dir common.TransferDirection, avgBytesPerFile int64, isToAzureFiles bool) *PerformanceAdvisor {
 	p := &PerformanceAdvisor{
 		capMbps:                     commandLineMbpsCap,
 		mbps:                        mbps,
@@ -125,6 +134,7 @@ func NewPerformanceAdvisor(stats *pipelineNetworkStats, commandLineMbpsCap int64
 		finalConcurrency:            finalConcurrency,
 		direction:                   dir,
 		avgBytesPerFile:             avgBytesPerFile,
+		isToAzureFiles:              isToAzureFiles,
 	}
 
 	p.azureVmSizeName = p.getAzureVmSize()
@@ -232,7 +242,7 @@ func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 	const mbpsThreshold = 0.9
 	if p.capMbps > 0 && float32(p.mbps) > mbpsThreshold*float32(p.capMbps) {
 		addAdvice(EAdviceType.MbpsCapped(),
-			"Throughput has been capped at %d Mbps with a command line parameter, and the measured throughput was "+
+			"Throughput has been capped at %f Mbps with a command line parameter, and the measured throughput was "+
 				"close to the cap. "+
 				"(This message is shown by AzCopy if a command-line cap is set and the measured throughput is "+
 				"over %.0f%% of the cap.)", p.capMbps, mbpsThreshold*100)
@@ -267,8 +277,17 @@ func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 				// TODO: can we detect if we're in the same region?  And can we do any better than that, because in many
 				//   (virtually all?) cases even being in different regions is fine.
 			} else {
-				// not limited by VM size, so must be file size or network
-				if p.avgBytesPerFile <= (htbbThresholdMB * 1024 * 1024) {
+				// not limited by VM size, so must be file size, network or Azure Files Standard Share
+				if p.isToAzureFiles {
+					// give output that hedges our bets between network and File Share, because we can't tell which is limiting perf
+					addAdvice(EAdviceType.FileShareOrNetwork(),
+						"No other factors were identified that are limiting performance, so the bottleneck is assumed to be either "+
+							"the throughput of the Azure File Share OR the available network bandwidth. To test whether the File Share or the network is "+
+							"the bottleneck, try running a benchmark to Blob Storage over the same network. If that is much faster, then the bottleneck in this "+
+							"run was probably the File Share. Check the published Azure File Share throughput targets for more info. In this run throughput "+
+							"of %d Mega bits/sec was obtained with %d concurrent connections.",
+						p.mbps, p.finalConcurrency)
+				} else if p.avgBytesPerFile <= (htbbThresholdMB * 1024 * 1024) {
 					addAdvice(EAdviceType.SmallFilesOrNetwork(),
 						"The files in this test are relatively small. In such cases AzCopy cannot tell whether performance was limited by "+
 							"your network, or by the additional processing overheads associated with small files. To check, run another benchmark using "+

@@ -2,11 +2,12 @@ package common
 
 import (
 	"bytes"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"net/http"
 	"net/url"
 	"runtime"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
@@ -30,9 +31,22 @@ type URLExtension struct {
 // URLWithPlusDecodedInPath returns a URL with '+' in path decoded as ' '(space).
 // This is useful for the cases, e.g: S3 management console encode ' '(space) as '+', which is not supported by Azure resources.
 func (u URLExtension) URLWithPlusDecodedInPath() url.URL {
-	if u.Path != "" && strings.Contains(u.Path, "+") {
-		u.Path = strings.Replace(u.Path, "+", " ", -1)
+	// url.RawPath is not always present. Which is likely, if we're _just_ using +.
+	if u.RawPath != "" {
+		if u.RawPath != u.EscapedPath() {
+			panic("sanity check: lost user input meaning on URL")
+		}
+
+		var err error
+		u.RawPath = strings.ReplaceAll(u.RawPath, "+", "%20")
+		u.Path, err = url.PathUnescape(u.RawPath)
+
+		PanicIfErr(err)
+	} else if u.Path != "" {
+		// If we're working with no encoded characters, just replace the pluses in the path and move on.
+		u.Path = strings.ReplaceAll(u.Path, "+", " ")
 	}
+
 	return u.URL
 }
 
@@ -156,4 +170,15 @@ func GenerateFullPath(rootPath, childPath string) string {
 
 	// otherwise, make sure a path separator is inserted between the rootPath if necessary
 	return rootPath + rootSeparator + childPath
+}
+
+func GenerateFullPathWithQuery(rootPath, childPath, extraQuery string) string {
+	p := GenerateFullPath(rootPath, childPath)
+
+	extraQuery = strings.TrimLeft(extraQuery, "?")
+	if extraQuery == "" {
+		return p
+	} else {
+		return p + "?" + extraQuery
+	}
 }

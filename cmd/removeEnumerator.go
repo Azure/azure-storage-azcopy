@@ -25,7 +25,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -33,8 +32,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 var NothingToRemoveError = errors.New("nothing found to remove")
@@ -46,25 +43,15 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	var sourceTraverser resourceTraverser
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	rawURL, err := url.Parse(cca.source)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if cca.sourceSAS != "" {
-		copyHandlerUtil{}.appendQueryParamToUrl(rawURL, cca.sourceSAS)
-	}
 
 	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = initResourceTraverser(rawURL.String(), cca.fromTo.From(), &ctx, &cca.credentialInfo, nil, cca.listOfFilesChannel, cca.recursive, false, func() {})
+	sourceTraverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &cca.credentialInfo, nil, cca.listOfFilesChannel, cca.recursive, false, func(common.EntityType) {})
 
 	// report failure to create traverser
 	if err != nil {
 		return nil, err
 	}
 
-	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart)
 	includeFilters := buildIncludeFilters(cca.includePatterns)
 	excludeFilters := buildExcludeFilters(cca.excludePatterns, false)
 	excludePathFilters := buildExcludeFilters(cca.excludePathPatterns, true)
@@ -72,6 +59,17 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	// set up the filters in the right order
 	filters := append(includeFilters, excludeFilters...)
 	filters = append(filters, excludePathFilters...)
+
+	// decide our folder transfer strategy
+	// (Must enumerate folders when deleting from a folder-aware location. Can't do folder deletion just based on file
+	// deletion, because that would not handle folders that were empty at the start of the job).
+	fpo, message := newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters, false, false)
+	glcm.Info(message)
+	if ste.JobsAdmin != nil {
+		ste.JobsAdmin.LogToJobLog(message)
+	}
+
+	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo)
 
 	finalize := func() error {
 		jobInitiated, err := transferScheduler.dispatchFinalPart()
@@ -99,24 +97,6 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	return newCopyEnumerator(sourceTraverser, filters, transferScheduler.scheduleCopyTransfer, finalize), nil
 }
 
-type directoryStack []azfile.DirectoryURL
-
-func (s *directoryStack) Push(d azfile.DirectoryURL) {
-	*s = append(*s, d)
-}
-
-func (s *directoryStack) Pop() (*azfile.DirectoryURL, bool) {
-	l := len(*s)
-
-	if l == 0 {
-		return nil, false
-	} else {
-		e := (*s)[l-1]
-		*s = (*s)[:l-1]
-		return &e, true
-	}
-}
-
 // TODO move after ADLS/Blob interop goes public
 // TODO this simple remove command is only here to support the scenario temporarily
 // Ultimately, this code can be merged into the newRemoveEnumerator
@@ -124,12 +104,13 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
 	ctx := context.Background()
 
 	// return an error if the unsupported options are passed in
-	if len(cca.includePatterns)+len(cca.excludePatterns) > 0 {
-		return errors.New("include/exclude options are not supported")
+	if len(cca.initModularFilters()) > 0 {
+		return errors.New("filter options, such as include/exclude, are not supported for this destination")
+		// because we just ignore them and delete the root
 	}
 
 	// patterns are not supported
-	if strings.Contains(cca.source, "*") {
+	if strings.Contains(cca.source.Value, "*") {
 		return errors.New("pattern matches are not supported in this command")
 	}
 
@@ -140,13 +121,10 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
 	}
 
 	// attempt to parse the source url
-	sourceURL, err := url.Parse(cca.source)
+	sourceURL, err := cca.source.FullURL()
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
-
-	// append the SAS query to the newly parsed URL
-	sourceURL = gCopyUtil.appendQueryParamToUrl(sourceURL, cca.sourceSAS)
 
 	// parse the given source URL into parts, which separates the filesystem name and directory/file path
 	urlParts := azbfs.NewBfsURLParts(*sourceURL)
@@ -160,8 +138,9 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
 		glcm.Exit(func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
 				summary := common.ListJobSummaryResponse{
-					JobStatus:          common.EJobStatus.Completed(),
-					TotalTransfers:     1,
+					JobStatus:      common.EJobStatus.Completed(),
+					TotalTransfers: 1,
+					// It's not meaningful to set FileTransfers or FolderPropertyTransfers because even if its a folder, its not really folder _properties_ which is what the name is
 					TransfersCompleted: 1,
 					PercentComplete:    100,
 				}

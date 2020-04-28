@@ -28,6 +28,10 @@ func NewDirectoryURL(url url.URL, p pipeline.Pipeline) DirectoryURL {
 	return DirectoryURL{directoryClient: directoryClient, filesystem: urlParts.FileSystemName, pathParameter: urlParts.DirectoryOrFilePath}
 }
 
+func (d DirectoryURL) IsFileSystemRoot() bool {
+	return d.pathParameter == ""
+}
+
 // URL returns the URL endpoint used by the DirectoryURL object.
 func (d DirectoryURL) URL() url.URL {
 	return d.directoryClient.URL()
@@ -64,11 +68,22 @@ func (d DirectoryURL) NewDirectoryURL(dirName string) DirectoryURL {
 }
 
 // Create creates a new directory within a File System
-func (d DirectoryURL) Create(ctx context.Context) (*DirectoryCreateResponse, error) {
+func (d DirectoryURL) Create(ctx context.Context, recreateIfExists bool) (*DirectoryCreateResponse, error) {
+	var ifNoneMatch *string
+	if recreateIfExists {
+		ifNoneMatch = nil // the default ADLS Gen2 behavior, see https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create
+	} else {
+		star := "*" // see https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create
+		ifNoneMatch = &star
+	}
+	return d.doCreate(ctx, ifNoneMatch)
+}
+
+func (d DirectoryURL) doCreate(ctx context.Context, ifNoneMatch *string) (*DirectoryCreateResponse, error) {
 	resp, err := d.directoryClient.Create(ctx, d.filesystem, d.pathParameter, PathResourceDirectory, nil,
 		PathRenameModeNone, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, ifNoneMatch,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, nil)
 	return (*DirectoryCreateResponse)(resp), err
@@ -124,17 +139,17 @@ func (d DirectoryURL) ListDirectorySegment(ctx context.Context, marker *string, 
 // It returns false if the directoryUrl is not able to get resource properties
 // It returns false if the url represent a file in the filesystem
 // TODO reconsider for SDK release
-func (d DirectoryURL) IsDirectory(ctx context.Context) bool {
+func (d DirectoryURL) IsDirectory(ctx context.Context) (bool, error) {
 	grep, err := d.GetProperties(ctx)
 	// If the error occurs while getting resource properties return false
 	if err != nil {
-		return false
+		return false, err
 	}
 	// return false if the resource type is not
 	if !strings.EqualFold(grep.XMsResourceType(), directoryResourceName) {
-		return false
+		return false, nil
 	}
-	return true
+	return true, nil
 }
 
 // NewFileUrl converts the current directory Url into the NewFileUrl

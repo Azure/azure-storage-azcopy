@@ -40,7 +40,9 @@ type md5Comparer struct {
 
 // TODO: let's add an aka.ms link to the message,  that gives more info
 var errMd5Mismatch = errors.New("the MD5 hash of the data, as we received it, did not match the expected value, as found in the Blob/File Service. " +
-	"This means that either there is a data integrity error OR another tool has failed to keep the stored hash up to date")
+	"This means that either there is a data integrity error OR another tool has failed to keep the stored hash up to date. " +
+	"(NOTE In the specific case of downloading a Page Blob that has been used as a VM disk, the VM has probably changed the content since the hash was set. That's normal, and " +
+	"in that specific case you can simply disable the MD5 check. See the documentation for the check-md5 parameter.)")
 
 // TODO: let's add an aka.ms link to the message, that gives more info
 const noMD5Stored = "no MD5 was stored in the Blob/File service against this file. So the downloaded data cannot be MD5-validated."
@@ -61,8 +63,9 @@ func (c *md5Comparer) Check() error {
 	// missing (at the source)
 	if len(c.expected) == 0 {
 		switch c.validationOption {
+		// This code would never be triggered anymore due to the early check that now occurs in xfer-remoteToLocal.go
 		case common.EHashValidationOption.FailIfDifferentOrMissing():
-			return errExpectedMd5Missing
+			panic("Transfer should've pre-emptively failed with a missing MD5.")
 		case common.EHashValidationOption.FailIfDifferent(),
 			common.EHashValidationOption.LogOnly():
 			c.logAsMissing()

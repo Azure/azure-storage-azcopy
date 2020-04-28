@@ -99,6 +99,10 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		muBlockIDs:       &sync.Mutex{}}, nil
 }
 
+func (s *blockBlobSenderBase) SendableEntityType() common.EntityType {
+	return common.EEntityType.File()
+}
+
 func (s *blockBlobSenderBase) ChunkSize() uint32 {
 	return s.chunkSize
 }
@@ -107,7 +111,7 @@ func (s *blockBlobSenderBase) NumChunks() uint32 {
 	return s.numChunks
 }
 
-func (s *blockBlobSenderBase) RemoteFileExists() (bool, error) {
+func (s *blockBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
 	return remoteObjectExists(s.destBlockBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}))
 }
 

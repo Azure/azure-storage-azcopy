@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
@@ -51,7 +52,8 @@ type IJobMgr interface {
 	JobID() common.JobID
 	JobPartMgr(partNum PartNumber) (IJobPartMgr, bool)
 	//Throughput() XferThroughput
-	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, sourceSAS string,
+	// If existingPlanMMF is nil, a new MMF is opened.
+	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF, sourceSAS string,
 		destinationSAS string, scheduleTransfers bool) IJobPartMgr
 	SetIncludeExclude(map[string]int, map[string]int)
 	IncludeExclude() (map[string]int, map[string]int)
@@ -70,7 +72,7 @@ type IJobMgr interface {
 	// TODO: added for debugging purpose. remove later
 	ActiveConnections() int64
 	GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint)
-	TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32) []common.PerformanceAdvice
+	TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32, fromTo common.FromTo) []common.PerformanceAdvice
 	//Close()
 	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
 	setInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
@@ -94,6 +96,7 @@ func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID 
 		overwritePrompter:             newOverwritePrompter(),
 		pipelineNetworkStats:          newPipelineNetworkStats(JobsAdmin.(*jobsAdmin).concurrencyTuner), // let the stats coordinate with the concurrency tuner
 		exclusiveDestinationMapHolder: &atomic.Value{},
+		initMu:                        &sync.Mutex{},
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
 	jm.logJobsAdminMessages()
@@ -142,8 +145,20 @@ func (jm *jobMgr) logConcurrencyParameters() {
 	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent transfer initiation routines: %d (%s)",
 		jm.concurrency.TransferInitiationPoolSize.Value,
 		jm.concurrency.TransferInitiationPoolSize.GetDescription()))
+
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max enumeration routines: %d (%s)",
+		jm.concurrency.EnumerationPoolSize.Value,
+		jm.concurrency.EnumerationPoolSize.GetDescription()))
+
 	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max open files when downloading: %d (auto-computed)",
 		jm.concurrency.MaxOpenDownloadFiles))
+}
+
+// jobMgrInitState holds one-time init structures (such as SIPM), that initialize when the first part is added.
+type jobMgrInitState struct {
+	securityInfoPersistenceManager *securityInfoPersistenceManager
+	folderCreationTracker          common.FolderCreationTracker
+	folderDeletionManager          common.FolderDeletionManager
 }
 
 // jobMgr represents the runtime information for a Job
@@ -188,6 +203,12 @@ type jobMgr struct {
 
 	// only a single instance of the prompter is needed for all transfers
 	overwritePrompter *overwritePrompter
+
+	// must have a single instance of this, for the whole job
+	folderCreationTracker common.FolderCreationTracker
+
+	initMu    *sync.Mutex
+	initState *jobMgrInitState
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -266,7 +287,7 @@ func (jm *jobMgr) logPerfInfo(displayStrings []string, constraint common.PerfCon
 	jm.Log(pipeline.LogInfo, msg)
 }
 
-func (jm *jobMgr) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32) []common.PerformanceAdvice {
+func (jm *jobMgr) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32, fromTo common.FromTo) []common.PerformanceAdvice {
 	ja := JobsAdmin.(*jobsAdmin)
 	if !ja.provideBenchmarkResults {
 		return make([]common.PerformanceAdvice, 0)
@@ -296,23 +317,43 @@ func (jm *jobMgr) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32) 
 	}
 
 	dir := jm.atomicTransferDirection.AtomicLoad()
-	a := NewPerformanceAdvisor(jm.pipelineNetworkStats, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency, dir, averageBytesPerFile)
+	isToAzureFiles := fromTo.To() == common.ELocation.File()
+	a := NewPerformanceAdvisor(jm.pipelineNetworkStats, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency, dir, averageBytesPerFile, isToAzureFiles)
 	return a.GetAdvice()
 }
 
 // initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
-func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, sourceSAS string,
+func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF, sourceSAS string,
 	destinationSAS string, scheduleTransfers bool) IJobPartMgr {
 	jpm := &jobPartMgr{jobMgr: jm, filename: planFile, sourceSAS: sourceSAS,
 		destinationSAS: destinationSAS, pacer: JobsAdmin.(*jobsAdmin).pacer,
 		slicePool:        JobsAdmin.(*jobsAdmin).slicePool,
 		cacheLimiter:     JobsAdmin.(*jobsAdmin).cacheLimiter,
 		fileCountLimiter: JobsAdmin.(*jobsAdmin).fileCountLimiter}
-	jpm.planMMF = jpm.filename.Map()
+	// If an existing plan MMF was supplied, re use it. Otherwise, init a new one.
+	if existingPlanMMF == nil {
+		jpm.planMMF = jpm.filename.Map()
+	} else {
+		jpm.planMMF = existingPlanMMF
+	}
+
 	jm.jobPartMgrs.Set(partNum, jpm)
 	jm.setFinalPartOrdered(partNum, jpm.planMMF.Plan().IsFinalPart)
 	jm.setDirection(jpm.Plan().FromTo)
 	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(partNum, jpm.Plan().FromTo)
+
+	jm.initMu.Lock()
+	defer jm.initMu.Unlock()
+	if jm.initState == nil {
+		var logger common.ILogger = jm
+		jm.initState = &jobMgrInitState{
+			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
+			folderCreationTracker:          common.NewFolderCreationTracker(jpm.Plan().Fpo),
+			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
+		}
+	}
+	jpm.jobMgrInitState = jm.initState // so jpm can use it as much as desired without locking (since the only mutation is the init in jobManager. As far as jobPartManager is concerned, the init state is read-only
+
 	if scheduleTransfers {
 		// If the schedule transfer is set to true
 		// Instead of the scheduling the Transfer for given JobPart
