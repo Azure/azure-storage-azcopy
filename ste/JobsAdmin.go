@@ -23,6 +23,7 @@ package ste
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -121,19 +122,16 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 	}
 
 	const channelSize = 100000
-	// PartsChannelSize defines the number of JobParts which can be placed into the
-	// parts channel. Any JobPart which comes from FE and partChannel is full,
-	// has to wait and enumeration of transfer gets blocked till then.
-	// TODO : PartsChannelSize Needs to be discussed and can change.
-	const PartsChannelSize = 10000
 
-	// partsCh is the channel in which all JobParts are put
+	// partsCh is the like a channel in which all JobParts are put
 	// for scheduling transfers. When the next JobPart order arrives
 	// transfer engine creates the JobPartPlan file and
 	// puts the JobPartMgr in partchannel
 	// from which each part is picked up one by one
 	// and transfers of that JobPart are scheduled
-	partsCh := make(chan IJobPartMgr, PartsChannelSize)
+	// It's not a real channel, because we take from it in random order.
+	// Also, unlike the channel we used to use here, this one does not block when full (it never becomes "full")
+	partsPseudoCh := newRandomizedPseudoChannel()
 	// Create normal & low transfer/chunk channels
 	normalTransferCh, normalChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
 	lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
@@ -167,16 +165,16 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 		commandLineMbpsCap:      targetRateInMegaBitsPerSec,
 		provideBenchmarkResults: providePerfAdvice,
 		coordinatorChannels: CoordinatorChannels{
-			partsChannel:     partsCh,
-			normalTransferCh: normalTransferCh,
-			lowTransferCh:    lowTransferCh,
+			partsPseudoChannel: partsPseudoCh,
+			normalTransferCh:   normalTransferCh,
+			lowTransferCh:      lowTransferCh,
 		},
 		xferChannels: XferChannels{
-			partsChannel:     partsCh,
-			normalTransferCh: normalTransferCh,
-			lowTransferCh:    lowTransferCh,
-			normalChunckCh:   normalChunkCh,
-			lowChunkCh:       lowChunkCh,
+			partsPseudoChannel: partsPseudoCh,
+			normalTransferCh:   normalTransferCh,
+			lowTransferCh:      lowTransferCh,
+			normalChunckCh:     normalChunkCh,
+			lowChunkCh:         lowChunkCh,
 		},
 		poolSizingChannels: poolSizingChannels{ // all deliberately unbuffered, because pool sizer routine works in lock-step with these - processing them as they happen, never catching up on populated buffer later
 			entryNotificationCh: make(chan struct{}),
@@ -253,15 +251,36 @@ func getMaxRamForChunks() int64 {
 // from where this JobPartMgr will be picked by a routine and
 // its transfers will be scheduled
 func (ja *jobsAdmin) QueueJobParts(jpm IJobPartMgr) {
-	ja.coordinatorChannels.partsChannel <- jpm
+	ja.coordinatorChannels.partsPseudoChannel.add(jpm)
 }
+
+var poolSizeOnce = &sync.Once{}
 
 // 1 single goroutine runs this method and InitJobsAdmin  kicks that goroutine off.
 func (ja *jobsAdmin) scheduleJobParts() {
-	poolSizeOnce := &sync.Once{}
 
+	time.Sleep(time.Minute * 2) // temp
+
+	// TODO: do we really need to do this?
+	const numSchedulerWorkers = 25 // we want enough that job parts from different parts of teh overall enumeration are getting processed concurrently, to get a nice mix of active files across the namespace (e.g. all 5 different plan files, if this value here is 5)
+
+	for i := 0; i < numSchedulerWorkers; i++ {
+		go ja.scheduleJobPartsWorker()
+	}
+}
+
+func (ja *jobsAdmin) scheduleJobPartsWorker() {
 	for {
-		jobPart := <-ja.xferChannels.partsChannel
+		// Take one job part AT RANDOM
+		// The randomness ensures that, on really big jobs with a large number of parts,
+		// we distribute the work over the namespace well. Since enumeration tends to be
+		// in alphabetical order on at least some resource types, if we just do parts in
+		// the order they are created, we would also be working in alphabetical order,
+		// which is not good for pref when file size is below the HTBB threshold. (Above the threshold,
+		// ordering doesn't matter)
+		// See https://docs.microsoft.com/en-us/azure/storage/blobs/storage-performance-checklist#partitioning
+		// and https://azure.microsoft.com/en-us/blog/high-throughput-with-azure-blob-storage/
+		jobPart := ja.xferChannels.partsPseudoChannel.takeRandom().(IJobPartMgr)
 
 		poolSizeOnce.Do(func() {
 			// spin up a GR to co-ordinate dynamic sizing of the main pool
@@ -478,6 +497,66 @@ func (ja *jobsAdmin) transferProcessor(workerID int) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+type randomizedPutter interface {
+	add(x interface{})
+}
+
+type randomizedTaker interface {
+	takeRandom() interface{}
+}
+
+type randomizedPseudoChannel struct {
+	mu    *sync.Mutex
+	items []interface{}
+	r     *rand.Rand
+}
+
+func newRandomizedPseudoChannel() *randomizedPseudoChannel {
+	return &randomizedPseudoChannel{
+		items: make([]interface{}, 0, 1024),
+		mu:    &sync.Mutex{},
+		r:     rand.New(rand.NewSource(rand.Int63())),
+	}
+}
+
+// putOne won't ever block.  I.e. the pseudoChannel has no max size.
+func (c *randomizedPseudoChannel) add(x interface{}) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.items = append(c.items, x)
+}
+
+func (c *randomizedPseudoChannel) takeRandom() interface{} {
+	for {
+		result, ok := c.tryTakeOne()
+		if ok {
+			return result
+		}
+		time.Sleep(500 * time.Millisecond) // crude, but good enough for the purpose we are using this for. TODO: should we replace it with a sync.Cond?
+	}
+}
+
+func (c *randomizedPseudoChannel) tryTakeOne() (interface{}, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.items) == 0 {
+		return nil, false
+	}
+	// choose one at random
+	index := c.r.Int63n(int64(len(c.items)))
+	// remove it, by swapping the last one into its place
+	result := c.items[index]
+	lastIndex := len(c.items) - 1
+	c.items[index] = c.items[lastIndex]
+	c.items = c.items[:lastIndex]
+
+	return result, true
+}
+
+// TODO: unit tests for the above
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 // There will be only 1 instance of the jobsAdmin type.
 // The coordinator uses this to manage all the running jobs and their job parts.
 type jobsAdmin struct {
@@ -507,17 +586,17 @@ type jobsAdmin struct {
 }
 
 type CoordinatorChannels struct {
-	partsChannel     chan<- IJobPartMgr         // Write Only
-	normalTransferCh chan<- IJobPartTransferMgr // Write-only
-	lowTransferCh    chan<- IJobPartTransferMgr // Write-only
+	partsPseudoChannel randomizedPutter           // Write Only
+	normalTransferCh   chan<- IJobPartTransferMgr // Write-only
+	lowTransferCh      chan<- IJobPartTransferMgr // Write-only
 }
 
 type XferChannels struct {
-	partsChannel     <-chan IJobPartMgr         // Read only
-	normalTransferCh <-chan IJobPartTransferMgr // Read-only
-	lowTransferCh    <-chan IJobPartTransferMgr // Read-only
-	normalChunckCh   chan chunkFunc             // Read-write
-	lowChunkCh       chan chunkFunc             // Read-write
+	partsPseudoChannel randomizedTaker
+	normalTransferCh   <-chan IJobPartTransferMgr // Read-only
+	lowTransferCh      <-chan IJobPartTransferMgr // Read-only
+	normalChunckCh     chan chunkFunc             // Read-write
+	lowChunkCh         chan chunkFunc             // Read-write
 }
 
 type poolSizingChannels struct {
