@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"net/http"
 	"net/url"
 	"runtime"
 	"strings"
@@ -36,6 +37,7 @@ import (
 
 // This sync.Once is present to ensure we output information about a S2S access tier preservation failure to stdout once
 var s2sAccessTierFailureLogStdout sync.Once
+var checkLengthFailureOnReadOnlyDst sync.Once
 
 // xfer.go requires just a single xfer function for the whole job.
 // This routine serves that role for uploads and S2S copies, and redirects for each transfer to a file or folder implementation
@@ -380,15 +382,30 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 
 	if jptm.IsLive() && info.DestLengthValidation {
 		_, isS2SCopier := s.(s2sCopier)
+		shouldCheckLength := true
 		destLength, err := s.GetDestinationLength()
 
-		if err != nil {
-			wrapped := fmt.Errorf("could not read destination length. If destination is write-only, use --check-length=false on the AzCopy command line. %w", err)
-			jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", wrapped)
+		if resp, respOk := err.(pipeline.Response); respOk && resp.Response() != nil &&
+			resp.Response().StatusCode == http.StatusForbidden {
+			// The destination is write-only. Cannot verify length
+			shouldCheckLength = false
+			checkLengthFailureOnReadOnlyDst.Do( func() {
+				var glcm = common.GetLifecycleMgr()
+				msg :=fmt.Sprintf("Could not read destination length. If the destination is write-only, use --check-length=false on the command line.")
+				glcm.Info(msg)
+				if jptm.ShouldLog(pipeline.LogError) {
+					jptm.Log(pipeline.LogError, msg)
+				}
+			})
 		}
 
-		if destLength != jptm.Info().SourceSize {
-			jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check", errors.New("destination length does not match source length"))
+		if shouldCheckLength {
+			if err != nil {
+				wrapped := fmt.Errorf("Could not read destination length. %w", err)
+				jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", wrapped)
+			} else if destLength != jptm.Info().SourceSize {
+				jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check", errors.New("destination length does not match source length"))
+			}
 		}
 	}
 
