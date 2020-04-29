@@ -34,7 +34,7 @@ import (
 
 func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *syncEnumerator, err error) {
 
-	srcCredInfo, srcIsPublic, err := getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.source.Value, cca.source.SAS, true)
+	srcCredInfo, srcIsPublic, err := getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true)
 
 	if err != nil {
 		return nil, err
