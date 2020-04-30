@@ -210,7 +210,8 @@ type blobPropsProvider interface {
 // a constructor is used so that in case the storedObject has to change, the callers would get a compilation error
 // and it forces all necessary properties to be always supplied and not forgotten
 func newStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time, size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) storedObject {
-	if strings.HasSuffix(relativePath, "\\") || strings.HasSuffix(relativePath, "/") {
+	// only worry about a trailing \ on Windows, because that's where it's a valid path separator in.
+	if (runtime.GOOS == "windows" && strings.HasSuffix(relativePath, "\\")) || strings.HasSuffix(relativePath, "/") {
 		panic("un-trimmed path provided to newStoredObject. This is not allowed") // since sync will get confused if it sometimes sees a path trimmed and sometimes untrimmed
 	}
 
