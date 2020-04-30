@@ -256,8 +256,8 @@ func (ja *jobsAdmin) QueueJobParts(jpm IJobPartMgr) {
 
 var poolSizeOnce = &sync.Once{}
 
-const partsPerPass = 6 // make this small-ish, so we keep our part selections widely-spaced in the namespace
-const partLevelConcurrency = partsPerPass
+const partsPerPass = 7          // make this small-ish, so we keep our part selections widely-spaced in the namespace
+const partLevelConcurrency = 20 // this is big-ish so get the content of this many parts concurrently feeding into the workstream
 
 // 1 single goroutine runs this method and InitJobsAdmin  kicks that goroutine off.
 func (ja *jobsAdmin) scheduleJobParts() {
@@ -515,6 +515,7 @@ type pseudoChannelTaker interface {
 type evenlySpreadPseudoChannel struct {
 	mu    *sync.Mutex
 	items []interface{}
+	count int
 	index float64
 }
 
@@ -530,6 +531,7 @@ func (c *evenlySpreadPseudoChannel) add(x interface{}) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.items = append(c.items, x)
+	c.count += 1
 }
 
 func (c *evenlySpreadPseudoChannel) takeOne() interface{} {
@@ -545,28 +547,36 @@ func (c *evenlySpreadPseudoChannel) takeOne() interface{} {
 func (c *evenlySpreadPseudoChannel) tryTakeOne() (interface{}, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if len(c.items) == 0 {
+	if c.count == 0 {
 		return nil, false
 	}
 
 	// step up through list in an even-sized increment (with wrap-around)
 	increment := float64(len(c.items)) / partsPerPass // e.g. if partsPerPass is 6, we want to go up by 1/6th of total
 	c.index += increment                              // keep track of floating point in the increments
-	if c.index >= float64(len(c.items)) {
+	idx := int(c.index)                               // but use int for indexing
+	if idx >= len(c.items) {
+		idx -= len(c.items)
 		c.index -= float64(len(c.items))
 	}
-	idx := int(c.index)                 // but use int for indexing
-	if idx < 0 || idx >= len(c.items) { // can we get any floating point weirdness/rounding etc in the above?  Not sure, but let's be safe
+	if idx < 0 { // in case of any floating point inaccuracies taking us < zero?
 		idx = 0
 	}
 
-	// remove chosen item, by swapping the last one into its place
-	// TODO: does the swapping undermine the even-ness of our selection, by bringing stuff from the end to the start and middle?
-	//    In theory it presumably does, but in practice, it doesn't seem to damage the even-ness enough to affect throughput
+	// we might have hit an empty slot
+	for c.items[idx] == nil {
+		idx++
+		if idx >= len(c.items) {
+			idx = 0
+		}
+	}
+
+	// remove chosen item
 	result := c.items[idx]
-	lastIndex := len(c.items) - 1
-	c.items[idx] = c.items[lastIndex]
-	c.items = c.items[:lastIndex]
+	c.items[idx] = nil
+	c.count--
+
+	fmt.Printf(" %d\n", idx) // TODO remove
 
 	return result, true
 }
