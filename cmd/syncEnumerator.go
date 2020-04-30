@@ -44,10 +44,12 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		if cca.fromTo.From() == common.ELocation.Blob() || cca.fromTo.From() == common.ELocation.File() {
 			// Adding files here seems like an odd case, but since files can't be public
 			// the second half of this if statement does not hurt.
+			if cca.fromTo.From() != cca.fromTo.To() {
+				panic(fmt.Sprintf("The semantics of authorization for an S2S transfer (within sync) is unknown for %s->%s transfers", cca.fromTo.From(), cca.fromTo.To()))
+			}
+
 			if srcCredInfo.CredentialType != common.ECredentialType.Anonymous() && !srcIsPublic {
 				return nil, fmt.Errorf("the source of a %s->%s sync must either be public, or authorized with a SAS token", cca.fromTo.From(), cca.fromTo.To())
-			} else {
-				panic(fmt.Sprintf("The semantics of authorization for an S2S transfer (within sync) is unknown for %s->%s transfers", cca.fromTo.From(), cca.fromTo.To()))
 			}
 		}
 	}
