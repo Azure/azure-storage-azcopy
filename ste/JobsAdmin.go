@@ -23,7 +23,6 @@ package ste
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -256,15 +255,14 @@ func (ja *jobsAdmin) QueueJobParts(jpm IJobPartMgr) {
 
 var poolSizeOnce = &sync.Once{}
 
+const partLevelConcurrency = 6
+
 // 1 single goroutine runs this method and InitJobsAdmin  kicks that goroutine off.
 func (ja *jobsAdmin) scheduleJobParts() {
 
 	time.Sleep(time.Minute * 2) // temp
 
-	// TODO: do we really need to do this?
-	const numSchedulerWorkers = 25 // we want enough that job parts from different parts of teh overall enumeration are getting processed concurrently, to get a nice mix of active files across the namespace (e.g. all 5 different plan files, if this value here is 5)
-
-	for i := 0; i < numSchedulerWorkers; i++ {
+	for i := 0; i < partLevelConcurrency; i++ {
 		go ja.scheduleJobPartsWorker()
 	}
 }
@@ -280,7 +278,7 @@ func (ja *jobsAdmin) scheduleJobPartsWorker() {
 		// ordering doesn't matter)
 		// See https://docs.microsoft.com/en-us/azure/storage/blobs/storage-performance-checklist#partitioning
 		// and https://azure.microsoft.com/en-us/blog/high-throughput-with-azure-blob-storage/
-		jobPart := ja.xferChannels.partsPseudoChannel.takeRandom().(IJobPartMgr)
+		jobPart := ja.xferChannels.partsPseudoChannel.takeOne().(IJobPartMgr)
 
 		poolSizeOnce.Do(func() {
 			// spin up a GR to co-ordinate dynamic sizing of the main pool
@@ -502,20 +500,19 @@ type randomizedPutter interface {
 }
 
 type randomizedTaker interface {
-	takeRandom() interface{}
+	takeOne() interface{}
 }
 
 type randomizedPseudoChannel struct {
 	mu    *sync.Mutex
 	items []interface{}
-	r     *rand.Rand
+	index int
 }
 
 func newRandomizedPseudoChannel() *randomizedPseudoChannel {
 	return &randomizedPseudoChannel{
 		items: make([]interface{}, 0, 1024),
 		mu:    &sync.Mutex{},
-		r:     rand.New(rand.NewSource(rand.Int63())),
 	}
 }
 
@@ -526,7 +523,7 @@ func (c *randomizedPseudoChannel) add(x interface{}) {
 	c.items = append(c.items, x)
 }
 
-func (c *randomizedPseudoChannel) takeRandom() interface{} {
+func (c *randomizedPseudoChannel) takeOne() interface{} {
 	for {
 		result, ok := c.tryTakeOne()
 		if ok {
@@ -542,12 +539,18 @@ func (c *randomizedPseudoChannel) tryTakeOne() (interface{}, bool) {
 	if len(c.items) == 0 {
 		return nil, false
 	}
-	// choose one at random
-	index := c.r.Int63n(int64(len(c.items)))
-	// remove it, by swapping the last one into its place
-	result := c.items[index]
+
+	// step up through list in an even-sized increment (with wrap-around)
+	increment := len(c.items) / partLevelConcurrency // e.g. if part levelConcurrency is 6, we want to go up by 1/6th of total
+	c.index += increment
+	if c.index >= len(c.items) {
+		c.index -= len(c.items)
+	}
+
+	// remove chosen item, by swapping the last one into its place
+	result := c.items[c.index]
 	lastIndex := len(c.items) - 1
-	c.items[index] = c.items[lastIndex]
+	c.items[c.index] = c.items[lastIndex]
 	c.items = c.items[:lastIndex]
 
 	return result, true
