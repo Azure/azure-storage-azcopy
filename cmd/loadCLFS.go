@@ -154,7 +154,7 @@ NOTE: This is a preview release of the load command. Please report any issues on
 `,
 	Example: `
 Load an entire directory with a SAS:
-  - azcopy load "/path/to/dir" "https://[account].blob.core.windows.net/[container]?[SAS]" --state-path="/path/to/state/path"
+  - azcopy load clfs "/path/to/dir" "https://[account].blob.core.windows.net/[container]?[SAS]" --state-path="/path/to/state/path"
 `,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if len(args) != 2 {
