@@ -1,6 +1,12 @@
 
 # Change Log
 
+## Version 10.4.2
+
+### Bug fixes
+
+1. Fixed bug in overwrite prompt for folders.
+
 ## Version 10.4.1
 
 ### New features
