@@ -256,7 +256,8 @@ func (ja *jobsAdmin) QueueJobParts(jpm IJobPartMgr) {
 
 var poolSizeOnce = &sync.Once{}
 
-const partLevelConcurrency = 12
+const partsPerPass = 6 // make this small-ish, so we keep our part selections widely-spaced in the namespace
+const partLevelConcurrency = partsPerPass
 
 // 1 single goroutine runs this method and InitJobsAdmin  kicks that goroutine off.
 func (ja *jobsAdmin) scheduleJobParts() {
@@ -549,8 +550,8 @@ func (c *evenlySpreadPseudoChannel) tryTakeOne() (interface{}, bool) {
 	}
 
 	// step up through list in an even-sized increment (with wrap-around)
-	increment := float64(len(c.items)) / partLevelConcurrency // e.g. if part levelConcurrency is 6, we want to go up by 1/6th of total
-	c.index += increment                                      // keep track of floating point in the increments
+	increment := float64(len(c.items)) / partsPerPass // e.g. if partsPerPass is 6, we want to go up by 1/6th of total
+	c.index += increment                              // keep track of floating point in the increments
 	if c.index >= float64(len(c.items)) {
 		c.index -= float64(len(c.items))
 	}
