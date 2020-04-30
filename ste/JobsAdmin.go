@@ -120,7 +120,8 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 		cpuMon = common.NewCalibratedCpuUsageMonitor()
 	}
 
-	const channelSize = 100000
+	const transferChannelSize = 10000 // keep this relatively small, so that if multiple job parts are getting scheduled, they will "complete" to get in  - blocking on full, and getting randomly selected to add when capacity is available. This gives as a more randomized file order, which is good for small-file perf to blob storage
+	const chunkChannelSize = 100000
 
 	// partsCh is the like a channel in which all JobParts are put
 	// for scheduling transfers. When the next JobPart order arrives
@@ -132,8 +133,8 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 	// Also, unlike the channel we used to use here, this one does not block when full (it never becomes "full")
 	partsPseudoCh := newRandomizedPseudoChannel()
 	// Create normal & low transfer/chunk channels
-	normalTransferCh, normalChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
-	lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
+	normalTransferCh, normalChunkCh := make(chan IJobPartTransferMgr, transferChannelSize), make(chan chunkFunc, chunkChannelSize)
+	lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, transferChannelSize), make(chan chunkFunc, chunkChannelSize)
 
 	maxRamBytesToUse := getMaxRamForChunks()
 
@@ -255,12 +256,15 @@ func (ja *jobsAdmin) QueueJobParts(jpm IJobPartMgr) {
 
 var poolSizeOnce = &sync.Once{}
 
-const partLevelConcurrency = 6
+const partLevelConcurrency = 12
 
 // 1 single goroutine runs this method and InitJobsAdmin  kicks that goroutine off.
 func (ja *jobsAdmin) scheduleJobParts() {
 
-	time.Sleep(time.Minute * 2) // temp
+	time.Sleep(time.Minute * 2) // TODO: find out a way to get good even spread even after we remove this.
+	//    Problem was that, without this, we'd just read from the pseudoChannel as fast as data was added to it,
+	//    so we always read item 0, and there was no shuffling effect.
+	//    NOTE: the recent reduction in size of the transfers channel may have helped.
 
 	for i := 0; i < partLevelConcurrency; i++ {
 		go ja.scheduleJobPartsWorker()
@@ -495,35 +499,39 @@ func (ja *jobsAdmin) transferProcessor(workerID int) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-type randomizedPutter interface {
+type pseudoChannelAdder interface {
 	add(x interface{})
 }
 
-type randomizedTaker interface {
+type pseudoChannelTaker interface {
 	takeOne() interface{}
 }
 
-type randomizedPseudoChannel struct {
+// Gives back items in an order that is roughly evenly spread across the whole queue
+// (rather than taking only from the start or end).
+// Allows us to get a more even spread of small files through the total namespace of the copy job,
+// which is good for blob performance when sizes are below the High Throughput Block Block threshold.
+type evenlySpreadPseudoChannel struct {
 	mu    *sync.Mutex
 	items []interface{}
-	index int
+	index float64
 }
 
-func newRandomizedPseudoChannel() *randomizedPseudoChannel {
-	return &randomizedPseudoChannel{
+func newRandomizedPseudoChannel() *evenlySpreadPseudoChannel {
+	return &evenlySpreadPseudoChannel{
 		items: make([]interface{}, 0, 1024),
 		mu:    &sync.Mutex{},
 	}
 }
 
 // putOne won't ever block.  I.e. the pseudoChannel has no max size.
-func (c *randomizedPseudoChannel) add(x interface{}) {
+func (c *evenlySpreadPseudoChannel) add(x interface{}) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.items = append(c.items, x)
 }
 
-func (c *randomizedPseudoChannel) takeOne() interface{} {
+func (c *evenlySpreadPseudoChannel) takeOne() interface{} {
 	for {
 		result, ok := c.tryTakeOne()
 		if ok {
@@ -533,7 +541,7 @@ func (c *randomizedPseudoChannel) takeOne() interface{} {
 	}
 }
 
-func (c *randomizedPseudoChannel) tryTakeOne() (interface{}, bool) {
+func (c *evenlySpreadPseudoChannel) tryTakeOne() (interface{}, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if len(c.items) == 0 {
@@ -541,16 +549,22 @@ func (c *randomizedPseudoChannel) tryTakeOne() (interface{}, bool) {
 	}
 
 	// step up through list in an even-sized increment (with wrap-around)
-	increment := len(c.items) / partLevelConcurrency // e.g. if part levelConcurrency is 6, we want to go up by 1/6th of total
-	c.index += increment
-	if c.index >= len(c.items) {
-		c.index -= len(c.items)
+	increment := float64(len(c.items)) / partLevelConcurrency // e.g. if part levelConcurrency is 6, we want to go up by 1/6th of total
+	c.index += increment                                      // keep track of floating point in the increments
+	if c.index >= float64(len(c.items)) {
+		c.index -= float64(len(c.items))
+	}
+	idx := int(c.index)                 // but use int for indexing
+	if idx < 0 || idx >= len(c.items) { // can we get any floating point weirdness/rounding etc in the above?  Not sure, but let's be safe
+		idx = 0
 	}
 
 	// remove chosen item, by swapping the last one into its place
-	result := c.items[c.index]
+	// TODO: does the swapping undermine the even-ness of our selection, by bringing stuff from the end to the start and middle?
+	//    In theory it presumably does, but in practice, it doesn't seem to damage the even-ness enough to affect throughput
+	result := c.items[idx]
 	lastIndex := len(c.items) - 1
-	c.items[c.index] = c.items[lastIndex]
+	c.items[idx] = c.items[lastIndex]
 	c.items = c.items[:lastIndex]
 
 	return result, true
@@ -589,13 +603,13 @@ type jobsAdmin struct {
 }
 
 type CoordinatorChannels struct {
-	partsPseudoChannel randomizedPutter           // Write Only
+	partsPseudoChannel pseudoChannelAdder         // Write Only
 	normalTransferCh   chan<- IJobPartTransferMgr // Write-only
 	lowTransferCh      chan<- IJobPartTransferMgr // Write-only
 }
 
 type XferChannels struct {
-	partsPseudoChannel randomizedTaker
+	partsPseudoChannel pseudoChannelTaker
 	normalTransferCh   <-chan IJobPartTransferMgr // Read-only
 	lowTransferCh      <-chan IJobPartTransferMgr // Read-only
 	normalChunckCh     chan chunkFunc             // Read-write
