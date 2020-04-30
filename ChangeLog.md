@@ -1,6 +1,12 @@
 
 # Change Log
 
+## Version 10.4.3
+
+### Bug fixes
+
+1. Fixed bug where AzCopy errored if a filename ended with slash character. (E.g. backslash at end of a Linux filename.)
+
 ## Version 10.4.2
 
 ### Bug fixes
