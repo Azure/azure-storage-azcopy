@@ -47,7 +47,6 @@ type IJobPartTransferMgr interface {
 	SetNumberOfChunks(numChunks uint32)
 	SetActionAfterLastChunk(f func())
 	ReportTransferDone() uint32
-	RescheduleTransfer()
 	ScheduleChunks(chunkFunc chunkFunc)
 	SetDestinationIsModified()
 	Cancel()
@@ -387,10 +386,6 @@ func (jptm *jobPartTransferMgr) HoldsDestinationLock() bool {
 func (jptm *jobPartTransferMgr) useFileCountLimiter() bool {
 	ft := jptm.FromTo()    // TODO: consider changing isDownload (and co) to have struct receiver instead of pointer receiver, so don't need variable like this
 	return ft.IsDownload() // count-based limits are only applied for download a present
-}
-
-func (jptm *jobPartTransferMgr) RescheduleTransfer() {
-	jptm.jobPartMgr.RescheduleTransfer(jptm)
 }
 
 func (jptm *jobPartTransferMgr) ScheduleChunks(chunkFunc chunkFunc) {

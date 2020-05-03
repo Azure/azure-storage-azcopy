@@ -24,14 +24,13 @@ var _ IJobPartMgr = &jobPartMgr{}
 
 type IJobPartMgr interface {
 	Plan() *JobPartPlanHeader
-	ScheduleTransfers(jobCtx context.Context)
+	ScheduleTransfers(jobCtx context.Context, pause time.Duration)
 	StartJobXfer(jptm IJobPartTransferMgr)
 	ReportTransferDone() uint32
 	GetOverwriteOption() common.OverwriteOption
 	GetForceIfReadOnly() bool
 	AutoDecompress() bool
 	ScheduleChunks(chunkFunc chunkFunc)
-	RescheduleTransfer(jptm IJobPartTransferMgr)
 	BlobTypeOverride() common.BlobType
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	ShouldPutMd5() bool
@@ -290,7 +289,7 @@ func (jpm *jobPartMgr) getFolderCreationTracker() common.FolderCreationTracker {
 func (jpm *jobPartMgr) Plan() *JobPartPlanHeader { return jpm.planMMF.Plan() }
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
-func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
+func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, pause time.Duration) {
 	jpm.atomicTransfersDone = 0 // Reset the # of transfers done back to 0
 	// partplan file is opened and mapped when job part is added
 	//jpm.planMMF = jpm.filename.Map() // Open the job part plan file & memory-map it in
@@ -391,6 +390,10 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 		JobsAdmin.(*jobsAdmin).ScheduleTransfer(jpm.priority, jptm)
 
+		if jobCtx.Err() == nil && pause != 0 {
+			time.Sleep(pause) // spread out the processing in time, so that our transfers get mixed up in the sequence with other concurrent job parts, to better spread work over the destination Blob namespace
+		}
+
 		// This sets the atomic variable atomicAllTransfersScheduled to 1
 		// atomicAllTransfersScheduled variables is used in case of resume job
 		// Since iterating the JobParts and scheduling transfer is independent
@@ -407,10 +410,6 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 func (jpm *jobPartMgr) ScheduleChunks(chunkFunc chunkFunc) {
 	JobsAdmin.ScheduleChunk(jpm.priority, chunkFunc)
-}
-
-func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
-	JobsAdmin.(*jobsAdmin).ScheduleTransfer(jpm.priority, jptm)
 }
 
 func (jpm *jobPartMgr) createPipelines(ctx context.Context) {

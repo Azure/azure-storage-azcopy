@@ -120,7 +120,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 		cpuMon = common.NewCalibratedCpuUsageMonitor()
 	}
 
-	const transferChannelSize = 10000 // keep this relatively small, so that if multiple job parts are getting scheduled, they will "complete" to get in  - blocking on full, and getting randomly selected to add when capacity is available. This gives as a more randomized file order, which is good for small-file perf to blob storage
+	const transferChannelSize = 1000 // keep this relatively small, so that if multiple job parts are getting scheduled, they will "complete" to get in  - blocking on full, and getting randomly selected to add when capacity is available. This gives as a more randomized file order, which is good for small-file perf to blob storage
 	const chunkChannelSize = 100000
 
 	// partsCh is the like a channel in which all JobParts are put
@@ -254,6 +254,7 @@ func (ja *jobsAdmin) QueueJobParts(jpm IJobPartMgr) {
 	ja.coordinatorChannels.partsPseudoChannel.add(jpm)
 }
 
+// TODO: move the be properties of jobsAdmin
 var poolSizeOnce = &sync.Once{}
 
 const partsPerPass = 7          // make this small-ish, so we keep our part selections widely-spaced in the namespace
@@ -291,6 +292,8 @@ func (ja *jobsAdmin) scheduleJobPartsWorker() {
 			go ja.poolSizer(ja.concurrencyTuner)
 		})
 
+		pause := time.Millisecond * 10 // TODO Review
+
 		// If the job manager is not found for the JobId of JobPart
 		// taken from partsChannel
 		// there is an error in our code
@@ -301,7 +304,7 @@ func (ja *jobsAdmin) scheduleJobPartsWorker() {
 		if !found {
 			panic(fmt.Errorf("no job manager found for JobId %s", jobId.String()))
 		}
-		jobPart.ScheduleTransfers(jm.Context())
+		jobPart.ScheduleTransfers(jm.Context(), pause)
 	}
 }
 
