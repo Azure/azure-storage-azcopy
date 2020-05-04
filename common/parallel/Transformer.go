@@ -29,14 +29,10 @@ type InputObject interface{}
 type OutputObject interface{}
 
 type transformer struct {
-	input       <-chan ErrorableItem // TODO: would have liked this to be of InputObject, but it made our usage messy.  Not sure of right solution to that yet
+	input       <-chan CrawlResult // TODO: would have liked this to be of InputObject, but it made our usage messy.  Not sure of right solution to that yet. For now, using CrawlResult ties us to transforming result of crawl
 	output      chan TransformResult
 	workerBody  TransformFunc
 	parallelism int
-}
-
-type ErrorableItem interface {
-	Item() (interface{}, error)
 }
 
 type TransformResult struct {
@@ -52,7 +48,7 @@ func (r TransformResult) Item() (interface{}, error) {
 type TransformFunc func(input InputObject) (OutputObject, error)
 
 // transformation will stop when input is closed
-func Transform(ctx context.Context, input <-chan ErrorableItem, worker TransformFunc, parallelism int) <-chan TransformResult {
+func Transform(ctx context.Context, input <-chan CrawlResult, worker TransformFunc, parallelism int) <-chan TransformResult {
 	t := &transformer{
 		input:       input,
 		output:      make(chan TransformResult, 1000),

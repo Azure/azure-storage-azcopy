@@ -183,11 +183,9 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 
 	// run the actual enumeration.
 	// First part is a parallel directory crawl
-	// Second part is parallel conversion of the directories and files to stored objects. This is necessary because the conversion to stored object may hit the network and therefore be slow in not parallelized
-	parallelism := 1
-	if enumerationParallelism > 1 {
-		parallelism = enumerationParallelism / 2 // half for crawl, half for transform
-	}
+	// Second part is parallel conversion of the directories and files to stored objects. This is necessary because the conversion to stored object may hit the network and therefore be slow if not parallelized
+	parallelism := enumerationParallelism // for Azure Files we'll run two pools of this size, one for crawl and one for transform
+
 	workerContext, cancelWorkers := context.WithCancel(t.ctx)
 
 	cCrawled := parallel.Crawl(workerContext, directoryURL, enumerateOneDir, parallelism)

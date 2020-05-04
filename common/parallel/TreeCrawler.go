@@ -27,7 +27,7 @@ import (
 )
 
 type crawler struct {
-	output      chan ErrorableItem
+	output      chan CrawlResult
 	workerBody  EnumerateOneDirFunc
 	parallelism int
 	cond        *sync.Cond
@@ -52,10 +52,12 @@ func (r CrawlResult) Item() (interface{}, error) {
 // must be safe to be simultaneously called by multiple go-routines, each with a different dir
 type EnumerateOneDirFunc func(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry)) error
 
-func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int) <-chan ErrorableItem {
+// Crawl crawls an abstract directory tree, using the supplied enumeration function.  May be use for whatever
+// that function can enumerate (i.e. not necessarily a local file system, just anything tree-structured)
+func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int) <-chan CrawlResult {
 	c := &crawler{
 		unstartedDirs: make([]Directory, 0, 1024),
-		output:        make(chan ErrorableItem, 1000),
+		output:        make(chan CrawlResult, 1000),
 		workerBody:    worker,
 		parallelism:   parallelism,
 		cond:          sync.NewCond(&sync.Mutex{}),
@@ -108,14 +110,15 @@ func (c *crawler) workerLoop(ctx context.Context, wg *sync.WaitGroup, workerInde
 }
 
 func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (bool, error) {
+	const maxQueueDirectories = 1000 * 1000
+	const maxQueueDirsForBreadthFirst = 100 * 1000 // figure is somewhat arbitrary.  Want it big, but not huge
+
 	var toExamine Directory
 	stop := false
 
 	// Acquire a directory to work on
 	// Note that we need explicit locking because there are two
-	// mutable things involved in our decision making, not one (the two being c.dirs and c.dirInProgressCount)
-	// and because we use len(c.unstartedDirs) which is not accurate unless len and channel manipulation are protected
-	// by the same lock.
+	// mutable things involved in our decision making, not one. (The two being c.unstartedDirs and c.dirInProgressCount)
 	c.cond.L.Lock()
 	{
 		// wait while there's nothing to do, and another thread might be going to add something
@@ -127,12 +130,22 @@ func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (boo
 		stop = ctx.Err() != nil
 		if !stop {
 			if len(c.unstartedDirs) > 0 {
-				// Pop dir from end of list
-				// We take the last one because that gives more of a depth-first flavour to our processing
-				// which (we think) will prevent c.unstartedDirs getting really large on a broad directory tree.
-				lastIndex := len(c.unstartedDirs) - 1
-				toExamine = c.unstartedDirs[lastIndex]
-				c.unstartedDirs = c.unstartedDirs[0:lastIndex]
+				if len(c.unstartedDirs) < maxQueueDirsForBreadthFirst {
+					// pop from start of list. This gives a breadth-first flavour to the search.
+					// (Breadth-first is useful for distributing small-file workloads over the full keyspace, which
+					// is can help performance when uploading small files to Azure Blob Storage)
+					toExamine = c.unstartedDirs[0]
+					c.unstartedDirs = c.unstartedDirs[1:]
+				} else {
+					// Fall back to popping from end of list if list is already pretty big.
+					// This gives more of a depth-first flavour to our processing,
+					// which (we think) will prevent c.unstartedDirs getting really large and using too much RAM.
+					// (Since we think that depth first tends to hit leaf nodes relatively quickly, so total number of
+					// unstarted dirs should tend to grow less in a depth first mode)
+					lastIndex := len(c.unstartedDirs) - 1
+					toExamine = c.unstartedDirs[lastIndex]
+					c.unstartedDirs = c.unstartedDirs[:lastIndex]
+				}
 
 				c.dirInProgressCount++ // record that we are working on something
 				c.cond.Broadcast()     // and let other threads know of that fact
@@ -156,7 +169,10 @@ func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (boo
 		foundDirectories = append(foundDirectories, d)
 	}
 	addOutput := func(e DirectoryEntry) {
-		c.output <- CrawlResult{item: e}
+		select {
+		case c.output <- CrawlResult{item: e}:
+		case <-ctx.Done(): // don't block on full channel if cancelled
+		}
 	}
 	bodyErr := c.workerBody(toExamine, addDir, addOutput) // this is the worker body supplied by our caller
 
@@ -173,12 +189,11 @@ func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (boo
 	// (It's impossible to know exactly what to do here, because we don't know whether more workers would _clear_
 	// the queue more quickly; or _add to_ the queue more quickly.  It depends on whether the directories we process
 	// next contain mostly child directories or if they are "leaf" directories containing mostly just files.  But,
-	// if we slowly reduce parallelism the end state is roughly equivalent to a single-threaded depth-first traversal, which
+	// if we slowly reduce parallelism the end state is closer to a single-threaded depth-first traversal, which
 	// is generally fine in terms of memory usage on most folder structures)
-	const maxQueueDirectories = 1000 * 1000
 	shouldShutSelfDown := len(c.unstartedDirs) > maxQueueDirectories && // we are getting way too much stuff queued up
 		workerIndex > (c.parallelism/4) && // never shut down the last ones, since we need something left to clear the queue
-		time.Since(c.lastAutoShutdown) > time.Second // adjust slightly gradually
+		time.Since(c.lastAutoShutdown) > time.Second // adjust somewhat gradually
 	if shouldShutSelfDown {
 		c.lastAutoShutdown = time.Now()
 		return false, bodyErr
