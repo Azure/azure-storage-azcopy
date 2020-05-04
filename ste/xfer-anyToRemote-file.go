@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"net/http"
 	"net/url"
 	"runtime"
 	"strings"
@@ -36,11 +37,31 @@ import (
 
 // This sync.Once is present to ensure we output information about a S2S access tier preservation failure to stdout once
 var s2sAccessTierFailureLogStdout sync.Once
+var checkLengthFailureOnReadOnlyDst sync.Once
 
 // xfer.go requires just a single xfer function for the whole job.
 // This routine serves that role for uploads and S2S copies, and redirects for each transfer to a file or folder implementation
 func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 	info := jptm.Info()
+	fromTo := jptm.FromTo()
+
+	// Ensure that the transfer isn't the same item, and fail it if it is.
+	// This scenario can only happen with S2S. We'll parse the URLs and compare the host and path.
+	if fromTo.IsS2S() {
+		srcURL, err := url.Parse(info.Source)
+		common.PanicIfErr(err)
+		dstURL, err := url.Parse(info.Destination)
+		common.PanicIfErr(err)
+
+		if srcURL.Hostname() == dstURL.Hostname() &&
+			srcURL.EscapedPath() == dstURL.EscapedPath() {
+			jptm.LogSendError(info.Source, info.Destination, "Transfer source and destination are the same, which would cause data loss. Aborting transfer.", 0)
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
+			return
+		}
+	}
+
 	if info.IsFolderPropertiesTransfer() {
 		anyToRemote_folder(jptm, info, p, pacer, senderFactory, sipf)
 	} else {
@@ -108,7 +129,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 				// remove the SAS before prompting the user
 				parsed, _ := url.Parse(info.Destination)
 				parsed.RawQuery = ""
-				shouldOverwrite = jptm.GetOverwritePrompter().shouldOverwrite(parsed.String())
+				shouldOverwrite = jptm.GetOverwritePrompter().ShouldOverwrite(parsed.String(), common.EEntityType.File())
 			} else if jptm.GetOverwriteOption() == common.EOverwriteOption.IfSourceNewer() {
 				// only overwrite if source lmt is newer (after) the destination
 				if jptm.LastModifiedTime().After(dstLmt) {
@@ -361,15 +382,30 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 
 	if jptm.IsLive() && info.DestLengthValidation {
 		_, isS2SCopier := s.(s2sCopier)
+		shouldCheckLength := true
 		destLength, err := s.GetDestinationLength()
 
-		if err != nil {
-			wrapped := fmt.Errorf("could not read destination length. If destination is write-only, use --check-length=false on the AzCopy command line. %w", err)
-			jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", wrapped)
+		if resp, respOk := err.(pipeline.Response); respOk && resp.Response() != nil &&
+			resp.Response().StatusCode == http.StatusForbidden {
+			// The destination is write-only. Cannot verify length
+			shouldCheckLength = false
+			checkLengthFailureOnReadOnlyDst.Do( func() {
+				var glcm = common.GetLifecycleMgr()
+				msg :=fmt.Sprintf("Could not read destination length. If the destination is write-only, use --check-length=false on the command line.")
+				glcm.Info(msg)
+				if jptm.ShouldLog(pipeline.LogError) {
+					jptm.Log(pipeline.LogError, msg)
+				}
+			})
 		}
 
-		if destLength != jptm.Info().SourceSize {
-			jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check", errors.New("destination length does not match source length"))
+		if shouldCheckLength {
+			if err != nil {
+				wrapped := fmt.Errorf("Could not read destination length. %w", err)
+				jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", wrapped)
+			} else if destLength != jptm.Info().SourceSize {
+				jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check", errors.New("destination length does not match source length"))
+			}
 		}
 	}
 

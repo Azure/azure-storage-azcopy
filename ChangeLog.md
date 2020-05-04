@@ -1,6 +1,31 @@
 
 # Change Log
 
+## Version 10.4.3
+
+### Bug fixes
+
+1. Fixed bug where AzCopy errored if a filename ended with slash character. (E.g. backslash at end of a Linux filename.)
+
+## Version 10.4.2
+
+### Bug fixes
+
+1. Fixed bug in overwrite prompt for folders.
+
+## Version 10.4.1
+
+### New features
+
+1. Added overwrite prompt support for folder property transfers.
+1. Perform proxy lookup when the source is S3.
+
+### Bug fixes
+
+1. When downloading from Azure Files to Windows with the `--preserve-smb-permissions` flag, sometimes 
+the resulting permissions were not correct. This was fixed by limiting the concurrent SetNamedSecurityInfo operations.
+1. Added check to avoid overwriting the file itself when performing copy operations.
+
 ## Version 10.4
 
 ### New features
@@ -79,6 +104,7 @@ contained directly in a container or virtual directory include `/*` at the end o
 1. ALL filter types are now disallowed when running `azcopy rm` against ADLS Gen2 endpoints. Previously 
 include/exclude patterns were disallowed, but exclude-path was not. That was incorrect. All should have been
 disallowed because none (other than include-path) are respected. 
+1. Fixed empty page range optimization when uploading Managed Disks. In an edge case, there was previously a risk of data corruption if the user uploaded two different images into the same Managed Disk resource one after the other.
    
 ## Version 10.3.4
 

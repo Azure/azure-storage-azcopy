@@ -6,8 +6,9 @@ import (
 	"os"
 )
 
-// TODO: this is not reliable to use for directories, except inside OSStat (since the stat gets the right result)
-//   (But if the raw result of this routine is used, checking its internal dir flag, that flag is wrong for directories)
+// NOTE: this is not safe to use on directories.  It returns an os.File that points at a directory, but thinks it points to a file.
+// There is no way around that in the Go SDK as at Go 1.13, because the only way to make a valid windows.File that points to a directory
+// is private inside the Go SDK's Windows package.
 func OSOpenFile(name string, flag int, perm os.FileMode) (*os.File, error) {
 	// use openwithwritethroughsetting with false writethrough, since it makes a windows syscall containing an ask
 	//     for backup privileges. This allows all of our file opening to go down one route of code.
@@ -31,13 +32,5 @@ func OSOpenFile(name string, flag int, perm os.FileMode) (*os.File, error) {
 //  path, but still returns a valid result for a directory.
 //  See also todo on OsOpen, and edit or remove it
 func OSStat(name string) (os.FileInfo, error) {
-	f, err := OSOpenFile(name, 0, 0)
-
-	if err != nil {
-		return nil, err
-	}
-
-	defer f.Close()
-
-	return f.Stat()
+	return os.Stat(name) // this is safe even with our --backup mode, because it uses FILE_FLAG_BACKUP_SEMANTICS (whereas os.File.Stat() does not)
 }

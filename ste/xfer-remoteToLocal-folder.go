@@ -53,7 +53,7 @@ func remoteToLocal_folder(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer p
 	if err != nil {
 		jptm.FailActiveDownload("ensuring destination folder exists", err)
 	} else {
-		shouldSetProps := t.ShouldSetProperties(info.Destination, jptm.GetOverwriteOption())
+		shouldSetProps := t.ShouldSetProperties(info.Destination, jptm.GetOverwriteOption(), jptm.GetOverwritePrompter())
 		if !shouldSetProps {
 			jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "Folder already exists, so due to the --overwrite option, its properties won't be set")
 			jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists()) // using same status for both files and folders, for simplicity

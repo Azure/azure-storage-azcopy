@@ -73,7 +73,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 
 			// if necessary, prompt to confirm user's intent
 			if jptm.GetOverwriteOption() == common.EOverwriteOption.Prompt() {
-				shouldOverwrite = jptm.GetOverwritePrompter().shouldOverwrite(info.Destination)
+				shouldOverwrite = jptm.GetOverwritePrompter().ShouldOverwrite(info.Destination, common.EEntityType.File())
 			} else if jptm.GetOverwriteOption() == common.EOverwriteOption.IfSourceNewer() {
 				// only overwrite if source lmt is newer (after) the destination
 				if jptm.LastModifiedTime().After(dstProps.ModTime()) {

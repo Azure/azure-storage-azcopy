@@ -8,6 +8,7 @@ import (
 	"os"
 )
 
+// NOTE: OSOpenFile not safe to use on directories on Windows. See comment on the Windows version of this routine
 func OSOpenFile(name string, flag int, perm os.FileMode) (*os.File, error) {
 	return os.OpenFile(name, flag, perm)
 }
