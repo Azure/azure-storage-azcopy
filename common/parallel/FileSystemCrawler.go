@@ -126,7 +126,8 @@ func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), 
 				fullPath: filepath.Join(dirString, childInfo.Name()),
 				info:     childInfo,
 			}
-			if childInfo.IsDir() {
+			isSymlink := childInfo.Mode()&os.ModeSymlink != 0 // for compatibility with filepath.Walk, we do not follow symlinks, but we do enqueue them as output
+			if childInfo.IsDir() && !isSymlink {
 				enqueueDir(childEntry.fullPath)
 			}
 			enqueueOutput(childEntry)
