@@ -101,7 +101,7 @@ func (r linuxDirReader) Readdir(dir *os.File, n int) ([]os.FileInfo, error) {
 				res = append(res, r.fi)
 			} else {
 				// if there was an error in the Lstatting, just assume that the file was deleted between the time we saw it and the
-				// time we Lstatted it.  (But remember the error, in case it happens ALL the time).
+				// time we Lstatted it.  (But remember the error, in case it happens ALL the time)
 				lastErr = r.err
 			}
 		case <-time.After(time.Minute):
