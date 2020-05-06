@@ -33,14 +33,27 @@ import (
 // Alternatives like https://github.com/karrick/godirwalk avoid the lookup all together, but only if you don't need any information
 // about each entry other than whether its a file or directory.  We definitely also need to know whether its a symlink.
 // And, in our current architecture, we also need to get the size and LMT for the file.
-func NewDirReader(parallelism int) DirReader {
+func NewDirReader(totalAvailableParallelisim int) (DirReader, int) {
 	r := linuxDirReader{
 		ch: make(chan linuxDirEntry, 10000),
 	}
-	for i := 0; i < parallelism; i++ {
+
+	// allocate 3/4 of available parallelism to dir reads
+	parallelismForDirReads := int(float32(totalAvailableParallelisim*3) / 4)
+	if parallelismForDirReads < 1 {
+		parallelismForDirReads = 1
+	}
+	remainingParallelism := totalAvailableParallelisim - parallelismForDirReads
+	if remainingParallelism < 1 {
+		remainingParallelism = 1
+	}
+
+	// spin up workers
+	for i := 0; i < parallelismForDirReads; i++ {
 		go r.worker()
 	}
-	return r
+
+	return r, remainingParallelism
 }
 
 type linuxDirEntry struct {

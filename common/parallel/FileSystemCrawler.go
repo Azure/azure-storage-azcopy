@@ -88,10 +88,10 @@ func Walk(root string, parallelism int, walkFn filepath.WalkFunc) {
 	_ = r.Close()
 
 	// walk the stuff inside the root
-	reader := NewDirReader(parallelism * 2) // lots of parallelism for this
+	reader, remainingParallelism := NewDirReader(parallelism)
 	defer reader.Close()
 	ctx, cancel := context.WithCancel(context.Background())
-	ch := CrawlLocalDirectory(ctx, root, parallelism, reader)
+	ch := CrawlLocalDirectory(ctx, root, remainingParallelism, reader)
 	for crawlResult := range ch {
 		entry, err := crawlResult.Item()
 		if err == nil {

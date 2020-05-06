@@ -28,8 +28,8 @@ import (
 	"os"
 )
 
-func NewDirReader(parallelism int) DirReader {
-	return defaultDirReader{}
+func NewDirReader(totalAvailableParallelisim int) (DirReader, int) {
+	return defaultDirReader{}, totalAvailableParallelisim // return the parallelism that was passed in to us (since we don't need to consume and of the available parallelism)
 }
 
 type defaultDirReader struct{}
