@@ -124,8 +124,8 @@ func (r linuxDirReader) worker() {
 		if !ok {
 			return
 		}
-		path := filepath.Join(e.parentDir.Name(), e.name) // TODO: check Name() is full path?
-		fi, err := os.Lstat(path)                         // Lstat because we don't want to follow symlinks
+		path := filepath.Join(e.parentDir.Name(), e.name)
+		fi, err := os.Lstat(path) // Lstat because we don't want to follow symlinks
 		if err == nil {
 			e.resultCh <- lstatResult{fi: fi}
 		} else {
