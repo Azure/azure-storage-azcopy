@@ -22,6 +22,7 @@ package parallel
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -59,7 +60,12 @@ func NewDirReader(totalAvailableParallelisim int) (DirReader, int) {
 type linuxDirEntry struct {
 	parentDir *os.File
 	name      string
-	resultCh  chan os.FileInfo
+	resultCh  chan lstatResult
+}
+
+type lstatResult struct {
+	fi  os.FileInfo
+	err error
 }
 
 type linuxDirReader struct {
@@ -67,7 +73,6 @@ type linuxDirReader struct {
 }
 
 var ReaddirTimeoutError = errors.New("readdir timed out getting file properties")
-var ReaddirAllFailed = errors.New("all readdir Lstat calls failed")
 
 func (r linuxDirReader) Readdir(dir *os.File, n int) ([]os.FileInfo, error) {
 	// get the names
@@ -77,7 +82,7 @@ func (r linuxDirReader) Readdir(dir *os.File, n int) ([]os.FileInfo, error) {
 	}
 
 	// enqueue the LStatting
-	resCh := make(chan os.FileInfo, 1000)
+	resCh := make(chan lstatResult, 1000)
 	for _, n := range names {
 		r.ch <- linuxDirEntry{
 			parentDir: dir,
@@ -87,12 +92,17 @@ func (r linuxDirReader) Readdir(dir *os.File, n int) ([]os.FileInfo, error) {
 	}
 
 	// collect the results
+	var lastErr error
 	res := make([]os.FileInfo, 0, 256)
 	for i := 0; i < len(names); i++ {
 		select {
-		case fi := <-resCh:
-			if fi != nil { // if there was an error in the Lstatting, skip this one
-				res = append(res, fi)
+		case r := <-resCh:
+			if r.err == nil {
+				res = append(res, r.fi)
+			} else {
+				// if there was an error in the Lstatting, just assume that the file was deleted between the time we saw it and the
+				// time we Lstatted it.  (But remember the error, in case it happens ALL the time).
+				lastErr = r.err
 			}
 		case <-time.After(time.Minute):
 			return nil, ReaddirTimeoutError
@@ -100,7 +110,7 @@ func (r linuxDirReader) Readdir(dir *os.File, n int) ([]os.FileInfo, error) {
 	}
 
 	if len(res) == 0 {
-		return nil, ReaddirAllFailed // TODO: doing this because it's not valid for this method to return empty result and nil error, IIRC, when n > 0. Check that?
+		return nil, fmt.Errorf("readdir all LStat calls failed with last error %w", lastErr) // TODO: doing this because it's not valid for this method to return empty result and nil error, IIRC, when n > 0. Check that?
 	}
 
 	return res, nil
@@ -117,9 +127,9 @@ func (r linuxDirReader) worker() {
 		path := filepath.Join(e.parentDir.Name(), e.name) // TODO: check Name() is full path?
 		fi, err := os.Lstat(path)                         // Lstat because we don't want to follow symlinks
 		if err == nil {
-			e.resultCh <- fi
+			e.resultCh <- lstatResult{fi: fi}
 		} else {
-			e.resultCh <- nil // skip this one, assume it was deleted between the time we first saw it and the time we Lstat'd it
+			e.resultCh <- lstatResult{err: err}
 		}
 	}
 }
