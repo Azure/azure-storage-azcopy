@@ -114,7 +114,7 @@ func (s *fileSystemCrawlerSuite) TestParallelEnumerationGetsTheRightFileInfo(c *
 
 	// our parallel walk
 	parallelResults := make(map[string]os.FileInfo)
-	Walk(dir, 16, func(path string, fi os.FileInfo, fileErr error) error {
+	Walk(dir, 64, func(path string, fi os.FileInfo, fileErr error) error {
 		if fileErr == nil {
 			parallelResults[path] = fi
 		}
