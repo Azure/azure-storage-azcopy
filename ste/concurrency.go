@@ -128,7 +128,7 @@ func (c ConcurrencySettings) AutoTuneMainPool() bool {
 }
 
 const defaultTransferInitiationPoolSize = 64
-const defaultEnumerationPoolSize = 64
+const defaultEnumerationPoolSize = 16
 const concurrentFilesFloor = 32
 
 // NewConcurrencySettings gets concurrency settings by referring to the
