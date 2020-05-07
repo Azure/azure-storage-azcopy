@@ -587,6 +587,20 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 	return ljt
 }
 
+func GetJobLCMWrapper(jobID common.JobID) common.LifecycleMgr {
+	jobmgr, found := JobsAdmin.JobMgr(jobID)
+	lcm := common.GetLifecycleMgr()
+
+	if !found {
+		return lcm
+	}
+
+	return jobLogLCMWrapper{
+		jobManager:   jobmgr,
+		LifecycleMgr: lcm,
+	}
+}
+
 // ListJobs returns the jobId of all the jobs existing in the current instance of azcopy
 func ListJobs() common.ListJobsResponse {
 	// Resurrect all the Jobs from the existing JobPart Plan files

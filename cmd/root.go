@@ -27,6 +27,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -105,6 +106,7 @@ var rootCmd = &cobra.Command{
 
 // hold a pointer to the global lifecycle controller so that commands could output messages and exit properly
 var glcm = common.GetLifecycleMgr()
+var glcmSwapOnce = &sync.Once{}
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
