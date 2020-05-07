@@ -313,6 +313,11 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 		filters = append(filters, buildAttrFilters(cca.includeFileAttributes, cca.source.ValueLocal(), true)...)
 	}
 
+	//Always exclude systems files on Windows
+	if runtime.GOOS == "windows" && cca.fromTo.From().IsLocal() {
+		cca.excludeFileAttributes = append(cca.excludeFileAttributes, "S")
+	}
+
 	if len(cca.excludeFileAttributes) != 0 {
 		filters = append(filters, buildAttrFilters(cca.excludeFileAttributes, cca.source.ValueLocal(), false)...)
 	}
