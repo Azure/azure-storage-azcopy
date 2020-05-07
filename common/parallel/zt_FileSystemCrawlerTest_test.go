@@ -41,7 +41,7 @@ var ctx = context.Background()
 var windowsSystemDirectory = ""
 
 func (s *fileSystemCrawlerSuite) TestParallelEnumerationFindsTheRightFiles(c *chk.C) {
-	dir := "/lib"
+	dir := "/usr"
 	if runtime.GOOS == "windows" {
 		dir = windowsSystemDirectory
 		c.Assert(dir, chk.Not(chk.Equals), "")
@@ -96,7 +96,7 @@ func (s *fileSystemCrawlerSuite) TestParallelEnumerationFindsTheRightFiles(c *ch
 
 // this test is important on Linux, because we do our own code there to lookup the FilInfo for each file
 func (s *fileSystemCrawlerSuite) TestParallelEnumerationGetsTheRightFileInfo(c *chk.C) {
-	dir := "/lib"
+	dir := "/usr"
 	if runtime.GOOS == "windows" {
 		dir = windowsSystemDirectory
 		c.Assert(dir, chk.Not(chk.Equals), "")
