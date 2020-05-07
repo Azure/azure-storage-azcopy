@@ -373,7 +373,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 						// Because this only goes one layer deep, we can just append the filename to fullPath and resolve with it.
 						symlinkPath := common.GenerateFullPath(t.fullPath, singleFile.Name())
 						// Evaluate the symlink
-						result, err := filepath.EvalSymlinks(symlinkPath)
+						result, err := UnfurlSymlinks(symlinkPath)
 
 						if err != nil {
 							return err
