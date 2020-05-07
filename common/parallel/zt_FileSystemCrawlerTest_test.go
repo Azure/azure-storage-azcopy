@@ -22,7 +22,6 @@ package parallel
 
 import (
 	"context"
-	"golang.org/x/sys/windows"
 	chk "gopkg.in/check.v1"
 	"os"
 	"path/filepath"
@@ -39,12 +38,13 @@ type fileSystemCrawlerSuite struct{}
 var _ = chk.Suite(&fileSystemCrawlerSuite{})
 var ctx = context.Background()
 
+var windowsSystemDirectory = ""
+
 func (s *fileSystemCrawlerSuite) TestParallelEnumerationFindsTheRightFiles(c *chk.C) {
-	var err error
 	dir := "/lib"
 	if runtime.GOOS == "windows" {
-		dir, err = windows.GetSystemDirectory()
-		c.Assert(err, chk.IsNil)
+		dir = windowsSystemDirectory
+		c.Assert(dir, chk.Not(chk.Equals), "")
 	}
 
 	// standard (Go SDK) file walk
@@ -98,9 +98,9 @@ func (s *fileSystemCrawlerSuite) TestParallelEnumerationFindsTheRightFiles(c *ch
 func (s *fileSystemCrawlerSuite) TestParallelEnumerationGetsTheRightFileInfo(c *chk.C) {
 	dir := "/lib"
 	if runtime.GOOS == "windows" {
-		sysDir, err := windows.GetSystemDirectory()
-		c.Assert(err, chk.IsNil)
-		dir = sysDir[0:1] + ":\\" + "Program Files" // need one where the contents won't change while our test runs
+		dir = windowsSystemDirectory
+		c.Assert(dir, chk.Not(chk.Equals), "")
+		dir = dir[0:1] + ":\\" + "Program Files" // need one where the contents won't change while our test runs
 	}
 
 	// standard (Go SDK) file walk
