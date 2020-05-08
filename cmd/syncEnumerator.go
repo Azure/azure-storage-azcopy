@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -85,7 +86,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// after making all filters, log any search prefix computed from them
 	if ste.JobsAdmin != nil {
 		if prefixFilter := filterSet(filters).GetEnumerationPreFilter(cca.recursive); prefixFilter != "" {
-			ste.JobsAdmin.LogToJobLog("Search prefix, which may be used to optimize scanning, is: " + prefixFilter) // "May be used" because we don't know here which enumerators will use it
+			ste.JobsAdmin.LogToJobLog("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, pipeline.LogInfo) // "May be used" because we don't know here which enumerators will use it
 		}
 	}
 
@@ -93,7 +94,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	fpo, folderMessage := newFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preserveSMBPermissions.IsTruthy()) // sync always acts like stripTopDir=true
 	glcm.Info(folderMessage)
 	if ste.JobsAdmin != nil {
-		ste.JobsAdmin.LogToJobLog(folderMessage)
+		ste.JobsAdmin.LogToJobLog(folderMessage, pipeline.LogInfo)
 	}
 
 	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo)

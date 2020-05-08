@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"math/rand"
 	"strings"
@@ -77,7 +78,7 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *cookedCopyCmdArgs
 	}
 
 	if ste.JobsAdmin != nil {
-		ste.JobsAdmin.LogToJobLog(FinalPartCreatedMessage)
+		ste.JobsAdmin.LogToJobLog(FinalPartCreatedMessage, pipeline.LogInfo)
 	}
 
 	// set the flag on cca, to indicate the enumeration is done

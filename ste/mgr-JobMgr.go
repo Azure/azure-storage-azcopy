@@ -543,7 +543,7 @@ func (jm *jobMgr) logJobsAdminMessages() {
 	for {
 		select {
 		case msg := <-JobsAdmin.MessagesForJobLog():
-			jm.Log(pipeline.LogInfo, msg)
+			jm.Log(msg.LogLevel, msg.string)
 		default:
 			return
 		}
