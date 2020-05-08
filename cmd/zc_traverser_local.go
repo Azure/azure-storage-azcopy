@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/common/parallel"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"io/ioutil"
 	"os"
 	"path"
@@ -103,6 +104,14 @@ func (s symlinkTargetFileInfo) Name() string {
 	return s.name // override the name
 }
 
+// TODO: standardize this across the cmd package, or replace with a better approach
+func dualLog(msg string) {
+	glcm.Info(msg)
+	if ste.JobsAdmin != nil {
+		ste.JobsAdmin.LogToJobLog(msg)
+	}
+}
+
 // WalkWithSymlinks is a symlinks-aware, parallelized, version of filePath.Walk.
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
@@ -141,7 +150,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 		// (for simplicity of coding, we don't parallelize across multiple queueItems)
 		parallel.Walk(queueItem.fullPath, enumerationParallelism, func(filePath string, fileInfo os.FileInfo, fileError error) error {
 			if fileError != nil {
-				glcm.Info(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError))
+				dualLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError))
 				return nil
 			}
 
@@ -156,25 +165,25 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 				result, err := filepath.EvalSymlinks(filePath)
 
 				if err != nil {
-					glcm.Info(fmt.Sprintf("Failed to resolve symlink %s: %s", filePath, err))
+					dualLog(fmt.Sprintf("Failed to resolve symlink %s: %s", filePath, err))
 					return nil
 				}
 
 				result, err = filepath.Abs(result)
 				if err != nil {
-					glcm.Info(fmt.Sprintf("Failed to get absolute path of symlink result %s: %s", filePath, err))
+					dualLog(fmt.Sprintf("Failed to get absolute path of symlink result %s: %s", filePath, err))
 					return nil
 				}
 
 				slPath, err := filepath.Abs(filePath)
 				if err != nil {
-					glcm.Info(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
+					dualLog(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
 					return nil
 				}
 
 				rStat, err := os.Stat(result)
 				if err != nil {
-					glcm.Info(fmt.Sprintf("Failed to get properties of symlink target at %s: %s", result, err))
+					dualLog(fmt.Sprintf("Failed to get properties of symlink target at %s: %s", result, err))
 					return nil
 				}
 
@@ -189,10 +198,10 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 						// enumerate the FOLDER now (since its presence in seenDirs will prevent its properties getting enumerated later)
 						return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
 					} else {
-						glcm.Info(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
+						dualLog(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
 					}
 				} else {
-					glcm.Info(fmt.Sprintf("Symlinks to individual files are not currently supported, so will ignore file at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
+					dualLog(fmt.Sprintf("Symlinks to individual files are not currently supported, so will ignore file at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
 					// TODO: remove the above info call and enable the below, with suitable multi-OS testing
 					//    including enable the test: TestWalkWithSymlinks_ToFile
 					/*
@@ -217,7 +226,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 				result, err := filepath.Abs(filePath)
 
 				if err != nil {
-					glcm.Info(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
+					dualLog(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
 					return nil
 				}
 
@@ -230,7 +239,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 						// because we'll hit this for the directory that is the direct (root) target of any symlink, so any warning here would be a red herring.
 						// In theory there might be cases when a warning here would be correct - but they are rare and too hard to identify in our code
 					} else {
-						glcm.Info(fmt.Sprintf("Ignored already seen file located at %s (found at %s)", filePath, common.GenerateFullPath(fullPath, computedRelativePath)))
+						dualLog(fmt.Sprintf("Ignored already seen file located at %s (found at %s)", filePath, common.GenerateFullPath(fullPath, computedRelativePath)))
 					}
 					return nil
 				}
@@ -272,7 +281,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 		if t.recursive {
 			processFile := func(filePath string, fileInfo os.FileInfo, fileError error) error {
 				if fileError != nil {
-					glcm.Info(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError))
+					dualLog(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError))
 					return nil
 				}
 
@@ -285,7 +294,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 
 				relPath := strings.TrimPrefix(strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(t.fullPath)), common.DeterminePathSeparator(t.fullPath))
 				if !t.followSymlinks && fileInfo.Mode()&os.ModeSymlink != 0 {
-					glcm.Info(fmt.Sprintf("Skipping over symlink at %s because --follow-symlinks is false", common.GenerateFullPath(t.fullPath, relPath)))
+					dualLog(fmt.Sprintf("Skipping over symlink at %s because --follow-symlinks is false", common.GenerateFullPath(t.fullPath, relPath)))
 					return nil
 				}
 
