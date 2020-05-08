@@ -60,12 +60,7 @@ func NewDirReader(totalAvailableParallelisim int) (DirReader, int) {
 type linuxDirEntry struct {
 	parentDir *os.File
 	name      string
-	resultCh  chan lstatResult
-}
-
-type lstatResult struct {
-	fi  os.FileInfo
-	err error
+	resultCh  chan failableFileInfo
 }
 
 type linuxDirReader struct {
@@ -82,7 +77,7 @@ func (r linuxDirReader) Readdir(dir *os.File, n int) ([]os.FileInfo, error) {
 	}
 
 	// enqueue the LStatting
-	resCh := make(chan lstatResult, 1000)
+	resCh := make(chan failableFileInfo, 1000)
 	for _, n := range names {
 		r.ch <- linuxDirEntry{
 			parentDir: dir,
@@ -92,25 +87,14 @@ func (r linuxDirReader) Readdir(dir *os.File, n int) ([]os.FileInfo, error) {
 	}
 
 	// collect the results
-	var lastErr error
 	res := make([]os.FileInfo, 0, 256)
 	for i := 0; i < len(names); i++ {
 		select {
 		case r := <-resCh:
-			if r.err == nil {
-				res = append(res, r.fi)
-			} else {
-				// if there was an error in the Lstatting, just assume that the file was deleted between the time we saw it and the
-				// time we Lstatted it.  (But remember the error, in case it happens ALL the time)
-				lastErr = r.err
-			}
+			res = append(res, r) // r is failableFileInfo, so may carry its own error with it
 		case <-time.After(time.Minute):
 			return nil, ReaddirTimeoutError
 		}
-	}
-
-	if len(res) == 0 {
-		return nil, fmt.Errorf("readdir all LStat calls failed with last error %w", lastErr) // TODO: doing this because it's not valid for this method to return empty result and nil error, IIRC, when n > 0. Check that?
 	}
 
 	return res, nil
@@ -126,14 +110,23 @@ func (r linuxDirReader) worker() {
 		}
 		path := filepath.Join(e.parentDir.Name(), e.name)
 		fi, err := os.Lstat(path) // Lstat because we don't want to follow symlinks
-		if err == nil {
-			e.resultCh <- lstatResult{fi: fi}
-		} else {
-			e.resultCh <- lstatResult{err: err}
+		if err != nil {
+			err = fmt.Errorf("%w (this error is harmless if the file '%s' has just been deleted. But in any other case, this error may be a real error)",
+				err, path)
 		}
+		e.resultCh <- failableFileInfoImpl{fi, err}
 	}
 }
 
 func (r linuxDirReader) Close() {
 	close(r.ch) // so workers know to shutdown
+}
+
+type failableFileInfoImpl struct {
+	os.FileInfo
+	error error
+}
+
+func (f failableFileInfoImpl) Error() error {
+	return f.error
 }

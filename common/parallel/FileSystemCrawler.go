@@ -32,6 +32,12 @@ type FileSystemEntry struct {
 	info     os.FileInfo
 }
 
+// represents a file info that we may have failed to obtain
+type failableFileInfo interface {
+	os.FileInfo
+	Error() error
+}
+
 type DirReader interface {
 	Readdir(dir *os.File, n int) ([]os.FileInfo, error)
 	Close()
@@ -44,7 +50,7 @@ type DirReader interface {
 func CrawlLocalDirectory(ctx context.Context, root string, parallelism int, reader DirReader) <-chan CrawlResult {
 	return Crawl(ctx,
 		root,
-		func(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry)) error {
+		func(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry, error)) error {
 			return enumerateOneFileSystemDirectory(dir, enqueueDir, enqueueOutput, reader)
 		},
 		parallelism,
@@ -108,7 +114,7 @@ func Walk(root string, parallelism int, walkFn filepath.WalkFunc) {
 }
 
 // enumerateOneFileSystemDirectory is an implementation of EnumerateOneDirFunc specifically for the local file system
-func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry), r DirReader) error {
+func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry, error), r DirReader) error {
 	dirString := dir.(string)
 
 	d, err := os.Open(dirString) // for directories, we don't need a special open with FILE_FLAG_BACKUP_SEMANTICS, because directory opening uses FindFirst which doesn't need that flag. https://blog.differentpla.net/blog/2007/05/25/findfirstfile-and-se_backup_name
@@ -129,6 +135,11 @@ func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), 
 			return err
 		}
 		for _, childInfo := range list {
+			if failable, ok := childInfo.(failableFileInfo); ok && failable.Error() != nil {
+				// while Readdir as a whole did not fail, this particular file info did
+				enqueueOutput(FileSystemEntry{}, failable.Error())
+				continue
+			}
 			childEntry := FileSystemEntry{
 				fullPath: filepath.Join(dirString, childInfo.Name()),
 				info:     childInfo,
@@ -137,7 +148,7 @@ func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), 
 			if childInfo.IsDir() && !isSymlink {
 				enqueueDir(childEntry.fullPath)
 			}
-			enqueueOutput(childEntry)
+			enqueueOutput(childEntry, nil)
 		}
 	}
 }
