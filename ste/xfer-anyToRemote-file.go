@@ -167,10 +167,10 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 	}
 
 	// We always to LMT verification after the transfer. Also do it here, before transfer, when:
-	// 1) Source is local, so get source file's LMT is free.
+	// 1) Source is local, and source's size is > 1 chunk.  (why not always?  Since getting LMT is not "free" at very small sizes)
 	// 2) Source is remote, i.e. S2S copy case. And source's size is larger than one chunk. So verification can possibly save transfer's cost.
-	if copier, isS2SCopier := s.(s2sCopier); srcInfoProvider.IsLocal() ||
-		(isS2SCopier && info.S2SSourceChangeValidation && srcSize > int64(copier.ChunkSize())) {
+	if _, isS2SCopier := s.(s2sCopier); numChunks > 1 &&
+		(srcInfoProvider.IsLocal() || isS2SCopier && info.S2SSourceChangeValidation) {
 		lmt, err := srcInfoProvider.GetFreshFileLastModifiedTime()
 		if err != nil {
 			jptm.LogSendError(info.Source, info.Destination, "Couldn't get source's last modified time-"+err.Error(), 0)
