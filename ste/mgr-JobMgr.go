@@ -543,7 +543,11 @@ func (jm *jobMgr) logJobsAdminMessages() {
 	for {
 		select {
 		case msg := <-JobsAdmin.MessagesForJobLog():
-			jm.Log(msg.LogLevel, msg.string)
+			prefix := ""
+			if msg.LogLevel <= pipeline.LogWarning {
+				prefix = fmt.Sprintf("%s: ", common.LogLevel(msg.LogLevel)) // so readers can find serious ones, but information ones still look uncluttered without INFO:
+			}
+			jm.Log(msg.LogLevel, prefix+msg.string)
 		default:
 			return
 		}
