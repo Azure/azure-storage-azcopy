@@ -88,7 +88,7 @@ func (r linuxDirReader) doReaddir(dir *os.File, n int, timeout time.Duration) ([
 	}
 
 	// enqueue the LStatting
-	resCh := make(chan failableFileInfo, 1000)
+	resCh := make(chan failableFileInfo, len(names)) // big enough that it will never get full and cause deadlocks
 	for _, n := range names {
 		r.ch <- linuxDirEntry{
 			parentDir: dir,
@@ -125,7 +125,10 @@ func (r linuxDirReader) worker() {
 			err = fmt.Errorf("%w (this error is harmless if the file '%s' has just been deleted. But in any other case, this error may be a real error)",
 				err, path)
 		}
-		e.resultCh <- failableFileInfoImpl{fi, err}
+		select {
+		case e.resultCh <- failableFileInfoImpl{fi, err}:
+		default: // give up on this one, so this worker doesn't get permanently blocked
+		}
 	}
 }
 
