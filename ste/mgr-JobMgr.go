@@ -271,6 +271,13 @@ func (jm *jobMgr) GetPerfInfo() (displayStrings []string, constraint common.Perf
 	// or not, especially if we are dynamically tuning the pool size.
 	result[len(result)-1] = fmt.Sprintf(strings.Replace(format, "%c", "%s", -1), "GRs", JobsAdmin.CurrentMainPoolSize())
 
+	// prepend counts of sleeping GRs
+	sleeps := make([]string, 2)
+	tSleep, cSleep := JobsAdmin.CurrentSleepingGRs()
+	sleeps[0] = fmt.Sprintf(strings.Replace(format, "%c", "%s", -1), "St", tSleep)
+	sleeps[1] = fmt.Sprintf(strings.Replace(format, "%c", "%s", -1), "Sc", cSleep)
+	result = append(sleeps, result...)
+
 	con := jm.chunkStatusLogger.GetPrimaryPerfConstraint(atomicTransferDirection, jm.PipelineNetworkStats())
 
 	// logging from here is a bit of a hack
