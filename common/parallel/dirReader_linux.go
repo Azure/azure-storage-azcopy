@@ -70,6 +70,17 @@ type linuxDirReader struct {
 var ReaddirTimeoutError = errors.New("readdir timed out getting file properties")
 
 func (r linuxDirReader) Readdir(dir *os.File, n int) ([]os.FileInfo, error) {
+	for try := 1; ; try++ {
+		timeout := time.Duration(try*try) * time.Minute
+		result, err := r.doReaddir(dir, n, timeout)
+		if err == ReaddirTimeoutError && try <= 3 { // we saw a few timeouts in customer testing prior to adding this
+			continue
+		}
+		return result, err
+	}
+}
+
+func (r linuxDirReader) doReaddir(dir *os.File, n int, timeout time.Duration) ([]os.FileInfo, error) {
 	// get the names
 	names, err := dir.Readdirnames(n)
 	if err != nil {
@@ -92,7 +103,7 @@ func (r linuxDirReader) Readdir(dir *os.File, n int) ([]os.FileInfo, error) {
 		select {
 		case r := <-resCh:
 			res = append(res, r) // r is failableFileInfo, so may carry its own error with it
-		case <-time.After(time.Minute):
+		case <-time.After(timeout):
 			return nil, ReaddirTimeoutError
 		}
 	}
