@@ -94,7 +94,7 @@ func (t *blobAccountTraverser) traverse(preprocessor objectMorpher, processor ob
 
 	for _, v := range cList {
 		containerURL := t.accountURL.NewContainerURL(v).URL()
-		containerTraverser := newBlobTraverser(&containerURL, t.p, t.ctx, true, t.incrementEnumerationCounter)
+		containerTraverser := newBlobTraverser(&containerURL, t.p, t.ctx, true, false, t.incrementEnumerationCounter)
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 

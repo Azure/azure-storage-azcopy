@@ -40,6 +40,9 @@ type blobTraverser struct {
 	ctx       context.Context
 	recursive bool
 
+	// whether to include blobs that have metadata 'hdi_isfolder = true'
+	includeDirectoryStubs bool
+
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
 }
@@ -53,7 +56,7 @@ func (t *blobTraverser) isDirectory(isSource bool) bool {
 		return isDirDirect
 	}
 
-	_, isSingleBlob, err := t.getPropertiesIfSingleBlob()
+	_, isSingleBlob, _, err := t.getPropertiesIfSingleBlob()
 
 	if stgErr, ok := err.(azblob.StorageError); ok {
 		// We know for sure this is a single blob still, let it walk on through to the traverser.
@@ -65,16 +68,20 @@ func (t *blobTraverser) isDirectory(isSource bool) bool {
 	return !isSingleBlob
 }
 
-func (t *blobTraverser) getPropertiesIfSingleBlob() (*azblob.BlobGetPropertiesResponse, bool, error) {
+func (t *blobTraverser) getPropertiesIfSingleBlob() (props *azblob.BlobGetPropertiesResponse, isBlob bool, isDirStub bool, err error) {
 	blobURL := azblob.NewBlobURL(*t.rawURL, t.p)
-	blobProps, blobPropertiesErr := blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{})
+	props, err = blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{})
 
 	// if there was no problem getting the properties, it means that we are looking at a single blob
-	if blobPropertiesErr == nil && !gCopyUtil.doesBlobRepresentAFolder(blobProps.NewMetadata()) {
-		return blobProps, true, blobPropertiesErr
+	if err == nil {
+		if gCopyUtil.doesBlobRepresentAFolder(props.NewMetadata()) {
+			return props, false, true, nil
+		}
+
+		return props, true, false, err
 	}
 
-	return nil, false, blobPropertiesErr
+	return nil, false, false, err
 }
 
 func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
@@ -82,7 +89,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 	util := copyHandlerUtil{}
 
 	// check if the url points to a single blob
-	blobProperties, isBlob, propErr := t.getPropertiesIfSingleBlob()
+	blobProperties, isBlob, isDirStub, propErr := t.getPropertiesIfSingleBlob()
 
 	if stgErr, ok := propErr.(azblob.StorageError); ok {
 		// Don't error out unless it's a CPK error just yet
@@ -93,7 +100,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		}
 	}
 
-	if isBlob {
+	if isBlob || (t.includeDirectoryStubs && isDirStub) {
 		// sanity checking so highlighting doesn't highlight things we're not worried about.
 		if blobProperties == nil {
 			panic("isBlob should never be set if getting properties is an error")
@@ -116,7 +123,12 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
 
-		return processIfPassedFilters(filters, storedObject, processor)
+		err := processIfPassedFilters(filters, storedObject, processor)
+
+		// short-circuit if we don't have anything else to scan
+		if isBlob || err != nil {
+			return err
+		}
 	}
 
 	// get the container URL so that we can list the blobs
@@ -152,7 +164,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		// process the blobs returned in this result segment
 		for _, blobInfo := range listBlob.Segment.BlobItems {
 			// if the blob represents a hdi folder, then skip it
-			if util.doesBlobRepresentAFolder(blobInfo.Metadata) {
+			if !t.includeDirectoryStubs && util.doesBlobRepresentAFolder(blobInfo.Metadata) {
 				continue
 			}
 
@@ -193,7 +205,9 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 	return
 }
 
-func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive bool, incrementEnumerationCounter enumerationCounterFunc) (t *blobTraverser) {
-	t = &blobTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, incrementEnumerationCounter: incrementEnumerationCounter}
+func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool,
+	incrementEnumerationCounter enumerationCounterFunc) (t *blobTraverser) {
+	t = &blobTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, includeDirectoryStubs: includeDirectoryStubs,
+		incrementEnumerationCounter: incrementEnumerationCounter}
 	return
 }

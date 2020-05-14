@@ -372,3 +372,49 @@ func (s *cmdIntegrationSuite) TestRemoveListOfBlobsWithIncludeAndExclude(c *chk.
 		validateRemoveTransfersAreScheduled(c, true, blobsToInclude, mockedRPC)
 	})
 }
+
+func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubs(c *chk.C) {
+	bsu := getBSU()
+	vdirName := "vdir1/"
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+	blobAndDirStubsList := scenarioHelper{}.generateCommonRemoteScenarioForWASB(c, containerURL, vdirName)
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobAndDirStubsList), chk.Not(chk.Equals), 0)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, strings.TrimSuffix(vdirName, "/"))
+	raw := getDefaultRemoveRawInput(rawVirtualDirectoryURLWithSAS.String())
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobAndDirStubsList))
+
+		// validate that the right transfers were sent
+		expectedTransfers := scenarioHelper{}.shaveOffPrefix(blobAndDirStubsList, vdirName)
+		validateRemoveTransfersAreScheduled(c, true, expectedTransfers, mockedRPC)
+	})
+
+	// turn off recursive, this time only top blobs should be deleted
+	raw.recursive = false
+	mockedRPC.reset()
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(blobAndDirStubsList))
+
+		for _, transfer := range mockedRPC.transfers {
+			c.Assert(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+		}
+	})
+}

@@ -59,6 +59,10 @@ func init() {
 
 			raw.setMandatoryDefaults()
 
+			// in the case of remove, we are fairly certain that the user wants all the blobs to be removed
+			// and this includes the stubs that represent directories (with metadata 'hdi_isfolder = true')
+			raw.includeDirectoryStubs = true
+
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
