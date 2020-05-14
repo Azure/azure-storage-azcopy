@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -79,6 +80,10 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	filters = append(filters, buildExcludeFilters(cca.excludePatterns, false)...)
 	filters = append(filters, buildExcludeFilters(cca.excludePaths, true)...)
 	if cca.fromTo.From() == common.ELocation.Local() {
+		//Always exclude systems files on Windows
+		if runtime.GOOS == "windows" {
+			cca.excludeFileAttributes = append(cca.excludeFileAttributes, "S")
+		}
 		excludeAttrFilters := buildAttrFilters(cca.excludeFileAttributes, cca.source.ValueLocal(), false)
 		filters = append(filters, excludeAttrFilters...)
 	}
