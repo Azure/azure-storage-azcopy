@@ -36,6 +36,12 @@ type ListResponse struct {
 }
 
 func init() {
+	type JobsListReq struct {
+		withStatus string
+	}
+
+	commandLineInput := JobsListReq{}
+
 	// lsCmd represents the listJob command
 	lsCmd := &cobra.Command{
 		Use:     "list",
@@ -52,7 +58,13 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			err := HandleListJobsCommand()
+			withStatus := common.EJobStatus
+			err := withStatus.Parse(commandLineInput.withStatus)
+			if err != nil {
+				glcm.Error(fmt.Sprintf("Failed to parse --with-status due to error: %s.", err))
+			}
+
+			err = HandleListJobsCommand(withStatus)
 			if err == nil {
 				glcm.Exit(nil, common.EExitCode.Success())
 			} else {
@@ -62,18 +74,21 @@ func init() {
 	}
 
 	jobsCmd.AddCommand(lsCmd)
+
+	jobsCmd.PersistentFlags().StringVar(&commandLineInput.withStatus, "with-status", "All",
+		"only remove the jobs with this status, available values: Cancelled, Completed, Failed, InProgress, All")
 }
 
 // HandleListJobsCommand sends the ListJobs request to transfer engine
 // Print the Jobs in the history of Azcopy
-func HandleListJobsCommand() error {
+func HandleListJobsCommand(jobStatus common.JobStatus) error {
 	resp := common.ListJobsResponse{}
 	Rpc(common.ERpcCmd.ListJobs(), nil, &resp)
-	return PrintExistingJobIds(resp)
+	return PrintExistingJobIds(resp, jobStatus)
 }
 
 // PrintExistingJobIds prints the response of listOrder command when listOrder command requested the list of existing jobs
-func PrintExistingJobIds(listJobResponse common.ListJobsResponse) error {
+func PrintExistingJobIds(listJobResponse common.ListJobsResponse, jobStatus common.JobStatus) error {
 	if listJobResponse.ErrorMessage != "" {
 		return fmt.Errorf("request failed with following error message: %s", listJobResponse.ErrorMessage)
 	}
@@ -92,6 +107,9 @@ func PrintExistingJobIds(listJobResponse common.ListJobsResponse) error {
 		sb.WriteString("Existing Jobs \n")
 		for index := 0; index < len(listJobResponse.JobIDDetails); index++ {
 			jobDetail := listJobResponse.JobIDDetails[index]
+			if jobDetail.JobStatus != jobStatus {
+				continue
+			}
 			sb.WriteString(fmt.Sprintf("JobId: %s\nStart Time: %s\nStatus: %s\nCommand: %s\n\n",
 				jobDetail.JobId.String(),
 				time.Unix(0, jobDetail.StartTime).Format(time.RFC850),
