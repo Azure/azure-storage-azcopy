@@ -17,6 +17,7 @@ import (
 )
 
 var enumerationParallelism = 1
+var enumerationParallelStatFiles = false
 
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
 func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {

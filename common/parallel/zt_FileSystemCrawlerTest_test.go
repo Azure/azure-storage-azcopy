@@ -61,7 +61,7 @@ func (s *fileSystemCrawlerSuite) TestParallelEnumerationFindsTheRightFiles(c *ch
 
 	// our parallel walk
 	parallelResults := make(map[string]struct{})
-	Walk(dir, 16, func(path string, _ os.FileInfo, fileErr error) error {
+	Walk(dir, 16, false, func(path string, _ os.FileInfo, fileErr error) error {
 		if fileErr == nil {
 			parallelResults[path] = struct{}{}
 		}
@@ -94,8 +94,16 @@ func (s *fileSystemCrawlerSuite) TestParallelEnumerationFindsTheRightFiles(c *ch
 	}
 }
 
-// this test is important on Linux, because we do our own code there to lookup the FilInfo for each file
-func (s *fileSystemCrawlerSuite) TestParallelEnumerationGetsTheRightFileInfo(c *chk.C) {
+func (s *fileSystemCrawlerSuite) TestParallelEnumerationGetsTheRightFileInfo_NormalStat(c *chk.C) {
+	s.doTestParallelEnumerationGetsTheRightFileInfo(false, c)
+}
+
+func (s *fileSystemCrawlerSuite) TestParallelEnumerationGetsTheRightFileInfo_ParallelStat(c *chk.C) {
+	s.doTestParallelEnumerationGetsTheRightFileInfo(true, c)
+}
+
+func (s *fileSystemCrawlerSuite) doTestParallelEnumerationGetsTheRightFileInfo(parallelStat bool, c *chk.C) {
+
 	dir := "/usr"
 	if runtime.GOOS == "windows" {
 		dir = windowsSystemDirectory
@@ -114,7 +122,7 @@ func (s *fileSystemCrawlerSuite) TestParallelEnumerationGetsTheRightFileInfo(c *
 
 	// our parallel walk
 	parallelResults := make(map[string]os.FileInfo)
-	Walk(dir, 64, func(path string, fi os.FileInfo, fileErr error) error {
+	Walk(dir, 64, parallelStat, func(path string, fi os.FileInfo, fileErr error) error {
 		if fileErr == nil {
 			parallelResults[path] = fi
 		}
@@ -166,7 +174,7 @@ func (s *fileSystemCrawlerSuite) TestParallelEnumerationGetsTheRightFileInfo(c *
 func (s *fileSystemCrawlerSuite) TestRootErrorsAreSignalled(c *chk.C) {
 	receivedError := false
 	nonExistentDir := filepath.Join(os.TempDir(), "Big random-named directory that almost certainly doesn't exist 85784362628398473732827384")
-	Walk(nonExistentDir, 16, func(path string, _ os.FileInfo, fileErr error) error {
+	Walk(nonExistentDir, 16, false, func(path string, _ os.FileInfo, fileErr error) error {
 		if fileErr != nil && path == nonExistentDir {
 			receivedError = true
 		}

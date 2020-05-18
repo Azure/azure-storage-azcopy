@@ -28,34 +28,56 @@ import (
 	"time"
 )
 
-// NewDirReader makes a Linux directory reader which uses a pool of go-routines to do the lookups from
-// name of directory entry to full os.FileInfo.
+// NewDirReader makes a directory reader.  If parallelStat is true, then the reader
+// uses a pool of go-routines to do the lookups from name of directory entry to full os.FileInfo.
+// Useful on Linux, but not Windows.
 // Why do we need this? Because on Linux os.Readdir does the same lookups, but it does them sequentially which hurts performance.
 // Alternatives like https://github.com/karrick/godirwalk avoid the lookup all together, but only if you don't need any information
 // about each entry other than whether its a file or directory.  We definitely also need to know whether its a symlink.
 // And, in our current architecture, we also need to get the size and LMT for the file.
-func NewDirReader(totalAvailableParallelisim int) (DirReader, int) {
-	r := linuxDirReader{
-		ch: make(chan linuxDirEntry, 10000),
-	}
+func NewDirReader(totalAvailableParallelisim int, parallelStat bool) (DirReader, int) {
+	if parallelStat {
+		r := linuxDirReader{
+			ch: make(chan linuxDirEntry, 10000),
+		}
 
-	// allocate 3/4 of available parallelism to dir reads
-	parallelismForDirReads := int(float32(totalAvailableParallelisim*3) / 4)
-	if parallelismForDirReads < 1 {
-		parallelismForDirReads = 1
-	}
-	remainingParallelism := totalAvailableParallelisim - parallelismForDirReads
-	if remainingParallelism < 1 {
-		remainingParallelism = 1
-	}
+		// allocate 3/4 of available parallelism to dir reads
+		parallelismForDirReads := int(float32(totalAvailableParallelisim*3) / 4)
+		if parallelismForDirReads < 1 {
+			parallelismForDirReads = 1
+		}
+		remainingParallelism := totalAvailableParallelisim - parallelismForDirReads
+		if remainingParallelism < 1 {
+			remainingParallelism = 1
+		}
 
-	// spin up workers
-	for i := 0; i < parallelismForDirReads; i++ {
-		go r.worker()
-	}
+		// spin up workers
+		for i := 0; i < parallelismForDirReads; i++ {
+			go r.worker()
+		}
 
-	return r, remainingParallelism
+		return r, remainingParallelism
+	} else {
+		// we're not reading file properties in parallel
+		return &defaultDirReader{}, totalAvailableParallelisim
+	}
 }
+
+////////////////////////
+
+type defaultDirReader struct{}
+
+// Readdir in the default reader just makes the normal OS read call
+// On Windows, this is performant because Go does not have to make any additional OS calls to hydrate the raw results into os.FileInfos.
+func (_ defaultDirReader) Readdir(dir *os.File, n int) ([]os.FileInfo, error) {
+	return dir.Readdir(n)
+}
+
+func (_ defaultDirReader) Close() {
+	// noop
+}
+
+/////////////////////////
 
 type linuxDirEntry struct {
 	parentDir *os.File

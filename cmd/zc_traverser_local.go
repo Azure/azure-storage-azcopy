@@ -139,7 +139,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 
 		// walk contents of this queueItem in parallel
 		// (for simplicity of coding, we don't parallelize across multiple queueItems)
-		parallel.Walk(queueItem.fullPath, enumerationParallelism, func(filePath string, fileInfo os.FileInfo, fileError error) error {
+		parallel.Walk(queueItem.fullPath, enumerationParallelism, enumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
 			if fileError != nil {
 				WarnStdoutAndJobLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError))
 				return nil

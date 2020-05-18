@@ -150,6 +150,10 @@ func (jm *jobMgr) logConcurrencyParameters() {
 		jm.concurrency.EnumerationPoolSize.Value,
 		jm.concurrency.EnumerationPoolSize.GetDescription()))
 
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Parallelize getting file properties (file.Stat): %t (%s)",
+		jm.concurrency.ParallelStatFiles.Value,
+		jm.concurrency.ParallelStatFiles.GetDescription()))
+
 	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max open files when downloading: %d (auto-computed)",
 		jm.concurrency.MaxOpenDownloadFiles))
 }
