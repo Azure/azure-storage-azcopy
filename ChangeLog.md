@@ -7,6 +7,10 @@
 
 1. Fixed bug where AzCopy errored if a filename ended with slash character. (E.g. backslash at end of a Linux filename.)
 
+### Breaking changes
+
+1. Windows system file and directories will no longer be copied by default
+
 ## Version 10.4.2
 
 ### Bug fixes
