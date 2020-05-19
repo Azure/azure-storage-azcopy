@@ -107,8 +107,6 @@ var JobsAdmin interface {
 
 	CurrentMainPoolSize() int
 
-	CurrentSleepingGRs() (transfer int, chunk int)
-
 	RequestTuneSlowly()
 }
 
@@ -438,9 +436,7 @@ func (ja *jobsAdmin) chunkProcessor(workerID int) {
 				case chunkFunc := <-ja.xferChannels.lowChunkCh:
 					chunkFunc(workerID)
 				default:
-					atomic.AddInt32(&ja.atomicSleepingChunkGRs, 1)
 					time.Sleep(100 * time.Millisecond) // Sleep before looping around
-					atomic.AddInt32(&ja.atomicSleepingChunkGRs, -1)
 					// TODO: Question: In order to safely support high goroutine counts,
 					// do we need to review sleep duration, or find an approach that does not require waking every x milliseconds
 					// For now, duration has been increased substantially from the previous 1 ms, to reduce cost of
@@ -479,9 +475,7 @@ func (ja *jobsAdmin) transferProcessor(workerID int) {
 			case jptm := <-ja.xferChannels.lowTransferCh:
 				startTransfer(jptm)
 			default:
-				atomic.AddInt32(&ja.atomicSleepingTransferGRs, 1)
 				time.Sleep(10 * time.Millisecond) // Sleep before looping around
-				atomic.AddInt32(&ja.atomicSleepingTransferGRs, -1)
 			}
 		}
 	}
@@ -496,8 +490,6 @@ type jobsAdmin struct {
 	atomicBytesTransferredWhileTuning  int64
 	atomicTuningEndSeconds             int64
 	atomicCurrentMainPoolSize          int32 // align 64 bit integers for 32 bit arch
-	atomicSleepingChunkGRs             int32
-	atomicSleepingTransferGRs          int32
 	concurrency                        ConcurrencySettings
 	logger                             common.ILoggerCloser
 	jobIDToJobMgr                      jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
@@ -732,10 +724,6 @@ func (ja *jobsAdmin) CloseLog()                               { ja.logger.CloseL
 
 func (ja *jobsAdmin) CurrentMainPoolSize() int {
 	return int(atomic.LoadInt32(&ja.atomicCurrentMainPoolSize))
-}
-
-func (ja *jobsAdmin) CurrentSleepingGRs() (transfer int, chunk int) {
-	return int(atomic.LoadInt32(&ja.atomicSleepingTransferGRs)), int(atomic.LoadInt32(&ja.atomicSleepingChunkGRs))
 }
 
 func (ja *jobsAdmin) slicePoolPruneLoop() {
