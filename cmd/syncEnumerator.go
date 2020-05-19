@@ -41,7 +41,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	}
 
 	if cca.fromTo.IsS2S() {
-		if cca.fromTo.From() == common.ELocation.Blob() || cca.fromTo.From() == common.ELocation.File() {
+		if cca.fromTo.From() != common.ELocation.S3() {
 			// Adding files here seems like an odd case, but since files can't be public
 			// the second half of this if statement does not hurt.
 			if cca.fromTo.From() != cca.fromTo.To() {
