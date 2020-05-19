@@ -22,12 +22,9 @@ package parallel
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"sync/atomic"
-	"time"
 )
 
 type FileSystemEntry struct {
@@ -119,23 +116,6 @@ func Walk(root string, parallelism int, parallelStat bool, walkFn filepath.WalkF
 // enumerateOneFileSystemDirectory is an implementation of EnumerateOneDirFunc specifically for the local file system
 func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry, error), r DirReader) error {
 	dirString := dir.(string)
-	atomicCount := int64(0)
-
-	start := time.Now()
-	done := make(chan struct{})
-	defer close(done)
-	go func() {
-		for {
-			select {
-			case <-done:
-				return
-			case <-time.After(10 * time.Minute):
-				mins := int(time.Since(start).Minutes())
-				count := atomic.LoadInt64(&atomicCount)
-				enqueueOutput(FileSystemEntry{}, fmt.Errorf("warning: enumeration of directory '%s' has been running for %d minutes and has found %d items so far", dirString, mins, count))
-			}
-		}
-	}()
 
 	d, err := os.Open(dirString) // for directories, we don't need a special open with FILE_FLAG_BACKUP_SEMANTICS, because directory opening uses FindFirst which doesn't need that flag. https://blog.differentpla.net/blog/2007/05/25/findfirstfile-and-se_backup_name
 	if err != nil {
@@ -146,7 +126,6 @@ func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), 
 	// enumerate immediate children
 	for {
 		list, err := r.Readdir(d, 1024) // list it in chunks, so that if we get child dirs early, parallel workers can start working on them
-		atomic.AddInt64(&atomicCount, int64(len(list)))
 		if err == io.EOF {
 			if len(list) > 0 {
 				panic("unexpected non-empty list")
