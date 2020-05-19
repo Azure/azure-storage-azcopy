@@ -355,6 +355,10 @@ func (csl *chunkStatusLogger) main(chunkLogPath string) {
 // map in the chunkStatusLogger, to track and look up the states, is considered a risk for performance.
 func (csl *chunkStatusLogger) countStateTransition(id ChunkID, newReason WaitReason) {
 
+	// NOTE to maintainers: this routine must be idempotent. E.g. for some whole-of-file pseudo chunks,
+	// they may be set to "Done" more than once.  So this routine should work OK if status is set to
+	// a status that the chunk already has
+
 	// Flip the chunk's state to indicate the new thing that it's waiting for now
 	oldReasonIndex := atomic.SwapInt32(id.waitReasonIndex, newReason.index)
 
