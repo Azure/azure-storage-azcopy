@@ -151,8 +151,6 @@ func (WaitReason) Cancelled() WaitReason { return WaitReason{20, "Cancelled"} } 
 // in a meaningful left-to-right sequential order.
 var uploadWaitReasons = []WaitReason{
 
-	EWaitReason.Nothing(), // TODO: remove this, it's only temporary, until we solve the reported "slow down" issue
-
 	// pseudo-chunk stats (whole-of-file level) that happen before any chunks get scheduled
 	EWaitReason.XferStart(),
 	EWaitReason.OpenLocalSource(),
