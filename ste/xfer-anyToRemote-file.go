@@ -25,7 +25,9 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"net/http"
 	"net/url"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -35,11 +37,41 @@ import (
 
 // This sync.Once is present to ensure we output information about a S2S access tier preservation failure to stdout once
 var s2sAccessTierFailureLogStdout sync.Once
+var checkLengthFailureOnReadOnlyDst sync.Once
 
-// anyToRemote handles all kinds of sender operations - both uploads from local files, and S2S copies
+// xfer.go requires just a single xfer function for the whole job.
+// This routine serves that role for uploads and S2S copies, and redirects for each transfer to a file or folder implementation
 func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
-
 	info := jptm.Info()
+	fromTo := jptm.FromTo()
+
+	// Ensure that the transfer isn't the same item, and fail it if it is.
+	// This scenario can only happen with S2S. We'll parse the URLs and compare the host and path.
+	if fromTo.IsS2S() {
+		srcURL, err := url.Parse(info.Source)
+		common.PanicIfErr(err)
+		dstURL, err := url.Parse(info.Destination)
+		common.PanicIfErr(err)
+
+		if srcURL.Hostname() == dstURL.Hostname() &&
+			srcURL.EscapedPath() == dstURL.EscapedPath() {
+			jptm.LogSendError(info.Source, info.Destination, "Transfer source and destination are the same, which would cause data loss. Aborting transfer.", 0)
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
+			return
+		}
+	}
+
+	if info.IsFolderPropertiesTransfer() {
+		anyToRemote_folder(jptm, info, p, pacer, senderFactory, sipf)
+	} else {
+		anyToRemote_file(jptm, info, p, pacer, senderFactory, sipf)
+	}
+}
+
+// anyToRemote_file handles all kinds of sender operations for files - both uploads from local files, and S2S copies
+func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+
 	srcSize := info.SourceSize
 
 	// step 1. perform initial checks
@@ -56,6 +88,9 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 		jptm.ReportTransferDone()
 		return
 	}
+	if srcInfoProvider.EntityType() != common.EEntityType.File() {
+		panic("configuration error. Source Info Provider does not have File entity type")
+	}
 
 	s, err := senderFactory(jptm, info.Destination, p, pacer, srcInfoProvider)
 	if err != nil {
@@ -64,6 +99,7 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 		jptm.ReportTransferDone()
 		return
 	}
+
 	// step 2b. Read chunk size and count from the sender (since it may have applied its own defaults and/or calculations to produce these values
 	numChunks := s.NumChunks()
 	if jptm.ShouldLog(pipeline.LogInfo) {
@@ -78,9 +114,9 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 	// then check the file exists at the remote location
 	// if it does, react accordingly
 	if jptm.GetOverwriteOption() != common.EOverwriteOption.True() {
-		exists, existenceErr := s.RemoteFileExists()
+		exists, dstLmt, existenceErr := s.RemoteFileExists()
 		if existenceErr != nil {
-			jptm.LogSendError(info.Source, info.Destination, "Could not check file existence. "+existenceErr.Error(), 0)
+			jptm.LogSendError(info.Source, info.Destination, "Could not check destination file existence. "+existenceErr.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed()) // is a real failure, not just a SkippedFileAlreadyExists, in this case
 			jptm.ReportTransferDone()
 			return
@@ -93,13 +129,18 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 				// remove the SAS before prompting the user
 				parsed, _ := url.Parse(info.Destination)
 				parsed.RawQuery = ""
-				shouldOverwrite = jptm.GetOverwritePrompter().shouldOverwrite(parsed.String())
+				shouldOverwrite = jptm.GetOverwritePrompter().ShouldOverwrite(parsed.String(), common.EEntityType.File())
+			} else if jptm.GetOverwriteOption() == common.EOverwriteOption.IfSourceNewer() {
+				// only overwrite if source lmt is newer (after) the destination
+				if jptm.LastModifiedTime().After(dstLmt) {
+					shouldOverwrite = true
+				}
 			}
 
 			if !shouldOverwrite {
 				// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
 				jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "File already exists, so will be skipped")
-				jptm.SetStatus(common.ETransferStatus.SkippedFileAlreadyExists())
+				jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists())
 				jptm.ReportTransferDone()
 				return
 			}
@@ -113,7 +154,11 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 		sourceFileFactory = srcInfoProvider.(ILocalSourceInfoProvider).OpenSourceFile // all local providers must implement this interface
 		srcFile, err = sourceFileFactory()
 		if err != nil {
-			jptm.LogSendError(info.Source, info.Destination, "Couldn't open source-"+err.Error(), 0)
+			suffix := ""
+			if strings.Contains(err.Error(), "Access is denied") && runtime.GOOS == "windows" {
+				suffix = " See --" + common.BackupModeFlagName + " flag if you need to read all files regardless of their permissions"
+			}
+			jptm.LogSendError(info.Source, info.Destination, "Couldn't open source. "+err.Error()+suffix, 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
 			return
@@ -121,12 +166,12 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 		defer srcFile.Close() // we read all the chunks in this routine, so can close the file at the end
 	}
 
-	// Do LMT verfication before transfer, when:
+	// We always to LMT verification after the transfer. Also do it here, before transfer, when:
 	// 1) Source is local, so get source file's LMT is free.
 	// 2) Source is remote, i.e. S2S copy case. And source's size is larger than one chunk. So verification can possibly save transfer's cost.
 	if copier, isS2SCopier := s.(s2sCopier); srcInfoProvider.IsLocal() ||
 		(isS2SCopier && info.S2SSourceChangeValidation && srcSize > int64(copier.ChunkSize())) {
-		lmt, err := srcInfoProvider.GetLastModifiedTime()
+		lmt, err := srcInfoProvider.GetFreshFileLastModifiedTime()
 		if err != nil {
 			jptm.LogSendError(info.Source, info.Destination, "Couldn't get source's last modified time-"+err.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
@@ -183,7 +228,7 @@ var jobCancelledLocalPrefetchErr = errors.New("job was cancelled; Pre-fetching s
 // is harmless (and a good thing, to avoid excessive RAM usage).
 // To take advantage of the good sequential read performance provided by many file systems,
 // and to be able to compute an MD5 hash for the file, we work sequentially through the file here.
-func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common.CloseableReaderAt, srcSize int64, s ISenderBase, sourceFileFactory common.ChunkReaderSourceFactory, srcInfoProvider ISourceInfoProvider) {
+func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common.CloseableReaderAt, srcSize int64, s sender, sourceFileFactory common.ChunkReaderSourceFactory, srcInfoProvider ISourceInfoProvider) {
 	// For generic send
 	chunkSize := s.ChunkSize()
 	numChunks := s.NumChunks()
@@ -311,7 +356,7 @@ func isDummyChunkInEmptyFile(startIndex int64, fileSize int64) bool {
 }
 
 // Complete epilogue. Handles both success and failure.
-func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, sip ISourceInfoProvider) {
+func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISourceInfoProvider) {
 	info := jptm.Info()
 	// allow our usual state tracking mechanism to keep count of how many epilogues are running at any given instant, for perf diagnostics
 	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
@@ -321,7 +366,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 	if jptm.IsLive() {
 		if _, isS2SCopier := s.(s2sCopier); sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation) {
 			// Check the source to see if it was changed during transfer. If it was, mark the transfer as failed.
-			lmt, err := sip.GetLastModifiedTime()
+			lmt, err := sip.GetFreshFileLastModifiedTime()
 			if err != nil {
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", err)
 			}
@@ -331,19 +376,36 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 		}
 	}
 
+	// TODO: should we refactor to force this to accept jptm isLive as a parameter, to encourage it to be checked?
+	//  or should we redefine epilogue to be success-path only, and only call it in that case?
 	s.Epilogue() // Perform service-specific cleanup before jptm cleanup. Some services may actually require setup to make the file actually appear.
 
 	if jptm.IsLive() && info.DestLengthValidation {
 		_, isS2SCopier := s.(s2sCopier)
+		shouldCheckLength := true
 		destLength, err := s.GetDestinationLength()
 
-		if err != nil {
-			wrapped := fmt.Errorf("could not read destination length. If destination is write-only, use --check-length=false on the AzCopy command line. %w", err)
-			jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", wrapped)
+		if resp, respOk := err.(pipeline.Response); respOk && resp.Response() != nil &&
+			resp.Response().StatusCode == http.StatusForbidden {
+			// The destination is write-only. Cannot verify length
+			shouldCheckLength = false
+			checkLengthFailureOnReadOnlyDst.Do( func() {
+				var glcm = common.GetLifecycleMgr()
+				msg :=fmt.Sprintf("Could not read destination length. If the destination is write-only, use --check-length=false on the command line.")
+				glcm.Info(msg)
+				if jptm.ShouldLog(pipeline.LogError) {
+					jptm.Log(pipeline.LogError, msg)
+				}
+			})
 		}
 
-		if destLength != jptm.Info().SourceSize {
-			jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check", errors.New("destination length does not match source length"))
+		if shouldCheckLength {
+			if err != nil {
+				wrapped := fmt.Errorf("Could not read destination length. %w", err)
+				jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", wrapped)
+			} else if destLength != jptm.Info().SourceSize {
+				jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check", errors.New("destination length does not match source length"))
+			}
 		}
 	}
 
@@ -351,12 +413,17 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 		s.Cleanup() // Perform jptm cleanup, if THIS jptm has the lock on the destination
 	}
 
-	jptm.UnlockDestination()
+	commonSenderCompletion(jptm, s, info)
+}
+
+// commonSenderCompletion is used for both files and folders
+func commonSenderCompletion(jptm IJobPartTransferMgr, s sender, info TransferInfo) {
+
+	jptm.EnsureDestinationUnlocked()
 
 	if jptm.TransferStatusIgnoringCancellation() == 0 {
 		panic("think we're finished but status is notStarted")
 	}
-
 	// note that we do not really know whether the context was canceled because of an error, or because the user asked for it
 	// if was an intentional cancel, the status is still "in progress", so we are still counting it as pending
 	// we leave these transfer status alone
@@ -374,10 +441,10 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 		// Final logging
 		if jptm.ShouldLog(pipeline.LogInfo) { // TODO: question: can we remove these ShouldLogs?  Aren't they inside Log?
 			if _, ok := s.(s2sCopier); ok {
-				jptm.Log(pipeline.LogInfo, fmt.Sprintf("COPYSUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("COPYSUCCESSFUL: %s%s", info.entityTypeLogIndicator(), strings.Split(info.Destination, "?")[0]))
 			} else if _, ok := s.(uploader); ok {
 				// Output relative path of file, includes file name.
-				jptm.Log(pipeline.LogInfo, fmt.Sprintf("UPLOADSUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("UPLOADSUCCESSFUL: %s%s", info.entityTypeLogIndicator(), strings.Split(info.Destination, "?")[0]))
 			} else {
 				panic("invalid state: epilogueWithCleanupSendToRemote should be used by COPY and UPLOAD")
 			}
@@ -390,7 +457,6 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 			jptm.Log(pipeline.LogDebug, "Finalizing Transfer Cancellation/Failure")
 		}
 	}
-
 	// successful or unsuccessful, it's definitely over
 	jptm.ReportTransferDone()
 }

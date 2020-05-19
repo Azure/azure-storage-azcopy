@@ -28,6 +28,7 @@ type IJobPartMgr interface {
 	StartJobXfer(jptm IJobPartTransferMgr)
 	ReportTransferDone() uint32
 	GetOverwriteOption() common.OverwriteOption
+	GetForceIfReadOnly() bool
 	AutoDecompress() bool
 	ScheduleChunks(chunkFunc chunkFunc)
 	RescheduleTransfer(jptm IJobPartTransferMgr)
@@ -49,6 +50,9 @@ type IJobPartMgr interface {
 	common.ILogger
 	SourceProviderPipeline() pipeline.Pipeline
 	getOverwritePrompter() *overwritePrompter
+	getFolderCreationTracker() common.FolderCreationTracker
+	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
+	FolderDeletionManager() common.FolderDeletionManager
 }
 
 type serviceAPIVersionOverride struct{}
@@ -214,8 +218,9 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 // jobPartMgr represents the runtime information for a Job's Part
 type jobPartMgr struct {
 	// These fields represent the part's existence
-	jobMgr   IJobMgr // Refers to this part's Job (for logging, cancelling, etc.)
-	filename JobPartPlanFileName
+	jobMgr          IJobMgr // Refers to this part's Job (for logging, cancelling, etc.)
+	jobMgrInitState *jobMgrInitState
+	filename        JobPartPlanFileName
 
 	// sourceSAS defines the sas of the source of the Job. If the source is local Location, then sas is empty.
 	// Since sas is not persisted in JobPartPlan file, it stripped from the source and stored in memory in JobPart Manager
@@ -228,9 +233,7 @@ type jobPartMgr struct {
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
 
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
-	blobHTTPHeaders   azblob.BlobHTTPHeaders
-	fileHTTPHeaders   azfile.FileHTTPHeaders
-	blobFSHTTPHeaders azbfs.BlobFSHTTPHeaders
+	httpHeaders common.ResourceHTTPHeaders
 
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
 	blockBlobTier common.BlockBlobTier
@@ -241,8 +244,7 @@ type jobPartMgr struct {
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
 	putMd5 bool
 
-	blobMetadata azblob.Metadata
-	fileMetadata azfile.Metadata
+	metadata common.Metadata
 
 	blobTypeOverride common.BlobType // User specified blob type
 
@@ -277,6 +279,14 @@ func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {
 	return jpm.jobMgr.getOverwritePrompter()
 }
 
+func (jpm *jobPartMgr) getFolderCreationTracker() common.FolderCreationTracker {
+	if jpm.jobMgrInitState == nil || jpm.jobMgrInitState.folderCreationTracker == nil {
+		panic("folderCreationTracker should have been initialized already")
+	}
+
+	return jpm.jobMgrInitState.folderCreationTracker
+}
+
 func (jpm *jobPartMgr) Plan() *JobPartPlanHeader { return jpm.planMMF.Plan() }
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
@@ -290,15 +300,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	// *** Open the job part: process any job part plan-setting used by all transfers ***
 	dstData := plan.DstBlobData
 
-	jpm.blobHTTPHeaders = azblob.BlobHTTPHeaders{
-		ContentType:        string(dstData.ContentType[:dstData.ContentTypeLength]),
-		ContentEncoding:    string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
-		ContentDisposition: string(dstData.ContentDisposition[:dstData.ContentDispositionLength]),
-		ContentLanguage:    string(dstData.ContentLanguage[:dstData.ContentLanguageLength]),
-		CacheControl:       string(dstData.CacheControl[:dstData.CacheControlLength]),
-	}
-
-	jpm.blobFSHTTPHeaders = azbfs.BlobFSHTTPHeaders{
+	jpm.httpHeaders = common.ResourceHTTPHeaders{
 		ContentType:        string(dstData.ContentType[:dstData.ContentTypeLength]),
 		ContentEncoding:    string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
 		ContentDisposition: string(dstData.ContentDisposition[:dstData.ContentDispositionLength]),
@@ -309,28 +311,14 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	jpm.putMd5 = dstData.PutMd5
 	jpm.blockBlobTier = dstData.BlockBlobTier
 	jpm.pageBlobTier = dstData.PageBlobTier
-	jpm.fileHTTPHeaders = azfile.FileHTTPHeaders{
-		ContentType:        string(dstData.ContentType[:dstData.ContentTypeLength]),
-		ContentEncoding:    string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
-		ContentDisposition: string(dstData.ContentDisposition[:dstData.ContentDispositionLength]),
-		ContentLanguage:    string(dstData.ContentLanguage[:dstData.ContentLanguageLength]),
-		CacheControl:       string(dstData.CacheControl[:dstData.CacheControlLength]),
-	}
-	// For this job part, split the metadata string apart and create an azblob.Metadata out of it
-	metadataString := string(dstData.Metadata[:dstData.MetadataLength])
-	jpm.blobMetadata = azblob.Metadata{}
-	if len(metadataString) > 0 {
-		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
-			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-			jpm.blobMetadata[kv[0]] = kv[1]
-		}
-	}
 
-	jpm.fileMetadata = azfile.Metadata{}
+	// For this job part, split the metadata string apart and create an common.Metadata out of it
+	metadataString := string(dstData.Metadata[:dstData.MetadataLength])
+	jpm.metadata = common.Metadata{}
 	if len(metadataString) > 0 {
 		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
 			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-			jpm.fileMetadata[kv[0]] = kv[1]
+			jpm.metadata[kv[0]] = kv[1]
 		}
 	}
 
@@ -357,7 +345,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		// If it doesn't exists, skip the transfer
 		if len(includeTransfer) > 0 {
 			// Get the source string from the part plan header
-			src, _ := plan.TransferSrcDstStrings(t)
+			src, _, _ := plan.TransferSrcDstStrings(t)
 			// If source doesn't exists, skip the transfer
 			_, ok := includeTransfer[src]
 			if !ok {
@@ -370,7 +358,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		// If it exists, then skip the transfer
 		if len(excludeTransfer) > 0 {
 			// Get the source string from the part plan header
-			src, _ := plan.TransferSrcDstStrings(t)
+			src, _, _ := plan.TransferSrcDstStrings(t)
 			// If the source exists in the list of excluded transfer
 			// skip the transfer
 			_, ok := excludeTransfer[src]
@@ -472,7 +460,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.jobMgr.HttpClient(),
 			statsAccForSip)
 	}
-	if fromTo == common.EFromTo.FileBlob() || fromTo == common.EFromTo.FileFile() {
+	// Consider the file-local SDDL transfer case.
+	if fromTo == common.EFromTo.FileBlob() || fromTo == common.EFromTo.FileFile() || fromTo == common.EFromTo.FileLocal() {
 		jpm.sourceProviderPipeline = NewFilePipeline(
 			azfile.NewAnonymousCredential(),
 			azfile.PipelineOptions{
@@ -578,30 +567,20 @@ func (jpm *jobPartMgr) GetOverwriteOption() common.OverwriteOption {
 	return jpm.Plan().ForceWrite
 }
 
+func (jpm *jobPartMgr) GetForceIfReadOnly() bool {
+	return jpm.Plan().ForceIfReadOnly
+}
+
 func (jpm *jobPartMgr) AutoDecompress() bool {
 	return jpm.Plan().AutoDecompress
 }
 
-func (jpm *jobPartMgr) blobDstData(fullFilePath string, dataFileToXfer []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
+func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata) {
 	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
-		return jpm.blobHTTPHeaders, jpm.blobMetadata
+		return jpm.httpHeaders, jpm.metadata
 	}
 
-	return azblob.BlobHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer), ContentLanguage: jpm.blobHTTPHeaders.ContentLanguage, ContentDisposition: jpm.blobHTTPHeaders.ContentDisposition, ContentEncoding: jpm.blobHTTPHeaders.ContentEncoding, CacheControl: jpm.blobHTTPHeaders.CacheControl}, jpm.blobMetadata
-}
-
-func (jpm *jobPartMgr) fileDstData(fullFilePath string, dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
-	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
-		return jpm.fileHTTPHeaders, jpm.fileMetadata
-	}
-	return azfile.FileHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer), ContentLanguage: jpm.fileHTTPHeaders.ContentLanguage, ContentEncoding: jpm.fileHTTPHeaders.ContentEncoding, ContentDisposition: jpm.fileHTTPHeaders.ContentDisposition, CacheControl: jpm.fileHTTPHeaders.CacheControl}, jpm.fileMetadata
-}
-
-func (jpm *jobPartMgr) bfsDstData(fullFilePath string, dataFileToXfer []byte) (headers azbfs.BlobFSHTTPHeaders) {
-	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
-		return jpm.blobFSHTTPHeaders
-	}
-	return azbfs.BlobFSHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer), ContentLanguage: jpm.blobFSHTTPHeaders.ContentLanguage, ContentEncoding: jpm.blobFSHTTPHeaders.ContentEncoding, ContentDisposition: jpm.blobFSHTTPHeaders.ContentDisposition, CacheControl: jpm.blobFSHTTPHeaders.CacheControl}
+	return common.ResourceHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer), ContentLanguage: jpm.httpHeaders.ContentLanguage, ContentDisposition: jpm.httpHeaders.ContentDisposition, ContentEncoding: jpm.httpHeaders.ContentEncoding, CacheControl: jpm.httpHeaders.CacheControl}, jpm.metadata
 }
 
 func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []byte) string {
@@ -626,6 +605,22 @@ func (jpm *jobPartMgr) ShouldPutMd5() bool {
 
 func (jpm *jobPartMgr) SAS() (string, string) {
 	return jpm.sourceSAS, jpm.destinationSAS
+}
+
+func (jpm *jobPartMgr) SecurityInfoPersistenceManager() *securityInfoPersistenceManager {
+	if jpm.jobMgrInitState == nil || jpm.jobMgrInitState.securityInfoPersistenceManager == nil {
+		panic("SIPM should have been initialized already")
+	}
+
+	return jpm.jobMgrInitState.securityInfoPersistenceManager
+}
+
+func (jpm *jobPartMgr) FolderDeletionManager() common.FolderDeletionManager {
+	if jpm.jobMgrInitState == nil || jpm.jobMgrInitState.folderDeletionManager == nil {
+		panic("folder deletion manager should have been initialized already")
+	}
+
+	return jpm.jobMgrInitState.folderDeletionManager
 }
 
 func (jpm *jobPartMgr) localDstData() *JobPartPlanDstLocal {
@@ -653,11 +648,8 @@ func (jpm *jobPartMgr) ReportTransferDone() (transfersDone uint32) {
 func (jpm *jobPartMgr) Close() {
 	jpm.planMMF.Unmap()
 	// Clear other fields to all for GC
-	jpm.blobHTTPHeaders = azblob.BlobHTTPHeaders{}
-	jpm.blobMetadata = azblob.Metadata{}
-	jpm.fileHTTPHeaders = azfile.FileHTTPHeaders{}
-	jpm.fileMetadata = azfile.Metadata{}
-	jpm.blobFSHTTPHeaders = azbfs.BlobFSHTTPHeaders{}
+	jpm.httpHeaders = common.ResourceHTTPHeaders{}
+	jpm.metadata = common.Metadata{}
 	jpm.preserveLastModifiedTime = false
 	// TODO: Delete file?
 	/*if err := os.Remove(jpm.planFile.Name()); err != nil {

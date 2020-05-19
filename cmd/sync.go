@@ -40,6 +40,7 @@ type rawSyncCmdArgs struct {
 	src       string
 	dst       string
 	recursive bool
+
 	// options from flags
 	blockSizeMB           float64
 	logVerbosity          string
@@ -51,15 +52,21 @@ type rawSyncCmdArgs struct {
 	legacyInclude         string // for warning messages only
 	legacyExclude         string // for warning messages only
 
-	followSymlinks      bool
-	putMd5              bool
-	md5ValidationOption string
+	preserveSMBPermissions bool
+	preserveOwner          bool
+	preserveSMBInfo        bool
+	followSymlinks         bool
+	backupMode             bool
+	putMd5                 bool
+	md5ValidationOption    string
 	// this flag indicates the user agreement with respect to deleting the extra files at the destination
 	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
 	// otherwise the user is prompted to make a decision
 	deleteDestination string
 
 	s2sPreserveAccessTier bool
+
+	forceIfReadOnly bool
 }
 
 func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -101,15 +108,15 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	if cooked.fromTo == common.EFromTo.Unknown() {
 		return cooked, fmt.Errorf("Unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
 	} else if cooked.fromTo == common.EFromTo.LocalBlob() {
-		cooked.destination, cooked.destinationSAS, err = SplitAuthTokenFromResource(raw.dst, cooked.fromTo.To())
+		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
 	} else if cooked.fromTo == common.EFromTo.BlobLocal() {
-		cooked.source, cooked.sourceSAS, err = SplitAuthTokenFromResource(raw.src, cooked.fromTo.From())
+		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
 	} else if cooked.fromTo == common.EFromTo.BlobBlob() || cooked.fromTo == common.EFromTo.FileFile() {
-		cooked.destination, cooked.destinationSAS, err = SplitAuthTokenFromResource(raw.dst, cooked.fromTo.To())
+		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
-		cooked.source, cooked.sourceSAS, err = SplitAuthTokenFromResource(raw.src, cooked.fromTo.From())
+		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
 	} else {
 		return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, cooked.fromTo)
@@ -117,16 +124,14 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	// Do this check seperately so we don't end up with a bunch of code duplication when new src/dsts are added
 	if cooked.fromTo.From() == common.ELocation.Local() {
-		cooked.source = cleanLocalPath(raw.src)
-		cooked.source = common.ToExtendedPath(cooked.source)
+		cooked.source = common.ResourceString{Value: common.ToExtendedPath(cleanLocalPath(raw.src))}
 	} else if cooked.fromTo.To() == common.ELocation.Local() {
-		cooked.destination = cleanLocalPath(raw.dst)
-		cooked.destination = common.ToExtendedPath(cooked.destination)
+		cooked.destination = common.ResourceString{Value: common.ToExtendedPath(cleanLocalPath(raw.dst))}
 	}
 
 	// we do not support service level sync yet
 	if cooked.fromTo.From().IsRemote() {
-		err = raw.validateURLIsNotServiceLevel(cooked.source, cooked.fromTo.From())
+		err = raw.validateURLIsNotServiceLevel(cooked.source.Value, cooked.fromTo.From())
 		if err != nil {
 			return cooked, err
 		}
@@ -134,7 +139,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	// we do not support service level sync yet
 	if cooked.fromTo.To().IsRemote() {
-		err = raw.validateURLIsNotServiceLevel(cooked.destination, cooked.fromTo.To())
+		err = raw.validateURLIsNotServiceLevel(cooked.destination.Value, cooked.fromTo.To())
 		if err != nil {
 			return cooked, err
 		}
@@ -149,7 +154,19 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	}
 
 	cooked.followSymlinks = raw.followSymlinks
+	if err = crossValidateSymlinksAndPermissions(cooked.followSymlinks, true /* replace with real value when available */); err != nil {
+		return cooked, err
+	}
 	cooked.recursive = raw.recursive
+	cooked.forceIfReadOnly = raw.forceIfReadOnly
+	if err = validateForceIfReadOnly(cooked.forceIfReadOnly, cooked.fromTo); err != nil {
+		return cooked, err
+	}
+
+	cooked.backupMode = raw.backupMode
+	if err = validateBackupMode(cooked.backupMode, cooked.fromTo); err != nil {
+		return cooked, err
+	}
 
 	// determine whether we should prompt the user to delete extra files
 	err = cooked.deleteDestination.Parse(raw.deleteDestination)
@@ -173,6 +190,20 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	err = cooked.logVerbosity.Parse(raw.logVerbosity)
 	if err != nil {
+		return cooked, err
+	}
+
+	if err = validatePreserveSMBPropertyOption(raw.preserveSMBPermissions, cooked.fromTo, nil, "preserve-smb-permissions"); err != nil {
+		return cooked, err
+	}
+	// TODO: the check on raw.preserveSMBPermissions on the next line can be removed once we have full support for these properties in sync
+	if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); raw.preserveSMBPermissions && err != nil {
+		return cooked, err
+	}
+	cooked.preserveSMBPermissions = common.NewPreservePermissionsOption(raw.preserveSMBPermissions, raw.preserveOwner, cooked.fromTo)
+
+	cooked.preserveSMBInfo = raw.preserveSMBInfo
+	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, nil, "preserve-smb-info"); err != nil {
 		return cooked, err
 	}
 
@@ -214,10 +245,8 @@ type cookedSyncCmdArgs struct {
 	// deletion count keeps track of how many extra files from the destination were removed
 	atomicDeletionCount uint32
 
-	source         string
-	sourceSAS      string
-	destination    string
-	destinationSAS string
+	source         common.ResourceString
+	destination    common.ResourceString
 	fromTo         common.FromTo
 	credentialInfo common.CredentialInfo
 
@@ -231,10 +260,14 @@ type cookedSyncCmdArgs struct {
 	excludeFileAttributes []string
 
 	// options
-	putMd5              bool
-	md5ValidationOption common.HashValidationOption
-	blockSize           uint32
-	logVerbosity        common.LogLevel
+	preserveSMBPermissions common.PreservePermissionsOption
+	preserveSMBInfo        bool
+	putMd5                 bool
+	md5ValidationOption    common.HashValidationOption
+	blockSize              uint32
+	logVerbosity           common.LogLevel
+	forceIfReadOnly        bool
+	backupMode             bool
 
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
@@ -380,7 +413,7 @@ func (cca *cookedSyncCmdArgs) getJsonOfSyncJobSummary(summary common.ListJobSumm
 	return string(jsonOutput)
 }
 
-func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
+func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
 	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 	var summary common.ListJobSummaryResponse
 	var throughput float64
@@ -390,6 +423,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	if cca.firstPartOrdered() {
 		Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
 		jobDone = summary.JobStatus.IsJobDone()
+		totalKnownCount = summary.TotalTransfers
 
 		// compute the average throughput for the last time interval
 		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(base10Mega))
@@ -426,6 +460,8 @@ Job %s Summary
 Files Scanned at Source: %v
 Files Scanned at Destination: %v
 Elapsed Time (Minutes): %v
+Number of Copy Transfers for Files: %v
+Number of Copy Transfers for Folder Properties: %v 
 Total Number Of Copy Transfers: %v
 Number of Copy Transfers Completed: %v
 Number of Copy Transfers Failed: %v
@@ -438,6 +474,8 @@ Final Job Status: %v%s%s
 				atomic.LoadUint64(&cca.atomicSourceFilesScanned),
 				atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
 				ste.ToFixed(duration.Minutes(), 4),
+				summary.FileTransfers,
+				summary.FolderPropertyTransfers,
 				summary.TotalTransfers,
 				summary.TransfersCompleted,
 				summary.TransfersFailed,
@@ -472,20 +510,22 @@ Final Job Status: %v%s%s
 			summary.TotalTransfers-summary.TransfersCompleted-summary.TransfersFailed,
 			summary.TotalTransfers, perfString, ste.ToFixed(throughput, 4), diskString)
 	})
+
+	return
 }
 
 func (cca *cookedSyncCmdArgs) process() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	// verifies credential type and initializes credential info.
-	// For sync, only one side need credential.
-	cca.credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
-		fromTo:         cca.fromTo,
-		source:         cca.source,
-		destination:    cca.destination,
-		sourceSAS:      cca.sourceSAS,
-		destinationSAS: cca.destinationSAS,
-	})
+	err = common.SetBackupMode(cca.backupMode, cca.fromTo)
+	if err != nil {
+		return err
+	}
+
+	// Verifies credential type and initializes credential info.
+	// Note that this is for the destination.
+	cca.credentialInfo, _, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(),
+		cca.destination.Value, cca.destination.SAS, false)
 
 	if err != nil {
 		return err
@@ -494,10 +534,6 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
 	if cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		// Message user that they are using Oauth token for authentication,
-		// in case of silently using cached token without consciousness。
-		glcm.Info("Using OAuth token for authentication.")
-
 		uotm := GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
@@ -562,6 +598,20 @@ func init() {
 
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", true, "True by default, look into sub-directories recursively when syncing between directories. (default true).")
+
+	// TODO: enable (and test) the following when we sort out what sync will do for files and folders where only
+	//    the attributes, name-value-metadata (AzureFiles), or SDDL has changed, but there's been no file content change.
+	// TODO: when we sort that out, also enable it for copy with IfSourceNewer
+	//syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files). For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
+	//syncCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
+	// TODO: if/when we enable preserve-smb-info for sync, think about what the transfer of LMTs means for both files and FOLDERS
+	//   Note that for folders we don't currently preserve LMTs, because that's not feasible in large download scenarios (and because folder LMTs
+	//   don't generally convey useful information).  However, we need to think through what this will mean when we enable preserve-smb-info
+	//   for sync.  Will folder sync just work fine as it does now, with no preservation of folder LMTs?
+	//syncCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault, "Only has an effect in downloads, and only when --preserve-smb-permissions is used. If true (the default), the file Owner and Group are preserved in downloads. If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group will be based on the user running AzCopy")
+	//syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (see TO DO on line above!) false, "False by default. Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is not preserved for folders. ")
+	//syncCmd.PersistentFlags().BoolVar(&raw.backupMode, common.BackupModeFlagName, false, "Activates Windows' SeBackupPrivilege for uploads, or SeRestorePrivilege for downloads, to allow AzCopy to see read all files, regardless of their file system permissions, and to restore all permissions. Requires that the account running AzCopy already has these permissions (e.g. has Administrator rights or is a member of the 'Backup Operators' group). All this flag does is activate privileges that the account already has")
+
 	syncCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage or downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")

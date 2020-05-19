@@ -34,7 +34,7 @@ type pageBlobUploader struct {
 	md5Channel chan []byte
 }
 
-func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
+func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
 	senderBase, err := newPageBlobSenderBase(jptm, destination, p, pacer, sip, azblob.AccessTierNone)
 	if err != nil {
 		return nil, err
@@ -60,11 +60,25 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 		}
 
 		if reader.HasPrefetchedEntirelyZeros() {
-			// for this destination type, there is no need to upload ranges than consist entirely of zeros
-			jptm.Log(pipeline.LogDebug,
-				fmt.Sprintf("Not uploading range from %d to %d,  all bytes are zero",
-					id.OffsetInFile(), id.OffsetInFile()+reader.Length()))
-			return
+			var destContainsData bool
+			// We check if we should actually skip this page,
+			// in the event the page blob uploader is sending to a managed disk.
+			if u.destPageRangeOptimizer != nil {
+				destContainsData = u.destPageRangeOptimizer.doesRangeContainData(
+					azblob.PageRange{
+						Start: id.OffsetInFile(),
+						End:   id.OffsetInFile() + reader.Length() - 1,
+					})
+			}
+
+			// If neither the source nor destination contain data, it's safe to skip.
+			if !destContainsData {
+				// for this destination type, there is no need to upload ranges than consist entirely of zeros
+				jptm.Log(pipeline.LogDebug,
+					fmt.Sprintf("Not uploading range from %d to %d,  all bytes are zero",
+						id.OffsetInFile(), id.OffsetInFile()+reader.Length()))
+				return
+			}
 		}
 
 		// control rate of sending (since page blobs can effectively have per-blob throughput limits)

@@ -23,6 +23,7 @@ package common
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"math"
 	"reflect"
 	"regexp"
@@ -209,9 +210,10 @@ var EOverwriteOption = OverwriteOption(0)
 
 type OverwriteOption uint8
 
-func (OverwriteOption) True() OverwriteOption   { return OverwriteOption(0) }
-func (OverwriteOption) False() OverwriteOption  { return OverwriteOption(1) }
-func (OverwriteOption) Prompt() OverwriteOption { return OverwriteOption(2) }
+func (OverwriteOption) True() OverwriteOption          { return OverwriteOption(0) }
+func (OverwriteOption) False() OverwriteOption         { return OverwriteOption(1) }
+func (OverwriteOption) Prompt() OverwriteOption        { return OverwriteOption(2) }
+func (OverwriteOption) IfSourceNewer() OverwriteOption { return OverwriteOption(3) }
 
 func (o *OverwriteOption) Parse(s string) error {
 	val, err := enum.Parse(reflect.TypeOf(o), s, true)
@@ -407,7 +409,7 @@ func (Location) S3() Location        { return Location(6) }
 func (Location) Benchmark() Location { return Location(7) }
 
 func (l Location) String() string {
-	return enum.StringInt(uint32(l), reflect.TypeOf(l))
+	return enum.StringInt(l, reflect.TypeOf(l))
 }
 
 // fromToValue returns the fromTo enum value for given
@@ -433,6 +435,19 @@ func (l Location) IsLocal() bool {
 		return false
 	} else {
 		return !l.IsRemote()
+	}
+}
+
+// IsFolderAware returns true if the location has real folders (e.g. there's such a thing as an empty folder,
+// and folders may have properties). Folders are only virtual, and so not real, in Blob Storage.
+func (l Location) IsFolderAware() bool {
+	switch l {
+	case ELocation.BlobFS(), ELocation.File(), ELocation.Local():
+		return true
+	case ELocation.Blob(), ELocation.S3(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
+		return false
+	default:
+		panic("unexpected location, please specify if it is folder-aware")
 	}
 }
 
@@ -522,6 +537,10 @@ func (ft *FromTo) IsUpload() bool {
 	return ft.From().IsLocal() && ft.To().IsRemote()
 }
 
+func (ft *FromTo) AreBothFolderAware() bool {
+	return ft.From().IsFolderAware() && ft.To().IsFolderAware()
+}
+
 // TODO: deletes are not covered by the above Is* routines
 
 var BenchmarkLmt = time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -591,7 +610,7 @@ func (TransferStatus) Failed() TransferStatus { return TransferStatus(-1) }
 // Transfer failed due to failure while Setting blob tier.
 func (TransferStatus) BlobTierFailure() TransferStatus { return TransferStatus(-2) }
 
-func (TransferStatus) SkippedFileAlreadyExists() TransferStatus { return TransferStatus(-3) }
+func (TransferStatus) SkippedEntityAlreadyExists() TransferStatus { return TransferStatus(-3) }
 
 func (TransferStatus) SkippedBlobHasSnapshots() TransferStatus { return TransferStatus(-4) }
 
@@ -854,6 +873,7 @@ const (
 type CopyTransfer struct {
 	Source           string
 	Destination      string
+	EntityType       EntityType
 	LastModifiedTime time.Time //represents the last modified time of source which ensures that source hasn't changed while transferring
 	SourceSize       int64     // size of the source entity in bytes.
 
@@ -1063,6 +1083,18 @@ func (h ResourceHTTPHeaders) ToAzFileHTTPHeaders() azfile.FileHTTPHeaders {
 	}
 }
 
+// ToBlobFSHTTPHeaders converts ResourceHTTPHeaders to BlobFS Headers.
+func (h ResourceHTTPHeaders) ToBlobFSHTTPHeaders() azbfs.BlobFSHTTPHeaders {
+	return azbfs.BlobFSHTTPHeaders{
+		ContentType: h.ContentType,
+		// ContentMD5 isn't in these headers. ContentMD5 is handled separately for BlobFS
+		ContentEncoding:    h.ContentEncoding,
+		ContentLanguage:    h.ContentLanguage,
+		ContentDisposition: h.ContentDisposition,
+		CacheControl:       h.CacheControl,
+	}
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var ETransferDirection = TransferDirection(0)
@@ -1172,5 +1204,78 @@ func GetCompressionType(contentEncoding string) (CompressionType, error) {
 		return ECompressionType.ZLib(), nil
 	default:
 		return ECompressionType.Unsupported(), fmt.Errorf("encoding type '%s' is not recognised as a supported encoding type for auto-decompression", contentEncoding)
+	}
+}
+
+/////////////////////////////////////////////////////////////////
+
+var EEntityType = EntityType(0)
+
+type EntityType uint8
+
+func (EntityType) File() EntityType   { return EntityType(0) }
+func (EntityType) Folder() EntityType { return EntityType(1) }
+
+func (e EntityType) String() string {
+	return enum.StringInt(e, reflect.TypeOf(e))
+}
+
+////////////////////////////////////////////////////////////////
+
+var EFolderPropertiesOption = FolderPropertyOption(0)
+
+// FolderPropertyOption controls which folders get their properties recorded in the Plan file
+type FolderPropertyOption uint8
+
+// no FPO has been selected.  Make sure the zero-like value is "unspecified" so that we detect
+// any code paths that that do not nominate any FPO
+func (FolderPropertyOption) Unspecified() FolderPropertyOption { return FolderPropertyOption(0) }
+
+func (FolderPropertyOption) NoFolders() FolderPropertyOption { return FolderPropertyOption(1) }
+func (FolderPropertyOption) AllFoldersExceptRoot() FolderPropertyOption {
+	return FolderPropertyOption(2)
+}
+func (FolderPropertyOption) AllFolders() FolderPropertyOption { return FolderPropertyOption(3) }
+
+///////////////////////////////////////////////////////////////////////
+
+var EPreservePermissionsOption = PreservePermissionsOption(0)
+
+type PreservePermissionsOption uint8
+
+func (PreservePermissionsOption) None() PreservePermissionsOption { return PreservePermissionsOption(0) }
+func (PreservePermissionsOption) ACLsOnly() PreservePermissionsOption {
+	return PreservePermissionsOption(1)
+}
+func (PreservePermissionsOption) OwnershipAndACLs() PreservePermissionsOption {
+	return PreservePermissionsOption(2)
+}
+
+func NewPreservePermissionsOption(preserve, includeOwnership bool, fromTo FromTo) PreservePermissionsOption {
+	if preserve {
+		if fromTo.IsDownload() {
+			// downloads are the only time we respect includeOwnership
+			if includeOwnership {
+				return EPreservePermissionsOption.OwnershipAndACLs()
+			} else {
+				return EPreservePermissionsOption.ACLsOnly()
+			}
+		}
+		// for uploads and S2S, we always include ownership
+		return EPreservePermissionsOption.OwnershipAndACLs()
+	}
+
+	return EPreservePermissionsOption.None()
+}
+
+func (p PreservePermissionsOption) IsTruthy() bool {
+	switch p {
+	case EPreservePermissionsOption.ACLsOnly(),
+		EPreservePermissionsOption.OwnershipAndACLs():
+		return true
+	case EPreservePermissionsOption.None():
+		return false
+	default:
+		panic("unknown permissions option")
 	}
 }

@@ -48,6 +48,7 @@ type rawBenchmarkCmdArgs struct {
 	// options from flags
 	blockSizeMB  float64
 	putMd5       bool
+	checkLength  bool
 	blobType     string
 	output       string
 	logVerbosity string
@@ -136,6 +137,7 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 
 	c.blockSizeMB = raw.blockSizeMB
 	c.putMd5 = raw.putMd5
+	c.CheckLength = raw.checkLength
 	c.blobType = raw.blobType
 	c.output = raw.output
 	c.logVerbosity = raw.logVerbosity
@@ -197,15 +199,16 @@ func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (stri
 }
 
 // define a cleanup job
-func (raw rawBenchmarkCmdArgs) createCleanupJobArgs(benchmarkDest, logVerbosity string) (*cookedCopyCmdArgs, error) {
+func (raw rawBenchmarkCmdArgs) createCleanupJobArgs(benchmarkDest common.ResourceString, logVerbosity string) (*cookedCopyCmdArgs, error) {
 
 	rc := rawCopyCmdArgs{}
 
-	rc.src = benchmarkDest // the SOURCE for the deletion is the the dest from the benchmark
+	u, _ := benchmarkDest.FullURL() // don't check error, because it was parsed already in main job
+	rc.src = u.String()             // the SOURCE for the deletion is the the dest from the benchmark
 	rc.recursive = true
 	rc.logVerbosity = logVerbosity
 
-	switch inferArgumentLocation(benchmarkDest) {
+	switch inferArgumentLocation(rc.src) {
 	case common.ELocation.Blob():
 		rc.fromTo = common.EFromTo.BlobTrash().String()
 	case common.ELocation.File():
@@ -313,6 +316,8 @@ func init() {
 	benchCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB). Default is automatically calculated based on file size. Decimal fractions are allowed - e.g. 0.25. Identical to the same-named parameter in the copy command")
 	benchCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "defines the type of blob at the destination. Used to allow benchmarking different blob types. Identical to the same-named parameter in the copy command")
 	benchCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. (By default the hash is NOT created.) Identical to the same-named parameter in the copy command")
+	benchCmd.PersistentFlags().BoolVar(&raw.checkLength, "check-length", true, "Check the length of a file on the destination after the transfer. If there is a mismatch between source and destination, the transfer is marked as failed.")
+
 	// TODO use constant for default value or, better, move loglevel param to root cmd?
 	benchCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs).")
 

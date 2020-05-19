@@ -26,6 +26,7 @@ import (
 	"io/ioutil"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -430,6 +431,38 @@ func (scenarioHelper) convertListToMap(list []string) map[string]int {
 	return lookupMap
 }
 
+func (scenarioHelper) convertMapKeysToList(m map[string]int) []string {
+	list := make([]string, len(m))
+	i := 0
+	for key := range m {
+		list[i] = key
+		i++
+	}
+	return list
+}
+
+// useful for files->files transfers, where folders are included in the transfers.
+// includeRoot should be set to true for cases where we expect the root directory to be copied across
+// (i.e. where we expect the behaviour that can be, but has not been in this case, turned off by appending /* to the source)
+func (s scenarioHelper) addFoldersToList(fileList []string, includeRoot bool) []string {
+	m := s.convertListToMap(fileList)
+	// for each file, add all its parent dirs
+	for name := range m {
+		for {
+			name = path.Dir(name)
+			if name == "." {
+				if includeRoot {
+					m[""] = 0 // don't use "."
+				}
+				break
+			} else {
+				m[name] = 0
+			}
+		}
+	}
+	return s.convertMapKeysToList(m)
+}
+
 func (scenarioHelper) shaveOffPrefix(list []string, prefix string) []string {
 	cleanList := make([]string, len(list))
 	for i, item := range list {
@@ -663,7 +696,12 @@ func validateRemoveTransfersAreScheduled(c *chk.C, isSrcEncoded bool, expectedTr
 		// look up the source from the expected transfers, make sure it exists
 		_, srcExist := lookupMap[srcRelativeFilePath]
 		c.Assert(srcExist, chk.Equals, true)
+
+		delete(lookupMap, srcRelativeFilePath)
 	}
+	//if len(lookupMap) > 0 {
+	//	panic("set breakpoint here to debug")
+	//}
 }
 
 func getDefaultSyncRawInput(src, dst string) rawSyncCmdArgs {
@@ -690,6 +728,7 @@ func getDefaultCopyRawInput(src string, dst string) rawCopyCmdArgs {
 		md5ValidationOption:            common.DefaultHashValidationOption.String(),
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
 		forceWrite:                     common.EOverwriteOption.True().String(),
+		preserveOwner:                  common.PreserveOwnerDefault,
 	}
 }
 
@@ -713,5 +752,6 @@ func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 		md5ValidationOption:            common.DefaultHashValidationOption.String(),
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
 		forceWrite:                     common.EOverwriteOption.True().String(),
+		preserveOwner:                  common.PreserveOwnerDefault,
 	}
 }

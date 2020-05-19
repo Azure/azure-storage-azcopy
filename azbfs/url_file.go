@@ -53,6 +53,14 @@ func (f FileURL) WithPipeline(p pipeline.Pipeline) FileURL {
 	return NewFileURL(f.fileClient.URL(), p)
 }
 
+func (f FileURL) GetParentDir() (DirectoryURL, error) {
+	d, err := removeLastSectionOfPath(f.URL())
+	if err != nil {
+		return DirectoryURL{}, err
+	}
+	return NewDirectoryURL(d, f.fileClient.p), nil
+}
+
 // Create creates a new file or replaces a file. Note that this method only initializes the file.
 // For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/create-file.
 func (f FileURL) Create(ctx context.Context, headers BlobFSHTTPHeaders) (*PathCreateResponse, error) {

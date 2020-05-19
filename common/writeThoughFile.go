@@ -26,6 +26,10 @@ import (
 	"strings"
 )
 
+const BackupModeFlagName = "backup" // original name, backup mode, matches the name used for the same thing in Robocopy
+const PreserveOwnerFlagName = "preserve-owner"
+const PreserveOwnerDefault = true
+
 // The regex doesn't require a / on the ending, it just requires something similar to the following
 // C:
 // C:/
@@ -35,24 +39,51 @@ import (
 var RootDriveRegex = regexp.MustCompile(`(?i)(^[A-Z]:\/?$)`)
 var RootShareRegex = regexp.MustCompile(`(^\/\/[^\/]*\/?$)`)
 
-func CreateParentDirectoryIfNotExist(destinationPath string) error {
+func CreateParentDirectoryIfNotExist(destinationPath string, tracker FolderCreationTracker) error {
 	// find the parent directory
-	parentDirectory := destinationPath[:strings.LastIndex(destinationPath, DeterminePathSeparator(destinationPath))]
+	directory := destinationPath[:strings.LastIndex(destinationPath, DeterminePathSeparator(destinationPath))]
+	return CreateDirectoryIfNotExist(directory, tracker)
+}
 
+func CreateDirectoryIfNotExist(directory string, tracker FolderCreationTracker) error {
 	// If we're pointing at the root of a drive, don't try because it won't work.
-	if shortParentDir := strings.ReplaceAll(ToShortPath(parentDirectory), OS_PATH_SEPARATOR, AZCOPY_PATH_SEPARATOR_STRING); RootDriveRegex.MatchString(shortParentDir) || RootShareRegex.MatchString(shortParentDir) || strings.EqualFold(shortParentDir, "/") {
+	if shortParentDir := strings.ReplaceAll(ToShortPath(directory), OS_PATH_SEPARATOR, AZCOPY_PATH_SEPARATOR_STRING); RootDriveRegex.MatchString(shortParentDir) || RootShareRegex.MatchString(shortParentDir) || strings.EqualFold(shortParentDir, "/") {
 		return nil
 	}
 
-	// try to create the root directory if the source does
-	if _, err := os.Stat(parentDirectory); err != nil {
+	// try to create the directory if it does not already exist
+	if _, err := OSStat(directory); err != nil {
 		// if the error is present, try to create the directory
 		// stat errors can be present in write-only scenarios, when the directory isn't present, etc.
 		// as a result, we care more about the mkdir error than the stat error, because that's the tell.
-		err := os.MkdirAll(parentDirectory, os.ModePerm)
-		// if MkdirAll succeeds, no error is dropped-- it is nil.
+		// first make sure the parent directory exists but we ignore any error that comes back
+		CreateParentDirectoryIfNotExist(directory, tracker)
+
+		// then create the directory
+		mkDirErr := os.Mkdir(directory, os.ModePerm)
+
+		// if Mkdir succeeds, no error is dropped-- it is nil.
 		// therefore, returning here is perfectly acceptable as it either succeeds (or it doesn't)
-		return err
+		if mkDirErr == nil {
+			// To run our folder overwrite logic, we have to know if this current job created the folder.
+			// As per the comments above, we are technically wrong here in a write-only scenario (maybe it already
+			// existed and our Stat failed).  But using overwrite=false on a write-only destination doesn't make
+			// a lot of sense anyway. Yes, we'll make the wrong decision here in a write-only scenario, but we'll
+			// make the _same_ wrong overwrite decision for all the files too (not just folders). So this is, at least,
+			// consistent.
+			tracker.RecordCreation(directory)
+			return nil
+		}
+
+		// another routine might have created the directory at the same time
+		// check whether the directory now exists
+		if _, err := OSStat(directory); err != nil {
+			// no other routine succeeded
+			// return the original error we got from Mkdir
+			return mkDirErr
+		}
+
+		return nil
 	} else { // if err is nil, we return err. if err has an error, we return it.
 		return nil
 	}

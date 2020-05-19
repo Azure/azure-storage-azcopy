@@ -103,6 +103,9 @@ type ConcurrencySettings struct {
 	// (i.e. creates chunkfuncs)
 	TransferInitiationPoolSize *ConfiguredInt
 
+	// EnumerationPoolSize is size of auxiliary goroutine pool used in enumerators (only some of which are in fact parallelized)
+	EnumerationPoolSize *ConfiguredInt
+
 	// MaxIdleConnections is the max number of idle TCP connections to keep open
 	MaxIdleConnections int
 
@@ -125,6 +128,7 @@ func (c ConcurrencySettings) AutoTuneMainPool() bool {
 }
 
 const defaultTransferInitiationPoolSize = 64
+const defaultEnumerationPoolSize = 16
 const concurrentFilesFloor = 32
 
 // NewConcurrencySettings gets concurrency settings by referring to the
@@ -138,9 +142,12 @@ func NewConcurrencySettings(maxFileAndSocketHandles int, requestAutoTuneGRs bool
 		InitialMainPoolSize:        initialMainPoolSize,
 		MaxMainPoolSize:            maxMainPoolSize,
 		TransferInitiationPoolSize: getTransferInitiationPoolSize(),
-		MaxOpenDownloadFiles:       getMaxOpenPayloadFiles(maxFileAndSocketHandles, maxMainPoolSize.Value),
-		CheckCpuWhenTuning:          getCheckCpuUsageWhenTuning(),
+		EnumerationPoolSize:        getEnumerationPoolSize(),
+		CheckCpuWhenTuning:         getCheckCpuUsageWhenTuning(),
 	}
+
+	s.MaxOpenDownloadFiles = getMaxOpenPayloadFiles(maxFileAndSocketHandles,
+		maxMainPoolSize.Value+s.TransferInitiationPoolSize.Value+s.EnumerationPoolSize.Value)
 
 	// Set the max idle connections that we allow. If there are any more idle connections
 	// than this, they will be closed, and then will result in creation of new connections
@@ -218,6 +225,17 @@ func getTransferInitiationPoolSize() *ConfiguredInt {
 	return &ConfiguredInt{defaultTransferInitiationPoolSize, false, envVar.Name, "hard-coded default"}
 }
 
+func getEnumerationPoolSize() *ConfiguredInt {
+	envVar := common.EEnvironmentVariable.EnumerationPoolSize()
+
+	if c := tryNewConfiguredInt(envVar); c != nil {
+		return c
+	}
+
+	return &ConfiguredInt{defaultEnumerationPoolSize, false, envVar.Name, "hard-coded default"}
+
+}
+
 func getCheckCpuUsageWhenTuning() *ConfiguredBool {
 	envVar := common.EEnvironmentVariable.AutoTuneToCpu()
 	if c := tryNewConfiguredBool(envVar); c != nil {
@@ -237,12 +255,8 @@ func getMaxOpenPayloadFiles(maxFileAndSocketHandles int, concurrentConnections i
 	// how many of those may be opened
 	const fileHandleAllowanceForPlanFiles = 300 // 300 plan files = 300 * common.NumOfFilesPerDispatchJobPart = 3million in total
 
-	const httpHandleAllowanceForOnGoingEnumeration = 1 // might still be scanning while we are transferring. Make this bigger if we ever do parallel scanning
-
 	// make a conservative estimate of total network and file handles known so far
-	estimateOfKnownHandles := int(float32(concurrentConnections)*1.1) +
-		fileHandleAllowanceForPlanFiles +
-		httpHandleAllowanceForOnGoingEnumeration
+	estimateOfKnownHandles := int(float32(concurrentConnections)*1.1) + fileHandleAllowanceForPlanFiles
 
 	// see what we've got left over for open files
 	concurrentFilesLimit := maxFileAndSocketHandles - estimateOfKnownHandles

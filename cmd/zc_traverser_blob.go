@@ -41,7 +41,7 @@ type blobTraverser struct {
 	recursive bool
 
 	// a generic function to notify that a new stored object has been enumerated
-	incrementEnumerationCounter func()
+	incrementEnumerationCounter enumerationCounterFunc
 }
 
 func (t *blobTraverser) isDirectory(isSource bool) bool {
@@ -103,6 +103,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			preprocessor,
 			getObjectNameOnly(blobUrlParts.BlobName),
 			"",
+			common.EEntityType.File(),
 			blobProperties.LastModified(),
 			blobProperties.ContentLength(),
 			blobProperties,
@@ -112,7 +113,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		)
 
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter()
+			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
 
 		return processIfPassedFilters(filters, storedObject, processor)
@@ -133,11 +134,17 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		searchPrefix += common.AZCOPY_PATH_SEPARATOR_STRING
 	}
 
+	// as a performance optimization, get an extra prefix to do pre-filtering. It's typically the start portion of a blob name.
+	extraSearchPrefix := filterSet(filters).GetEnumerationPreFilter(t.recursive)
+
 	for marker := (azblob.Marker{}); marker.NotDone(); {
+
+		// see the TO DO in GetEnumerationPreFilter if/when we make this more directory-aware
+
 		// look for all blobs that start with the prefix
 		// TODO optimize for the case where recursive is off
 		listBlob, err := containerURL.ListBlobsFlatSegment(t.ctx, marker,
-			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix, Details: azblob.BlobListingDetails{Metadata: true}})
+			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix + extraSearchPrefix, Details: azblob.BlobListingDetails{Metadata: true}})
 		if err != nil {
 			return fmt.Errorf("cannot list blobs. Failed with error %s", err.Error())
 		}
@@ -161,6 +168,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 				preprocessor,
 				getObjectNameOnly(blobInfo.Name),
 				relativePath,
+				common.EEntityType.File(),
 				blobInfo.Properties.LastModified,
 				*blobInfo.Properties.ContentLength,
 				adapter,
@@ -170,7 +178,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			)
 
 			if t.incrementEnumerationCounter != nil {
-				t.incrementEnumerationCounter()
+				t.incrementEnumerationCounter(common.EEntityType.File())
 			}
 
 			processErr := processIfPassedFilters(filters, storedObject, processor)
@@ -185,7 +193,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 	return
 }
 
-func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive bool, incrementEnumerationCounter func()) (t *blobTraverser) {
+func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive bool, incrementEnumerationCounter enumerationCounterFunc) (t *blobTraverser) {
 	t = &blobTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, incrementEnumerationCounter: incrementEnumerationCounter}
 	return
 }

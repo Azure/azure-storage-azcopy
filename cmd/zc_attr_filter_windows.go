@@ -40,6 +40,10 @@ func (f *attrFilter) doesSupportThisOS() (msg string, supported bool) {
 	return
 }
 
+func (f *attrFilter) appliesOnlyToFiles() bool {
+	return true // keep this filter consistent with include-pattern
+}
+
 func (f *attrFilter) doesPass(storedObject storedObject) bool {
 	fileName := common.GenerateFullPath(f.filePath, storedObject.relativePath)
 	lpFileName, _ := syscall.UTF16PtrFromString(fileName)
@@ -66,7 +70,7 @@ func (f *attrFilter) doesPass(storedObject storedObject) bool {
 func buildAttrFilters(attributes []string, fullPath string, isIncludeFilter bool) []objectFilter {
 	var fileAttributes uint32
 	filters := make([]objectFilter, 0)
-	// Available attributes (NTFS) include:
+	// Available attributes (SMB) include:
 	// R = Read-only files
 	// A = Files ready for archiving
 	// S = System files

@@ -129,7 +129,7 @@ func createNewFileSystem(c *chk.C, fsu azbfs.ServiceURL) (fs azbfs.FileSystemURL
 func createNewDirectoryFromFileSystem(c *chk.C, fileSystem azbfs.FileSystemURL) (dir azbfs.DirectoryURL, name string) {
 	dir, name = getDirectoryURLFromFileSystem(c, fileSystem)
 
-	cResp, err := dir.Create(ctx)
+	cResp, err := dir.Create(ctx, true)
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
 	return dir, name

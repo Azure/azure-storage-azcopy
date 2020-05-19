@@ -14,19 +14,28 @@ import (
 
 var explainedSkippedRemoveOnce sync.Once
 
-func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
-
-	info := jptm.Info()
-	// Get the source blob url of blob to delete
-	u, _ := url.Parse(info.Source)
-
-	srcBlobURL := azblob.NewBlobURL(*u, p)
+func DeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
 		jptm.ReportTransferDone()
 		return
 	}
+
+	// schedule the work as a chunk, so it will run on the main goroutine pool, instead of the
+	// smaller "transfer initiation pool", where this code runs.
+	id := common.NewChunkID(jptm.Info().Source, 0, 0)
+	cf := createChunkFunc(true, jptm, id, func() { doDeleteBlob(jptm, p) })
+	jptm.ScheduleChunks(cf)
+}
+
+func doDeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
+
+	info := jptm.Info()
+	// Get the source blob url of blob to delete
+	u, _ := url.Parse(info.Source)
+
+	srcBlobURL := azblob.NewBlobURL(*u, p)
 
 	// Internal function which checks the transfer status and logs the msg respectively.
 	// Sets the transfer status and Report Transfer as Done.

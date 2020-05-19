@@ -1,12 +1,120 @@
 
 # Change Log
 
-## Version 10.x.x
+## Version 10.4.3
+
+### Bug fixes
+
+1. Fixed bug where AzCopy errored if a filename ended with slash character. (E.g. backslash at end of a Linux filename.)
+
+## Version 10.4.2
+
+### Bug fixes
+
+1. Fixed bug in overwrite prompt for folders.
+
+## Version 10.4.1
+
+### New features
+
+1. Added overwrite prompt support for folder property transfers.
+1. Perform proxy lookup when the source is S3.
+
+### Bug fixes
+
+1. When downloading from Azure Files to Windows with the `--preserve-smb-permissions` flag, sometimes 
+the resulting permissions were not correct. This was fixed by limiting the concurrent SetNamedSecurityInfo operations.
+1. Added check to avoid overwriting the file itself when performing copy operations.
+
+## Version 10.4
+
+### New features
+
+1. `azcopy copy` now supports the persistence of ACLs between supported resources (Windows and Azure Files) using the `--persist-smb-permissions` flag.
+1. `azcopy copy` now supports the persistence of SMB property info between supported resources (Windows and Azure Files) 
+using the `--persist-smb-info` flag. The information that can be preserved is Created Time, Last Write Time and Attributes (e.g. Read Only).
+1. AzCopy can now transfer empty folders, and also transfer the properties of folders. This applies when both the source 
+and destination support real folders (Blob Storage does not, because it only supports virtual folders).
+1. On Windows, AzCopy can now activate the special privileges `SeBackupPrivilege` and `SeRestorePrivilege`.  Most admin-level 
+accounts have these privileges in a deactivated state, as do all members of the "Backup Operators" security group.  
+If you run AzCopy as one of those users 
+and supply the new flag `--backup`, AzCopy will activate the privileges. (Use an elevated command prompt, if running as Admin).
+At upload time, this allows AzCopy to read files 
+which you wouldn't otherwise have permission to see. At download time, it works with the `--preserve-smb-permissions` flag
+to allow preservation of permissions where the Owner is not the user running AzCopy.  The `--backup` flag will report a failure 
+if the privileges cannot be activated.   
+1. Status output from AzCopy `copy`, `sync`, `jobs list`, and `jobs status` now contains information about folders.
+   This includes new properties in the JSON output of copy, sync, list and jobs status commands, when `--output-type
+   json` is used.
+1. Empty folders are deleted when using `azcopy rm` on Azure Files.
+1. Snapshots of Azure File Shares are supported, for read-only access, in `copy`,`sync` and `list`. To use, add a
+   `sharesnapshot` parameter at end of URL for your Azure Files source. Remember to separate it from the existing query
+   string parameters (i.e. the SAS token) with a `&`.  E.g.
+   `https://<youraccount>.file.core.windows.net/sharename?st=2020-03-03T20%3A53%3A48Z&se=2020-03-04T20%3A53%3A48Z&sp=rl&sv=2018-03-28&sr=s&sig=REDACTED&sharesnapshot=2020-03-03T20%3A24%3A13.0000000Z`
+1. Benchmark mode is now supported for Azure Files and ADLS Gen 2 (in addition to the existing benchmark support for
+   Blob Storage).
+1. A special performance optimization is introduced, but only for NON-recursive cases in this release.  An `--include-pattern` that contains only `*` wildcards will be performance optimized when 
+   querying blob storage without the recursive flag. The section before the first `*` will be used as a server-side prefix, to filter the search results more efficiently. E.g. `--include-pattern abc*` will be implemented 
+as a prefix search for "abc". In a more complex example, `--include-pattern abc*123`, will be implemented as a prefix search for `abc`, followed by normal filtering for all matches of `abc*123`.  To non-recursively process blobs
+contained directly in a container or virtual directory include `/*` at the end of the URL (before the query string).  E.g. `http://account.blob.core.windows.net/container/*?<SAS>`.
+1. The `--cap-mbps` parameter now parses floating-point numbers. This will allow you to limit your maximum throughput to a fraction of a megabit per second.
+
+### Special notes
+
+1. A more user-friendly error message is returned when an unknown source/destination combination is supplied
+1. AzCopy has upgraded to service revision `2019-02-02`. Users targeting local emulators, Azure Stack, or other private/special
+ instances of Azure Storage may need to intentionally downgrade their service revision using the environment variable 
+ `AZCOPY_DEFAULT_SERVICE_API_VERSION`. Prior to this release, the default service revision was `2018-03-28`.
+1. For Azure Files to Azure Files transfers, --persist-smb-permissions and --persist-smb-info are available on all OS's. 
+(But for for uploads and downloads, those flags are only available on Windows.)
+1. AzCopy now includes a list of trusted domain suffixes for Azure Active Directory (AAD) authentication. 
+   After `azcopy login`, the resulting token will only be sent to locations that appear in the list. The list is:
+   `*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net`. 
+   If necessary, you can add to the the list with the command-line flag: `--trusted-microsoft-suffixes`. For security,
+   you should only add Microsoft Azure domains. 
+1. When transferring over a million files, AzCopy will reduces its progress reporting frequency from every 2 seconds to every 2 minutes.   
 
 ### Breaking changes
 
 1. To accommodate interfacing with JavaScript programs (and other languages that have similar issue with number precision), 
    all the numbers in the JSON output have been converted to strings (i.e. with quotes around them).
+1. The TransferStatus value `SkippedFileAlreadyExists` has been renamed `SkippedEntityExists` and may now be used both 
+   for when files are skipped and for when the setting of folder properties is skipped.  This affects the input and 
+   output of `azcopy jobs show` and the status values shown in the JSON output format from `copy` and `sync`.
+1. The format and content of authentication information messages, in the JSON output format, e.g.
+   "Using OAuth token for authentication" has been changed.
+
+### Bug fixes
+
+1. AzCopy can now overwrite even Read-Only and Hidden files when downloading to Windows. (The read-only case requires the use of 
+   the new `--force-if-read-only` flag.)
+1. Fixed a nil dereference when a prefetching error occurs in a upload
+1. Fixed a nil dereference when attempting to close a log file while log-level is none
+1. AzCopy's scanning of Azure Files sources, for download or Service to Service transfers, is now much faster.
+1. Sources and destinations that are identified by their IPv4 address can now be used. This enables usage with storage
+   emulators.  Note that the `from-to` flag is typically needed when using such sources or destinations. E.g. `--from-to
+   BlobLocal` if downloading from a blob storage emulator to local disk.
+1. Filenames containing the character `:` can now safely be downloaded on Windows and uploaded to Azure Files
+1. Objects with names containing `+` can now safely be used in imported S3 object names
+1. The `check-length` flag is now exposed in benchmark mode, so that length checking can be turned off for more speed,
+   when benchmarking with small file sizes. (When using large file sizes, the overhead of the length check is
+   insignificant.)
+1. The in-app documentation for Service Principal Authentication has been corrected, to now include the application-id
+   parameter.
+1. ALL filter types are now disallowed when running `azcopy rm` against ADLS Gen2 endpoints. Previously 
+include/exclude patterns were disallowed, but exclude-path was not. That was incorrect. All should have been
+disallowed because none (other than include-path) are respected. 
+1. Fixed empty page range optimization when uploading Managed Disks. In an edge case, there was previously a risk of data corruption if the user uploaded two different images into the same Managed Disk resource one after the other.
+   
+## Version 10.3.4
+
+### New features
+
+1. Fixed feature parity issue by adding support for "ifSourceNewer" option on the `overwrite` flag. It serves as a replacement of the '\XO' flag in V8.
+
+### Bug fixes
+
+1. Fixed `jobs clean` command on Windows which was previously crashing when the `with-status` flag was used.
 
 ## Version 10.3.3
 

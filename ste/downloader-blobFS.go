@@ -89,3 +89,8 @@ func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPi
 		}
 	})
 }
+
+func (bd *blobFSDownloader) SetFolderProperties(jptm IJobPartTransferMgr) error {
+	// no-op (BlobFS is folder aware, but we don't currently preserve properties from its folders)
+	return nil
+}

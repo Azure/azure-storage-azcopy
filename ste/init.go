@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
@@ -49,7 +50,7 @@ func ToFixed(num float64, precision int) float64 {
 }
 
 // MainSTE initializes the Storage Transfer Engine
-func MainSTE(concurrency ConcurrencySettings, targetRateInMegaBitsPerSec int64, azcopyJobPlanFolder, azcopyLogPathFolder string, providePerfAdvice bool) error {
+func MainSTE(concurrency ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder, azcopyLogPathFolder string, providePerfAdvice bool) error {
 	// Initialize the JobsAdmin, resurrect Job plan files
 	initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec, azcopyJobPlanFolder, azcopyLogPathFolder, providePerfAdvice)
 	// No need to read the existing JobPartPlan files since Azcopy is running in process
@@ -151,7 +152,8 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 		InMemoryTransitJobState{
 			credentialInfo: order.CredentialInfo,
 		})
-	jpm.AddJobPart(order.PartNum, jppfn, order.SourceSAS, order.DestinationSAS, true) // Add this part to the Job and schedule its transfers
+	// Supply no plan MMF because we don't have one, and AddJobPart will create one on its own.
+	jpm.AddJobPart(order.PartNum, jppfn, nil, order.SourceRoot.SAS, order.DestinationRoot.SAS, true) // Add this part to the Job and schedule its transfers
 	return common.CopyJobPartOrderResponse{JobStarted: true}
 }
 
@@ -428,6 +430,13 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 			// transferHeader represents the memory map transfer header of transfer at index position for given job and part number
 			jppt := jpp.Transfer(t)
 			js.TotalBytesEnumerated += uint64(jppt.SourceSize)
+
+			if jppt.EntityType == common.EEntityType.File() {
+				js.FileTransfers++
+			} else {
+				js.FolderPropertyTransfers++
+			}
+
 			// check for all completed transfer to calculate the progress percentage at the end
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.NotStarted(),
@@ -441,24 +450,26 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 				common.ETransferStatus.BlobTierFailure():
 				js.TransfersFailed++
 				// getting the source and destination for failed transfer at position - index
-				src, dst := jpp.TransferSrcDstStrings(t)
+				src, dst, isFolder := jpp.TransferSrcDstStrings(t)
 				// appending to list of failed transfer
 				js.FailedTransfers = append(js.FailedTransfers,
 					common.TransferDetail{
-						Src:            src,
-						Dst:            dst,
-						TransferStatus: common.ETransferStatus.Failed(),
-						ErrorCode:      jppt.ErrorCode()}) // TODO: Optimize
-			case common.ETransferStatus.SkippedFileAlreadyExists(),
+						Src:                src,
+						Dst:                dst,
+						IsFolderProperties: isFolder,
+						TransferStatus:     common.ETransferStatus.Failed(),
+						ErrorCode:          jppt.ErrorCode()}) // TODO: Optimize
+			case common.ETransferStatus.SkippedEntityAlreadyExists(),
 				common.ETransferStatus.SkippedBlobHasSnapshots():
 				js.TransfersSkipped++
 				// getting the source and destination for skipped transfer at position - index
-				src, dst := jpp.TransferSrcDstStrings(t)
+				src, dst, isFolder := jpp.TransferSrcDstStrings(t)
 				js.SkippedTransfers = append(js.SkippedTransfers,
 					common.TransferDetail{
-						Src:            src,
-						Dst:            dst,
-						TransferStatus: jppt.TransferStatus(),
+						Src:                src,
+						Dst:                dst,
+						IsFolderProperties: isFolder,
+						TransferStatus:     jppt.TransferStatus(),
 					})
 			}
 		}
@@ -568,9 +579,9 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 				continue
 			}
 			// getting source and destination of a transfer at index index for given jobId and part number.
-			src, dst := jpp.TransferSrcDstStrings(t)
+			src, dst, isFolder := jpp.TransferSrcDstStrings(t)
 			ljt.Details = append(ljt.Details,
-				common.TransferDetail{Src: src, Dst: dst, TransferStatus: transferEntry.TransferStatus(), ErrorCode: transferEntry.ErrorCode()})
+				common.TransferDetail{Src: src, Dst: dst, IsFolderProperties: isFolder, TransferStatus: transferEntry.TransferStatus(), ErrorCode: transferEntry.ErrorCode()})
 		}
 	}
 	return ljt
@@ -598,6 +609,12 @@ func ListJobs() common.ListJobsResponse {
 		listJobResponse.JobIDDetails = append(listJobResponse.JobIDDetails,
 			common.JobIDDetails{JobId: jobId, CommandString: jpm.Plan().CommandString(),
 				StartTime: jpm.Plan().StartTime, JobStatus: jpm.Plan().JobStatus()})
+
+		// Close the job part managers and the log.
+		jm.(*jobMgr).jobPartMgrs.Iterate(false, func(k common.PartNumber, v IJobPartMgr) {
+			v.Close()
+		})
+		jm.CloseLog()
 	}
 	return listJobResponse
 }
@@ -625,7 +642,7 @@ func GetJobFromTo(r common.GetJobFromToRequest) common.GetJobFromToResponse {
 	}
 
 	// Use first transfer's source/destination as represent.
-	source, destination := jp0.Plan().TransferSrcDstStrings(0)
+	source, destination, _ := jp0.Plan().TransferSrcDstStrings(0)
 	if source == "" && destination == "" {
 		return common.GetJobFromToResponse{
 			ErrorMsg: fmt.Sprintf("error getting the source/destination with JobID %v", r.JobID),

@@ -25,11 +25,8 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
-// Abstraction of the methods needed to download from a remote location. Downloaders are simple because state is maintained in chunkedFileWriter,
-// so this interface is very simple. (Contrast with Uploaders, which have to be stateful because remote targets require such different, and potentially complex,
-// prologue and epilogue handling)
+// Abstraction of the methods needed to download files/blobs from a remote location
 type downloader interface {
-
 	// Prologue does any necessary first-time setup
 	Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline)
 
@@ -41,6 +38,20 @@ type downloader interface {
 	// Epilogue does cleanup. MAY be the only method that gets called (in error cases). So must not fail simply because
 	// Prologue has not yet been called
 	Epilogue()
+}
+
+// folderDownloader is a downloader that can also process folder properties
+type folderDownloader interface {
+	downloader
+	SetFolderProperties(jptm IJobPartTransferMgr) error
+}
+
+// smbPropertyAwareDownloader is a windows-triggered interface.
+// Code outside of windows-specific files shouldn't implement this ever.
+type smbPropertyAwareDownloader interface {
+	PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error
+
+	PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error
 }
 
 type downloaderFactory func() downloader
