@@ -139,7 +139,8 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 
 			if !shouldOverwrite {
 				// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
-				jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "File already exists, so will be skipped")
+				msg := fmt.Sprintf("File already exists, will be skipped. Dst mtime: %s, src mtime: %s", dstLmt.String(), jptm.LastModifiedTime().String())
+				jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, msg)
 				jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists())
 				jptm.ReportTransferDone()
 				return
@@ -389,9 +390,9 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 			resp.Response().StatusCode == http.StatusForbidden {
 			// The destination is write-only. Cannot verify length
 			shouldCheckLength = false
-			checkLengthFailureOnReadOnlyDst.Do( func() {
+			checkLengthFailureOnReadOnlyDst.Do(func() {
 				var glcm = common.GetLifecycleMgr()
-				msg :=fmt.Sprintf("Could not read destination length. If the destination is write-only, use --check-length=false on the command line.")
+				msg := fmt.Sprintf("Could not read destination length. If the destination is write-only, use --check-length=false on the command line.")
 				glcm.Info(msg)
 				if jptm.ShouldLog(pipeline.LogError) {
 					jptm.Log(pipeline.LogError, msg)

@@ -83,7 +83,9 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 
 			if !shouldOverwrite {
 				// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
-				jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "File already exists, so will be skipped")
+				msg := fmt.Sprintf("File alreay exists on destination, will be skipped. Dst mtime: %s, src mtime: %s",
+					dstProps.ModTime().String(), jptm.LastModifiedTime().String())
+				jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, msg)
 				jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists())
 				jptm.ReportTransferDone()
 				return
