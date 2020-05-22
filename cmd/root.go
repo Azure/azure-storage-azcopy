@@ -23,6 +23,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/url"
 	"os"
 	"runtime"
@@ -58,6 +59,8 @@ var rootCmd = &cobra.Command{
 	Long:    rootCmdLongDescription,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 
+		timeAtPrestart := time.Now()
+
 		err := azcopyOutputFormat.Parse(outputFormatRaw)
 		glcm.SetOutputFormat(azcopyOutputFormat)
 		if err != nil {
@@ -91,6 +94,15 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 		enumerationParallelism = concurrencySettings.EnumerationPoolSize.Value
+
+		// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
+		// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
+		// job is running. I.e. using this later with --include-after is _guaranteed_ to pick up all files that changed during
+		// or after this job.
+		adjustedTime := timeAtPrestart.Add(-5 * time.Second)
+		startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed after this job started, use the --%s parameter with a value of %s",
+			common.IncludeAfterFlagName, includeAfterDateFilter{}.Format(adjustedTime))
+		ste.JobsAdmin.LogToJobLog(startTimeMessage)
 
 		// spawn a routine to fetch and compare the local application's version against the latest version available
 		// if there's a newer version that can be used, then write the suggestion to stderr
