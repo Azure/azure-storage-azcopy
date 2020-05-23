@@ -295,6 +295,12 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	// partplan file is opened and mapped when job part is added
 	//jpm.planMMF = jpm.filename.Map() // Open the job part plan file & memory-map it in
 	plan := jpm.planMMF.Plan()
+	if plan.PartNum == 0 && plan.NumTransfers == 0 {
+		/* This will wind down the transfer and report summary */
+		plan.SetJobStatus(common.EJobStatus.Completed())
+		return
+	}
+
 	// get the list of include / exclude transfers
 	includeTransfer, excludeTransfer := jpm.jobMgr.IncludeExclude()
 	// *** Open the job part: process any job part plan-setting used by all transfers ***
