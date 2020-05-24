@@ -250,6 +250,11 @@ func (f *includeAfterDateFilter) appliesOnlyToFiles() bool {
 }
 
 func (f *includeAfterDateFilter) doesPass(storedObject storedObject) bool {
+	zeroTime := time.Time{}
+	if storedObject.lastModifiedTime == zeroTime {
+		panic("cannot use includeAfterDateFilter on an object for which no Last Modified Time has been retrieved")
+	}
+
 	return storedObject.lastModifiedTime.After(f.threshold) ||
 		storedObject.lastModifiedTime.Equal(f.threshold) // >= is easier for users to understand than >
 }
