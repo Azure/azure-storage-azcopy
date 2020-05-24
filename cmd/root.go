@@ -101,7 +101,7 @@ var rootCmd = &cobra.Command{
 		// or after this job.
 		adjustedTime := timeAtPrestart.Add(-5 * time.Second)
 		startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed after this job started, use the --%s parameter with a value of %s",
-			common.IncludeAfterFlagName, includeAfterDateFilter{}.Format(adjustedTime))
+			common.IncludeAfterFlagName, includeAfterDateFilter{}.FormatAsUTC(adjustedTime))
 		ste.JobsAdmin.LogToJobLog(startTimeMessage)
 
 		// spawn a routine to fetch and compare the local application's version against the latest version available

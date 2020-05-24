@@ -295,7 +295,7 @@ func (_ includeAfterDateFilter) ParseISO8601(s string) (time.Time, error) {
 	return time.Time{}, err
 }
 
-//Format is inverse of parseISO8601 (and always uses the most detailed format)
-func (_ includeAfterDateFilter) Format(t time.Time) string {
+//FormatAsUTC is inverse of parseISO8601 (and always uses the most detailed format)
+func (_ includeAfterDateFilter) FormatAsUTC(t time.Time) string {
 	return t.UTC().Format(time.RFC3339)
 }
