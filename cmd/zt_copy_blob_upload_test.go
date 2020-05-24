@@ -435,7 +435,15 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithPattern(c *chk.C
 	})
 }
 
-func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeAfter(c *chk.C) {
+func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeAfter_UTC(c *chk.C) {
+	s.doTestUploadDirectoryToContainerWithIncludeAfter(true, c)
+}
+
+func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeAfter_LocalTime(c *chk.C) {
+	s.doTestUploadDirectoryToContainerWithIncludeAfter(false, c)
+}
+
+func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeAfter(useUtc bool, c *chk.C) {
 	bsu := getBSU()
 
 	// set up the source with numerous files
@@ -464,7 +472,11 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeAfter(c *
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
 	raw := getDefaultCopyRawInput(srcDirPath, rawContainerURLWithSAS.String())
 	raw.recursive = true
-	raw.includeAfter = includeAfterDateFilter{}.Format(includeFrom)
+	if useUtc {
+		raw.includeAfter = includeFrom.UTC().Format(time.RFC3339)
+	} else {
+		raw.includeAfter = includeFrom.Format("2006-01-02T15:04:05") // local time, no timezone
+	}
 
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
