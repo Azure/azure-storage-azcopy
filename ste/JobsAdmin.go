@@ -292,7 +292,8 @@ func (ja *jobsAdmin) scheduleJobPartsWorker() {
 			go ja.poolSizer(ja.concurrencyTuner)
 		})
 
-		pause := time.Millisecond * 10 // TODO Review
+		pause := time.Millisecond * 10 // TODO Review.  I _think_ this may help, to get a better mix of active transfers,
+		//               across various job parts. But I don't know for sure (would need more testing to be sure)
 
 		// If the job manager is not found for the JobId of JobPart
 		// taken from partsChannel
