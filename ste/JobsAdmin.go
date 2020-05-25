@@ -266,7 +266,9 @@ func (ja *jobsAdmin) scheduleJobParts() {
 	time.Sleep(time.Minute * 2) // TODO: find out a way to get good even spread even after we remove this.
 	//    Problem was that, without this, we'd just read from the pseudoChannel as fast as data was added to it,
 	//    so we always read item 0, and there was no shuffling effect.
-	//    NOTE: the recent reduction in size of the transfers channel may have helped.
+	//    NOTE: the recent reduction in size of the transfers channel may have helped, so retesting this would be good.
+	//    Note also: that removing the need for this delay is probably they key obstacle to actually using the experimental
+	//    code in this PR.
 
 	for i := 0; i < partLevelConcurrency; i++ {
 		go ja.scheduleJobPartsWorker()
@@ -275,8 +277,9 @@ func (ja *jobsAdmin) scheduleJobParts() {
 
 func (ja *jobsAdmin) scheduleJobPartsWorker() {
 	for {
-		// Take one job part AT RANDOM
-		// The randomness ensures that, on really big jobs with a large number of parts,
+		// Take one job part AT "RANDOM"
+		// (see previous commits in this PR for other attempted ways to do this...)
+		// The "randomness" attempts to ensures that, on really big jobs with a large number of parts,
 		// we distribute the work over the namespace well. Since enumeration tends to be
 		// in alphabetical order on at least some resource types, if we just do parts in
 		// the order they are created, we would also be working in alphabetical order,
@@ -284,6 +287,7 @@ func (ja *jobsAdmin) scheduleJobPartsWorker() {
 		// ordering doesn't matter)
 		// See https://docs.microsoft.com/en-us/azure/storage/blobs/storage-performance-checklist#partitioning
 		// and https://azure.microsoft.com/en-us/blog/high-throughput-with-azure-blob-storage/
+		// TODO: test on a range of different job sizes.
 		jobPart := ja.xferChannels.partsPseudoChannel.takeOne().(IJobPartMgr)
 
 		poolSizeOnce.Do(func() {
@@ -580,7 +584,7 @@ func (c *evenlySpreadPseudoChannel) tryTakeOne() (interface{}, bool) {
 	c.items[idx] = nil
 	c.count--
 
-	fmt.Printf(" %d\n", idx) // TODO remove
+	//fmt.Printf(" %d\n", idx) // TODO remove
 
 	return result, true
 }
