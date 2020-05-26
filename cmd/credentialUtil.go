@@ -409,7 +409,10 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 			return fmt.Errorf(
 				"s3 authentication to %s is not currently suported in AzCopy", host)
 		}
-
+	case common.ECredentialType.GoogleAppCredentials():
+		if resourceType != common.ELocation.GCP(){
+			return errors.New(fmt.Sprintf("Google Application Credentials to %s is not valid", resourceType.String()))
+		}
 	default:
 		panic("unknown credential type")
 	}
@@ -492,6 +495,12 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 				return common.ECredentialType.Unknown(), false, errors.New("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables must be set before creating the S3 AccessKey credential")
 			}
 			credType = common.ECredentialType.S3AccessKey()
+		case common.ELocation.GCP():
+			googleAppCredentials := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleAppCredentials())
+			if googleAppCredentials == "" {
+				return common.ECredentialType.Unknown(), false, errors.New("GOOGLE_APPLICATION_CREDENTIALS environment variable must be set before using GCP transfer feature")
+			}
+			credType = common.ECredentialType.GoogleAppCredentials()
 		}
 	}
 
