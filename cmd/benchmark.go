@@ -52,7 +52,7 @@ type rawBenchmarkCmdArgs struct {
 	blobType     string
 	output       string
 	logVerbosity string
-	download     bool
+	mode         string
 }
 
 const (
@@ -124,11 +124,18 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	c := rawCopyCmdArgs{}
 	c.setMandatoryDefaults()
 
-	if raw.download {
+	benchMode := common.BenchMarkMode(0)
+	err = benchMode.Parse(raw.mode)
+	if err != nil {
+		return dummyCooked, err
+	}
+	downloadMode := benchMode == common.EBenchMarkMode.Download()
+
+	if downloadMode {
 		//We to write to NULL device, so our measurements are not masked by disk perf
 		c.dst = os.DevNull
 		c.src = raw.target
-	} else {
+	} else { // Upload
 		// src must be string, but needs to indicate that its for benchmark and encode what we want
 		c.src = benchmarkSourceHelper{}.ToUrl(raw.fileCount, bytesPerFile)
 		c.dst, err = raw.appendVirtualDir(raw.target, virtualDir)
@@ -153,7 +160,13 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
-	if !raw.download && raw.deleteTestData {
+	if downloadMode {
+		glcm.Info(fmt.Sprintf("Benchmarking downloads from %s.", cooked.source.Value))
+	} else {
+		glcm.Info(fmt.Sprintf("Benchmarking uploads to %s.", cooked.destination.Value))
+	}
+
+	if !downloadMode && raw.deleteTestData {
 		// set up automatic cleanup
 		cooked.followupJobArgs, err = raw.createCleanupJobArgs(cooked.destination, raw.logVerbosity)
 		if err != nil {
@@ -323,7 +336,7 @@ func init() {
 	benchCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "defines the type of blob at the destination. Used to allow benchmarking different blob types. Identical to the same-named parameter in the copy command")
 	benchCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. (By default the hash is NOT created.) Identical to the same-named parameter in the copy command")
 	benchCmd.PersistentFlags().BoolVar(&raw.checkLength, "check-length", true, "Check the length of a file on the destination after the transfer. If there is a mismatch between source and destination, the transfer is marked as failed.")
-	benchCmd.PersistentFlags().BoolVar(&raw.download, "download", false, "Measure download performance from this location.")
+	benchCmd.PersistentFlags().StringVar(&raw.mode, "mode", "upload", "Defines if Azcopy should test uploads or downloads from this target. Valid values are 'upload' and 'download'. Defaulted option is 'upload'.")
 
 	// TODO use constant for default value or, better, move loglevel param to root cmd?
 	benchCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs).")

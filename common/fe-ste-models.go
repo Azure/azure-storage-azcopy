@@ -23,13 +23,14 @@ package common
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"math"
 	"reflect"
 	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 
 	"fmt"
 
@@ -1179,6 +1180,27 @@ const SizePerFileParam = "size-per-file"
 const FileCountParam = "file-count"
 const FileCountDefault = 100
 
+//BenchMarkMode enumerates values for Azcopy bench command. Valid values Upload or Download
+type BenchMarkMode uint8
+
+var EBenchMarkMode = BenchMarkMode(0)
+
+func (BenchMarkMode) Upload() BenchMarkMode { return BenchMarkMode(0) }
+
+func (BenchMarkMode) Download() BenchMarkMode { return BenchMarkMode(1) }
+
+func (bm BenchMarkMode) String() string {
+	return enum.StringInt(bm, reflect.TypeOf(bm))
+}
+
+func (bm *BenchMarkMode) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(bm), s, true, true)
+	if err == nil {
+		*bm = val.(BenchMarkMode)
+	}
+	return err
+}
+
 //////////////////////////////////////////////////////////////////////////////////////
 
 var ECompressionType = CompressionType(0)
@@ -1243,7 +1265,9 @@ var EPreservePermissionsOption = PreservePermissionsOption(0)
 
 type PreservePermissionsOption uint8
 
-func (PreservePermissionsOption) None() PreservePermissionsOption { return PreservePermissionsOption(0) }
+func (PreservePermissionsOption) None() PreservePermissionsOption {
+	return PreservePermissionsOption(0)
+}
 func (PreservePermissionsOption) ACLsOnly() PreservePermissionsOption {
 	return PreservePermissionsOption(1)
 }
