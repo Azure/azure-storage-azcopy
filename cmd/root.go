@@ -98,7 +98,7 @@ var rootCmd = &cobra.Command{
 		// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
 		// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
 		// job is running. I.e. using this later with --include-after is _guaranteed_ to pick up all files that changed during
-		// or after this job.
+		// or after this job
 		adjustedTime := timeAtPrestart.Add(-5 * time.Second)
 		startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed after this job started, use the parameter --%s=%s",
 			common.IncludeAfterFlagName, includeAfterDateFilter{}.FormatAsUTC(adjustedTime))
