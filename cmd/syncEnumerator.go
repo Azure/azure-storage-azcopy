@@ -35,10 +35,30 @@ import (
 
 func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *syncEnumerator, err error) {
 
+	srcCredInfo, srcIsPublic, err := getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if cca.fromTo.IsS2S() {
+		if cca.fromTo.From() != common.ELocation.S3() {
+			// Adding files here seems like an odd case, but since files can't be public
+			// the second half of this if statement does not hurt.
+			if cca.fromTo.From() != cca.fromTo.To() {
+				panic(fmt.Sprintf("The semantics of authorization for an S2S transfer (within sync) is unknown for %s->%s transfers", cca.fromTo.From(), cca.fromTo.To()))
+			}
+
+			if srcCredInfo.CredentialType != common.ECredentialType.Anonymous() && !srcIsPublic {
+				return nil, fmt.Errorf("the source of a %s->%s sync must either be public, or authorized with a SAS token", cca.fromTo.From(), cca.fromTo.To())
+			}
+		}
+	}
+
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
-	sourceTraverser, err := initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &cca.credentialInfo,
+	sourceTraverser, err := initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo,
 		nil, nil, cca.recursive, true, func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
