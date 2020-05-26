@@ -124,37 +124,39 @@ func (jm *jobMgr) reset(appCtx context.Context, commandString string) IJobMgr {
 }
 
 func (jm *jobMgr) logConcurrencyParameters() {
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Number of CPUs: %d", runtime.NumCPU()))
+	level := pipeline.LogWarning // log all this stuff at warning level, so that it can still be see it when running at that level. (It won't have the WARN prefix, because we don't add that)
+
+	jm.logger.Log(level, fmt.Sprintf("Number of CPUs: %d", runtime.NumCPU()))
 	// TODO: label max file buffer ram with how we obtained it (env var or default)
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max file buffer RAM %.3f GB",
+	jm.logger.Log(level, fmt.Sprintf("Max file buffer RAM %.3f GB",
 		float32(JobsAdmin.(*jobsAdmin).cacheLimiter.Limit())/(1024*1024*1024)))
 
 	dynamicMessage := ""
 	if jm.concurrency.AutoTuneMainPool() {
 		dynamicMessage = " will be dynamically tuned up to "
 	}
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent network operations: %s%d (%s)",
+	jm.logger.Log(level, fmt.Sprintf("Max concurrent network operations: %s%d (%s)",
 		dynamicMessage,
 		jm.concurrency.MaxMainPoolSize.Value,
 		jm.concurrency.MaxMainPoolSize.GetDescription()))
 
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Check CPU usage when dynamically tuning concurrency: %t (%s)",
+	jm.logger.Log(level, fmt.Sprintf("Check CPU usage when dynamically tuning concurrency: %t (%s)",
 		jm.concurrency.CheckCpuWhenTuning.Value,
 		jm.concurrency.CheckCpuWhenTuning.GetDescription()))
 
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent transfer initiation routines: %d (%s)",
+	jm.logger.Log(level, fmt.Sprintf("Max concurrent transfer initiation routines: %d (%s)",
 		jm.concurrency.TransferInitiationPoolSize.Value,
 		jm.concurrency.TransferInitiationPoolSize.GetDescription()))
 
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max enumeration routines: %d (%s)",
+	jm.logger.Log(level, fmt.Sprintf("Max enumeration routines: %d (%s)",
 		jm.concurrency.EnumerationPoolSize.Value,
 		jm.concurrency.EnumerationPoolSize.GetDescription()))
 
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Parallelize getting file properties (file.Stat): %t (%s)",
+	jm.logger.Log(level, fmt.Sprintf("Parallelize getting file properties (file.Stat): %t (%s)",
 		jm.concurrency.ParallelStatFiles.Value,
 		jm.concurrency.ParallelStatFiles.GetDescription()))
 
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max open files when downloading: %d (auto-computed)",
+	jm.logger.Log(level, fmt.Sprintf("Max open files when downloading: %d (auto-computed)",
 		jm.concurrency.MaxOpenDownloadFiles))
 }
 
@@ -551,7 +553,7 @@ func (jm *jobMgr) logJobsAdminMessages() {
 			if msg.LogLevel <= pipeline.LogWarning {
 				prefix = fmt.Sprintf("%s: ", common.LogLevel(msg.LogLevel)) // so readers can find serious ones, but information ones still look uncluttered without INFO:
 			}
-			jm.Log(msg.LogLevel, prefix+msg.string)
+			jm.Log(pipeline.LogWarning, prefix+msg.string) // use LogError here, so that it forces these to get logged, even if user is running at warning level instead of Info.  They won't have "warning" prefix, if Info level was passed in to MessagesForJobLog
 		default:
 			return
 		}
