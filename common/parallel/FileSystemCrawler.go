@@ -60,9 +60,9 @@ func CrawlLocalDirectory(ctx context.Context, root string, parallelism int, read
 // Walk is similar to filepath.Walk.
 // But note the following difference is how WalkFunc is used:
 // 1. If fileError passed to walkFunc is not nil, then here the filePath passed to that function will usually be ""
-//    (whereas with filepath.Walk it will usually (always?) have a value)
+//    (whereas with filepath.Walk it will usually (always?) have a value).
 // 2. If the return value of walkFunc function is not nil, enumeration will always stop, not matter what the type of the error.
-//    (Unlike filepath.WalkFunc, where returning filePath.SkipDir is handled as a special case)
+//    (Unlike filepath.WalkFunc, where returning filePath.SkipDir is handled as a special case).
 func Walk(root string, parallelism int, parallelStat bool, walkFn filepath.WalkFunc) {
 	signalRootError := func(e error) {
 		_ = walkFn(root, nil, e)
