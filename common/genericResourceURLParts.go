@@ -20,6 +20,7 @@ type GenericResourceURLParts struct {
 	fileURLParts azfile.FileURLParts
 	bfsURLParts  azbfs.BfsURLParts
 	s3URLParts   S3URLParts
+	gcpURLParts GCPURLParts
 }
 
 func NewGenericResourceURLParts(resourceURL url.URL, location Location) GenericResourceURLParts {
@@ -36,7 +37,10 @@ func NewGenericResourceURLParts(resourceURL url.URL, location Location) GenericR
 		var err error
 		g.s3URLParts, err = NewS3URLParts(resourceURL)
 		PanicIfErr(err)
-
+	case ELocation.GCP():
+		var err error
+		g.gcpURLParts, err = NewGCPURLParts(resourceURL)
+		PanicIfErr(err)
 	default:
 		panic(fmt.Sprintf("%s is an invalid location for GenericResourceURLParts", g.location))
 	}
@@ -54,7 +58,8 @@ func (g GenericResourceURLParts) GetContainerName() string {
 		return g.bfsURLParts.FileSystemName
 	case ELocation.S3():
 		return g.s3URLParts.BucketName
-
+	case ELocation.GCP():
+		return g.gcpURLParts.BucketName
 	default:
 		panic(fmt.Sprintf("%s is an invalid location for GenericResourceURLParts", g.location))
 	}
@@ -70,7 +75,8 @@ func (g GenericResourceURLParts) GetObjectName() string {
 		return g.bfsURLParts.DirectoryOrFilePath
 	case ELocation.S3():
 		return g.s3URLParts.ObjectKey
-
+	case ELocation.GCP():
+		return g.gcpURLParts.ObjectKey
 	default:
 		panic(fmt.Sprintf("%s is an invalid location for GenericResourceURLParts", g.location))
 	}
@@ -86,7 +92,8 @@ func (g *GenericResourceURLParts) SetObjectName(objectName string) {
 		g.bfsURLParts.DirectoryOrFilePath = objectName
 	case ELocation.S3():
 		g.s3URLParts.ObjectKey = objectName
-
+	case ELocation.GCP():
+		g.gcpURLParts.ObjectKey = objectName
 	default:
 		panic(fmt.Sprintf("%s is an invalid location for GenericResourceURLParts", g.location))
 	}
@@ -98,7 +105,8 @@ func (g GenericResourceURLParts) String() string {
 	switch g.location {
 	case ELocation.S3():
 		return g.s3URLParts.String()
-
+	case ELocation.GCP():
+		return g.gcpURLParts.String()
 	case ELocation.Blob():
 		URLOut = g.blobURLParts.URL()
 	case ELocation.File():
@@ -123,6 +131,8 @@ func (g GenericResourceURLParts) URL() url.URL {
 		return g.bfsURLParts.URL()
 	case ELocation.S3():
 		return g.s3URLParts.URL()
+	case ELocation.GCP():
+		return g.gcpURLParts.URL()
 	default:
 		panic(fmt.Sprintf("%s is an invalid location for GenericResourceURLParts", g.location))
 	}

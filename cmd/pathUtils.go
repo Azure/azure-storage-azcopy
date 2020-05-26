@@ -59,7 +59,8 @@ func determineLocationLevel(location string, locationType common.Location, sourc
 	case common.ELocation.Blob(),
 		common.ELocation.File(),
 		common.ELocation.BlobFS(),
-		common.ELocation.S3():
+		common.ELocation.S3(),
+		common.ELocation.GCP():
 		URL, err := url.Parse(location)
 
 		if err != nil {
@@ -164,6 +165,19 @@ func GetResourceRoot(resource string, location common.Location) (resourceBase st
 
 		s3URL := s3URLParts.URL()
 		return s3URL.String(), nil
+	case common.ELocation.GCP():
+		gcpURLParts, err := common.NewGCPURLParts(*resourceURL)
+		common.PanicIfErr(err)
+
+		if gcpURLParts.BucketName == "" || strings.Contains(gcpURLParts.BucketName, "*") {
+			if gcpURLParts.ObjectKey != "" {
+				return resource, errors.New("Cannot combine account-level traversal and specific object names")
+			}
+			gcpURLParts.BucketName = ""
+		}
+
+		gcpURL := gcpURLParts.URL()
+		return gcpURL.String(), nil
 	default:
 		panic(fmt.Sprintf("Location %s is missing from GetResourceRoot", location))
 	}
@@ -204,6 +218,8 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 
 		*baseURL = common.URLExtension{URL: *baseURL}.URLWithPlusDecodedInPath()
 		return baseURL.String(), "", nil
+	case common.ELocation.GCP():
+		return resource, "", nil
 	case common.ELocation.Benchmark(), // cover for benchmark as we generate data for that
 		common.ELocation.Unknown(): // cover for unknown as we treat that as garbage
 		// Local and S3 don't feature URL-embedded tokens
@@ -364,6 +380,16 @@ func GetContainerName(path string, location common.Location) (string, error) {
 		}
 
 		return s3URLParts.BucketName, nil
+	case common.ELocation.GCP():
+		baseURL, err := url.Parse(path)
+		if err != nil {
+			return "", err
+		}
+		gcpURLParts, err := common.NewGCPURLParts(*baseURL)
+		if err != nil {
+			return "", err
+		}
+		return gcpURLParts.BucketName, nil
 	default:
 		return "", fmt.Errorf("cannot get container name on location type %s", location.String())
 	}

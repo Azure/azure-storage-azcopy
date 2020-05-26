@@ -476,6 +476,32 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 				return nil, err
 			}
 		}
+	case common.ELocation.GCP():
+		resourceURL, err := resource.FullURL()
+		if err != nil {
+			return nil, err
+		}
+
+		recommendHttpsIfNecessary(*resourceURL)
+
+		gcpURLParts, err := common.NewGCPURLParts(*resourceURL)
+		if err != nil {
+			return nil, err
+		}
+
+		if ctx == nil {
+			return nil, errors.New("a valid context must be supplied to create a GCP traverser")
+		}
+
+		if gcpURLParts.BucketName == "" || strings.Contains(gcpURLParts.BucketName, "*") {
+			return nil, errors.New("Account level transfers are not yet supported")
+		} else {
+			output, err = newGCPTraverser(resourceURL, *ctx, recursive, getProperties, incrementEnumerationCounter)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 	default:
 		return nil, errors.New("could not choose a traverser from currently available traversers")
 	}

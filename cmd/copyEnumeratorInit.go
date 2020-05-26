@@ -51,7 +51,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	getRemoteProperties := (cca.fromTo.From() == common.ELocation.File() && !cca.fromTo.To().IsRemote()) || // If download, we still need LMT and MD5 from files.
 		(cca.fromTo.From() == common.ELocation.File() && cca.fromTo.To().IsRemote() && cca.s2sSourceChangeValidation) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties anyway (according to the old code)
 		(cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() && cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
-	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
+	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && !getRemoteProperties && cca.s2sGetPropertiesInBackend     // Infer GetProperties if GetPropertiesInBackend is enabled.
 	jobPartOrder.S2SSourceChangeValidation = cca.s2sSourceChangeValidation
 	jobPartOrder.DestLengthValidation = cca.CheckLength
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
@@ -171,8 +171,13 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					// this will probably never be reached
 					return nil, fmt.Errorf("failed to get container name from source (is it formatted correctly?)")
 				}
-
-				resName, err := containerResolver.ResolveName(cName)
+				var resName string
+				if cca.fromTo.From() == common.ELocation.S3() {
+					resName, err = containerResolver.ResolveName(cName)
+				} else if cca.fromTo.From() == common.ELocation.GCP() {
+					resName = cName
+					err = nil
+				}
 
 				if err == nil {
 					err = cca.createDstContainer(resName, cca.destination, ctx, existingContainers)

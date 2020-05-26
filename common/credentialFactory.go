@@ -33,6 +33,7 @@ import (
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/minio/minio-go"
 	"github.com/minio/minio-go/pkg/credentials"
+	"cloud.google.com/go/storage"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 )
@@ -247,6 +248,11 @@ func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option Credent
 	}
 
 	return minio.NewWithCredentials(credInfo.S3CredentialInfo.Endpoint, credential, true, credInfo.S3CredentialInfo.Region)
+}
+
+func CreateGCPClient(ctx context.Context) (*storage.Client, error) {
+	client, err := storage.NewClient(ctx)
+	return client, err
 }
 
 type S3ClientFactory struct {
