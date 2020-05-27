@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"math/rand"
 	"strings"
@@ -10,6 +11,7 @@ import (
 )
 
 var enumerationParallelism = 1
+var enumerationParallelStatFiles = false
 
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
 func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
@@ -71,7 +73,7 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *cookedCopyCmdArgs
 	}
 
 	if ste.JobsAdmin != nil {
-		ste.JobsAdmin.LogToJobLog(FinalPartCreatedMessage)
+		ste.JobsAdmin.LogToJobLog(FinalPartCreatedMessage, pipeline.LogInfo)
 	}
 
 	// set the flag on cca, to indicate the enumeration is done
