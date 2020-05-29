@@ -390,7 +390,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubs(c *chk.C) {
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, strings.TrimSuffix(vdirName, "/"))
+	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName)
 	raw := getDefaultRemoveRawInput(rawVirtualDirectoryURLWithSAS.String())
 	raw.recursive = true
 

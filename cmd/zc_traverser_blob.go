@@ -88,6 +88,11 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 	blobUrlParts := azblob.NewBlobURLParts(*t.rawURL)
 	util := copyHandlerUtil{}
 
+	// trim away the trailing slash before we check whether it's a single blob
+	// so that we can detect the directory stub in case there is one
+	blobUrlParts.BlobName = strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)
+	*t.rawURL = blobUrlParts.URL()
+
 	// check if the url points to a single blob
 	blobProperties, isBlob, isDirStub, propErr := t.getPropertiesIfSingleBlob()
 
