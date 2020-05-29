@@ -105,7 +105,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		}
 	}
 
-	if isBlob || (t.includeDirectoryStubs && isDirStub) {
+	if isBlob || (t.includeDirectoryStubs && isDirStub && t.recursive) {
 		// sanity checking so highlighting doesn't highlight things we're not worried about.
 		if blobProperties == nil {
 			panic("isBlob should never be set if getting properties is an error")
@@ -169,7 +169,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		// process the blobs returned in this result segment
 		for _, blobInfo := range listBlob.Segment.BlobItems {
 			// if the blob represents a hdi folder, then skip it
-			if !t.includeDirectoryStubs && util.doesBlobRepresentAFolder(blobInfo.Metadata) {
+			if util.doesBlobRepresentAFolder(blobInfo.Metadata) && !(t.includeDirectoryStubs && t.recursive) {
 				continue
 			}
 

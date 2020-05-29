@@ -411,7 +411,9 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubs(c *chk.C) {
 
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(blobAndDirStubsList))
+
+		// there should be exactly 20 top files, no directory stubs should included
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 20)
 
 		for _, transfer := range mockedRPC.transfers {
 			c.Assert(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
