@@ -373,7 +373,7 @@ func logAuthType(ct common.CredentialType, location common.Location, isSource bo
 	if _, exists := authMessagesAlreadyLogged.Load(message); !exists {
 		authMessagesAlreadyLogged.Store(message, struct{}{}) // dedup because source is auth'd by both enumerator and STE
 		if ste.JobsAdmin != nil {
-			ste.JobsAdmin.LogToJobLog(message)
+			ste.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
 		}
 		glcm.Info(message)
 	}

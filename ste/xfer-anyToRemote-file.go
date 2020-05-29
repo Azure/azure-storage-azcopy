@@ -24,15 +24,14 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"hash"
 	"net/http"
 	"net/url"
 	"runtime"
 	"strings"
 	"sync"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // This sync.Once is present to ensure we output information about a S2S access tier preservation failure to stdout once
@@ -71,6 +70,10 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 
 // anyToRemote_file handles all kinds of sender operations for files - both uploads from local files, and S2S copies
 func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+
+	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
+	jptm.LogChunkStatus(pseudoId, common.EWaitReason.XferStart())
+	defer jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone())
 
 	srcSize := info.SourceSize
 
@@ -148,6 +151,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 	}
 
 	// step 4: Open the local Source File (if any)
+	jptm.LogChunkStatus(pseudoId, common.EWaitReason.OpenLocalSource())
 	var sourceFileFactory func() (common.CloseableReaderAt, error)
 	srcFile := (common.CloseableReaderAt)(nil)
 	if srcInfoProvider.IsLocal() {
@@ -167,10 +171,11 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 	}
 
 	// We always to LMT verification after the transfer. Also do it here, before transfer, when:
-	// 1) Source is local, so get source file's LMT is free.
+	// 1) Source is local, and source's size is > 1 chunk.  (why not always?  Since getting LMT is not "free" at very small sizes)
 	// 2) Source is remote, i.e. S2S copy case. And source's size is larger than one chunk. So verification can possibly save transfer's cost.
-	if copier, isS2SCopier := s.(s2sCopier); srcInfoProvider.IsLocal() ||
-		(isS2SCopier && info.S2SSourceChangeValidation && srcSize > int64(copier.ChunkSize())) {
+	jptm.LogChunkStatus(pseudoId, common.EWaitReason.ModifiedTimeRefresh())
+	if _, isS2SCopier := s.(s2sCopier); numChunks > 1 &&
+		(srcInfoProvider.IsLocal() || isS2SCopier && info.S2SSourceChangeValidation) {
 		lmt, err := srcInfoProvider.GetFreshFileLastModifiedTime()
 		if err != nil {
 			jptm.LogSendError(info.Source, info.Destination, "Couldn't get source's last modified time-"+err.Error(), 0)
@@ -190,6 +195,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 	// (is safe to do it relatively early here, before we run the prologue, because its just a internal lock, within the app)
 	// But must be after all of the early returns that are above here (since
 	// if we succeed here, we need to know the epilogue will definitely run to unlock later)
+	jptm.LogChunkStatus(pseudoId, common.EWaitReason.LockDestination())
 	err = jptm.WaitUntilLockDestination(jptm.Context())
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
@@ -213,6 +219,9 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 	// step 5b: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
 	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupSendToRemote(jptm, s, srcInfoProvider) })
+
+	// stop tracking pseudo id (since real chunk id's will be tracked from here on)
+	jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone())
 
 	// Step 6: Go through the file and schedule chunk messages to send each chunk
 	scheduleSendChunks(jptm, info.Source, srcFile, srcSize, s, sourceFileFactory, srcInfoProvider)
@@ -389,9 +398,9 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 			resp.Response().StatusCode == http.StatusForbidden {
 			// The destination is write-only. Cannot verify length
 			shouldCheckLength = false
-			checkLengthFailureOnReadOnlyDst.Do( func() {
+			checkLengthFailureOnReadOnlyDst.Do(func() {
 				var glcm = common.GetLifecycleMgr()
-				msg :=fmt.Sprintf("Could not read destination length. If the destination is write-only, use --check-length=false on the command line.")
+				msg := fmt.Sprintf("Could not read destination length. If the destination is write-only, use --check-length=false on the command line.")
 				glcm.Info(msg)
 				if jptm.ShouldLog(pipeline.LogError) {
 					jptm.Log(pipeline.LogError, msg)

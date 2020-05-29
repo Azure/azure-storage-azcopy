@@ -96,8 +96,11 @@ var JobsAdmin interface {
 	// returns number of bytes successfully transferred in transfers that are currently in progress
 	SuccessfulBytesInActiveFiles() uint64
 
-	MessagesForJobLog() <-chan string
-	LogToJobLog(msg string)
+	MessagesForJobLog() <-chan struct {
+		string
+		pipeline.LogLevel
+	}
+	LogToJobLog(msg string, level pipeline.LogLevel)
 
 	//DeleteJob(jobID common.JobID)
 	common.ILoggerCloser
@@ -184,7 +187,10 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 			scalebackRequestCh:  make(chan struct{}),
 			requestSlowTuneCh:   make(chan struct{}),
 		},
-		workaroundJobLoggingChannel: make(chan string, 1000), // workaround to support logging from JobsAdmin
+		workaroundJobLoggingChannel: make(chan struct {
+			string
+			pipeline.LogLevel
+		}, 1000), // workaround to support logging from JobsAdmin
 	}
 	// create new context with the defaultService api version set as value to serviceAPIVersionOverride in the app context.
 	ja.appCtx = context.WithValue(ja.appCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
@@ -313,7 +319,7 @@ func (ja *jobsAdmin) recordTuningCompleted(showOutput bool) {
 			common.GetLifecycleMgr().Info("*** You do not need to wait for whole job to finish.                                                  ***")
 		}
 		common.GetLifecycleMgr().Info("")
-		ja.LogToJobLog(msg)
+		ja.LogToJobLog(msg, pipeline.LogInfo)
 	}
 }
 
@@ -329,7 +335,7 @@ func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 		default:
 			msg := fmt.Sprintf("Trying %d concurrent connections (%s)", targetConcurrency, reason)
 			common.GetLifecycleMgr().Info(msg)
-			ja.LogToJobLog(msg)
+			ja.LogToJobLog(msg, pipeline.LogInfo)
 		}
 	}
 
@@ -498,11 +504,14 @@ type jobsAdmin struct {
 	slicePool                   common.ByteSlicePooler
 	cacheLimiter                common.CacheLimiter
 	fileCountLimiter            common.CacheLimiter
-	workaroundJobLoggingChannel chan string
-	concurrencyTuner            ConcurrencyTuner
-	commandLineMbpsCap          float64
-	provideBenchmarkResults     bool
-	cpuMonitor                  common.CPUMonitor
+	workaroundJobLoggingChannel chan struct {
+		string
+		pipeline.LogLevel
+	}
+	concurrencyTuner        ConcurrencyTuner
+	commandLineMbpsCap      float64
+	provideBenchmarkResults bool
+	cpuMonitor              common.CPUMonitor
 }
 
 type CoordinatorChannels struct {
@@ -737,16 +746,22 @@ func (ja *jobsAdmin) slicePoolPruneLoop() {
 // TODO: review or replace (or confirm to leave as is?)  Originally, JobAdmin couldn't use invidual job logs because there could
 // be several concurrent jobs running. That's not the case any more, so this is safe now, but it does't quite fit with the
 // architecture around it.
-func (ja *jobsAdmin) LogToJobLog(msg string) {
+func (ja *jobsAdmin) LogToJobLog(msg string, level pipeline.LogLevel) {
 	select {
-	case ja.workaroundJobLoggingChannel <- msg:
+	case ja.workaroundJobLoggingChannel <- struct {
+		string
+		pipeline.LogLevel
+	}{msg, level}:
 		// done, we have passed it off to get logged
 	default:
 		// channel buffer is full, have to drop this message
 	}
 }
 
-func (ja *jobsAdmin) MessagesForJobLog() <-chan string {
+func (ja *jobsAdmin) MessagesForJobLog() <-chan struct {
+	string
+	pipeline.LogLevel
+} {
 	return ja.workaroundJobLoggingChannel
 }
 

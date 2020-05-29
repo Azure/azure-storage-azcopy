@@ -76,7 +76,7 @@ jobs:
           # -timeout 25m as our tests typically run between 10-15m and I'd rather have some headroom.
           # "-check.v" (must be after package list) outputs timings
           set -e
-          go test -timeout 25m -race -short -cover ./cmd ./common ./ste ./azbfs "-check.v" 
+          go test -timeout 25m -race -short -cover ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v"
           GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
         name: 'Run_unit_tests'
         env:
