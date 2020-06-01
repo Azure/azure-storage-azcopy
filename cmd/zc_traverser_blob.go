@@ -90,6 +90,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 
 	// trim away the trailing slash before we check whether it's a single blob
 	// so that we can detect the directory stub in case there is one
+	hadTrailingSlash := strings.HasSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)
 	blobUrlParts.BlobName = strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)
 	*t.rawURL = blobUrlParts.URL()
 
@@ -105,7 +106,11 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		}
 	}
 
-	if isBlob || (t.includeDirectoryStubs && isDirStub && t.recursive) {
+	// schedule the blob in two cases:
+	// 	1. either we are targeting a single blob and the URL wasn't explicitly pointed to a virtual dir
+	//	2. either we are scanning recursively with includeDirectoryStubs set to true,
+	//	   then we add the stub blob that represents the directory
+	if (isBlob && !hadTrailingSlash) || (t.includeDirectoryStubs && isDirStub && t.recursive) {
 		// sanity checking so highlighting doesn't highlight things we're not worried about.
 		if blobProperties == nil {
 			panic("isBlob should never be set if getting properties is an error")
