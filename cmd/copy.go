@@ -74,6 +74,7 @@ type rawCopyCmdArgs struct {
 	excludePath           string
 	includeFileAttributes string
 	excludeFileAttributes string
+	includeAfter          string
 	legacyInclude         string // used only for warnings
 	legacyExclude         string // used only for warnings
 
@@ -420,6 +421,14 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 
 	if raw.listOfFilesToCopy != "" || raw.includePath != "" {
 		cooked.listOfFilesChannel = listChan
+	}
+
+	if raw.includeAfter != "" {
+		parsedIncludeAfter, err := includeAfterDateFilter{}.ParseISO8601(raw.includeAfter)
+		if err != nil {
+			return cooked, err
+		}
+		cooked.includeAfter = &parsedIncludeAfter
 	}
 
 	cooked.metadata = raw.metadata
@@ -770,6 +779,7 @@ type cookedCopyCmdArgs struct {
 	excludePathPatterns   []string
 	includeFileAttributes []string
 	excludeFileAttributes []string
+	includeAfter          *time.Time
 
 	// filters from flags
 	listOfFilesChannel chan string // Channels are nullable.
@@ -1464,6 +1474,7 @@ func init() {
 
 	// filters change which files get transferred
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "Follow symbolic links when uploading from local file system.")
+	cpCmd.PersistentFlags().StringVar(&raw.includeAfter, common.IncludeAfterFlagName, "", "Include only those files modified on or after the given date/time. The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. As at AzCopy 10.5, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
 	cpCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only these files when copying. "+
 		"This option supports wildcard characters (*). Separate files by using a ';'.")
 	cpCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "Include only these paths when copying. "+

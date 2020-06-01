@@ -100,7 +100,7 @@ func (t *fileAccountTraverser) traverse(preprocessor objectMorpher, processor ob
 		err = shareTraverser.traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
-			LogStdoutAndJobLog(fmt.Sprintf("failed to list files in share %s: %s", v, err))
+			WarnStdoutAndJobLog(fmt.Sprintf("failed to list files in share %s: %s", v, err))
 			continue
 		}
 	}

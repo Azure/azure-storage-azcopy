@@ -22,6 +22,8 @@ package cmd
 
 import (
 	chk "gopkg.in/check.v1"
+	"strings"
+	"time"
 )
 
 type genericFilterSuite struct{}
@@ -71,5 +73,56 @@ func (s *genericFilterSuite) TestExcludeFilter(c *chk.C) {
 		err := processIfPassedFilters(excludeFilterList, storedObject{name: file}, dummyProcessor.process)
 		c.Assert(err, chk.IsNil)
 		c.Assert(len(dummyProcessor.record), chk.Equals, 0)
+	}
+}
+
+func (s *genericFilterSuite) TestDateParsingForIncludeAfter(c *chk.C) {
+	examples := []struct {
+		input                 string // ISO 8601
+		expectedValue         string // RFC822Z (with seconds and X for placeholder for local timezone offset)
+		expectedErrorContents string // partial error string
+	}{
+		// success cases
+		{"2019-01-31T18:30:15Z", "31 Jan 2019 18:30:15 -0000", ""},         // UTC
+		{"2019-01-31T18:30:15.333Z", "31 Jan 2019 18:30:15.333 -0000", ""}, // UTC with fractional seconds
+		{"2019-01-31T18:30:15+11:30", "31 Jan 2019 18:30:15 +1130", ""},    // explicit TZ offset (we can't NOT support this, due to the way Go parses the Z portion of the string)
+		{"2019-01-31T18:30:15", "31 Jan 2019 18:30:15 X", ""},              // local
+		{"2019-01-31T18:30:15.333", "31 Jan 2019 18:30:15.333 X", ""},      // local with fractional seconds
+		{"2019-01-31T18:30", "31 Jan 2019 18:30:00 X", ""},                 // local no seconds
+		{"2019-01-31T18", "31 Jan 2019 18:00:00 X", ""},                    // local hour only
+		{"2019-01-31", "31 Jan 2019 00:00:00 X", ""},                       // local midnight
+
+		// failure cases (these all get Go's cryptic datetime parsing error messages, unfortunately)
+		{"2019-03-31 18:30:15", "", "cannot parse \" 18:30:15\" as \"T\""},       // space instead of T
+		{"2019-03-31T18:30:15UTC", "", "cannot parse \"UTC\" as \"Z07:00\""},     // "UTC" instead of Z
+		{"2019/03/31T18:30:15", "", "cannot parse \"/03/31T18:30:15\" as \"-\""}, //wrong date separator
+		{"2019-03-31T18:1:15", "", "cannot parse \"1:15\" as \"04\""},            // single-digit minute
+	}
+
+	const expectedFormatWithTz = "02 Jan 2006 15:04:05 -0700"
+	const expectedFormatShort = "02 Jan 2006 15:04:05"
+
+	loc, _ := time.LoadLocation("Local")
+
+	for _, x := range examples {
+		t, err := includeAfterDateFilter{}.ParseISO8601(x.input)
+		if x.expectedErrorContents == "" {
+			c.Assert(err, chk.IsNil, chk.Commentf(x.input))
+			expString := x.expectedValue
+			expectedTime, expErr := time.Parse(expectedFormatWithTz, expString)
+			if strings.Contains(expString, " X") {
+				// no TZ in expected string
+				expString = strings.Replace(x.expectedValue, " X", "", -1)
+				expectedTime, expErr = time.ParseInLocation(expectedFormatShort, expString, loc)
+			}
+			c.Assert(expErr, chk.IsNil)
+			foo := expectedTime.String()
+			if foo == "" {
+			}
+			c.Check(t.Equal(expectedTime), chk.Equals, true, chk.Commentf(x.input))
+		} else {
+			c.Assert(err, chk.Not(chk.IsNil))
+			c.Assert(strings.Contains(err.Error(), x.expectedErrorContents), chk.Equals, true, chk.Commentf(x.input))
+		}
 	}
 }

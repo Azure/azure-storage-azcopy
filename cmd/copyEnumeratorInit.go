@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -128,7 +129,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				logDstContainerCreateFailureOnce.Do(func() {
 					glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 				})
-				ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err))
+				ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err), pipeline.LogWarning)
 				seenFailedContainers[dstContainerName] = true
 			}
 		} else if cca.fromTo.From().IsRemote() { // if the destination has implicit container names
@@ -160,7 +161,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						logDstContainerCreateFailureOnce.Do(func() {
 							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
-						ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", bucketName, err))
+						ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", bucketName, err), pipeline.LogWarning)
 						seenFailedContainers[bucketName] = true
 					}
 				}
@@ -186,7 +187,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						logDstContainerCreateFailureOnce.Do(func() {
 							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
-						ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err))
+						ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err), pipeline.LogWarning)
 						seenFailedContainers[dstContainerName] = true
 					}
 				}
@@ -201,7 +202,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters, cca.preserveSMBInfo, cca.preserveSMBPermissions.IsTruthy())
 	glcm.Info(message)
 	if ste.JobsAdmin != nil {
-		ste.JobsAdmin.LogToJobLog(message)
+		ste.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
 	}
 
 	processor := func(object storedObject) error {
@@ -215,7 +216,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 				if err != nil {
 					if _, ok := seenFailedContainers[object.containerName]; !ok {
-						LogStdoutAndJobLog(fmt.Sprintf("failed to add transfers from container %s as it has an invalid name. Please manually transfer from this container to one with a valid name.", object.containerName))
+						WarnStdoutAndJobLog(fmt.Sprintf("failed to add transfers from container %s as it has an invalid name. Please manually transfer from this container to one with a valid name.", object.containerName))
 						seenFailedContainers[object.containerName] = true
 					}
 					return nil
@@ -285,6 +286,10 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 	filters := make([]objectFilter, 0) // same as []objectFilter{} under the hood
 
+	if cca.includeAfter != nil {
+		filters = append(filters, &includeAfterDateFilter{threshold: *cca.includeAfter})
+	}
+
 	if len(cca.includePatterns) != 0 {
 		filters = append(filters, &includeFilter{patterns: cca.includePatterns}) // TODO should this call buildIncludeFilters?
 	}
@@ -325,7 +330,7 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 	// finally, log any search prefix computed from these
 	if ste.JobsAdmin != nil {
 		if prefixFilter := filterSet(filters).GetEnumerationPreFilter(cca.recursive); prefixFilter != "" {
-			ste.JobsAdmin.LogToJobLog("Search prefix, which may be used to optimize scanning, is: " + prefixFilter) // "May be used" because we don't know here which enumerators will use it
+			ste.JobsAdmin.LogToJobLog("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, pipeline.LogInfo) // "May be used" because we don't know here which enumerators will use it
 		}
 	}
 

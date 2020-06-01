@@ -159,7 +159,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 
 	// Define how to enumerate its contents
 	// This func must be threadsafe/goroutine safe
-	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry)) error {
+	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
 		currentDirURL := dir.(azfile.DirectoryURL)
 		for marker := (azfile.Marker{}); marker.NotDone(); {
 			lResp, err := currentDirURL.ListFilesAndDirectoriesSegment(t.ctx, marker, azfile.ListFilesAndDirectoriesOptions{})
@@ -167,10 +167,10 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
 			for _, fileInfo := range lResp.FileItems {
-				enqueueOutput(newAzFileFileEntity(currentDirURL, fileInfo))
+				enqueueOutput(newAzFileFileEntity(currentDirURL, fileInfo), nil)
 			}
 			for _, dirInfo := range lResp.DirectoryItems {
-				enqueueOutput(newAzFileChildFolderEntity(currentDirURL, dirInfo.Name))
+				enqueueOutput(newAzFileChildFolderEntity(currentDirURL, dirInfo.Name), nil)
 				if t.recursive {
 					// If recursive is turned on, add sub directories to be processed
 					enqueueDir(currentDirURL.NewDirectoryURL(dirInfo.Name))

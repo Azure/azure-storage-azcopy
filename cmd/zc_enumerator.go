@@ -639,10 +639,10 @@ func newCopyEnumerator(traverser resourceTraverser, filters []objectFilter, obje
 	}
 }
 
-func LogStdoutAndJobLog(toLog string) {
+func WarnStdoutAndJobLog(toLog string) {
 	glcm.Info(toLog)
 	if ste.JobsAdmin != nil {
-		ste.JobsAdmin.LogToJobLog(toLog)
+		ste.JobsAdmin.LogToJobLog(toLog, pipeline.LogWarning)
 	}
 }
 
