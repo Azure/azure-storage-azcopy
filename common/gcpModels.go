@@ -2,6 +2,7 @@ package common
 
 import (
 	"cloud.google.com/go/storage"
+	"strings"
 )
 
 type GCPObjectInfoExtension struct {
@@ -33,7 +34,17 @@ func (gie *GCPObjectInfoExtension) ContentMD5() []byte {
 	return b
 }
 
+const gcpMetadataPrefix = "x-goog-meta-"
+const gcpMetadataPrefixLen = len(gcpMetadataPrefix)
+
 func (gie *GCPObjectInfoExtension) NewCommonMetadata() Metadata {
-	md := gie.ObjectInfo.Metadata
+	md := Metadata{}
+	for k, v := range gie.ObjectInfo.Metadata {
+		if len(k) > gcpMetadataPrefixLen {
+			if prefix := k[0:gcpMetadataPrefixLen]; strings.EqualFold(prefix, gcpMetadataPrefix) {
+				md[k[gcpMetadataPrefixLen:]] = v
+			}
+		}
+	}
 	return md
 }

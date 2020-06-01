@@ -24,6 +24,7 @@ require (
 	github.com/spf13/pflag v1.0.2 // indirect
 	github.com/stretchr/objx v0.1.1 // indirect
 	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
+	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a
 	golang.org/x/sys v0.0.0-20200511232937-7e40ca221e25
 	google.golang.org/api v0.24.0

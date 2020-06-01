@@ -21,6 +21,7 @@
 package common
 
 import (
+	"cloud.google.com/go/storage"
 	"context"
 	"errors"
 	"fmt"
@@ -29,13 +30,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/minio/minio-go"
 	"github.com/minio/minio-go/pkg/credentials"
-	"cloud.google.com/go/storage"
-
-	"github.com/Azure/azure-storage-azcopy/azbfs"
 )
 
 // ==============================================================================================
@@ -216,6 +215,22 @@ func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options Cr
 	panic("work around the compiling, logic wouldn't reach here")
 }
 
+func CreateGCPCredential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) error {
+	glcm := GetLifecycleMgr()
+	switch credInfo.CredentialType {
+	case ECredentialType.GoogleAppCredentials():
+		appCredentials := glcm.GetEnvironmentVariable(EEnvironmentVariable.GoogleAppCredentials())
+
+		if appCredentials == "" {
+			return errors.New(fmt.Sprintf("GOOGLE_APPLICATION_CREDENTIALS environment variable must be set"))
+		}
+		return nil
+	default:
+		options.panicError(fmt.Errorf("Invalid state, credential type %v is not supported", credInfo.CredentialType))
+	}
+	panic("work around for compiling, logic wouldn't reach here")
+}
+
 func refreshBlobFSToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCredential azbfs.TokenCredential, options CredentialOpOptions) time.Duration {
 	newToken, err := tokenInfo.Refresh(ctx)
 	if err != nil {
@@ -248,11 +263,6 @@ func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option Credent
 	}
 
 	return minio.NewWithCredentials(credInfo.S3CredentialInfo.Endpoint, credential, true, credInfo.S3CredentialInfo.Region)
-}
-
-func CreateGCPClient(ctx context.Context) (*storage.Client, error) {
-	client, err := storage.NewClient(ctx)
-	return client, err
 }
 
 type S3ClientFactory struct {
@@ -289,5 +299,46 @@ func (f *S3ClientFactory) GetS3Client(ctx context.Context, credInfo CredentialIn
 		return newS3Client, nil
 	} else {
 		return s3Client, nil
+	}
+}
+
+// ====================================================================
+// GCP credential factory related methods
+// ====================================================================
+func CreateGCPClient(ctx context.Context) (*storage.Client, error) {
+	client, err := storage.NewClient(ctx)
+	return client, err
+}
+
+type GCPClientFactory struct {
+	gcpClients map[CredentialInfo]*storage.Client
+	lock       sync.RWMutex
+}
+
+func NewGCPClientFactory() GCPClientFactory {
+	return GCPClientFactory{
+		gcpClients: make(map[CredentialInfo]*storage.Client),
+	}
+}
+
+func (f *GCPClientFactory) GetGCPClient(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions) (*storage.Client, error) {
+	f.lock.RLock()
+	gcpClient, ok := f.gcpClients[credInfo]
+	f.lock.RUnlock()
+
+	if ok {
+		return gcpClient, nil
+	}
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	if gcpClient, ok := f.gcpClients[credInfo]; !ok {
+		newGCPClient, err := CreateGCPClient(ctx)
+		if err != nil {
+			return nil, err
+		}
+		f.gcpClients[credInfo] = newGCPClient
+		return newGCPClient, nil
+	} else {
+		return gcpClient, nil
 	}
 }
