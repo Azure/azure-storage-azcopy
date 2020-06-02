@@ -139,6 +139,9 @@ func (s *genericFilterSuite) TestDateParsingForIncludeAfter(c *chk.C) {
 func (s *genericFilterSuite) TestDateParsingForIncludeAfter_IsSafeAtDaylightSavingsTransition(c *chk.C) {
 
 	dateString, utcEarlyVersion, utcLateVersion, err := s.findAmbiguousTime()
+	if err == noAmbiguousHourError {
+		c.Skip(fmt.Sprintf("Cannot run daylight savings test, because local timezone does not appear to have daylight savings time. Local time is %v", time.Now()))
+	}
 	c.Assert(err, chk.IsNil)
 
 	fmt.Println("Testing end of daylight saving at " + dateString + " local time")
@@ -159,6 +162,8 @@ func (s *genericFilterSuite) TestDateParsingForIncludeAfter_IsSafeAtDaylightSavi
 
 }
 
+var noAmbiguousHourError = errors.New("could not find hour for end of daylight saving in current local timezone (this might happen if you run the tests in a locale where there is no daylight saving")
+
 // Go's Location object is opaque to us, so we can't directly use it to see when daylight savings ends.
 // So we'll just test all the hours in the year, and see!
 func (_ *genericFilterSuite) findAmbiguousTime() (string, time.Time, time.Time, error) {
@@ -174,5 +179,5 @@ func (_ *genericFilterSuite) findAmbiguousTime() (string, time.Time, time.Time, 
 		}
 	}
 
-	return "", time.Time{}, time.Time{}, errors.New("could not find hour for end of daylight saving in current local timezone (this might happen if you run the tests in a locale where there is no daylight saving")
+	return "", time.Time{}, time.Time{}, noAmbiguousHourError
 }
