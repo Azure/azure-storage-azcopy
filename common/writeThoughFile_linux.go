@@ -22,6 +22,7 @@ package common
 
 import (
 	"os"
+	"syscall"
 )
 
 func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int64, writeThrough bool, t FolderCreationTracker, forceIfReadOnly bool) (*os.File, error) {
@@ -42,9 +43,22 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 		return nil, err
 	}
 
-	err = f.Truncate(fileSize)
+	if fileSize == 0 {
+		return f, err
+	}
 
-	return f, err
+	err = syscall.Fallocate(int(f.Fd()), 0, 0, fileSize)
+	if err != nil {
+		// To solve the case that Fallocate cannot work well with cifs/smb3.
+		if err == syscall.ENOTSUP {
+			if truncateError := f.Truncate(fileSize); truncateError != nil {
+				return nil, truncateError
+			}
+		} else {
+			return nil, err
+		}
+	}
+	return f, nil
 }
 
 func SetBackupMode(enable bool, fromTo FromTo) error {
