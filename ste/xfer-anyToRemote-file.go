@@ -183,7 +183,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 			jptm.ReportTransferDone()
 			return
 		}
-		if lmt.UTC() != jptm.LastModifiedTime().UTC() {
+		if !lmt.Equal(jptm.LastModifiedTime()) {
 			jptm.LogSendError(info.Source, info.Destination, "File modified since transfer scheduled", 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
@@ -379,7 +379,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 			if err != nil {
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", err)
 			}
-			if lmt.UTC() != jptm.LastModifiedTime().UTC() {
+			if !lmt.Equal(jptm.LastModifiedTime()) {
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("source modified during transfer"))
 			}
 		}
