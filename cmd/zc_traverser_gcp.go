@@ -67,7 +67,7 @@ func (t *gcpTraverser) traverse(preprocessor objectMorpher, processor objectProc
 		}
 	}
 
-	if !strings.HasSuffix(t.gcpURLParts.ObjectKey, "/") && t.gcpURLParts.ObjectKey == "" {
+	if !strings.HasSuffix(t.gcpURLParts.ObjectKey, "/") && t.gcpURLParts.ObjectKey != "" {
 		t.gcpURLParts.ObjectKey += "/"
 	}
 	searchPrefix := t.gcpURLParts.ObjectKey
@@ -79,9 +79,12 @@ func (t *gcpTraverser) traverse(preprocessor objectMorpher, processor objectProc
 	for {
 		attrs, err := it.Next()
 		if err == iterator.Done {
-			return fmt.Errorf("Cannot list objects due to error %v", err)
+			return nil
 		}
-		if err != nil {
+		if err == nil {
+			if strings.HasSuffix(attrs.Name, "/") {
+				continue
+			}
 			objectPath := strings.Split(attrs.Name, "/")
 			objectName := objectPath[len(objectPath)-1]
 
