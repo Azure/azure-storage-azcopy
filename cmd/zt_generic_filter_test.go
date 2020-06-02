@@ -21,6 +21,8 @@
 package cmd
 
 import (
+	"errors"
+	"fmt"
 	chk "gopkg.in/check.v1"
 	"strings"
 	"time"
@@ -105,9 +107,10 @@ func (s *genericFilterSuite) TestDateParsingForIncludeAfter(c *chk.C) {
 	loc, _ := time.LoadLocation("Local")
 
 	for _, x := range examples {
-		t, err := includeAfterDateFilter{}.ParseISO8601(x.input)
+		t, err := includeAfterDateFilter{}.ParseISO8601(x.input, true)
 		if x.expectedErrorContents == "" {
 			c.Assert(err, chk.IsNil, chk.Commentf(x.input))
+			//fmt.Printf("%v -> %v\n", x.input, t)
 			expString := x.expectedValue
 			expectedTime, expErr := time.Parse(expectedFormatWithTz, expString)
 			if strings.Contains(expString, " X") {
@@ -125,4 +128,51 @@ func (s *genericFilterSuite) TestDateParsingForIncludeAfter(c *chk.C) {
 			c.Assert(strings.Contains(err.Error(), x.expectedErrorContents), chk.Equals, true, chk.Commentf(x.input))
 		}
 	}
+}
+
+// When daylight savings ends, in the fall, there's one ambiguous hour (in US timezones, for example, the repeated hour is 1 to 2 am
+// on the first Sunday in November).  For the purposes of include-after, we should use the FIRST of the two possible times.
+// (If we use the last, we might miss file changes that happened in the hour before it. This could result in regular running
+// with include-after failing to pick up changes, if the include-after date fails within the ambiguous hour and files have been
+// changed in that hour.  Using the earliest possible interpretation of the date avoids that problem).
+// There's no similar ambiguity in spring, because there an hour is just skipped.
+func (s *genericFilterSuite) TestDateParsingForIncludeAfter_IsSafeAtDaylightSavingsTransition(c *chk.C) {
+
+	dateString, utcEarlyVersion, utcLateVersion, err := s.findAmbiguousTime()
+	c.Assert(err, chk.IsNil)
+
+	fmt.Println("Testing end of daylight saving at " + dateString + " local time")
+
+	// ask for the earliest of the two ambiguous times
+	parsed, err := includeAfterDateFilter{}.ParseISO8601(dateString, true) // we use chooseEarliest=true for includeAfter
+	c.Assert(err, chk.IsNil)
+	fmt.Printf("For chooseEarliest = true, the times are parsed %v, utcEarly %v, utcLate %v \n", parsed, utcEarlyVersion, utcLateVersion)
+	c.Assert(parsed.Equal(utcEarlyVersion), chk.Equals, true)
+	c.Assert(parsed.Equal(utcLateVersion), chk.Equals, false)
+
+	// ask for the latest of the two ambiguous times
+	parsed, err = includeAfterDateFilter{}.ParseISO8601(dateString, false) // we test the false case in this test too, just for completeness
+	c.Assert(err, chk.IsNil)
+	fmt.Printf("For chooseEarliest = false, the times are parsed %v, utcEarly %v, utcLate %v \n", parsed, utcEarlyVersion, utcLateVersion)
+	c.Assert(parsed.UTC().Equal(utcEarlyVersion), chk.Equals, false)
+	c.Assert(parsed.UTC().Equal(utcLateVersion), chk.Equals, true)
+
+}
+
+// Go's Location object is opaque to us, so we can't directly use it to see when daylight savings ends.
+// So we'll just test all the hours in the year, and see!
+func (_ *genericFilterSuite) findAmbiguousTime() (string, time.Time, time.Time, error) {
+	const localTimeFormat = "2006-01-02T15:04:05"
+	start := time.Now().UTC()
+	end := start.AddDate(1, 0, 0)
+	for u := start; u.Before(end); u = u.Add(time.Hour) {
+		localString := u.Local().Format(localTimeFormat)
+		hourLaterLocalString := u.Add(time.Hour).Local().Format(localTimeFormat)
+		if localString == hourLaterLocalString {
+			// return the string, and the two UTC times that map to that local time (with their fractional seconds trucated away)
+			return localString, u.Truncate(time.Second), u.Add(time.Hour).Truncate(time.Second), nil
+		}
+	}
+
+	return "", time.Time{}, time.Time{}, errors.New("could not find hour for end of daylight saving in current local timezone (this might happen if you run the tests in a locale where there is no daylight saving")
 }

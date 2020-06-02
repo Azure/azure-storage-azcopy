@@ -424,7 +424,9 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	}
 
 	if raw.includeAfter != "" {
-		parsedIncludeAfter, err := includeAfterDateFilter{}.ParseISO8601(raw.includeAfter)
+		// must set chooseEarliest = true, so that if there's an ambiguous local date, the earliest will be returned
+		// (since that's safest for includeAfter.  Better to choose the earlier time and do more work, than the later one and fail to pick up a changed file
+		parsedIncludeAfter, err := includeAfterDateFilter{}.ParseISO8601(raw.includeAfter, true)
 		if err != nil {
 			return cooked, err
 		}
