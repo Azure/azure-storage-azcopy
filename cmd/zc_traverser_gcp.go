@@ -24,12 +24,14 @@ type gcpTraverser struct {
 }
 
 func (t *gcpTraverser) isDirectory(isSource bool) bool {
+	//Identify whether directory or not syntactically
 	isDirDirect := !t.gcpURLParts.IsObjectSyntactically() && (t.gcpURLParts.IsDirectorySyntactically() || t.gcpURLParts.IsBucketSyntactically())
 	if !isSource {
 		return isDirDirect
 	}
 	bkt := t.gcpClient.Bucket(t.gcpURLParts.BucketName)
 	obj := bkt.Object(t.gcpURLParts.ObjectKey)
+	//Directories do not have attributes and hence throw error
 	_, err := obj.Attrs(t.ctx)
 	if err == storage.ErrObjectNotExist {
 		return true
@@ -38,7 +40,7 @@ func (t *gcpTraverser) isDirectory(isSource bool) bool {
 }
 
 func (t *gcpTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) error {
-
+	//Syntactically ensure whether single object or not
 	if t.gcpURLParts.IsObjectSyntactically() && !t.gcpURLParts.IsDirectorySyntactically() && !t.gcpURLParts.IsBucketSyntactically() {
 		objectPath := strings.Split(t.gcpURLParts.ObjectKey, "/")
 		objectName := objectPath[len(objectPath)-1]
@@ -67,6 +69,7 @@ func (t *gcpTraverser) traverse(preprocessor objectMorpher, processor objectProc
 		}
 	}
 
+	//Append trailing slash if missing
 	if !strings.HasSuffix(t.gcpURLParts.ObjectKey, "/") && t.gcpURLParts.ObjectKey != "" {
 		t.gcpURLParts.ObjectKey += "/"
 	}
@@ -76,13 +79,15 @@ func (t *gcpTraverser) traverse(preprocessor objectMorpher, processor objectProc
 	query := &storage.Query{Prefix: searchPrefix}
 	it := bkt.Objects(t.ctx, query)
 
+	//If code reaches here then the URL points to a bucket or a virtual directory
 	for {
 		attrs, err := it.Next()
 		if err == iterator.Done {
 			return nil
 		}
 		if err == nil {
-			if strings.HasSuffix(attrs.Name, "/") {
+			//Virtual directories alone have "/" as suffix and size as 0
+			if strings.HasSuffix(attrs.Name, "/") && attrs.Size == 0 {
 				continue
 			}
 			objectPath := strings.Split(attrs.Name, "/")
