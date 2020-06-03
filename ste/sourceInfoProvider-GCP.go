@@ -22,6 +22,7 @@ type gcpSourceInfoProvider struct {
 }
 
 var gcpClientFactory = common.NewGCPClientFactory()
+var jsonKey []byte
 
 func newGCPSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
 	var err error
@@ -54,11 +55,7 @@ func newGCPSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, er
 }
 
 func (p *gcpSourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
-	glcm := common.GetLifecycleMgr()
-	jsonKey, err := ioutil.ReadFile(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleAppCredentials()))
-	if err != nil {
-		return nil, fmt.Errorf("Cannot read JSON key file. Please verify you have correctly set GOOGLE_APPLICATION_CREDENTIALS environment variable")
-	}
+
 	conf, err := google.JWTConfigFromJSON(jsonKey)
 	if err != nil {
 		return nil, fmt.Errorf("Could not get config from json key. Error: %v", err)
@@ -161,5 +158,14 @@ func (p *gcpSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error
 }
 
 func (p *gcpSourceInfoProvider) EntityType() common.EntityType {
-	return common.EEntityType.File()
+	return common.EEntityType.File() // All folders are virtual in GCP and only files exist.
+}
+
+func init() {
+	var err error
+	glcm := common.GetLifecycleMgr()
+	jsonKey, err = ioutil.ReadFile(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleAppCredentials()))
+	if err != nil {
+		panic(fmt.Errorf("Cannot read JSON key file. Please verify you have correctly set GOOGLE_APPLICATION_CREDENTIALS environment variable"))
+	}
 }

@@ -279,7 +279,10 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	// does not exceeds 50000 (max number of block per blob)
 	if blockSize == 0 {
 		blockSize = uint32(common.DefaultBlockBlobBlockSize)
-		if int64(blockSize) > sourceSize {
+		//Workaround to support transfer of small files from GCP.
+		//This workaround is in place because GCP sends back a Response code 200 instead of Response code 209
+		//when file size is smaller than the blockSize.
+		if int64(blockSize) > sourceSize && sourceSize != 0 && plan.FromTo == common.EFromTo.GCPBlob() {
 			if sourceSize < 0 {
 				panic(fmt.Errorf("GCP sourceSize cannot be negative\n"))
 			} else {
