@@ -87,7 +87,7 @@ func (t *gcpTraverser) traverse(preprocessor objectMorpher, processor objectProc
 		}
 		if err == nil {
 			//Virtual directories alone have "/" as suffix and size as 0
-			if strings.HasSuffix(attrs.Name, "/") && attrs.Size == 0 {
+			if strings.HasSuffix(attrs.Name, "/") {
 				continue
 			}
 			objectPath := strings.Split(attrs.Name, "/")
