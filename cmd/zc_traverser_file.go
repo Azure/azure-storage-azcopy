@@ -101,6 +101,8 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		relativePath := strings.TrimPrefix(fileURLParts.DirectoryOrFilePath, targetURLParts.DirectoryOrFilePath)
 		relativePath = strings.TrimPrefix(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
+		size := f.contentLength
+
 		// We need to omit some properties if we don't get properties
 		lmt := time.Time{}
 		var contentProps contentPropsProvider = noContentProps
@@ -116,6 +118,12 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			lmt = fullProperties.LastModified()
 			if f.entityType == common.EEntityType.File() {
 				contentProps = fullProperties.(*azfile.FileGetPropertiesResponse) // only files have content props. Folders don't.
+				// Get an up-to-date size, because it's documented that the size returned by the listing might not be up-to-date,
+				// if an SMB client has modified by not yet closed the file. (See https://docs.microsoft.com/en-us/rest/api/storageservices/list-directories-and-files)
+				// Doing this here makes sure that our size is just as up-to-date as our LMT.
+				// (If s2s-detect-source-changed is false, then this code won't run.  If if its false, we don't check for modifications anyway,
+				// so it's fair to assume that the size will stay equal to that returned at by the listing operation)
+				size = fullProperties.(*azfile.FileGetPropertiesResponse).ContentLength()
 			}
 			meta = common.FromAzFileMetadataToCommonMetadata(fullProperties.NewMetadata())
 		}
@@ -125,7 +133,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			relativePath,
 			f.entityType,
 			lmt,
-			f.contentLength,
+			size,
 			contentProps,
 			noBlobProps,
 			meta,
