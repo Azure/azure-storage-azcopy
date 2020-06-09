@@ -345,8 +345,24 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 				"s3 authentication to %s is not currently suported in AzCopy", host)
 		}
 	case common.ECredentialType.GoogleAppCredentials():
-		if resourceType != common.ELocation.GCP(){
+		if resourceType != common.ELocation.GCP() {
 			return errors.New(fmt.Sprintf("Google Application Credentials to %s is not valid", resourceType.String()))
+		}
+
+		ok := false
+		host := "<unparseable url>"
+
+		u, err := url.Parse(resource)
+		if err == nil {
+			host = u.Host
+			parts, err := common.NewGCPURLParts(*u)
+			if err == nil {
+				_, err := url.Parse("https://" + parts.Endpoint)
+				ok = err == nil
+			}
+		}
+		if !ok {
+			return fmt.Errorf("GCP authentication to %s is not currently supported", host)
 		}
 	default:
 		panic("unknown credential type")
@@ -391,7 +407,7 @@ func getCredentialTypeForLocation(ctx context.Context, location common.Location,
 func doGetCredentialTypeForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool, getForcedCredType func() common.CredentialType) (credType common.CredentialType, isPublic bool, err error) {
 	if resourceSAS != "" {
 		credType = common.ECredentialType.Anonymous()
-	} else if credType = getForcedCredType(); credType == common.ECredentialType.Unknown() || location == common.ELocation.S3() {
+	} else if credType = getForcedCredType(); credType == common.ECredentialType.Unknown() || location == common.ELocation.S3() || location == common.ELocation.GCP() {
 		switch location {
 		case common.ELocation.Local(), common.ELocation.Benchmark():
 			credType = common.ECredentialType.Anonymous()

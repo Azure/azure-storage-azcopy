@@ -215,22 +215,6 @@ func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options Cr
 	panic("work around the compiling, logic wouldn't reach here")
 }
 
-func CreateGCPCredential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) error {
-	glcm := GetLifecycleMgr()
-	switch credInfo.CredentialType {
-	case ECredentialType.GoogleAppCredentials():
-		appCredentials := glcm.GetEnvironmentVariable(EEnvironmentVariable.GoogleAppCredentials())
-
-		if appCredentials == "" {
-			return errors.New(fmt.Sprintf("GOOGLE_APPLICATION_CREDENTIALS environment variable must be set"))
-		}
-		return nil
-	default:
-		options.panicError(fmt.Errorf("Invalid state, credential type %v is not supported", credInfo.CredentialType))
-	}
-	panic("work around for compiling, logic wouldn't reach here")
-}
-
 func refreshBlobFSToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCredential azbfs.TokenCredential, options CredentialOpOptions) time.Duration {
 	newToken, err := tokenInfo.Refresh(ctx)
 	if err != nil {
