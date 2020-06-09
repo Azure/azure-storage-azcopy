@@ -3,9 +3,10 @@ package ste
 import (
 	"errors"
 	"reflect"
-	"unsafe"
-
+	"runtime"
+	"strings"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -144,9 +145,17 @@ func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (sour
 	sh.Cap = sh.Len
 	dstRelative := string(dstSlice)
 
+	if runtime.GOOS == "windows" && startsWith(dstRelative, "/%5C") {
+		dstRelative = strings.Replace(srcRoot, common.EXTENDED_PATH_PREFIX, "", 1) + dstRelative[4:]
+	}
+
 	return common.GenerateFullPathWithQuery(srcRoot, srcRelative, srcExtraQuery),
 		common.GenerateFullPathWithQuery(dstRoot, dstRelative, dstExtraQuery),
 		isFolder
+}
+
+func startsWith(s string, t string) bool {
+	return len(s) >= len(t) && strings.EqualFold(s[0:len(t)], t)
 }
 
 func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
