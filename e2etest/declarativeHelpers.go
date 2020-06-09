@@ -168,7 +168,11 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 	result := make([]common.FromTo, 0, 4)
 
 	for _, from := range tft.froms {
+		haveEnoughTos := false
 		for _, to := range tft.tos {
+			if haveEnoughTos {
+				continue
+			}
 
 			// replace File -> Blob with File -> File if configured to do so.
 			// So that we can use Blob as a generic "remote" to, but still do File->File in those case where that makes more sense
@@ -202,6 +206,9 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 
 			// this one is valid
 			result = append(result, fromTo)
+			if !tft.useAllTos {
+				haveEnoughTos = true // we only need the one we just found
+			}
 		}
 	}
 

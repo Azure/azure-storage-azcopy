@@ -54,7 +54,7 @@ func RunTests(
 	testName := strings.Trim(path.Ext(frame.Function), ".")
 
 	// log the overall test that we are running, in a concise form (each scenario will be logged later)
-	c.Logf("%s -> RunTests for %v %v", testName, operations, testFromTo)
+	// Removed to declutter the output:  c.Logf("%s -> RunTests for %v %v", testName, operations, testFromTo)
 
 	// construct all the scenarios
 	scenarios := make([]scenario, 0, 16)
