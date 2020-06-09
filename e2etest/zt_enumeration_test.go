@@ -87,7 +87,8 @@ func (s *enumerationSuite) TestFilter_IncludeAfter(c *chk.C) {
 		params{},
 		&hooks{
 			betweenCreateFilesToIgnoreAndToTransfer: func(h hookHelper) {
-				// put a gap in time between creation of the "to ignore" and "to transfer" files, and then set includeAfterDate
+				// Put a gap in time between creation of the "to ignore" and "to transfer" files, and then set includeAfterDate
+				// See comments on definition of betweenCreateFilesToIgnoreAndToTransfer for acknowledgment that this approach is a bit ugly, but it's the best we have for now.
 				time.Sleep(5 * time.Second)
 				scenarioParams := h.GetModifyableParameters() // must get the right params instance, because RunTests operates multiple scenarios in parallel
 				scenarioParams.includeAfter = time.Now().Format(time.RFC3339)
