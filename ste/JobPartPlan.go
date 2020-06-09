@@ -145,9 +145,9 @@ func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (sour
 	sh.Cap = sh.Len
 	dstRelative := string(dstSlice)
 
-	// Incase user is trying to copy complete directory in windows i.e D:\\ 
+	// Incase user is trying to copy complete directory in windows i.e D:\\
 	if runtime.GOOS == "windows" && startsWith(dstRelative, "/%5C") {
-		dstRelative = srcRoot[4:6] + dstRelative[4:]
+		dstRelative = strings.Replace(common.VolumeName(srcRoot), common.EXTENDED_PATH_PREFIX, "", 1) + dstRelative[4:]
 	}
 
 	return common.GenerateFullPathWithQuery(srcRoot, srcRelative, srcExtraQuery),
