@@ -161,7 +161,7 @@ func (tft TestFromTo) String() string {
 	if tft.useAllTos {
 		destDesc = "all of"
 	}
-	return fmt.Sprintf("%s (%v -> %s %v)", tft.desc, tft.froms, destDesc, tft.tos)
+	return fmt.Sprintf("%s (%v -> (%s) %v)", tft.desc, tft.froms, destDesc, tft.tos)
 }
 
 func (tft TestFromTo) getValues(op Operation) []common.FromTo {

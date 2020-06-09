@@ -21,9 +21,11 @@
 package e2etest
 
 import (
-	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	chk "gopkg.in/check.v1"
+	"path"
+	"runtime"
+	"strings"
 	"sync"
 )
 
@@ -45,8 +47,14 @@ func RunTests(
 	fs testFiles,
 	// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
 ) {
+	// Get the name of the calling Test... method (for logging purposes)
+	pcs := make([]uintptr, 1)
+	n := runtime.Callers(2, pcs)
+	frame, _ := runtime.CallersFrames(pcs[:n]).Next()
+	testName := strings.Trim(path.Ext(frame.Function), ".")
+
 	// log the overall test that we are running, in a concise form (each scenario will be logged later)
-	c.Log(fmt.Sprintf("Running %s for %s", operations, testFromTo))
+	c.Logf("%s -> RunTests for %v %v", testName, operations, testFromTo)
 
 	// construct all the scenarios
 	scenarios := make([]scenario, 0, 16)
@@ -54,6 +62,7 @@ func RunTests(
 		for _, fromTo := range testFromTo.getValues(op) {
 			s := scenario{
 				c:         c,
+				testName:  testName,
 				operation: op,
 				fromTo:    fromTo,
 				p:         p, // copies them, because they are a struct. This is what we need, since the may be morphed while running
@@ -68,11 +77,13 @@ func RunTests(
 	// run them in parallel
 	// TODO: is this really how we want to do this?
 	wg := &sync.WaitGroup{}
+	wg.Add(len(scenarios))
 	for _, s := range scenarios {
-		wg.Add(1)
+		sen := s // capture to separate var inside the loop
 		go func() {
 			defer wg.Done()
-			s.Run()
+
+			sen.Run()
 		}()
 	}
 	wg.Wait() // TODO: do we want some kind of timeout here (and how does one even do that with WaitGroups anyway?)
@@ -80,6 +91,7 @@ func RunTests(
 
 type scenario struct {
 	c         *chk.C
+	testName  string
 	operation Operation
 	fromTo    common.FromTo
 	p         params
@@ -89,12 +101,12 @@ type scenario struct {
 
 // Run runs one test scenario
 func (s *scenario) Run() {
-	s.log()
+	s.logStart()
 
 	// TODO: add implementation here! ;-)
 	s.c.Succeed()
 }
 
-func (s *scenario) log() {
-	s.c.Log("wombat")
+func (s *scenario) logStart() {
+	s.c.Logf("%s -> %s %s", s.testName, s.operation, s.fromTo)
 }
