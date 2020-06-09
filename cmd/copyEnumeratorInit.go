@@ -175,8 +175,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				if cca.fromTo.From() == common.ELocation.S3() {
 					resName, err = containerResolver.ResolveName(cName)
 				} else if cca.fromTo.From() == common.ELocation.GCP() {
-					resName = cName
-					err = nil
+					gcpContainerResolver := NewGCPBucketNameToAzureResourcesResolver(nil)
+					resName, err = gcpContainerResolver.ResolveName(cName)
 				}
 
 				if err == nil {
