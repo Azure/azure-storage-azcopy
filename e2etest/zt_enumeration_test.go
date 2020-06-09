@@ -80,7 +80,7 @@ func (s *enumerationSuite) TestFilter_IncludePath_Folder(c *chk.C) {
 // TestFilter_IncludeAfter test the include-after parameter
 func (s *enumerationSuite) TestFilter_IncludeAfter(c *chk.C) {
 	RunTests(c,
-		eOperation.CopyOnly(), // IncludeAfter is not applicable for sync
+		eOperation.Copy(), // IncludeAfter is not applicable for sync
 		eTestFromTo.AllSourcesToOneDest(),
 		nil,
 		nil,

@@ -9,3 +9,4 @@ package e2etest
 // exclusiveStringMap (usage of it, by the STE)
 // Resume
 // Operations other than copy and sync
+// Account-to-account (i.e. whole of account) copies (since right now we only support single-container copies in the declarative tests)

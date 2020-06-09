@@ -20,7 +20,12 @@
 
 package e2etest
 
-import chk "gopkg.in/check.v1"
+import (
+	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common"
+	chk "gopkg.in/check.v1"
+	"sync"
+)
 
 // This declarative test runner adds a layer on top of e2etest/base. The added layer allows us to test in a declarative style,
 // saying what to do, but not how to do it.
@@ -40,5 +45,56 @@ func RunTests(
 	fs testFiles,
 	// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
 ) {
+	// log the overall test that we are running, in a concise form (each scenario will be logged later)
+	c.Log(fmt.Sprintf("Running %s for %s", operations, testFromTo))
 
+	// construct all the scenarios
+	scenarios := make([]scenario, 0, 16)
+	for _, op := range operations.getValues() {
+		for _, fromTo := range testFromTo.getValues(op) {
+			s := scenario{
+				c:         c,
+				operation: op,
+				fromTo:    fromTo,
+				p:         p, // copies them, because they are a struct. This is what we need, since the may be morphed while running
+				hs:        hs,
+				fs:        fs,
+			}
+
+			scenarios = append(scenarios, s)
+		}
+	}
+
+	// run them in parallel
+	// TODO: is this really how we want to do this?
+	wg := &sync.WaitGroup{}
+	for _, s := range scenarios {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s.Run()
+		}()
+	}
+	wg.Wait() // TODO: do we want some kind of timeout here (and how does one even do that with WaitGroups anyway?)
+}
+
+type scenario struct {
+	c         *chk.C
+	operation Operation
+	fromTo    common.FromTo
+	p         params
+	hs        *hooks
+	fs        testFiles
+}
+
+// Run runs one test scenario
+func (s *scenario) Run() {
+	s.log()
+
+	// TODO: add implementation here! ;-)
+	s.c.Succeed()
+}
+
+func (s *scenario) log() {
+	s.c.Log("wombat")
 }

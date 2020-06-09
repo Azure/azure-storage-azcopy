@@ -66,12 +66,25 @@ var eOperation = Operation(0)
 
 type Operation uint8
 
-func (Operation) CopyOnly() Operation    { return Operation(1) }
-func (Operation) SyncOnly() Operation    { return Operation(2) }
-func (Operation) CopyAndSync() Operation { return eOperation.CopyOnly() & eOperation.SyncOnly() }
+func (Operation) Copy() Operation        { return Operation(1) }
+func (Operation) Sync() Operation        { return Operation(2) }
+func (Operation) CopyAndSync() Operation { return eOperation.Copy() & eOperation.Sync() }
 
 func (o Operation) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
+}
+
+// getValues chops up composite values into their parts
+func (o Operation) getValues() []Operation {
+	switch o {
+	case eOperation.Copy(),
+		eOperation.Sync():
+		return []Operation{o}
+	case eOperation.CopyAndSync():
+		return []Operation{eOperation.Copy(), eOperation.Sync()}
+	default:
+		panic("unexpected operation type")
+	}
 }
 
 /////////////
@@ -82,7 +95,7 @@ var eTestFromTo = TestFromTo{}
 type TestFromTo struct {
 	desc                   string
 	useAllTos              bool
-	suppressAutoFileToFile bool // if true, we won't automatically replace File -> Blob with File -> File. We do that replacement by default because File -> File is the more common scenario (and, for sync, File -> Blob is not even supported currently).
+	suppressAutoFileToFile bool // TODO: invert this // if true, we won't automatically replace File -> Blob with File -> File. We do that replacement by default because File -> File is the more common scenario (and, for sync, File -> Blob is not even supported currently).
 	froms                  []common.Location
 	tos                    []common.Location
 }
@@ -149,6 +162,50 @@ func (tft TestFromTo) String() string {
 		destDesc = "all of"
 	}
 	return fmt.Sprintf("%s (%v -> %s %v)", tft.desc, tft.froms, destDesc, tft.tos)
+}
+
+func (tft TestFromTo) getValues(op Operation) []common.FromTo {
+	result := make([]common.FromTo, 0, 4)
+
+	for _, from := range tft.froms {
+		for _, to := range tft.tos {
+
+			// replace File -> Blob with File -> File if configured to do so.
+			// So that we can use Blob as a generic "remote" to, but still do File->File in those case where that makes more sense
+			if !tft.suppressAutoFileToFile {
+				if from == common.ELocation.File() && to == common.ELocation.Blob() {
+					to = common.ELocation.File()
+				}
+			}
+
+			// parse the combination and see if its valid
+			var fromTo common.FromTo
+			err := fromTo.Parse(from.String() + to.String())
+			if err != nil {
+				continue // this pairing wasn't valid
+			}
+
+			// if we are doing sync, skip combos that are not currently valid for sync
+			if op == eOperation.Sync() {
+				switch fromTo {
+				case common.EFromTo.BlobBlob(),
+					common.EFromTo.FileFile(),
+					common.EFromTo.LocalBlob(),
+					common.EFromTo.BlobLocal(),
+					common.EFromTo.LocalFile(),
+					common.EFromTo.FileLocal():
+					// do nothing, these are fine
+				default:
+					continue // not supported for sync
+				}
+			}
+
+			// this one is valid
+			result = append(result, fromTo)
+		}
+	}
+
+	return result
 }
 
 //////
