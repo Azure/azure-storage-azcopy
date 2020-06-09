@@ -413,6 +413,18 @@ func (l Location) String() string {
 	return enum.StringInt(l, reflect.TypeOf(l))
 }
 
+// AllStandardLocations returns all locations that are "normal" for testing purposes. Excludes the likes of Unknown, Benchmark and Pipe
+func (Location) AllStandardLocations() []Location {
+	return []Location{
+		ELocation.Local(),
+		ELocation.Blob(),
+		ELocation.File(),
+		ELocation.BlobFS(),
+		ELocation.S3(),
+		// TODO: ELocation.GCP
+	}
+}
+
 // fromToValue returns the fromTo enum value for given
 // from / To location combination. In 16 bits fromTo
 // value, first 8 bits represents from location

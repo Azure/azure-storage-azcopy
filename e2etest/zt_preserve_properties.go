@@ -18,48 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// TODO this file was forked from the cmd package, it needs to cleaned to keep only the necessary part
-
 package e2etest
 
-import (
-	"path/filepath"
-	"strings"
-	"syscall"
-
-	chk "gopkg.in/check.v1"
-)
-
-// set file attributes to test file
-func (scenarioHelper) setAttributesForLocalFile(filePath string, attrList []string) error {
-	lpFilePath, err := syscall.UTF16PtrFromString(filePath)
-	if err != nil {
-		return err
-	}
-
-	fileAttributeMap := map[string]uint32{
-		"R": 1,
-		"A": 32,
-		"S": 4,
-		"H": 2,
-		"C": 2048,
-		"N": 128,
-		"E": 16384,
-		"T": 256,
-		"O": 4096,
-		"I": 8192,
-	}
-	var attrs uint32
-	for _, attribute := range attrList {
-		attrs |= fileAttributeMap[strings.ToUpper(attribute)]
-	}
-	err = syscall.SetFileAttributes(lpFilePath, attrs)
-	return err
-}
-
-func (s scenarioHelper) setAttributesForLocalFiles(c *chk.C, dirPath string, fileList []string, attrList []string) {
-	for _, fileName := range fileList {
-		err := s.setAttributesForLocalFile(filepath.Join(dirPath, fileName), attrList)
-		c.Assert(err, chk.IsNil)
-	}
-}
+// Purpose: Tests for preserving transferred properties, info and ACLs.  Both those possessed by the original source file/folder,
+//   and those specified on the command line
