@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common/parallel"
 	"net/url"
 	"strings"
 
@@ -160,57 +161,73 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 	// as a performance optimization, get an extra prefix to do pre-filtering. It's typically the start portion of a blob name.
 	extraSearchPrefix := filterSet(filters).GetEnumerationPreFilter(t.recursive)
 
-	for marker := (azblob.Marker{}); marker.NotDone(); {
+	// Define how to enumerate its contents
+	// This func must be thread safe/goroutine safe
+	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
+		currentDirPath := dir.(string)
+		for marker := (azblob.Marker{}); marker.NotDone(); {
+			lResp, err := containerURL.ListBlobsHierarchySegment(t.ctx, marker, "/", azblob.ListBlobsSegmentOptions{Prefix: currentDirPath})
+			if err != nil {
+				return fmt.Errorf("cannot list files due to reason %s", err)
+			}
 
-		// see the TO DO in GetEnumerationPreFilter if/when we make this more directory-aware
+			// process the blobs returned in this result segment
+			for _, blobInfo := range lResp.Segment.BlobItems {
+				// if the blob represents a hdi folder, then skip it
+				if util.doesBlobRepresentAFolder(blobInfo.Metadata) && !(t.includeDirectoryStubs && t.recursive) {
+					continue
+				}
 
-		// look for all blobs that start with the prefix
-		// TODO optimize for the case where recursive is off
-		listBlob, err := containerURL.ListBlobsFlatSegment(t.ctx, marker,
-			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix + extraSearchPrefix, Details: azblob.BlobListingDetails{Metadata: true}})
-		if err != nil {
-			return fmt.Errorf("cannot list blobs. Failed with error %s", err.Error())
+				relativePath := strings.TrimPrefix(blobInfo.Name, searchPrefix)
+				adapter := blobPropertiesAdapter{blobInfo.Properties}
+				storedObject := newStoredObject(
+					preprocessor,
+					getObjectNameOnly(blobInfo.Name),
+					relativePath,
+					common.EEntityType.File(),
+					blobInfo.Properties.LastModified,
+					*blobInfo.Properties.ContentLength,
+					adapter,
+					adapter, // adapter satisfies both interfaces
+					common.FromAzBlobMetadataToCommonMetadata(blobInfo.Metadata),
+					blobUrlParts.ContainerName,
+				)
+				enqueueOutput(storedObject, nil)
+			}
+
+			// queue up the sub virtual directories if recursive is true
+			if t.recursive {
+				for _, virtualDir := range lResp.Segment.BlobPrefixes {
+					enqueueDir(virtualDir.Name)
+				}
+			}
+
+			marker = lResp.NextMarker
+		}
+		return nil
+	}
+
+	// initiate parallel scanning, starting at the root path
+	workerContext, cancelWorkers := context.WithCancel(t.ctx)
+	cCrawled := parallel.Crawl(workerContext, searchPrefix+extraSearchPrefix, enumerateOneDir, enumerationParallelism)
+
+	for x := range cCrawled {
+		item, workerError := x.Item()
+		if workerError != nil {
+			cancelWorkers()
+			return workerError
 		}
 
-		// process the blobs returned in this result segment
-		for _, blobInfo := range listBlob.Segment.BlobItems {
-			// if the blob represents a hdi folder, then skip it
-			if util.doesBlobRepresentAFolder(blobInfo.Metadata) && !(t.includeDirectoryStubs && t.recursive) {
-				continue
-			}
-
-			relativePath := strings.TrimPrefix(blobInfo.Name, searchPrefix)
-
-			// if recursive
-			if !t.recursive && strings.Contains(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING) {
-				continue
-			}
-
-			adapter := blobPropertiesAdapter{blobInfo.Properties}
-			storedObject := newStoredObject(
-				preprocessor,
-				getObjectNameOnly(blobInfo.Name),
-				relativePath,
-				common.EEntityType.File(),
-				blobInfo.Properties.LastModified,
-				*blobInfo.Properties.ContentLength,
-				adapter,
-				adapter, // adapter satisfies both interfaces
-				common.FromAzBlobMetadataToCommonMetadata(blobInfo.Metadata),
-				blobUrlParts.ContainerName,
-			)
-
-			if t.incrementEnumerationCounter != nil {
-				t.incrementEnumerationCounter(common.EEntityType.File())
-			}
-
-			processErr := processIfPassedFilters(filters, storedObject, processor)
-			if processErr != nil {
-				return processErr
-			}
+		if t.incrementEnumerationCounter != nil {
+			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
 
-		marker = listBlob.NextMarker
+		object := item.(storedObject)
+		processErr := processIfPassedFilters(filters, object, processor)
+		if processErr != nil {
+			cancelWorkers()
+			return processErr
+		}
 	}
 
 	return
