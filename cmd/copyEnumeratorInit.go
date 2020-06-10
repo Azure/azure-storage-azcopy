@@ -233,6 +233,14 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		srcRelPath := cca.makeEscapedRelativePath(true, isDestDir, object)
 		dstRelPath := cca.makeEscapedRelativePath(false, isDestDir, object)
 
+		if runtime.GOOS == "windows" && strings.HasPrefix(dstRelPath, "/%5C") {
+			if strings.HasPrefix(cca.source.Value, common.EXTENDED_PATH_PREFIX) {
+				dstRelPath = filepath.VolumeName(strings.TrimPrefix(cca.source.Value, common.EXTENDED_PATH_PREFIX)) + strings.TrimPrefix(dstRelPath, "/%5C")
+			} else {
+				dstRelPath = filepath.VolumeName(cca.source.Value) + strings.TrimPrefix(dstRelPath, "/%5C")
+			}
+		}
+
 		transfer, shouldSendToSte := object.ToNewCopyTransfer(
 			cca.autoDecompress && cca.fromTo.IsDownload(),
 			srcRelPath, dstRelPath,
