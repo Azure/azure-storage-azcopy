@@ -403,8 +403,11 @@ Runs a performance benchmark by uploading test data to a specified destination. 
 
 The benchmark command runs the same upload process as 'copy', except that: 
 
-  - There's no source parameter.  The command requires only a destination URL. In the current release, this destination URL must refer to a blob container.
-  
+  - The command requires a target URL. In the current release, target must refer to a blob container.
+
+  - The 'mode' parameter describes whether Azcopy should test uploads to or downloads from given target. Valid values are 'Upload'
+    and 'Download'. Default value is 'Upload'.
+
   - The payload is described by command line parameters, which control how many files are auto-generated and 
     how big they are. The generation process takes place entirely in memory. Disk is not used.
   
@@ -418,8 +421,10 @@ Benchmark mode will automatically tune itself to the number of parallel TCP conn
 the maximum throughput. It will display that number at the end. To prevent auto-tuning, set the 
 AZCOPY_CONCURRENCY_VALUE environment variable to a specific number of connections. 
 
-All the usual authentication types are supported. However, the most convenient approach for benchmarking is typically
-to create an empty container with a SAS token and use SAS authentication.
+All the usual authentication types are supported. However, the most convenient approach for benchmarking upload is typically
+to create an empty container with a SAS token and use SAS authentication. Download mode requires a set of test data to be
+present in the target container.
+  
 `
 
 const benchCmdExample = `Run a benchmark test with default parameters (suitable for benchmarking networks up to 1 Gbps):'
@@ -434,5 +439,9 @@ Same as above, but use 50,000 files, each 8 MiB in size and compute their MD5 ha
 in the copy command). The purpose of --put-md5 when benchmarking is to test whether MD5 computation affects throughput for the 
 selected file count and size:
 
-   - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 50000 --size-per-file 8M --put-md5
+   - azcopy bench --mode='Upload' "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 50000 --size-per-file 8M --put-md5
+
+Run a benchmark test that downloads from a target
+
+   - azcopy bench --mode='Download' "https://[account].blob.core.windows.net/[container]?<SAS?"
 `
