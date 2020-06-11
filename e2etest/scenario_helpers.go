@@ -20,7 +20,7 @@
 
 // TODO this file was forked from the cmd package, it needs to cleaned to keep only the necessary part
 
-package base
+package e2etest
 
 import (
 	"context"

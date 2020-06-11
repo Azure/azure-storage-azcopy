@@ -20,7 +20,7 @@
 
 // TODO this file was forked from the cmd package, it needs to cleaned to keep only the necessary part
 
-package base
+package e2etest
 
 import (
 	"bytes"
@@ -45,10 +45,7 @@ import (
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
-// Hookup to the testing framework
-func Test(t *testing.T) { chk.TestingT(t) }
-
-type cmdIntegrationSuite struct{}
+type cmdIntegrationSuite struct{} // TODO: remove?
 
 var _ = chk.Suite(&cmdIntegrationSuite{})
 var ctx = context.Background()
