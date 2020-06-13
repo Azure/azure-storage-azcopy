@@ -98,6 +98,13 @@ func (gUrl *GCPURLParts) String() string {
 	return u.String()
 }
 
+func (gUrl *GCPURLParts) IsServiceSyntactically() bool {
+	if gUrl.Host != "" && gUrl.BucketName == "" {
+		return true
+	}
+	return false
+}
+
 func (gUrl *GCPURLParts) IsBucketSyntactically() bool {
 	if gUrl.BucketName != "" && gUrl.ObjectKey == "" {
 		return true

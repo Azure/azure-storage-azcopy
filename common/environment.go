@@ -288,8 +288,15 @@ func (EnvironmentVariable) AwsSessionToken() EnvironmentVariable {
 
 func (EnvironmentVariable) GoogleAppCredentials() EnvironmentVariable {
 	return EnvironmentVariable{
-		Name: "GOOGLE_APPLICATION_CREDENTIALS",
+		Name:        "GOOGLE_APPLICATION_CREDENTIALS",
 		Description: "The application credentials required to access GCP resources for service to service copy.",
+	}
+}
+
+func (EnvironmentVariable) GoogleCloudProject() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "GOOGLE_CLOUD_PROJECT",
+		Description: "Project ID required for service level traversals in Google Cloud Storage",
 	}
 }
 

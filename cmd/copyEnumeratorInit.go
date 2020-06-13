@@ -21,6 +21,10 @@ import (
 	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
+type RemoteResourceToAzureResourcesResolver interface {
+	ResolveName(bucketName string) (string, error)
+}
+
 func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) (*copyEnumerator, error) {
 	var traverser resourceTraverser
 
@@ -102,9 +106,14 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		cca.stripTopDir = true
 	}
 
-	// Create a S3 bucket resolver
+	// Create a Remote resource resolver
 	// Giving it nothing to work with as new names will be added as we traverse.
-	var containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
+	var containerResolver RemoteResourceToAzureResourcesResolver
+	if cca.fromTo == common.EFromTo.S3Blob() {
+		containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
+	} else if cca.fromTo == common.EFromTo.GCPBlob() {
+		containerResolver = NewGCPBucketNameToAzureResourcesResolver(nil)
+	}
 	existingContainers := make(map[string]bool)
 	var logDstContainerCreateFailureOnce sync.Once
 	seenFailedContainers := make(map[string]bool) // Create map of already failed container conversions so we don't log a million items just for one container.
@@ -141,7 +150,11 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 				// Resolve all container names up front.
 				// If we were to resolve on-the-fly, then name order would affect the results inconsistently.
-				containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
+				if cca.fromTo == common.EFromTo.S3Blob() {
+					containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
+				} else if cca.fromTo == common.EFromTo.GCPBlob() {
+					containerResolver = NewGCPBucketNameToAzureResourcesResolver(containers)
+				}
 
 				for _, v := range containers {
 					bucketName, err := containerResolver.ResolveName(v)
@@ -172,12 +185,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					return nil, fmt.Errorf("failed to get container name from source (is it formatted correctly?)")
 				}
 				var resName string
-				if cca.fromTo.From() == common.ELocation.S3() {
-					resName, err = containerResolver.ResolveName(cName)
-				} else if cca.fromTo.From() == common.ELocation.GCP() {
-					gcpContainerResolver := NewGCPBucketNameToAzureResourcesResolver(nil)
-					resName, err = gcpContainerResolver.ResolveName(cName)
-				}
+
+				resName, err = containerResolver.ResolveName(cName)
 
 				if err == nil {
 					err = cca.createDstContainer(resName, cca.destination, ctx, existingContainers)

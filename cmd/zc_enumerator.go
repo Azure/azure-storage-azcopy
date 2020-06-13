@@ -499,7 +499,14 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 		}
 
 		if gcpURLParts.BucketName == "" || strings.Contains(gcpURLParts.BucketName, "*") {
-			return nil, errors.New("Account level transfers are not yet supported")
+			if !recursive {
+				return nil, errors.New(accountTraversalInherentlyRecursiveError)
+			}
+
+			output, err = newGCPServiceTraverser(resourceURL, *ctx, getProperties, incrementEnumerationCounter)
+			if err != nil {
+				return nil, err
+			}
 		} else {
 			output, err = newGCPTraverser(resourceURL, *ctx, recursive, getProperties, incrementEnumerationCounter)
 			if err != nil {
