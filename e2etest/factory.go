@@ -75,7 +75,7 @@ func (TestResourceFactory) GetDatalakeServiceURL(accountType AccountType) azbfs.
 func (TestResourceFactory) GetBlobServiceURLWithSAS(c *chk.C, accountType AccountType) azblob.ServiceURL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(accountType)
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil)
+	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
 
 	sasQueryParams, err := azblob.AccountSASSignatureValues{
 		Protocol:      azblob.SASProtocolHTTPS,
@@ -84,7 +84,7 @@ func (TestResourceFactory) GetBlobServiceURLWithSAS(c *chk.C, accountType Accoun
 		Services:      azfile.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
 		ResourceTypes: azfile.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
 	}.NewSASQueryParameters(credential)
-	c.Assert(err, chk.IsNil)
+	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
 
 	// construct the url from scratch
 	qp := sasQueryParams.Encode()
@@ -93,7 +93,7 @@ func (TestResourceFactory) GetBlobServiceURLWithSAS(c *chk.C, accountType Accoun
 
 	// convert the raw url and validate it was parsed successfully
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
 
 	return azblob.NewServiceURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
 }
@@ -101,7 +101,7 @@ func (TestResourceFactory) GetBlobServiceURLWithSAS(c *chk.C, accountType Accoun
 func (TestResourceFactory) GetContainerURLWithSAS(c *chk.C, accountType AccountType, containerName string) azblob.ContainerURL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(accountType)
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil)
+	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
 
 	sasQueryParams, err := azblob.BlobSASSignatureValues{
 		Protocol:      azblob.SASProtocolHTTPS,
@@ -109,7 +109,7 @@ func (TestResourceFactory) GetContainerURLWithSAS(c *chk.C, accountType AccountT
 		ContainerName: containerName,
 		Permissions:   azblob.ContainerSASPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, List: true}.String(),
 	}.NewSASQueryParameters(credential)
-	c.Assert(err, chk.IsNil)
+	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
 
 	// construct the url from scratch
 	qp := sasQueryParams.Encode()
@@ -118,7 +118,7 @@ func (TestResourceFactory) GetContainerURLWithSAS(c *chk.C, accountType AccountT
 
 	// convert the raw url and validate it was parsed successfully
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
 
 	return azblob.NewContainerURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
 }
@@ -134,14 +134,14 @@ func (TestResourceFactory) CreateNewContainer(c *chk.C, accountType AccountType)
 	container = TestResourceFactory{}.GetBlobServiceURL(accountType).NewContainerURL(name)
 
 	cResp, err := container.Create(context.Background(), nil, azblob.PublicAccessNone)
-	c.Assert(err, chk.IsNil)
+	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
 	return container, name, TestResourceFactory{}.GetContainerURLWithSAS(c, accountType, name).URL()
 }
 
 func (TestResourceFactory) CreateLocalDirectory(c *chk.C) (dstDirName string) {
 	dstDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
-	c.Assert(err, chk.IsNil)
+	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
 	return
 }
 
@@ -152,6 +152,32 @@ const (
 	blobPrefix      = "blob"
 )
 
+func getTestName() (testSuite, test string) {
+	// The following lines step up the stack find the name of the test method
+	// Note: the way to do this changed in go 1.12, refer to release notes for more info
+	var pcs [10]uintptr
+	n := runtime.Callers(1, pcs[:])
+	frames := runtime.CallersFrames(pcs[:n])
+	fullName := "(*fooSuite).TestFoo" // default stub "Foo" is used if anything goes wrong with this procedure
+	for {
+		frame, more := frames.Next()
+		if strings.Contains(frame.Func.Name(), "Suite") {
+			fullName = frame.Func.Name()
+			break
+		} else if !more {
+			break
+		}
+	}
+	funcNameStart := strings.Index(fullName, "Test")
+	suiteNameStart := strings.Index(fullName, ".(")
+	suite := strings.Replace(strings.Trim(fullName[suiteNameStart:funcNameStart], "()*."), "_", "-", -1) // for consistency with name, below
+
+	name := fullName[funcNameStart+len("Test"):]                // Just get the name of the test and not any of the garbage at the beginning
+	name = strings.Replace(strings.ToLower(name), "_", "-", -1) // Ensure it is a valid resource name (containers don't allow _ but do allow -)
+
+	return suite, name
+}
+
 // This function generates an entity name by concatenating the passed prefix,
 // the name of the test requesting the entity name, and the minute, second, and nanoseconds of the call.
 // This should make it easy to associate the entities with their test, uniquely identify
@@ -159,24 +185,8 @@ const (
 // Will truncate the end of the test name, if there is not enough room for it, followed by the time-based suffix,
 // with a non-zero maxLen.
 func generateName(prefix string, maxLen int) string {
-	// The following lines step up the stack find the name of the test method
-	// Note: the way to do this changed in go 1.12, refer to release notes for more info
-	var pcs [10]uintptr
-	n := runtime.Callers(1, pcs[:])
-	frames := runtime.CallersFrames(pcs[:n])
-	name := "TestFoo" // default stub "Foo" is used if anything goes wrong with this procedure
-	for {
-		frame, more := frames.Next()
-		if strings.Contains(frame.Func.Name(), "Suite") {
-			name = frame.Func.Name()
-			break
-		} else if !more {
-			break
-		}
-	}
-	funcNameStart := strings.Index(name, "Test")
-	name = name[funcNameStart+len("Test"):] // Just get the name of the test and not any of the garbage at the beginning
-	name = strings.ToLower(name)            // Ensure it is a valid resource name
+	_, name := getTestName()
+
 	textualPortion := fmt.Sprintf("%s%s", prefix, strings.ToLower(name))
 	currentTime := time.Now()
 	numericSuffix := fmt.Sprintf("%02d%02d%d", currentTime.Minute(), currentTime.Second(), currentTime.Nanosecond())

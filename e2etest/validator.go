@@ -35,14 +35,27 @@ type Validator struct{}
 func (Validator) ValidateCopyTransfersAreScheduled(c *chk.C, isSrcEncoded bool, isDstEncoded bool,
 	sourcePrefix string, destinationPrefix string, expectedTransfers []string, actualTransfers []common.TransferDetail) {
 
+	normalizeSlashes := func(s string) string {
+		return strings.Replace(s, "\\", "/", -1)
+	}
+
+	if len(expectedTransfers) > 0 && !common.IsShortPath(actualTransfers[0].Src) {
+		sourcePrefix = common.ToExtendedPath(sourcePrefix)
+	}
+	if len(expectedTransfers) > 0 && !common.IsShortPath(actualTransfers[0].Dst) {
+		destinationPrefix = common.ToExtendedPath(destinationPrefix)
+	}
+	sourcePrefix = normalizeSlashes(sourcePrefix)
+	destinationPrefix = normalizeSlashes(destinationPrefix)
+
 	// validate that the right number of transfers were scheduled
 	c.Assert(len(actualTransfers), chk.Equals, len(expectedTransfers))
 
 	// validate that the right transfers were sent
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
 	for _, transfer := range actualTransfers {
-		srcRelativeFilePath := strings.TrimPrefix(strings.TrimPrefix(transfer.Src, sourcePrefix), "/")
-		dstRelativeFilePath := strings.TrimPrefix(strings.TrimPrefix(transfer.Dst, destinationPrefix), "/")
+		srcRelativeFilePath := strings.TrimPrefix(strings.TrimPrefix(normalizeSlashes(transfer.Src), sourcePrefix), "/")
+		dstRelativeFilePath := strings.TrimPrefix(strings.TrimPrefix(normalizeSlashes(transfer.Dst), destinationPrefix), "/")
 
 		if isSrcEncoded {
 			srcRelativeFilePath, _ = url.PathUnescape(srcRelativeFilePath)

@@ -27,12 +27,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"io/ioutil"
 	"math/rand"
 	"net/url"
 	"os"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
@@ -253,10 +253,14 @@ func createNewAzureFile(c *chk.C, share azfile.ShareURL, prefix string) (file az
 	return
 }
 
+func newNullFolderCreationTracker() common.FolderCreationTracker {
+	return common.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders())
+}
+
 func generateParentsForAzureFile(c *chk.C, fileURL azfile.FileURL) {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, _ := azfile.NewSharedKeyCredential(accountName, accountKey)
-	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileURL, azfile.NewPipeline(credential, azfile.PipelineOptions{}))
+	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileURL, azfile.NewPipeline(credential, azfile.PipelineOptions{}), newNullFolderCreationTracker())
 	c.Assert(err, chk.IsNil)
 }
 
