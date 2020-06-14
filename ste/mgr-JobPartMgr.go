@@ -53,6 +53,7 @@ type IJobPartMgr interface {
 	getFolderCreationTracker() common.FolderCreationTracker
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 	FolderDeletionManager() common.FolderDeletionManager
+	UpdateJobPartProgress(status common.TransferStatus)
 }
 
 type serviceAPIVersionOverride struct{}
@@ -215,6 +216,13 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Holds the status of tranfers in this jptm
+type jobPartProgressInfo struct {
+	atomicTransfersCompleted int32
+	atomicTransfersSkipped   int32
+	atomicTransfersFailed    int32
+}
+
 // jobPartMgr represents the runtime information for a Job's Part
 type jobPartMgr struct {
 	// These fields represent the part's existence
@@ -273,6 +281,8 @@ type jobPartMgr struct {
 	// which are either completed or failed
 	// numberOfTransfersDone_doNotUse determines the final cancellation of JobPartOrder
 	atomicTransfersDone uint32
+
+	progressInfo jobPartProgressInfo
 }
 
 func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {
@@ -663,9 +673,25 @@ func (jpm *jobPartMgr) deleteSnapshotsOption() common.DeleteSnapshotsOption {
 	return jpm.Plan().DeleteSnapshotsOption
 }
 
+func (jpm *jobPartMgr) UpdateJobPartProgress(status common.TransferStatus) {
+	switch status {
+	case common.ETransferStatus.Success():
+		atomic.AddInt32(&jpm.progressInfo.atomicTransfersCompleted, 1)
+	case common.ETransferStatus.Failed(), common.ETransferStatus.BlobTierFailure():
+		atomic.AddInt32(&jpm.progressInfo.atomicTransfersFailed, 1)
+	case common.ETransferStatus.SkippedEntityAlreadyExists(), common.ETransferStatus.SkippedBlobHasSnapshots():
+		atomic.AddInt32(&jpm.progressInfo.atomicTransfersSkipped, 1)
+	default:
+		panic("Unexpected status")
+	}
+}
+
 // Call Done when a transfer has completed its epilog; this method returns the number of transfers completed so far
 func (jpm *jobPartMgr) ReportTransferDone() (transfersDone uint32) {
 	transfersDone = atomic.AddUint32(&jpm.atomicTransfersDone, 1)
+
+	//Add a safety count-check
+
 	if jpm.ShouldLog(pipeline.LogInfo) {
 		plan := jpm.Plan()
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d", plan.JobID, plan.PartNum, transfersDone, plan.NumTransfers))
