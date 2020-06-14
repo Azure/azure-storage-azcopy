@@ -697,7 +697,7 @@ func (jpm *jobPartMgr) ReportTransferDone() (transfersDone uint32) {
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d", plan.JobID, plan.PartNum, transfersDone, plan.NumTransfers))
 	}
 	if transfersDone == jpm.planMMF.Plan().NumTransfers {
-		jpm.jobMgr.ReportJobPartDone()
+		jpm.jobMgr.ReportJobPartDone(jpm.progressInfo)
 	}
 	return transfersDone
 }

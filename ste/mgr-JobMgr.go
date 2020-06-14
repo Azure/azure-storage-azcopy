@@ -62,7 +62,7 @@ type IJobMgr interface {
 	ConfirmAllTransfersScheduled()
 	ResetAllTransfersScheduled()
 	PipelineLogInfo() pipeline.LogOptions
-	ReportJobPartDone() uint32
+	ReportJobPartDone(jobPartProgressInfo)
 	Context() context.Context
 	Cancel()
 	// TODO: added for debugging purpose. remove later
@@ -88,6 +88,7 @@ type IJobMgr interface {
 func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel, commandString string, logFileFolder string) IJobMgr {
 	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
 	enableChunkLogOutput := level.ToPipelineLogLevel() == pipeline.LogDebug
+	jobPartProgressCh := make(chan jobPartProgressInfo)
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
 		httpClient:                    NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
 		logger:                        common.NewJobLogger(jobID, level, appLogger, logFileFolder),
@@ -97,9 +98,11 @@ func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID 
 		pipelineNetworkStats:          newPipelineNetworkStats(JobsAdmin.(*jobsAdmin).concurrencyTuner), // let the stats coordinate with the concurrency tuner
 		exclusiveDestinationMapHolder: &atomic.Value{},
 		initMu:                        &sync.Mutex{},
+		jobPartProgress:               jobPartProgressCh,
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
 	jm.logJobsAdminMessages()
+	go jm.reportJobPartDoneHandler()
 	return &jm
 }
 
@@ -215,6 +218,8 @@ type jobMgr struct {
 
 	initMu    *sync.Mutex
 	initState *jobMgrInitState
+
+	jobPartProgress chan jobPartProgressInfo
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -467,7 +472,13 @@ func (jm *jobMgr) ResetAllTransfersScheduled() {
 }
 
 // ReportJobPartDone is called to report that a job part completed or failed
-func (jm *jobMgr) ReportJobPartDone() uint32 {
+func (jm *jobMgr) ReportJobPartDone(progressInfo jobPartProgressInfo) {
+	jm.jobPartProgress <- progressInfo
+}
+
+func (jm *jobMgr) reportJobPartDoneHandler() {
+	var haveFinalPart bool
+	var jobProgressInfo jobPartProgressInfo
 	shouldLog := jm.ShouldLog(pipeline.LogInfo)
 
 	jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
@@ -477,18 +488,28 @@ func (jm *jobMgr) ReportJobPartDone() uint32 {
 	part0Plan := jobPart0Mgr.Plan()
 	jobStatus := part0Plan.JobStatus() // status of part 0 is status of job as a whole
 
-	partsDone := atomic.AddUint32(&jm.partsDone, 1)
-	// If the last part is still awaited or other parts all still not complete,
-	// JobPart 0 status is not changed (unless we are cancelling)
-	allKnownPartsDone := partsDone == jm.jobPartMgrs.Count()
-	haveFinalPart := atomic.LoadInt32(&jm.atomicFinalPartOrderedIndicator) == 1
-	isCancelling := jobStatus == common.EJobStatus.Cancelling()
-	shouldComplete := allKnownPartsDone && (haveFinalPart || isCancelling)
-	if !shouldComplete {
+	for {
+		partProgressInfo := <-jm.jobPartProgress
+		partsDone := atomic.AddUint32(&jm.partsDone, 1)
+		atomic.AddInt32(&jobProgressInfo.atomicTransfersCompleted, partProgressInfo.atomicTransfersCompleted)
+		atomic.AddInt32(&jobProgressInfo.atomicTransfersSkipped, partProgressInfo.atomicTransfersSkipped)
+		atomic.AddInt32(&jobProgressInfo.atomicTransfersFailed, partProgressInfo.atomicTransfersFailed)
+
+		// If the last part is still awaited or other parts all still not complete,
+		// JobPart 0 status is not changed (unless we are cancelling)
+		haveFinalPart = atomic.LoadInt32(&jm.atomicFinalPartOrderedIndicator) == 1
+		allKnownPartsDone := partsDone == jm.jobPartMgrs.Count()
+		isCancelling := jobStatus == common.EJobStatus.Cancelling()
+		shouldComplete := allKnownPartsDone && (haveFinalPart || isCancelling)
+		if shouldComplete {
+			break
+		} //Else log and wait for next part to complete
+
 		if shouldLog {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("is part of Job which %d total number of parts done ", partsDone))
 		}
-		return partsDone
+
+		jm.chunkStatusLogger.FlushLog()
 	}
 
 	partDescription := "all parts of entire Job"
@@ -506,12 +527,12 @@ func (jm *jobMgr) ReportJobPartDone() uint32 {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("%s %v successfully cancelled", partDescription, jm.jobID))
 		}
 	case common.EJobStatus.InProgress():
-		part0Plan.SetJobStatus((common.EJobStatus).Completed())
+		part0Plan.SetJobStatus((common.EJobStatus).EnhanceJobStatusInfo(jobProgressInfo.atomicTransfersSkipped > 0,
+			jobProgressInfo.atomicTransfersFailed > 0,
+			jobProgressInfo.atomicTransfersCompleted > 0))
 	}
 
 	jm.chunkStatusLogger.FlushLog() // TODO: remove once we sort out what will be calling CloseLog (currently nothing)
-
-	return partsDone
 }
 
 func (jm *jobMgr) getInMemoryTransitJobState() InMemoryTransitJobState {
