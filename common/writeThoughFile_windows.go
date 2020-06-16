@@ -23,14 +23,29 @@ package common
 import (
 	"errors"
 	"fmt"
-	"golang.org/x/sys/windows"
 	"os"
+	"path/filepath"
 	"reflect"
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
 
+func isDriveRoot(path string) bool {
+	// VolumeName will not have trailing backslash
+	if last := len(path) - 1; last >= 0 && path[last] == '\\' {
+		path = path[:last]
+	}
+
+	return filepath.VolumeName(path) == path
+}
+
 func GetFileInformation(path string) (windows.ByHandleFileInformation, error) {
+
+	if isDriveRoot(path) {
+		path = ToShortPath(path)
+	}
 
 	srcPtr, err := syscall.UTF16PtrFromString(path)
 	if err != nil {
