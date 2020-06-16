@@ -233,6 +233,14 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		srcRelPath := cca.makeEscapedRelativePath(true, isDestDir, object)
 		dstRelPath := cca.makeEscapedRelativePath(false, isDestDir, object)
 
+		/* In Windows, when a user tries to copy whole directory (eg. D:\),  the upload destination
+		will contains two // before the actual paths to the files/directories due to "/%5C" prefix
+		at the destination relative path. (e.g. D:\file.txt will end up at //file.txt).
+
+		Following code will
+		a. Get volume name from source
+		b. Remove "/%5C" from desRelPath and add volume name as prefix in it.
+		*/
 		if runtime.GOOS == "windows" && strings.HasPrefix(dstRelPath, "/%5C") {
 			if strings.HasPrefix(cca.source.Value, common.EXTENDED_PATH_PREFIX) {
 				dstRelPath = filepath.VolumeName(strings.TrimPrefix(cca.source.Value, common.EXTENDED_PATH_PREFIX)) + strings.TrimPrefix(dstRelPath, "/%5C")
