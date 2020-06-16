@@ -120,7 +120,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 				contentProps = fullProperties.(*azfile.FileGetPropertiesResponse) // only files have content props. Folders don't.
 				// Get an up-to-date size, because it's documented that the size returned by the listing might not be up-to-date,
 				// if an SMB client has modified by not yet closed the file. (See https://docs.microsoft.com/en-us/rest/api/storageservices/list-directories-and-files)
-				// Doing this here makes sure that our size is just as up-to-date as our LMT.
+				// Doing this here makes sure that our size is just as up-to-date as our LMT .
 				// (If s2s-detect-source-changed is false, then this code won't run.  If if its false, we don't check for modifications anyway,
 				// so it's fair to assume that the size will stay equal to that returned at by the listing operation)
 				size = fullProperties.(*azfile.FileGetPropertiesResponse).ContentLength()
