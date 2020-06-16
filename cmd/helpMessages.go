@@ -399,35 +399,41 @@ const benchCmdShortDescription = "Performs a performance benchmark"
 // TODO: document whether we delete the uploaded data
 
 const benchCmdLongDescription = `
-Runs a performance benchmark by uploading test data to a specified destination. The test data is automatically generated.
+Runs a performance benchmark by uploading or downloading test data to or from a specified destination. 
+For uploads, the test data is automatically generated.
 
-The benchmark command runs the same upload process as 'copy', except that: 
+The benchmark command runs the same process as 'copy', except that: 
 
-  - The command requires a target URL. In the current release, target must refer to a blob container.
+  - Instead of requiring both source and destination parameters, benchmark takes just one. This is the 
+    blob container, Azure Files Share, or ADLS Gen 2 File System that you want to upload to or download from.
 
-  - The 'mode' parameter describes whether Azcopy should test uploads to or downloads from given target. Valid values are 'Upload'
+  - The 'mode' parameter describes whether AzCopy should test uploads to or downloads from given target. Valid values are 'Upload'
     and 'Download'. Default value is 'Upload'.
 
-  - The payload is described by command line parameters, which control how many files are auto-generated and 
+  - For upload benchmarks, the payload is described by command line parameters, which control how many files are auto-generated and 
     how big they are. The generation process takes place entirely in memory. Disk is not used.
+
+  - For downloads, the payload consists of whichever files already exist at the source. (See example below about how to generate
+    test files if needed).
   
   - Only a few of the optional parameters that are available to the copy command are supported.
   
   - Additional diagnostics are measured and reported.
   
-  - By default, the transferred data is deleted at the end of the test run.
+  - For uploads, the default behaviour is to delete the transferred data at the end of the test run.  For downloads, the data
+    is never actually saved locally.
 
 Benchmark mode will automatically tune itself to the number of parallel TCP connections that gives 
 the maximum throughput. It will display that number at the end. To prevent auto-tuning, set the 
 AZCOPY_CONCURRENCY_VALUE environment variable to a specific number of connections. 
 
 All the usual authentication types are supported. However, the most convenient approach for benchmarking upload is typically
-to create an empty container with a SAS token and use SAS authentication. Download mode requires a set of test data to be
-present in the target container.
+to create an empty container with a SAS token and use SAS authentication. (Download mode requires a set of test data to be
+present in the target container.)
   
 `
 
-const benchCmdExample = `Run a benchmark test with default parameters (suitable for benchmarking networks up to 1 Gbps):'
+const benchCmdExample = `Run an upload benchmark with default parameters (suitable for benchmarking networks up to 1 Gbps):'
 
    - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>"
 
@@ -441,7 +447,11 @@ selected file count and size:
 
    - azcopy bench --mode='Upload' "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 50000 --size-per-file 8M --put-md5
 
-Run a benchmark test that downloads from a target
+Run a benchmark test that downloads existing files from a target
 
    - azcopy bench --mode='Download' "https://[account].blob.core.windows.net/[container]?<SAS?"
+
+Run an upload that does not delete the transferred files. (These files can then serve as the payload for a download test)
+
+   - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 100 --delete-test-data=false
 `
