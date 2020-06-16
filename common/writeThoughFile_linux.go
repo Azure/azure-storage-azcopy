@@ -43,6 +43,10 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 		return nil, err
 	}
 
+	if fileSize == 0 {
+		return f, err
+	}
+
 	err = syscall.Fallocate(int(f.Fd()), 0, 0, fileSize)
 	if err != nil {
 		// To solve the case that Fallocate cannot work well with cifs/smb3.
