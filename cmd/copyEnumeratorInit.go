@@ -109,9 +109,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// Create a Remote resource resolver
 	// Giving it nothing to work with as new names will be added as we traverse.
 	var containerResolver RemoteResourceToAzureResourcesResolver
-	if cca.fromTo == common.EFromTo.S3Blob() {
-		containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
-	} else if cca.fromTo == common.EFromTo.GCPBlob() {
+	containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
+	if cca.fromTo == common.EFromTo.GCPBlob() {
 		containerResolver = NewGCPBucketNameToAzureResourcesResolver(nil)
 	}
 	existingContainers := make(map[string]bool)
