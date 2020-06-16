@@ -534,6 +534,15 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 		// Save to a directory
 		rootDir := filepath.Base(cca.source.Value)
 
+		/* In windows, when a user tries to copy whole volume (eg. D:\),  the upload destination
+		will contains "//"" in the files/directories names because of rootDir = "\" prefix. 
+		(e.g. D:\file.txt will end up as //file.txt).
+		Following code will get volume name from source and add volume name as prefix in rootDir
+		*/
+		if runtime.GOOS == "windows" && rootDir == `\` {
+			rootDir = filepath.VolumeName(common.ToShortPath(cca.source.Value))
+		}
+		
 		if cca.fromTo.From().IsRemote() {
 			ueRootDir, err := url.PathUnescape(rootDir)
 
