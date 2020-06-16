@@ -23,9 +23,6 @@ package e2etest
 import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	chk "gopkg.in/check.v1"
-	"path"
-	"runtime"
-	"strings"
 	"sync"
 )
 
@@ -33,6 +30,10 @@ import (
 // saying what to do, but not how to do it.
 // In particular, it lets one test cover a range of different source/dest types, and even cover both sync and copy.
 // See first test in zt_enumeration for an annotated example.
+
+// TODO:
+//     account types (std, prem etc)
+//     account-to-account (e.g. multiple containers, copying whole account)
 
 // RunTests is the key entry point for declarative testing.
 // It constructs and executes tests, according to its parameters, and checks their results
@@ -47,11 +48,7 @@ func RunTests(
 	fs testFiles,
 	// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
 ) {
-	// Get the name of the calling Test... method (for logging purposes)
-	pcs := make([]uintptr, 1)
-	n := runtime.Callers(2, pcs)
-	frame, _ := runtime.CallersFrames(pcs[:n]).Next()
-	testName := strings.Trim(path.Ext(frame.Function), ".")
+	suiteName, testName := getTestName()
 
 	// log the overall test that we are running, in a concise form (each scenario will be logged later)
 	// Removed to declutter the output:  c.Logf("%s -> RunTests for %v %v", testName, operations, testFromTo)
@@ -62,6 +59,7 @@ func RunTests(
 		for _, fromTo := range testFromTo.getValues(op) {
 			s := scenario{
 				c:         c,
+				suiteName: suiteName,
 				testName:  testName,
 				operation: op,
 				fromTo:    fromTo,
@@ -91,6 +89,7 @@ func RunTests(
 
 type scenario struct {
 	c         *chk.C
+	suiteName string
 	testName  string
 	operation Operation
 	fromTo    common.FromTo
@@ -108,5 +107,5 @@ func (s *scenario) Run() {
 }
 
 func (s *scenario) logStart() {
-	s.c.Logf("%s -> %s %s", s.testName, s.operation, s.fromTo)
+	s.c.Logf("%s.%s -> %s %s", s.suiteName, s.testName, s.operation, s.fromTo)
 }

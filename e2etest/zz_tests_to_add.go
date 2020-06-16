@@ -2,6 +2,9 @@ package e2etest
 
 // TODO: consider how to add tests to cover the following
 
+// Running these tests doesn't ensure that AZCOPY_E2E_EXECUTABLE_PATH points to an UP TO DATE build of the app.
+// Could we somehow make it do that?
+
 // Piping (we don't have any piping tests in the new suite yet)
 
 // --cap-mbps
