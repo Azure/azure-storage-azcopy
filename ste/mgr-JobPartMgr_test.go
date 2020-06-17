@@ -48,6 +48,7 @@ func (s *jobPartMgrTestSuite) TestInferContentType(c *chk.C) {
 		"/usr/foo/bla.png":             "image/png",
 		"/usr/foo/bla.multiple.dot.js": "application/javascript",
 		"/usr/foo/no/extension":        "application/octet-stream",
+		"/usr/foo/bla.HTML":            "text/html",
 	}
 
 	// Action & Assert

@@ -585,10 +585,10 @@ func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byt
 
 // TODO do we want these charset=utf-8?
 var builtinTypes = map[string]string{
-	".css":  "text/css; charset=utf-8",
+	".css":  "text/css;",
 	".gif":  "image/gif",
-	".htm":  "text/html; charset=utf-8",
-	".html": "text/html; charset=utf-8",
+	".htm":  "text/html;",
+	".html": "text/html;",
 	".jpeg": "image/jpeg",
 	".jpg":  "image/jpeg",
 	".js":   "application/javascript",
@@ -598,7 +598,7 @@ var builtinTypes = map[string]string{
 	".svg":  "image/svg+xml",
 	".wasm": "application/wasm",
 	".webp": "image/webp",
-	".xml":  "text/xml; charset=utf-8",
+	".xml":  "text/xml;",
 }
 
 func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []byte) string {
@@ -606,7 +606,7 @@ func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []by
 
 	// short-circuit for common static website files
 	// mime.TypeByExtension takes the registry into account, which is most often undesirable in practice
-	if override, ok := builtinTypes[fileExtension]; ok {
+	if override, ok := builtinTypes[strings.ToLower(fileExtension)]; ok {
 		return override
 	}
 
