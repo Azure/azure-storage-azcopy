@@ -818,8 +818,7 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 		panic("cannot report the same transfer done twice")
 	}
 
-	jptm.jobPartMgr.UpdateJobPartProgress(jptm.jobPartPlanTransfer.TransferStatus())
-	return jptm.jobPartMgr.ReportTransferDone()
+	return jptm.jobPartMgr.ReportTransferDone(jptm.jobPartPlanTransfer.TransferStatus())
 }
 
 func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {

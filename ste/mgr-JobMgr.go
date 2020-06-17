@@ -481,15 +481,14 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 	var jobProgressInfo jobPartProgressInfo
 	shouldLog := jm.ShouldLog(pipeline.LogInfo)
 
-	jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
-	if !ok {
-		jm.Panic(fmt.Errorf("Failed to find Job %v, Part #0", jm.jobID))
-	}
-	part0Plan := jobPart0Mgr.Plan()
-	jobStatus := part0Plan.JobStatus() // status of part 0 is status of job as a whole
-
 	for {
 		partProgressInfo := <-jm.jobPartProgress
+		jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
+		if !ok {
+			jm.Panic(fmt.Errorf("Failed to find Job %v, Part #0", jm.jobID))
+		}
+		part0Plan := jobPart0Mgr.Plan()
+		jobStatus := part0Plan.JobStatus() // status of part 0 is status of job as a whole
 		partsDone := atomic.AddUint32(&jm.partsDone, 1)
 		atomic.AddInt32(&jobProgressInfo.atomicTransfersCompleted, partProgressInfo.atomicTransfersCompleted)
 		atomic.AddInt32(&jobProgressInfo.atomicTransfersSkipped, partProgressInfo.atomicTransfersSkipped)
@@ -512,6 +511,9 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 		jm.chunkStatusLogger.FlushLog()
 	}
 
+	jobPart0Mgr, _ := jm.jobPartMgrs.Get(0)
+	part0Plan := jobPart0Mgr.Plan() // status of part 0 is status of job as whole.
+
 	partDescription := "all parts of entire Job"
 	if !haveFinalPart {
 		partDescription = "known parts of incomplete Job"
@@ -520,7 +522,7 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 		jm.Log(pipeline.LogInfo, fmt.Sprintf("%s %s successfully completed, cancelled or paused", partDescription, jm.jobID.String()))
 	}
 
-	switch jobStatus {
+	switch part0Plan.JobStatus() {
 	case common.EJobStatus.Cancelling():
 		part0Plan.SetJobStatus(common.EJobStatus.Cancelled())
 		if shouldLog {

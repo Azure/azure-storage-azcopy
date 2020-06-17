@@ -26,7 +26,7 @@ type IJobPartMgr interface {
 	Plan() *JobPartPlanHeader
 	ScheduleTransfers(jobCtx context.Context)
 	StartJobXfer(jptm IJobPartTransferMgr)
-	ReportTransferDone() uint32
+	ReportTransferDone(status common.TransferStatus) uint32
 	GetOverwriteOption() common.OverwriteOption
 	GetForceIfReadOnly() bool
 	AutoDecompress() bool
@@ -53,7 +53,6 @@ type IJobPartMgr interface {
 	getFolderCreationTracker() common.FolderCreationTracker
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 	FolderDeletionManager() common.FolderDeletionManager
-	UpdateJobPartProgress(status common.TransferStatus)
 }
 
 type serviceAPIVersionOverride struct{}
@@ -352,7 +351,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		jppt := plan.Transfer(t)
 		ts := jppt.TransferStatus()
 		if ts == common.ETransferStatus.Success() {
-			jpm.ReportTransferDone() // Don't schedule an already-completed/failed transfer
+			jpm.ReportTransferDone(ts) // Don't schedule an already-completed/failed transfer
 			continue
 		}
 
@@ -365,7 +364,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			// If source doesn't exists, skip the transfer
 			_, ok := includeTransfer[src]
 			if !ok {
-				jpm.ReportTransferDone() // Don't schedule transfer which is not mentioned to be included
+				jpm.ReportTransferDone(ts) // Don't schedule transfer which is not mentioned to be included
 				continue
 			}
 		}
@@ -379,7 +378,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			// skip the transfer
 			_, ok := excludeTransfer[src]
 			if ok {
-				jpm.ReportTransferDone() // Don't schedule transfer which is mentioned to be excluded
+				jpm.ReportTransferDone(ts) // Don't schedule transfer which is mentioned to be excluded
 				continue
 			}
 		}
@@ -673,7 +672,7 @@ func (jpm *jobPartMgr) deleteSnapshotsOption() common.DeleteSnapshotsOption {
 	return jpm.Plan().DeleteSnapshotsOption
 }
 
-func (jpm *jobPartMgr) UpdateJobPartProgress(status common.TransferStatus) {
+func (jpm *jobPartMgr) updateJobPartProgress(status common.TransferStatus) {
 	switch status {
 	case common.ETransferStatus.Success():
 		atomic.AddInt32(&jpm.progressInfo.atomicTransfersCompleted, 1)
@@ -687,8 +686,9 @@ func (jpm *jobPartMgr) UpdateJobPartProgress(status common.TransferStatus) {
 }
 
 // Call Done when a transfer has completed its epilog; this method returns the number of transfers completed so far
-func (jpm *jobPartMgr) ReportTransferDone() (transfersDone uint32) {
+func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfersDone uint32) {
 	transfersDone = atomic.AddUint32(&jpm.atomicTransfersDone, 1)
+	jpm.updateJobPartProgress(status)
 
 	//Add a safety count-check
 

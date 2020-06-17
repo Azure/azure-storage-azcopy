@@ -34,7 +34,6 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
@@ -42,7 +41,7 @@ import (
 // That's alright, but it's good to know on the off chance.
 // This sync.Once is present to ensure we output information about a S2S access tier preservation failure to stdout once
 var s2sAccessTierFailureLogStdout sync.Once
-var checkLengthFailureOnReadOnlyDst sync 	.Once
+var checkLengthFailureOnReadOnlyDst sync.Once
 
 // This sync.Once and string pair ensures that we only get a user's destination account kind once when handling set-tier
 // Premium block blob doesn't support tiering, and page blobs only support P1-80.
@@ -581,6 +580,7 @@ func commonSenderCompletion(jptm IJobPartTransferMgr, s sender, info TransferInf
 			jptm.Log(pipeline.LogDebug, "Finalizing Transfer")
 		}
 	} else {
+		jptm.SetStatus(common.ETransferStatus.Failed())
 		if jptm.ShouldLog(pipeline.LogDebug) {
 			jptm.Log(pipeline.LogDebug, "Finalizing Transfer Cancellation/Failure")
 		}
