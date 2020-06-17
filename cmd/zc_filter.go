@@ -262,7 +262,7 @@ func (f *includeAfterDateFilter) doesPass(storedObject storedObject) bool {
 // ParseISO8601 parses ISO 8601 dates. This routine is needed because GoLang's time.Parse* routines require all expected
 // elements to be present.  I.e. you can't specify just a date, and have the time default to 00:00. But ISO 8601 requires
 // that and, for usability, that's what we want.  (So that users can omit the whole time, or at least the seconds portion of it, if they wish)
-func (_ includeAfterDateFilter) ParseISO8601(s string) (time.Time, error) {
+func (_ includeAfterDateFilter) ParseISO8601(s string, chooseEarliest bool) (time.Time, error) {
 
 	// list of ISO-8601 Go-lang formats in descending order of completeness
 	formats := []string{
@@ -284,6 +284,21 @@ func (_ includeAfterDateFilter) ParseISO8601(s string) (time.Time, error) {
 	for _, f := range formats {
 		t, err := time.ParseInLocation(f, s, loc)
 		if err == nil {
+			if t.Location() == loc {
+				// if we are working in local time, then detect the case where the time falls in the repeated hour
+				// at then end of daylight saving, and resolve it according to chooseEarliest
+				const localNoTimezone = "2006-01-02T15:04:05"
+				var possibleLocalDuplicate time.Time
+				if chooseEarliest {
+					possibleLocalDuplicate = t.Add(-time.Hour) // test an hour earlier, and favour it, if it's the same local time
+				} else {
+					possibleLocalDuplicate = t.Add(time.Hour) // test an hour later, and favour it, if it's the same local time
+				}
+				isSameLocalTime := possibleLocalDuplicate.Format(localNoTimezone) == t.Format(localNoTimezone)
+				if isSameLocalTime {
+					return possibleLocalDuplicate, nil
+				}
+			}
 			return t, nil
 		}
 	}
