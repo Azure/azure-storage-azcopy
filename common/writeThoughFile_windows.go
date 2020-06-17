@@ -100,7 +100,7 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 		// cleared. (But then, given the download implementation as at 10.3.x,
 		// we'll try to clean up by deleting the file at the end of our job anyway, so we won't be
 		// leaving damaged trash around if the delete works).
-		// TODO: is that acceptable? Seems overkill to re-instate the attribute if the open fails...
+		// TODO: is that acceptable? Seems overkill to re-instate the attribute if the open fails....
 		newAttrs := fi.FileAttributes &^ toClear
 		err = windows.SetFileAttributes(destPtr, newAttrs)
 		return err == nil
