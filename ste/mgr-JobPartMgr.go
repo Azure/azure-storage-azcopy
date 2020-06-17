@@ -589,8 +589,34 @@ func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byt
 	return common.ResourceHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer), ContentLanguage: jpm.httpHeaders.ContentLanguage, ContentDisposition: jpm.httpHeaders.ContentDisposition, ContentEncoding: jpm.httpHeaders.ContentEncoding, CacheControl: jpm.httpHeaders.CacheControl}, jpm.metadata
 }
 
+// TODO do we want these charset=utf-8?
+var builtinTypes = map[string]string{
+	".css":  "text/css;",
+	".gif":  "image/gif",
+	".htm":  "text/html;",
+	".html": "text/html;",
+	".jpeg": "image/jpeg",
+	".jpg":  "image/jpeg",
+	".js":   "application/javascript",
+	".mjs":  "application/javascript",
+	".pdf":  "application/pdf",
+	".png":  "image/png",
+	".svg":  "image/svg+xml",
+	".wasm": "application/wasm",
+	".webp": "image/webp",
+	".xml":  "text/xml;",
+}
+
 func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []byte) string {
-	if guessedType := mime.TypeByExtension(filepath.Ext(fullFilePath)); guessedType != "" {
+	fileExtension := filepath.Ext(fullFilePath)
+
+	// short-circuit for common static website files
+	// mime.TypeByExtension takes the registry into account, which is most often undesirable in practice
+	if override, ok := builtinTypes[strings.ToLower(fileExtension)]; ok {
+		return override
+	}
+
+	if guessedType := mime.TypeByExtension(fileExtension); guessedType != "" {
 		return guessedType
 	}
 
