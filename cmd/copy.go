@@ -137,6 +137,9 @@ type rawCopyCmdArgs struct {
 
 	// internal override to enforce strip-top-dir
 	internalOverrideStripTopDir bool
+
+	// whether to include blobs that have metadata 'hdi_isfolder = true'
+	includeDirectoryStubs bool
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -441,6 +444,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	cooked.cacheControl = raw.cacheControl
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
+	cooked.includeDirectoryStubs = raw.includeDirectoryStubs
 
 	// Make sure the given input is the one of the enums given by the blob SDK
 	err = cooked.deleteSnapshotsOption.Parse(raw.deleteSnapshotsOption)
@@ -865,6 +869,9 @@ type cookedCopyCmdArgs struct {
 	priorJobExitCode  *common.ExitCode
 	isCleanupJob      bool // triggers abbreviated status reporting, since we don't want full reporting for cleanup jobs
 	cleanupJobMessage string
+
+	// whether to include blobs that have metadata 'hdi_isfolder = true'
+	includeDirectoryStubs bool
 }
 
 func (cca *cookedCopyCmdArgs) isRedirection() bool {
