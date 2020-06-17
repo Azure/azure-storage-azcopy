@@ -119,7 +119,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 
 		storedObject := newStoredObject(
 			preprocessor,
-			getObjectNameOnly(blobUrlParts.BlobName),
+			getObjectNameOnly(strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
 			"",
 			common.EEntityType.File(),
 			blobProperties.LastModified(),
