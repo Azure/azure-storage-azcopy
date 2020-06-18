@@ -521,16 +521,12 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	}
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed
 	// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
-	if (js.CompleteJobOrdered) && (part0PlanStatus == common.EJobStatus.Completed()) {
+	if (js.CompleteJobOrdered) && (part0PlanStatus.IsJobDone()) {
 		js.JobStatus = part0PlanStatus
 	}
 
-	if js.JobStatus == common.EJobStatus.Completed() {
-		js.JobStatus = js.JobStatus.EnhanceJobStatusInfo(js.TransfersSkipped > 0, js.TransfersFailed > 0,
-			js.TransfersCompleted > 0)
-
+	if js.JobStatus.IsJobDone() {
 		js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped, part0.Plan().FromTo)
-
 	}
 
 	return js
