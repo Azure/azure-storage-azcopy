@@ -38,6 +38,7 @@ func (s *changeDetectionSuite) TestDetectFileChangedDuringTransfer(c *chk.C) {
 	RunTests(c,
 		eOperation.CopyAndSync(),
 		eTestFromTo.AllPairs(),
+		eValidate.TransferStates(),
 		nil,
 		nil,
 		params{

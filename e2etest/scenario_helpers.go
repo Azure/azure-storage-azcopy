@@ -65,7 +65,7 @@ func (scenarioHelper) generateListOfFiles(c asserter, fileList []string) (path s
 	c.Assert(err, chk.IsNil)
 
 	// create the file
-	path = common.GenerateFullPath(parentDirName, generateName("listy", 0))
+	path = common.GenerateFullPath(parentDirName, generateName(c, "listy", 0))
 	err = os.MkdirAll(filepath.Dir(path), os.ModePerm)
 	c.Assert(err, chk.IsNil)
 
@@ -112,11 +112,11 @@ func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c asserter, dirPath
 	fileList = make([]string, 50)
 	for i := 0; i < 10; i++ {
 		batch := []string{
-			generateName(prefix+"top", 0),
-			generateName(prefix+"sub1/", 0),
-			generateName(prefix+"sub2/", 0),
-			generateName(prefix+"sub1/sub3/sub5/", 0),
-			generateName(prefix+specialNames[i], 0),
+			generateName(c, prefix+"top", 0),
+			generateName(c, prefix+"sub1/", 0),
+			generateName(c, prefix+"sub2/", 0),
+			generateName(c, prefix+"sub1/sub3/sub5/", 0),
+			generateName(c, prefix+specialNames[i], 0),
 		}
 
 		for j, name := range batch {
@@ -219,7 +219,7 @@ func (s scenarioHelper) generateFileSharesAndFilesFromLists(c asserter, serviceU
 		_, err := surl.Create(ctx, azfile.Metadata{}, 0)
 		c.Assert(err, chk.IsNil)
 
-		s.generateAzureFilesFromList(c, surl, fileList)
+		s.generateAzureFilesFromList(c, surl, fileList, defaultFileSize)
 	}
 }
 
@@ -386,7 +386,7 @@ func (scenarioHelper) generateCommonRemoteScenarioForS3(c asserter, client *mini
 }
 
 // create the demanded azure files
-func (scenarioHelper) generateAzureFilesFromList(c asserter, shareURL azfile.ShareURL, fileList []string) {
+func (scenarioHelper) generateAzureFilesFromList(c asserter, shareURL azfile.ShareURL, fileList []string, size int) {
 	for _, filePath := range fileList {
 		file := shareURL.NewRootDirectoryURL().NewFileURL(filePath)
 
@@ -394,9 +394,11 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, shareURL azfile.Sha
 		generateParentsForAzureFile(c, file)
 
 		// create the file itself
-		cResp, err := file.Create(ctx, defaultAzureFileSizeInBytes, azfile.FileHTTPHeaders{}, azfile.Metadata{})
+		cResp, err := file.Create(ctx, int64(size), azfile.FileHTTPHeaders{}, azfile.Metadata{})
 		c.Assert(err, chk.IsNil)
 		c.Assert(cResp.StatusCode(), chk.Equals, 201)
+
+		// TODO: do we want to put some random content into it?
 	}
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past

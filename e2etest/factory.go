@@ -72,7 +72,7 @@ func (TestResourceFactory) GetDatalakeServiceURL(accountType AccountType) azbfs.
 	return azbfs.NewServiceURL(*u, pipeline)
 }
 
-func (TestResourceFactory) GetBlobServiceURLWithSAS(c *chk.C, accountType AccountType) azblob.ServiceURL {
+func (TestResourceFactory) GetBlobServiceURLWithSAS(c asserter, accountType AccountType) azblob.ServiceURL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(accountType)
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
 	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
@@ -98,7 +98,7 @@ func (TestResourceFactory) GetBlobServiceURLWithSAS(c *chk.C, accountType Accoun
 	return azblob.NewServiceURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
 }
 
-func (TestResourceFactory) GetContainerURLWithSAS(c *chk.C, accountType AccountType, containerName string) azblob.ContainerURL {
+func (TestResourceFactory) GetContainerURLWithSAS(c asserter, accountType AccountType, containerName string) azblob.ContainerURL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(accountType)
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
 	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
@@ -123,20 +123,32 @@ func (TestResourceFactory) GetContainerURLWithSAS(c *chk.C, accountType AccountT
 	return azblob.NewContainerURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
 }
 
-func (TestResourceFactory) GetBlobURLWithSAS(c *chk.C, accountType AccountType, containerName string, blobName string) azblob.BlobURL {
+func (TestResourceFactory) GetBlobURLWithSAS(c asserter, accountType AccountType, containerName string, blobName string) azblob.BlobURL {
 	containerURLWithSAS := TestResourceFactory{}.GetContainerURLWithSAS(c, accountType, containerName)
 	blobURLWithSAS := containerURLWithSAS.NewBlobURL(blobName)
 	return blobURLWithSAS
 }
 
 func (TestResourceFactory) CreateNewContainer(c asserter, accountType AccountType) (container azblob.ContainerURL, name string, rawURL url.URL) {
-	name = TestResourceNameGenerator{}.GenerateContainerName()
+	name = TestResourceNameGenerator{}.GenerateContainerName(c)
 	container = TestResourceFactory{}.GetBlobServiceURL(accountType).NewContainerURL(name)
 
 	cResp, err := container.Create(context.Background(), nil, azblob.PublicAccessNone)
 	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
 	return container, name, TestResourceFactory{}.GetContainerURLWithSAS(c, accountType, name).URL()
+}
+
+const defaultShareQuotaGB = 512
+
+func (TestResourceFactory) CreateNewFileShare(c asserter, accountType AccountType) (fileShare azfile.ShareURL, name string) {
+	name = TestResourceNameGenerator{}.GenerateContainerName(c)
+	fileShare = TestResourceFactory{}.GetFileServiceURL(accountType).NewShareURL(name)
+
+	cResp, err := fileShare.Create(context.Background(), nil, defaultShareQuotaGB)
+	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
+	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	return fileShare, name // TODO add file share sas similar to this if needed: TestResourceFactory{}.GetContainerURLWithSAS(c, accountType, name).URL()
 }
 
 func (TestResourceFactory) CreateLocalDirectory(c asserter) (dstDirName string) {
@@ -184,8 +196,8 @@ func getTestName() (testSuite, test string) {
 // them, and determine the order in which they were created.
 // Will truncate the end of the test name, if there is not enough room for it, followed by the time-based suffix,
 // with a non-zero maxLen.
-func generateName(prefix string, maxLen int) string {
-	_, name := getTestName()
+func generateName(c asserter, prefix string, maxLen int) string {
+	name := c.ScenarioName() // don't want to just use test name here, because each test contains multiple scearios with the declarative runner
 
 	textualPortion := fmt.Sprintf("%s%s", prefix, strings.ToLower(name))
 	currentTime := time.Now()
@@ -203,10 +215,10 @@ func generateName(prefix string, maxLen int) string {
 	return name
 }
 
-func (TestResourceNameGenerator) GenerateContainerName() string {
-	return generateName(containerPrefix, 63)
+func (TestResourceNameGenerator) GenerateContainerName(c asserter) string {
+	return generateName(c, containerPrefix, 63)
 }
 
-func (TestResourceNameGenerator) generateBlobName() string {
-	return generateName(blobPrefix, 0)
+func (TestResourceNameGenerator) generateBlobName(c asserter) string {
+	return generateName(c, blobPrefix, 0)
 }

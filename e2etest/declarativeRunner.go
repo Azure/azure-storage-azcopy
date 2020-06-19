@@ -21,6 +21,7 @@
 package e2etest
 
 import (
+	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	chk "gopkg.in/check.v1"
 	"sync"
@@ -41,6 +42,7 @@ func RunTests(
 	c *chk.C,
 	operations Operation,
 	testFromTo TestFromTo,
+	validate Validate, // TODO: do we really want the test author to have to nominate which validation should happen?  Pros: better perf of tests. Cons: they have to tell us, and if they tell us wrong test may not test what they think it tests
 	_ interface{}, // TODO, blockBLobsOnly or specifc/all blob types
 	_ interface{}, // TODO, default auth type only, or specific/all auth types
 	p params,
@@ -50,22 +52,21 @@ func RunTests(
 ) {
 	suiteName, testName := getTestName()
 
-	// log the overall test that we are running, in a concise form (each scenario will be logged later)
-	// Removed to declutter the output:  c.Logf("%s -> RunTests for %v %v", testName, operations, testFromTo)
-
 	// construct all the scenarios
 	scenarios := make([]scenario, 0, 16)
 	for _, op := range operations.getValues() {
 		for _, fromTo := range testFromTo.getValues(op) {
+			scenarioName := fmt.Sprintf("%s.%s[%s,%s]", suiteName, testName, op, fromTo)
 			s := scenario{
-				c:         c,
-				suiteName: suiteName,
-				testName:  testName,
-				operation: op,
-				fromTo:    fromTo,
-				p:         p, // copies them, because they are a struct. This is what we need, since the may be morphed while running
-				hs:        hs,
-				fs:        fs,
+				c:            c,
+				scenarioName: scenarioName,
+				operation:    op,
+				fromTo:       fromTo,
+				validate:     validate,
+				p:            p, // copies them, because they are a struct. This is what we need, since the may be morphed while running
+				hs:           hs,
+				fs:           fs,
+				a:            &scenarioAsserter{c, scenarioName},
 			}
 
 			scenarios = append(scenarios, s)
@@ -88,24 +89,117 @@ func RunTests(
 }
 
 type scenario struct {
-	c         *chk.C
-	suiteName string
-	testName  string
-	operation Operation
-	fromTo    common.FromTo
-	p         params
-	hs        *hooks
-	fs        testFiles
+
+	// scenario config properties as provided by user
+	c            *chk.C
+	scenarioName string
+	operation    Operation
+	validate     Validate
+	fromTo       common.FromTo
+	p            params
+	hs           *hooks
+	fs           testFiles
+	a            asserter
+
+	// internal declarative runner state
+	state scenarioState
+}
+
+type scenarioState struct {
+	source resourceManager
+	dest   resourceManager
+}
+
+// TODO: any better names for this?
+// a source or destination
+type resourceManager interface {
+
+	// setup creates and initializes a test resource appropriate for the given test files
+	setup(a asserter, fs testFiles, isSource bool)
+
+	// cleanup gets rid of everything that setup created
+	// (Takes no param, because the resourceManager is expected to track its own state. E.g. "what did I make")
+	cleanup(a asserter)
 }
 
 // Run runs one test scenario
 func (s *scenario) Run() {
+	defer s.cleanup()
+
 	s.logStart()
 
-	// TODO: add implementation here! ;-)
-	s.c.Succeed()
+	// setup
+	s.assignSourceAndDest() // what/where are they
+	s.state.source.setup(s.a, s.fs, true)
+	s.state.dest.setup(s.a, s.fs, false)
+	s.prepareParams()
+
+	// execute
+	s.runAzCopy()
+
+	// check
+	s.validateTransfers()
+	if s.validate&eValidate.Content() == eValidate.Content() {
+		s.validateContent()
+	}
 }
 
 func (s *scenario) logStart() {
-	s.c.Logf("%s.%s -> %s %s", s.suiteName, s.testName, s.operation, s.fromTo)
+	s.c.Logf("Start scenario: %s", s.scenarioName)
+}
+
+func (s *scenario) logWarning(where string, err error) {
+	s.c.Logf("warning in %s: %s %v", s.scenarioName, where, err)
+}
+
+func (s *scenario) assignSourceAndDest() {
+	createTestResource := func(loc common.Location) resourceManager {
+		// TODO: handle account to account (multi-container) scenarios
+		switch loc {
+		case common.ELocation.Local():
+			return &resourceLocal{}
+		case common.ELocation.File():
+			return &resourceAzureFiles{accountType: EAccountType.Standard()}
+		case common.ELocation.Blob():
+			// TODO: handle the multi-container (whole account) scenario
+			// TODO: handle wider variety of account types
+			return &resourceBlobContainer{accountType: EAccountType.Standard()}
+		case common.ELocation.BlobFS():
+			s.c.Error("Not implementd yet for blob FS")
+			return &resourceDummy{}
+		case common.ELocation.S3():
+			s.c.Error("Not implementd yet for S3")
+			return &resourceDummy{}
+		default:
+			panic(fmt.Sprintf("location type '%s' is not yet supported in declarative tests", loc))
+		}
+	}
+
+	s.state.source = createTestResource(s.fromTo.From())
+	s.state.dest = createTestResource(s.fromTo.To())
+}
+
+func (s *scenario) prepareParams() {
+
+}
+
+func (s *scenario) runAzCopy() {
+
+}
+
+func (s *scenario) validateTransfers() {
+
+}
+
+func (s *scenario) validateContent() {
+
+}
+
+func (s *scenario) cleanup() {
+	if s.state.source != nil {
+		s.state.source.cleanup(s.a)
+	}
+	if s.state.dest != nil {
+		s.state.dest.cleanup(s.a)
+	}
 }

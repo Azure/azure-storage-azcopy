@@ -80,93 +80,93 @@ func skipIfS3Disabled(c asserter) {
 	}
 }
 
-func generateContainerName() string {
-	return generateName(containerPrefix, 63)
+func generateContainerName(c asserter) string {
+	return generateName(c, containerPrefix, 63)
 }
 
-func generateBlobName() string {
-	return generateName(blobPrefix, 0)
+func generateBlobName(c asserter) string {
+	return generateName(c, blobPrefix, 0)
 }
 
-func generateBucketName() string {
-	return generateName(bucketPrefix, 63)
+func generateBucketName(c asserter) string {
+	return generateName(c, bucketPrefix, 63)
 }
 
-func generateBucketNameWithCustomizedPrefix(customizedPrefix string) string {
-	return generateName(customizedPrefix, 63)
+func generateBucketNameWithCustomizedPrefix(c asserter, customizedPrefix string) string {
+	return generateName(c, customizedPrefix, 63)
 }
 
-func generateObjectName() string {
-	return generateName(objectPrefix, 0)
+func generateObjectName(c asserter) string {
+	return generateName(c, objectPrefix, 0)
 }
 
-func generateShareName() string {
-	return generateName(sharePrefix, 63)
+func generateShareName(c asserter) string {
+	return generateName(c, sharePrefix, 63)
 }
 
-func generateFilesystemName() string {
-	return generateName(blobfsPrefix, 63)
+func generateFilesystemName(c asserter) string {
+	return generateName(c, blobfsPrefix, 63)
 }
 
 func getShareURL(c asserter, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
-	name = generateShareName()
+	name = generateShareName(c)
 	share = fsu.NewShareURL(name)
 
 	return share, name
 }
 
-func generateAzureFileName() string {
-	return generateName(azureFilePrefix, 0)
+func generateAzureFileName(c asserter) string {
+	return generateName(c, azureFilePrefix, 0)
 }
 
-func generateBfsFileName() string {
-	return generateName(blobfsPrefix, 0)
+func generateBfsFileName(c asserter) string {
+	return generateName(c, blobfsPrefix, 0)
 }
 
 func getContainerURL(c asserter, bsu azblob.ServiceURL) (container azblob.ContainerURL, name string) {
-	name = generateContainerName()
+	name = generateContainerName(c)
 	container = bsu.NewContainerURL(name)
 
 	return container, name
 }
 
 func getFilesystemURL(c asserter, bfssu azbfs.ServiceURL) (filesystem azbfs.FileSystemURL, name string) {
-	name = generateFilesystemName()
+	name = generateFilesystemName(c)
 	filesystem = bfssu.NewFileSystemURL(name)
 
 	return
 }
 
 func getBlockBlobURL(c asserter, container azblob.ContainerURL, prefix string) (blob azblob.BlockBlobURL, name string) {
-	name = prefix + generateBlobName()
+	name = prefix + generateBlobName(c)
 	blob = container.NewBlockBlobURL(name)
 
 	return blob, name
 }
 
 func getBfsFileURL(c asserter, filesystemURL azbfs.FileSystemURL, prefix string) (file azbfs.FileURL, name string) {
-	name = prefix + generateBfsFileName()
+	name = prefix + generateBfsFileName(c)
 	file = filesystemURL.NewRootDirectoryURL().NewFileURL(name)
 
 	return
 }
 
 func getAppendBlobURL(c asserter, container azblob.ContainerURL, prefix string) (blob azblob.AppendBlobURL, name string) {
-	name = generateBlobName()
+	name = generateBlobName(c)
 	blob = container.NewAppendBlobURL(prefix + name)
 
 	return blob, name
 }
 
 func getPageBlobURL(c asserter, container azblob.ContainerURL, prefix string) (blob azblob.PageBlobURL, name string) {
-	name = generateBlobName()
+	name = generateBlobName(c)
 	blob = container.NewPageBlobURL(prefix + name)
 
 	return
 }
 
 func getAzureFileURL(c asserter, shareURL azfile.ShareURL, prefix string) (fileURL azfile.FileURL, name string) {
-	name = prefix + generateAzureFileName()
+	name = prefix + generateAzureFileName(c)
 	fileURL = shareURL.NewRootDirectoryURL().NewFileURL(name)
 
 	return
@@ -339,7 +339,7 @@ func createS3ClientWithMinio(o createS3ResOptions) (*minio.Client, error) {
 }
 
 func createNewBucket(c asserter, client *minio.Client, o createS3ResOptions) string {
-	bucketName := generateBucketName()
+	bucketName := generateBucketName(c)
 	err := client.MakeBucket(bucketName, o.Location)
 	c.Assert(err, chk.IsNil)
 
@@ -352,7 +352,7 @@ func createNewBucketWithName(c asserter, client *minio.Client, bucketName string
 }
 
 func createNewObject(c asserter, client *minio.Client, bucketName string, prefix string) (objectKey string) {
-	objectKey = prefix + generateObjectName()
+	objectKey = prefix + generateObjectName(c)
 
 	size := int64(len(objectDefaultData))
 	n, err := client.PutObject(bucketName, objectKey, strings.NewReader(objectDefaultData), size, minio.PutObjectOptions{})

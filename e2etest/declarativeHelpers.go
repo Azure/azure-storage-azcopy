@@ -38,6 +38,7 @@ type asserter interface {
 	Assert(obtained interface{}, checker chk.Checker, args ...interface{})
 	AssertNoErr(where string, err error)
 	Skip(reason string)
+	ScenarioName() string
 }
 
 type scenarioAsserter struct {
@@ -48,7 +49,7 @@ type scenarioAsserter struct {
 func (a *scenarioAsserter) Assert(obtained interface{}, checker chk.Checker, args ...interface{}) {
 	fullArgs := make([]interface{}, 0)
 	fullArgs = append(fullArgs, args)
-	fullArgs = append(fullArgs, chk.Commentf(a.scenarioName))
+	fullArgs = append(fullArgs, chk.Commentf(a.ScenarioName()))
 	a.c.Assert(obtained, checker, fullArgs)
 }
 
@@ -58,6 +59,15 @@ func (a *scenarioAsserter) AssertNoErr(where string, err error) {
 
 func (a *scenarioAsserter) Skip(reason string) {
 	a.c.Skip(reason)
+}
+
+func (a *scenarioAsserter) ScenarioName() string {
+	if a.scenarioName == "" {
+		// assume we are actually not in the declarative runner
+		_, name := getTestName()
+		return name
+	}
+	return a.scenarioName
 }
 
 ///////////////
@@ -82,6 +92,31 @@ type testFiles struct {
 type failure struct {
 	filename              string
 	partialFailureMessage string
+}
+
+func (tf *testFiles) allNames(isSource bool) []string {
+	if isSource {
+		result := make([]string, 0)
+		result = append(result, tf.shouldTransfer...)
+		result = append(result, tf.shouldIgnore...) // these must be present at the source. Enumeration filters are expected to skip them
+		result = append(result, tf.shouldSkip...)   // these must be present at the source. Overwrite processing is expected to skip them
+		for _, f := range tf.shouldFail {
+			// these must also be present at the source. Their transferring is expected to fail
+			result = append(result, f.filename)
+		}
+		return result
+	} else {
+		// destination only needs the things that overwrite will skip
+		return tf.shouldSkip
+	}
+}
+
+func (tf *testFiles) defaultSizeBytes() (int, error) {
+	longSize, err := cmd.ParseSizeString(tf.size, "testFiles.size")
+	if longSize < math.MaxInt32 {
+		return int(longSize), err
+	}
+	return 0, errors.New("unsupported size")
 }
 
 ////
@@ -246,6 +281,27 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 	}
 
 	return result
+}
+
+////
+
+var eValidate = Validate(0)
+
+type Validate uint8
+
+// TODO: review this enum
+
+// TransferStates validates "which transfers did we attempt, and what was their outcome?"
+func (Validate) TransferStates() Validate { return Validate(1) }
+
+// Content validates "was file content preserved"?  TODO: do we really want to compare bytes, or use the MD5 hash mechanism?
+func (Validate) Content() Validate { return Validate(2) }
+
+// TODO: if add more, ensure All() still means all
+func (Validate) All() Validate { return Validate(3) }
+
+func (v Validate) String() string {
+	return enum.StringInt(v, reflect.TypeOf(v))
 }
 
 //////

@@ -53,6 +53,7 @@ func (s *enumerationSuite) TestFilter_IncludePath_Folder(c *chk.C) {
 		c,                                 // Pass the chk object in, so that RunTests can make assertions with it
 		eOperation.CopyAndSync(),          // Should the test be run for copy only, sync only, or both?
 		eTestFromTo.AllSourcesToOneDest(), // What range of source/dest pairs should this test be run on
+		eValidate.TransferStates(),        // What to validate (in this case, we don't validate content. We just validate that the desired transfers were scheduled
 		nil,                               // Here nil == block blobs only; or eBlobTypes.All() == test on all blob types
 		nil,                               // Here nil == use one (default) auth type only. To repeat the test with different auth types, use eAuthTypes.<something>.
 		params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
@@ -77,11 +78,14 @@ func (s *enumerationSuite) TestFilter_IncludePath_Folder(c *chk.C) {
 				"sub/subsub/fileb",
 				"sub/subsub/filec",
 			},
-		})
+		},
+	)
 
 }
 
-func (s *enumerationSuite) TestFilter_IncludePath_Folder_Temp_Imperative(c *chk.C) {
+func (s *enumerationSuite) TestFilter_IncludePath_Folder_Temp_Imperative(ch *chk.C) {
+	c := &scenarioAsserter{ch, ""}
+
 	// set up the source
 	files := []string{
 		"filea",
@@ -102,8 +106,8 @@ func (s *enumerationSuite) TestFilter_IncludePath_Folder_Temp_Imperative(c *chk.
 
 	dirPath := TestResourceFactory{}.CreateLocalDirectory(c)
 	defer os.RemoveAll(dirPath)
-	scenarioHelper{}.generateLocalFilesFromList(c, dirPath, files)
-	scenarioHelper{}.generateLocalFilesFromList(c, dirPath, filesToInclude)
+	scenarioHelper{}.generateLocalFilesFromList(c, dirPath, files, defaultFileSize)
+	scenarioHelper{}.generateLocalFilesFromList(c, dirPath, filesToInclude, defaultFileSize)
 
 	// set up the destination
 	containerURL, _, containerURLWithSAS := TestResourceFactory{}.CreateNewContainer(c, EAccountType.Standard())
@@ -130,6 +134,7 @@ func (s *enumerationSuite) TestFilter_IncludeAfter(c *chk.C) {
 	RunTests(c,
 		eOperation.Copy(), // IncludeAfter is not applicable for sync
 		eTestFromTo.AllSourcesToOneDest(),
+		eValidate.TransferStates(),
 		nil,
 		nil,
 		params{},
