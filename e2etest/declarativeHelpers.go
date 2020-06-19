@@ -21,11 +21,44 @@
 package e2etest
 
 import (
+	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/cmd"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/JeffreyRichter/enum/enum"
+	chk "gopkg.in/check.v1"
+	"math"
 	"reflect"
 )
+
+///////////
+
+// simplified assertion interface. Allows us to hook in scenario identification in our assertions
+type asserter interface {
+	Assert(obtained interface{}, checker chk.Checker, args ...interface{})
+	AssertNoErr(where string, err error)
+	Skip(reason string)
+}
+
+type scenarioAsserter struct {
+	c            *chk.C
+	scenarioName string
+}
+
+func (a *scenarioAsserter) Assert(obtained interface{}, checker chk.Checker, args ...interface{}) {
+	fullArgs := make([]interface{}, 0)
+	fullArgs = append(fullArgs, args)
+	fullArgs = append(fullArgs, chk.Commentf(a.scenarioName))
+	a.c.Assert(obtained, checker, fullArgs)
+}
+
+func (a *scenarioAsserter) AssertNoErr(where string, err error) {
+	a.Assert(err, chk.IsNil, chk.Commentf(where))
+}
+
+func (a *scenarioAsserter) Skip(reason string) {
+	a.c.Skip(reason)
+}
 
 ///////////////
 

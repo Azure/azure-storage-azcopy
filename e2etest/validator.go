@@ -32,7 +32,7 @@ import (
 
 type Validator struct{}
 
-func (Validator) ValidateCopyTransfersAreScheduled(c *chk.C, isSrcEncoded bool, isDstEncoded bool,
+func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool, isDstEncoded bool,
 	sourcePrefix string, destinationPrefix string, expectedTransfers []string, actualTransfers []common.TransferDetail) {
 
 	normalizeSlashes := func(s string) string {

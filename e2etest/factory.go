@@ -129,7 +129,7 @@ func (TestResourceFactory) GetBlobURLWithSAS(c *chk.C, accountType AccountType, 
 	return blobURLWithSAS
 }
 
-func (TestResourceFactory) CreateNewContainer(c *chk.C, accountType AccountType) (container azblob.ContainerURL, name string, rawURL url.URL) {
+func (TestResourceFactory) CreateNewContainer(c asserter, accountType AccountType) (container azblob.ContainerURL, name string, rawURL url.URL) {
 	name = TestResourceNameGenerator{}.GenerateContainerName()
 	container = TestResourceFactory{}.GetBlobServiceURL(accountType).NewContainerURL(name)
 
@@ -139,7 +139,7 @@ func (TestResourceFactory) CreateNewContainer(c *chk.C, accountType AccountType)
 	return container, name, TestResourceFactory{}.GetContainerURLWithSAS(c, accountType, name).URL()
 }
 
-func (TestResourceFactory) CreateLocalDirectory(c *chk.C) (dstDirName string) {
+func (TestResourceFactory) CreateLocalDirectory(c asserter) (dstDirName string) {
 	dstDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
 	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
 	return
