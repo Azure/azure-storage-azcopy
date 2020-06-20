@@ -55,14 +55,14 @@ func NewDropboxURLParts(u url.URL) (DropboxURLParts, error) {
 	if path != "" && path[0] == '/' {
 		path = path[1:]
 	}
-	up.ObjectKey = path
+	up.ObjectKey = strings.TrimSuffix(path, "/")
 
 	dbx, err := CreateDropboxClient()
 	if err != nil {
 		return DropboxURLParts{}, err
 	}
-	if u.Path != "/" {
-		metadata, err := dbx.GetMetadata(files.NewGetMetadataArg("/" + up.ObjectKey))
+	if u.Path != "/" && u.Path != "/*" && u.Path != "" {
+		metadata, err := dbx.GetMetadata(files.NewGetMetadataArg("/" + strings.TrimSuffix(up.ObjectKey, "/*")))
 		if err != nil {
 			return DropboxURLParts{}, err
 		}

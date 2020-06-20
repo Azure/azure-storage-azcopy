@@ -71,10 +71,11 @@ func (t *dropboxTraverser) traverse(preprocessor objectMorpher, processor object
 		return err
 	}
 	for i := 0; i < len(objects); i++ {
+		relativePath := strings.TrimPrefix(objects[i].ObjectPath(), t.dropboxURLParts.ObjectKey+"/")
 		storedObject := newStoredObject(
 			preprocessor,
 			objects[i].ObjectName(),
-			objects[i].ObjectPath(),
+			relativePath,
 			common.EEntityType.File(),
 			objects[i].LMT(),
 			objects[i].Size(),
@@ -94,10 +95,10 @@ func (t *dropboxTraverser) traverse(preprocessor objectMorpher, processor object
 
 func (t *dropboxTraverser) ListObjects(path string) ([]*common.DropboxObjectInfoExtension, error) {
 	objectInfos := make([]*common.DropboxObjectInfoExtension, 0)
-	arg := files.NewListFolderArg(path)
+	arg := files.NewListFolderArg(common.IffString(path == "" || path == "/" || path == "/*", "", "/"+path))
 	arg.Recursive = t.recursive
 	arg.IncludeNonDownloadableFiles = false
-	res, err := t.client.ListFolder(files.NewListFolderArg(path))
+	res, err := t.client.ListFolder(arg)
 	if err != nil {
 		return objectInfos, err
 	}
