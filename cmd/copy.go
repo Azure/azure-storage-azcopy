@@ -589,6 +589,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		}
 	case common.EFromTo.BlobFile(),
 		common.EFromTo.S3Blob(),
+		common.EFromTo.DropboxBlob(),
 		common.EFromTo.BlobBlob(),
 		common.EFromTo.FileBlob(),
 		common.EFromTo.FileFile():
@@ -1078,6 +1079,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		common.EFromTo.FileFile(),
 		common.EFromTo.BlobFile(),
 		common.EFromTo.S3Blob(),
+		common.EFromTo.DropboxBlob(),
 		common.EFromTo.BenchmarkBlob(),
 		common.EFromTo.BenchmarkBlobFS(),
 		common.EFromTo.BenchmarkFile():

@@ -344,7 +344,24 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 			return fmt.Errorf(
 				"s3 authentication to %s is not currently suported in AzCopy", host)
 		}
+	case common.ECredentialType.DropboxAccessToken():
+		if resourceType != common.ELocation.Dropbox() {
+			return fmt.Errorf("dropbox Access Token authentication to %s is not a valid combination", resourceType)
+		}
+		ok := false
+		host := "<unparseable url>"
+		u, err := url.Parse(resource)
+		if err == nil {
+			host = u.Host
+			_, err := common.NewDropboxURLParts(*u)
+			if err == nil {
+				ok = true
+			}
+		}
 
+		if !ok {
+			return fmt.Errorf("dropbox authentication to %s is not support", host)
+		}
 	default:
 		panic("unknown credential type")
 	}
@@ -388,7 +405,7 @@ func getCredentialTypeForLocation(ctx context.Context, location common.Location,
 func doGetCredentialTypeForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool, getForcedCredType func() common.CredentialType) (credType common.CredentialType, isPublic bool, err error) {
 	if resourceSAS != "" {
 		credType = common.ECredentialType.Anonymous()
-	} else if credType = getForcedCredType(); credType == common.ECredentialType.Unknown() || location == common.ELocation.S3() {
+	} else if credType = getForcedCredType(); credType == common.ECredentialType.Unknown() || location == common.ELocation.S3() || location == common.ELocation.Dropbox() {
 		switch location {
 		case common.ELocation.Local(), common.ELocation.Benchmark():
 			credType = common.ECredentialType.Anonymous()
@@ -411,6 +428,12 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 				return common.ECredentialType.Unknown(), false, errors.New("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables must be set before creating the S3 AccessKey credential")
 			}
 			credType = common.ECredentialType.S3AccessKey()
+		case common.ELocation.Dropbox():
+			accessToken := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DropboxAccessToken())
+			if accessToken == "" {
+				return common.ECredentialType.Unknown(), false, errors.New("DROPBOX_ACCESS_TOKEN env variables must be set before using Dropbox as source")
+			}
+			credType = common.ECredentialType.DropboxAccessToken()
 		}
 	}
 

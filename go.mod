@@ -9,6 +9,7 @@ require (
 	github.com/cpuguy83/go-md2man v1.0.10 // indirect
 	github.com/danieljoos/wincred v1.0.1
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
+	github.com/dropbox/dropbox-sdk-go-unofficial v5.6.0+incompatible
 	github.com/go-ini/ini v1.41.0 // indirect
 	github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
@@ -24,6 +25,7 @@ require (
 	github.com/stretchr/objx v0.1.1 // indirect
 	github.com/stretchr/testify v1.3.0 // indirect
 	golang.org/x/crypto v0.0.0-20190513172903-22d7a77e9e5f
+	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d // indirect
 	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
 	golang.org/x/sys v0.0.0-20191220220014-0732a990476f
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127

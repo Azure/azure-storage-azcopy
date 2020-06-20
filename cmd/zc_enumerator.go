@@ -227,7 +227,6 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, en
 		Metadata:           meta,
 		containerName:      containerName,
 	}
-
 	// Folders don't have size, and root ones shouldn't have names in the storedObject. Ensure those rules are consistently followed
 	if entityType == common.EEntityType.Folder() {
 		obj.size = 0
@@ -476,6 +475,29 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 				return nil, err
 			}
 		}
+	case common.ELocation.Dropbox():
+		resourceURL, err := resource.FullURL()
+		if err != nil {
+			return nil, err
+		}
+
+		recommendHttpsIfNecessary(*resourceURL)
+
+		_, err = common.NewDropboxURLParts(*resourceURL)
+		if err != nil {
+			return nil, err
+		}
+
+		if ctx == nil {
+			return nil, errors.New("a valid context must be supplied to create a Dropbox traverser")
+		}
+
+		output, err = newDropboxTraverser(resourceURL, *ctx, recursive, getProperties, incrementEnumerationCounter)
+
+		if err != nil {
+			return nil, err
+		}
+
 	default:
 		return nil, errors.New("could not choose a traverser from currently available traversers")
 	}

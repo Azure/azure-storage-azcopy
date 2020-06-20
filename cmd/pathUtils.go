@@ -59,7 +59,8 @@ func determineLocationLevel(location string, locationType common.Location, sourc
 	case common.ELocation.Blob(),
 		common.ELocation.File(),
 		common.ELocation.BlobFS(),
-		common.ELocation.S3():
+		common.ELocation.S3(),
+		common.ELocation.Dropbox():
 		URL, err := url.Parse(location)
 
 		if err != nil {
@@ -164,6 +165,11 @@ func GetResourceRoot(resource string, location common.Location) (resourceBase st
 
 		s3URL := s3URLParts.URL()
 		return s3URL.String(), nil
+	case common.ELocation.Dropbox():
+		dropboxURLParts, err := common.NewDropboxURLParts(*resourceURL)
+		common.PanicIfErr(err)
+		dropboxURL := dropboxURLParts.URL()
+		return dropboxURL.String(), nil
 	default:
 		panic(fmt.Sprintf("Location %s is missing from GetResourceRoot", location))
 	}
@@ -204,6 +210,8 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 
 		*baseURL = common.URLExtension{URL: *baseURL}.URLWithPlusDecodedInPath()
 		return baseURL.String(), "", nil
+	case common.ELocation.Dropbox():
+		return resource, "", nil
 	case common.ELocation.Benchmark(), // cover for benchmark as we generate data for that
 		common.ELocation.Unknown(): // cover for unknown as we treat that as garbage
 		// Local and S3 don't feature URL-embedded tokens
@@ -364,6 +372,16 @@ func GetContainerName(path string, location common.Location) (string, error) {
 		}
 
 		return s3URLParts.BucketName, nil
+	case common.ELocation.Dropbox():
+		baseURL, err := url.Parse(path)
+		if err != nil {
+			return "", err
+		}
+		dropboxURLParts, err := common.NewDropboxURLParts(*baseURL)
+		if err != nil {
+			return "", err
+		}
+		return dropboxURLParts.BucketName, nil
 	default:
 		return "", fmt.Errorf("cannot get container name on location type %s", location.String())
 	}

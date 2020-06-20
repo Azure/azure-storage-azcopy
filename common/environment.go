@@ -209,6 +209,10 @@ func (EnvironmentVariable) AwsSessionToken() EnvironmentVariable {
 	return EnvironmentVariable{Name: "AWS_SESSION_TOKEN"}
 }
 
+func (EnvironmentVariable) DropboxAccessToken() EnvironmentVariable {
+	return EnvironmentVariable{Name: "DROPBOX_ACCESS_TOKEN"}
+}
+
 // OAuthTokenInfo is only used for internal integration.
 func (EnvironmentVariable) OAuthTokenInfo() EnvironmentVariable {
 	return EnvironmentVariable{Name: "AZCOPY_OAUTH_TOKEN_INFO"}

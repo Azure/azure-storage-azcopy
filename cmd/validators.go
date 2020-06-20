@@ -100,6 +100,8 @@ func inferFromTo(src, dst string) common.FromTo {
 		return common.EFromTo.FileFile()
 	case srcLocation == common.ELocation.S3() && dstLocation == common.ELocation.Blob():
 		return common.EFromTo.S3Blob()
+	case srcLocation == common.ELocation.Dropbox() && dstLocation == common.ELocation.Blob():
+		return common.EFromTo.DropboxBlob()
 	case srcLocation == common.ELocation.Benchmark() && dstLocation == common.ELocation.Blob():
 		return common.EFromTo.BenchmarkBlob()
 	case srcLocation == common.ELocation.Benchmark() && dstLocation == common.ELocation.File():
@@ -147,6 +149,8 @@ func inferArgumentLocation(arg string) common.Location {
 
 			if common.IsS3URL(*u) {
 				return common.ELocation.S3()
+			} else if common.IsDropboxURL(*u) {
+				return common.ELocation.Dropbox()
 			}
 		}
 	}

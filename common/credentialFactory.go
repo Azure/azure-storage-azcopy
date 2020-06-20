@@ -24,17 +24,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/dropbox/dropbox-sdk-go-unofficial/dropbox"
+	"github.com/dropbox/dropbox-sdk-go-unofficial/dropbox/files"
 	"math"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/minio/minio-go"
 	"github.com/minio/minio-go/pkg/credentials"
-
-	"github.com/Azure/azure-storage-azcopy/azbfs"
 )
 
 // ==============================================================================================
@@ -247,6 +248,20 @@ func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option Credent
 	}
 
 	return minio.NewWithCredentials(credInfo.S3CredentialInfo.Endpoint, credential, true, credInfo.S3CredentialInfo.Region)
+}
+
+func CreateDropboxClient() (files.Client, error) {
+	glcm := GetLifecycleMgr()
+	accessToken := glcm.GetEnvironmentVariable(EEnvironmentVariable.DropboxAccessToken())
+	if accessToken == "" {
+		return nil, fmt.Errorf("DROPBOX_ACCESS_TOKEN env variable is not set. Check whether environment variable is set.")
+	}
+	config := dropbox.Config{
+		Token:    accessToken,
+		LogLevel: dropbox.LogOff,
+	}
+	dbx := files.New(config)
+	return dbx, nil
 }
 
 type S3ClientFactory struct {
