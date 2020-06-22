@@ -171,6 +171,15 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
 
+			// queue up the sub virtual directories if recursive is true
+			if t.recursive {
+				for _, virtualDir := range lResp.Segment.BlobPrefixes {
+					enqueueDir(virtualDir.Name)
+				}
+			}
+
+			marker = lResp.NextMarker
+
 			// process the blobs returned in this result segment
 			for _, blobInfo := range lResp.Segment.BlobItems {
 				// if the blob represents a hdi folder, then skip it
@@ -194,15 +203,6 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 				)
 				enqueueOutput(storedObject, nil)
 			}
-
-			// queue up the sub virtual directories if recursive is true
-			if t.recursive {
-				for _, virtualDir := range lResp.Segment.BlobPrefixes {
-					enqueueDir(virtualDir.Name)
-				}
-			}
-
-			marker = lResp.NextMarker
 		}
 		return nil
 	}
