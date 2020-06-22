@@ -62,8 +62,9 @@ func RunTests(
 	scenarios := make([]scenario, 0, 16)
 	for _, op := range operations.getValues() {
 		for _, fromTo := range testFromTo.getValues(op) {
-			// short form is useful for generating container names
-			scenarioNameShort := fmt.Sprintf("%s.%s.%c-%c%c", suiteName, testName, op.String()[0], fromTo.From().String()[0], fromTo.To().String()[0])
+			// Short form is useful for generating container names
+			// Full form is useful for logging and reading by humans
+			scenarioNameShort := fmt.Sprintf("%s-%s-%c-%c%c", suiteName, testName, op.String()[0], fromTo.From().String()[0], fromTo.To().String()[0])
 			scenarioNameFull := fmt.Sprintf("%s.%s.%s-%s", suiteName, testName, op, fromTo)
 			s := scenario{
 				c:            c,
@@ -83,7 +84,7 @@ func RunTests(
 	}
 
 	// run them in parallel if not debugging, but sequentially (for easier debugging) if a debugger is attached
-	parallel := !isLaunchedByDebugger
+	parallel := !isLaunchedByDebugger // this only works if gops.exe is on your path. See azcopyDebugHelper.go for instructions.
 	wg := &sync.WaitGroup{}
 	wg.Add(len(scenarios))
 	for _, s := range scenarios {
@@ -140,6 +141,7 @@ type scenarioState struct {
 // Run runs one test scenario
 func (s *scenario) Run() {
 	defer s.cleanup()
+	defer s.logEnd()
 
 	s.logStart()
 
@@ -162,6 +164,10 @@ func (s *scenario) Run() {
 
 func (s *scenario) logStart() {
 	s.c.Logf("Start scenario: %s", s.scenarioName)
+}
+
+func (s *scenario) logEnd() {
+	s.c.Logf("End scenario: %s with result %s", s.scenarioName, common.IffString(s.c.Failed(), "FAIL", "pass"))
 }
 
 func (s *scenario) logWarning(where string, err error) {

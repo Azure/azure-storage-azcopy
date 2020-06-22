@@ -47,20 +47,26 @@ type scenarioAsserter struct {
 	scenarioName string
 }
 
+func (a *scenarioAsserter) addScenarioName(args []interface{}) []interface{} {
+	if len(args) > 0 {
+		if com, ok := args[len(args)-1].(chk.CommentInterface); ok {
+			args = args[:len(args)-1]
+			return append(args, chk.Commentf(a.ScenarioName()+" "+com.CheckCommentString()))
+		}
+	}
+	return append(args, chk.Commentf(a.ScenarioName()))
+}
+
 func (a *scenarioAsserter) Assert(obtained interface{}, checker chk.Checker, args ...interface{}) {
-	fullArgs := make([]interface{}, 0)
-	fullArgs = append(fullArgs, args)
-	fullArgs = append(fullArgs, chk.Commentf(a.ScenarioName()))
-	a.c.Assert(obtained, checker, fullArgs)
+	args = a.addScenarioName(args)
+	a.c.Assert(obtained, checker, args...)
 }
 
 // Check is "Assert but don't stop running the test". Useful for initial checks, where subsequent checks or asserts will give
 // additional information.  A failed check marks the test as failed
 func (a *scenarioAsserter) Check(obtained interface{}, checker chk.Checker, args ...interface{}) {
-	fullArgs := make([]interface{}, 0)
-	fullArgs = append(fullArgs, args)
-	fullArgs = append(fullArgs, chk.Commentf(a.ScenarioName()))
-	a.c.Check(obtained, checker, fullArgs)
+	args = a.addScenarioName(args)
+	a.c.Check(obtained, checker, args...)
 }
 
 func (a *scenarioAsserter) AssertNoErr(where string, err error) {

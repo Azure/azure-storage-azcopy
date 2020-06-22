@@ -190,6 +190,7 @@ const (
 )
 
 func getTestName() (testSuite, test string) {
+
 	// The following lines step up the stack find the name of the test method
 	// Note: the way to do this changed in go 1.12, refer to release notes for more info
 	var pcs [10]uintptr
@@ -228,7 +229,7 @@ func getTestName() (testSuite, test string) {
 func generateName(c asserter, prefix string, maxLen int) string {
 	name := c.ScenarioName() // don't want to just use test name here, because each test contains multiple scearios with the declarative runner
 
-	textualPortion := fmt.Sprintf("%s.%s", prefix, strings.ToLower(name))
+	textualPortion := fmt.Sprintf("%s-%s", prefix, strings.ToLower(name))
 	currentTime := time.Now()
 	numericSuffix := fmt.Sprintf("%02d%02d%d", currentTime.Minute(), currentTime.Second(), currentTime.Nanosecond())
 	if maxLen > 0 {
