@@ -77,6 +77,9 @@ func (t *gcpTraverser) traverse(preprocessor objectMorpher, processor objectProc
 
 	bkt := t.gcpClient.Bucket(t.gcpURLParts.BucketName)
 	query := &storage.Query{Prefix: searchPrefix}
+	if !t.recursive {
+		query.Delimiter = "/"
+	}
 	it := bkt.Objects(t.ctx, query)
 
 	//If code reaches here then the URL points to a bucket or a virtual directory
@@ -87,7 +90,7 @@ func (t *gcpTraverser) traverse(preprocessor objectMorpher, processor objectProc
 		}
 		if err == nil {
 			//Virtual directories alone have "/" as suffix and size as 0
-			if strings.HasSuffix(attrs.Name, "/") {
+			if strings.HasSuffix(attrs.Name, "/") || attrs.Name == "" {
 				continue
 			}
 			objectPath := strings.Split(attrs.Name, "/")
