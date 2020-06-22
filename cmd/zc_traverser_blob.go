@@ -166,7 +166,8 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
 		currentDirPath := dir.(string)
 		for marker := (azblob.Marker{}); marker.NotDone(); {
-			lResp, err := containerURL.ListBlobsHierarchySegment(t.ctx, marker, "/", azblob.ListBlobsSegmentOptions{Prefix: currentDirPath})
+			lResp, err := containerURL.ListBlobsHierarchySegment(t.ctx, marker, "/", azblob.ListBlobsSegmentOptions{Prefix: currentDirPath,
+				Details: azblob.BlobListingDetails{Metadata: true}})
 			if err != nil {
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}

@@ -412,7 +412,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubs(c *chk.C) {
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
-		// there should be exactly 20 top files, no directory stubs should included
+		// there should be exactly 20 top files, no directory stubs should be included
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 20)
 
 		for _, transfer := range mockedRPC.transfers {
