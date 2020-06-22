@@ -23,8 +23,33 @@ package e2etest
 import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	"net/url"
 	"os"
 )
+
+func assertNoStripTopDir(stripTopDir bool) {
+	if stripTopDir {
+		panic("support for stripTopDir is not yet implemented here") // when implemented, resourceManagers should return /* in the right part of the string
+	}
+}
+
+// TODO: any better names for this?
+// a source or destination
+type resourceManager interface {
+
+	// setup creates and initializes a test resource appropriate for the given test files
+	setup(a asserter, fs testFiles, isSource bool)
+
+	// cleanup gets rid of everything that setup created
+	// (Takes no param, because the resourceManager is expected to track its own state. E.g. "what did I make")
+	cleanup(a asserter)
+
+	// gets the azCopy command line param that represents the resource.  withSas is ignored when not applicable
+	getParam(stripTopDir bool, withSas bool) string
+
+	// isContainerLike returns true if the resource is a top-level cloud-based resource (e.g. a container, a File Share, etc)
+	isContainerLike() bool
+}
 
 ///////////////
 
@@ -47,16 +72,27 @@ func (r *resourceLocal) cleanup(_ asserter) {
 	}
 }
 
+func (r *resourceLocal) getParam(stripTopDir bool, _ bool) string {
+	assertNoStripTopDir(stripTopDir)
+	return r.dirPath
+}
+
+func (r *resourceLocal) isContainerLike() bool {
+	return false
+}
+
 ///////
 
 type resourceBlobContainer struct {
 	accountType  AccountType
 	containerURL *azblob.ContainerURL
+	rawSasURL    *url.URL
 }
 
 func (r *resourceBlobContainer) setup(a asserter, fs testFiles, isSource bool) {
-	cu, _, _ := TestResourceFactory{}.CreateNewContainer(a, r.accountType)
+	cu, _, rawSasURL := TestResourceFactory{}.CreateNewContainer(a, r.accountType)
 	r.containerURL = &cu
+	r.rawSasURL = &rawSasURL
 
 	size, err := fs.defaultSizeBytes()
 	a.AssertNoErr("get size", err)
@@ -70,16 +106,31 @@ func (r *resourceBlobContainer) cleanup(a asserter) {
 	}
 }
 
-/////
-
-type resourceAzureFiles struct {
-	accountType AccountType
-	shareURL    *azfile.ShareURL
+func (r *resourceBlobContainer) getParam(stripTopDir bool, useSas bool) string {
+	assertNoStripTopDir(stripTopDir)
+	if useSas {
+		return r.rawSasURL.String()
+	} else {
+		return r.containerURL.String()
+	}
 }
 
-func (r *resourceAzureFiles) setup(a asserter, fs testFiles, isSource bool) {
-	su, _ := TestResourceFactory{}.CreateNewFileShare(a, EAccountType.Standard())
+func (r *resourceBlobContainer) isContainerLike() bool {
+	return true
+}
+
+/////
+
+type resourceAzureFileShare struct {
+	accountType AccountType
+	shareURL    *azfile.ShareURL
+	rawSasURL   *url.URL
+}
+
+func (r *resourceAzureFileShare) setup(a asserter, fs testFiles, isSource bool) {
+	su, _, rawSasURL := TestResourceFactory{}.CreateNewFileShare(a, EAccountType.Standard())
 	r.shareURL = &su
+	r.rawSasURL = &rawSasURL
 
 	size, err := fs.defaultSizeBytes()
 	a.AssertNoErr("get size", err)
@@ -87,10 +138,22 @@ func (r *resourceAzureFiles) setup(a asserter, fs testFiles, isSource bool) {
 	scenarioHelper{}.generateAzureFilesFromList(a, *r.shareURL, fs.allNames(isSource), size)
 }
 
-func (r *resourceAzureFiles) cleanup(a asserter) {
+func (r *resourceAzureFileShare) cleanup(a asserter) {
 	if r.shareURL != nil {
 		deleteShare(a, *r.shareURL)
 	}
+}
+
+func (r *resourceAzureFileShare) getParam(stripTopDir bool, useSas bool) string {
+	assertNoStripTopDir(stripTopDir)
+	if !useSas {
+		panic("SAS is currently the only supported auth type for Azure Files")
+	}
+	return r.rawSasURL.String()
+}
+
+func (r *resourceAzureFileShare) isContainerLike() bool {
+	return true
 }
 
 ////
@@ -102,4 +165,13 @@ func (r *resourceDummy) setup(a asserter, fs testFiles, isSource bool) {
 }
 
 func (r *resourceDummy) cleanup(_ asserter) {
+}
+
+func (r *resourceDummy) getParam(stripTopDir bool, _ bool) string {
+	assertNoStripTopDir(stripTopDir)
+	return "foobar"
+}
+
+func (r *resourceDummy) isContainerLike() bool {
+	return false
 }

@@ -21,11 +21,7 @@
 package e2etest
 
 import (
-	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
 	chk "gopkg.in/check.v1"
-	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -81,52 +77,6 @@ func (s *enumerationSuite) TestFilter_IncludePath_Folder(c *chk.C) {
 		},
 	)
 
-}
-
-func (s *enumerationSuite) TestFilter_IncludePath_Folder_Temp_Imperative(ch *chk.C) {
-	c := &scenarioAsserter{ch, ""}
-
-	// set up the source
-	files := []string{
-		"filea",
-		"fileb",
-		"filec",
-		"sub/filea",
-		"sub/fileb",
-		"sub/filec",
-		"sub/somethingelse/subsub/filex", // should not be included because sub/subsub is not contiguous here
-		"othersub/sub/subsub/filey",      // should not be included because sub/subsub is not at root here
-	}
-
-	filesToInclude := []string{
-		"sub/subsub/filea",
-		"sub/subsub/fileb",
-		"sub/subsub/filec",
-	}
-
-	dirPath := TestResourceFactory{}.CreateLocalDirectory(c)
-	defer os.RemoveAll(dirPath)
-	scenarioHelper{}.generateLocalFilesFromList(c, dirPath, files, defaultFileSize)
-	scenarioHelper{}.generateLocalFilesFromList(c, dirPath, filesToInclude, defaultFileSize)
-
-	// set up the destination
-	containerURL, _, containerURLWithSAS := TestResourceFactory{}.CreateNewContainer(c, EAccountType.Standard())
-	defer deleteContainer(c, containerURL)
-
-	// invoke the executable and get results
-	runner := newTestRunner()
-	runner.SetRecursiveFlag(true)
-	runner.SetIncludePathFlag("sub/subsub")
-
-	result, err := runner.ExecuteCopyCommand(dirPath, containerURLWithSAS.String())
-	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
-	c.Assert(int(result.finalStatus.TransfersCompleted), chk.Equals, len(filesToInclude))
-
-	transfers := result.GetTransferList(common.ETransferStatus.Success())
-	srcRoot := dirPath
-	dstRoot := fmt.Sprintf("%s/%s", containerURL.String(), filepath.Base(dirPath))
-	Validator{}.ValidateCopyTransfersAreScheduled(c, false, true, srcRoot, dstRoot,
-		filesToInclude, transfers)
 }
 
 // TestFilter_IncludeAfter test the include-after parameter

@@ -123,6 +123,31 @@ func (TestResourceFactory) GetContainerURLWithSAS(c asserter, accountType Accoun
 	return azblob.NewContainerURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
 }
 
+func (TestResourceFactory) GetFileShareULWithSAS(c asserter, accountType AccountType, containerName string) azfile.ShareURL {
+	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(accountType)
+	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
+	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
+
+	sasQueryParams, err := azfile.FileSASSignatureValues{
+		Protocol:    azfile.SASProtocolHTTPS,
+		ExpiryTime:  time.Now().UTC().Add(48 * time.Hour),
+		ShareName:   containerName,
+		Permissions: azfile.ShareSASPermissions{Read: true, Write: true, Create: true, Delete: true, List: true}.String(),
+	}.NewSASQueryParameters(credential)
+	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
+
+	// construct the url from scratch
+	qp := sasQueryParams.Encode()
+	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/%s?%s",
+		credential.AccountName(), containerName, qp)
+
+	// convert the raw url and validate it was parsed successfully
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
+
+	return azfile.NewShareURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
+}
+
 func (TestResourceFactory) GetBlobURLWithSAS(c asserter, accountType AccountType, containerName string, blobName string) azblob.BlobURL {
 	containerURLWithSAS := TestResourceFactory{}.GetContainerURLWithSAS(c, accountType, containerName)
 	blobURLWithSAS := containerURLWithSAS.NewBlobURL(blobName)
@@ -141,14 +166,14 @@ func (TestResourceFactory) CreateNewContainer(c asserter, accountType AccountTyp
 
 const defaultShareQuotaGB = 512
 
-func (TestResourceFactory) CreateNewFileShare(c asserter, accountType AccountType) (fileShare azfile.ShareURL, name string) {
+func (TestResourceFactory) CreateNewFileShare(c asserter, accountType AccountType) (fileShare azfile.ShareURL, name string, rawSasURL url.URL) {
 	name = TestResourceNameGenerator{}.GenerateContainerName(c)
 	fileShare = TestResourceFactory{}.GetFileServiceURL(accountType).NewShareURL(name)
 
 	cResp, err := fileShare.Create(context.Background(), nil, defaultShareQuotaGB)
 	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
-	return fileShare, name // TODO add file share sas similar to this if needed: TestResourceFactory{}.GetContainerURLWithSAS(c, accountType, name).URL()
+	return fileShare, name, TestResourceFactory{}.GetFileShareULWithSAS(c, accountType, name).URL()
 }
 
 func (TestResourceFactory) CreateLocalDirectory(c asserter) (dstDirName string) {
@@ -160,7 +185,7 @@ func (TestResourceFactory) CreateLocalDirectory(c asserter) (dstDirName string) 
 type TestResourceNameGenerator struct{}
 
 const (
-	containerPrefix = "e2etest"
+	containerPrefix = "e2e"
 	blobPrefix      = "blob"
 )
 
@@ -183,6 +208,10 @@ func getTestName() (testSuite, test string) {
 	funcNameStart := strings.Index(fullName, "Test")
 	suiteNameStart := strings.Index(fullName, ".(")
 	suite := strings.Replace(strings.Trim(fullName[suiteNameStart:funcNameStart], "()*."), "_", "-", -1) // for consistency with name, below
+	suite = strings.Replace(suite, "Suite", "", -1)
+	if len(suite) > 4 {
+		suite = suite[:4] // trim the suite name part of it, so that we don't end up with so many names that are too long
+	}
 
 	name := fullName[funcNameStart+len("Test"):]                // Just get the name of the test and not any of the garbage at the beginning
 	name = strings.Replace(strings.ToLower(name), "_", "-", -1) // Ensure it is a valid resource name (containers don't allow _ but do allow -)
@@ -199,7 +228,7 @@ func getTestName() (testSuite, test string) {
 func generateName(c asserter, prefix string, maxLen int) string {
 	name := c.ScenarioName() // don't want to just use test name here, because each test contains multiple scearios with the declarative runner
 
-	textualPortion := fmt.Sprintf("%s%s", prefix, strings.ToLower(name))
+	textualPortion := fmt.Sprintf("%s.%s", prefix, strings.ToLower(name))
 	currentTime := time.Now()
 	numericSuffix := fmt.Sprintf("%02d%02d%d", currentTime.Minute(), currentTime.Second(), currentTime.Nanosecond())
 	if maxLen > 0 {

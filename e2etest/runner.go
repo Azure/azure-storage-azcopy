@@ -42,20 +42,34 @@ func newTestRunner() TestRunner {
 	return TestRunner{flags: make(map[string]string)}
 }
 
-func (t *TestRunner) SetOverwriteFlag(value string) {
-	t.flags["overwrite"] = value
-}
-
-func (t *TestRunner) SetRecursiveFlag(value bool) {
-	if value {
-		t.flags["recursive"] = "true"
-	} else {
-		t.flags["recursive"] = "false"
+var isLaunchedByDebugger = func() bool {
+	// gops executable must be in the path. See https://github.com/google/gops
+	gopsOut, err := exec.Command("gops", strconv.Itoa(os.Getppid())).Output()
+	if err == nil && strings.Contains(string(gopsOut), "\\dlv.exe") {
+		// our parent process is (probably) the Delve debugger
+		return true
 	}
-}
+	return false
+}()
 
-func (t *TestRunner) SetIncludePathFlag(value string) {
-	t.flags["include-path"] = value
+func (t *TestRunner) SetAllFlags(p params) {
+	set := func(key string, value interface{}, dflt interface{}, formats ...string) {
+		if value == dflt {
+			return // nothing to do. The flag is not supposed to be set
+		}
+
+		format := "%v"
+		if len(formats) > 0 {
+			format = formats[0]
+		}
+
+		t.flags[key] = fmt.Sprintf(format, value)
+	}
+
+	set("recursive", p.recursive, false, "%t")
+	set("include-path", p.includePath, "")
+	set("include-after", p.includeAfter, "")
+	set("cap-mbps", p.capMbps, 0)
 }
 
 func (t *TestRunner) computeArgs() []string {
@@ -67,20 +81,10 @@ func (t *TestRunner) computeArgs() []string {
 	return append(args, "--output-type=json")
 }
 
-func (t *TestRunner) isLaunchedByDebugger() bool {
-	// gops executable must be in the path. See https://github.com/google/gops
-	gopsOut, err := exec.Command("gops", strconv.Itoa(os.Getppid())).Output()
-	if err == nil && strings.Contains(string(gopsOut), "\\dlv.exe") {
-		// our parent process is (probably) the Delve debugger
-		return true
-	}
-	return false
-}
-
 // execCommandWithOutput replaces Go's exec.Command().Output, but appends an extra parameter and
 // breaks up the c.Run() call into its component parts. Both changes are to assist debugging
 func (t *TestRunner) execDebuggableWithOutput(name string, args []string) ([]byte, error) {
-	debug := t.isLaunchedByDebugger()
+	debug := isLaunchedByDebugger
 	if debug {
 		args = append(args, "--await-continue")
 	}
@@ -114,14 +118,24 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string) ([]byt
 	return stdout.Bytes(), runErr
 }
 
-func (t *TestRunner) ExecuteCopyCommand(src, dst string) (CopyCommandResult, error) {
-	args := append([]string{"copy", src, dst}, t.computeArgs()...)
-	out, err := t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args)
-	if err != nil {
-		return CopyCommandResult{}, err
+func (t *TestRunner) ExecuteCopyOrSyncCommand(operation Operation, src, dst string) (CopyOrSyncCommandResult, error) {
+	verb := ""
+	switch operation {
+	case eOperation.Copy():
+		verb = "copy"
+	case eOperation.Sync():
+		verb = "sync"
+	default:
+		panic("unsupported operation type")
 	}
 
-	return newCopyCommandResult(string(out)), nil
+	args := append([]string{verb, src, dst}, t.computeArgs()...)
+	out, err := t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args)
+	if err != nil {
+		return CopyOrSyncCommandResult{}, err
+	}
+
+	return newCopyOrSyncCommandResult(string(out)), nil
 }
 
 func (t *TestRunner) SetTransferStatusFlag(value string) {
@@ -138,12 +152,12 @@ func (t *TestRunner) ExecuteJobsShowCommand(jobID common.JobID) (JobsShowCommand
 	return newJobsShowCommandResult(string(out)), nil
 }
 
-type CopyCommandResult struct {
+type CopyOrSyncCommandResult struct {
 	jobID       common.JobID
-	finalStatus common.ListJobSummaryResponse
+	finalStatus common.ListSyncJobSummaryResponse
 }
 
-func newCopyCommandResult(rawOutput string) CopyCommandResult {
+func newCopyOrSyncCommandResult(rawOutput string) CopyOrSyncCommandResult {
 	lines := strings.Split(rawOutput, "\n")
 
 	// parse out the final status
@@ -155,16 +169,16 @@ func newCopyCommandResult(rawOutput string) CopyCommandResult {
 		panic(err)
 	}
 
-	jobSummary := common.ListJobSummaryResponse{}
+	jobSummary := common.ListSyncJobSummaryResponse{} // this is a superset of ListJobSummaryResponse, so works for both copy and sync
 	err = json.Unmarshal([]byte(finalMsg.MessageContent), &jobSummary)
 	if err != nil {
 		panic(err)
 	}
 
-	return CopyCommandResult{jobID: jobSummary.JobID, finalStatus: jobSummary}
+	return CopyOrSyncCommandResult{jobID: jobSummary.JobID, finalStatus: jobSummary}
 }
 
-func (c *CopyCommandResult) GetTransferList(status common.TransferStatus) []common.TransferDetail {
+func (c *CopyOrSyncCommandResult) GetTransferList(status common.TransferStatus) []common.TransferDetail {
 	runner := newTestRunner()
 	runner.SetTransferStatusFlag(status.String())
 

@@ -36,6 +36,7 @@ import (
 // simplified assertion interface. Allows us to hook in scenario identification in our assertions
 type asserter interface {
 	Assert(obtained interface{}, checker chk.Checker, args ...interface{})
+	Check(obtained interface{}, checker chk.Checker, args ...interface{})
 	AssertNoErr(where string, err error)
 	Skip(reason string)
 	ScenarioName() string
@@ -51,6 +52,15 @@ func (a *scenarioAsserter) Assert(obtained interface{}, checker chk.Checker, arg
 	fullArgs = append(fullArgs, args)
 	fullArgs = append(fullArgs, chk.Commentf(a.ScenarioName()))
 	a.c.Assert(obtained, checker, fullArgs)
+}
+
+// Check is "Assert but don't stop running the test". Useful for initial checks, where subsequent checks or asserts will give
+// additional information.  A failed check marks the test as failed
+func (a *scenarioAsserter) Check(obtained interface{}, checker chk.Checker, args ...interface{}) {
+	fullArgs := make([]interface{}, 0)
+	fullArgs = append(fullArgs, args)
+	fullArgs = append(fullArgs, chk.Commentf(a.ScenarioName()))
+	a.c.Check(obtained, checker, fullArgs)
 }
 
 func (a *scenarioAsserter) AssertNoErr(where string, err error) {
@@ -111,6 +121,21 @@ func (tf *testFiles) allNames(isSource bool) []string {
 	}
 }
 
+func (tf *testFiles) getForStatus(status common.TransferStatus) []string {
+	switch status {
+	case common.ETransferStatus.Success():
+		return tf.shouldTransfer
+	case common.ETransferStatus.Failed():
+		result := make([]string, 0)
+		for _, f := range tf.shouldFail {
+			result = append(result, f.filename)
+		}
+		return result
+	default:
+		panic("unsupported status type")
+	}
+}
+
 func (tf *testFiles) defaultSizeBytes() (int, error) {
 	longSize, err := cmd.ParseSizeString(tf.size, "testFiles.size")
 	if longSize < math.MaxInt32 {
@@ -122,10 +147,11 @@ func (tf *testFiles) defaultSizeBytes() (int, error) {
 ////
 
 type params struct {
-	recursive    bool
-	includePath  string
-	includeAfter string
-	capMbps      float32
+	recursive         bool
+	includePath       string
+	includeAfter      string
+	capMbps           float32
+	deleteDestination common.DeleteDestination
 }
 
 //////////////
@@ -270,6 +296,13 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 				default:
 					continue // not supported for sync
 				}
+			}
+
+			// TODO: remove this temp block
+			// temp
+			if fromTo.From() == common.ELocation.S3() ||
+				fromTo.From() == common.ELocation.BlobFS() || fromTo.To() == common.ELocation.BlobFS() {
+				continue // until we impelment the declarativeResoucreManagers
 			}
 
 			// this one is valid

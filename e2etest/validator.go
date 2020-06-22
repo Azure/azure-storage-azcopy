@@ -49,7 +49,7 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 	destinationPrefix = normalizeSlashes(destinationPrefix)
 
 	// validate that the right number of transfers were scheduled
-	c.Assert(len(actualTransfers), chk.Equals, len(expectedTransfers))
+	c.Check(len(actualTransfers), chk.Equals, len(expectedTransfers))
 
 	// validate that the right transfers were sent
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
@@ -80,10 +80,10 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 		}
 
 		// the relative paths should be equal
-		c.Assert(srcRelativeFilePath, chk.Equals, dstRelativeFilePath)
+		c.Check(srcRelativeFilePath, chk.Equals, dstRelativeFilePath)
 
 		// look up the path from the expected transfers, make sure it exists
 		_, transferExist := lookupMap[srcRelativeFilePath]
-		c.Assert(transferExist, chk.Equals, true)
+		c.Check(transferExist, chk.Equals, true)
 	}
 }
