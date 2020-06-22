@@ -312,8 +312,13 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 		domainSuffixes := getSuffixes(trustedSuffixesAAD, extraSuffixesAAD)
 		if host, ok := isResourceInSuffixList(domainSuffixes); !ok {
 			return fmt.Errorf(
-				"azure authentication to %s is not enabled in AzCopy. To enable, view the documentation for "+
-					"the parameter --%s, by running 'AzCopy copy --help'. Then use that parameter in your command if necessary",
+				"the URL requires authentication. If this URL is in fact an Azure service, you can enable Azure authentication to %s. "+
+					"To enable, view the documentation for "+
+					"the parameter --%s, by running 'AzCopy copy --help'. BUT if this URL is not an Azure service, do NOT enable Azure authentication to it. "+
+					"Instead, see if the URL host supports authentication by way of a token that can be included in the URL's query string",
+				// E.g. CDN apparently supports a non-SAS type of token as noted here: https://docs.microsoft.com/en-us/azure/cdn/cdn-token-auth#setting-up-token-authentication
+				// Including such a token in the URL will cause AzCopy to see it as a "public" URL (since the URL on its own will pass
+				// our "isPublic" access tests, which run before this routine).
 				host, trustedSuffixesNameAAD)
 		}
 
