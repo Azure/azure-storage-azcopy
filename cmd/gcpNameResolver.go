@@ -88,7 +88,7 @@ func (resolver *GCPBucketNameToAzureResourcesResolver) resolveNewBucketNameInter
 		resolvedName = strings.Replace(resolvedName, "_", "-", -1)
 	}
 
-	hasConsecutiveHyphens = strings.Contains(bucketName, "--")
+	hasConsecutiveHyphens = strings.Contains(resolvedName, "--")
 
 	//Try to replace consecutive hyphens (--) with number of hyphens
 	if hasConsecutiveHyphens {
