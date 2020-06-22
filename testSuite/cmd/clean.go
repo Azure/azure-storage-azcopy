@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"cloud.google.com/go/storage"
 	"context"
 	"fmt"
+	"google.golang.org/api/iterator"
 	"net/http"
 	"net/url"
 	"os"
@@ -48,6 +50,7 @@ func (ServiceType) Blob() ServiceType   { return ServiceType(0) }
 func (ServiceType) File() ServiceType   { return ServiceType(1) }
 func (ServiceType) BlobFS() ServiceType { return ServiceType(2) } // For SAS or public.
 func (ServiceType) S3() ServiceType     { return ServiceType(3) }
+func (ServiceType) GCP() ServiceType    { return ServiceType(4) }
 
 func (ct ServiceType) String() string {
 	return enum.StringInt(ct, reflect.TypeOf(ct))
@@ -127,6 +130,15 @@ func init() {
 					cleanObject(resourceURL)
 				case EResourceType.Account():
 					cleanS3Account(resourceURL)
+				}
+			case EServiceType.GCP():
+				switch resourceType {
+				case EResourceType.Bucket():
+					cleanBucket(resourceURL)
+				case EResourceType.SingleFile():
+					cleanObject(resourceURL)
+				case EResourceType.Account():
+					cleanGCPAccount(resourceURL)
 				}
 			default:
 				panic(fmt.Errorf("illegal resourceType %q", resourceType))
@@ -466,6 +478,82 @@ func cleanS3Account(resourceURL string) {
 		if err := s3Client.RemoveBucket(bucket.Name); err != nil {
 			fmt.Printf("error deleting the bucket %q from account, %v\n", bucket.Name, err)
 		}
+	}
+}
+
+func cleanGCPAccount(resourceURL string) {
+	u, err := url.Parse(resourceURL)
+
+	if err != nil {
+		fmt.Println("fail to parse the GCP service URL, ", err)
+		os.Exit(1)
+	}
+
+	_, err = common.NewGCPURLParts(*u)
+	if err != nil {
+		fmt.Println("new GCP URL parts, ", err)
+		os.Exit(1)
+	}
+
+	gcpClient, _ := createGCPClientWithGCSSDK()
+	it := gcpClient.Buckets(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	for {
+		battrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err == nil {
+			if !strings.HasPrefix(battrs.Name, "s2scopybucket") {
+				continue // skip buckets not created by s2s copy testings.
+			}
+
+			objectsCh := make(chan string)
+
+			go func() {
+				defer close(objectsCh)
+
+				// List all objects from a bucket-name with a matching prefix.
+				itObj := gcpClient.Bucket(battrs.Name).Objects(context.Background(), nil)
+				for {
+					attrs, err := itObj.Next()
+					if err == iterator.Done {
+						break
+					}
+					if err == nil {
+						objectsCh <- attrs.Name
+					} else {
+						fmt.Printf("error listing the objects from bucket %q, %v\n", battrs.Name, err)
+						return
+
+					}
+				}
+			}()
+
+			deleteGCPBucket(gcpClient, battrs.Name)
+		}
+	}
+}
+
+func deleteGCPBucket(client *storage.Client, bucketName string) {
+	bucket := client.Bucket(bucketName)
+	ctx := context.Background()
+	it := bucket.Objects(ctx, &storage.Query{Prefix: ""})
+	for {
+		attrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err == nil {
+			err = bucket.Object(attrs.Name).Delete(nil)
+			if err != nil {
+				fmt.Println("Could not clear GCS Buckets.")
+				return
+			}
+		}
+	}
+	err := bucket.Delete(context.Background())
+	if err != nil {
+		fmt.Printf("Failed to Delete GCS Bucket %v", bucketName)
 	}
 }
 
