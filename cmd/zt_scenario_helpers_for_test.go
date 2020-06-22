@@ -161,6 +161,43 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlob(c *chk.C, containerURL
 	return
 }
 
+// same as blob, but for every virtual directory, a blob with the same name is created, and it has metadata 'hdi_isfolder = true'
+func (scenarioHelper) generateCommonRemoteScenarioForWASB(c *chk.C, containerURL azblob.ContainerURL, prefix string) (blobList []string) {
+	blobList = make([]string, 50)
+
+	for i := 0; i < 10; i++ {
+		_, blobName1 := createNewBlockBlob(c, containerURL, prefix+"top")
+		_, blobName2 := createNewBlockBlob(c, containerURL, prefix+"sub1/")
+		_, blobName3 := createNewBlockBlob(c, containerURL, prefix+"sub2/")
+		_, blobName4 := createNewBlockBlob(c, containerURL, prefix+"sub1/sub3/sub5/")
+		_, blobName5 := createNewBlockBlob(c, containerURL, prefix+specialNames[i])
+
+		blobList[5*i] = blobName1
+		blobList[5*i+1] = blobName2
+		blobList[5*i+2] = blobName3
+		blobList[5*i+3] = blobName4
+		blobList[5*i+4] = blobName5
+	}
+
+	if prefix != "" {
+		createNewDirectoryStub(c, containerURL, strings.TrimSuffix(prefix, "/"))
+		blobList = append(blobList, "")
+	}
+
+	createNewDirectoryStub(c, containerURL, prefix+"sub1")
+	createNewDirectoryStub(c, containerURL, prefix+"sub1/sub3")
+	createNewDirectoryStub(c, containerURL, prefix+"sub1/sub3/sub5")
+	createNewDirectoryStub(c, containerURL, prefix+"sub2")
+
+	for _, dirPath := range []string{prefix + "sub1", prefix + "sub1/sub3", prefix + "sub1/sub3/sub5", prefix + "sub2"} {
+		blobList = append(blobList, dirPath)
+	}
+
+	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
+	time.Sleep(time.Millisecond * 1050)
+	return
+}
+
 func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(c *chk.C, filesystemURL azbfs.FileSystemURL, prefix string) (pathList []string) {
 	pathList = make([]string, 50)
 
@@ -829,5 +866,6 @@ func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
 		forceWrite:                     common.EOverwriteOption.True().String(),
 		preserveOwner:                  common.PreserveOwnerDefault,
+		includeDirectoryStubs:          true,
 	}
 }

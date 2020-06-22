@@ -137,6 +137,9 @@ type rawCopyCmdArgs struct {
 
 	// internal override to enforce strip-top-dir
 	internalOverrideStripTopDir bool
+
+	// whether to include blobs that have metadata 'hdi_isfolder = true'
+	includeDirectoryStubs bool
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -424,7 +427,9 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	}
 
 	if raw.includeAfter != "" {
-		parsedIncludeAfter, err := includeAfterDateFilter{}.ParseISO8601(raw.includeAfter)
+		// must set chooseEarliest = true, so that if there's an ambiguous local date, the earliest will be returned
+		// (since that's safest for includeAfter.  Better to choose the earlier time and do more work, than the later one and fail to pick up a changed file
+		parsedIncludeAfter, err := includeAfterDateFilter{}.ParseISO8601(raw.includeAfter, true)
 		if err != nil {
 			return cooked, err
 		}
@@ -439,6 +444,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	cooked.cacheControl = raw.cacheControl
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
+	cooked.includeDirectoryStubs = raw.includeDirectoryStubs
 
 	// Make sure the given input is the one of the enums given by the blob SDK
 	err = cooked.deleteSnapshotsOption.Parse(raw.deleteSnapshotsOption)
@@ -864,6 +870,9 @@ type cookedCopyCmdArgs struct {
 	priorJobExitCode  *common.ExitCode
 	isCleanupJob      bool // triggers abbreviated status reporting, since we don't want full reporting for cleanup jobs
 	cleanupJobMessage string
+
+	// whether to include blobs that have metadata 'hdi_isfolder = true'
+	includeDirectoryStubs bool
 }
 
 func (cca *cookedCopyCmdArgs) isRedirection() bool {
@@ -1206,6 +1215,9 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	// fetch a job status
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
+	glcmSwapOnce.Do(func() {
+		Rpc(common.ERpcCmd.GetJobLCMWrapper(), &cca.jobID, &glcm)
+	})
 	summary.IsCleanupJob = cca.isCleanupJob // only FE knows this, so we can only set it here
 	cleanupStatusString := fmt.Sprintf("Cleanup %v/%v", summary.TransfersCompleted, summary.TotalTransfers)
 

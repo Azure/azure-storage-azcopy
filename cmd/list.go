@@ -119,7 +119,7 @@ func HandleListContainerCommand(unparsedSource string, location common.Location)
 		}
 	}
 
-	traverser, err := initResourceTraverser(source, location, &ctx, &credentialInfo, nil, nil, true, false, func(common.EntityType) {})
+	traverser, err := initResourceTraverser(source, location, &ctx, &credentialInfo, nil, nil, true, false, false, func(common.EntityType) {})
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())
