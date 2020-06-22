@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"cloud.google.com/go/storage"
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -40,6 +42,23 @@ func createS3ClientWithMinio(o createS3ResOptions) *minio.Client {
 		os.Exit(1)
 	}
 	return s3Client
+}
+
+func createGCPClientWithGCSSDK() (*storage.Client, error) {
+	jsonKey := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	if jsonKey == "" {
+		return nil, fmt.Errorf("GOOGLE_APPLICATION_CREDENTIALS should be set before creating the GCP Client")
+	}
+	projectID := os.Getenv("GOOGLE_CLOUD_PROJECT")
+	if projectID == "" {
+		return nil, fmt.Errorf("GOOGLE_CLOUD_PROJECT should be set before creating GCP Client for testing")
+	}
+	ctx := context.Background()
+	gcpClient, err := storage.NewClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return gcpClient, nil
 }
 
 func ignoreStorageConflictStatus(err error) error {
