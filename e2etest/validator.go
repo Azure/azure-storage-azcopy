@@ -54,8 +54,8 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 	// validate that the right transfers were sent
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
 	for _, transfer := range actualTransfers {
-		srcRelativeFilePath := strings.TrimPrefix(strings.TrimPrefix(normalizeSlashes(transfer.Src), sourcePrefix), "/")
-		dstRelativeFilePath := strings.TrimPrefix(strings.TrimPrefix(normalizeSlashes(transfer.Dst), destinationPrefix), "/")
+		srcRelativeFilePath := strings.Trim(strings.TrimPrefix(normalizeSlashes(transfer.Src), sourcePrefix), "/")
+		dstRelativeFilePath := strings.Trim(strings.TrimPrefix(normalizeSlashes(transfer.Dst), destinationPrefix), "/")
 
 		if isSrcEncoded {
 			srcRelativeFilePath, _ = url.PathUnescape(srcRelativeFilePath)
@@ -83,7 +83,11 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 		c.Check(srcRelativeFilePath, chk.Equals, dstRelativeFilePath)
 
 		// look up the path from the expected transfers, make sure it exists
-		_, transferExist := lookupMap[srcRelativeFilePath]
-		c.Check(transferExist, chk.Equals, true)
+		lookupKey := srcRelativeFilePath
+		if transfer.IsFolderProperties {
+			lookupKey = folder(lookupKey)
+		}
+		_, transferExist := lookupMap[lookupKey]
+		c.Check(transferExist, chk.Equals, true, chk.Commentf("Looking for file "+lookupKey))
 	}
 }

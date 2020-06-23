@@ -167,7 +167,7 @@ func (s *scenario) logStart() {
 }
 
 func (s *scenario) logEnd() {
-	s.c.Logf("End scenario:   %s with result %s", s.scenarioName, common.IffString(s.c.Failed(), "FAIL", "pass"))
+	s.c.Logf("End scenario:   %s", s.scenarioName) // can't include result here, since with current test harness we know the TEST result but not the SCENARIO result
 }
 
 func (s *scenario) logWarning(where string, err error) {
@@ -224,10 +224,15 @@ func (s *scenario) validateTransfers() {
 		panic("validation of deleteDestination behaviour is not yet implemented in the declarative test runner")
 	}
 
-	isSrcEncoded := s.fromTo.From().IsRemote()                                            // TODO: is this right, reviewers?
-	isDstEncoded := s.fromTo.To().IsRemote()                                              // TODO: is this right, reviewers?
-	srcRoot := s.state.source.getParam(false, s.fromTo.From() == common.ELocation.File()) // must use SAS for Files, since that's all we support right now
-	dstRoot := s.state.dest.getParam(false, s.fromTo.To() == common.ELocation.File())
+	isSrcEncoded := s.fromTo.From().IsRemote() // TODO: is this right, reviewers?
+	isDstEncoded := s.fromTo.To().IsRemote()   // TODO: is this right, reviewers?
+	srcRoot := s.state.source.getParam(false, false)
+	dstRoot := s.state.dest.getParam(false, false)
+
+	// do we expect folder transfers
+	expectFolders := s.fromTo.From().IsFolderAware() &&
+		s.fromTo.To().IsFolderAware() &&
+		s.p.allowsFolderTransfers()
 
 	// compute dest, taking into account our stripToDir rules
 	areBothContainerLike := s.state.source.isContainerLike() && s.state.dest.isContainerLike()
@@ -246,7 +251,7 @@ func (s *scenario) validateTransfers() {
 		// TODO: testing of skipped is implicit, in that they are created at the source, but don't exist in Success or Failed lists
 		//       Is that OK? (Not sure what to do if it's not, because azcopy jobs show, apparently doesn't offer us a way to get the skipped list)
 	} {
-		expectedTransfers := s.fs.getForStatus(statusToTest)
+		expectedTransfers := s.fs.getForStatus(statusToTest, expectFolders)
 		actualTransfers := s.state.result.GetTransferList(statusToTest)
 
 		Validator{}.ValidateCopyTransfersAreScheduled(s.a, isSrcEncoded, isDstEncoded, srcRoot, dstRoot, expectedTransfers, actualTransfers)

@@ -68,10 +68,14 @@ func (s *enumerationSuite) TestFilter_IncludePath_Folder(c *chk.C) {
 				"sub/filea",
 				"sub/fileb",
 				"sub/filec",
+				folder("sub/subsubsub"),          // include-path only works with _whole_ directories (i.e. not prefix match)
 				"sub/somethingelse/subsub/filex", // should not be included because sub/subsub is not contiguous here
 				"othersub/sub/subsub/filey",      // should not be included because sub/subsub is not at root here
 			},
 			shouldTransfer: []string{ // A list of files which should be created an which should indeed be transferred
+				// Include folders as a line that ends in /. Test framework will automatically ignore them when
+				// not transferring between folder-aware locations
+				folder("sub/subsub"),
 				"sub/subsub/filea",
 				"sub/subsub/fileb",
 				"sub/subsub/filec",

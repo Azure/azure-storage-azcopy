@@ -146,10 +146,11 @@ func (r *resourceAzureFileShare) cleanup(a asserter) {
 
 func (r *resourceAzureFileShare) getParam(stripTopDir bool, useSas bool) string {
 	assertNoStripTopDir(stripTopDir)
-	if !useSas {
-		panic("SAS is currently the only supported auth type for Azure Files")
+	if useSas {
+		return r.rawSasURL.String()
+	} else {
+		return r.shareURL.String()
 	}
-	return r.rawSasURL.String()
 }
 
 func (r *resourceAzureFileShare) isContainerLike() bool {

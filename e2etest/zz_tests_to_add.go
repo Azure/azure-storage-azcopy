@@ -1,5 +1,11 @@
 package e2etest
 
+// TODO soon:
+//    stripTopDir
+//    think about "decode unsafe dst characters no Windows" comment in validator.go
+//    With asserter, we get the call stack from the point of the asserter method, not the caller...
+//    .... so we get the equivalent of true != false (again!)
+
 // TODO: right now, as soon as one scenario fails in a test,
 //    we stop executing them, and won't execute any other scearios
 //    in that test.  Should we change this? It could be a bit difficult,

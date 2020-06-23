@@ -28,8 +28,29 @@ import (
 	"github.com/JeffreyRichter/enum/enum"
 	chk "gopkg.in/check.v1"
 	"math"
+	"path"
 	"reflect"
+	"strings"
 )
+
+///////////
+
+// folder is syntactic sugar to make folders stand out in our file lists
+func folder(s string) string {
+	return strings.TrimRight(s, "/") + "/" // ensure it ends in one slash
+}
+
+func isFolder(s string) bool {
+	return strings.HasSuffix(s, "/")
+}
+
+func asFolderName(s string) string {
+	return strings.TrimRight(s, "/") // strip the trialing /
+}
+
+func asFolderDummyContent(s string) string { // make a dummy filename in the folder
+	return path.Join(s, "dummy")
+}
 
 ///////////
 
@@ -132,19 +153,25 @@ func (tf *testFiles) allNames(isSource bool) []string {
 	}
 }
 
-func (tf *testFiles) getForStatus(status common.TransferStatus) []string {
+func (tf *testFiles) getForStatus(status common.TransferStatus, expectFolders bool) []string {
+	result := make([]string, 0)
 	switch status {
 	case common.ETransferStatus.Success():
-		return tf.shouldTransfer
-	case common.ETransferStatus.Failed():
-		result := make([]string, 0)
-		for _, f := range tf.shouldFail {
-			result = append(result, f.filename)
+		for _, f := range tf.shouldTransfer {
+			if expectFolders || !isFolder(f) {
+				result = append(result, f)
+			}
 		}
-		return result
+	case common.ETransferStatus.Failed():
+		for _, f := range tf.shouldFail {
+			if expectFolders || !isFolder(f.filename) {
+				result = append(result, f.filename)
+			}
+		}
 	default:
 		panic("unsupported status type")
 	}
+	return result
 }
 
 func (tf *testFiles) defaultSizeBytes() (int, error) {
@@ -160,9 +187,19 @@ func (tf *testFiles) defaultSizeBytes() (int, error) {
 type params struct {
 	recursive         bool
 	includePath       string
+	includePattern    string
 	includeAfter      string
+	includeAttributes string
+	excludePath       string
+	excludePattern    string
+	excludeAttributes string
 	capMbps           float32
 	deleteDestination common.DeleteDestination
+}
+
+// we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level
+func (p params) allowsFolderTransfers() bool {
+	return p.includePattern+p.includeAfter+p.includeAttributes+p.excludePattern+p.excludeAttributes == ""
 }
 
 //////////////
