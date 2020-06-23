@@ -129,6 +129,15 @@ def clean_test_s3_account(account):
         return False
     return True
 
+def clean_test_gcp_account(account):
+    if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
+        return True
+    result = Command("clean").add_arguments(account).add_flags("serviceType", "GCP").add_flags("resourceType", "Account").execute_azcopy_clean()
+    if not result:
+        print("error cleaning the GCP account.")
+        return False
+    return True
+
 def clean_test_file_account(account):
     result = Command("clean").add_arguments(account).add_flags("serviceType", "File").add_flags("resourceType", "Account").execute_azcopy_clean()
     if not result:
@@ -154,7 +163,7 @@ def clean_test_filesystem(fileSystemURLStr):
 
 # initialize_test_suite initializes the setup for executing test cases.
 def initialize_test_suite(test_dir_path, container_sas, container_oauth, container_oauth_validate, share_sas_url, premium_container_sas, filesystem_url, filesystem_sas_url,
-                          s2s_src_blob_account_url, s2s_src_file_account_url, s2s_src_s3_service_url, s2s_dst_blob_account_url, azcopy_exec_location, test_suite_exec_location):
+                          s2s_src_blob_account_url, s2s_src_file_account_url, s2s_src_s3_service_url, s2s_src_gcp_service_url, s2s_dst_blob_account_url, azcopy_exec_location, test_suite_exec_location):
     # test_directory_path is global variable holding the location of test directory to execute all the test cases.
     # contents are created, copied, uploaded and downloaded to and from this test directory only
     global test_directory_path
@@ -192,6 +201,7 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
     global test_s2s_dst_blob_account_url
     global test_s2s_src_file_account_url
     global test_s2s_src_s3_service_url
+    global test_s2s_src_gcp_service_url
 
     # creating a test_directory in the location given by user.
     # this directory will be used to created and download all the test files.
@@ -239,6 +249,7 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
     test_s2s_src_file_account_url = s2s_src_file_account_url
     test_s2s_dst_blob_account_url = s2s_dst_blob_account_url
     test_s2s_src_s3_service_url = s2s_src_s3_service_url
+    test_s2s_src_gcp_service_url = s2s_src_gcp_service_url
     test_share_url = share_sas_url
 
     if not clean_test_filesystem(test_bfs_account_url.rstrip("/").rstrip("\\")):  # rstrip because clean fails if trailing /
@@ -259,6 +270,8 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
         print("failed to clean s2s blob destination account.")
     if not clean_test_s3_account(test_s2s_src_s3_service_url):
         print("failed to clean s3 account.")
+    if not clean_test_gcp_account(test_s2s_src_gcp_service_url):
+        print("failed to clean GCS account")
     if not clean_test_share(test_share_url):
         print("failed to clean test share.")
 
@@ -697,9 +710,9 @@ def parseAzcopyOutput(s):
         # If the line is empty, then continue
         if line == "":
             continue
-        elif line is '}':
+        elif line == '}':
             count = count + 1
-        elif line is "{":
+        elif line == "{":
             count = count - 1
         if count >= 0:
             if len(output) > 0:

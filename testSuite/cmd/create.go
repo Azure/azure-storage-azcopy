@@ -397,7 +397,9 @@ func createGCPBucket(bucketURLStr string) {
 	}
 
 	gcpClient, err := createGCPClientWithGCSSDK()
-
+	if err != nil {
+		fmt.Println("Failed to create GCS Client: ", err)
+	}
 	bkt := gcpClient.Bucket(gcpURLParts.BucketName)
 	err = bkt.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &storage.BucketAttrs{})
 	if err != nil {
