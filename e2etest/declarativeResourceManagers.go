@@ -61,7 +61,7 @@ func (r *resourceLocal) setup(a asserter, fs testFiles, isSource bool) {
 	r.dirPath = TestResourceFactory{}.CreateLocalDirectory(a)
 
 	size, err := fs.defaultSizeBytes()
-	a.AssertNoErr("get size", err)
+	a.AssertNoErr(err)
 
 	scenarioHelper{}.generateLocalFilesFromList(a, r.dirPath, fs.allNames(isSource), size)
 }
@@ -95,7 +95,7 @@ func (r *resourceBlobContainer) setup(a asserter, fs testFiles, isSource bool) {
 	r.rawSasURL = &rawSasURL
 
 	size, err := fs.defaultSizeBytes()
-	a.AssertNoErr("get size", err)
+	a.AssertNoErr(err)
 
 	scenarioHelper{}.generateBlobsFromList(a, *r.containerURL, fs.allNames(isSource), size)
 }
@@ -133,7 +133,7 @@ func (r *resourceAzureFileShare) setup(a asserter, fs testFiles, isSource bool) 
 	r.rawSasURL = &rawSasURL
 
 	size, err := fs.defaultSizeBytes()
-	a.AssertNoErr("get size", err)
+	a.AssertNoErr(err)
 
 	scenarioHelper{}.generateAzureFilesFromList(a, *r.shareURL, fs.allNames(isSource), size)
 }

@@ -21,20 +21,24 @@
 package e2etest
 
 import (
-	chk "gopkg.in/check.v1"
+	"testing"
 	"time"
 )
 
 // Purpose: Tests for enumeration of sources, including filtering
-type enumerationSuite struct{}
 
-var _ = chk.Suite(&enumerationSuite{})
+// TODO: re "suites". do we want something like this:
+//type enumerationSuite struct{ DeclarativeSuite } // must contain our own declarativeSuite
+//func TestEnumerationSuite(t *testing.T) { // must be registered with Testing like this
+//	suite.Run(t, new(enumerationSuite))  // needs to use reflection to run them all
+//}
+// NOTE: for now, we are just following the Go idiom of "one file is one suite"
 
 // Please leave the following test at the top of this file, where it can serve as an easy-to-find annotated example.
 // We won't normally put this many comments in a test, but this one has the verbose comments to explain the declarative test
 // framework
 // TestIncludePath_Folder tests the includePath parameter in the case where it lists folders.
-func (s *enumerationSuite) TestFilter_IncludePath_Folder(c *chk.C) {
+func TestFilter_IncludePath_Folder(t *testing.T) {
 	// This will test IncludePath once for each source resource type.
 	// For source resource types that support both Copy and Sync, it will run the test twice, once with Copy and once with Sync.
 	//  Copy: Blob -> Blob
@@ -47,8 +51,8 @@ func (s *enumerationSuite) TestFilter_IncludePath_Folder(c *chk.C) {
 	// instead of just eOperation.Copy(), then for the first three listed above, RunTests would have run Sync as well, making
 	// it 8 scenarios in total. But include-path does not apply to Sync, so we did not specify that here)
 
-	RunTests( // RunTests is the method that does all the work.  We pass it params to define that test that should be run
-		c,                                 // Pass the chk object in, so that RunTests can make assertions with it
+	RunScenarios( // This is the method that does all the work.  We pass it params to define that test that should be run
+		t,                                 // Pass in the test context
 		eOperation.Copy(),                 // Should the test be run for copy only, sync only, or both?
 		eTestFromTo.AllSourcesToOneDest(), // What range of source/dest pairs should this test be run on
 		eValidate.TransferStates(),        // What to validate (in this case, we don't validate content. We just validate that the desired transfers were scheduled
@@ -86,8 +90,9 @@ func (s *enumerationSuite) TestFilter_IncludePath_Folder(c *chk.C) {
 }
 
 // TestFilter_IncludeAfter test the include-after parameter
-func (s *enumerationSuite) TestFilter_IncludeAfter(c *chk.C) {
-	RunTests(c,
+func TestFilter_IncludeAfter(t *testing.T) {
+	RunScenarios(
+		t,
 		eOperation.Copy(), // IncludeAfter is not applicable for sync
 		eTestFromTo.AllSourcesToOneDest(),
 		eValidate.TransferStates(),
@@ -114,6 +119,6 @@ func (s *enumerationSuite) TestFilter_IncludeAfter(c *chk.C) {
 		})
 }
 
-func (s *enumerationSuite) TestFilter_IncludePath_File(c *chk.C) {
-	c.Skip("TODO")
+func TestFilter_IncludePath_File(t *testing.T) {
+	t.Skip("sample skip") // TODO
 }

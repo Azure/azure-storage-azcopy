@@ -38,7 +38,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
-	chk "gopkg.in/check.v1"
 )
 
 const defaultFileSize = 1024
@@ -62,23 +61,23 @@ var specialNames = []string{
 // note: this is to emulate the list-of-files flag
 func (scenarioHelper) generateListOfFiles(c asserter, fileList []string) (path string) {
 	parentDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	// create the file
 	path = common.GenerateFullPath(parentDirName, generateName(c, "listy", 0))
 	err = os.MkdirAll(filepath.Dir(path), os.ModePerm)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	// pipe content into it
 	content := strings.Join(fileList, "\n")
 	err = ioutil.WriteFile(path, []byte(content), common.DEFAULT_FILE_PERM)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 	return
 }
 
 func (scenarioHelper) generateLocalDirectory(c asserter) (dstDirName string) {
 	dstDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 	return
 }
 
@@ -106,7 +105,7 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, dirPath string, f
 		} else {
 			_, err = s.generateLocalFile(filepath.Join(dirPath, fileName), sizeBytes)
 		}
-		c.Assert(err, chk.IsNil)
+		c.AssertNoErr(err)
 	}
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
@@ -127,7 +126,7 @@ func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c asserter, dirPath
 		for j, name := range batch {
 			fileList[5*i+j] = name
 			_, err := s.generateLocalFile(filepath.Join(dirPath, name), defaultFileSize)
-			c.Assert(err, chk.IsNil)
+			c.AssertNoErr(err)
 		}
 	}
 
@@ -212,7 +211,7 @@ func (s scenarioHelper) generateBlobContainersAndBlobsFromLists(c asserter, serv
 	for _, containerName := range containerList {
 		curl := serviceURL.NewContainerURL(containerName)
 		_, err := curl.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
-		c.Assert(err, chk.IsNil)
+		c.AssertNoErr(err)
 
 		s.generateBlobsFromList(c, curl, blobList, defaultFileSize)
 	}
@@ -222,7 +221,7 @@ func (s scenarioHelper) generateFileSharesAndFilesFromLists(c asserter, serviceU
 	for _, shareName := range shareList {
 		surl := serviceURL.NewShareURL(shareName)
 		_, err := surl.Create(ctx, azfile.Metadata{}, 0)
-		c.Assert(err, chk.IsNil)
+		c.AssertNoErr(err)
 
 		s.generateAzureFilesFromList(c, surl, fileList, defaultFileSize)
 	}
@@ -232,7 +231,7 @@ func (s scenarioHelper) generateFilesystemsAndFilesFromLists(c asserter, service
 	for _, filesystemName := range fsList {
 		fsURL := serviceURL.NewFileSystemURL(filesystemName)
 		_, err := fsURL.Create(ctx)
-		c.Assert(err, chk.IsNil)
+		c.AssertNoErr(err)
 
 		s.generateBFSPathsFromList(c, fsURL, fileList)
 	}
@@ -241,7 +240,7 @@ func (s scenarioHelper) generateFilesystemsAndFilesFromLists(c asserter, service
 func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c asserter, s3Client *minio.Client, bucketList []string, objectList []string, data string) {
 	for _, bucketName := range bucketList {
 		err := s3Client.MakeBucket(bucketName, "")
-		c.Assert(err, chk.IsNil)
+		c.AssertNoErr(err)
 
 		s.generateObjects(c, s3Client, bucketName, objectList)
 	}
@@ -256,8 +255,8 @@ func (scenarioHelper) generateBlobsFromList(c asserter, containerURL azblob.Cont
 		blob := containerURL.NewBlockBlobURL(blobName)
 		cResp, err := blob.Upload(ctx, common.NewRandomDataGenerator(int64(size)), azblob.BlobHTTPHeaders{},
 			nil, azblob.BlobAccessConditions{})
-		c.Assert(err, chk.IsNil)
-		c.Assert(cResp.StatusCode(), chk.Equals, 201)
+		c.AssertNoErr(err)
+		c.Assert(cResp.StatusCode(), equals(), 201)
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
@@ -278,8 +277,8 @@ func (scenarioHelper) generatePageBlobsFromList(c asserter, containerURL azblob.
 			azblob.Metadata{},
 			azblob.BlobAccessConditions{},
 		)
-		c.Assert(err, chk.IsNil)
-		c.Assert(cResp.StatusCode(), chk.Equals, 201)
+		c.AssertNoErr(err)
+		c.Assert(cResp.StatusCode(), equals(), 201)
 
 		//Create the page (PUT page)
 		uResp, err := blob.UploadPages(ctx,
@@ -288,8 +287,8 @@ func (scenarioHelper) generatePageBlobsFromList(c asserter, containerURL azblob.
 			azblob.PageBlobAccessConditions{},
 			nil,
 		)
-		c.Assert(err, chk.IsNil)
-		c.Assert(uResp.StatusCode(), chk.Equals, 201)
+		c.AssertNoErr(err)
+		c.Assert(uResp.StatusCode(), equals(), 201)
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
@@ -307,16 +306,16 @@ func (scenarioHelper) generateAppendBlobsFromList(c asserter, containerURL azblo
 			azblob.Metadata{},
 			azblob.BlobAccessConditions{},
 		)
-		c.Assert(err, chk.IsNil)
-		c.Assert(cResp.StatusCode(), chk.Equals, 201)
+		c.AssertNoErr(err)
+		c.Assert(cResp.StatusCode(), equals(), 201)
 
 		//Append a block (PUT block)
 		uResp, err := blob.AppendBlock(ctx,
 			strings.NewReader(data),
 			azblob.AppendBlobAccessConditions{},
 			nil)
-		c.Assert(err, chk.IsNil)
-		c.Assert(uResp.StatusCode(), chk.Equals, 201)
+		c.AssertNoErr(err)
+		c.Assert(uResp.StatusCode(), equals(), 201)
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
@@ -327,11 +326,11 @@ func (scenarioHelper) generateBlockBlobWithAccessTier(c asserter, containerURL a
 	blob := containerURL.NewBlockBlobURL(blobName)
 	cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
 		nil, azblob.BlobAccessConditions{})
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	c.AssertNoErr(err)
+	c.Assert(cResp.StatusCode(), equals(), 201)
 
 	_, err = blob.SetTier(ctx, accessTier, azblob.LeaseAccessConditions{})
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 }
 
 // create the demanded objects
@@ -339,8 +338,8 @@ func (scenarioHelper) generateObjects(c asserter, client *minio.Client, bucketNa
 	size := int64(len(objectDefaultData))
 	for _, objectName := range objectList {
 		n, err := client.PutObjectWithContext(ctx, bucketName, objectName, strings.NewReader(objectDefaultData), size, minio.PutObjectOptions{})
-		c.Assert(err, chk.IsNil)
-		c.Assert(n, chk.Equals, size)
+		c.AssertNoErr(err)
+		c.Assert(n, equals(), size)
 	}
 }
 
@@ -349,7 +348,7 @@ func (scenarioHelper) generateFlatFiles(c asserter, shareURL azfile.ShareURL, fi
 	for _, fileName := range fileList {
 		file := shareURL.NewRootDirectoryURL().NewFileURL(fileName)
 		err := azfile.UploadBufferToAzureFile(ctx, []byte(fileDefaultData), file, azfile.UploadToAzureFileOptions{})
-		c.Assert(err, chk.IsNil)
+		c.AssertNoErr(err)
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
@@ -407,8 +406,8 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, shareURL azfile.Sha
 
 			// create the file itself
 			cResp, err := file.Create(ctx, int64(size), azfile.FileHTTPHeaders{}, azfile.Metadata{})
-			c.Assert(err, chk.IsNil)
-			c.Assert(cResp.StatusCode(), chk.Equals, 201)
+			c.AssertNoErr(err)
+			c.Assert(cResp.StatusCode(), equals(), 201)
 
 			// TODO: do we want to put some random content into it?
 		}
@@ -424,16 +423,16 @@ func (scenarioHelper) generateBFSPathsFromList(c asserter, filesystemURL azbfs.F
 
 		// Create the file
 		cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{})
-		c.Assert(err, chk.IsNil)
-		c.Assert(cResp.StatusCode(), chk.Equals, 201)
+		c.AssertNoErr(err)
+		c.Assert(cResp.StatusCode(), equals(), 201)
 
 		aResp, err := file.AppendData(ctx, 0, strings.NewReader(string(make([]byte, defaultBlobFSFileSizeInBytes))))
-		c.Assert(err, chk.IsNil)
-		c.Assert(aResp.StatusCode(), chk.Equals, 202)
+		c.AssertNoErr(err)
+		c.Assert(aResp.StatusCode(), equals(), 202)
 
 		fResp, err := file.FlushData(ctx, defaultBlobFSFileSizeInBytes, nil, azbfs.BlobFSHTTPHeaders{}, false, true)
-		c.Assert(err, chk.IsNil)
-		c.Assert(fResp.StatusCode(), chk.Equals, 200)
+		c.AssertNoErr(err)
+		c.Assert(fResp.StatusCode(), equals(), 200)
 	}
 }
 
@@ -466,7 +465,7 @@ func (scenarioHelper) addPrefix(list []string, prefix string) []string {
 func (scenarioHelper) getRawContainerURLWithSAS(c asserter, containerName string) url.URL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 	containerURLWithSAS := getContainerURLWithSAS(c, *credential, containerName)
 	return containerURLWithSAS.URL()
 }
@@ -474,7 +473,7 @@ func (scenarioHelper) getRawContainerURLWithSAS(c asserter, containerName string
 func (scenarioHelper) getRawBlobURLWithSAS(c asserter, containerName string, blobName string) url.URL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 	containerURLWithSAS := getContainerURLWithSAS(c, *credential, containerName)
 	blobURLWithSAS := containerURLWithSAS.NewBlockBlobURL(blobName)
 	return blobURLWithSAS.URL()
@@ -483,7 +482,7 @@ func (scenarioHelper) getRawBlobURLWithSAS(c asserter, containerName string, blo
 func (scenarioHelper) getRawBlobServiceURLWithSAS(c asserter) url.URL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	return getBlobServiceURLWithSAS(c, *credential).URL()
 }
@@ -491,7 +490,7 @@ func (scenarioHelper) getRawBlobServiceURLWithSAS(c asserter) url.URL {
 func (scenarioHelper) getRawFileServiceURLWithSAS(c asserter) url.URL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	return getFileServiceURLWithSAS(c, *credential).URL()
 }
@@ -506,12 +505,12 @@ func (scenarioHelper) getRawAdlsServiceURLWithSAS(c asserter) azbfs.ServiceURL {
 func (scenarioHelper) getBlobServiceURL(c asserter) azblob.ServiceURL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net", credential.AccountName())
 
 	// convert the raw url and validate it was parsed successfully
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	return azblob.NewServiceURL(*fullURL, azblob.NewPipeline(credential, azblob.PipelineOptions{}))
 }
@@ -527,7 +526,7 @@ func (scenarioHelper) getRawS3AccountURL(c asserter, region string) url.URL {
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com", common.IffString(region == "", "", "-"+region))
 
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	return *fullURL
 }
@@ -537,7 +536,7 @@ func (scenarioHelper) getRawS3BucketURL(c asserter, region string, bucketName st
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s", common.IffString(region == "", "", "-"+region), bucketName)
 
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	return *fullURL
 }
@@ -546,14 +545,14 @@ func (scenarioHelper) getRawS3ObjectURL(c asserter, region string, bucketName st
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s/%s", common.IffString(region == "", "", "-"+region), bucketName, objectName)
 
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	return *fullURL
 }
 
 func (scenarioHelper) getRawFileURLWithSAS(c asserter, shareName string, fileName string) url.URL {
 	credential, err := getGenericCredentialForFile("")
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 	shareURLWithSAS := getShareURLWithSAS(c, *credential, shareName)
 	fileURLWithSAS := shareURLWithSAS.NewRootDirectoryURL().NewFileURL(fileName)
 	return fileURLWithSAS.URL()
@@ -562,7 +561,7 @@ func (scenarioHelper) getRawFileURLWithSAS(c asserter, shareName string, fileNam
 func (scenarioHelper) getRawShareURLWithSAS(c asserter, shareName string) url.URL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 	shareURLWithSAS := getShareURLWithSAS(c, *credential, shareName)
 	return shareURLWithSAS.URL()
 }

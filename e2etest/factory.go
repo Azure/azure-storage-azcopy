@@ -29,8 +29,6 @@ import (
 	"strings"
 	"time"
 
-	chk "gopkg.in/check.v1"
-
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -75,7 +73,7 @@ func (TestResourceFactory) GetDatalakeServiceURL(accountType AccountType) azbfs.
 func (TestResourceFactory) GetBlobServiceURLWithSAS(c asserter, accountType AccountType) azblob.ServiceURL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(accountType)
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
+	c.AssertNoErr(err)
 
 	sasQueryParams, err := azblob.AccountSASSignatureValues{
 		Protocol:      azblob.SASProtocolHTTPS,
@@ -84,7 +82,7 @@ func (TestResourceFactory) GetBlobServiceURLWithSAS(c asserter, accountType Acco
 		Services:      azfile.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
 		ResourceTypes: azfile.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
 	}.NewSASQueryParameters(credential)
-	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
+	c.AssertNoErr(err)
 
 	// construct the url from scratch
 	qp := sasQueryParams.Encode()
@@ -93,7 +91,7 @@ func (TestResourceFactory) GetBlobServiceURLWithSAS(c asserter, accountType Acco
 
 	// convert the raw url and validate it was parsed successfully
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
+	c.AssertNoErr(err)
 
 	return azblob.NewServiceURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
 }
@@ -101,7 +99,7 @@ func (TestResourceFactory) GetBlobServiceURLWithSAS(c asserter, accountType Acco
 func (TestResourceFactory) GetContainerURLWithSAS(c asserter, accountType AccountType, containerName string) azblob.ContainerURL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(accountType)
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
+	c.AssertNoErr(err)
 
 	sasQueryParams, err := azblob.BlobSASSignatureValues{
 		Protocol:      azblob.SASProtocolHTTPS,
@@ -109,7 +107,7 @@ func (TestResourceFactory) GetContainerURLWithSAS(c asserter, accountType Accoun
 		ContainerName: containerName,
 		Permissions:   azblob.ContainerSASPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, List: true}.String(),
 	}.NewSASQueryParameters(credential)
-	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
+	c.AssertNoErr(err)
 
 	// construct the url from scratch
 	qp := sasQueryParams.Encode()
@@ -118,7 +116,7 @@ func (TestResourceFactory) GetContainerURLWithSAS(c asserter, accountType Accoun
 
 	// convert the raw url and validate it was parsed successfully
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
+	c.AssertNoErr(err)
 
 	return azblob.NewContainerURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
 }
@@ -126,7 +124,7 @@ func (TestResourceFactory) GetContainerURLWithSAS(c asserter, accountType Accoun
 func (TestResourceFactory) GetFileShareULWithSAS(c asserter, accountType AccountType, containerName string) azfile.ShareURL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(accountType)
 	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
+	c.AssertNoErr(err)
 
 	sasQueryParams, err := azfile.FileSASSignatureValues{
 		Protocol:    azfile.SASProtocolHTTPS,
@@ -134,7 +132,7 @@ func (TestResourceFactory) GetFileShareULWithSAS(c asserter, accountType Account
 		ShareName:   containerName,
 		Permissions: azfile.ShareSASPermissions{Read: true, Write: true, Create: true, Delete: true, List: true}.String(),
 	}.NewSASQueryParameters(credential)
-	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
+	c.AssertNoErr(err)
 
 	// construct the url from scratch
 	qp := sasQueryParams.Encode()
@@ -143,7 +141,7 @@ func (TestResourceFactory) GetFileShareULWithSAS(c asserter, accountType Account
 
 	// convert the raw url and validate it was parsed successfully
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
+	c.AssertNoErr(err)
 
 	return azfile.NewShareURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
 }
@@ -159,8 +157,8 @@ func (TestResourceFactory) CreateNewContainer(c asserter, accountType AccountTyp
 	container = TestResourceFactory{}.GetBlobServiceURL(accountType).NewContainerURL(name)
 
 	cResp, err := container.Create(context.Background(), nil, azblob.PublicAccessNone)
-	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	c.AssertNoErr(err)
+	c.Assert(cResp.StatusCode(), equals(), 201)
 	return container, name, TestResourceFactory{}.GetContainerURLWithSAS(c, accountType, name).URL()
 }
 
@@ -171,14 +169,14 @@ func (TestResourceFactory) CreateNewFileShare(c asserter, accountType AccountTyp
 	fileShare = TestResourceFactory{}.GetFileServiceURL(accountType).NewShareURL(name)
 
 	cResp, err := fileShare.Create(context.Background(), nil, defaultShareQuotaGB)
-	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	c.AssertNoErr(err)
+	c.Assert(cResp.StatusCode(), equals(), 201)
 	return fileShare, name, TestResourceFactory{}.GetFileShareULWithSAS(c, accountType, name).URL()
 }
 
 func (TestResourceFactory) CreateLocalDirectory(c asserter) (dstDirName string) {
 	dstDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
-	c.Assert(err, chk.IsNil, chk.Commentf("Error: %s", err))
+	c.AssertNoErr(err)
 	return
 }
 
@@ -191,31 +189,38 @@ const (
 
 func getTestName() (testSuite, test string) {
 
+	removeUnderscores := func(s string) string {
+		return strings.Replace(s, "_", "-", -1) // necessary if using name as basis for blob container name
+	}
+
 	// The following lines step up the stack find the name of the test method
 	// Note: the way to do this changed in go 1.12, refer to release notes for more info
 	var pcs [10]uintptr
 	n := runtime.Callers(1, pcs[:])
 	frames := runtime.CallersFrames(pcs[:n])
-	fullName := "(*fooSuite).TestFoo" // default stub "Foo" is used if anything goes wrong with this procedure
+	funcName := "TestFoo" // default stub "Foo" is used if anything goes wrong with this procedure
+	fileName := "UnknownFile_test.go"
 	for {
 		frame, more := frames.Next()
 		if strings.Contains(frame.Func.Name(), "Suite") {
-			fullName = frame.Func.Name()
+			funcName = frame.Func.Name()
+			fileName = frame.File
 			break
 		} else if !more {
 			break
 		}
 	}
-	funcNameStart := strings.Index(fullName, "Test")
-	suiteNameStart := strings.Index(fullName, ".(")
-	suite := strings.Replace(strings.Trim(fullName[suiteNameStart:funcNameStart], "()*."), "_", "-", -1) // for consistency with name, below
-	suite = strings.Replace(suite, "Suite", "", -1)
-	if len(suite) > 4 {
-		suite = suite[:4] // trim the suite name part of it, so that we don't end up with so many names that are too long
-	}
 
-	name := fullName[funcNameStart+len("Test"):]                // Just get the name of the test and not any of the garbage at the beginning
-	name = strings.Replace(strings.ToLower(name), "_", "-", -1) // Ensure it is a valid resource name (containers don't allow _ but do allow -)
+	// when using the basic Testing package, suite=file
+	suite := strings.Replace(strings.ToLower(fileName), "_test.go", "", -1)
+	suite = strings.Replace(suite, "zt_", "", -1)
+	if len(suite) > 6 {
+		suite = suite[:6] // trim the suite name part of it, so that we don't end up with so many names that are too long
+	}
+	suite = removeUnderscores(suite)
+
+	name := strings.Replace(funcName, "Test", "", 1)
+	name = removeUnderscores(name)
 
 	return suite, name
 }

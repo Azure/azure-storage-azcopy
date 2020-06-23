@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
+	chk "gopkg.in/check.v1"
 	"io/ioutil"
 	"math/rand"
 	"net/url"
@@ -39,15 +40,10 @@ import (
 	"github.com/Azure/azure-storage-azcopy/ste"
 	minio "github.com/minio/minio-go"
 
-	chk "gopkg.in/check.v1"
-
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
-type cmdIntegrationSuite struct{} // TODO: remove?
-
-var _ = chk.Suite(&cmdIntegrationSuite{})
 var ctx = context.Background()
 
 const (
@@ -189,8 +185,8 @@ func createNewContainer(c asserter, bsu azblob.ServiceURL) (container azblob.Con
 	container, name = getContainerURL(c, bsu)
 
 	cResp, err := container.Create(ctx, nil, azblob.PublicAccessNone)
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	c.AssertNoErr(err)
+	c.Assert(cResp.StatusCode(), equals(), 201)
 	return container, name
 }
 
@@ -198,8 +194,8 @@ func createNewFilesystem(c asserter, bfssu azbfs.ServiceURL) (filesystem azbfs.F
 	filesystem, name = getFilesystemURL(c, bfssu)
 
 	cResp, err := filesystem.Create(ctx)
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	c.AssertNoErr(err)
+	c.Assert(cResp.StatusCode(), equals(), 201)
 	return
 }
 
@@ -208,16 +204,16 @@ func createNewBfsFile(c asserter, filesystem azbfs.FileSystemURL, prefix string)
 
 	// Create the file
 	cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{})
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	c.AssertNoErr(err)
+	c.Assert(cResp.StatusCode(), equals(), 201)
 
 	aResp, err := file.AppendData(ctx, 0, strings.NewReader(string(make([]byte, defaultBlobFSFileSizeInBytes))))
-	c.Assert(err, chk.IsNil)
-	c.Assert(aResp.StatusCode(), chk.Equals, 202)
+	c.AssertNoErr(err)
+	c.Assert(aResp.StatusCode(), equals(), 202)
 
 	fResp, err := file.FlushData(ctx, defaultBlobFSFileSizeInBytes, nil, azbfs.BlobFSHTTPHeaders{}, false, true)
-	c.Assert(err, chk.IsNil)
-	c.Assert(fResp.StatusCode(), chk.Equals, 200)
+	c.AssertNoErr(err)
+	c.Assert(fResp.StatusCode(), equals(), 200)
 	return
 }
 
@@ -227,8 +223,8 @@ func createNewBlockBlob(c asserter, container azblob.ContainerURL, prefix string
 	cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
 		nil, azblob.BlobAccessConditions{})
 
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	c.AssertNoErr(err)
+	c.Assert(cResp.StatusCode(), equals(), 201)
 
 	return
 }
@@ -237,8 +233,8 @@ func createNewAzureShare(c asserter, fsu azfile.ServiceURL) (share azfile.ShareU
 	share, name = getShareURL(c, fsu)
 
 	cResp, err := share.Create(ctx, nil, 0)
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	c.AssertNoErr(err)
+	c.Assert(cResp.StatusCode(), equals(), 201)
 	return share, name
 }
 
@@ -249,8 +245,8 @@ func createNewAzureFile(c asserter, share azfile.ShareURL, prefix string) (file 
 	generateParentsForAzureFile(c, file)
 
 	cResp, err := file.Create(ctx, defaultAzureFileSizeInBytes, azfile.FileHTTPHeaders{}, azfile.Metadata{})
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	c.AssertNoErr(err)
+	c.Assert(cResp.StatusCode(), equals(), 201)
 
 	return
 }
@@ -263,7 +259,7 @@ func generateParentsForAzureFile(c asserter, fileURL azfile.FileURL) {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, _ := azfile.NewSharedKeyCredential(accountName, accountKey)
 	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileURL, azfile.NewPipeline(credential, azfile.PipelineOptions{}), newNullFolderCreationTracker())
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 }
 
 func createNewAppendBlob(c asserter, container azblob.ContainerURL, prefix string) (blob azblob.AppendBlobURL, name string) {
@@ -271,8 +267,8 @@ func createNewAppendBlob(c asserter, container azblob.ContainerURL, prefix strin
 
 	resp, err := blob.Create(ctx, azblob.BlobHTTPHeaders{}, nil, azblob.BlobAccessConditions{})
 
-	c.Assert(err, chk.IsNil)
-	c.Assert(resp.StatusCode(), chk.Equals, 201)
+	c.AssertNoErr(err)
+	c.Assert(resp.StatusCode(), equals(), 201)
 	return
 }
 
@@ -281,26 +277,26 @@ func createNewPageBlob(c asserter, container azblob.ContainerURL, prefix string)
 
 	resp, err := blob.Create(ctx, azblob.PageBlobPageBytes*10, 0, azblob.BlobHTTPHeaders{}, nil, azblob.BlobAccessConditions{})
 
-	c.Assert(err, chk.IsNil)
-	c.Assert(resp.StatusCode(), chk.Equals, 201)
+	c.AssertNoErr(err)
+	c.Assert(resp.StatusCode(), equals(), 201)
 	return
 }
 
 func deleteContainer(c asserter, container azblob.ContainerURL) {
 	resp, err := container.Delete(ctx, azblob.ContainerAccessConditions{})
-	c.Assert(err, chk.IsNil)
-	c.Assert(resp.StatusCode(), chk.Equals, 202)
+	c.AssertNoErr(err)
+	c.Assert(resp.StatusCode(), equals(), 202)
 }
 
 func deleteFilesystem(c asserter, filesystem azbfs.FileSystemURL) {
 	resp, err := filesystem.Delete(ctx)
-	c.Assert(err, chk.IsNil)
-	c.Assert(resp.StatusCode(), chk.Equals, 202)
+	c.AssertNoErr(err)
+	c.Assert(resp.StatusCode(), equals(), 202)
 }
 
 func validateStorageError(c asserter, err error, code azblob.ServiceCodeType) {
 	serr, _ := err.(azblob.StorageError)
-	c.Assert(serr.ServiceCode(), chk.Equals, code)
+	c.Assert(serr.ServiceCode(), equals(), code)
 }
 
 func getRelativeTimeGMT(amount time.Duration) time.Time {
@@ -341,14 +337,14 @@ func createS3ClientWithMinio(o createS3ResOptions) (*minio.Client, error) {
 func createNewBucket(c asserter, client *minio.Client, o createS3ResOptions) string {
 	bucketName := generateBucketName(c)
 	err := client.MakeBucket(bucketName, o.Location)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	return bucketName
 }
 
 func createNewBucketWithName(c asserter, client *minio.Client, bucketName string, o createS3ResOptions) {
 	err := client.MakeBucket(bucketName, o.Location)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 }
 
 func createNewObject(c asserter, client *minio.Client, bucketName string, prefix string) (objectKey string) {
@@ -356,9 +352,9 @@ func createNewObject(c asserter, client *minio.Client, bucketName string, prefix
 
 	size := int64(len(objectDefaultData))
 	n, err := client.PutObject(bucketName, objectKey, strings.NewReader(objectDefaultData), size, minio.PutObjectOptions{})
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
-	c.Assert(n, chk.Equals, size)
+	c.Assert(n, equals(), size)
 
 	return
 }
@@ -427,11 +423,11 @@ func cleanBlobAccount(c asserter, serviceURL azblob.ServiceURL) {
 	marker := azblob.Marker{}
 	for marker.NotDone() {
 		resp, err := serviceURL.ListContainersSegment(ctx, marker, azblob.ListContainersSegmentOptions{})
-		c.Assert(err, chk.IsNil)
+		c.AssertNoErr(err)
 
 		for _, v := range resp.ContainerItems {
 			_, err = serviceURL.NewContainerURL(v.Name).Delete(ctx, azblob.ContainerAccessConditions{})
-			c.Assert(err, chk.IsNil)
+			c.AssertNoErr(err)
 		}
 
 		marker = resp.NextMarker
@@ -442,11 +438,11 @@ func cleanFileAccount(c asserter, serviceURL azfile.ServiceURL) {
 	marker := azfile.Marker{}
 	for marker.NotDone() {
 		resp, err := serviceURL.ListSharesSegment(ctx, marker, azfile.ListSharesOptions{})
-		c.Assert(err, chk.IsNil)
+		c.AssertNoErr(err)
 
 		for _, v := range resp.ShareItems {
 			_, err = serviceURL.NewShareURL(v.Name).Delete(ctx, azfile.DeleteSnapshotsOptionNone)
-			c.Assert(err, chk.IsNil)
+			c.AssertNoErr(err)
 		}
 
 		marker = resp.NextMarker
@@ -483,7 +479,7 @@ func getAlternateFSU() (azfile.ServiceURL, error) {
 
 func deleteShare(c asserter, share azfile.ShareURL) {
 	_, err := share.Delete(ctx, azfile.DeleteSnapshotsOptionInclude)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 }
 
 // Some tests require setting service properties. It can take up to 30 seconds for the new properties to be reflected across all FEs.
@@ -502,26 +498,26 @@ func runTestRequiringServiceProperties(c asserter, bsu azblob.ServiceURL, code s
 	if err != nil && err.Error() == code {
 		time.Sleep(time.Second * 30)
 		err = testImplFunc(c, bsu)
-		c.Assert(err, chk.IsNil)
+		c.AssertNoErr(err)
 	}
 }
 
 func enableSoftDelete(c asserter, bsu azblob.ServiceURL) {
 	days := int32(1)
 	_, err := bsu.SetProperties(ctx, azblob.StorageServiceProperties{DeleteRetentionPolicy: &azblob.RetentionPolicy{Enabled: true, Days: &days}})
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 }
 
 func disableSoftDelete(c asserter, bsu azblob.ServiceURL) {
 	_, err := bsu.SetProperties(ctx, azblob.StorageServiceProperties{DeleteRetentionPolicy: &azblob.RetentionPolicy{Enabled: false}})
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 }
 
 func validateUpload(c asserter, blobURL azblob.BlockBlobURL) {
 	resp, err := blobURL.Download(ctx, 0, 0, azblob.BlobAccessConditions{}, false)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 	data, _ := ioutil.ReadAll(resp.Response().Body)
-	c.Assert(data, chk.HasLen, 0)
+	c.Assert(len(data), equals(), 0)
 }
 
 func getContainerURLWithSAS(c asserter, credential azblob.SharedKeyCredential, containerName string) azblob.ContainerURL {
@@ -531,7 +527,7 @@ func getContainerURLWithSAS(c asserter, credential azblob.SharedKeyCredential, c
 		ContainerName: containerName,
 		Permissions:   azblob.ContainerSASPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, List: true}.String(),
 	}.NewSASQueryParameters(&credential)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	// construct the url from scratch
 	qp := sasQueryParams.Encode()
@@ -540,7 +536,7 @@ func getContainerURLWithSAS(c asserter, credential azblob.SharedKeyCredential, c
 
 	// convert the raw url and validate it was parsed successfully
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	// TODO perhaps we need a global default pipeline
 	return azblob.NewContainerURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
@@ -554,7 +550,7 @@ func getBlobServiceURLWithSAS(c asserter, credential azblob.SharedKeyCredential)
 		Services:      azfile.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
 		ResourceTypes: azfile.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
 	}.NewSASQueryParameters(&credential)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	// construct the url from scratch
 	qp := sasQueryParams.Encode()
@@ -563,7 +559,7 @@ func getBlobServiceURLWithSAS(c asserter, credential azblob.SharedKeyCredential)
 
 	// convert the raw url and validate it was parsed successfully
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	return azblob.NewServiceURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
 }
@@ -576,13 +572,13 @@ func getFileServiceURLWithSAS(c asserter, credential azfile.SharedKeyCredential)
 		Services:      azfile.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
 		ResourceTypes: azfile.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
 	}.NewSASQueryParameters(&credential)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	qp := sasQueryParams.Encode()
 	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/?%s", credential.AccountName(), qp)
 
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	return azfile.NewServiceURL(*fullURL, azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{}))
 }
@@ -594,7 +590,7 @@ func getShareURLWithSAS(c asserter, credential azfile.SharedKeyCredential, share
 		ShareName:   shareName,
 		Permissions: azfile.ShareSASPermissions{Read: true, Write: true, Create: true, Delete: true, List: true}.String(),
 	}.NewSASQueryParameters(&credential)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	// construct the url from scratch
 	qp := sasQueryParams.Encode()
@@ -603,7 +599,7 @@ func getShareURLWithSAS(c asserter, credential azfile.SharedKeyCredential, share
 
 	// convert the raw url and validate it was parsed successfully
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	// TODO perhaps we need a global default pipeline
 	return azfile.NewShareURL(*fullURL, azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{}))
@@ -617,7 +613,7 @@ func getAdlsServiceURLWithSAS(c asserter, credential azbfs.SharedKeyCredential) 
 		Services:      azfile.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
 		ResourceTypes: azfile.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
 	}.NewSASQueryParameters(&credential)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	// construct the url from scratch
 	qp := sasQueryParams.Encode()
@@ -626,7 +622,7 @@ func getAdlsServiceURLWithSAS(c asserter, credential azbfs.SharedKeyCredential) 
 
 	// convert the raw url and validate it was parsed successfully
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	return azbfs.NewServiceURL(*fullURL, azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{}))
 }

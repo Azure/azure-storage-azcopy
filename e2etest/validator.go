@@ -26,8 +26,6 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/common"
-
-	chk "gopkg.in/check.v1"
 )
 
 type Validator struct{}
@@ -49,7 +47,7 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 	destinationPrefix = normalizeSlashes(destinationPrefix)
 
 	// validate that the right number of transfers were scheduled
-	c.Check(len(actualTransfers), chk.Equals, len(expectedTransfers))
+	c.Assert(len(actualTransfers), equals(), len(expectedTransfers))
 
 	// validate that the right transfers were sent
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
@@ -80,7 +78,7 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 		}
 
 		// the relative paths should be equal
-		c.Check(srcRelativeFilePath, chk.Equals, dstRelativeFilePath)
+		c.Assert(srcRelativeFilePath, equals(), dstRelativeFilePath)
 
 		// look up the path from the expected transfers, make sure it exists
 		lookupKey := srcRelativeFilePath
@@ -88,6 +86,6 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 			lookupKey = folder(lookupKey)
 		}
 		_, transferExist := lookupMap[lookupKey]
-		c.Check(transferExist, chk.Equals, true, chk.Commentf("Looking for file "+lookupKey))
+		c.Assert(transferExist, equals(), true, "Looking for file "+lookupKey)
 	}
 }

@@ -21,21 +21,18 @@
 package e2etest
 
 import (
-	chk "gopkg.in/check.v1"
+	"testing"
 	"time"
 )
 
 // Purpose: Tests for detecting that source has been changed during transfer
-type changeDetectionSuite struct{}
-
-var _ = chk.Suite(&changeDetectionSuite{})
 
 // TestDetectFileChangedDuringTransfer tests that we can detect files changed during transfer, for all supported
 // pairwise source-dest combinations.
 // We test all pairs here because change detection depends on both the source info provider and the xfer-... code.
 // The latter differs between upload and download.
-func (s *changeDetectionSuite) TestDetectFileChangedDuringTransfer(c *chk.C) {
-	RunTests(c,
+func TestDetectFileChangedDuringTransfer(t *testing.T) {
+	RunScenarios(t,
 		eOperation.CopyAndSync(),
 		eTestFromTo.AllPairs(),
 		eValidate.TransferStates(),

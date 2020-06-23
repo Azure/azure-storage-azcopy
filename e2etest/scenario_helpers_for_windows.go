@@ -26,8 +26,6 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-
-	chk "gopkg.in/check.v1"
 )
 
 // set file attributes to test file
@@ -57,9 +55,9 @@ func (scenarioHelper) setAttributesForLocalFile(filePath string, attrList []stri
 	return err
 }
 
-func (s scenarioHelper) setAttributesForLocalFiles(c *chk.C, dirPath string, fileList []string, attrList []string) {
+func (s scenarioHelper) setAttributesForLocalFiles(c asserter, dirPath string, fileList []string, attrList []string) {
 	for _, fileName := range fileList {
 		err := s.setAttributesForLocalFile(filepath.Join(dirPath, fileName), attrList)
-		c.Assert(err, chk.IsNil)
+		c.AssertNoErr(err)
 	}
 }

@@ -26,11 +26,11 @@ import (
 	"github.com/Azure/azure-storage-azcopy/cmd"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/JeffreyRichter/enum/enum"
-	chk "gopkg.in/check.v1"
 	"math"
 	"path"
 	"reflect"
 	"strings"
+	"testing"
 )
 
 ///////////
@@ -56,56 +56,87 @@ func asFolderDummyContent(s string) string { // make a dummy filename in the fol
 
 var sanitizer = common.NewAzCopyLogSanitizer() // while this is "only tests", we may as well follow good SAS redaction practices
 
-// simplified assertion interface. Allows us to hook in scenario identification in our assertions
+////////
+
+type comparison struct {
+	equals bool
+}
+
+func (c comparison) String() string {
+	if c.equals {
+		return "equals"
+	} else {
+		return "notEquals"
+	}
+}
+
+func equals() comparison {
+	return comparison{true}
+}
+
+func notEquals() comparison {
+	return comparison{false}
+}
+
+///////
+
+// simplified assertion interface. Allows us to abstract away the specific test harness we are using
+// (in case we change it... again)
 type asserter interface {
-	Assert(obtained interface{}, checker chk.Checker, args ...interface{})
-	Check(obtained interface{}, checker chk.Checker, args ...interface{})
-	AssertNoErr(where string, err error)
+	Assert(obtained interface{}, comp comparison, expected interface{}, comment ...string)
+	AssertNoErr(err error, comment ...string)
+	Error(reason string)
 	Skip(reason string)
+
+	// ScenarioName piggy-backs on this interface, in a context-value-like way (ugly, but it works)
 	ScenarioName() string
 }
 
-type scenarioAsserter struct {
-	c            *chk.C
+type testingAsserter struct {
+	t            *testing.T
 	scenarioName string
 }
 
-func (a *scenarioAsserter) updateCommentArg(args []interface{}) []interface{} {
-	if len(args) > 0 {
-		if com, ok := args[len(args)-1].(chk.CommentInterface); ok {
-			args = args[:len(args)-1]
-			return append(args, chk.Commentf(a.ScenarioName()+" "+sanitizer.SanitizeLogMessage(com.CheckCommentString())))
-		}
+// Assert compares its arguments and marks the current test (or subtest) as failed. Unlike gocheck's Assert method,
+// in this implementation execution of the test continues (and so subsequent asserts may give additional information)
+func (a *testingAsserter) Assert(obtained interface{}, comp comparison, expected interface{}, comment ...string) {
+	// do the comparison (our comparison options are deliberately simple)
+	// TODO: if obtained or expected is a pointer, do we want to dereference it before comparing?  Do we even need that in our codebase?
+	ok := false
+	if comp.equals {
+		ok = obtained == expected
+	} else {
+		ok = obtained != expected
 	}
-	return append(args, chk.Commentf(a.ScenarioName()))
+	if ok {
+		return
+	}
+
+	// record the failure
+	a.t.Helper() // exclude this method from the logged callstack
+	a.t.Logf("Assert %v %s %v %s", obtained, comp, expected, comment)
+	a.t.Fail()
 }
 
-func (a *scenarioAsserter) Assert(obtained interface{}, checker chk.Checker, args ...interface{}) {
-	args = a.updateCommentArg(args)
-	a.c.Assert(obtained, checker, args...)
-}
-
-// Check is "Assert but don't stop running the test". Useful for initial checks, where subsequent checks or asserts will give
-// additional information.  A failed check marks the test as failed
-func (a *scenarioAsserter) Check(obtained interface{}, checker chk.Checker, args ...interface{}) {
-	args = a.updateCommentArg(args)
-	a.c.Check(obtained, checker, args...)
-}
-
-func (a *scenarioAsserter) AssertNoErr(where string, err error) {
+func (a *testingAsserter) AssertNoErr(err error, comment ...string) {
 	if err != nil {
-		redactedErr := errors.New(sanitizer.SanitizeLogMessage(err.Error()))
-		a.Assert(redactedErr, chk.IsNil, chk.Commentf(where))
+		redactedErr := sanitizer.SanitizeLogMessage(err.Error())
+		fullComments := append(comment, redactedErr)
+		a.Assert(redactedErr, equals(), nil, fullComments...)
 	}
 }
 
-func (a *scenarioAsserter) Skip(reason string) {
-	a.c.Skip(reason)
+func (a *testingAsserter) Error(reason string) {
+	a.t.Error(reason)
 }
 
-func (a *scenarioAsserter) ScenarioName() string {
+func (a *testingAsserter) Skip(reason string) {
+	a.t.Skip(reason)
+}
+
+func (a *testingAsserter) ScenarioName() string {
 	if a.scenarioName == "" {
-		// assume we are actually not in the declarative runner
+		// assume we are actually not in the declarative runner (e.g. maybe we are called from old code)
 		_, name := getTestName()
 		return name
 	}

@@ -23,12 +23,10 @@ package e2etest
 import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
-	chk "gopkg.in/check.v1"
 	"os"
 	"path"
 	"path/filepath"
-	"sync"
-	"time"
+	"testing"
 )
 
 // This declarative test runner adds a layer on top of e2etest/base. The added layer allows us to test in a declarative style,
@@ -42,10 +40,18 @@ import (
 //     specifying "strip top dir"
 //     copying to/from things that are not the share root/container root
 
-// RunTests is the key entry point for declarative testing.
-// It constructs and executes tests, according to its parameters, and checks their results
-func RunTests(
-	c *chk.C,
+// A note on test frameworks.
+// We are just using GoLang's own Testing package.
+// Why aren't we using gocheck (gopkg.in/check.v1) as we did for older unit tests?
+// Because gocheck doesn't seem to have, or expose, any concept of sub-tests. But we want: suite/test/subtest
+// (subtest = scenario in our wording below).
+// Why aren't we using stretchr/testify/suite? Because it appears from the code there that tests (and subtests) within a suite cannot be parallelized
+// (Since suite.SetT() manipulates shared state).
+
+// RunScenarios is the key entry point for declarative testing.
+// It constructs and executes scenarios (subtest in Go-speak), according to its parameters, and checks their results
+func RunScenarios(
+	t *testing.T,
 	operations Operation,
 	testFromTo TestFromTo,
 	validate Validate, // TODO: do we really want the test author to have to nominate which validation should happen?  Pros: better perf of tests. Cons: they have to tell us, and if they tell us wrong test may not test what they think it tests
@@ -62,21 +68,20 @@ func RunTests(
 	scenarios := make([]scenario, 0, 16)
 	for _, op := range operations.getValues() {
 		for _, fromTo := range testFromTo.getValues(op) {
-			// Short form is useful for generating container names
-			// Full form is useful for logging and reading by humans
-			scenarioNameShort := fmt.Sprintf("%s-%s-%c-%c%c", suiteName, testName, op.String()[0], fromTo.From().String()[0], fromTo.To().String()[0])
-			scenarioNameFull := fmt.Sprintf("%s.%s.%s-%s", suiteName, testName, op, fromTo)
+			// Create unique name for generating container names
+			uniqueScenarioName := fmt.Sprintf("%s-%s-%c-%c%c", suiteName, testName, op.String()[0], fromTo.From().String()[0], fromTo.To().String()[0])
+			// Subtest name is not globally unique (it doesn't need to be) but it is more human-readable
+			subtestName := fmt.Sprintf("%s-%s", op, fromTo)
 			s := scenario{
-				c:            c,
-				scenarioName: scenarioNameFull,
-				operation:    op,
-				fromTo:       fromTo,
-				validate:     validate,
-				p:            p, // copies them, because they are a struct. This is what we need, since the may be morphed while running
-				hs:           hs,
-				fs:           fs,
-				a:            &scenarioAsserter{c, scenarioNameShort},
-				stripTopDir:  false, // TODO: how will we set this?
+				subtestName: subtestName,
+				operation:   op,
+				fromTo:      fromTo,
+				validate:    validate,
+				p:           p, // copies them, because they are a struct. This is what we need, since the may be morphed while running
+				hs:          hs,
+				fs:          fs,
+				a:           &testingAsserter{t, uniqueScenarioName}, // it's a bit ugly passing the scenario name in here, in a "context"-like way, but it works
+				stripTopDir: false,                                   // TODO: how will we set this?
 			}
 
 			scenarios = append(scenarios, s)
@@ -85,46 +90,29 @@ func RunTests(
 
 	// run them in parallel if not debugging, but sequentially (for easier debugging) if a debugger is attached
 	parallel := !isLaunchedByDebugger // this only works if gops.exe is on your path. See azcopyDebugHelper.go for instructions.
-	wg := &sync.WaitGroup{}
-	wg.Add(len(scenarios))
 	for _, s := range scenarios {
 		sen := s // capture to separate var inside the loop, for the parallel case
-		scenRunner := func() {
-			defer wg.Done()
+		// use t.Run to get proper sub-test support
+		t.Run(s.subtestName, func(t *testing.T) {
+			if parallel {
+				t.Parallel() // tell testing that it can run stuff in parallel with us
+			}
 			sen.Run()
-		}
-		if parallel {
-			go scenRunner()
-		} else {
-			scenRunner()
-		}
-	}
-
-	// wait on completion with timeout
-	cwg := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(cwg)
-	}()
-	select {
-	case <-cwg: // normal completion
-	case <-time.After(time.Minute * 10):
-		c.Fatal("Timed out waiting for parallel sceario runs")
+		})
 	}
 }
 
 type scenario struct {
 
 	// scenario config properties as provided by user
-	c            *chk.C
-	scenarioName string
-	operation    Operation
-	validate     Validate
-	fromTo       common.FromTo
-	p            params
-	hs           *hooks
-	fs           testFiles
-	a            asserter
+	subtestName string
+	operation   Operation
+	validate    Validate
+	fromTo      common.FromTo
+	p           params
+	hs          *hooks
+	fs          testFiles
+	a           asserter
 
 	stripTopDir bool // TODO: figure out how we'll control and use this
 
@@ -141,9 +129,6 @@ type scenarioState struct {
 // Run runs one test scenario
 func (s *scenario) Run() {
 	defer s.cleanup()
-	defer s.logEnd()
-
-	s.logStart()
 
 	// setup
 	s.assignSourceAndDest() // what/where are they
@@ -162,18 +147,6 @@ func (s *scenario) Run() {
 	}
 }
 
-func (s *scenario) logStart() {
-	s.c.Logf("Start scenario: %s", s.scenarioName)
-}
-
-func (s *scenario) logEnd() {
-	s.c.Logf("End scenario:   %s", s.scenarioName) // can't include result here, since with current test harness we know the TEST result but not the SCENARIO result
-}
-
-func (s *scenario) logWarning(where string, err error) {
-	s.c.Logf("warning in %s: %s %v", s.scenarioName, where, err)
-}
-
 func (s *scenario) assignSourceAndDest() {
 	createTestResource := func(loc common.Location) resourceManager {
 		// TODO: handle account to account (multi-container) scenarios
@@ -187,10 +160,10 @@ func (s *scenario) assignSourceAndDest() {
 			// TODO: handle wider variety of account types
 			return &resourceBlobContainer{accountType: EAccountType.Standard()}
 		case common.ELocation.BlobFS():
-			s.c.Error("Not implementd yet for blob FS")
+			s.a.Error("Not implementd yet for blob FS")
 			return &resourceDummy{}
 		case common.ELocation.S3():
-			s.c.Error("Not implementd yet for S3")
+			s.a.Error("Not implementd yet for S3")
 			return &resourceDummy{}
 		default:
 			panic(fmt.Sprintf("location type '%s' is not yet supported in declarative tests", loc))
@@ -213,7 +186,7 @@ func (s *scenario) runAzCopy() {
 		s.operation,
 		s.state.source.getParam(s.stripTopDir, useSas),
 		s.state.dest.getParam(false, useSas))
-	s.a.AssertNoErr("run AzCopy", err)
+	s.a.AssertNoErr(err, "running AzCopy")
 	s.state.result = &result
 }
 
