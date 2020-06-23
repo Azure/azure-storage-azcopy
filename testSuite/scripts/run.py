@@ -11,6 +11,7 @@ from test_blobfs_download_oauth import *
 from test_blob_piping import *
 from test_blob_sync import *
 from test_service_to_service_copy import *
+from test_google_cloud_storage_copy import *
 from test_blobfs_download_SAS import *
 from test_blobfs_upload_SAS import *
 from test_autodetect_blob_type import *
@@ -91,13 +92,17 @@ def parse_config_file_set_env():
     # set env var for service-2-service copy source file account
     os.environ['S2S_SRC_FILE_ACCOUNT_SAS_URL'] = config['CREDENTIALS']['S2S_SRC_FILE_ACCOUNT_SAS_URL']
 
-    # set env var for service-2-service copy source s3 
+    # set env var for service-2-service copy source s3 and gcp
     os.environ['S2S_SRC_S3_SERVICE_URL'] = config['CREDENTIALS']['S2S_SRC_S3_SERVICE_URL']
+    os.environ['S2S_SRC_GCP_SERVICE_URL'] = config['CREDENTIALS']['S2S_SRC_GCP_SERVICE_URL']
     os.environ['AWS_ACCESS_KEY_ID'] = config['CREDENTIALS']['AWS_ACCESS_KEY_ID']
     os.environ['AWS_SECRET_ACCESS_KEY'] = config['CREDENTIALS']['AWS_SECRET_ACCESS_KEY']
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = config['CREDENTIALS']['GOOGLE_APPLICATION_CREDENTIALS']
+    os.environ['GOOGLE_CLOUD_PROJECT'] = config['CREDENTIALS']['GOOGLE_CLOUD_PROJECT']
 
     os.environ['OAUTH_AAD_ENDPOINT'] = config['CREDENTIALS']['OAUTH_AAD_ENDPOINT']
     os.environ['S3_TESTS_OFF'] = config['CREDENTIALS']['S3_TESTS_OFF']
+    os.environ['GCP_TESTS_OFF'] = config['CREDENTIALS']['GCP_TESTS_OFF']
 
 def check_env_not_exist(key):
     if os.environ.get(key, '-1') == '-1':
@@ -125,7 +130,7 @@ def init():
             check_env_not_exist('FILESYSTEM_URL') or check_env_not_exist('FILESYSTEM_SAS_URL') or \
             check_env_not_exist('ACCOUNT_NAME') or check_env_not_exist('ACCOUNT_KEY') or \
             check_env_not_exist('S2S_SRC_BLOB_ACCOUNT_SAS_URL') or check_env_not_exist('S2S_DST_BLOB_ACCOUNT_SAS_URL') \
-            or check_env_not_exist('S2S_SRC_FILE_ACCOUNT_SAS_URL') or check_env_not_exist('S2S_SRC_S3_SERVICE_URL'):
+            or check_env_not_exist('S2S_SRC_FILE_ACCOUNT_SAS_URL') or check_env_not_exist('S2S_SRC_S3_SERVICE_URL') or check_env_not_exist('S2S_SRC_GCP_SERVICE_URL'):
         parse_config_file_set_env()
 
     # Get the environment variables value
@@ -164,6 +169,7 @@ def init():
     s2s_src_blob_account_url = get_env_logged('S2S_SRC_BLOB_ACCOUNT_SAS_URL')
     s2s_src_file_account_url = get_env_logged('S2S_SRC_FILE_ACCOUNT_SAS_URL')
     s2s_src_s3_service_url = get_env_logged('S2S_SRC_S3_SERVICE_URL')
+    s2s_src_gcp_service_url = get_env_logged('S2S_SRC_GCP_SERVICE_URL')
 
     # get the s2s copy dest account URLs
     s2s_dst_blob_account_url = get_env_logged('S2S_DST_BLOB_ACCOUNT_SAS_URL')
@@ -184,7 +190,7 @@ def init():
     cleanup()
 
     if not util.initialize_test_suite(test_dir_path, container_sas, container_oauth, container_oauth_validate, share_sas_url, premium_container_sas,
-                                      filesystem_url, filesystem_sas_url, s2s_src_blob_account_url, s2s_src_file_account_url, s2s_src_s3_service_url, s2s_dst_blob_account_url, azcopy_exec_location, test_suite_exec_location):
+                                      filesystem_url, filesystem_sas_url, s2s_src_blob_account_url, s2s_src_file_account_url, s2s_src_s3_service_url, s2s_src_gcp_service_url, s2s_dst_blob_account_url, azcopy_exec_location, test_suite_exec_location):
         print("failed to initialize the test suite with given user input")
         return
     else:
