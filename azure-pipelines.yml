@@ -65,7 +65,7 @@ jobs:
         name: ciGCSServiceAccountKey
         displayName: 'Download GCS Service Account Key'
         inputs:
-          - secureFile: 'ci-gcs-dev.json'
+          secureFile: 'ci-gcs-dev.json'
       - script: |
           pip install azure-storage-blob==12.0.0b3
           # the recent release 1.0.0b4 has a breaking change
