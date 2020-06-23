@@ -69,7 +69,7 @@ func (t *TestRunner) SetAllFlags(p params) {
 	set("recursive", p.recursive, false, "%t")
 	set("include-path", p.includePath, "")
 	set("include-after", p.includeAfter, "")
-	set("cap-mbps", p.capMbps, 0)
+	set("cap-mbps", p.capMbps, float32(0))
 }
 
 func (t *TestRunner) computeArgs() []string {
@@ -132,7 +132,7 @@ func (t *TestRunner) ExecuteCopyOrSyncCommand(operation Operation, src, dst stri
 	args := append([]string{verb, src, dst}, t.computeArgs()...)
 	out, err := t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args)
 	if err != nil {
-		return CopyOrSyncCommandResult{}, err
+		return CopyOrSyncCommandResult{}, fmt.Errorf("azcopy run error %w with output %s, from args %v", err, out, args)
 	}
 
 	return newCopyOrSyncCommandResult(string(out)), nil

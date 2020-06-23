@@ -167,7 +167,7 @@ func (s *scenario) logStart() {
 }
 
 func (s *scenario) logEnd() {
-	s.c.Logf("End scenario: %s with result %s", s.scenarioName, common.IffString(s.c.Failed(), "FAIL", "pass"))
+	s.c.Logf("End scenario:   %s with result %s", s.scenarioName, common.IffString(s.c.Failed(), "FAIL", "pass"))
 }
 
 func (s *scenario) logWarning(where string, err error) {
@@ -224,10 +224,10 @@ func (s *scenario) validateTransfers() {
 		panic("validation of deleteDestination behaviour is not yet implemented in the declarative test runner")
 	}
 
-	isSrcEncoded := s.fromTo.From().IsRemote() // TODO: is this right, reviewers?
-	isDstEncoded := s.fromTo.To().IsRemote()   // TODO: is this right, reviewers?
-	srcRoot := s.state.source.getParam(false, false)
-	dstRoot := s.state.dest.getParam(false, false)
+	isSrcEncoded := s.fromTo.From().IsRemote()                                            // TODO: is this right, reviewers?
+	isDstEncoded := s.fromTo.To().IsRemote()                                              // TODO: is this right, reviewers?
+	srcRoot := s.state.source.getParam(false, s.fromTo.From() == common.ELocation.File()) // must use SAS for Files, since that's all we support right now
+	dstRoot := s.state.dest.getParam(false, s.fromTo.To() == common.ELocation.File())
 
 	// compute dest, taking into account our stripToDir rules
 	areBothContainerLike := s.state.source.isContainerLike() && s.state.dest.isContainerLike()

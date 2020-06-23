@@ -37,17 +37,19 @@ var _ = chk.Suite(&enumerationSuite{})
 func (s *enumerationSuite) TestFilter_IncludePath_Folder(c *chk.C) {
 	// This will test IncludePath once for each source resource type.
 	// For source resource types that support both Copy and Sync, it will run the test twice, once with Copy and once with Sync.
-	//  Copy and Sync: Blob -> Blob
-	//  Copy and Sync: Local -> Blob
-	//  Copy and Sync: Files -> Files
+	//  Copy: Blob -> Blob
+	//  Copy: Local -> Blob
+	//  Copy: Files -> Files
 	//  Copy: AWS -> Blob
 	//  Copy: ADLS Gen2 -> Local
-	// That's 8 scenarios in total, but we only need to specify the test declaratively _once_.  The eOperation and eTestFromTo
-	// parameters automatically cause this test to expand out to the 8 scenarios.
+	// That's 5 scenarios in total, but we only need to specify the test declaratively _once_.  The eOperation and eTestFromTo
+	// parameters automatically cause this test to expand out to the 5 scenarios. (If we had specified eOperation.CopyAndSync()
+	// instead of just eOperation.Copy(), then for the first three listed above, RunTests would have run Sync as well, making
+	// it 8 scenarios in total. But include-path does not apply to Sync, so we did not specify that here)
 
 	RunTests( // RunTests is the method that does all the work.  We pass it params to define that test that should be run
 		c,                                 // Pass the chk object in, so that RunTests can make assertions with it
-		eOperation.CopyAndSync(),          // Should the test be run for copy only, sync only, or both?
+		eOperation.Copy(),                 // Should the test be run for copy only, sync only, or both?
 		eTestFromTo.AllSourcesToOneDest(), // What range of source/dest pairs should this test be run on
 		eValidate.TransferStates(),        // What to validate (in this case, we don't validate content. We just validate that the desired transfers were scheduled
 		nil,                               // Here nil == block blobs only; or eBlobTypes.All() == test on all blob types

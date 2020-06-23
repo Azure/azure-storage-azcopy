@@ -8,7 +8,8 @@ package e2etest
 // TODO: consider how to add tests to cover the following
 
 // Running these tests doesn't ensure that AZCOPY_E2E_EXECUTABLE_PATH points to an UP TO DATE build of the app.
-// Could we somehow make it do that?
+// Could we somehow make it do that?  (e.g. AZCOPY_E2E_AUTO_BUILD=true makes it call go build in the directory of  AZCOPY_E2E_EXECUTABLE_PATH,
+// but only once for when the test suite is run. Not once PER TEST!
 
 // Piping (we don't have any piping tests in the new suite yet)
 

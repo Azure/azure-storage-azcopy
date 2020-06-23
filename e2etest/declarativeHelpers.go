@@ -33,6 +33,8 @@ import (
 
 ///////////
 
+var sanitizer = common.NewAzCopyLogSanitizer() // while this is "only tests", we may as well follow good SAS redaction practices
+
 // simplified assertion interface. Allows us to hook in scenario identification in our assertions
 type asserter interface {
 	Assert(obtained interface{}, checker chk.Checker, args ...interface{})
@@ -47,30 +49,33 @@ type scenarioAsserter struct {
 	scenarioName string
 }
 
-func (a *scenarioAsserter) addScenarioName(args []interface{}) []interface{} {
+func (a *scenarioAsserter) updateCommentArg(args []interface{}) []interface{} {
 	if len(args) > 0 {
 		if com, ok := args[len(args)-1].(chk.CommentInterface); ok {
 			args = args[:len(args)-1]
-			return append(args, chk.Commentf(a.ScenarioName()+" "+com.CheckCommentString()))
+			return append(args, chk.Commentf(a.ScenarioName()+" "+sanitizer.SanitizeLogMessage(com.CheckCommentString())))
 		}
 	}
 	return append(args, chk.Commentf(a.ScenarioName()))
 }
 
 func (a *scenarioAsserter) Assert(obtained interface{}, checker chk.Checker, args ...interface{}) {
-	args = a.addScenarioName(args)
+	args = a.updateCommentArg(args)
 	a.c.Assert(obtained, checker, args...)
 }
 
 // Check is "Assert but don't stop running the test". Useful for initial checks, where subsequent checks or asserts will give
 // additional information.  A failed check marks the test as failed
 func (a *scenarioAsserter) Check(obtained interface{}, checker chk.Checker, args ...interface{}) {
-	args = a.addScenarioName(args)
+	args = a.updateCommentArg(args)
 	a.c.Check(obtained, checker, args...)
 }
 
 func (a *scenarioAsserter) AssertNoErr(where string, err error) {
-	a.Assert(err, chk.IsNil, chk.Commentf(where))
+	if err != nil {
+		redactedErr := errors.New(sanitizer.SanitizeLogMessage(err.Error()))
+		a.Assert(redactedErr, chk.IsNil, chk.Commentf(where))
+	}
 }
 
 func (a *scenarioAsserter) Skip(reason string) {
