@@ -1,7 +1,6 @@
 package e2etest
 
 // TODO soon:
-//    Break declarativeRunner into a scenario and a declarativeRUnner file
 //    stripTopDir
 //    think about "decode unsafe dst characters no Windows" comment in validator.go
 //    With asserter, we get the call stack from the point of the asserter method, not the caller...
