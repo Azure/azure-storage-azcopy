@@ -61,6 +61,11 @@ jobs:
         name: 'Set_up_Golang'
         inputs:
           version: '1.13'
+      - task: DownloadSecureFile@1
+        name: ciGCSServiceAccountKey
+        displayName: 'Download GCS Service Account Key'
+        inputs:
+          - secureFile: 'ci-gcs-dev.json'
       - script: |
           pip install azure-storage-blob==12.0.0b3
           # the recent release 1.0.0b4 has a breaking change
@@ -84,6 +89,8 @@ jobs:
           ACCOUNT_KEY: $(ACCOUNT_KEY)
           AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
           AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+          GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
+          GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
       - script: |
           go build -o test-validator ./testSuite/
           mkdir test-temp
@@ -97,6 +104,8 @@ jobs:
           ACCOUNT_KEY: $(ACCOUNT_KEY)
           AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
           AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+          GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+          GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
           AZCOPY_OAUTH_TOKEN_INFO: $(AZCOPY_OAUTH_TOKEN_INFO)
           CONTAINER_OAUTH_URL: $(CONTAINER_OAUTH_URL)
           CONTAINER_OAUTH_VALIDATE_SAS_URL: $(CONTAINER_OAUTH_VALIDATE_SAS_URL)
@@ -110,6 +119,7 @@ jobs:
           S2S_SRC_BLOB_ACCOUNT_SAS_URL: $(S2S_SRC_BLOB_ACCOUNT_SAS_URL)
           S2S_SRC_FILE_ACCOUNT_SAS_URL: $(S2S_SRC_FILE_ACCOUNT_SAS_URL)
           S2S_SRC_S3_SERVICE_URL: $(S2S_SRC_S3_SERVICE_URL)
+          S2S_SRC_GCP_SERVICE_URL: $(S2S_SRC_GCP_SERVICE_URL)
           SHARE_SAS_URL: $(SHARE_SAS_URL)
       - script: python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"
         name: 'Release_the_distributed_mutex'
