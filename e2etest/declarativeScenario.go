@@ -21,9 +21,11 @@
 package e2etest
 
 import (
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 )
@@ -136,7 +138,19 @@ func (s *scenario) runAzCopy() {
 		s.operation,
 		s.state.source.getParam(s.stripTopDir, useSas),
 		s.state.dest.getParam(false, useSas))
-	s.a.AssertNoErr(err, "running AzCopy")
+
+	// Allow "clean" exit error codes (because these can be returned when we moved some files but failed on others, and that
+	// might be the very thing we are testing for).
+	// But consider all other exit codes to signal failure
+	wasClean := true
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		wasClean = ee.ExitCode() == int(common.EExitCode.Error()) // AzCopy didn't crash or panic, but just returned it's clean failure exit code
+	}
+	if !wasClean {
+		s.a.AssertNoErr(err, "running AzCopy")
+	}
+
 	s.state.result = &result
 }
 

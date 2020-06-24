@@ -39,7 +39,8 @@ func TestDetectFileChangedDuringTransfer(t *testing.T) {
 		nil,
 		nil,
 		params{
-			capMbps: 10, // go really slow, so that the transfer will last long enough for our other thread to change the file while its running
+			recursive: true,
+			capMbps:   10, // go really slow, so that the transfer will last long enough for our other thread to change the file while its running
 		},
 		&hooks{
 			beforeRunJob: func(h hookHelper) {
