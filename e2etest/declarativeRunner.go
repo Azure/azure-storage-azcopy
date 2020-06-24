@@ -70,18 +70,16 @@ func RunScenarios(
 			}
 
 			s := scenario{
-				subtestName: subtestName,
-				operation:   op,
-				fromTo:      fromTo,
-				validate:    validate,
-				p:           p, // copies them, because they are a struct. This is what we need, since they may be morphed while running
-				hs:          hsToUse,
-				fs:          fs,
-				a: &testingAsserter{
-					t:                   t,
-					compactScenarioName: compactScenarioName,
-					fullScenarioName:    fullScenarioName},
-				stripTopDir: false, // TODO: how will we set this?
+				subtestName:         subtestName,
+				compactScenarioName: compactScenarioName,
+				fullScenarioName:    fullScenarioName,
+				operation:           op,
+				fromTo:              fromTo,
+				validate:            validate,
+				p:                   p, // copies them, because they are a struct. This is what we need, since they may be morphed while running
+				hs:                  hsToUse,
+				fs:                  fs,
+				stripTopDir:         false, // TODO: how will we set this?
 			}
 
 			scenarios = append(scenarios, s)
@@ -96,6 +94,12 @@ func RunScenarios(
 		t.Run(s.subtestName, func(t *testing.T) {
 			if parallel {
 				t.Parallel() // tell testing that it can run stuff in parallel with us
+			}
+			// set asserter now (and only now), since before this point we don't have the right "t"
+			sen.a = &testingAsserter{
+				t:                   t,
+				fullScenarioName:    sen.fullScenarioName,
+				compactScenarioName: sen.compactScenarioName,
 			}
 			sen.Run()
 		})

@@ -32,19 +32,21 @@ import (
 // A scenario is treated as a sub-test by our declarative test runner
 type scenario struct {
 
-	// scenario config properties as provided by user
-	subtestName string
-	operation   Operation
-	validate    Validate
-	fromTo      common.FromTo
-	p           params
-	hs          hooks
-	fs          testFiles
-	a           asserter
+	// scenario config properties
+	subtestName         string
+	compactScenarioName string
+	fullScenarioName    string
+	operation           Operation
+	validate            Validate
+	fromTo              common.FromTo
+	p                   params
+	hs                  hooks
+	fs                  testFiles
 
 	stripTopDir bool // TODO: figure out how we'll control and use this
 
 	// internal declarative runner state
+	a     asserter
 	state scenarioState // TODO: does this really need to be a separate struct?
 }
 
