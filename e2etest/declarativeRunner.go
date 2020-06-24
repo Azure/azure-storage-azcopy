@@ -36,7 +36,7 @@ import (
 // Because gocheck doesn't seem to have, or expose, any concept of sub-tests. But we want: suite/test/subtest
 // (subtest = scenario in our wording below).
 // Why aren't we using stretchr/testify/suite? Because it appears from the code there that tests (and subtests) within a suite cannot be parallelized
-// (Since suite.SetT() manipulates shared state).
+// (Since suite.SetT() manipulates shared state), but we might want to parallelize tests within a suite.
 
 // RunScenarios is the key entry point for declarative testing.
 // It constructs and executes scenarios (subtest in Go-speak), according to its parameters, and checks their results
