@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/dropbox/dropbox-sdk-go-unofficial/dropbox/files"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -335,6 +336,17 @@ func (scenarioHelper) generateObjects(c *chk.C, client *minio.Client, bucketName
 	}
 }
 
+func (scenarioHelper) generateDropboxObjects(c *chk.C, client files.Client, objectList []string) {
+	for _, objectName := range objectList {
+		commitInfo := files.NewCommitInfo("/" + objectName)
+		commitInfo.Mode.Tag = "overwrite"
+		commitInfo.ClientModified = time.Now().UTC().Round(time.Second)
+		if _, err := client.Upload(commitInfo, strings.NewReader(objectDefaultData)); err != nil {
+			fmt.Printf("Error uploading file: %s, err: %s\n", objectName, err)
+		}
+	}
+}
+
 // create the demanded files
 func (scenarioHelper) generateFlatFiles(c *chk.C, shareURL azfile.ShareURL, fileList []string) {
 	for _, fileName := range fileList {
@@ -558,8 +570,26 @@ func (scenarioHelper) getRawS3BucketURL(c *chk.C, region string, bucketName stri
 	return *fullURL
 }
 
+func (scenarioHelper) getRawDropboxBucketURL(c *chk.C, bucketName string) url.URL {
+	rawURL := fmt.Sprintf("https://%s.dropbox.com/", bucketName)
+
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
+
+	return *fullURL
+}
+
 func (scenarioHelper) getRawS3ObjectURL(c *chk.C, region string, bucketName string, objectName string) url.URL {
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s/%s", common.IffString(region == "", "", "-"+region), bucketName, objectName)
+
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
+
+	return *fullURL
+}
+
+func (scenarioHelper) getRawDropboxObjectURL(c *chk.C, bucketName string, objectName string) url.URL {
+	rawURL := fmt.Sprintf("https://%s.dropbox.com/%s", bucketName, objectName)
 
 	fullURL, err := url.Parse(rawURL)
 	c.Assert(err, chk.IsNil)

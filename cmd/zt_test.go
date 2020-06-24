@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/dropbox/dropbox-sdk-go-unofficial/dropbox/files"
 	"io/ioutil"
 	"math/rand"
 	"net/url"
@@ -422,6 +423,8 @@ func createS3ClientWithMinio(o createS3ResOptions) (*minio.Client, error) {
 	return s3Client, nil
 }
 
+
+
 func createNewBucket(c *chk.C, client *minio.Client, o createS3ResOptions) string {
 	bucketName := generateBucketName()
 	err := client.MakeBucket(bucketName, o.Location)
@@ -491,6 +494,40 @@ func deleteBucket(c *chk.C, client *minio.Client, bucketName string, waitQuarter
 	}
 }
 
+func deleteDropboxBucket(c *chk.C, client files.Client, waitQuarterMinute bool) {
+	arg := files.NewListFolderArg("")
+
+	res, err := client.ListFolder(arg)
+	if err != nil {
+		fmt.Printf("Could not clear Dropbox Bucket: %s\n", err)
+	}
+
+	entries := res.Entries
+	for res.HasMore {
+		arg := files.NewListFolderContinueArg(res.Cursor)
+		res, err = client.ListFolderContinue(arg)
+		if err != nil {
+			fmt.Printf("Could not clear Dropbox Bucket: %s\n", err)
+		}
+		entries = append(entries, res.Entries...)
+	}
+
+	for _, entry := range entries {
+		switch f := entry.(type) {
+		case *files.FileMetadata:
+			arg := files.NewDeleteArg(f.PathLower)
+			if _, err := client.DeleteV2(arg); err != nil {
+				fmt.Printf("Could not clear Dropbox Bucket due to file: %s, err: %s\n", f.PathLower, err)
+			}
+		case *files.FolderMetadata:
+			arg := files.NewDeleteArg(f.PathLower)
+			if _, err := client.DeleteV2(arg); err != nil {
+				fmt.Printf("Could not clear Dropbox Bucket due to folder: %s, err: %s\n", f.PathLower, err)
+			}
+		}
+	}
+}
+
 func cleanS3Account(c *chk.C, client *minio.Client) {
 	buckets, err := client.ListBuckets()
 	if err != nil {
@@ -504,6 +541,11 @@ func cleanS3Account(c *chk.C, client *minio.Client) {
 		deleteBucket(c, client, bucket.Name, false)
 	}
 
+	time.Sleep(time.Minute)
+}
+
+func cleanDropboxAccount(c *chk.C, client files.Client) {
+	deleteDropboxBucket(c, client, false)
 	time.Sleep(time.Minute)
 }
 

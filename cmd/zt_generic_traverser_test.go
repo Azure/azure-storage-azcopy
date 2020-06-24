@@ -388,12 +388,17 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 	defer deleteFilesystem(c, filesystemURL)
 
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	s3Enabled := err == nil && !isS3Disabled()
+	dropboxClient, err2 := common.CreateDropboxClient()
+	s3Enabled := err == nil && !isS3Disabled() && err2 == nil
 	var bucketName string
+	var dropboxBucketName string
 
 	if s3Enabled {
 		bucketName = createNewBucket(c, s3Client, createS3ResOptions{})
 		defer deleteBucket(c, s3Client, bucketName, true)
+
+		dropboxBucketName = generateBucketName()
+		defer deleteDropboxBucket(c, dropboxClient, true)
 	}
 
 	// test two scenarios, either blob is at the root virtual dir, or inside sub virtual dirs
@@ -493,6 +498,20 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 
 			c.Assert(localDummyProcessor.record[0].relativePath, chk.Equals, s3DummyProcessor.record[0].relativePath)
 			c.Assert(localDummyProcessor.record[0].name, chk.Equals, s3DummyProcessor.record[0].name)
+
+			dropboxList := []string{storedObjectName}
+			scenarioHelper{}.generateDropboxObjects(c, dropboxClient, dropboxList)
+			dropboxDummyProcessor := dummyProcessor{}
+			dropboxURL := scenarioHelper{}.getRawDropboxObjectURL(c, dropboxBucketName, storedObjectName)
+			dropboxTraverser, err := newDropboxTraverser(&dropboxURL, ctx, false, false, func(entityType common.EntityType) {})
+			c.Assert(err, chk.IsNil)
+
+			err = dropboxTraverser.traverse(noPreProccessor, dropboxDummyProcessor.process, nil)
+			c.Assert(err, chk.IsNil)
+			c.Assert(len(dropboxDummyProcessor.record), chk.Equals, 1)
+
+			c.Assert(localDummyProcessor.record[0].relativePath, chk.Equals, dropboxDummyProcessor.record[0].relativePath)
+			c.Assert(localDummyProcessor.record[0].name, chk.Equals, dropboxDummyProcessor.record[0].name)
 		}
 	}
 }
@@ -513,11 +532,14 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 	defer deleteFilesystem(c, filesystemURL)
 
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	s3Enabled := err == nil && !isS3Disabled() // are creds supplied, and is S3 enabled
+	dropboxClient, err2 := common.CreateDropboxClient()
+	s3Enabled := err == nil && !isS3Disabled() && err2 == nil // are creds supplied, and is S3 enabled
 	var bucketName string
 	if s3Enabled {
 		bucketName = createNewBucket(c, s3Client, createS3ResOptions{})
 		defer deleteBucket(c, s3Client, bucketName, true)
+
+		defer deleteDropboxBucket(c, dropboxClient, true)
 	}
 
 	// set up the container with numerous blobs
@@ -533,6 +555,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 	if s3Enabled {
 		// set up a bucket with the same files
 		scenarioHelper{}.generateObjects(c, s3Client, bucketName, fileList)
+		scenarioHelper{}.generateDropboxObjects(c, dropboxClient, fileList)
 	}
 
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -583,12 +606,19 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		c.Assert(err, chk.IsNil)
 
 		s3DummyProcessor := dummyProcessor{}
+		dropboxDummyProcessor := dummyProcessor{}
 		if s3Enabled {
 			// construct and run a S3 traverser
 			rawS3URL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName)
 			S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, false, func(common.EntityType) {})
 			c.Assert(err, chk.IsNil)
 			err = S3Traverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
+			c.Assert(err, chk.IsNil)
+
+			rawDropboxURL := scenarioHelper{}.getRawDropboxBucketURL(c, bucketName)
+			dropboxTraverser, err := newDropboxTraverser(&rawDropboxURL, ctx, isRecursiveOn, false, func(entityType common.EntityType) {})
+			c.Assert(err, chk.IsNil)
+			err = dropboxTraverser.traverse(noPreProccessor, dropboxDummyProcessor.process, nil)
 			c.Assert(err, chk.IsNil)
 		}
 
@@ -615,10 +645,11 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 
 		if s3Enabled {
 			c.Assert(len(s3DummyProcessor.record), chk.Equals, localFileOnlyCount)
+			c.Assert(len(dropboxDummyProcessor.record), chk.Equals, localFileOnlyCount)
 		}
 
 		// if s3dummyprocessor is empty, it's A-OK because no records will be tested
-		for _, storedObject := range append(append(append(blobDummyProcessor.record, fileDummyProcessor.record...), bfsDummyProcessor.record...), s3DummyProcessor.record...) {
+		for _, storedObject := range append(append(append(append(blobDummyProcessor.record, fileDummyProcessor.record...), bfsDummyProcessor.record...), s3DummyProcessor.record...), dropboxDummyProcessor.record...) {
 			if isRecursiveOn || storedObject.entityType == common.EEntityType.File() { // folder enumeration knowingly NOT consistent when non-recursive (since the folders get stripped out by ToNewCopyTransfer when non-recursive anyway)
 				correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
 
@@ -649,11 +680,16 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 	defer deleteFilesystem(c, filesystemURL)
 
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	s3Enabled := err == nil && !isS3Disabled()
+	dropboxClient, err2 := common.CreateDropboxClient()
+	s3Enabled := err == nil && !isS3Disabled() && err2 == nil
 	var bucketName string
+	var dropboxBucketName string
 	if s3Enabled {
 		bucketName = createNewBucket(c, s3Client, createS3ResOptions{})
 		defer deleteBucket(c, s3Client, bucketName, true)
+
+		dropboxBucketName = generateBucketName()
+		defer deleteDropboxBucket(c, dropboxClient, true)
 	}
 
 	// set up the container with numerous blobs
@@ -670,6 +706,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 	if s3Enabled {
 		// Set up the bucket with the same files
 		scenarioHelper{}.generateObjects(c, s3Client, bucketName, fileList)
+		scenarioHelper{}.generateDropboxObjects(c, dropboxClient, fileList)
 	}
 
 	time.Sleep(time.Second * 2) // Ensure the objects' LMTs are in the past
@@ -730,6 +767,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		}
 
 		s3DummyProcessor := dummyProcessor{}
+		dropboxDummyProcessor := dummyProcessor{}
 		if s3Enabled {
 			// construct and run a S3 traverser
 			// directory object keys always end with / in S3
@@ -741,6 +779,12 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 
 			// check that the results are the same length
 			c.Assert(len(s3DummyProcessor.record), chk.Equals, localFileOnlyCount)
+
+			rawDropboxURL := scenarioHelper{}.getRawDropboxObjectURL(c, dropboxBucketName, virDirName+"/")
+			dropboxTraverser, err := newDropboxTraverser(&rawDropboxURL, ctx, isRecursiveOn, false, func(entityType common.EntityType) {})
+			c.Assert(err, chk.IsNil)
+			err = dropboxTraverser.traverse(noPreProccessor, dropboxDummyProcessor.process, nil)
+			c.Assert(err, chk.IsNil)
 		}
 
 		// make sure the results are as expected
@@ -754,7 +798,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 			c.Assert(bfsDummyProcessor.countFilesOnly(), chk.Equals, localTotalCount)
 		}
 		// if s3 testing is disabled the s3 dummy processors' records will be empty. This is OK for appending. Nothing will happen.
-		for _, storedObject := range append(append(append(blobDummyProcessor.record, fileDummyProcessor.record...), bfsDummyProcessor.record...), s3DummyProcessor.record...) {
+		for _, storedObject := range append(append(append(append(blobDummyProcessor.record, fileDummyProcessor.record...), bfsDummyProcessor.record...), s3DummyProcessor.record...), dropboxDummyProcessor.record...) {
 			if isRecursiveOn || storedObject.entityType == common.EEntityType.File() { // folder enumeration knowingly NOT consistent when non-recursive (since the folders get stripped out by ToNewCopyTransfer when non-recursive anyway)
 
 				correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]

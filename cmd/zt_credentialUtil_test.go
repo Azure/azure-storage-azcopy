@@ -55,16 +55,22 @@ func (s *credentialUtilSuite) TestCheckAuthSafeForTarget(c *chk.C) {
 		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://s3.eu-central-1.amazonaws.com", "", true},
 		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://s3.cn-north-1.amazonaws.com.cn", "", true},
 		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://s3.amazonaws.com", "", true},
+		{common.ECredentialType.DropboxAccessToken(), common.ELocation.Dropbox(), "http://something.dropbox.com", "", true},
+
 
 		// These should fail (they are not storage)
 		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://somethingelseinazure.windows.net", "", false},
 		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://somethingelseinaws.amazonaws.com", "", false},
+		{common.ECredentialType.DropboxAccessToken(), common.ELocation.Dropbox(), "http://somethingelseinaws.dropbox.com", "", false},
 
 		// As should these (they are nothing to do with the expected URLs)
 		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://abc.example.com", "", false},
 		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://abc.example.com", "", false},
+		{common.ECredentialType.DropboxAccessToken(), common.ELocation.S3(), "http://abc.example.com", "", false},
 		// Test that we don't want to send an S3 access key to a blob resource type.
 		{common.ECredentialType.S3AccessKey(), common.ELocation.Blob(), "http://abc.example.com", "", false},
+		{common.ECredentialType.DropboxAccessToken(), common.ELocation.Blob(), "http://abc.example.com", "", false},
+
 
 		// But the same Azure one should pass if the user opts in to them (we don't support any similar override for S3)
 		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://abc.example.com", "*.foo.com;*.example.com", true},

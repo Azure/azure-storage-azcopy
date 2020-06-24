@@ -54,16 +54,18 @@ func (s *cmdIntegrationSuite) SetUpSuite(c *chk.C) {
 		return
 	}
 
-	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
+	_, err := createS3ClientWithMinio(createS3ResOptions{})
+	dropboxClient, err2 := common.CreateDropboxClient()
 
 	// If S3 credentials aren't supplied, we're probably only trying to run Azure tests.
 	// As such, gracefully return here instead of cancelling every test because we couldn't clean up S3.
-	if err != nil {
+	if err != nil || err2 != nil {
 		return
 	}
 
 	// Cleanup the source S3 account
-	cleanS3Account(c, s3Client)
+	//cleanS3Account(c, s3Client)
+	cleanDropboxAccount(c, dropboxClient)
 }
 
 func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
@@ -541,6 +543,57 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ObjectToBlobContainer(c *chk.C) {
 	rawSrcS3ObjectURL = scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, "sub/file2") // Use default region
 	rawDstContainerURLWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcS3ObjectURL.String(), rawDstContainerURLWithSAS.String())
+
+	// bucket should be resolved, and objects should be scheduled for transfer
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+	})
+}
+
+func (s *cmdIntegrationSuite) TestS2SCopyFromDropboxObjectToBlobContainer(c *chk.C) {
+	skipIfS3Disabled(c)
+	client, err := common.CreateDropboxClient()
+	if err != nil {
+		c.Skip("Dropbox client credentials not supplied")
+	}
+
+	// Generate source bucket
+	defer deleteDropboxBucket(c, client, true)
+	dstContainerName := generateContainerName()
+
+	objectList := []string{"file", "sub/file2"}
+	scenarioHelper{}.generateDropboxObjects(c, client, objectList)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawSrcDropboxObjectURL := scenarioHelper{}.getRawDropboxObjectURL(c, dstContainerName, "file")
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultRawCopyInput(rawSrcDropboxObjectURL.String(), rawDstContainerURLWithSAS.String())
+
+	// bucket should be resolved, and objects should be scheduled for transfer
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+	})
+
+	mockedRPC.reset()
+
+	rawSrcDropboxObjectURL = scenarioHelper{}.getRawDropboxObjectURL(c, dstContainerName, "sub/file2") // Use default region
+	rawDstContainerURLWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw = getDefaultRawCopyInput(rawSrcDropboxObjectURL.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(c, raw, func(err error) {
