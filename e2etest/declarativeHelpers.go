@@ -87,6 +87,7 @@ type asserter interface {
 	AssertNoErr(err error, comment ...string)
 	Error(reason string)
 	Skip(reason string)
+	Failed() bool
 
 	// ScenarioName piggy-backs on this interface, in a context-value-like way (ugly, but it works)
 	CompactScenarioName() string
@@ -96,6 +97,14 @@ type testingAsserter struct {
 	t                   *testing.T
 	compactScenarioName string
 	fullScenarioName    string
+}
+
+func (a *testingAsserter) formatComments(comment []string) string {
+	expandedComment := strings.Join(comment, ", ")
+	if expandedComment != "" {
+		expandedComment = "\n    " + expandedComment
+	}
+	return expandedComment
 }
 
 // Assert compares its arguments and marks the current test (or subtest) as failed. Unlike gocheck's Assert method,
@@ -115,19 +124,17 @@ func (a *testingAsserter) Assert(obtained interface{}, comp comparison, expected
 
 	// record the failure
 	a.t.Helper() // exclude this method from the logged callstack
-	expandedComment := strings.Join(comment, ", ")
-	if expandedComment != "" {
-		expandedComment = "\n    " + expandedComment
-	}
+	expandedComment := a.formatComments(comment)
 	a.t.Logf("Assertion failed in %s\n    Attempted to assert that: %v %s %v%s", a.fullScenarioName, obtained, comp, expected, expandedComment)
 	a.t.Fail()
 }
 
 func (a *testingAsserter) AssertNoErr(err error, comment ...string) {
 	if err != nil {
+		a.t.Helper() // exclude this method from the logged callstack
 		redactedErr := sanitizer.SanitizeLogMessage(err.Error())
-		fullComments := append(comment, redactedErr)
-		a.Assert(redactedErr, equals(), nil, fullComments...)
+		a.t.Logf("Error %s%s", redactedErr, a.formatComments(comment))
+		a.t.Fail()
 	}
 }
 
@@ -137,6 +144,10 @@ func (a *testingAsserter) Error(reason string) {
 
 func (a *testingAsserter) Skip(reason string) {
 	a.t.Skip(reason)
+}
+
+func (a *testingAsserter) Failed() bool {
+	return a.t.Failed()
 }
 
 func (a *testingAsserter) CompactScenarioName() string {
@@ -160,6 +171,19 @@ type testFiles struct {
 
 	// names of files that we expect to be skipped due to an overwrite setting
 	shouldSkip []string
+}
+
+func (tf testFiles) clone(onlyCloneShouldTransfer bool) testFiles {
+	if onlyCloneShouldTransfer {
+		// just do the "should transfer" ones
+		return testFiles{
+			size:           tf.size,
+			shouldTransfer: tf.shouldTransfer,
+		}
+	} else {
+		clone := tf
+		return clone
+	}
 }
 
 type failure struct {
@@ -421,8 +445,14 @@ func (v Validate) String() string {
 // hookHelper is functions that hooks can call to influence test execution
 // NOTE: this interface will have to actively evolve as we discover what we need our hooks to do.
 type hookHelper interface {
-	GetModifyableParameters() *params
-	ReCreateSourceFiles()
+	// GetModifiableParameters returns a pointer to the AzCopy parameters that will be used in the scenario
+	GetModifiableParameters() *params
+
+	// GetTestFiles returns (a copy of) the testFiles object that defines which files will be used in the test
+	GetTestFiles() testFiles
+
+	// CreateFiles creates the specified files (overwriting any that are already there of the same name)
+	CreateFiles(fs testFiles, atSource bool)
 }
 
 ///////
@@ -431,14 +461,9 @@ type hookFunc func(h hookHelper)
 
 // hooks contains functions that are called at various points in the running of the test, so that we can do
 // custom behaviour (for those func that are not nil).
-// NOTE: the funcs you provide here must be threadsafe, because RunTests works in parallel for all its scenarios
+// NOTE: the funcs you provide here must be threadsafe, because RunScenarios works in parallel for all its scenarios
 type hooks struct {
 
 	// called after all the setup is done, and before AzCopy is actually invoked
 	beforeRunJob hookFunc
-
-	// This one is a bit ugly. It relies on our declarative test running creating the "to ignore" files FIRST then
-	// calling this, then making the other files.  The ordering assumption, which is implicit in all respects except the name,
-	// is a bit ugly.  TODO: to we have any better ideas?
-	betweenCreateFilesToIgnoreAndToTransfer hookFunc
 }

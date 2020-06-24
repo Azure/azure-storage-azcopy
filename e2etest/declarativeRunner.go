@@ -64,13 +64,18 @@ func RunScenarios(
 			// Sub-test name is not globally unique (it doesn't need to be) but it is more human-readable
 			subtestName := fmt.Sprintf("%s-%s", op, fromTo)
 
+			hsToUse := hooks{}
+			if hs != nil {
+				hsToUse = *hs
+			}
+
 			s := scenario{
 				subtestName: subtestName,
 				operation:   op,
 				fromTo:      fromTo,
 				validate:    validate,
-				p:           p, // copies them, because they are a struct. This is what we need, since the may be morphed while running
-				hs:          hs,
+				p:           p, // copies them, because they are a struct. This is what we need, since they may be morphed while running
+				hs:          hsToUse,
 				fs:          fs,
 				a: &testingAsserter{
 					t:                   t,

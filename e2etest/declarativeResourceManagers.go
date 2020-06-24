@@ -37,8 +37,13 @@ func assertNoStripTopDir(stripTopDir bool) {
 // a source or destination
 type resourceManager interface {
 
-	// setup creates and initializes a test resource appropriate for the given test files
-	setup(a asserter, fs testFiles, isSource bool)
+	// creates an empty container/share/directory etc
+	createLocation(a asserter)
+
+	// creates the test files in the location. Implementers can assume that createLocation has been called first.
+	// This method may be called multiple times, in which case it should overwrite any like-named files that are already there.
+	// (e.g. when test need to create files with later modification dates, they will trigger a second call to this)
+	createFiles(a asserter, fs testFiles, isSource bool)
 
 	// cleanup gets rid of everything that setup created
 	// (Takes no param, because the resourceManager is expected to track its own state. E.g. "what did I make")
@@ -57,12 +62,13 @@ type resourceLocal struct {
 	dirPath string
 }
 
-func (r *resourceLocal) setup(a asserter, fs testFiles, isSource bool) {
+func (r *resourceLocal) createLocation(a asserter) {
 	r.dirPath = TestResourceFactory{}.CreateLocalDirectory(a)
+}
 
+func (r *resourceLocal) createFiles(a asserter, fs testFiles, isSource bool) {
 	size, err := fs.defaultSizeBytes()
 	a.AssertNoErr(err)
-
 	scenarioHelper{}.generateLocalFilesFromList(a, r.dirPath, fs.allNames(isSource), size)
 }
 
@@ -89,11 +95,13 @@ type resourceBlobContainer struct {
 	rawSasURL    *url.URL
 }
 
-func (r *resourceBlobContainer) setup(a asserter, fs testFiles, isSource bool) {
+func (r *resourceBlobContainer) createLocation(a asserter) {
 	cu, _, rawSasURL := TestResourceFactory{}.CreateNewContainer(a, r.accountType)
 	r.containerURL = &cu
 	r.rawSasURL = &rawSasURL
+}
 
+func (r *resourceBlobContainer) createFiles(a asserter, fs testFiles, isSource bool) {
 	size, err := fs.defaultSizeBytes()
 	a.AssertNoErr(err)
 
@@ -127,11 +135,13 @@ type resourceAzureFileShare struct {
 	rawSasURL   *url.URL
 }
 
-func (r *resourceAzureFileShare) setup(a asserter, fs testFiles, isSource bool) {
+func (r *resourceAzureFileShare) createLocation(a asserter) {
 	su, _, rawSasURL := TestResourceFactory{}.CreateNewFileShare(a, EAccountType.Standard())
 	r.shareURL = &su
 	r.rawSasURL = &rawSasURL
+}
 
+func (r *resourceAzureFileShare) createFiles(a asserter, fs testFiles, isSource bool) {
 	size, err := fs.defaultSizeBytes()
 	a.AssertNoErr(err)
 
@@ -161,7 +171,11 @@ func (r *resourceAzureFileShare) isContainerLike() bool {
 
 type resourceDummy struct{}
 
-func (r *resourceDummy) setup(a asserter, fs testFiles, isSource bool) {
+func (r *resourceDummy) createLocation(a asserter) {
+
+}
+
+func (r *resourceDummy) createFiles(a asserter, fs testFiles, isSource bool) {
 
 }
 

@@ -38,7 +38,7 @@ type scenario struct {
 	validate    Validate
 	fromTo      common.FromTo
 	p           params
-	hs          *hooks
+	hs          hooks
 	fs          testFiles
 	a           asserter
 
@@ -56,16 +56,29 @@ type scenarioState struct {
 
 // Run runs one test scenario
 func (s *scenario) Run() {
-	defer s.cleanup()
+	//defer s.cleanup()
 
 	// setup
 	s.assignSourceAndDest() // what/where are they
-	s.state.source.setup(s.a, s.fs, true)
-	s.state.dest.setup(s.a, s.fs, false)
-	s.prepareParams()
+	s.state.source.createLocation(s.a)
+	s.state.dest.createLocation(s.a)
+	s.state.source.createFiles(s.a, s.fs, true)
+	s.state.dest.createFiles(s.a, s.fs, false)
+	if s.a.Failed() {
+		return // setup failed. No point in running the test
+	}
+
+	// call pre-run hook
+	if !s.runHook(s.hs.beforeRunJob) {
+		return
+	}
 
 	// execute
 	s.runAzCopy()
+
+	if s.a.Failed() {
+		return // execution failed. No point in running validation
+	}
 
 	// check
 	// TODO: which options to we want to expose here, and is eValidate the right way to do so? Or do we just need a boolean, validateContent?
@@ -73,6 +86,17 @@ func (s *scenario) Run() {
 	if s.validate&eValidate.Content() == eValidate.Content() {
 		s.validateContent()
 	}
+}
+
+func (s *scenario) runHook(h hookFunc) bool {
+	if h == nil {
+		return true //nothing to do. So "successful"
+	}
+
+	// run the hook, passing ourself in as the implementation of hookHelper interface
+	h(s)
+
+	return !s.a.Failed() // was successful if the test state did not become "failed" while the hook ran
 }
 
 func (s *scenario) assignSourceAndDest() {
@@ -100,10 +124,6 @@ func (s *scenario) assignSourceAndDest() {
 
 	s.state.source = createTestResource(s.fromTo.From())
 	s.state.dest = createTestResource(s.fromTo.To())
-}
-
-func (s *scenario) prepareParams() {
-	// todo: mess with hooks
 }
 
 func (s *scenario) runAzCopy() {
@@ -174,5 +194,23 @@ func (s *scenario) cleanup() {
 	}
 	if s.state.dest != nil {
 		s.state.dest.cleanup(s.a)
+	}
+}
+
+/// support the hookHelper functions. These are use by our hooks to modify the state, or resources, of the running test
+
+func (s *scenario) GetModifiableParameters() *params {
+	return &s.p
+}
+
+func (s *scenario) GetTestFiles() testFiles {
+	return s.fs
+}
+
+func (s *scenario) CreateFiles(fs testFiles, atSource bool) {
+	if atSource {
+		s.state.source.createFiles(s.a, fs, true)
+	} else {
+		s.state.dest.createFiles(s.a, fs, false)
 	}
 }

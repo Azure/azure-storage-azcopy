@@ -96,12 +96,17 @@ func TestFilter_IncludeAfter(t *testing.T) {
 			recursive: true,
 		},
 		&hooks{
-			betweenCreateFilesToIgnoreAndToTransfer: func(h hookHelper) {
-				// Put a gap in time between creation of the "to ignore" and "to transfer" files, and then set includeAfterDate
-				// See comments on definition of betweenCreateFilesToIgnoreAndToTransfer for acknowledgment that this approach is a bit ugly, but it's the best we have for now.
+			beforeRunJob: func(h hookHelper) {
+				// let LMTs of existing file age a little
 				time.Sleep(5 * time.Second)
-				scenarioParams := h.GetModifyableParameters() // must get the right params instance, because RunTests operates multiple scenarios in parallel
+
+				// set includeAfter to "now"
+				scenarioParams := h.GetModifiableParameters()
 				scenarioParams.includeAfter = time.Now().Format(time.RFC3339)
+
+				// re-create the "shouldTransfer" files, after our includeAfter time.
+				fs := h.GetTestFiles().clone(true)
+				h.CreateFiles(fs, true)
 			},
 		},
 		testFiles{

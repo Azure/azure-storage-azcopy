@@ -39,14 +39,15 @@ func TestDetectFileChangedDuringTransfer(t *testing.T) {
 		nil,
 		nil,
 		params{
-			capMbps: 1, // go really slow, so that the transfer will last long enough for our other thread to change the file while its running
+			capMbps: 10, // go really slow, so that the transfer will last long enough for our other thread to change the file while its running
 		},
 		&hooks{
-			beforeRunJob: func(helper hookHelper) {
+			beforeRunJob: func(h hookHelper) {
+				// use separate Goroutine, so that job will start while our goroutine is still running
 				go func() {
-					// wait a moment, then re-create the source files (over top of what we are already trying to transfer)
-					time.Sleep(15 * time.Second)
-					helper.ReCreateSourceFiles() // force the files to change
+					// wait a moment, then re-create the source files (over top of what AzCopy will be  already trying to transfer)
+					time.Sleep(7 * time.Second)           // given the cap, and the file size, this should be mid-way through the job
+					h.CreateFiles(h.GetTestFiles(), true) // force the files to change
 				}()
 			},
 		},
