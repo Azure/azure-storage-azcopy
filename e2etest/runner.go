@@ -119,6 +119,14 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string) ([]byt
 }
 
 func (t *TestRunner) ExecuteCopyOrSyncCommand(operation Operation, src, dst string) (CopyOrSyncCommandResult, error) {
+	capLen := func(b []byte) []byte {
+		if len(b) < 1024 {
+			return b
+		} else {
+			return append(b[:1024], byte('\n'))
+		}
+	}
+
 	verb := ""
 	switch operation {
 	case eOperation.Copy():
@@ -132,7 +140,12 @@ func (t *TestRunner) ExecuteCopyOrSyncCommand(operation Operation, src, dst stri
 	args := append([]string{verb, src, dst}, t.computeArgs()...)
 	out, err := t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args)
 	if err != nil {
-		return CopyOrSyncCommandResult{}, fmt.Errorf("azcopy run error %w with output %s, from args %v", err, out, args)
+		stdErr := make([]byte, 0)
+		if ee, ok := err.(*exec.ExitError); ok {
+			stdErr = ee.Stderr
+		}
+		return CopyOrSyncCommandResult{},
+			fmt.Errorf("azcopy run error: %w\n  with stderr: %s\n and stdout: %s\n  from args %v", err, capLen(stdErr), capLen(out), args)
 	}
 
 	return newCopyOrSyncCommandResult(string(out)), nil
