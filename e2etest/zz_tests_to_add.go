@@ -1,10 +1,42 @@
 package e2etest
 
+import (
+	"flag"
+	"strings"
+	"testing"
+)
+
 // TODO soon:
 //    stripTopDir
 //    think about "decode unsafe dst characters no Windows" comment in validator.go
 //    With asserter, we get the call stack from the point of the asserter method, not the caller...
 //    .... so we get the equivalent of true != false (again!)
+
+// Think about suites.  Don't want to use testify, because it doesn't support parallization within a suite (and doesn't support subtests)
+// But we want something that the IDE will recognise, and allow us to run individual tests or the suite. I think this will work
+func RunFileAsSuite(t *testing.T) {
+	f := flag.Lookup("test.run")
+	if f == nil {
+		t.Skip("Cannot determine whether suite-based running was requested, so skipping it")
+		return
+	}
+	suiteRunningRequested := strings.HasPrefix(strings.TrimPrefix("^", f.Value.String()), "TestSuite") // the regex is looking for things starting with TestSuite
+	if !suiteRunningRequested {
+		// skip if not explictly requested to run, else we'll end up running every test twice - once directly
+		// from the test runner, and once as a child of the suite.
+		t.Skip("test.run parameter did not request test(s) named TestSuite..., so skipping suite-based runner")
+	}
+
+	// TODO:
+	//   use a syncOnce to scan for all Test(t *testing.T) methods, excluding those that beging with TestSUite, and group them by file
+	//   then find out which file the calling method/test is in, and then run as subtests all the ones from that file
+	//
+
+	// Document that it can be used like this:
+	//func TestSuiteEnumeration(t *testing.T) {
+	//		RunFileAsSuite(t)
+	//	}
+}
 
 // TODO: right now, as soon as one scenario fails in a test,
 //    we stop executing them, and won't execute any other scearios
