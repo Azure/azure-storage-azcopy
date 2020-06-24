@@ -118,7 +118,7 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string) ([]byt
 	return stdout.Bytes(), runErr
 }
 
-func (t *TestRunner) ExecuteCopyOrSyncCommand(operation Operation, src, dst string) (CopyOrSyncCommandResult, error) {
+func (t *TestRunner) ExecuteCopyOrSyncCommand(operation Operation, src, dst string) (CopyOrSyncCommandResult, bool, error) {
 	capLen := func(b []byte) []byte {
 		if len(b) < 1024 {
 			return b
@@ -139,16 +139,28 @@ func (t *TestRunner) ExecuteCopyOrSyncCommand(operation Operation, src, dst stri
 
 	args := append([]string{verb, src, dst}, t.computeArgs()...)
 	out, err := t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args)
+
+	wasClean := true
+	stdErr := make([]byte, 0)
 	if err != nil {
-		stdErr := make([]byte, 0)
 		if ee, ok := err.(*exec.ExitError); ok {
 			stdErr = ee.Stderr
+			if len(stdErr) > 0 {
+				wasClean = false // something was written to stderr, probably a panic
+			}
 		}
-		return CopyOrSyncCommandResult{},
-			fmt.Errorf("azcopy run error: %w\n  with stderr: %s\n and stdout: %s\n  from args %v", err, capLen(stdErr), capLen(out), args)
 	}
 
-	return newCopyOrSyncCommandResult(string(out)), nil
+	if wasClean {
+		// either it succeeded, for it returned a failure code in a clean (non-panic) way.
+		// In both cases, we want out to be parsed, to get us the job ID.  E.g. maybe 1 transfer out of several failed,
+		// and that's what we'er actually testing for (so can't treat this as a fatal error).
+		return newCopyOrSyncCommandResult(string(out)), true, err
+	} else {
+		return CopyOrSyncCommandResult{},
+			false,
+			fmt.Errorf("azcopy run error: %w\n  with stderr: %s\n  and stdout: %s\n  from args %v", err, capLen(stdErr), capLen(out), args)
+	}
 }
 
 func (t *TestRunner) SetTransferStatusFlag(value string) {
