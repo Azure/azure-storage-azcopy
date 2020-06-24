@@ -7,6 +7,7 @@ import (
 )
 
 // TODO soon:
+//    ** why is sub/subsub getting created locally? (in the e2e folder)
 //    stripTopDir
 //    think about "decode unsafe dst characters no Windows" comment in validator.go
 //    With asserter, we get the call stack from the point of the asserter method, not the caller...

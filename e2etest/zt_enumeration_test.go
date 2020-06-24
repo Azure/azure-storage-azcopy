@@ -92,7 +92,9 @@ func TestFilter_IncludeAfter(t *testing.T) {
 		eValidate.TransferStates(),
 		nil,
 		nil,
-		params{},
+		params{
+			recursive: true,
+		},
 		&hooks{
 			betweenCreateFilesToIgnoreAndToTransfer: func(h hookHelper) {
 				// Put a gap in time between creation of the "to ignore" and "to transfer" files, and then set includeAfterDate

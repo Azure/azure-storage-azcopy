@@ -89,12 +89,13 @@ type asserter interface {
 	Skip(reason string)
 
 	// ScenarioName piggy-backs on this interface, in a context-value-like way (ugly, but it works)
-	ScenarioName() string
+	CompactScenarioName() string
 }
 
 type testingAsserter struct {
-	t            *testing.T
-	scenarioName string
+	t                   *testing.T
+	compactScenarioName string
+	fullScenarioName    string
 }
 
 // Assert compares its arguments and marks the current test (or subtest) as failed. Unlike gocheck's Assert method,
@@ -114,7 +115,11 @@ func (a *testingAsserter) Assert(obtained interface{}, comp comparison, expected
 
 	// record the failure
 	a.t.Helper() // exclude this method from the logged callstack
-	a.t.Logf("Assert %v %s %v %s", obtained, comp, expected, comment)
+	expandedComment := strings.Join(comment, ", ")
+	if expandedComment != "" {
+		expandedComment = "\n    " + expandedComment
+	}
+	a.t.Logf("Assertion failed in %s\n    Attempted to assert that: %v %s %v%s", a.fullScenarioName, obtained, comp, expected, expandedComment)
 	a.t.Fail()
 }
 
@@ -134,13 +139,8 @@ func (a *testingAsserter) Skip(reason string) {
 	a.t.Skip(reason)
 }
 
-func (a *testingAsserter) ScenarioName() string {
-	if a.scenarioName == "" {
-		// assume we are actually not in the declarative runner (e.g. maybe we are called from old code)
-		_, name := getTestName()
-		return name
-	}
-	return a.scenarioName
+func (a *testingAsserter) CompactScenarioName() string {
+	return a.compactScenarioName
 }
 
 ///////////////

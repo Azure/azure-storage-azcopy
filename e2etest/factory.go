@@ -25,8 +25,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/url"
+	"path/filepath"
 	"runtime"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
@@ -187,23 +189,23 @@ const (
 	blobPrefix      = "blob"
 )
 
-func getTestName() (testSuite, test string) {
+func getTestName(t *testing.T) (testSuite, test string) {
 
 	removeUnderscores := func(s string) string {
 		return strings.Replace(s, "_", "-", -1) // necessary if using name as basis for blob container name
 	}
 
-	// The following lines step up the stack find the name of the test method
+	testName := t.Name()
+
+	// Look up the stack to find out more info about the test method
 	// Note: the way to do this changed in go 1.12, refer to release notes for more info
 	var pcs [10]uintptr
 	n := runtime.Callers(1, pcs[:])
 	frames := runtime.CallersFrames(pcs[:n])
-	funcName := "TestFoo" // default stub "Foo" is used if anything goes wrong with this procedure
 	fileName := "UnknownFile_test.go"
 	for {
 		frame, more := frames.Next()
-		if strings.Contains(frame.Func.Name(), "Suite") {
-			funcName = frame.Func.Name()
+		if strings.HasSuffix(frame.Func.Name(), "."+testName) {
 			fileName = frame.File
 			break
 		} else if !more {
@@ -212,17 +214,13 @@ func getTestName() (testSuite, test string) {
 	}
 
 	// when using the basic Testing package, suite=file
-	suite := strings.Replace(strings.ToLower(fileName), "_test.go", "", -1)
+	suite := strings.Replace(strings.ToLower(filepath.Base(fileName)), "_test.go", "", -1)
 	suite = strings.Replace(suite, "zt_", "", -1)
-	if len(suite) > 6 {
-		suite = suite[:6] // trim the suite name part of it, so that we don't end up with so many names that are too long
-	}
+
 	suite = removeUnderscores(suite)
+	testName = removeUnderscores(testName)
 
-	name := strings.Replace(funcName, "Test", "", 1)
-	name = removeUnderscores(name)
-
-	return suite, name
+	return suite, testName
 }
 
 // This function generates an entity name by concatenating the passed prefix,
@@ -232,7 +230,7 @@ func getTestName() (testSuite, test string) {
 // Will truncate the end of the test name, if there is not enough room for it, followed by the time-based suffix,
 // with a non-zero maxLen.
 func generateName(c asserter, prefix string, maxLen int) string {
-	name := c.ScenarioName() // don't want to just use test name here, because each test contains multiple scearios with the declarative runner
+	name := c.CompactScenarioName() // don't want to just use test name here, because each test contains multiple scearios with the declarative runner
 
 	textualPortion := fmt.Sprintf("%s-%s", prefix, strings.ToLower(name))
 	currentTime := time.Now()

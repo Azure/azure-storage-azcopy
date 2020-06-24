@@ -178,17 +178,17 @@ func newCopyOrSyncCommandResult(rawOutput string) CopyOrSyncCommandResult {
 	return CopyOrSyncCommandResult{jobID: jobSummary.JobID, finalStatus: jobSummary}
 }
 
-func (c *CopyOrSyncCommandResult) GetTransferList(status common.TransferStatus) []common.TransferDetail {
+func (c *CopyOrSyncCommandResult) GetTransferList(status common.TransferStatus) ([]common.TransferDetail, error) {
 	runner := newTestRunner()
 	runner.SetTransferStatusFlag(status.String())
 
 	// invoke AzCopy to get the status from the plan files
 	result, err := runner.ExecuteJobsShowCommand(c.jobID)
 	if err != nil {
-		panic(err)
+		return make([]common.TransferDetail, 0), err
 	}
 
-	return result.transfers
+	return result.transfers, nil
 }
 
 type JobsShowCommandResult struct {

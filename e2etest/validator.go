@@ -37,10 +37,10 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 		return strings.Replace(s, "\\", "/", -1)
 	}
 
-	if len(expectedTransfers) > 0 && !common.IsShortPath(actualTransfers[0].Src) {
+	if len(actualTransfers) > 0 && !common.IsShortPath(actualTransfers[0].Src) {
 		sourcePrefix = common.ToExtendedPath(sourcePrefix)
 	}
-	if len(expectedTransfers) > 0 && !common.IsShortPath(actualTransfers[0].Dst) {
+	if len(actualTransfers) > 0 && !common.IsShortPath(actualTransfers[0].Dst) {
 		destinationPrefix = common.ToExtendedPath(destinationPrefix)
 	}
 	sourcePrefix = normalizeSlashes(sourcePrefix)
@@ -86,6 +86,6 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 			lookupKey = folder(lookupKey)
 		}
 		_, transferExist := lookupMap[lookupKey]
-		c.Assert(transferExist, equals(), true, "Looking for file "+lookupKey)
+		c.Assert(transferExist, equals(), true, "Looking for file '"+lookupKey+"'")
 	}
 }

@@ -153,7 +153,8 @@ func (s *scenario) validateTransfers() {
 		//       Is that OK? (Not sure what to do if it's not, because azcopy jobs show, apparently doesn't offer us a way to get the skipped list)
 	} {
 		expectedTransfers := s.fs.getForStatus(statusToTest, expectFolders)
-		actualTransfers := s.state.result.GetTransferList(statusToTest)
+		actualTransfers, err := s.state.result.GetTransferList(statusToTest)
+		s.a.AssertNoErr(err)
 
 		Validator{}.ValidateCopyTransfersAreScheduled(s.a, isSrcEncoded, isDstEncoded, srcRoot, dstRoot, expectedTransfers, actualTransfers)
 		// TODO: how are we going to validate folder transfers????

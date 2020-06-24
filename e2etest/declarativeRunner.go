@@ -52,14 +52,15 @@ func RunScenarios(
 	fs testFiles,
 	// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
 ) {
-	suiteName, testName := getTestName()
+	suiteName, testName := getTestName(t)
 
 	// construct all the scenarios
 	scenarios := make([]scenario, 0, 16)
 	for _, op := range operations.getValues() {
 		for _, fromTo := range testFromTo.getValues(op) {
 			// Create unique name for generating container names
-			uniqueScenarioName := fmt.Sprintf("%s-%s-%c-%c%c", suiteName, testName, op.String()[0], fromTo.From().String()[0], fromTo.To().String()[0])
+			compactScenarioName := fmt.Sprintf("%.4s-%s-%c-%c%c", suiteName, testName, op.String()[0], fromTo.From().String()[0], fromTo.To().String()[0])
+			fullScenarioName := fmt.Sprintf("%s.%s.%s-%s", suiteName, testName, op.String(), fromTo.String())
 			// Sub-test name is not globally unique (it doesn't need to be) but it is more human-readable
 			subtestName := fmt.Sprintf("%s-%s", op, fromTo)
 
@@ -71,8 +72,11 @@ func RunScenarios(
 				p:           p, // copies them, because they are a struct. This is what we need, since the may be morphed while running
 				hs:          hs,
 				fs:          fs,
-				a:           &testingAsserter{t, uniqueScenarioName}, // it's a bit ugly passing the scenario name in here, in a "context"-like way, but it works
-				stripTopDir: false,                                   // TODO: how will we set this?
+				a: &testingAsserter{
+					t:                   t,
+					compactScenarioName: compactScenarioName,
+					fullScenarioName:    fullScenarioName},
+				stripTopDir: false, // TODO: how will we set this?
 			}
 
 			scenarios = append(scenarios, s)
