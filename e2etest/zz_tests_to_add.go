@@ -12,6 +12,12 @@ import (
 //    With asserter, we get the call stack from the point of the asserter method, not the caller...
 //    .... so we get the equivalent of true != false (again!)
 
+// TODO:
+//     account types (std, prem etc)
+//     account-to-account (e.g. multiple containers, copying whole account)
+//     specifying "strip top dir"
+//     copying to/from things that are not the share root/container root
+
 // Think about suites.  Don't want to use testify, because it doesn't support parallization within a suite (and doesn't support subtests)
 // But we want something that the IDE will recognise, and allow us to run individual tests or the suite. I think this will work
 func RunFileAsSuite(t *testing.T) {

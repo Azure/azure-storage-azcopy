@@ -30,12 +30,6 @@ import (
 // In particular, it lets one test cover a range of different source/dest types, and even cover both sync and copy.
 // See first test in zt_enumeration for an annotated example.
 
-// TODO:
-//     account types (std, prem etc)
-//     account-to-account (e.g. multiple containers, copying whole account)
-//     specifying "strip top dir"
-//     copying to/from things that are not the share root/container root
-
 // A note on test frameworks.
 // We are just using GoLang's own Testing package.
 // Why aren't we using gocheck (gopkg.in/check.v1) as we did for older unit tests?
@@ -66,8 +60,9 @@ func RunScenarios(
 		for _, fromTo := range testFromTo.getValues(op) {
 			// Create unique name for generating container names
 			uniqueScenarioName := fmt.Sprintf("%s-%s-%c-%c%c", suiteName, testName, op.String()[0], fromTo.From().String()[0], fromTo.To().String()[0])
-			// Subtest name is not globally unique (it doesn't need to be) but it is more human-readable
+			// Sub-test name is not globally unique (it doesn't need to be) but it is more human-readable
 			subtestName := fmt.Sprintf("%s-%s", op, fromTo)
+
 			s := scenario{
 				subtestName: subtestName,
 				operation:   op,

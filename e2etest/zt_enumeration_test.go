@@ -27,18 +27,10 @@ import (
 
 // Purpose: Tests for enumeration of sources, including filtering
 
-// TODO: re "suites". do we want something like this:
-//type enumerationSuite struct{ DeclarativeSuite } // must contain our own declarativeSuite
-//func TestEnumerationSuite(t *testing.T) { // must be registered with Testing like this
-//	suite.Run(t, new(enumerationSuite))  // needs to use reflection to run them all
-//}
-// NOTE: for now, we are just following the Go idiom of "one file is one suite"
-
 // Please leave the following test at the top of this file, where it can serve as an easy-to-find annotated example.
 // We won't normally put this many comments in a test, but this one has the verbose comments to explain the declarative test
 // framework
-// TestIncludePath_Folder tests the includePath parameter in the case where it lists folders.
-func TestFilter_IncludePath_Folder(t *testing.T) {
+func TestFilter_IncludePath(t *testing.T) {
 	// This will test IncludePath once for each source resource type.
 	// For source resource types that support both Copy and Sync, it will run the test twice, once with Copy and once with Sync.
 	//  Copy: Blob -> Blob
@@ -60,7 +52,7 @@ func TestFilter_IncludePath_Folder(t *testing.T) {
 		nil,                               // Here nil == use one (default) auth type only. To repeat the test with different auth types, use eAuthTypes.<something>.
 		params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
 			recursive:   true,
-			includePath: "sub/subsub",
+			includePath: "sub/subsub;wantedfile",
 		},
 		nil, // For advanced usage, can pass a hooks struct here, to hook funcs into different stage of the testing process to customize it
 		testFiles{ // Source files specifies details of the files to test on
@@ -69,16 +61,19 @@ func TestFilter_IncludePath_Folder(t *testing.T) {
 				"filea",
 				"fileb",
 				"filec",
+				"wantedfileabc", // include-path only works with whole filenames, so this won't match wantedfile
 				"sub/filea",
 				"sub/fileb",
 				"sub/filec",
 				folder("sub/subsubsub"),          // include-path only works with _whole_ directories (i.e. not prefix match)
-				"sub/somethingelse/subsub/filex", // should not be included because sub/subsub is not contiguous here
+				"sub/somethingelse/subsub/filey", // should not be included because sub/subsub is not contiguous here
 				"othersub/sub/subsub/filey",      // should not be included because sub/subsub is not at root here
+				"othersub/wantedfile",            // should not be included because, although wantedfile is in the includepath, include path always starts from the root
 			},
 			shouldTransfer: []string{ // A list of files which should be created an which should indeed be transferred
 				// Include folders as a line that ends in /. Test framework will automatically ignore them when
 				// not transferring between folder-aware locations
+				"wantedfile",
 				folder("sub/subsub"),
 				"sub/subsub/filea",
 				"sub/subsub/fileb",
@@ -86,7 +81,6 @@ func TestFilter_IncludePath_Folder(t *testing.T) {
 			},
 		},
 	)
-
 }
 
 // TestFilter_IncludeAfter test the include-after parameter
@@ -117,8 +111,4 @@ func TestFilter_IncludeAfter(t *testing.T) {
 				"fileb",
 			},
 		})
-}
-
-func TestFilter_IncludePath_File(t *testing.T) {
-	t.Skip("sample skip") // TODO
 }
