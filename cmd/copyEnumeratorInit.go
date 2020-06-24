@@ -427,7 +427,6 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 
 // Because some invalid characters weren't being properly encoded by url.PathEscape, we're going to instead manually encode them.
 var encodedInvalidCharacters = map[rune]string{
-	0x00: "%00",
 	'<':  "%3C",
 	'>':  "%3E",
 	'\\': "%5C",
@@ -440,7 +439,6 @@ var encodedInvalidCharacters = map[rune]string{
 }
 
 var reverseEncodedChars = map[string]rune{
-	"%00": 0x00,
 	"%3C": '<',
 	"%3E": '>',
 	"%5C": '\\',
