@@ -28,7 +28,7 @@ func (t *dropboxTraverser) isDirectory(isSource bool) bool {
 func (t *dropboxTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) error {
 	if !t.dropboxURLParts.IsDir {
 		objectPath := strings.Split(t.dropboxURLParts.ObjectKey, "/")
-		_ = objectPath[len(objectPath)-1]
+		objectName := objectPath[len(objectPath)-1]
 
 		dbx := t.client
 		res, err := dbx.GetMetadata(files.NewGetMetadataArg("/" + t.dropboxURLParts.ObjectKey))
@@ -48,7 +48,7 @@ func (t *dropboxTraverser) traverse(preprocessor objectMorpher, processor object
 		oie := common.DropboxObjectInfoExtension{Metadata: *metadata}
 		storedObject := newStoredObject(
 			preprocessor,
-			t.dropboxURLParts.ObjectKey,
+			objectName,
 			"",
 			common.EEntityType.File(),
 			lmt,
