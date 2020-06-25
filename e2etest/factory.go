@@ -189,7 +189,7 @@ const (
 	blobPrefix      = "blob"
 )
 
-func getTestName(t *testing.T) (testSuite, test string) {
+func getTestName(t *testing.T) (pseudoSuite, test string) {
 
 	removeUnderscores := func(s string) string {
 		return strings.Replace(s, "_", "-", -1) // necessary if using name as basis for blob container name
@@ -202,7 +202,7 @@ func getTestName(t *testing.T) (testSuite, test string) {
 	var pcs [10]uintptr
 	n := runtime.Callers(1, pcs[:])
 	frames := runtime.CallersFrames(pcs[:n])
-	fileName := "UnknownFile_test.go"
+	fileName := ""
 	for {
 		frame, more := frames.Next()
 		if strings.HasSuffix(frame.Func.Name(), "."+testName) {
@@ -213,14 +213,25 @@ func getTestName(t *testing.T) (testSuite, test string) {
 		}
 	}
 
-	// when using the basic Testing package, suite=file
-	suite := strings.Replace(strings.ToLower(filepath.Base(fileName)), "_test.go", "", -1)
-	suite = strings.Replace(suite, "zt_", "", -1)
+	// When using the basic Testing package, we have adopted a convention that
+	// the test name should being with one of the words in the file name, followed by a _ .
+	// Try to extract a "pseudo suite" name from the test name according to that rule.
+	pseudoSuite = ""
+	testName = strings.Replace(testName, "Test", "", 1)
+	uscorePos := strings.Index(testName, "_")
+	if uscorePos >= 0 && uscorePos < len(testName)-1 {
+		beforeUnderscore := strings.ToLower(testName[:uscorePos])
+		fileWords := strings.Split(strings.Replace(strings.ToLower(filepath.Base(fileName)), "_test.go", "", -1), "_")
+		for _, w := range fileWords {
+			if beforeUnderscore == w {
+				pseudoSuite = beforeUnderscore
+				testName = testName[uscorePos+1:]
+				break
+			}
+		}
+	}
 
-	suite = removeUnderscores(suite)
-	testName = removeUnderscores(testName)
-
-	return suite, testName
+	return pseudoSuite, removeUnderscores(testName)
 }
 
 // This function generates an entity name by concatenating the passed prefix,
