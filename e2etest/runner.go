@@ -21,9 +21,12 @@
 package e2etest
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -64,9 +67,56 @@ func (t *TestRunner) computeArgs() []string {
 	return append(args, "--output-type=json")
 }
 
+func (t *TestRunner) isLaunchedByDebugger() bool {
+	// gops executable must be in the path. See https://github.com/google/gops
+	gopsOut, err := exec.Command("gops", strconv.Itoa(os.Getppid())).Output()
+	if err == nil && strings.Contains(string(gopsOut), "\\dlv.exe") {
+		// our parent process is (probably) the Delve debugger
+		return true
+	}
+	return false
+}
+
+// execCommandWithOutput replaces Go's exec.Command().Output, but appends an extra parameter and
+// breaks up the c.Run() call into its component parts. Both changes are to assist debugging
+func (t *TestRunner) execDebuggableWithOutput(name string, args []string) ([]byte, error) {
+	debug := t.isLaunchedByDebugger()
+	if debug {
+		args = append(args, "--await-continue")
+	}
+	c := exec.Command(name, args...)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	stdin, err := c.StdinPipe()
+	if err != nil {
+		return make([]byte, 0), err
+	}
+
+	c.Stdout = &stdout
+	c.Stderr = &stderr
+
+	//instead of err := c.Run(), we do the following
+	runErr := c.Start()
+	if runErr == nil {
+		if debug {
+			beginAzCopyDebugging(stdin)
+		}
+		runErr = c.Wait()
+	}
+
+	// back to normal exec.Cmd.Output() processing
+	if runErr != nil {
+		if ee, ok := runErr.(*exec.ExitError); ok {
+			ee.Stderr = stderr.Bytes()
+		}
+	}
+	return stdout.Bytes(), runErr
+}
+
 func (t *TestRunner) ExecuteCopyCommand(src, dst string) (CopyCommandResult, error) {
 	args := append([]string{"copy", src, dst}, t.computeArgs()...)
-	out, err := exec.Command(GlobalInputManager{}.GetExecutablePath(), args...).Output()
+	out, err := t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args)
 	if err != nil {
 		return CopyCommandResult{}, err
 	}
