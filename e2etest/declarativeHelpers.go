@@ -467,4 +467,9 @@ type hooks struct {
 
 	// called after all the setup is done, and before AzCopy is actually invoked
 	beforeRunJob hookFunc
+
+	// called after AzCopy has started running, but before it has started its first transfer.  Moment of call may be
+	// before, during or after AzCopy's scanning phase.  If this hook is set, AzCopy won't open its first file, to start
+	// transferring data, until this function executes.
+	beforeOpenFirstFile hookFunc
 }

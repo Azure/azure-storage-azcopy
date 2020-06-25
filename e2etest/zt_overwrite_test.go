@@ -21,3 +21,7 @@
 package e2etest
 
 // Purpose: Tests of overwrite logic
+
+// Might be able to use afterStart hook in these tests, since it can be used to send arbitrary text to the apps stdin
+// We currently use it to set "open" in the case where --await-open was on the command line, but the afterStart func in
+// execDebuggableWithOutput is not limited to that purpose. _Whatever_ it returns will be sent to AzCopy's stdin.

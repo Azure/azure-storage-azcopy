@@ -22,7 +22,6 @@ package e2etest
 
 import (
 	"testing"
-	"time"
 )
 
 // Purpose: Tests for detecting that source has been changed during transfer
@@ -39,22 +38,19 @@ func TestDetectFileChangedDuringTransfer(t *testing.T) {
 		nil,
 		nil,
 		params{
-			recursive:   true,
-			capMbps:     1,    // go really slow, so that the transfer will last long enough for our other thread to change the file while its running
-			blockSizeMB: 0.25, // small block size, so that the cap works better (since capMbps is coarse-grained when running S2S)
+			recursive: true,
 		},
 		&hooks{
-			beforeRunJob: func(h hookHelper) {
-				// use separate Goroutine, so that job will start while our goroutine is still running
-				go func() {
-					// wait a moment, then re-create the source files (over top of what AzCopy will be  already trying to transfer)
-					time.Sleep(5 * time.Second)
-					h.CreateFiles(h.GetTestFiles(), true) // force the files to change
-				}()
+			beforeOpenFirstFile: func(h hookHelper) {
+				// Re-create the source files (over top of what AzCopy has already scanned, but has not yet started to transfer)
+				// This will give them new LMTs
+				h.CreateFiles(h.GetTestFiles(), true)
 			},
+			// We don't use the beforeRunJob hook here, because that doesn't allow us to time the change exactly after scanning starts,
+			// but before the file gets read.
 		},
 		testFiles{
-			size:       "20M",
+			size:       "1k",
 			shouldFail: []failure{{"filea", "File modified since transfer scheduled"}},
 		},
 	)

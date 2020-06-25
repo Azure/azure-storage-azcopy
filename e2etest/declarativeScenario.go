@@ -26,6 +26,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"time"
 )
 
 // E.g. if we have enumerationSuite/TestFooBar/Copy-LocalBlob the scenario is "Copy-LocalBlob"
@@ -131,11 +132,26 @@ func (s *scenario) assignSourceAndDest() {
 func (s *scenario) runAzCopy() {
 	r := newTestRunner()
 	r.SetAllFlags(s.p)
+
+	// use the general-purpose "after start" mechanism, provided by execDebuggableWithOutput,
+	// for the _specific_ purpose of running beforeOpenFirstFile, if that hook exists.
+	afterStart := func() string { return "" }
+	if s.hs.beforeOpenFirstFile != nil {
+		r.SetAwaitOpenFlag() // tell AzCopy to wait for "open" on stdin before opening any files
+		afterStart = func() string {
+			time.Sleep(5 * time.Second) // give AzCopy time to initialize it's monitoring of stdin
+			s.hs.beforeOpenFirstFile(s)
+			return "open" // send open to AzCopy's stdin
+		}
+	}
+
+	// run AzCopy
 	const useSas = true // TODO: support other auth options (see params of RunTest)
 	result, wasClean, err := r.ExecuteCopyOrSyncCommand(
 		s.operation,
 		s.state.source.getParam(s.stripTopDir, useSas),
-		s.state.dest.getParam(false, useSas))
+		s.state.dest.getParam(false, useSas),
+		afterStart)
 
 	if !wasClean {
 		s.a.AssertNoErr(err, "running AzCopy")

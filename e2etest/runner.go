@@ -73,6 +73,10 @@ func (t *TestRunner) SetAllFlags(p params) {
 	set("block-size-mb", p.blockSizeMB, float32(0))
 }
 
+func (t *TestRunner) SetAwaitOpenFlag() {
+	t.flags["await-open"] = "true"
+}
+
 func (t *TestRunner) computeArgs() []string {
 	args := make([]string, 0)
 	for key, value := range t.flags {
@@ -84,7 +88,7 @@ func (t *TestRunner) computeArgs() []string {
 
 // execCommandWithOutput replaces Go's exec.Command().Output, but appends an extra parameter and
 // breaks up the c.Run() call into its component parts. Both changes are to assist debugging
-func (t *TestRunner) execDebuggableWithOutput(name string, args []string) ([]byte, error) {
+func (t *TestRunner) execDebuggableWithOutput(name string, args []string, afterStart func() string) ([]byte, error) {
 	debug := isLaunchedByDebugger
 	if debug {
 		args = append(args, "--await-continue")
@@ -104,9 +108,21 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string) ([]byt
 	//instead of err := c.Run(), we do the following
 	runErr := c.Start()
 	if runErr == nil {
+		defer func() {
+			_ = c.Process.Kill() // in case we never finish c.Wait() below, and get paniced or killed
+		}()
+
 		if debug {
 			beginAzCopyDebugging(stdin)
 		}
+
+		if afterStart != nil {
+			msgToApp := afterStart() // perform a local action, here in the test suite, that may optionally produce a message to send to the the app
+			if msgToApp != "" {
+				_, _ = stdin.Write([]byte(msgToApp + "\n"))
+			}
+		}
+
 		runErr = c.Wait()
 	}
 
@@ -119,7 +135,7 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string) ([]byt
 	return stdout.Bytes(), runErr
 }
 
-func (t *TestRunner) ExecuteCopyOrSyncCommand(operation Operation, src, dst string) (CopyOrSyncCommandResult, bool, error) {
+func (t *TestRunner) ExecuteCopyOrSyncCommand(operation Operation, src, dst string, afterStart func() string) (CopyOrSyncCommandResult, bool, error) {
 	capLen := func(b []byte) []byte {
 		if len(b) < 1024 {
 			return b
@@ -139,7 +155,7 @@ func (t *TestRunner) ExecuteCopyOrSyncCommand(operation Operation, src, dst stri
 	}
 
 	args := append([]string{verb, src, dst}, t.computeArgs()...)
-	out, err := t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args)
+	out, err := t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args, afterStart)
 
 	wasClean := true
 	stdErr := make([]byte, 0)
