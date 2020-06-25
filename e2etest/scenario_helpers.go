@@ -101,7 +101,7 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, dirPath string, f
 	for _, fileName := range fileList {
 		var err error
 		if isFolder(fileName) {
-			err = os.MkdirAll(asFolderName(fileName), os.ModePerm)
+			err = os.MkdirAll(filepath.Join(dirPath, asFolderName(fileName)), os.ModePerm)
 		} else {
 			_, err = s.generateLocalFile(filepath.Join(dirPath, fileName), sizeBytes)
 		}

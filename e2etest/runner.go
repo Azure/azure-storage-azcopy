@@ -66,11 +66,12 @@ func (t *TestRunner) SetAllFlags(p params) {
 		t.flags[key] = fmt.Sprintf(format, value)
 	}
 
-	set("recursive", p.recursive, false, "%t")
+	set("recursive", p.recursive, false)
 	set("include-path", p.includePath, "")
 	set("include-after", p.includeAfter, "")
 	set("cap-mbps", p.capMbps, float32(0))
 	set("block-size-mb", p.blockSizeMB, float32(0))
+	set("s2s-detect-source-changed", p.s2sSourceChangeValidation, false)
 }
 
 func (t *TestRunner) SetAwaitOpenFlag() {

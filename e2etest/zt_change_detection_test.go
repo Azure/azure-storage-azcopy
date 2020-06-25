@@ -22,6 +22,7 @@ package e2etest
 
 import (
 	"testing"
+	"time"
 )
 
 // Purpose: Tests for detecting that source has been changed during transfer
@@ -41,17 +42,25 @@ func TestDetectFileChangedDuringTransfer(t *testing.T) {
 			recursive: true,
 		},
 		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				ft := h.FromTo()
+				if ft.IsS2S() {
+					h.GetModifiableParameters().s2sSourceChangeValidation = true // s2s change detection is not enabled by default
+				}
+			},
 			beforeOpenFirstFile: func(h hookHelper) {
 				// Re-create the source files (over top of what AzCopy has already scanned, but has not yet started to transfer)
 				// This will give them new LMTs
+				time.Sleep(2 * time.Second) // make sure the new LMTs really will be different
 				h.CreateFiles(h.GetTestFiles(), true)
 			},
 			// We don't use the beforeRunJob hook here, because that doesn't allow us to time the change exactly after scanning starts,
 			// but before the file gets read.
 		},
 		testFiles{
-			size:       "1k",
-			shouldFail: []failure{{"filea", "File modified since transfer scheduled"}},
+			size:           "1k",
+			shouldTransfer: []string{folder("")}, // the root folder should transfer between folder-aware locations
+			shouldFail:     []failure{{"filea", "File modified since transfer scheduled"}},
 		},
 	)
 }

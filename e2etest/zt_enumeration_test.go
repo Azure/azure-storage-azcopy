@@ -58,6 +58,7 @@ func TestFilter_IncludePath(t *testing.T) {
 		testFiles{ // Source files specifies details of the files to test on
 			size: "1K", // An indication of what size of files should be created
 			shouldIgnore: []string{ // A list of files which should be created, but which are expected to be ignored by the job
+				folder(""), // root folder (i.e. the folder that normally gets copied when source doesn't end in /*.  But it doesn't get copied in this case, because it doesn't match the include-path)
 				"filea",
 				"fileb",
 				"filec",

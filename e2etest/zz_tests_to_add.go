@@ -7,10 +7,11 @@ import (
 )
 
 // TODO soon:
-//    ** why is sub/subsub getting created locally? (in the e2e folder)
 //    stripTopDir
 //    think about "decode unsafe dst characters no Windows" comment in validator.go
 //    Add a timeout to all exections fo AzCopy
+//    Remaining resource providers
+//    Is our cleanup reliable enough, eg. after stopping the test harness during debugging?
 
 // TODO: given this is a new suite for an existing app, how do we make sure each test really is testing what we think its testing
 //

@@ -139,7 +139,7 @@ func (s *scenario) runAzCopy() {
 	if s.hs.beforeOpenFirstFile != nil {
 		r.SetAwaitOpenFlag() // tell AzCopy to wait for "open" on stdin before opening any files
 		afterStart = func() string {
-			time.Sleep(5 * time.Second) // give AzCopy time to initialize it's monitoring of stdin
+			time.Sleep(2 * time.Second) // give AzCopy a moment to initialize it's monitoring of stdin
 			s.hs.beforeOpenFirstFile(s)
 			return "open" // send open to AzCopy's stdin
 		}
@@ -176,11 +176,15 @@ func (s *scenario) validateTransfers() {
 	expectFolders := s.fromTo.From().IsFolderAware() &&
 		s.fromTo.To().IsFolderAware() &&
 		s.p.allowsFolderTransfers()
+	expectRootFolder := expectFolders
 
 	// compute dest, taking into account our stripToDir rules
 	areBothContainerLike := s.state.source.isContainerLike() && s.state.dest.isContainerLike()
 	if s.stripTopDir || areBothContainerLike {
-		// noop
+		// For copies between two container-like locations, we don't expect the root directory to be transferred, regardless of stripTopDir.
+		// Yes, this is arguably inconsistent. But its the way its always been, and it does seem to match user expectations for copies
+		// of that kind.
+		expectRootFolder = false
 	} else if s.fromTo.From().IsLocal() {
 		dstRoot = fmt.Sprintf("%s%c%s", dstRoot, os.PathSeparator, filepath.Base(srcRoot))
 	} else {
@@ -194,7 +198,7 @@ func (s *scenario) validateTransfers() {
 		// TODO: testing of skipped is implicit, in that they are created at the source, but don't exist in Success or Failed lists
 		//       Is that OK? (Not sure what to do if it's not, because azcopy jobs show, apparently doesn't offer us a way to get the skipped list)
 	} {
-		expectedTransfers := s.fs.getForStatus(statusToTest, expectFolders)
+		expectedTransfers := s.fs.getForStatus(statusToTest, expectFolders, expectRootFolder)
 		actualTransfers, err := s.state.result.GetTransferList(statusToTest)
 		s.a.AssertNoErr(err)
 
@@ -220,6 +224,10 @@ func (s *scenario) cleanup() {
 }
 
 /// support the hookHelper functions. These are use by our hooks to modify the state, or resources, of the running test
+
+func (s *scenario) FromTo() common.FromTo {
+	return s.fromTo
+}
 
 func (s *scenario) GetModifiableParameters() *params {
 	return &s.p

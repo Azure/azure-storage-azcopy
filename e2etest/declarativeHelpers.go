@@ -44,6 +44,10 @@ func isFolder(s string) bool {
 	return strings.HasSuffix(s, "/")
 }
 
+func isRootFolder(s string) bool {
+	return s == "/"
+}
+
 func asFolderName(s string) string {
 	return strings.TrimRight(s, "/") // strip the trialing /
 }
@@ -125,7 +129,7 @@ func (a *testingAsserter) Assert(obtained interface{}, comp comparison, expected
 	// record the failure
 	a.t.Helper() // exclude this method from the logged callstack
 	expandedComment := a.formatComments(comment)
-	a.t.Logf("Assertion failed in %s\n    Attempted to assert that: %v %s %v%s", a.fullScenarioName, obtained, comp, expected, expandedComment)
+	a.t.Logf("Assertion failed in %s\n    Attempted to assert that: (actual) %v %s (expected) %v%s", a.fullScenarioName, obtained, comp, expected, expandedComment)
 	a.t.Fail()
 }
 
@@ -208,18 +212,33 @@ func (tf *testFiles) allNames(isSource bool) []string {
 	}
 }
 
-func (tf *testFiles) getForStatus(status common.TransferStatus, expectFolders bool) []string {
+func (tf *testFiles) getForStatus(status common.TransferStatus, expectFolders bool, expectRootFolder bool) []string {
+	shouldInclude := func(f string) bool {
+		if !isFolder(f) {
+			return true
+		}
+
+		if expectFolders {
+			if isRootFolder(f) {
+				return expectRootFolder
+			} else {
+				return true
+			}
+		}
+		return false
+	}
+
 	result := make([]string, 0)
 	switch status {
 	case common.ETransferStatus.Success():
 		for _, f := range tf.shouldTransfer {
-			if expectFolders || !isFolder(f) {
+			if shouldInclude(f) {
 				result = append(result, f)
 			}
 		}
 	case common.ETransferStatus.Failed():
 		for _, f := range tf.shouldFail {
-			if expectFolders || !isFolder(f.filename) {
+			if shouldInclude(f.filename) {
 				result = append(result, f.filename)
 			}
 		}
@@ -240,17 +259,18 @@ func (tf *testFiles) defaultSizeBytes() (int, error) {
 ////
 
 type params struct {
-	recursive         bool
-	includePath       string
-	includePattern    string
-	includeAfter      string
-	includeAttributes string
-	excludePath       string
-	excludePattern    string
-	excludeAttributes string
-	capMbps           float32
-	blockSizeMB       float32
-	deleteDestination common.DeleteDestination
+	recursive                 bool
+	includePath               string
+	includePattern            string
+	includeAfter              string
+	includeAttributes         string
+	excludePath               string
+	excludePattern            string
+	excludeAttributes         string
+	capMbps                   float32
+	blockSizeMB               float32
+	deleteDestination         common.DeleteDestination
+	s2sSourceChangeValidation bool
 }
 
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level
@@ -446,6 +466,9 @@ func (v Validate) String() string {
 // hookHelper is functions that hooks can call to influence test execution
 // NOTE: this interface will have to actively evolve as we discover what we need our hooks to do.
 type hookHelper interface {
+	// FromTo returns the fromTo for the scenario
+	FromTo() common.FromTo
+
 	// GetModifiableParameters returns a pointer to the AzCopy parameters that will be used in the scenario
 	GetModifiableParameters() *params
 

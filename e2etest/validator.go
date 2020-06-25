@@ -83,13 +83,18 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 		c.Assert(srcRelativeFilePath, equals(), dstRelativeFilePath)
 
 		// look up the path from the expected transfers, make sure it exists
+		folderMessage := ""
 		lookupKey := srcRelativeFilePath
 		if transfer.IsFolderProperties {
 			lookupKey = folder(lookupKey)
+			folderMessage = ".\n    The transfer was for a folder. Have you forgotten to include folders in your testFiles? (Use the folder() function)"
 		}
 		_, transferExist := lookupMap[lookupKey]
 		c.Assert(transferExist, equals(), true,
-			fmt.Sprintf("File '%s' ended with status '%s' but was not expected to end in that status", lookupKey, statusToTest.String()))
+			fmt.Sprintf("Transfer '%s' ended with status '%s' but was not expected to end in that status%s",
+				lookupKey,
+				statusToTest.String(),
+				folderMessage))
 
 		// TODO: do we also want to output specific filenames for ones that were expected to have that status, but did not get it?
 	}
