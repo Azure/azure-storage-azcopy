@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-// Purpose: Tests for enumeration of sources, including filtering
+// Purpose: Tests for the filtering functionality (when enumerating sources)
 
 // Please leave the following test at the top of this file, where it can serve as an easy-to-find annotated example.
 // We won't normally put this many comments in a test, but this one has the verbose comments to explain the declarative test

@@ -31,7 +31,7 @@ import (
 // pairwise source-dest combinations.
 // We test all pairs here because change detection depends on both the source info provider and the xfer-... code.
 // The latter differs between upload and download.
-func TestDetectFileChangedDuringTransfer(t *testing.T) {
+func TestChange_DetectFileChangedDuringTransfer(t *testing.T) {
 	RunScenarios(t,
 		eOperation.CopyAndSync(),
 		eTestFromTo.AllPairs(),

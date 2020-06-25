@@ -1,11 +1,5 @@
 package e2etest
 
-import (
-	"flag"
-	"strings"
-	"testing"
-)
-
 // TODO soon:
 //
 //   Suggest some basic cases for team to implement.
@@ -13,6 +7,8 @@ import (
 //      The resource manager support for S3 and BlobFS and (who will do this one) GCP?
 //
 //   Why did TestFilter-IncludePath not show all three children???
+//
+//    A change detection test that asserts that s2s changes are not detected by default
 //
 //    stripTopDir
 //    think about "decode unsafe dst characters no Windows" comment in validator.go
@@ -30,36 +26,24 @@ import (
 //     should we be using AzCopy (prehaps a known good version) to do our setup uploads and verification downlaods? (would be quicker
 //     than what we have right now)
 
-// Think about suites.  Don't want to use testify, because it doesn't support parallization within a suite (and doesn't support subtests)
-// But we want something that the IDE will recognise, and allow us to run individual tests or the suite. I think this will work
-func RunFileAsSuite(t *testing.T) {
-	f := flag.Lookup("test.run")
-	if f == nil {
-		t.Skip("Cannot determine whether suite-based running was requested, so skipping it")
-		return
-	}
-	suiteRunningRequested := strings.HasPrefix(strings.TrimPrefix("^", f.Value.String()), "TestSuite") // the regex is looking for things starting with TestSuite
-	if !suiteRunningRequested {
-		// skip if not explictly requested to run, else we'll end up running every test twice - once directly
-		// from the test runner, and once as a child of the suite.
-		t.Skip("test.run parameter did not request test(s) named TestSuite..., so skipping suite-based runner")
-	}
-
-	// TODO:
-	//   use a syncOnce to scan for all Test(t *testing.T) methods, excluding those that beging with TestSUite, and group them by file
-	//   then find out which file the calling method/test is in, and then run as subtests all the ones from that file
-	//
-
-	// Document that it can be used like this:
-	//func TestSuiteEnumeration(t *testing.T) {
-	//		RunFileAsSuite(t)
-	//	}
-}
-
-// TODO: right now, as soon as one scenario fails in a test,
-//    we stop executing them, and won't execute any other scearios
-//    in that test.  Should we change this? It could be a bit difficult,
-//    but might be possible with the Check vs Assert and Fail method in gocheck (chk)
+// TODO: document the following re test frameworks, and support for suites specifically:
+//// A note on test frameworks.
+//// We are just using GoLang's own Testing package.
+//// Why aren't we using gocheck (gopkg.in/check.v1) as we did for older unit tests?
+//// Because gocheck doesn't seem to have, or expose, any concept of sub-tests. But we want: suite/test/subtest
+//// (subtest = scenario in our wording below).
+//// Why aren't we using stretchr/testify/suite? Because it appears from the code there that tests (and subtests) within a suite cannot be parallelized
+//// (Since suite.SetT() manipulates shared state), but we might want to parallelize tests within a suite.
+/// We need subetsts so we can report the pass/fail the state of each sceario separately
+/// Things we can't do:
+/// 1. Make our own suite approach like testify does (where tests are methods rather than func) This is easy to implement, but because GoLand doesn't know about it, it becomes impossible to
+///    invoke individual tests from the IDE.
+/// 2. Use normal "testing" style funcs but somehow group them automatically. Can't group automatiecally, because even tho we can get their names in a TestMain method (via
+///    a little relfection on the M parameter, we can't tell which file each one is defined it. We just get their name and their func object.  And we have no (easy) way
+///    of doing symbol table lookups or similar to get the file for the func.
+///
+/// SO we are just adopting the convention of including a prefix in the name, so that they sort sensible.  So we'll just have a two-level structure,
+/// but it will look like this MySuite_MyTest/scenario
 
 // TODO: consider how to add tests to cover the following
 
