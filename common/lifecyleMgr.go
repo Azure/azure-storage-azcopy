@@ -20,6 +20,7 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 		msgQueue:             make(chan outputMessage, 1000),
 		progressCache:        "",
 		cancelChannel:        make(chan os.Signal, 1),
+		continueChannel:      make(chan struct{}),
 		outputFormat:         EOutputFormat.Text(), // output text by default
 		logSanitizer:         NewAzCopyLogSanitizer(),
 		inputQueue:           make(chan userInput, 1000),
@@ -57,6 +58,7 @@ type LifecycleMgr interface {
 	EnableInputWatcher()                                         // depending on the command, we may allow user to give input through Stdin
 	EnableCancelFromStdIn()                                      // allow user to send in `cancel` to stop the job
 	AddUserAgentPrefix(string) string                            // append the global user agent prefix, if applicable
+	AwaitContinue()
 }
 
 func GetLifecycleMgr() LifecycleMgr {
@@ -68,12 +70,14 @@ type lifecycleMgr struct {
 	msgQueue             chan outputMessage
 	progressCache        string // useful for keeping job progress on the last line
 	cancelChannel        chan os.Signal
+	continueChannel      chan struct{}
 	waitEverCalled       int32
 	outputFormat         OutputFormat
 	logSanitizer         pipeline.LogSanitizer
 	inputQueue           chan userInput // msgs from the user
 	allowWatchInput      bool           // accept user inputs and place then in the inputQueue
 	allowCancelFromStdIn bool           // allow user to send in 'cancel' from the stdin to stop the current job
+	allowAwaitContinue   bool           // allow the user to send 'continue' from stdin to start the current job
 }
 
 type userInput struct {
@@ -103,6 +107,8 @@ func (lcm *lifecycleMgr) watchInputs() {
 
 		if lcm.allowCancelFromStdIn && strings.EqualFold(msg, "cancel") {
 			lcm.cancelChannel <- os.Interrupt
+		} else if lcm.allowAwaitContinue && strings.EqualFold(msg, "continue") {
+			close(lcm.continueChannel)
 		} else {
 			lcm.inputQueue <- userInput{timeReceived: timeReceived, content: msg}
 		}
@@ -501,6 +507,17 @@ func (lcm *lifecycleMgr) AddUserAgentPrefix(userAgent string) string {
 	}
 
 	return userAgent
+}
+
+// AwaitContinue is used in case where a developer want's to debug AzCopy by attaching to the running process,
+// before it starts doing any actual work.
+func (lcm *lifecycleMgr) AwaitContinue() {
+	lcm.allowAwaitContinue = true // not technically gorountine safe (since its shared state) but its consistent with EnableInputWatcher
+	lcm.EnableInputWatcher()
+	select {
+	case <-lcm.continueChannel:
+	case <-time.After(time.Minute): // give up waiting after this long
+	}
 }
 
 // captures the common logic of exiting if there's an expected error

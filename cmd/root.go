@@ -46,6 +46,7 @@ var outputFormatRaw string
 var cancelFromStdin bool
 var azcopyOutputFormat common.OutputFormat
 var cmdLineCapMegaBitsPerSecond float64
+var azcopyAwaitContinue bool
 
 // It's not pretty that this one is read directly by credential util.
 // But doing otherwise required us passing it around in many places, even though really
@@ -60,6 +61,10 @@ var rootCmd = &cobra.Command{
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+
+		if azcopyAwaitContinue {
+			glcm.AwaitContinue()
+		}
 
 		timeAtPrestart := time.Now()
 
@@ -158,8 +163,13 @@ func init() {
 	// Note: this is due to Windows not supporting signals properly
 	rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false, "Used by partner teams to send in `cancel` through stdin to stop a job.")
 
+	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitContinue, "await-continue", false, "Used when debugging, to tell AzCopy to await `continue` on stdin before starting any work. Assists with debugging AzCopy via attach-to-process")
+
 	// reserved for partner teams
 	rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
+
+	// debug-only
+	rootCmd.PersistentFlags().MarkHidden("await-continue")
 }
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where

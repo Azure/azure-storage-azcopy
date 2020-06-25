@@ -129,6 +129,10 @@ func (*mockedLifecycleManager) AddUserAgentPrefix(userAgent string) string {
 	return userAgent
 }
 
+func (*mockedLifecycleManager) AwaitContinue() {
+	// not implemented in mocked version
+}
+
 type dummyProcessor struct {
 	record []storedObject
 }
