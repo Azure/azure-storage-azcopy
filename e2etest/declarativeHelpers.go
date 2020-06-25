@@ -133,12 +133,15 @@ func (a *testingAsserter) Assert(obtained interface{}, comp comparison, expected
 	a.t.Fail()
 }
 
+// AssertNoErr asserts that err is nil, and calls FailNow for immediate termination of the test if err is not nil.
+// This does immediate termination, rather than letting the test continue running like Assert() does, because
+// with immediate termination it can be used as a guard clause, before things which might otherwise panic due to invalid inputs.
 func (a *testingAsserter) AssertNoErr(err error, comment ...string) {
 	if err != nil {
 		a.t.Helper() // exclude this method from the logged callstack
 		redactedErr := sanitizer.SanitizeLogMessage(err.Error())
 		a.t.Logf("Error %s%s", redactedErr, a.formatComments(comment))
-		a.t.Fail()
+		a.t.FailNow()
 	}
 }
 
