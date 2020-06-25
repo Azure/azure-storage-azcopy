@@ -394,6 +394,8 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 
 			// replace File -> Blob with File -> File if configured to do so.
 			// So that we can use Blob as a generic "remote" to, but still do File->File in those case where that makes more sense
+			// (Specifically, if testing just one of FileFile and FileBlob, it makes much more sense to do FileFile because its the
+			// more common case in real usage.)
 			if !tft.suppressAutoFileToFile {
 				if from == common.ELocation.File() && to == common.ELocation.Blob() {
 					to = common.ELocation.File()
@@ -413,9 +415,7 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 				case common.EFromTo.BlobBlob(),
 					common.EFromTo.FileFile(),
 					common.EFromTo.LocalBlob(),
-					common.EFromTo.BlobLocal(),
-					common.EFromTo.LocalFile(),
-					common.EFromTo.FileLocal():
+					common.EFromTo.BlobLocal():
 					// do nothing, these are fine
 				default:
 					continue // not supported for sync
@@ -468,6 +468,8 @@ func (v Validate) String() string {
 type hookHelper interface {
 	// FromTo returns the fromTo for the scenario
 	FromTo() common.FromTo
+
+	Operation() Operation
 
 	// GetModifiableParameters returns a pointer to the AzCopy parameters that will be used in the scenario
 	GetModifiableParameters() *params

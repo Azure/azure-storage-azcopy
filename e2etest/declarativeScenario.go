@@ -180,7 +180,8 @@ func (s *scenario) validateTransfers() {
 
 	// compute dest, taking into account our stripToDir rules
 	areBothContainerLike := s.state.source.isContainerLike() && s.state.dest.isContainerLike()
-	if s.stripTopDir || areBothContainerLike {
+	if s.stripTopDir || s.operation == eOperation.Sync() || areBothContainerLike {
+		// Sync always acts like stripTopDir is true.
 		// For copies between two container-like locations, we don't expect the root directory to be transferred, regardless of stripTopDir.
 		// Yes, this is arguably inconsistent. But its the way its always been, and it does seem to match user expectations for copies
 		// of that kind.
@@ -227,6 +228,10 @@ func (s *scenario) cleanup() {
 
 func (s *scenario) FromTo() common.FromTo {
 	return s.fromTo
+}
+
+func (s *scenario) Operation() Operation {
+	return s.operation
 }
 
 func (s *scenario) GetModifiableParameters() *params {

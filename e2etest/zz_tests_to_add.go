@@ -7,6 +7,13 @@ import (
 )
 
 // TODO soon:
+//
+//   Suggest some basic cases for team to implement.
+//   	More filter tests
+//      The resource manager support for S3 and BlobFS and (who will do this one) GCP?
+//
+//   Why did TestFilter-IncludePath not show all three children???
+//
 //    stripTopDir
 //    think about "decode unsafe dst characters no Windows" comment in validator.go
 //    Add a timeout to all exections fo AzCopy
@@ -20,6 +27,8 @@ import (
 //     account-to-account (e.g. multiple containers, copying whole account)
 //     specifying "strip top dir"
 //     copying to/from things that are not the share root/container root
+//     should we be using AzCopy (prehaps a known good version) to do our setup uploads and verification downlaods? (would be quicker
+//     than what we have right now)
 
 // Think about suites.  Don't want to use testify, because it doesn't support parallization within a suite (and doesn't support subtests)
 // But we want something that the IDE will recognise, and allow us to run individual tests or the suite. I think this will work

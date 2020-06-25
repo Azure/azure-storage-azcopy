@@ -44,8 +44,10 @@ func TestDetectFileChangedDuringTransfer(t *testing.T) {
 		&hooks{
 			beforeRunJob: func(h hookHelper) {
 				ft := h.FromTo()
-				if ft.IsS2S() {
-					h.GetModifiableParameters().s2sSourceChangeValidation = true // s2s change detection is not enabled by default
+				if ft.IsS2S() && h.Operation() == eOperation.Copy() {
+					// in Copy, s2s change detection is not enabled by default.
+					// (Whereas in Sync, it is is, so we don't need to, and cannot, set it.)
+					h.GetModifiableParameters().s2sSourceChangeValidation = true
 				}
 			},
 			beforeOpenFirstFile: func(h hookHelper) {
@@ -54,8 +56,6 @@ func TestDetectFileChangedDuringTransfer(t *testing.T) {
 				time.Sleep(2 * time.Second) // make sure the new LMTs really will be different
 				h.CreateFiles(h.GetTestFiles(), true)
 			},
-			// We don't use the beforeRunJob hook here, because that doesn't allow us to time the change exactly after scanning starts,
-			// but before the file gets read.
 		},
 		testFiles{
 			size:           "1k",
