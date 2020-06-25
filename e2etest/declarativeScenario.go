@@ -216,6 +216,11 @@ func (s *scenario) validateContent() {
 }
 
 func (s *scenario) cleanup() {
+
+	if s.a.Failed() && (GlobalInputManager{}.KeepFailedData()) {
+		return // don't clean up. Leave the failed data so the dev can investigate the failure
+	}
+
 	if s.state.source != nil {
 		s.state.source.cleanup(s.a)
 	}
