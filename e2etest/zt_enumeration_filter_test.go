@@ -98,12 +98,17 @@ func TestFilter_IncludeAfter(t *testing.T) {
 		},
 		&hooks{
 			beforeRunJob: func(h hookHelper) {
-				// let LMTs of existing file age a little
-				time.Sleep(5 * time.Second)
+				// let LMTs of existing file age a little (so they are definitely older than our include-after)
+				time.Sleep(4 * time.Second)
 
 				// set includeAfter to "now"
 				scenarioParams := h.GetModifiableParameters()
 				scenarioParams.includeAfter = time.Now().Format(time.RFC3339)
+
+				// wait a moment, so that LMTs of the files we are about to create will be definitely >= our include-after
+				// (without this, we had a bug, presumably due to a small clock skew error between client machine and blob storage,
+				// in which the LMTs of the re-created files ended up before the include-after time).
+				time.Sleep(4 * time.Second)
 
 				// re-create the "shouldTransfer" files, after our includeAfter time.
 				fs := h.GetTestFiles().clone(true)
