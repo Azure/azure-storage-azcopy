@@ -151,6 +151,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 	}
 
 	// step 4: Open the local Source File (if any)
+	common.GetLifecycleMgr().E2EAwaitAllowOpenFiles()
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.OpenLocalSource())
 	var sourceFileFactory func() (common.CloseableReaderAt, error)
 	srcFile := (common.CloseableReaderAt)(nil)
