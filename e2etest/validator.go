@@ -21,6 +21,7 @@
 package e2etest
 
 import (
+	"fmt"
 	"net/url"
 	"runtime"
 	"strings"
@@ -31,7 +32,7 @@ import (
 type Validator struct{}
 
 func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool, isDstEncoded bool,
-	sourcePrefix string, destinationPrefix string, expectedTransfers []string, actualTransfers []common.TransferDetail) {
+	sourcePrefix string, destinationPrefix string, expectedTransfers []string, actualTransfers []common.TransferDetail, statusToTest common.TransferStatus) {
 
 	normalizeSlashes := func(s string) string {
 		return strings.Replace(s, "\\", "/", -1)
@@ -47,7 +48,8 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 	destinationPrefix = normalizeSlashes(destinationPrefix)
 
 	// validate that the right number of transfers were scheduled
-	c.Assert(len(actualTransfers), equals(), len(expectedTransfers))
+	c.Assert(len(actualTransfers), equals(), len(expectedTransfers),
+		fmt.Sprintf("Number of actual and expected transfers should match, for status %s", statusToTest.String()))
 
 	// validate that the right transfers were sent
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
@@ -86,6 +88,9 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 			lookupKey = folder(lookupKey)
 		}
 		_, transferExist := lookupMap[lookupKey]
-		c.Assert(transferExist, equals(), true, "Looking for file '"+lookupKey+"'")
+		c.Assert(transferExist, equals(), true,
+			fmt.Sprintf("File '%s' ended with status '%s' but was not expected to end in that status", lookupKey, statusToTest.String()))
+
+		// TODO: do we also want to output specific filenames for ones that were expected to have that status, but did not get it?
 	}
 }

@@ -10,11 +10,10 @@ import (
 //    ** why is sub/subsub getting created locally? (in the e2e folder)
 //    stripTopDir
 //    think about "decode unsafe dst characters no Windows" comment in validator.go
-//    With asserter, we get the call stack from the point of the asserter method, not the caller...
-//    .... so we get the equivalent of true != false (again!)
+//    Add a timeout to all exections fo AzCopy
 
 // TODO: given this is a new suite for an existing app, how do we make sure each test really is testing what we think its testing
-
+//
 // TODO:
 //     account types (std, prem etc)
 //     account-to-account (e.g. multiple containers, copying whole account)

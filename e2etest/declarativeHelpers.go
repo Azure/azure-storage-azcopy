@@ -249,6 +249,7 @@ type params struct {
 	excludePattern    string
 	excludeAttributes string
 	capMbps           float32
+	blockSizeMB       float32
 	deleteDestination common.DeleteDestination
 }
 

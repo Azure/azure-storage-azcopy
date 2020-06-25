@@ -39,15 +39,16 @@ func TestDetectFileChangedDuringTransfer(t *testing.T) {
 		nil,
 		nil,
 		params{
-			recursive: true,
-			capMbps:   10, // go really slow, so that the transfer will last long enough for our other thread to change the file while its running
+			recursive:   true,
+			capMbps:     1,    // go really slow, so that the transfer will last long enough for our other thread to change the file while its running
+			blockSizeMB: 0.25, // small block size, so that the cap works better (since capMbps is coarse-grained when running S2S)
 		},
 		&hooks{
 			beforeRunJob: func(h hookHelper) {
 				// use separate Goroutine, so that job will start while our goroutine is still running
 				go func() {
 					// wait a moment, then re-create the source files (over top of what AzCopy will be  already trying to transfer)
-					time.Sleep(7 * time.Second)           // given the cap, and the file size, this should be mid-way through the job
+					time.Sleep(5 * time.Second)
 					h.CreateFiles(h.GetTestFiles(), true) // force the files to change
 				}()
 			},

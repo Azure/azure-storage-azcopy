@@ -70,6 +70,7 @@ func (t *TestRunner) SetAllFlags(p params) {
 	set("include-path", p.includePath, "")
 	set("include-after", p.includeAfter, "")
 	set("cap-mbps", p.capMbps, float32(0))
+	set("block-size-mb", p.blockSizeMB, float32(0))
 }
 
 func (t *TestRunner) computeArgs() []string {
@@ -144,7 +145,7 @@ func (t *TestRunner) ExecuteCopyOrSyncCommand(operation Operation, src, dst stri
 	stdErr := make([]byte, 0)
 	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
-			stdErr = ee.Stderr
+			stdErr = capLen(ee.Stderr) // cap length of this, because it can be a panic. But don't cap stdout, because we need its last line in newCopyOrSyncCommandResult
 			if len(stdErr) > 0 {
 				wasClean = false // something was written to stderr, probably a panic
 			}
@@ -155,12 +156,17 @@ func (t *TestRunner) ExecuteCopyOrSyncCommand(operation Operation, src, dst stri
 		// either it succeeded, for it returned a failure code in a clean (non-panic) way.
 		// In both cases, we want out to be parsed, to get us the job ID.  E.g. maybe 1 transfer out of several failed,
 		// and that's what we'er actually testing for (so can't treat this as a fatal error).
-		return newCopyOrSyncCommandResult(string(out)), true, err
-	} else {
-		return CopyOrSyncCommandResult{},
-			false,
-			fmt.Errorf("azcopy run error: %w\n  with stderr: %s\n  and stdout: %s\n  from args %v", err, capLen(stdErr), capLen(out), args)
+		r, ok := newCopyOrSyncCommandResult(string(out))
+		if ok {
+			return r, true, err
+		} else {
+			err = fmt.Errorf("could not parse AzCopy output. Run error, if any, was '%w'", err)
+		}
 	}
+
+	return CopyOrSyncCommandResult{},
+		false,
+		fmt.Errorf("azcopy run error: %w\n  with stderr: %s\n  and stdout: %s\n  from args %v", err, stdErr, out, args)
 }
 
 func (t *TestRunner) SetTransferStatusFlag(value string) {
@@ -182,25 +188,28 @@ type CopyOrSyncCommandResult struct {
 	finalStatus common.ListSyncJobSummaryResponse
 }
 
-func newCopyOrSyncCommandResult(rawOutput string) CopyOrSyncCommandResult {
+func newCopyOrSyncCommandResult(rawOutput string) (CopyOrSyncCommandResult, bool) {
 	lines := strings.Split(rawOutput, "\n")
 
 	// parse out the final status
 	// -2 because the last line is empty
+	if len(lines) < 2 {
+		return CopyOrSyncCommandResult{}, false
+	}
 	finalLine := lines[len(lines)-2]
 	finalMsg := common.JsonOutputTemplate{}
 	err := json.Unmarshal([]byte(finalLine), &finalMsg)
 	if err != nil {
-		panic(err)
+		return CopyOrSyncCommandResult{}, false
 	}
 
 	jobSummary := common.ListSyncJobSummaryResponse{} // this is a superset of ListJobSummaryResponse, so works for both copy and sync
 	err = json.Unmarshal([]byte(finalMsg.MessageContent), &jobSummary)
 	if err != nil {
-		panic(err)
+		return CopyOrSyncCommandResult{}, false
 	}
 
-	return CopyOrSyncCommandResult{jobID: jobSummary.JobID, finalStatus: jobSummary}
+	return CopyOrSyncCommandResult{jobID: jobSummary.JobID, finalStatus: jobSummary}, true
 }
 
 func (c *CopyOrSyncCommandResult) GetTransferList(status common.TransferStatus) ([]common.TransferDetail, error) {
