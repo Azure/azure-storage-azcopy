@@ -59,7 +59,7 @@ type scenarioState struct {
 
 // Run runs one test scenario
 func (s *scenario) Run() {
-	//defer s.cleanup()
+	defer s.cleanup()
 
 	// setup
 	s.assignSourceAndDest() // what/where are they
