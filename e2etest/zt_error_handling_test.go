@@ -20,6 +20,6 @@
 
 package e2etest
 
-// Purpose: Tests for how we respond to errors.
+// Purpose: Tests for how we respond to errors. Maybe also resume?
 
 // TODO: include how we clean up destination files/blobs after errors

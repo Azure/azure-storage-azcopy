@@ -7,29 +7,43 @@ package e2etest
 //      The resource manager support for S3 and BlobFS and (who will do this one) GCP?
 //
 //   Next framework _development_ tasks
+//      Change expectation lists from string to interface{}
 //  	Content preservation tests
 //		Properties preservation tests
 //
-//   Why did TestFilter-IncludePath not show all three children???
+//   Suggested near-term goal:
+//		Complete the following suites:
+//			Change detection (done)
+//			Filters
+//			preserve content
+//			preserve properties
 //
-//    A change detection test that asserts that s2s changes are not detected by default
+//  Leave for later:
+//		Capabilities:
+//			Page and Append Blobs
+//          Different account types (should be easy to add tho)
+//          Whole-account-to-whole account (e.g. copy all containers, or all S3 buckets)
+//			Different auth types
+//		These suites:
+//  	  Overwrite  (how will we process the prompts? Just through t.execDebuggableWithOutput's afterstart parameter? Requires us to assume what the prompt will be, and that there will be only 1 prompt - so can only test teh "all" answers with this mechansim. But may be able to extend it.
+//        Sync (special stuff that's unique to sync)
+//        Preserve names (special chars, escaping etc)
+//        Managed disks (our special case logic or uploading managed disks)
+//        Logging
+//		  Error handing (e.g. deleting files that fail part way through) and Resume
 //
+//   To think about:
 //    stripTopDir
+//    copying to/from things that are not the share root/container root
 //    think about "decode unsafe dst characters no Windows" comment in validator.go
-//    Add a timeout to all exections fo AzCopy
-//    Remaining resource providers
-//    Is our cleanup reliable enough, eg. after stopping the test harness during debugging?
+//    Add a timeout to all executions of AzCopy
+//    Is our cleanup reliable enough, eg. after stopping the test harness during debugging? No, it doesn't always seem to cleanup in those cases. Can we fix that?
+//    Given this is a new suite for an existing app, how do we make sure each test really is testing what we think its testing
+//    See other notes below, in this file
 
-// TODO: given this is a new suite for an existing app, how do we make sure each test really is testing what we think its testing
+// ----------------- additional unstructured notes below this point -----
+
 //
-// TODO:
-//     account types (std, prem etc)
-//     account-to-account (e.g. multiple containers, copying whole account)
-//     specifying "strip top dir"
-//     copying to/from things that are not the share root/container root
-//     should we be using AzCopy (prehaps a known good version) to do our setup uploads and verification downlaods? (would be quicker
-//     than what we have right now)
-
 // TODO: document the following re test frameworks, and support for suites specifically:
 //// A note on test frameworks.
 //// We are just using GoLang's own Testing package.
