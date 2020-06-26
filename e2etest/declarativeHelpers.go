@@ -468,13 +468,22 @@ type Validate uint8
 // TODO: review this enum
 
 // TransferStates validates "which transfers did we attempt, and what was their outcome?"
-func (Validate) TransferStates() Validate { return Validate(1) }
+func (Validate) TransferStates() Validate { return Validate(0) } // has value 0 because we ALWAYS validate this
 
 // Content validates "was file content preserved"?  TODO: do we really want to compare bytes, or use the MD5 hash mechanism?
-func (Validate) Content() Validate { return Validate(2) }
+func (Validate) Content() Validate { return Validate(1) }
 
-// TODO: if add more, ensure All() still means all
-func (Validate) All() Validate { return Validate(3) }
+// Header properties validates things like Content-Type, Content-Encoding etc
+func (Validate) HeaderProperties() Validate { return Validate(2) }
+
+// Metadata validates the name value pairs of Azure metadata
+func (Validate) NameValueMetadata() Validate { return Validate(4) }
+
+// SMBInfo validates preservation of SMB info
+func (Validate) SMBInfo() Validate { return Validate(8) }
+
+// SMBPermissions validates preservation SMB permissions
+func (Validate) SMBPermissions() Validate { return Validate(16) }
 
 func (v Validate) String() string {
 	return enum.StringInt(v, reflect.TypeOf(v))

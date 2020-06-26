@@ -85,9 +85,15 @@ func (s *scenario) Run() {
 
 	// check
 	// TODO: which options to we want to expose here, and is eValidate the right way to do so? Or do we just need a boolean, validateContent?
-	s.validateTransfers()
+	s.validateTransfers() // we always do this, regardless of s.validate
 	if s.validate&eValidate.Content() == eValidate.Content() {
 		s.validateContent()
+	}
+	if s.validate&eValidate.HeaderProperties() == eValidate.HeaderProperties() ||
+		s.validate&eValidate.NameValueMetadata() == eValidate.NameValueMetadata() ||
+		s.validate&eValidate.SMBInfo() == eValidate.SMBInfo() ||
+		s.validate&eValidate.SMBPermissions() == eValidate.SMBPermissions() {
+		panic("not implemented yet")
 	}
 }
 
