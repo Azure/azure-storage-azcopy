@@ -180,17 +180,16 @@ type testFiles struct {
 	shouldSkip []string
 }
 
-func (tf testFiles) clone(onlyCloneShouldTransfer bool) testFiles {
-	if onlyCloneShouldTransfer {
-		// just do the "should transfer" ones
-		return testFiles{
-			size:           tf.size,
-			shouldTransfer: tf.shouldTransfer,
-		}
-	} else {
-		clone := tf
-		return clone
+func (tf testFiles) cloneShouldTransfers() testFiles {
+	return testFiles{
+		size:           tf.size,
+		shouldTransfer: tf.shouldTransfer,
 	}
+}
+
+func (tf testFiles) cloneAll() testFiles {
+	clone := tf
+	return clone
 }
 
 type failure struct {

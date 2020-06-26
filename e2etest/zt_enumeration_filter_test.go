@@ -111,7 +111,7 @@ func TestFilter_IncludeAfter(t *testing.T) {
 				time.Sleep(4 * time.Second)
 
 				// re-create the "shouldTransfer" files, after our includeAfter time.
-				fs := h.GetTestFiles().clone(true)
+				fs := h.GetTestFiles().cloneShouldTransfers()
 				h.CreateFiles(fs, true)
 			},
 		},
