@@ -319,6 +319,7 @@ type TestFromTo struct {
 	suppressAutoFileToFile bool // TODO: invert this // if true, we won't automatically replace File -> Blob with File -> File. We do that replacement by default because File -> File is the more common scenario (and, for sync, File -> Blob is not even supported currently).
 	froms                  []common.Location
 	tos                    []common.Location
+	filter                 func(to common.FromTo) bool
 }
 
 // AllSourcesToOneDest means use all possible sources, and test each source to one destination (generally Blob is the destination,
@@ -362,6 +363,15 @@ func (TestFromTo) AllPairs() TestFromTo {
 		froms:                  common.ELocation.AllStandardLocations(),
 		tos:                    common.ELocation.AllStandardLocations(),
 	}
+}
+
+// AllS2S represents the subset of AllPairs that are S2S transfers
+func (TestFromTo) AllS2S() TestFromTo {
+	result := TestFromTo{}.AllPairs()
+	result.filter = func(ft common.FromTo) bool {
+		return ft.IsS2S()
+	}
+	return result
 }
 
 // New makes a custom TestFromTo, that is not defined by one of our standard functions such as AllSourcesToOneDest
@@ -430,6 +440,13 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 			if fromTo.From() == common.ELocation.S3() ||
 				fromTo.From() == common.ELocation.BlobFS() || fromTo.To() == common.ELocation.BlobFS() {
 				continue // until we impelment the declarativeResoucreManagers
+			}
+
+			// check filter
+			if tft.filter != nil {
+				if !tft.filter(fromTo) {
+					continue
+				}
 			}
 
 			// this one is valid
