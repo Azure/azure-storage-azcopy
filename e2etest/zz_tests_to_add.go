@@ -2,9 +2,13 @@ package e2etest
 
 // TODO soon:
 //
-//   Suggest some basic cases for team to implement.
+//   Next framework _use_ tasks
 //   	More filter tests
 //      The resource manager support for S3 and BlobFS and (who will do this one) GCP?
+//
+//   Next framework _development_ tasks
+//  	Content preservation tests
+//		Properties preservation tests
 //
 //   Why did TestFilter-IncludePath not show all three children???
 //
