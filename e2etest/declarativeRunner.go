@@ -44,6 +44,8 @@ func RunScenarios(
 	fs testFiles,
 	// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
 ) {
+	// enable this if we want parents in parallel: t.Parallel()
+
 	suiteName, testName := getTestName(t)
 	if suiteName == "" {
 		t.Errorf("To group our tests cleanly, our test names should be of the form: TestXxx_Yyy..., where Xxx matches one of the words in the (underscore-separated) name of the containing file. '%s' does not follow that rule",
