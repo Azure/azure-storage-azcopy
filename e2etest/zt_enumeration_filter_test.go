@@ -48,8 +48,6 @@ func TestFilter_IncludePath(t *testing.T) {
 		eOperation.Copy(),                 // Should the test be run for copy only, sync only, or both?
 		eTestFromTo.AllSourcesToOneDest(), // What range of source/dest pairs should this test be run on
 		eValidate.TransferStates(),        // What to validate (in this case, we don't validate content. We just validate that the desired transfers were scheduled
-		nil,                               // Here nil == block blobs only; or eBlobTypes.All() == test on all blob types
-		nil,                               // Here nil == use one (default) auth type only. To repeat the test with different auth types, use eAuthTypes.<something>.
 		params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
 			recursive:   true,
 			includePath: "sub/subsub;wantedfile",
@@ -91,8 +89,6 @@ func TestFilter_IncludeAfter(t *testing.T) {
 		eOperation.Copy(), // IncludeAfter is not applicable for sync
 		eTestFromTo.AllSourcesToOneDest(),
 		eValidate.TransferStates(),
-		nil,
-		nil,
 		params{
 			recursive: true,
 		},

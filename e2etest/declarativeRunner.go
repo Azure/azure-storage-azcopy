@@ -37,8 +37,8 @@ func RunScenarios(
 	operations Operation,
 	testFromTo TestFromTo,
 	validate Validate, // TODO: do we really want the test author to have to nominate which validation should happen?  Pros: better perf of tests. Cons: they have to tell us, and if they tell us wrong test may not test what they think it tests
-	_ interface{}, // TODO, blockBLobsOnly or specifc/all blob types
-	_ interface{}, // TODO, default auth type only, or specific/all auth types
+	/*_ interface{}, // TODO if we want it??, blockBLobsOnly or specifc/all blob types
+	_ interface{}, // TODO if we want it??, default auth type only, or specific/all auth types*/
 	p params,
 	hs *hooks,
 	fs testFiles,
