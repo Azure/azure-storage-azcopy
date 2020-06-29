@@ -54,8 +54,8 @@ func TestFilter_IncludePath(t *testing.T) {
 		},
 		nil, // For advanced usage, can pass a hooks struct here, to hook funcs into different stage of the testing process to customize it
 		testFiles{ // Source files specifies details of the files to test on
-			size: "1K", // An indication of what size of files should be created
-			shouldIgnore: []string{ // A list of files which should be created, but which are expected to be ignored by the job
+			defaultSize: "1K", // An indication of what size of files should be created
+			shouldIgnore: []interface{}{ // A list of files which should be created, but which are expected to be ignored by the job
 				folder(""), // root folder (i.e. the folder that normally gets copied when source doesn't end in /*.  But it doesn't get copied in this case, because it doesn't match the include-path)
 				"filea",
 				"fileb",
@@ -69,7 +69,7 @@ func TestFilter_IncludePath(t *testing.T) {
 				"othersub/sub/subsub/filey",      // should not be included because sub/subsub is not at root here
 				"othersub/wantedfile",            // should not be included because, although wantedfile is in the includepath, include path always starts from the root
 			},
-			shouldTransfer: []string{ // A list of files which should be created an which should indeed be transferred
+			shouldTransfer: []interface{}{ // A list of files which should be created an which should indeed be transferred
 				// Include folders as a line that ends in /. Test framework will automatically ignore them when
 				// not transferring between folder-aware locations
 				"wantedfile",
@@ -112,11 +112,11 @@ func TestFilter_IncludeAfter(t *testing.T) {
 			},
 		},
 		testFiles{
-			size: "1K",
-			shouldIgnore: []string{
+			defaultSize: "1K",
+			shouldIgnore: []interface{}{
 				"filea",
 			},
-			shouldTransfer: []string{
+			shouldTransfer: []interface{}{
 				"fileb",
 			},
 		})

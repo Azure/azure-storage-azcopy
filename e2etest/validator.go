@@ -32,7 +32,7 @@ import (
 type Validator struct{}
 
 func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool, isDstEncoded bool,
-	sourcePrefix string, destinationPrefix string, expectedTransfers []string, actualTransfers []common.TransferDetail, statusToTest common.TransferStatus) {
+	sourcePrefix string, destinationPrefix string, expectedTransfers []*testObject, actualTransfers []common.TransferDetail, statusToTest common.TransferStatus) {
 
 	normalizeSlashes := func(s string) string {
 		return strings.Replace(s, "\\", "/", -1)
@@ -52,7 +52,19 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 		fmt.Sprintf("Number of actual and expected transfers should match, for status %s", statusToTest.String()))
 
 	// validate that the right transfers were sent
-	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
+	addFolderSuffix := func(s string) string {
+		if strings.HasSuffix(s, "/") {
+			panic("folder suffix already present")
+		}
+		return s + "/"
+	}
+	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers, func(to *testObject) string {
+		if to.isFolder {
+			return addFolderSuffix(to.name)
+		} else {
+			return to.name
+		}
+	})
 	for _, transfer := range actualTransfers {
 		srcRelativeFilePath := strings.Trim(strings.TrimPrefix(normalizeSlashes(transfer.Src), sourcePrefix), "/")
 		dstRelativeFilePath := strings.Trim(strings.TrimPrefix(normalizeSlashes(transfer.Dst), destinationPrefix), "/")
@@ -86,7 +98,7 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 		folderMessage := ""
 		lookupKey := srcRelativeFilePath
 		if transfer.IsFolderProperties {
-			lookupKey = folder(lookupKey)
+			lookupKey = addFolderSuffix(lookupKey)
 			folderMessage = ".\n    The transfer was for a folder. Have you forgotten to include folders in your testFiles? (Use the folder() function)"
 		}
 		_, transferExist := lookupMap[lookupKey]

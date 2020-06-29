@@ -22,3 +22,74 @@ package e2etest
 
 // Purpose: Tests for preserving transferred properties, info and ACLs.  Both those possessed by the original source file/folder,
 //   and those specified on the command line
+
+/* todo
+func TestProperties_SMBDates(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.CopyAndSync(),
+		eTestFromTo.AllSMBPairs(), // these are the only pairs where we preserve last write time AND creation time
+		eValidate.CreationTime() && eValidate.LastWriteTimeTime(),
+		params{
+			recursive:       true,
+			preserveSmbInfo: true,
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
+				// So that when validating, our validation can be sure that the right datetime has ended up in the right
+				// field
+				time.Sleep(5 * time.Second)
+				h.CreateFiles(h.GetTestFiles(), true)
+				// And pause again, so that that the write times at the destination wont' just _automatically_ match the source times
+				// (due to there being < 1 sec delay between creation and completion of copy). With this delay, we know they only match
+				// if AzCopy really did preserve them
+				time.Sleep(10 * time.Second) // we are assuming here, that the clock skew between source and dest is less than 10 secs
+			},
+		},
+		testFiles{
+			size: "1K",
+			// no need to set specific dates on these. Instead, we just mess with the write times in
+			// beforeRunJob
+			// TODO: is that what we really want, or do we want to set write times here?
+			shouldTransfer: []string{
+				"filea",
+				folder("fold1"),
+				"fold1/fileb",
+			},
+		})
+}
+
+func TestProperties_SMBDates(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.CopyAndSync(),
+		eTestFromTo.AllSMBPairs(), // these are the only pairs where we preserve last write time AND creation time
+		eValidate.SMBAttributes(),
+		params{
+			recursive:       true,
+			preserveSmbInfo: true,
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
+				// So that when validating, our validation can be sure that the right datetime has ended up in the right
+				// field
+				time.Sleep(5 * time.Second)
+				h.CreateFiles(h.GetTestFiles(), true)
+				// And pause again, so that that the write times at the destination wont' just _automatically_ match the source times
+				// (due to there being < 1 sec delay between creation and completion of copy). With this delay, we know they only match
+				// if AzCopy really did preserve them
+				time.Sleep(10 * time.Second) // we are assuming here, that the clock skew between source and dest is less than 10 secs
+			},
+		},
+		testFiles{
+			size: "1K",
+			shouldTransfer: []string{
+				f("filea", with{smbAttributes: ABTC}),
+				folder("fold1"),
+				"fold1/fileb",
+			},
+		})
+}
+*/

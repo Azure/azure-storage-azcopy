@@ -20,4 +20,32 @@
 
 package e2etest
 
+import (
+	"github.com/Azure/azure-storage-azcopy/common"
+	"testing"
+)
+
 // Purpose: Other tests for enumeration of sources, NOT including filtering
+
+func TestEnumeration_DirectoryStubsAreNotDownloaded(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.CopyAndSync(),
+		eTestFromTo.Specific(common.EFromTo.BlobLocal()), // TODO: does this apply to any other cases
+		eValidate.TransferStates(),
+		params{
+			recursive: true,
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldIgnore: []interface{}{
+				f("dir", withDirStubMetadata{}),
+			},
+			shouldTransfer: []interface{}{
+				"filea",
+				folder("dir"),
+				"dir/fileb",
+			},
+		})
+}

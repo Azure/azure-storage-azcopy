@@ -34,7 +34,7 @@ func assertNoStripTopDir(stripTopDir bool) {
 }
 
 // TODO: any better names for this?
-// a source or destination
+// a source or destination. We need one of these for each of Blob, Azure Files, BlobFS, S3, Local disk etc.
 type resourceManager interface {
 
 	// creates an empty container/share/directory etc
@@ -67,9 +67,7 @@ func (r *resourceLocal) createLocation(a asserter) {
 }
 
 func (r *resourceLocal) createFiles(a asserter, fs testFiles, isSource bool) {
-	size, err := fs.defaultSizeBytes()
-	a.AssertNoErr(err)
-	scenarioHelper{}.generateLocalFilesFromList(a, r.dirPath, fs.allNames(isSource), size)
+	scenarioHelper{}.generateLocalFilesFromList(a, r.dirPath, fs.allObjects(isSource), fs.defaultSize)
 }
 
 func (r *resourceLocal) cleanup(_ asserter) {
@@ -102,10 +100,7 @@ func (r *resourceBlobContainer) createLocation(a asserter) {
 }
 
 func (r *resourceBlobContainer) createFiles(a asserter, fs testFiles, isSource bool) {
-	size, err := fs.defaultSizeBytes()
-	a.AssertNoErr(err)
-
-	scenarioHelper{}.generateBlobsFromList(a, *r.containerURL, fs.allNames(isSource), size)
+	scenarioHelper{}.generateBlobsFromList(a, *r.containerURL, fs.allObjects(isSource), fs.defaultSize)
 }
 
 func (r *resourceBlobContainer) cleanup(a asserter) {
@@ -142,10 +137,7 @@ func (r *resourceAzureFileShare) createLocation(a asserter) {
 }
 
 func (r *resourceAzureFileShare) createFiles(a asserter, fs testFiles, isSource bool) {
-	size, err := fs.defaultSizeBytes()
-	a.AssertNoErr(err)
-
-	scenarioHelper{}.generateAzureFilesFromList(a, *r.shareURL, fs.allNames(isSource), size)
+	scenarioHelper{}.generateAzureFilesFromList(a, *r.shareURL, fs.allObjects(isSource), fs.defaultSize)
 }
 
 func (r *resourceAzureFileShare) cleanup(a asserter) {

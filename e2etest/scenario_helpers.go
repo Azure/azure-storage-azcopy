@@ -28,6 +28,7 @@ import (
 	"io/ioutil"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -41,6 +42,7 @@ import (
 )
 
 const defaultFileSize = 1024
+const defaultStringFileSize = "1k"
 
 type scenarioHelper struct{}
 
@@ -97,15 +99,19 @@ func (scenarioHelper) generateLocalFile(filePath string, fileSize int) ([]byte, 
 	return bigBuff, err
 }
 
-func (s scenarioHelper) generateLocalFilesFromList(c asserter, dirPath string, fileList []string, sizeBytes int) {
-	for _, fileName := range fileList {
+func (s scenarioHelper) generateLocalFilesFromList(c asserter, dirPath string, fileList []*testObject, defaultSize string) {
+	for _, file := range fileList {
 		var err error
-		if isFolder(fileName) {
-			err = os.MkdirAll(filepath.Join(dirPath, asFolderName(fileName)), os.ModePerm)
+		if file.isFolder {
+			err = os.MkdirAll(filepath.Join(dirPath, file.name), os.ModePerm)
+			c.AssertNoErr(err)
 		} else {
-			_, err = s.generateLocalFile(filepath.Join(dirPath, fileName), sizeBytes)
+			_, err = s.generateLocalFile(
+				filepath.Join(dirPath, file.name),
+				file.creationProperties.sizeBytes(c, defaultSize))
+			c.AssertNoErr(err)
+			// todo: set up the files dates, acl and other properties, based on file.creationProperties
 		}
-		c.AssertNoErr(err)
 	}
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
@@ -207,23 +213,23 @@ func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c asserter, share
 	return
 }
 
-func (s scenarioHelper) generateBlobContainersAndBlobsFromLists(c asserter, serviceURL azblob.ServiceURL, containerList []string, blobList []string) {
+func (s scenarioHelper) generateBlobContainersAndBlobsFromLists(c asserter, serviceURL azblob.ServiceURL, containerList []string, blobList []*testObject) {
 	for _, containerName := range containerList {
 		curl := serviceURL.NewContainerURL(containerName)
 		_, err := curl.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
 		c.AssertNoErr(err)
 
-		s.generateBlobsFromList(c, curl, blobList, defaultFileSize)
+		s.generateBlobsFromList(c, curl, blobList, defaultStringFileSize)
 	}
 }
 
-func (s scenarioHelper) generateFileSharesAndFilesFromLists(c asserter, serviceURL azfile.ServiceURL, shareList []string, fileList []string) {
+func (s scenarioHelper) generateFileSharesAndFilesFromLists(c asserter, serviceURL azfile.ServiceURL, shareList []string, fileList []*testObject) {
 	for _, shareName := range shareList {
 		surl := serviceURL.NewShareURL(shareName)
 		_, err := surl.Create(ctx, azfile.Metadata{}, 0)
 		c.AssertNoErr(err)
 
-		s.generateAzureFilesFromList(c, surl, fileList, defaultFileSize)
+		s.generateAzureFilesFromList(c, surl, fileList, defaultStringFileSize)
 	}
 }
 
@@ -247,14 +253,18 @@ func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c asserter, s3Clien
 }
 
 // create the demanded blobs
-func (scenarioHelper) generateBlobsFromList(c asserter, containerURL azblob.ContainerURL, blobList []string, size int) {
-	for _, blobName := range blobList {
-		if isFolder(blobName) {
+func (scenarioHelper) generateBlobsFromList(c asserter, containerURL azblob.ContainerURL, blobList []*testObject, defaultSize string) {
+	for _, b := range blobList {
+		if b.isFolder {
 			continue // no real folders in blob
 		}
-		blob := containerURL.NewBlockBlobURL(blobName)
-		cResp, err := blob.Upload(ctx, common.NewRandomDataGenerator(int64(size)), azblob.BlobHTTPHeaders{},
-			nil, azblob.BlobAccessConditions{})
+		ad := blobResourceAdapter{b}
+		blob := containerURL.NewBlockBlobURL(b.name)
+		cResp, err := blob.Upload(ctx,
+			common.NewRandomDataGenerator(int64(b.creationProperties.sizeBytes(c, defaultSize))),
+			ad.toHeaders(),
+			ad.toMetadata(),
+			azblob.BlobAccessConditions{})
 		c.AssertNoErr(err)
 		c.Assert(cResp.StatusCode(), equals(), 201)
 	}
@@ -393,19 +403,20 @@ func (scenarioHelper) generateCommonRemoteScenarioForS3(c asserter, client *mini
 }
 
 // create the demanded azure files
-func (scenarioHelper) generateAzureFilesFromList(c asserter, shareURL azfile.ShareURL, fileList []string, size int) {
-	for _, filePath := range fileList {
-		if isFolder(filePath) {
-			file := shareURL.NewRootDirectoryURL().NewFileURL(asFolderDummyContent(filePath))
+func (scenarioHelper) generateAzureFilesFromList(c asserter, shareURL azfile.ShareURL, fileList []*testObject, defaultSize string) {
+	for _, f := range fileList {
+		if f.isFolder {
+			file := shareURL.NewRootDirectoryURL().NewFileURL(path.Join(f.name, "dummyChild"))
 			generateParentsForAzureFile(c, file)
 		} else {
-			file := shareURL.NewRootDirectoryURL().NewFileURL(filePath)
+			file := shareURL.NewRootDirectoryURL().NewFileURL(f.name)
 
 			// create parents first
 			generateParentsForAzureFile(c, file)
 
 			// create the file itself
-			cResp, err := file.Create(ctx, int64(size), azfile.FileHTTPHeaders{}, azfile.Metadata{})
+			// TODO: set properties etc
+			cResp, err := file.Create(ctx, int64(f.creationProperties.sizeBytes(c, defaultSize)), azfile.FileHTTPHeaders{}, azfile.Metadata{})
 			c.AssertNoErr(err)
 			c.Assert(cResp.StatusCode(), equals(), 201)
 
@@ -437,9 +448,10 @@ func (scenarioHelper) generateBFSPathsFromList(c asserter, filesystemURL azbfs.F
 }
 
 // Golang does not have sets, so we have to use a map to fulfill the same functionality
-func (scenarioHelper) convertListToMap(list []string) map[string]int {
+func (scenarioHelper) convertListToMap(list []*testObject, converter func(*testObject) string) map[string]int {
 	lookupMap := make(map[string]int)
-	for _, entryName := range list {
+	for _, entry := range list {
+		entryName := converter(entry)
 		lookupMap[entryName] = 0
 	}
 

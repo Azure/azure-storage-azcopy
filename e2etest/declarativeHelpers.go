@@ -21,40 +21,13 @@
 package e2etest
 
 import (
-	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/cmd"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/JeffreyRichter/enum/enum"
-	"math"
-	"path"
 	"reflect"
 	"strings"
 	"testing"
 )
-
-///////////
-
-// folder is syntactic sugar to make folders stand out in our file lists
-func folder(s string) string {
-	return strings.TrimRight(s, "/") + "/" // ensure it ends in one slash
-}
-
-func isFolder(s string) bool {
-	return strings.HasSuffix(s, "/")
-}
-
-func isRootFolder(s string) bool {
-	return s == "/"
-}
-
-func asFolderName(s string) string {
-	return strings.TrimRight(s, "/") // strip the trialing /
-}
-
-func asFolderDummyContent(s string) string { // make a dummy filename in the folder
-	return path.Join(s, "dummy")
-}
 
 ///////////
 
@@ -159,103 +132,6 @@ func (a *testingAsserter) Failed() bool {
 
 func (a *testingAsserter) CompactScenarioName() string {
 	return a.compactScenarioName
-}
-
-///////////////
-
-// represents a set of source files, including what we expect should happen to them
-type testFiles struct {
-	size string // how big should the files be. Uses the same K, M, G suffixes as benchmark mode's size-per-file
-
-	// names of files that we expect to be transferred
-	shouldTransfer []string
-
-	// names of files that we expect NOT to be found by the enumeration
-	shouldIgnore []string
-
-	// names of files that we expect to  fail with error (unlike the other fields, this one is composite object instead of just a filename
-	shouldFail []failure
-
-	// names of files that we expect to be skipped due to an overwrite setting
-	shouldSkip []string
-}
-
-func (tf testFiles) cloneShouldTransfers() testFiles {
-	return testFiles{
-		size:           tf.size,
-		shouldTransfer: tf.shouldTransfer,
-	}
-}
-
-func (tf testFiles) cloneAll() testFiles {
-	clone := tf
-	return clone
-}
-
-type failure struct {
-	filename              string
-	partialFailureMessage string
-}
-
-func (tf *testFiles) allNames(isSource bool) []string {
-	if isSource {
-		result := make([]string, 0)
-		result = append(result, tf.shouldTransfer...)
-		result = append(result, tf.shouldIgnore...) // these must be present at the source. Enumeration filters are expected to skip them
-		result = append(result, tf.shouldSkip...)   // these must be present at the source. Overwrite processing is expected to skip them
-		for _, f := range tf.shouldFail {
-			// these must also be present at the source. Their transferring is expected to fail
-			result = append(result, f.filename)
-		}
-		return result
-	} else {
-		// destination only needs the things that overwrite will skip
-		return tf.shouldSkip
-	}
-}
-
-func (tf *testFiles) getForStatus(status common.TransferStatus, expectFolders bool, expectRootFolder bool) []string {
-	shouldInclude := func(f string) bool {
-		if !isFolder(f) {
-			return true
-		}
-
-		if expectFolders {
-			if isRootFolder(f) {
-				return expectRootFolder
-			} else {
-				return true
-			}
-		}
-		return false
-	}
-
-	result := make([]string, 0)
-	switch status {
-	case common.ETransferStatus.Success():
-		for _, f := range tf.shouldTransfer {
-			if shouldInclude(f) {
-				result = append(result, f)
-			}
-		}
-	case common.ETransferStatus.Failed():
-		for _, f := range tf.shouldFail {
-			if shouldInclude(f.filename) {
-				result = append(result, f.filename)
-			}
-		}
-	default:
-		panic("unsupported status type")
-	}
-	return result
-}
-
-func (tf *testFiles) defaultSizeBytes() (int, error) {
-	longSize, err := cmd.ParseSizeString(tf.size, "testFiles.size")
-	if longSize < math.MaxInt32 {
-		return int(longSize), err
-	}
-	return 0, errors.New("unsupported size")
 }
 
 ////
@@ -373,8 +249,23 @@ func (TestFromTo) AllS2S() TestFromTo {
 	return result
 }
 
-// New makes a custom TestFromTo, that is not defined by one of our standard functions such as AllSourcesToOneDest
-func (TestFromTo) New(desc string, useAllTos bool, froms []common.Location, tos []common.Location) TestFromTo {
+// Specific is for when you want to list one or more specific from-tos that the test should cover.
+// Generally avoid this method, because it does not automatically pick up new pairs as we add new supported
+// resource types to AzCopy.
+func (TestFromTo) Specific(values ...common.FromTo) TestFromTo {
+	result := TestFromTo{}.AllPairs()
+	result.filter = func(ft common.FromTo) bool {
+		for _, v := range values {
+			if ft == v {
+				return true
+			}
+		}
+		return false
+	}
+	return result
+}
+
+func NewTestFromTo(desc string, useAllTos bool, froms []common.Location, tos []common.Location) TestFromTo {
 	return TestFromTo{
 		desc:                   desc,
 		useAllTos:              useAllTos,
@@ -473,17 +364,26 @@ func (Validate) TransferStates() Validate { return Validate(0) } // has value 0 
 // Content validates "was file content preserved"?  TODO: do we really want to compare bytes, or use the MD5 hash mechanism?
 func (Validate) Content() Validate { return Validate(1) }
 
-// Header properties validates things like Content-Type, Content-Encoding etc
-func (Validate) HeaderProperties() Validate { return Validate(2) }
+// ContentHeaders validates things like Content-Type, Content-Encoding etc
+func (Validate) ContentHeaders() Validate { return Validate(2) }
 
 // Metadata validates the name value pairs of Azure metadata
 func (Validate) NameValueMetadata() Validate { return Validate(4) }
 
-// SMBInfo validates preservation of SMB info
-func (Validate) SMBInfo() Validate { return Validate(8) }
+// LastWriteTime validates preservation of LastWriteTime (i.e. last time content of the file was written).
+// Often referred to as Last Modified Time (LMT) in our codebase, but LMT is somewhat ambiguous as a term because it's not
+// clear whether it means the time the content was last changed, or the metadata.
+// Last Write Time specifically relates to content, and that's the term we use here.
+func (Validate) LastWriteTimeTime() Validate { return Validate(8) }
+
+// CreationTime validates the creation time of the file/folder
+func (Validate) CreationTime() Validate { return Validate(16) }
+
+// SMBAttributes validates the attributes such as Archive, ReadOnly etc
+func (Validate) SMBAttributes() Validate { return Validate(32) }
 
 // SMBPermissions validates preservation SMB permissions
-func (Validate) SMBPermissions() Validate { return Validate(16) }
+func (Validate) SMBPermissions() Validate { return Validate(64) }
 
 func (v Validate) String() string {
 	return enum.StringInt(v, reflect.TypeOf(v))

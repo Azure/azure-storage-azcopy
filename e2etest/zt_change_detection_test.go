@@ -56,9 +56,13 @@ func TestChange_DetectFileChangedDuringTransfer(t *testing.T) {
 			},
 		},
 		testFiles{
-			size:           "1k",
-			shouldTransfer: []string{folder("")}, // the root folder should transfer between folder-aware locations
-			shouldFail:     []failure{{"filea", "File modified since transfer scheduled"}},
+			defaultSize: "1k",
+			shouldTransfer: []interface{}{
+				folder(""), // the root folder should transfer between folder-aware locations
+			},
+			shouldFail: []interface{}{
+				f("filea", withError{"File modified since transfer scheduled"}),
+			},
 		},
 	)
 }
@@ -85,8 +89,11 @@ func TestChange_DefaultToNoDetectionForCopyS2S(t *testing.T) {
 			},
 		},
 		testFiles{
-			size:           "1k",
-			shouldTransfer: []string{folder(""), "filea"}, // assert it succeeds, because the default S2S behaviour is to NOT check for changes
+			defaultSize: "1k",
+			shouldTransfer: []interface{}{
+				folder(""),
+				"filea", // assert it succeeds, because the default S2S behaviour is to NOT check for changes
+			},
 		},
 	)
 }
