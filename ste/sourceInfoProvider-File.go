@@ -56,12 +56,10 @@ type fileSourceInfoProvider struct {
 }
 
 func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
-	b, err := newDefaultRemoteSourceInfoProvider(jptm)
+	base, err := newDefaultRemoteSourceInfoProvider(jptm)
 	if err != nil {
 		return nil, err
 	}
-
-	base := b.(*defaultRemoteSourceInfoProvider)
 
 	// due to the REST parity feature added in 2019-02-02, the File APIs are no longer backward compatible
 	// so we must use the latest SDK version to stay safe

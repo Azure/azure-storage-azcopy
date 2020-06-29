@@ -100,12 +100,15 @@ type sourceInfoProviderFactory func(jptm IJobPartTransferMgr) (ISourceInfoProvid
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 // Default copy remote source info provider which provides info sourced from transferInfo.
+// It implements all methods of ISourceInfoProvider except for GetFreshLastModifiedTime.
+// It's never correct to implement that based on the transfer info, because the whole point is that it should
+// return FRESH (up to date) data.
 type defaultRemoteSourceInfoProvider struct {
 	jptm         IJobPartTransferMgr
 	transferInfo TransferInfo
 }
 
-func newDefaultRemoteSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
+func newDefaultRemoteSourceInfoProvider(jptm IJobPartTransferMgr) (*defaultRemoteSourceInfoProvider, error) {
 	return &defaultRemoteSourceInfoProvider{jptm: jptm, transferInfo: jptm.Info()}, nil
 }
 
@@ -135,10 +138,6 @@ func (p *defaultRemoteSourceInfoProvider) SourceSize() int64 {
 
 func (p *defaultRemoteSourceInfoProvider) RawSource() string {
 	return p.transferInfo.Source
-}
-
-func (p *defaultRemoteSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
-	return p.jptm.LastModifiedTime(), nil
 }
 
 func (p *defaultRemoteSourceInfoProvider) EntityType() common.EntityType {
