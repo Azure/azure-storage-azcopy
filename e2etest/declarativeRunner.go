@@ -22,6 +22,7 @@ package e2etest
 
 import (
 	"fmt"
+	"os"
 	"testing"
 )
 
@@ -84,6 +85,11 @@ func RunScenarios(
 		}
 	}
 
+	logErr := logTestSummary(suiteName, testName, operations.includes(eOperation.Copy()), operations.includes(eOperation.Sync()), testFromTo, len(scenarios))
+	if logErr != nil {
+		t.Errorf("Error logging to test summary file: %s", logErr)
+	}
+
 	// run them in parallel if not debugging, but sequentially (for easier debugging) if a debugger is attached
 	parallel := !isLaunchedByDebugger // this only works if gops.exe is on your path. See azcopyDebugHelper.go for instructions.
 	for _, s := range scenarios {
@@ -102,4 +108,44 @@ func RunScenarios(
 			sen.Run()
 		})
 	}
+}
+
+var testSummaryLogName string
+
+func init() {
+	path := GlobalInputManager{}.TestSummaryLogPath()
+	if path == "" {
+		return
+	}
+
+	fmt.Printf("Creating/replacing test summary log file at '%s'\n", path)
+	_ = os.Remove(path)
+	testSummaryLogName = path
+	_ = logTestHeaders()
+}
+
+func logTestHeaders() error {
+	return logToSummaryFile("PseudoSuite,Test,Copy,Sync,TestFromTo,ScenarioCount")
+}
+
+func logTestSummary(suite, test string, forCopy, forSync bool, testFromTo TestFromTo, scenarioCount int) error {
+	return logToSummaryFile(fmt.Sprintf("%s,%s,%t,%t,%s,%d", suite, test, forCopy, forSync, testFromTo.String(), scenarioCount))
+}
+
+// this might be useful for helping us to understand what our tests cover, and the differences in AzCopy functionality
+// in terms of which things are supported in both copy and sync and which in one only.
+// Is a csv file, for ease of importing into Excel
+func logToSummaryFile(s string) error {
+	if testSummaryLogName == "" {
+		return nil
+	}
+
+	f, err := os.OpenFile(testSummaryLogName, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = f.WriteString(s + "\n")
+	return err
 }

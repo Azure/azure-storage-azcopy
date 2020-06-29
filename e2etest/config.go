@@ -75,6 +75,10 @@ func (GlobalInputManager) KeepFailedData() bool {
 	return result
 }
 
+func (GlobalInputManager) TestSummaryLogPath() string {
+	return os.Getenv("AZCOPY_E2E_TEST_SUMMARY_LOG")
+}
+
 var EAccountType = AccountType(0)
 
 type AccountType uint8

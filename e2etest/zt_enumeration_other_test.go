@@ -31,7 +31,7 @@ func TestEnumeration_DirectoryStubsAreNotDownloaded(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.CopyAndSync(),
-		eTestFromTo.Specific(common.EFromTo.BlobLocal()), // TODO: does this apply to any other cases
+		eTestFromTo.Other(common.EFromTo.BlobLocal()), // TODO: does this apply to any additional cases?
 		eValidate.Auto(),
 		params{
 			recursive: true,

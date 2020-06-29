@@ -21,7 +21,6 @@
 package e2etest
 
 import (
-	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/JeffreyRichter/enum/enum"
 	"reflect"
@@ -185,6 +184,15 @@ func (o Operation) getValues() []Operation {
 	}
 }
 
+func (o Operation) includes(item Operation) bool {
+	for _, v := range o.getValues() {
+		if v == item {
+			return true
+		}
+	}
+	return false
+}
+
 /////////////
 
 var eTestFromTo = TestFromTo{}
@@ -245,6 +253,7 @@ func (TestFromTo) AllPairs() TestFromTo {
 // AllUploads represents the subset of AllPairs that are uploads
 func (TestFromTo) AllUploads() TestFromTo {
 	result := TestFromTo{}.AllPairs()
+	result.desc = "AllUploads"
 	result.filter = func(ft common.FromTo) bool {
 		return ft.IsUpload()
 	}
@@ -254,6 +263,7 @@ func (TestFromTo) AllUploads() TestFromTo {
 // AllDownloads represents the subset of AllPairs that are downloads
 func (TestFromTo) AllDownloads() TestFromTo {
 	result := TestFromTo{}.AllPairs()
+	result.desc = "AllDownloads"
 	result.filter = func(ft common.FromTo) bool {
 		return ft.IsDownload()
 	}
@@ -263,6 +273,7 @@ func (TestFromTo) AllDownloads() TestFromTo {
 // AllS2S represents the subset of AllPairs that are S2S transfers
 func (TestFromTo) AllS2S() TestFromTo {
 	result := TestFromTo{}.AllPairs()
+	result.desc = "AllS2S"
 	result.filter = func(ft common.FromTo) bool {
 		return ft.IsS2S()
 	}
@@ -272,6 +283,7 @@ func (TestFromTo) AllS2S() TestFromTo {
 // AllAzureS2S is like AllS2S, but it excludes non-Azure sources. (No need to exclude non-Azure destinations, since AzCopy doesn't have those)
 func (TestFromTo) AllAzureS2S() TestFromTo {
 	result := TestFromTo{}.AllPairs()
+	result.desc = "AllAzureS2S"
 	result.filter = func(ft common.FromTo) bool {
 		isFromAzure := ft.From() == common.ELocation.BlobFS() ||
 			ft.From() == common.ELocation.Blob() ||
@@ -281,11 +293,12 @@ func (TestFromTo) AllAzureS2S() TestFromTo {
 	return result
 }
 
-// Specific is for when you want to list one or more specific from-tos that the test should cover.
+// Other is for when you want to list one or more specific from-tos that the test should cover.
 // Generally avoid this method, because it does not automatically pick up new pairs as we add new supported
 // resource types to AzCopy.
-func (TestFromTo) Specific(values ...common.FromTo) TestFromTo {
+func (TestFromTo) Other(values ...common.FromTo) TestFromTo {
 	result := TestFromTo{}.AllPairs()
+	result.desc = "Other"
 	result.filter = func(ft common.FromTo) bool {
 		for _, v := range values {
 			if ft == v {
@@ -307,14 +320,8 @@ func NewTestFromTo(desc string, useAllTos bool, froms []common.Location, tos []c
 	}
 }
 
-// String gives a basic description. It does not rule out invalid/unsupported combinations.
-// That's done by the declarativeRunner later
 func (tft TestFromTo) String() string {
-	destDesc := "one of"
-	if tft.useAllTos {
-		destDesc = "all of"
-	}
-	return fmt.Sprintf("%s (%v -> (%s) %v)", tft.desc, tft.froms, destDesc, tft.tos)
+	return tft.desc
 }
 
 func (tft TestFromTo) getValues(op Operation) []common.FromTo {
