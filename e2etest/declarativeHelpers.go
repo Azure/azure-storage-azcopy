@@ -119,6 +119,7 @@ func (a *testingAsserter) AssertNoErr(err error, comment ...string) {
 }
 
 func (a *testingAsserter) Error(reason string) {
+	a.t.Helper()
 	a.t.Error(reason)
 }
 
@@ -149,6 +150,7 @@ type params struct {
 	blockSizeMB               float32
 	deleteDestination         common.DeleteDestination
 	s2sSourceChangeValidation bool
+	metadata                  string
 }
 
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level
@@ -240,11 +242,41 @@ func (TestFromTo) AllPairs() TestFromTo {
 	}
 }
 
+// AllUploads represents the subset of AllPairs that are uploads
+func (TestFromTo) AllUploads() TestFromTo {
+	result := TestFromTo{}.AllPairs()
+	result.filter = func(ft common.FromTo) bool {
+		return ft.IsUpload()
+	}
+	return result
+}
+
+// AllDownloads represents the subset of AllPairs that are downloads
+func (TestFromTo) AllDownloads() TestFromTo {
+	result := TestFromTo{}.AllPairs()
+	result.filter = func(ft common.FromTo) bool {
+		return ft.IsDownload()
+	}
+	return result
+}
+
 // AllS2S represents the subset of AllPairs that are S2S transfers
 func (TestFromTo) AllS2S() TestFromTo {
 	result := TestFromTo{}.AllPairs()
 	result.filter = func(ft common.FromTo) bool {
 		return ft.IsS2S()
+	}
+	return result
+}
+
+// AllAzureS2S is like AllS2S, but it excludes non-Azure sources. (No need to exclude non-Azure destinations, since AzCopy doesn't have those)
+func (TestFromTo) AllAzureS2S() TestFromTo {
+	result := TestFromTo{}.AllPairs()
+	result.filter = func(ft common.FromTo) bool {
+		isFromAzure := ft.From() == common.ELocation.BlobFS() ||
+			ft.From() == common.ELocation.Blob() ||
+			ft.From() == common.ELocation.File()
+		return ft.IsS2S() && isFromAzure
 	}
 	return result
 }
@@ -356,34 +388,13 @@ var eValidate = Validate(0)
 
 type Validate uint8
 
-// TODO: review this enum
+// Auto automatically validates everything except for the actual content of the transferred files.
+// It includes "which transfers did we attempt, and what was their outcome?" AND, if any of the shouldTransfer files specify
+// file properties that should be validated, it validates those too
+func (Validate) Auto() Validate { return Validate(0) }
 
-// TransferStates validates "which transfers did we attempt, and what was their outcome?"
-func (Validate) TransferStates() Validate { return Validate(0) } // has value 0 because we ALWAYS validate this
-
-// Content validates "was file content preserved"?  TODO: do we really want to compare bytes, or use the MD5 hash mechanism?
-func (Validate) Content() Validate { return Validate(1) }
-
-// ContentHeaders validates things like Content-Type, Content-Encoding etc
-func (Validate) ContentHeaders() Validate { return Validate(2) }
-
-// Metadata validates the name value pairs of Azure metadata
-func (Validate) NameValueMetadata() Validate { return Validate(4) }
-
-// LastWriteTime validates preservation of LastWriteTime (i.e. last time content of the file was written).
-// Often referred to as Last Modified Time (LMT) in our codebase, but LMT is somewhat ambiguous as a term because it's not
-// clear whether it means the time the content was last changed, or the metadata.
-// Last Write Time specifically relates to content, and that's the term we use here.
-func (Validate) LastWriteTimeTime() Validate { return Validate(8) }
-
-// CreationTime validates the creation time of the file/folder
-func (Validate) CreationTime() Validate { return Validate(16) }
-
-// SMBAttributes validates the attributes such as Archive, ReadOnly etc
-func (Validate) SMBAttributes() Validate { return Validate(32) }
-
-// SMBPermissions validates preservation SMB permissions
-func (Validate) SMBPermissions() Validate { return Validate(64) }
+// BasicPlusContent also validates the file content
+func (Validate) AutoPlusContent() Validate { return Validate(1) }
 
 func (v Validate) String() string {
 	return enum.StringInt(v, reflect.TypeOf(v))

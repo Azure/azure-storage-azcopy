@@ -84,10 +84,16 @@ func (s *scenario) Run() {
 	}
 
 	// check
-	// TODO: which options to we want to expose here, and is eValidate the right way to do so? Or do we just need a boolean, validateContent?
-	s.validateTransfers() // we always do this, regardless of s.validate
-	if s.validate != eValidate.TransferStates() {
-		panic("validation of things other than transfer states is not yet implemented")
+	s.validateTransferStates()
+	if s.a.Failed() {
+		return // no point in doing more validation
+	}
+	s.validateProperties()
+	if s.a.Failed() {
+		return // no point in doing more validation
+	}
+	if s.validate == eValidate.AutoPlusContent() {
+		panic("validation of the transferred file content is not yet implemented")
 	}
 }
 
@@ -160,7 +166,7 @@ func (s *scenario) runAzCopy() {
 	s.state.result = &result
 }
 
-func (s *scenario) validateTransfers() {
+func (s *scenario) validateTransferStates() {
 
 	if s.p.deleteDestination != common.EDeleteDestination.False() {
 		// TODO: implement deleteDestinationValidation
@@ -169,28 +175,7 @@ func (s *scenario) validateTransfers() {
 
 	isSrcEncoded := s.fromTo.From().IsRemote() // TODO: is this right, reviewers?
 	isDstEncoded := s.fromTo.To().IsRemote()   // TODO: is this right, reviewers?
-	srcRoot := s.state.source.getParam(false, false)
-	dstRoot := s.state.dest.getParam(false, false)
-
-	// do we expect folder transfers
-	expectFolders := s.fromTo.From().IsFolderAware() &&
-		s.fromTo.To().IsFolderAware() &&
-		s.p.allowsFolderTransfers()
-	expectRootFolder := expectFolders
-
-	// compute dest, taking into account our stripToDir rules
-	areBothContainerLike := s.state.source.isContainerLike() && s.state.dest.isContainerLike()
-	if s.stripTopDir || s.operation == eOperation.Sync() || areBothContainerLike {
-		// Sync always acts like stripTopDir is true.
-		// For copies between two container-like locations, we don't expect the root directory to be transferred, regardless of stripTopDir.
-		// Yes, this is arguably inconsistent. But its the way its always been, and it does seem to match user expectations for copies
-		// of that kind.
-		expectRootFolder = false
-	} else if s.fromTo.From().IsLocal() {
-		dstRoot = fmt.Sprintf("%s%c%s", dstRoot, os.PathSeparator, filepath.Base(srcRoot))
-	} else {
-		dstRoot = fmt.Sprintf("%s/%s", dstRoot, path.Base(srcRoot))
-	}
+	srcRoot, dstRoot, expectFolders, expectRootFolder := s.getTransferInfo()
 
 	// test the sets of files in the various statuses
 	for _, statusToTest := range []common.TransferStatus{
@@ -209,6 +194,82 @@ func (s *scenario) validateTransfers() {
 
 	// TODO: for failures, consider validating the failure messages (for which we have expected values, in s.fs; but don't currently have a good way to get
 	//    the actual values from the test run
+}
+
+func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFolders bool, expectedRootFolder bool) {
+	srcRoot = s.state.source.getParam(false, false)
+	dstRoot = s.state.dest.getParam(false, false)
+
+	// do we expect folder transfers
+	expectFolders = s.fromTo.From().IsFolderAware() &&
+		s.fromTo.To().IsFolderAware() &&
+		s.p.allowsFolderTransfers()
+	expectRootFolder := expectFolders
+
+	// compute dest, taking into account our stripToDir rules
+	areBothContainerLike := s.state.source.isContainerLike() && s.state.dest.isContainerLike()
+	if s.stripTopDir || s.operation == eOperation.Sync() || areBothContainerLike {
+		// Sync always acts like stripTopDir is true.
+		// For copies between two container-like locations, we don't expect the root directory to be transferred, regardless of stripTopDir.
+		// Yes, this is arguably inconsistent. But its the way its always been, and it does seem to match user expectations for copies
+		// of that kind.
+		expectRootFolder = false
+	} else if s.fromTo.From().IsLocal() {
+		dstRoot = fmt.Sprintf("%s%c%s", dstRoot, os.PathSeparator, filepath.Base(srcRoot))
+	} else {
+		dstRoot = fmt.Sprintf("%s/%s", dstRoot, path.Base(srcRoot))
+	}
+	return srcRoot, dstRoot, expectFolders, expectRootFolder
+}
+
+func (s *scenario) validateProperties() {
+	// get a map of everything that now exists at the destination
+	destContents := s.state.dest.getAllProperties(s.a)
+	if s.a.Failed() {
+		return
+	}
+
+	_, _, expectFolders, expectRootFolder := s.getTransferInfo()
+
+	// for everything that should have been transferred, verify that any expected properties have been transferred to the destination
+	expectedFilesAndFolders := s.fs.getForStatus(common.ETransferStatus.Success(), expectFolders, expectRootFolder)
+	for _, f := range expectedFilesAndFolders {
+		expected := f.verificationProperties // use verificationProperties (i.e. what we expect) NOT creationProperties (what we made at the source). They won't ALWAYS be the same
+		actual, ok := destContents[f.name]
+		if !ok {
+			// this shouldn't happen, because we only run if validateTransferStates passed, but check anyway
+			// TODO: JohnR: need to remove the strip top dir prefix from the map (and normalize the delimiters)
+			//    since currently uploads fail here
+			s.a.Error(fmt.Sprintf("could not find expected file %s", f.name))
+			return
+		}
+
+		// validate all the different things
+		s.validateMetadata(expected.nameValueMetadata, actual.nameValueMetadata)
+		// add more methods like s.validateMetadata for the other things that need to be validated
+		if expected.lastWriteTime != nil ||
+			expected.creationTime != nil ||
+			expected.smbAttributes != nil ||
+			expected.smbPermissionsSddl != nil ||
+			expected.contentHeaders != nil {
+			s.a.Error("validateProperties does not yet support the properties you are using")
+			// TODO: nakulkar-msft it will be necessary to validate all of these
+		}
+	}
+}
+
+//// Individual property validation routines
+
+func (s *scenario) validateMetadata(expected, actual map[string]string) {
+	s.a.Assert(len(expected), equals(), len(actual), "Both should have same number of metadata entries")
+	for key := range expected {
+		exValue := expected[key]
+		actualValue, ok := actual[key]
+		s.a.Assert(ok, equals(), true, fmt.Sprintf("expect key '%s' to be found in destination metadata", key))
+		if ok {
+			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("Expect value for key '%s' to be '%s' but found '%s'", key, exValue, actualValue))
+		}
+	}
 }
 
 func (s *scenario) cleanup() {

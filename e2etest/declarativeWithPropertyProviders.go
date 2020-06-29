@@ -20,7 +20,11 @@
 
 package e2etest
 
-import "time"
+import (
+	"github.com/Azure/azure-storage-azcopy/cmd"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"time"
+)
 
 // All the structs in this file have names starting with "with", to make the readability flow when they are used
 // as parameters to the f() or folder() functions.
@@ -65,7 +69,9 @@ func (w with) createObjectProperties() *objectProperties {
 	}
 
 	if w.size != "" {
-		result.size = &w.size
+		longSize, err := cmd.ParseSizeString(w.size, "with.size")
+		common.PanicIfErr(err) // TODO: any better option?
+		result.size = &longSize
 	}
 
 	// content headers
@@ -96,7 +102,7 @@ func (w with) createObjectProperties() *objectProperties {
 
 	// other properties
 	if w.nameValueMetadata != nil {
-		result.nameValueMetadata = &w.nameValueMetadata
+		result.nameValueMetadata = w.nameValueMetadata
 	}
 	if w.lastWriteTime != (time.Time{}) {
 		result.lastWriteTime = &w.lastWriteTime
@@ -116,26 +122,26 @@ func (w with) createObjectProperties() *objectProperties {
 
 ////
 
-// use withCreateOnly if you want to define properties that should be used when creating an object, but not
+// use createOnly if you want to define properties that should be used when creating an object, but not
 // used when verifying the state of the transferred object. Generally you'll have no use for this.
 // Just use "with", and the test framework will do the right thing.
-type withCreateOnly struct {
+type createOnly struct {
 	with
 }
 
-func (withCreateOnly) appliesToVerification() bool {
+func (createOnly) appliesToVerification() bool {
 	return false
 }
 
 ////
 
-// Use withVerifyOnly if you need to specify some properties that should NOT be applied to the file when it is created,
+// Use verifyOnly if you need to specify some properties that should NOT be applied to the file when it is created,
 // but should be present on it afte) the transfer
-type withVerifyOnly struct {
+type verifyOnly struct {
 	with
 }
 
-func (withVerifyOnly) appliesToCreation() bool {
+func (verifyOnly) appliesToCreation() bool {
 	return false
 }
 
@@ -154,10 +160,10 @@ func (withDirStubMetadata) appliesToVerification() bool {
 
 func (withDirStubMetadata) createObjectProperties() *objectProperties {
 	m := map[string]string{"hdi_isfolder": "true"} // special flag that says this file is a stub
-	size := "0k"
+	size := int64(0)
 	return &objectProperties{
 		size:              &size,
-		nameValueMetadata: &m,
+		nameValueMetadata: m,
 	}
 }
 

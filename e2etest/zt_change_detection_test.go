@@ -35,7 +35,7 @@ func TestChange_DetectFileChangedDuringTransfer(t *testing.T) {
 	RunScenarios(t,
 		eOperation.CopyAndSync(),
 		eTestFromTo.AllPairs(),
-		eValidate.TransferStates(),
+		eValidate.Auto(),
 		params{
 			recursive: true,
 		},
@@ -75,7 +75,7 @@ func TestChange_DefaultToNoDetectionForCopyS2S(t *testing.T) {
 	RunScenarios(t,
 		eOperation.Copy(), // this test only applies to Copy, because Sync does always set s2sSourceChangeValidation = true
 		eTestFromTo.AllS2S(),
-		eValidate.TransferStates(),
+		eValidate.Auto(),
 		params{
 			recursive: true,
 		},

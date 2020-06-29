@@ -24,12 +24,14 @@ package e2etest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -102,20 +104,70 @@ func (scenarioHelper) generateLocalFile(filePath string, fileSize int) ([]byte, 
 func (s scenarioHelper) generateLocalFilesFromList(c asserter, dirPath string, fileList []*testObject, defaultSize string) {
 	for _, file := range fileList {
 		var err error
-		if file.isFolder {
+		if file.isFolder() {
 			err = os.MkdirAll(filepath.Join(dirPath, file.name), os.ModePerm)
 			c.AssertNoErr(err)
+			//TODO: nakulkar-msft you'll need to set up things like attributes, and other relevant things from
+			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
+			//			//   by local files. E.g. not contentHeaders or metadata).
 		} else {
 			_, err = s.generateLocalFile(
 				filepath.Join(dirPath, file.name),
 				file.creationProperties.sizeBytes(c, defaultSize))
 			c.AssertNoErr(err)
-			// todo: set up the files dates, acl and other properties, based on file.creationProperties
+			//TODO: nakulkar-msft you'll need to set up things like attributes, and other relevant things from
+			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
+			//   by local files. E.g. not contentHeaders or metadata).
 		}
 	}
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
 	time.Sleep(time.Millisecond * 1050)
+}
+
+// Enumerates all local files and their properties, with the given dirpath
+func (s scenarioHelper) enumerateLocalProperties(a asserter, dirpath string) map[string]*objectProperties {
+	result := make(map[string]*objectProperties)
+	err := filepath.Walk(dirpath, func(fullpath string, info os.FileInfo, err error) error {
+		a.AssertNoErr(err) // we don't expect any errors walking the local file system
+		relPath := strings.Replace(fullpath, dirpath, "", 1)
+		relPath = strings.TrimPrefix(relPath, "\\/")
+
+		size := info.Size()
+		lastWriteTime := info.ModTime()
+		var pCreationTime *time.Time
+		var pSmbAttributes *string
+		var pSmbPermissionsSddl *string
+		if runtime.GOOS == "windows" {
+			var creationTime time.Time
+			lastWriteTime, creationTime = osScenarioHelper{}.getFileDates(a, fullpath)
+			pCreationTime = &creationTime
+			// TODO: nakulkar-msft the osScenarioHelper methods here will need to be implemented before
+			//   attribute preservation can be tested. The easiest way to implement them will be to rely on existing AzCopy code
+			//   similar to what getFileDates does (see a few lines above)
+			/*
+				smbAttributes := osScenarioHelper{}.getSmbAttributes(a, fullpath)
+				pSmbAttributes = &smbAttributes
+				smbPermissionsSddl := osScenarioHelper{}.getSmbSddl(a, fullPath)
+				pSmbPermissionsSddl = &smbPermissionsSddl
+			*/
+		}
+		props := objectProperties{
+			isFolder:           info.IsDir(),
+			size:               &size,
+			creationTime:       pCreationTime,
+			lastWriteTime:      &lastWriteTime,
+			smbAttributes:      pSmbAttributes,
+			smbPermissionsSddl: pSmbPermissionsSddl,
+			//contentHeaders don't exist on local file system
+			//nameValueMetadata doesn't exist on local file system
+		}
+
+		result[relPath] = &props
+		return nil
+	})
+	a.AssertNoErr(err)
+	return result
 }
 
 func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c asserter, dirPath string, prefix string) (fileList []string) {
@@ -255,7 +307,7 @@ func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c asserter, s3Clien
 // create the demanded blobs
 func (scenarioHelper) generateBlobsFromList(c asserter, containerURL azblob.ContainerURL, blobList []*testObject, defaultSize string) {
 	for _, b := range blobList {
-		if b.isFolder {
+		if b.isFolder() {
 			continue // no real folders in blob
 		}
 		ad := blobResourceAdapter{b}
@@ -272,6 +324,48 @@ func (scenarioHelper) generateBlobsFromList(c asserter, containerURL azblob.Cont
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
 	// TODO: can we make it so that this sleeping only happens when we really need it to?
 	time.Sleep(time.Millisecond * 1050)
+}
+
+func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerURL azblob.ContainerURL) map[string]*objectProperties {
+	result := make(map[string]*objectProperties)
+
+	for marker := (azblob.Marker{}); marker.NotDone(); {
+
+		listBlob, err := containerURL.ListBlobsFlatSegment(context.TODO(), marker, azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true}})
+		a.AssertNoErr(err)
+
+		for _, blobInfo := range listBlob.Segment.BlobItems {
+
+			relativePath := blobInfo.Name // need to change this when we support working on virtual directories down inside containers
+			bp := blobInfo.Properties
+
+			h := contentHeaders{
+				cacheControl:       bp.CacheControl,
+				contentDisposition: bp.ContentDisposition,
+				contentEncoding:    bp.ContentEncoding,
+				contentLanguage:    bp.ContentLanguage,
+				contentType:        bp.ContentType,
+				contentMD5:         bp.ContentMD5,
+			}
+			md := map[string]string(blobInfo.Metadata)
+
+			props := objectProperties{
+				isFolder:          false, // no folders in Blob
+				size:              bp.ContentLength,
+				contentHeaders:    &h,
+				nameValueMetadata: md,
+				creationTime:      bp.CreationTime,
+				lastWriteTime:     &bp.LastModified,
+				// smbAttributes and smbPermissions don't exist in blob
+			}
+
+			result[relativePath] = &props
+		}
+
+		marker = listBlob.NextMarker
+	}
+
+	return result
 }
 
 func (scenarioHelper) generatePageBlobsFromList(c asserter, containerURL azblob.ContainerURL, blobList []string, data string) {
@@ -405,9 +499,29 @@ func (scenarioHelper) generateCommonRemoteScenarioForS3(c asserter, client *mini
 // create the demanded azure files
 func (scenarioHelper) generateAzureFilesFromList(c asserter, shareURL azfile.ShareURL, fileList []*testObject, defaultSize string) {
 	for _, f := range fileList {
-		if f.isFolder {
+		ad := filesResourceAdapter{f}
+		if f.isFolder() {
+			// make sure the dir exists
 			file := shareURL.NewRootDirectoryURL().NewFileURL(path.Join(f.name, "dummyChild"))
 			generateParentsForAzureFile(c, file)
+
+			// set its metadata if any
+			if f.creationProperties.nameValueMetadata != nil {
+				dir := shareURL.NewRootDirectoryURL().NewDirectoryURL(f.name)
+				_, err := dir.SetMetadata(context.TODO(), ad.toMetadata())
+				c.AssertNoErr(err)
+			}
+
+			// set other properties
+			// TODO: do we need a SetProperties method on dir...?  Discuss with zezha-msft
+			if f.creationProperties.creationTime != nil ||
+				f.creationProperties.smbPermissionsSddl != nil ||
+				f.creationProperties.smbAttributes != nil {
+				panic("setting these properties isn't implmented yet for folders in the test harnesss")
+				// TODO: nakulkar-msft the attributes stuff will need to be implemented here before attributes can be tested on Azure Files
+			}
+			// TODO: I'm pretty sure we don't prserve lastWritetime or contentProperties (headers) for folders, so the above if statement doesn't test those
+			//    Is that the correct decision?
 		} else {
 			file := shareURL.NewRootDirectoryURL().NewFileURL(f.name)
 
@@ -415,8 +529,7 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, shareURL azfile.Sha
 			generateParentsForAzureFile(c, file)
 
 			// create the file itself
-			// TODO: set properties etc
-			cResp, err := file.Create(ctx, int64(f.creationProperties.sizeBytes(c, defaultSize)), azfile.FileHTTPHeaders{}, azfile.Metadata{})
+			cResp, err := file.Create(ctx, int64(f.creationProperties.sizeBytes(c, defaultSize)), ad.toHeaders(), ad.toMetadata())
 			c.AssertNoErr(err)
 			c.Assert(cResp.StatusCode(), equals(), 201)
 
@@ -426,6 +539,14 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, shareURL azfile.Sha
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
 	time.Sleep(time.Millisecond * 1050)
+}
+
+func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile.ShareURL) map[string]*objectProperties {
+	a.AssertNoErr(errors.New("enumerateShareFileProperties is not yet implemeted"))
+	//root := shareURL.NewRootDirectoryURL()
+	// TODO use root.ListFilesAndDirectoriesSegment()
+	// TODO: nakulkar-msft ?
+	return nil
 }
 
 func (scenarioHelper) generateBFSPathsFromList(c asserter, filesystemURL azbfs.FileSystemURL, fileList []string) {

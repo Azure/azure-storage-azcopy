@@ -3,13 +3,17 @@ package e2etest
 // TODO soon:
 //
 //   Next framework _use_ tasks
-//   	More filter tests
+//   	In progress: More filter tests
+//      Flesh out attribute support, in usages of objectProperties.smbAttributes, so that we can create, and verify, tests with these
+//         (right now, tests that use these will fail, because they lack the necessary code to retrieve them, from the destinatino (and set the at the source)
+//         isn't there.  See commented code marked TODO: nakulkar-msft
 //      The resource manager support for S3 and BlobFS and (who will do this one) GCP?
 //
 //   Next framework _development_ tasks
-//      Change expectation lists from string to interface{}
+//      DONE Change expectation lists from string to interface{}
 //  	Content preservation tests
-//		Properties preservation tests
+//		In progress: Properties preservation tests ***** normalize delimiters and remove the propagated source dir (if no strip top dir) in the auto-validation
+//      A resume test
 //
 //   Suggested near-term goal:
 //		Complete the following suites:
@@ -64,8 +68,6 @@ package e2etest
 ///
 /// SO we are just adopting the convention of including a prefix in the name, so that they sort sensible.  So we'll just have a two-level structure,
 /// but it will look like this MySuite_MyTest/scenario
-
-// TODO: consider how to add tests to cover the following
 
 // Running these tests doesn't ensure that AZCOPY_E2E_EXECUTABLE_PATH points to an UP TO DATE build of the app.
 // Could we somehow make it do that?  (e.g. AZCOPY_E2E_AUTO_BUILD=true makes it call go build in the directory of  AZCOPY_E2E_EXECUTABLE_PATH,

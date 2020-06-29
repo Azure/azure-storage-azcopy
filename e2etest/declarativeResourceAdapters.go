@@ -20,7 +20,10 @@
 
 package e2etest
 
-import "github.com/Azure/azure-storage-blob-go/azblob"
+import (
+	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
+)
 
 func sval(s *string) string {
 	if s == nil {
@@ -29,12 +32,12 @@ func sval(s *string) string {
 	return *s
 }
 
-// Our resource adapters adapt between blob/File etc and objectProperties
-// They don't share any common interface
+// Our resource adapters convert from objectProperties to the metadata and other objects for Blob/File etc
+// They don't share any common interface, because blob/file etc don't share a common interface.
+// The reverse conversion, from the remote format back to objectProperties, is in resourceManager.getAllProperties.
 
 // Adapts testObject to blob.
-// Note that lastWriteTime and creationTime are read only for blob.
-// While smbAttributes and smbPermissionsSddl don't exist in blob and will be ignored
+// Doesn't need to deal with anything except contentHeaders and metadata, because that's all Blob supports
 type blobResourceAdapter struct {
 	obj *testObject
 }
@@ -58,5 +61,35 @@ func (a blobResourceAdapter) toMetadata() azblob.Metadata {
 	if a.obj.creationProperties.nameValueMetadata == nil {
 		return azblob.Metadata{}
 	}
-	return *a.obj.creationProperties.nameValueMetadata
+	return a.obj.creationProperties.nameValueMetadata
+}
+
+////
+
+type filesResourceAdapter struct {
+	obj *testObject
+}
+
+func (a filesResourceAdapter) toHeaders() azfile.FileHTTPHeaders {
+	props := a.obj.creationProperties.contentHeaders
+	if props == nil {
+		return azfile.FileHTTPHeaders{}
+	}
+	return azfile.FileHTTPHeaders{
+		ContentType:        sval(props.contentType),
+		ContentMD5:         props.contentMD5,
+		ContentEncoding:    sval(props.contentEncoding),
+		ContentLanguage:    sval(props.contentLanguage),
+		ContentDisposition: sval(props.contentDisposition),
+		CacheControl:       sval(props.cacheControl),
+		//TODO: nakulkar-msft azfile.FileHttpHeaders also includes SMB props - for attributes, times and ACLs. You'll need to
+		//   include at least some of those here, to make your SMB attribute tests pass
+	}
+}
+
+func (a filesResourceAdapter) toMetadata() azfile.Metadata {
+	if a.obj.creationProperties.nameValueMetadata == nil {
+		return azfile.Metadata{}
+	}
+	return a.obj.creationProperties.nameValueMetadata
 }

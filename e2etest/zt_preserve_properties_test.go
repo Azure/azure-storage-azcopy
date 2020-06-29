@@ -20,8 +20,56 @@
 
 package e2etest
 
+import (
+	"testing"
+)
+
 // Purpose: Tests for preserving transferred properties, info and ACLs.  Both those possessed by the original source file/folder,
 //   and those specified on the command line
+
+func TestProperties_NameValueMetadataIsPreservedS2S(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.CopyAndSync(),
+		eTestFromTo.AllAzureS2S(),
+		eValidate.Auto(),
+		params{
+			recursive: true,
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				f("filea", with{nameValueMetadata: map[string]string{"foo": "abc", "bar": "def"}}),
+				folder("fold1", with{nameValueMetadata: map[string]string{"other": "xyz"}}),
+			},
+		})
+}
+
+func TestProperties_NameValueMetadataCanBeUploaded(t *testing.T) {
+	expectedMap := map[string]string{"foo": "abc", "bar": "def"}
+
+	RunScenarios(
+		t,
+		eOperation.Copy(), // Sync doesn't support the command-line metadata flag
+		eTestFromTo.AllUploads(),
+		eValidate.Auto(),
+		params{
+			recursive: true,
+			metadata:  "foo=abc;bar=def",
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder("", verifyOnly{with{nameValueMetadata: expectedMap}}), // root folder
+				f("filea", verifyOnly{with{nameValueMetadata: expectedMap}}),
+			},
+		})
+}
+
+// TODO: add some tests (or modify the above) to make assertions about case preservation (or not) in metadata
+//    See https://github.com/Azure/azure-storage-azcopy/issues/113 (which incidentally, I'm not observing in the tests above, for reasons unknown)
 
 /* todo
 func TestProperties_SMBDates(t *testing.T) {

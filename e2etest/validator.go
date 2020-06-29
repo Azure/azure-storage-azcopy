@@ -59,7 +59,7 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 		return s + "/"
 	}
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers, func(to *testObject) string {
-		if to.isFolder {
+		if to.isFolder() {
 			return addFolderSuffix(to.name)
 		} else {
 			return to.name

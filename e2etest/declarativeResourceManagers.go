@@ -45,6 +45,10 @@ type resourceManager interface {
 	// (e.g. when test need to create files with later modification dates, they will trigger a second call to this)
 	createFiles(a asserter, fs testFiles, isSource bool)
 
+	// Gets the names and properties of all files (and, if applicable, folders) that exist.
+	// Used for verification
+	getAllProperties(a asserter) map[string]*objectProperties
+
 	// cleanup gets rid of everything that setup created
 	// (Takes no param, because the resourceManager is expected to track its own state. E.g. "what did I make")
 	cleanup(a asserter)
@@ -85,6 +89,10 @@ func (r *resourceLocal) isContainerLike() bool {
 	return false
 }
 
+func (r *resourceLocal) getAllProperties(a asserter) map[string]*objectProperties {
+	return scenarioHelper{}.enumerateLocalProperties(a, r.dirPath)
+}
+
 ///////
 
 type resourceBlobContainer struct {
@@ -120,6 +128,10 @@ func (r *resourceBlobContainer) getParam(stripTopDir bool, useSas bool) string {
 
 func (r *resourceBlobContainer) isContainerLike() bool {
 	return true
+}
+
+func (r *resourceBlobContainer) getAllProperties(a asserter) map[string]*objectProperties {
+	return scenarioHelper{}.enumerateContainerBlobProperties(a, *r.containerURL)
 }
 
 /////
@@ -159,6 +171,10 @@ func (r *resourceAzureFileShare) isContainerLike() bool {
 	return true
 }
 
+func (r *resourceAzureFileShare) getAllProperties(a asserter) map[string]*objectProperties {
+	return scenarioHelper{}.enumerateShareFileProperties(a, *r.shareURL)
+}
+
 ////
 
 type resourceDummy struct{}
@@ -181,4 +197,8 @@ func (r *resourceDummy) getParam(stripTopDir bool, _ bool) string {
 
 func (r *resourceDummy) isContainerLike() bool {
 	return false
+}
+
+func (r *resourceDummy) getAllProperties(a asserter) map[string]*objectProperties {
+	panic("not impelmented")
 }

@@ -47,7 +47,7 @@ func TestFilter_IncludePath(t *testing.T) {
 		t,                                 // Pass in the test context
 		eOperation.Copy(),                 // Should the test be run for copy only, sync only, or both?
 		eTestFromTo.AllSourcesToOneDest(), // What range of source/dest pairs should this test be run on
-		eValidate.TransferStates(),        // What to validate (in this case, we don't validate content. We just validate that the desired transfers were scheduled
+		eValidate.Auto(),                  // What to validate (in this case, we don't validate content. We just validate that the desired transfers were scheduled
 		params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
 			recursive:   true,
 			includePath: "sub/subsub;wantedfile",
@@ -88,7 +88,7 @@ func TestFilter_IncludeAfter(t *testing.T) {
 		t,
 		eOperation.Copy(), // IncludeAfter is not applicable for sync
 		eTestFromTo.AllSourcesToOneDest(),
-		eValidate.TransferStates(),
+		eValidate.Auto(),
 		params{
 			recursive: true,
 		},

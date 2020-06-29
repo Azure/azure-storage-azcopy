@@ -45,34 +45,38 @@ type contentHeaders struct {
 // This is exposed to the declarativeResourceManagers, to create/check the objects.
 // All field are pointers or interfaces to make them nil-able. Nil means "unspecified".
 type objectProperties struct {
-	size               *string // uses our standard K, M, G suffix
+	isFolder           bool // if false, the object is a file
+	size               *int64
 	contentHeaders     *contentHeaders
-	nameValueMetadata  *map[string]string
-	lastWriteTime      *time.Time
+	nameValueMetadata  map[string]string
 	creationTime       *time.Time
+	lastWriteTime      *time.Time
 	smbAttributes      *string
 	smbPermissionsSddl *string
 }
 
+// returns op.size, if present, else defaultSize
 func (op objectProperties) sizeBytes(a asserter, defaultSize string) int {
-	s := defaultSize
 	if op.size != nil {
-		s = *op.size
+		if *op.size > math.MaxInt32 {
+			a.Error(fmt.Sprintf("unsupported size: %d", *op.size))
+			return 0
+		}
+		return int(*op.size)
 	}
 
-	longSize, err := cmd.ParseSizeString(s, "testFiles.size")
+	longSize, err := cmd.ParseSizeString(defaultSize, "testFiles.size")
 	if longSize < math.MaxInt32 {
 		a.AssertNoErr(err)
 		return int(longSize)
 	}
-	a.Error("unsupported size: " + s)
+	a.Error("unsupported size: " + defaultSize)
 	return 0
 }
 
 // a file or folder. Create these with the f() and folder() functions
 type testObject struct {
 	name                   string
-	isFolder               bool   // if false, the object is a file
 	expectedFailureMessage string // the failure message that we expect to see in the log for this file/folder (only populated for expected failures)
 
 	// info to be used at creation time. Usually, creationInfo and and verificationInfo will be the same
@@ -82,8 +86,15 @@ type testObject struct {
 	verificationProperties objectProperties
 }
 
+func (t *testObject) isFolder() bool {
+	if t.creationProperties.isFolder != t.verificationProperties.isFolder {
+		panic("isFolder properties are misconfigured")
+	}
+	return t.creationProperties.isFolder
+}
+
 func (t *testObject) isRootFolder() bool {
-	return t.name == "" && t.isFolder
+	return t.name == "" && t.isFolder()
 }
 
 // This interface is implemented by types that provide extra information about test files
@@ -106,7 +117,7 @@ type expectedFailureProvider interface {
 // instead of calling this function).
 // Provide properties by including one or more objects that implement withPropertyProvider.
 // Typically, that will just be done like this: f("foo", with{<set properties here>})
-// For advanced cases, you can use withVerifyOnly instead of the normal "with".  The normal "with" applies to both creation
+// For advanced cases, you can use verifyOnly instead of the normal "with".  The normal "with" applies to both creation
 // and verification.
 // You can also add withFailureMessage{"message"} to files that are expected to fail, to specify what the expected
 // failure message will be in the log.
@@ -155,7 +166,12 @@ func f(n string, properties ...withPropertyProvider) *testObject {
 func folder(n string, properties ...withPropertyProvider) *testObject {
 	name := strings.TrimLeft(n, "/")
 	result := f(name, properties...)
-	result.isFolder = true
+
+	// isFolder is at properties level, not testObject level, because we need it at properties level when reading
+	// the properties back from the destination (where we don't read testObjects, we just read objectProperties)
+	result.creationProperties.isFolder = true
+	result.verificationProperties.isFolder = true
+
 	return result
 }
 
@@ -231,7 +247,7 @@ func (tf *testFiles) allObjects(isSource bool) []*testObject {
 
 func (tf *testFiles) getForStatus(status common.TransferStatus, expectFolders bool, expectRootFolder bool) []*testObject {
 	shouldInclude := func(f *testObject) bool {
-		if !f.isFolder {
+		if !f.isFolder() {
 			return true
 		}
 

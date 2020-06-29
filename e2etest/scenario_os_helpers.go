@@ -1,3 +1,4 @@
+// +build !windows
 // Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -18,34 +19,21 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// TODO this file was forked from the cmd package, it needs to cleaned to keep only the necessary part
+
 package e2etest
 
-import (
-	"github.com/Azure/azure-storage-azcopy/common"
-	"testing"
-)
+type osScenarioHelper struct{}
 
-// Purpose: Other tests for enumeration of sources, NOT including filtering
+// set file attributes to test file
+func (osScenarioHelper) setAttributesForLocalFile() error {
+	panic("should never be called")
+}
 
-func TestEnumeration_DirectoryStubsAreNotDownloaded(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.Specific(common.EFromTo.BlobLocal()), // TODO: does this apply to any other cases
-		eValidate.Auto(),
-		params{
-			recursive: true,
-		},
-		nil,
-		testFiles{
-			defaultSize: "1K",
-			shouldIgnore: []interface{}{
-				f("dir", withDirStubMetadata{}),
-			},
-			shouldTransfer: []interface{}{
-				"filea",
-				folder("dir"),
-				"dir/fileb",
-			},
-		})
+func (osScenarioHelper) setAttributesForLocalFiles(c asserter, dirPath string, fileList []string, attrList []string) {
+	panic("should never be called")
+}
+
+func (osScenarioHelper) getFileDates(c asserter, filePath string) (createdTime, lastWriteTime time.Time) {
+	panic("should never be called")
 }

@@ -72,6 +72,7 @@ func (t *TestRunner) SetAllFlags(p params) {
 	set("cap-mbps", p.capMbps, float32(0))
 	set("block-size-mb", p.blockSizeMB, float32(0))
 	set("s2s-detect-source-changed", p.s2sSourceChangeValidation, false)
+	set("metadata", p.metadata, "")
 }
 
 func (t *TestRunner) SetAwaitOpenFlag() {

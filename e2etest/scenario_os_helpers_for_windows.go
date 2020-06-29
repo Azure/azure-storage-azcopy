@@ -23,13 +23,18 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 )
 
+type osScenarioHelper struct{}
+
 // set file attributes to test file
-func (scenarioHelper) setAttributesForLocalFile(filePath string, attrList []string) error {
+func (osScenarioHelper) setAttributesForLocalFile(filePath string, attrList []string) error {
 	lpFilePath, err := syscall.UTF16PtrFromString(filePath)
 	if err != nil {
 		return err
@@ -55,9 +60,16 @@ func (scenarioHelper) setAttributesForLocalFile(filePath string, attrList []stri
 	return err
 }
 
-func (s scenarioHelper) setAttributesForLocalFiles(c asserter, dirPath string, fileList []string, attrList []string) {
+func (s osScenarioHelper) setAttributesForLocalFiles(c asserter, dirPath string, fileList []string, attrList []string) {
 	for _, fileName := range fileList {
 		err := s.setAttributesForLocalFile(filepath.Join(dirPath, fileName), attrList)
 		c.AssertNoErr(err)
 	}
+}
+
+func (osScenarioHelper) getFileDates(c asserter, filePath string) (createdTime, lastWriteTime time.Time) {
+	h, err := common.GetFileInformation(filePath)
+	c.AssertNoErr(err)
+	hi := ste.HandleInfo{h} // TODO: do we want to rely on AzCopy code in tests like this? It does save a little time in test framework dev
+	return hi.FileCreationTime(), hi.FileLastWriteTime()
 }
