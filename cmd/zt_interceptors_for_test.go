@@ -129,6 +129,18 @@ func (*mockedLifecycleManager) AddUserAgentPrefix(userAgent string) string {
 	return userAgent
 }
 
+func (*mockedLifecycleManager) E2EAwaitContinue() {
+	// not implemented in mocked version
+}
+
+func (*mockedLifecycleManager) E2EAwaitAllowOpenFiles() {
+	// not implemented in mocked version
+}
+
+func (*mockedLifecycleManager) E2EEnableAwaitAllowOpenFiles(_ bool) {
+	// not implemented in mocked version
+}
+
 type dummyProcessor struct {
 	record []storedObject
 }
