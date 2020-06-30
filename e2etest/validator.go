@@ -21,28 +21,61 @@
 package e2etest
 
 import (
+	"fmt"
 	"net/url"
 	"runtime"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/common"
-
-	chk "gopkg.in/check.v1"
 )
 
 type Validator struct{}
 
-func (Validator) ValidateCopyTransfersAreScheduled(c *chk.C, isSrcEncoded bool, isDstEncoded bool,
-	sourcePrefix string, destinationPrefix string, expectedTransfers []string, actualTransfers []common.TransferDetail) {
+// Use this to ensure that source and dest strings can be compared with each other
+func makeSlashesComparable(s string) string {
+	return strings.Replace(s, "\\", "/", -1)
+}
+
+// Use this to ensure slashes are correct for the location, loc
+func fixSlashes(s string, loc common.Location) string {
+	if loc == common.ELocation.Local() {
+		// replace all slashes with the one that right for the local OS
+		s = strings.Replace(s, "/", common.OS_PATH_SEPARATOR, -1)
+		s = strings.Replace(s, "\\", common.OS_PATH_SEPARATOR, -1)
+	} else {
+		// replace all backslashes with web-style forward slash
+		s = strings.Replace(s, "\\", common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+	}
+	return s
+}
+
+func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool, isDstEncoded bool,
+	sourcePrefix string, destinationPrefix string, expectedTransfers []*testObject, actualTransfers []common.TransferDetail, statusToTest common.TransferStatus) {
+
+	sourcePrefix = makeSlashesComparable(sourcePrefix)
+	destinationPrefix = makeSlashesComparable(destinationPrefix)
 
 	// validate that the right number of transfers were scheduled
-	c.Assert(len(actualTransfers), chk.Equals, len(expectedTransfers))
+	c.Assert(len(actualTransfers), equals(), len(expectedTransfers),
+		fmt.Sprintf("Number of actual and expected transfers should match, for status %s", statusToTest.String()))
 
 	// validate that the right transfers were sent
-	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
+	addFolderSuffix := func(s string) string {
+		if strings.HasSuffix(s, "/") {
+			panic("folder suffix already present")
+		}
+		return s + "/"
+	}
+	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers, func(to *testObject) string {
+		if to.isFolder() {
+			return addFolderSuffix(to.name)
+		} else {
+			return to.name
+		}
+	})
 	for _, transfer := range actualTransfers {
-		srcRelativeFilePath := strings.TrimPrefix(strings.TrimPrefix(transfer.Src, sourcePrefix), "/")
-		dstRelativeFilePath := strings.TrimPrefix(strings.TrimPrefix(transfer.Dst, destinationPrefix), "/")
+		srcRelativeFilePath := strings.Trim(strings.TrimPrefix(makeSlashesComparable(transfer.Src), sourcePrefix), "/")
+		dstRelativeFilePath := strings.Trim(strings.TrimPrefix(makeSlashesComparable(transfer.Dst), destinationPrefix), "/")
 
 		if isSrcEncoded {
 			srcRelativeFilePath, _ = url.PathUnescape(srcRelativeFilePath)
@@ -67,10 +100,22 @@ func (Validator) ValidateCopyTransfersAreScheduled(c *chk.C, isSrcEncoded bool, 
 		}
 
 		// the relative paths should be equal
-		c.Assert(srcRelativeFilePath, chk.Equals, dstRelativeFilePath)
+		c.Assert(srcRelativeFilePath, equals(), dstRelativeFilePath)
 
 		// look up the path from the expected transfers, make sure it exists
-		_, transferExist := lookupMap[srcRelativeFilePath]
-		c.Assert(transferExist, chk.Equals, true)
+		folderMessage := ""
+		lookupKey := srcRelativeFilePath
+		if transfer.IsFolderProperties {
+			lookupKey = addFolderSuffix(lookupKey)
+			folderMessage = ".\n    The transfer was for a folder. Have you forgotten to include folders in your testFiles? (Use the folder() function)"
+		}
+		_, transferExist := lookupMap[lookupKey]
+		c.Assert(transferExist, equals(), true,
+			fmt.Sprintf("Transfer '%s' ended with status '%s' but was not expected to end in that status%s",
+				lookupKey,
+				statusToTest.String(),
+				folderMessage))
+
+		// TODO: do we also want to output specific filenames for ones that were expected to have that status, but did not get it?
 	}
 }

@@ -25,11 +25,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/url"
+	"path/filepath"
 	"runtime"
 	"strings"
+	"testing"
 	"time"
-
-	chk "gopkg.in/check.v1"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -72,10 +72,10 @@ func (TestResourceFactory) GetDatalakeServiceURL(accountType AccountType) azbfs.
 	return azbfs.NewServiceURL(*u, pipeline)
 }
 
-func (TestResourceFactory) GetBlobServiceURLWithSAS(c *chk.C, accountType AccountType) azblob.ServiceURL {
+func (TestResourceFactory) GetBlobServiceURLWithSAS(c asserter, accountType AccountType) azblob.ServiceURL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(accountType)
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	sasQueryParams, err := azblob.AccountSASSignatureValues{
 		Protocol:      azblob.SASProtocolHTTPS,
@@ -84,7 +84,7 @@ func (TestResourceFactory) GetBlobServiceURLWithSAS(c *chk.C, accountType Accoun
 		Services:      azfile.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
 		ResourceTypes: azfile.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
 	}.NewSASQueryParameters(credential)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	// construct the url from scratch
 	qp := sasQueryParams.Encode()
@@ -93,15 +93,15 @@ func (TestResourceFactory) GetBlobServiceURLWithSAS(c *chk.C, accountType Accoun
 
 	// convert the raw url and validate it was parsed successfully
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	return azblob.NewServiceURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
 }
 
-func (TestResourceFactory) GetContainerURLWithSAS(c *chk.C, accountType AccountType, containerName string) azblob.ContainerURL {
+func (TestResourceFactory) GetContainerURLWithSAS(c asserter, accountType AccountType, containerName string) azblob.ContainerURL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(accountType)
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	sasQueryParams, err := azblob.BlobSASSignatureValues{
 		Protocol:      azblob.SASProtocolHTTPS,
@@ -109,7 +109,7 @@ func (TestResourceFactory) GetContainerURLWithSAS(c *chk.C, accountType AccountT
 		ContainerName: containerName,
 		Permissions:   azblob.ContainerSASPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, List: true}.String(),
 	}.NewSASQueryParameters(credential)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	// construct the url from scratch
 	qp := sasQueryParams.Encode()
@@ -118,39 +118,121 @@ func (TestResourceFactory) GetContainerURLWithSAS(c *chk.C, accountType AccountT
 
 	// convert the raw url and validate it was parsed successfully
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 
 	return azblob.NewContainerURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
 }
 
-func (TestResourceFactory) GetBlobURLWithSAS(c *chk.C, accountType AccountType, containerName string, blobName string) azblob.BlobURL {
+func (TestResourceFactory) GetFileShareULWithSAS(c asserter, accountType AccountType, containerName string) azfile.ShareURL {
+	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(accountType)
+	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
+	c.AssertNoErr(err)
+
+	sasQueryParams, err := azfile.FileSASSignatureValues{
+		Protocol:    azfile.SASProtocolHTTPS,
+		ExpiryTime:  time.Now().UTC().Add(48 * time.Hour),
+		ShareName:   containerName,
+		Permissions: azfile.ShareSASPermissions{Read: true, Write: true, Create: true, Delete: true, List: true}.String(),
+	}.NewSASQueryParameters(credential)
+	c.AssertNoErr(err)
+
+	// construct the url from scratch
+	qp := sasQueryParams.Encode()
+	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/%s?%s",
+		credential.AccountName(), containerName, qp)
+
+	// convert the raw url and validate it was parsed successfully
+	fullURL, err := url.Parse(rawURL)
+	c.AssertNoErr(err)
+
+	return azfile.NewShareURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
+}
+
+func (TestResourceFactory) GetBlobURLWithSAS(c asserter, accountType AccountType, containerName string, blobName string) azblob.BlobURL {
 	containerURLWithSAS := TestResourceFactory{}.GetContainerURLWithSAS(c, accountType, containerName)
 	blobURLWithSAS := containerURLWithSAS.NewBlobURL(blobName)
 	return blobURLWithSAS
 }
 
-func (TestResourceFactory) CreateNewContainer(c *chk.C, accountType AccountType) (container azblob.ContainerURL, name string, rawURL url.URL) {
-	name = TestResourceNameGenerator{}.GenerateContainerName()
+func (TestResourceFactory) CreateNewContainer(c asserter, accountType AccountType) (container azblob.ContainerURL, name string, rawURL url.URL) {
+	name = TestResourceNameGenerator{}.GenerateContainerName(c)
 	container = TestResourceFactory{}.GetBlobServiceURL(accountType).NewContainerURL(name)
 
 	cResp, err := container.Create(context.Background(), nil, azblob.PublicAccessNone)
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	c.AssertNoErr(err)
+	c.Assert(cResp.StatusCode(), equals(), 201)
 	return container, name, TestResourceFactory{}.GetContainerURLWithSAS(c, accountType, name).URL()
 }
 
-func (TestResourceFactory) CreateLocalDirectory(c *chk.C) (dstDirName string) {
+const defaultShareQuotaGB = 512
+
+func (TestResourceFactory) CreateNewFileShare(c asserter, accountType AccountType) (fileShare azfile.ShareURL, name string, rawSasURL url.URL) {
+	name = TestResourceNameGenerator{}.GenerateContainerName(c)
+	fileShare = TestResourceFactory{}.GetFileServiceURL(accountType).NewShareURL(name)
+
+	cResp, err := fileShare.Create(context.Background(), nil, defaultShareQuotaGB)
+	c.AssertNoErr(err)
+	c.Assert(cResp.StatusCode(), equals(), 201)
+	return fileShare, name, TestResourceFactory{}.GetFileShareULWithSAS(c, accountType, name).URL()
+}
+
+func (TestResourceFactory) CreateLocalDirectory(c asserter) (dstDirName string) {
 	dstDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
-	c.Assert(err, chk.IsNil)
+	c.AssertNoErr(err)
 	return
 }
 
 type TestResourceNameGenerator struct{}
 
 const (
-	containerPrefix = "e2etest"
+	containerPrefix = "e2e"
 	blobPrefix      = "blob"
 )
+
+func getTestName(t *testing.T) (pseudoSuite, test string) {
+
+	removeUnderscores := func(s string) string {
+		return strings.Replace(s, "_", "-", -1) // necessary if using name as basis for blob container name
+	}
+
+	testName := t.Name()
+
+	// Look up the stack to find out more info about the test method
+	// Note: the way to do this changed in go 1.12, refer to release notes for more info
+	var pcs [10]uintptr
+	n := runtime.Callers(1, pcs[:])
+	frames := runtime.CallersFrames(pcs[:n])
+	fileName := ""
+	for {
+		frame, more := frames.Next()
+		if strings.HasSuffix(frame.Func.Name(), "."+testName) {
+			fileName = frame.File
+			break
+		} else if !more {
+			break
+		}
+	}
+
+	// When using the basic Testing package, we have adopted a convention that
+	// the test name should being with one of the words in the file name, followed by a _ .
+	// Try to extract a "pseudo suite" name from the test name according to that rule.
+	pseudoSuite = ""
+	testName = strings.Replace(testName, "Test", "", 1)
+	uscorePos := strings.Index(testName, "_")
+	if uscorePos >= 0 && uscorePos < len(testName)-1 {
+		beforeUnderscore := strings.ToLower(testName[:uscorePos])
+		fileWords := strings.Split(strings.Replace(strings.ToLower(filepath.Base(fileName)), "_test.go", "", -1), "_")
+		for _, w := range fileWords {
+			if beforeUnderscore == w {
+				pseudoSuite = beforeUnderscore
+				testName = testName[uscorePos+1:]
+				break
+			}
+		}
+	}
+
+	return pseudoSuite, removeUnderscores(testName)
+}
 
 // This function generates an entity name by concatenating the passed prefix,
 // the name of the test requesting the entity name, and the minute, second, and nanoseconds of the call.
@@ -158,26 +240,10 @@ const (
 // them, and determine the order in which they were created.
 // Will truncate the end of the test name, if there is not enough room for it, followed by the time-based suffix,
 // with a non-zero maxLen.
-func generateName(prefix string, maxLen int) string {
-	// The following lines step up the stack find the name of the test method
-	// Note: the way to do this changed in go 1.12, refer to release notes for more info
-	var pcs [10]uintptr
-	n := runtime.Callers(1, pcs[:])
-	frames := runtime.CallersFrames(pcs[:n])
-	name := "TestFoo" // default stub "Foo" is used if anything goes wrong with this procedure
-	for {
-		frame, more := frames.Next()
-		if strings.Contains(frame.Func.Name(), "Suite") {
-			name = frame.Func.Name()
-			break
-		} else if !more {
-			break
-		}
-	}
-	funcNameStart := strings.Index(name, "Test")
-	name = name[funcNameStart+len("Test"):] // Just get the name of the test and not any of the garbage at the beginning
-	name = strings.ToLower(name)            // Ensure it is a valid resource name
-	textualPortion := fmt.Sprintf("%s%s", prefix, strings.ToLower(name))
+func generateName(c asserter, prefix string, maxLen int) string {
+	name := c.CompactScenarioName() // don't want to just use test name here, because each test contains multiple scearios with the declarative runner
+
+	textualPortion := fmt.Sprintf("%s-%s", prefix, strings.ToLower(name))
 	currentTime := time.Now()
 	numericSuffix := fmt.Sprintf("%02d%02d%d", currentTime.Minute(), currentTime.Second(), currentTime.Nanosecond())
 	if maxLen > 0 {
@@ -193,10 +259,10 @@ func generateName(prefix string, maxLen int) string {
 	return name
 }
 
-func (TestResourceNameGenerator) GenerateContainerName() string {
-	return generateName(containerPrefix, 63)
+func (TestResourceNameGenerator) GenerateContainerName(c asserter) string {
+	return generateName(c, containerPrefix, 63)
 }
 
-func (TestResourceNameGenerator) generateBlobName() string {
-	return generateName(blobPrefix, 0)
+func (TestResourceNameGenerator) generateBlobName(c asserter) string {
+	return generateName(c, blobPrefix, 0)
 }

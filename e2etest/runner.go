@@ -21,9 +21,12 @@
 package e2etest
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -39,20 +42,43 @@ func newTestRunner() TestRunner {
 	return TestRunner{flags: make(map[string]string)}
 }
 
-func (t *TestRunner) SetOverwriteFlag(value string) {
-	t.flags["overwrite"] = value
-}
-
-func (t *TestRunner) SetRecursiveFlag(value bool) {
-	if value {
-		t.flags["recursive"] = "true"
-	} else {
-		t.flags["recursive"] = "false"
+var isLaunchedByDebugger = func() bool {
+	// gops executable must be in the path. See https://github.com/google/gops
+	gopsOut, err := exec.Command("gops", strconv.Itoa(os.Getppid())).Output()
+	if err == nil && strings.Contains(string(gopsOut), "\\dlv.exe") {
+		// our parent process is (probably) the Delve debugger
+		return true
 	}
+	return false
+}()
+
+func (t *TestRunner) SetAllFlags(p params) {
+	set := func(key string, value interface{}, dflt interface{}, formats ...string) {
+		if value == dflt {
+			return // nothing to do. The flag is not supposed to be set
+		}
+
+		format := "%v"
+		if len(formats) > 0 {
+			format = formats[0]
+		}
+
+		t.flags[key] = fmt.Sprintf(format, value)
+	}
+
+	// TODO: TODO: nakulkar-msft there will be many more to add here
+	set("recursive", p.recursive, false)
+	set("include-path", p.includePath, "")
+	set("include-after", p.includeAfter, "")
+	set("cap-mbps", p.capMbps, float32(0))
+	set("block-size-mb", p.blockSizeMB, float32(0))
+	set("s2s-detect-source-changed", p.s2sSourceChangeValidation, false)
+	set("metadata", p.metadata, "")
+	set("cancel-from-stdin", p.cancelFromStdin, false)
 }
 
-func (t *TestRunner) SetIncludePathFlag(value string) {
-	t.flags["include-path"] = value
+func (t *TestRunner) SetAwaitOpenFlag() {
+	t.flags["await-open"] = "true"
 }
 
 func (t *TestRunner) computeArgs() []string {
@@ -64,14 +90,119 @@ func (t *TestRunner) computeArgs() []string {
 	return append(args, "--output-type=json")
 }
 
-func (t *TestRunner) ExecuteCopyCommand(src, dst string) (CopyCommandResult, error) {
-	args := append([]string{"copy", src, dst}, t.computeArgs()...)
-	out, err := exec.Command(GlobalInputManager{}.GetExecutablePath(), args...).Output()
+// execCommandWithOutput replaces Go's exec.Command().Output, but appends an extra parameter and
+// breaks up the c.Run() call into its component parts. Both changes are to assist debugging
+func (t *TestRunner) execDebuggableWithOutput(name string, args []string, afterStart func() string, chToStdin <-chan string) ([]byte, error) {
+	debug := isLaunchedByDebugger
+	if debug {
+		args = append(args, "--await-continue")
+	}
+	c := exec.Command(name, args...)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	stdin, err := c.StdinPipe()
 	if err != nil {
-		return CopyCommandResult{}, err
+		return make([]byte, 0), err
 	}
 
-	return newCopyCommandResult(string(out)), nil
+	c.Stdout = &stdout
+	c.Stderr = &stderr
+
+	//instead of err := c.Run(), we do the following
+	runErr := c.Start()
+	if runErr == nil {
+		defer func() {
+			_ = c.Process.Kill() // in case we never finish c.Wait() below, and get paniced or killed
+		}()
+
+		if debug {
+			beginAzCopyDebugging(stdin)
+		}
+
+		// perform a specific post-start action
+		if afterStart != nil {
+			msgToApp := afterStart() // perform a local action, here in the test suite, that may optionally produce a message to send to the the app
+			if msgToApp != "" {
+				_, _ = stdin.Write([]byte(msgToApp + "\n")) // TODO: maybe change this to use chToStdIn
+			}
+		}
+
+		// allow on-going messages to stdin
+		if chToStdin != nil {
+			go func() {
+				for {
+					msg, ok := <-chToStdin
+					if ok {
+						_, _ = stdin.Write([]byte(msg + "\n"))
+					} else {
+						break
+					}
+				}
+			}()
+		}
+
+		// wait for completion
+		runErr = c.Wait()
+	}
+
+	// back to normal exec.Cmd.Output() processing
+	if runErr != nil {
+		if ee, ok := runErr.(*exec.ExitError); ok {
+			ee.Stderr = stderr.Bytes()
+		}
+	}
+	return stdout.Bytes(), runErr
+}
+
+func (t *TestRunner) ExecuteCopyOrSyncCommand(operation Operation, src, dst string, afterStart func() string, chToStdin <-chan string) (CopyOrSyncCommandResult, bool, error) {
+	capLen := func(b []byte) []byte {
+		if len(b) < 1024 {
+			return b
+		} else {
+			return append(b[:1024], byte('\n'))
+		}
+	}
+
+	verb := ""
+	switch operation {
+	case eOperation.Copy():
+		verb = "copy"
+	case eOperation.Sync():
+		verb = "sync"
+	default:
+		panic("unsupported operation type")
+	}
+
+	args := append([]string{verb, src, dst}, t.computeArgs()...)
+	out, err := t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args, afterStart, chToStdin)
+
+	wasClean := true
+	stdErr := make([]byte, 0)
+	if err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			stdErr = capLen(ee.Stderr) // cap length of this, because it can be a panic. But don't cap stdout, because we need its last line in newCopyOrSyncCommandResult
+			if len(stdErr) > 0 {
+				wasClean = false // something was written to stderr, probably a panic
+			}
+		}
+	}
+
+	if wasClean {
+		// either it succeeded, for it returned a failure code in a clean (non-panic) way.
+		// In both cases, we want out to be parsed, to get us the job ID.  E.g. maybe 1 transfer out of several failed,
+		// and that's what we'er actually testing for (so can't treat this as a fatal error).
+		r, ok := newCopyOrSyncCommandResult(string(out))
+		if ok {
+			return r, true, err
+		} else {
+			err = fmt.Errorf("could not parse AzCopy output. Run error, if any, was '%w'", err)
+		}
+	}
+
+	return CopyOrSyncCommandResult{},
+		false,
+		fmt.Errorf("azcopy run error: %w\n  with stderr: %s\n  and stdout: %s\n  from args %v", err, stdErr, out, args)
 }
 
 func (t *TestRunner) SetTransferStatusFlag(value string) {
@@ -88,43 +219,46 @@ func (t *TestRunner) ExecuteJobsShowCommand(jobID common.JobID) (JobsShowCommand
 	return newJobsShowCommandResult(string(out)), nil
 }
 
-type CopyCommandResult struct {
+type CopyOrSyncCommandResult struct {
 	jobID       common.JobID
-	finalStatus common.ListJobSummaryResponse
+	finalStatus common.ListSyncJobSummaryResponse
 }
 
-func newCopyCommandResult(rawOutput string) CopyCommandResult {
+func newCopyOrSyncCommandResult(rawOutput string) (CopyOrSyncCommandResult, bool) {
 	lines := strings.Split(rawOutput, "\n")
 
 	// parse out the final status
 	// -2 because the last line is empty
+	if len(lines) < 2 {
+		return CopyOrSyncCommandResult{}, false
+	}
 	finalLine := lines[len(lines)-2]
 	finalMsg := common.JsonOutputTemplate{}
 	err := json.Unmarshal([]byte(finalLine), &finalMsg)
 	if err != nil {
-		panic(err)
+		return CopyOrSyncCommandResult{}, false
 	}
 
-	jobSummary := common.ListJobSummaryResponse{}
+	jobSummary := common.ListSyncJobSummaryResponse{} // this is a superset of ListJobSummaryResponse, so works for both copy and sync
 	err = json.Unmarshal([]byte(finalMsg.MessageContent), &jobSummary)
 	if err != nil {
-		panic(err)
+		return CopyOrSyncCommandResult{}, false
 	}
 
-	return CopyCommandResult{jobID: jobSummary.JobID, finalStatus: jobSummary}
+	return CopyOrSyncCommandResult{jobID: jobSummary.JobID, finalStatus: jobSummary}, true
 }
 
-func (c *CopyCommandResult) GetTransferList(status common.TransferStatus) []common.TransferDetail {
+func (c *CopyOrSyncCommandResult) GetTransferList(status common.TransferStatus) ([]common.TransferDetail, error) {
 	runner := newTestRunner()
 	runner.SetTransferStatusFlag(status.String())
 
 	// invoke AzCopy to get the status from the plan files
 	result, err := runner.ExecuteJobsShowCommand(c.jobID)
 	if err != nil {
-		panic(err)
+		return make([]common.TransferDetail, 0), err
 	}
 
-	return result.transfers
+	return result.transfers, nil
 }
 
 type JobsShowCommandResult struct {

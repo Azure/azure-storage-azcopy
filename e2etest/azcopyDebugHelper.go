@@ -1,4 +1,4 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+// Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,41 +18,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package e2etest
 
 import (
-	chk "gopkg.in/check.v1"
+	"io"
 )
 
-type parseSizeSuite struct{}
-
-var _ = chk.Suite(&parseSizeSuite{})
-
-func (s *parseSizeSuite) TestParseSize(c *chk.C) {
-	b, _ := ParseSizeString("123K", "x")
-	c.Assert(b, chk.Equals, int64(123*1024))
-
-	b, _ = ParseSizeString("456m", "x")
-	c.Assert(b, chk.Equals, int64(456*1024*1024))
-
-	b, _ = ParseSizeString("789G", "x")
-	c.Assert(b, chk.Equals, int64(789*1024*1024*1024))
-
-	expectedError := "foo-bar must be a number immediately followed by K, M or G. E.g. 12k or 200G"
-
-	_, err := ParseSizeString("123", "foo-bar")
-	c.Assert(err.Error(), chk.Equals, expectedError)
-
-	_, err = ParseSizeString("123 K", "foo-bar")
-	c.Assert(err.Error(), chk.Equals, expectedError)
-
-	_, err = ParseSizeString("123KB", "foo-bar")
-	c.Assert(err.Error(), chk.Equals, expectedError)
-
-	_, err = ParseSizeString("123T", "foo-bar") // we don't support terabytes
-	c.Assert(err.Error(), chk.Equals, expectedError)
-
-	_, err = ParseSizeString("abcK", "foo-bar")
-	c.Assert(err.Error(), chk.Equals, expectedError)
-
+func beginAzCopyDebugging(stdin io.Writer) {
+	// to debug AzCopy from within a running test, you must
+	// 0. Make sure that gops is available on your PATH. (i.e. running "gops" will run it).  See https://github.com/google/gops
+	//    Gops is needed by TestRunner.isLaunchedByDebugger(), and it's also needed by GoLand's Attach To Process (step 2 below)
+	// then
+	// 1. Set a breakpoint on the line below
+	// 2. When the breakpoint is hit, use Attach To Process to manually attach your debugger to the running AzCopy process
+	// 3. Then you MUST continue past the breakpoint that you set here (i.e. on the line below). Any breakpoints you've set in AzCopy will then be hit.
+	//    (Note that some IDEs, e.g. GoLand, will give you two separate debug tabs/contexts, one for the tests exe, and one for AzCopy. So make sure you hit run/continue in the right tab)
+	_, _ = stdin.Write([]byte("continue\n")) // tell AzCopy to start its work
 }

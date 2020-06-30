@@ -61,7 +61,7 @@ const (
 	sizeStringDescription = "a number immediately followed by K, M or G. E.g. 12k or 200G"
 )
 
-func parseSizeString(s string, name string) (int64, error) {
+func ParseSizeString(s string, name string) (int64, error) {
 
 	message := name + " must be " + sizeStringDescription
 
@@ -108,7 +108,7 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return dummyCooked, errors.New(common.FileCountParam + " must be greater than zero")
 	}
 
-	bytesPerFile, err := parseSizeString(raw.sizePerFile, common.SizePerFileParam)
+	bytesPerFile, err := ParseSizeString(raw.sizePerFile, common.SizePerFileParam)
 	if err != nil {
 		return dummyCooked, err
 	}

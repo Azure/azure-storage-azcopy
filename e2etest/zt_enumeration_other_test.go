@@ -1,4 +1,4 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+// Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,41 +18,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package e2etest
 
 import (
-	chk "gopkg.in/check.v1"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"testing"
 )
 
-type parseSizeSuite struct{}
+// Purpose: Other tests for enumeration of sources, NOT including filtering
 
-var _ = chk.Suite(&parseSizeSuite{})
-
-func (s *parseSizeSuite) TestParseSize(c *chk.C) {
-	b, _ := ParseSizeString("123K", "x")
-	c.Assert(b, chk.Equals, int64(123*1024))
-
-	b, _ = ParseSizeString("456m", "x")
-	c.Assert(b, chk.Equals, int64(456*1024*1024))
-
-	b, _ = ParseSizeString("789G", "x")
-	c.Assert(b, chk.Equals, int64(789*1024*1024*1024))
-
-	expectedError := "foo-bar must be a number immediately followed by K, M or G. E.g. 12k or 200G"
-
-	_, err := ParseSizeString("123", "foo-bar")
-	c.Assert(err.Error(), chk.Equals, expectedError)
-
-	_, err = ParseSizeString("123 K", "foo-bar")
-	c.Assert(err.Error(), chk.Equals, expectedError)
-
-	_, err = ParseSizeString("123KB", "foo-bar")
-	c.Assert(err.Error(), chk.Equals, expectedError)
-
-	_, err = ParseSizeString("123T", "foo-bar") // we don't support terabytes
-	c.Assert(err.Error(), chk.Equals, expectedError)
-
-	_, err = ParseSizeString("abcK", "foo-bar")
-	c.Assert(err.Error(), chk.Equals, expectedError)
-
+func TestEnumeration_DirectoryStubsAreNotDownloaded(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.CopyAndSync(),
+		eTestFromTo.Other(common.EFromTo.BlobLocal()), // TODO: does this apply to any additional cases?
+		eValidate.Auto(),
+		params{
+			recursive: true,
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldIgnore: []interface{}{
+				f("dir", withDirStubMetadata{}),
+			},
+			shouldTransfer: []interface{}{
+				"filea",
+				folder("dir"),
+				"dir/fileb",
+			},
+		})
 }

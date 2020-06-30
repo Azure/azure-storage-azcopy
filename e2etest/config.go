@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strconv"
 
 	"github.com/JeffreyRichter/enum/enum"
 )
@@ -58,6 +59,24 @@ func (GlobalInputManager) GetExecutablePath() string {
 	}
 
 	return path
+}
+
+func (GlobalInputManager) KeepFailedData() bool {
+	raw := os.Getenv("AZCOPY_E2E_KEEP_FAILED_DATA")
+	if raw == "" {
+		return false
+	}
+
+	result, err := strconv.ParseBool(raw)
+	if err != nil {
+		panic("If AZCOPY_E2E_KEEP_FAILED_DATA is set, it must be a boolean")
+	}
+
+	return result
+}
+
+func (GlobalInputManager) TestSummaryLogPath() string {
+	return os.Getenv("AZCOPY_E2E_TEST_SUMMARY_LOG")
 }
 
 var EAccountType = AccountType(0)

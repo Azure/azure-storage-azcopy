@@ -103,6 +103,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	// this if statement ladder remains instead of being separated to help determine valid combinations for sync
 	// consider making a map of valid source/dest combos and consolidating this to generic source/dest setups, akin to the lower if statement
+	// TODO: if expand the set of source/dest combos supported by sync, update this method the declarative test framework: // TODO: add support for account-to-account operations (for those from-tos that support that)
 	cooked.fromTo = inferFromTo(raw.src, raw.dst)
 	var err error
 	if cooked.fromTo == common.EFromTo.Unknown() {
