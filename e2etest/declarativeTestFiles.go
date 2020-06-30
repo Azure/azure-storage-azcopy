@@ -82,12 +82,12 @@ type testObject struct {
 	// info to be used at creation time. Usually, creationInfo and and verificationInfo will be the same
 	// I.e. we expect the creation properties to be preserved. But, for flexibility, they can be set to something different.
 	creationProperties objectProperties
-	// info to be used at verification time
-	verificationProperties objectProperties
+	// info to be used at verification time. Will be nil if there is no validation (of properties) to be done
+	verificationProperties *objectProperties
 }
 
 func (t *testObject) isFolder() bool {
-	if t.creationProperties.isFolder != t.verificationProperties.isFolder {
+	if t.verificationProperties != nil && t.creationProperties.isFolder != t.verificationProperties.isFolder {
 		panic("isFolder properties are misconfigured")
 	}
 	return t.creationProperties.isFolder
@@ -146,6 +146,9 @@ func f(n string, properties ...withPropertyProvider) *testObject {
 			}
 			haveCreationProperties = true
 			objProps := p.createObjectProperties()
+			if objProps == nil {
+				objProps = &objectProperties{} // for creationProperties, this saves our code from endless nil checks. (But for verification, below, the nil is useful)
+			}
 			result.creationProperties = *objProps
 		}
 
@@ -155,7 +158,7 @@ func f(n string, properties ...withPropertyProvider) *testObject {
 			}
 			haveVerificationProperties = true
 			objProps := p.createObjectProperties()
-			result.verificationProperties = *objProps
+			result.verificationProperties = objProps // verification props is nilable, and nil signals "nothing to verify"
 		}
 	}
 
@@ -170,7 +173,9 @@ func folder(n string, properties ...withPropertyProvider) *testObject {
 	// isFolder is at properties level, not testObject level, because we need it at properties level when reading
 	// the properties back from the destination (where we don't read testObjects, we just read objectProperties)
 	result.creationProperties.isFolder = true
-	result.verificationProperties.isFolder = true
+	if result.verificationProperties != nil {
+		result.verificationProperties.isFolder = true
+	}
 
 	return result
 }

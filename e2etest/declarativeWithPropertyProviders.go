@@ -58,9 +58,10 @@ func (with) appliesToVerification() bool {
 }
 
 // maps non-nillable fields (which are easy to create in the tests) to nillable ones, which have clearer meaning in
-// the resourceManagers
+// the resourceManagers.
 func (w with) createObjectProperties() *objectProperties {
 	result := &objectProperties{}
+	populated := false
 
 	ensureContentPropsExist := func() {
 		if result.contentHeaders == nil {
@@ -69,6 +70,7 @@ func (w with) createObjectProperties() *objectProperties {
 	}
 
 	if w.size != "" {
+		populated = true
 		longSize, err := cmd.ParseSizeString(w.size, "with.size")
 		common.PanicIfErr(err) // TODO: any better option?
 		result.size = &longSize
@@ -76,48 +78,63 @@ func (w with) createObjectProperties() *objectProperties {
 
 	// content headers
 	if w.cacheControl != "" {
+		populated = true
 		ensureContentPropsExist()
 		result.contentHeaders.cacheControl = &w.cacheControl
 	}
 	if w.contentDisposition != "" {
+		populated = true
 		ensureContentPropsExist()
 		result.contentHeaders.contentDisposition = &w.contentDisposition
 	}
 	if w.contentEncoding != "" {
+		populated = true
 		ensureContentPropsExist()
 		result.contentHeaders.contentEncoding = &w.contentEncoding
 	}
 	if w.contentLanguage != "" {
+		populated = true
 		ensureContentPropsExist()
 		result.contentHeaders.contentLanguage = &w.contentLanguage
 	}
 	if w.contentMD5 != nil {
+		populated = true
 		ensureContentPropsExist()
 		result.contentHeaders.contentMD5 = w.contentMD5
 	}
 	if w.contentType != "" {
+		populated = true
 		ensureContentPropsExist()
 		result.contentHeaders.contentType = &w.contentType
 	}
 
 	// other properties
 	if w.nameValueMetadata != nil {
+		populated = true
 		result.nameValueMetadata = w.nameValueMetadata
 	}
 	if w.lastWriteTime != (time.Time{}) {
+		populated = true
 		result.lastWriteTime = &w.lastWriteTime
 	}
 	if w.creationTime != (time.Time{}) {
+		populated = true
 		result.creationTime = &w.creationTime
 	}
 	if w.smbAttributes != "" {
+		populated = true
 		result.smbAttributes = &w.smbAttributes
 	}
 	if w.smbPermissionsSddl != "" {
+		populated = true
 		result.smbPermissionsSddl = &w.smbPermissionsSddl
 	}
 
-	return result
+	if populated {
+		return result
+	} else {
+		return nil // this gives consumers a shortcut way to know "there is no validation to do here", and so avoid expensive network calls to get destination properties when there is no validation needed
+	}
 }
 
 ////

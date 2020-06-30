@@ -223,11 +223,8 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 }
 
 func (s *scenario) validateProperties() {
-	// get a map of everything that now exists at the destination
-	destContents := s.state.dest.getAllProperties(s.a)
-	if s.a.Failed() {
-		return
-	}
+	destPropsRetrieved := false
+	var destProps map[string]*objectProperties // map of all files, and their properties, that now exist at the destination
 
 	_, _, expectFolders, expectRootFolder := s.getTransferInfo()
 
@@ -235,7 +232,17 @@ func (s *scenario) validateProperties() {
 	expectedFilesAndFolders := s.fs.getForStatus(common.ETransferStatus.Success(), expectFolders, expectRootFolder)
 	for _, f := range expectedFilesAndFolders {
 		expected := f.verificationProperties // use verificationProperties (i.e. what we expect) NOT creationProperties (what we made at the source). They won't ALWAYS be the same
-		actual, ok := destContents[f.name]
+		if expected == nil {
+			// nothing to verify
+			continue
+		}
+		if !destPropsRetrieved {
+			// only incur the IO cost of getting dest properties if we have at least one thing to verify
+			destPropsRetrieved = true
+			destProps = s.state.dest.getAllProperties(s.a)
+		}
+
+		actual, ok := destProps[f.name]
 		if !ok {
 			// this shouldn't happen, because we only run if validateTransferStates passed, but check anyway
 			// TODO: JohnR: need to remove the strip top dir prefix from the map (and normalize the delimiters)
