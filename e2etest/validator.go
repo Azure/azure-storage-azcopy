@@ -31,21 +31,29 @@ import (
 
 type Validator struct{}
 
+// Use this to ensure that source and dest strings can be compared with each other
+func makeSlashesComparable(s string) string {
+	return strings.Replace(s, "\\", "/", -1)
+}
+
+// Use this to ensure slashes are correct for the location, loc
+func fixSlashes(s string, loc common.Location) string {
+	if loc == common.ELocation.Local() {
+		// replace all slashes with the one that right for the local OS
+		s = strings.Replace(s, "/", common.OS_PATH_SEPARATOR, -1)
+		s = strings.Replace(s, "\\", common.OS_PATH_SEPARATOR, -1)
+	} else {
+		// replace all backslashes with web-style forward slash
+		s = strings.Replace(s, "\\", common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+	}
+	return s
+}
+
 func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool, isDstEncoded bool,
 	sourcePrefix string, destinationPrefix string, expectedTransfers []*testObject, actualTransfers []common.TransferDetail, statusToTest common.TransferStatus) {
 
-	normalizeSlashes := func(s string) string {
-		return strings.Replace(s, "\\", "/", -1)
-	}
-
-	if len(actualTransfers) > 0 && !common.IsShortPath(actualTransfers[0].Src) {
-		sourcePrefix = common.ToExtendedPath(sourcePrefix)
-	}
-	if len(actualTransfers) > 0 && !common.IsShortPath(actualTransfers[0].Dst) {
-		destinationPrefix = common.ToExtendedPath(destinationPrefix)
-	}
-	sourcePrefix = normalizeSlashes(sourcePrefix)
-	destinationPrefix = normalizeSlashes(destinationPrefix)
+	sourcePrefix = makeSlashesComparable(sourcePrefix)
+	destinationPrefix = makeSlashesComparable(destinationPrefix)
 
 	// validate that the right number of transfers were scheduled
 	c.Assert(len(actualTransfers), equals(), len(expectedTransfers),
@@ -66,8 +74,8 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 		}
 	})
 	for _, transfer := range actualTransfers {
-		srcRelativeFilePath := strings.Trim(strings.TrimPrefix(normalizeSlashes(transfer.Src), sourcePrefix), "/")
-		dstRelativeFilePath := strings.Trim(strings.TrimPrefix(normalizeSlashes(transfer.Dst), destinationPrefix), "/")
+		srcRelativeFilePath := strings.Trim(strings.TrimPrefix(makeSlashesComparable(transfer.Src), sourcePrefix), "/")
+		dstRelativeFilePath := strings.Trim(strings.TrimPrefix(makeSlashesComparable(transfer.Dst), destinationPrefix), "/")
 
 		if isSrcEncoded {
 			srcRelativeFilePath, _ = url.PathUnescape(srcRelativeFilePath)

@@ -219,6 +219,14 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 	} else {
 		dstRoot = fmt.Sprintf("%s/%s", dstRoot, path.Base(srcRoot))
 	}
+
+	if s.fromTo.From() == common.ELocation.Local() {
+		srcRoot = common.ToExtendedPath(srcRoot)
+	}
+	if s.fromTo.To() == common.ELocation.Local() {
+		dstRoot = common.ToExtendedPath(dstRoot)
+	}
+
 	return srcRoot, dstRoot, expectFolders, expectRootFolder
 }
 
