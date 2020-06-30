@@ -20,5 +20,4 @@
 
 package e2etest
 
-// Purpose: Tests that are specific to the behaviour of sync (i.e. the actual syncing part of sync - deciding which files to move,
-//    and which to delete
+// Purpose: Tests specifically about logging?  E.g. redaction of SAS tokens?  Do we even need logging tests tho?

@@ -16,13 +16,23 @@ package e2etest
 //
 //   Discussion points
 //     How to use it outside AzCopy? (Maybe let it mature a little first, then abstract out the running of AzCopy)
+//     Hacks/workarounds?
+//    		The beforeOpenFirstFile hook is a bit ugly, but will probably have to do.
+//          AT some stage, all TODOs need to be reviewed, and actioned or remove
+//     And see gaps, below
+//     Need to hook it into build
+//     Need to gradually remove python tests, but only remove those that are covered by the new suite.
 //
 //  Framework gaps
-//		Creating remote files more quickly (or at least in parallel). Right now, it takes too long to do the setup for tests with non-trivial file sizes
+//		IMPORTANT Creating remote files more quickly (or at least in parallel). Right now, it takes too long to do the setup for tests with non-trivial file sizes
 //      Putting content in all our remote test files (done for blob, but not for others, and for some tests content is needed)
 //      Content preservation verification. Content preservation tests. Will need a way, in resourceManager, to ask it for some proof of what the content of a specific file is.
 //          Maybe a getSha256Hash method? (I'm suggesting that hashing type, since MD5 can misleading. Just downloading the MD5 from storage doesn't
 //          prove that the file has that content.  Using Sha256 makes it very clear that we need to download the blob and hash it oursleves)
+//  Less important framework gaps:
+//      Verifying the failure messages, from shouldFail are actually present in the log
+//      Responding to prompts, for testing overwrite.  Part of the implementation could come from chToStdin that is supported by the method that runs AzCopy.
+//         Not 100% sure how to get the stdout back out in real time. That may be a little trickier.
 //
 //   Suggested near-term goal:
 //		Complete the following suites:
@@ -48,7 +58,10 @@ package e2etest
 //        The e2etest package into a set of packages - e.g. separate the test framework from the tests?  But, do we really need this?
 //
 //   To think about:
-//    stripTopDir
+//
+//    stripTopDir (we need to test cases with it true (i.e;. trailing /*) on the source and false
+//    Add a test that uses lots of filters in combination (we once found a bug, in manual testing with combining include-path with other filters).
+//      See EnumerationTestMatrix.xls in the Teams channel files list, for some possible examples of combined tests.
 //    copying to/from things that are not the share root/container root
 //    think about "decode unsafe dst characters no Windows" comment in validator.go
 //    Add a timeout to all executions of AzCopy
