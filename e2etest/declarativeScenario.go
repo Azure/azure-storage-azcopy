@@ -175,7 +175,7 @@ func (s *scenario) validateTransferStates() {
 
 	isSrcEncoded := s.fromTo.From().IsRemote() // TODO: is this right, reviewers?
 	isDstEncoded := s.fromTo.To().IsRemote()   // TODO: is this right, reviewers?
-	srcRoot, dstRoot, expectFolders, expectRootFolder := s.getTransferInfo()
+	srcRoot, dstRoot, expectFolders, expectRootFolder, _ := s.getTransferInfo()
 
 	// test the sets of files in the various statuses
 	for _, statusToTest := range []common.TransferStatus{
@@ -196,7 +196,7 @@ func (s *scenario) validateTransferStates() {
 	//    the actual values from the test run
 }
 
-func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFolders bool, expectedRootFolder bool) {
+func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFolders bool, expectedRootFolder bool, addedDirAtDest string) {
 	srcRoot = s.state.source.getParam(false, false)
 	dstRoot = s.state.dest.getParam(false, false)
 
@@ -207,6 +207,7 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 	expectRootFolder := expectFolders
 
 	// compute dest, taking into account our stripToDir rules
+	addedDirAtDest = ""
 	areBothContainerLike := s.state.source.isContainerLike() && s.state.dest.isContainerLike()
 	if s.stripTopDir || s.operation == eOperation.Sync() || areBothContainerLike {
 		// Sync always acts like stripTopDir is true.
@@ -215,9 +216,11 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 		// of that kind.
 		expectRootFolder = false
 	} else if s.fromTo.From().IsLocal() {
-		dstRoot = fmt.Sprintf("%s%c%s", dstRoot, os.PathSeparator, filepath.Base(srcRoot))
+		addedDirAtDest = filepath.Base(srcRoot)
+		dstRoot = fmt.Sprintf("%s%c%s", dstRoot, os.PathSeparator, addedDirAtDest)
 	} else {
-		dstRoot = fmt.Sprintf("%s/%s", dstRoot, path.Base(srcRoot))
+		addedDirAtDest = path.Base(srcRoot)
+		dstRoot = fmt.Sprintf("%s/%s", dstRoot, addedDirAtDest)
 	}
 
 	if s.fromTo.From() == common.ELocation.Local() {
@@ -227,14 +230,14 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 		dstRoot = common.ToExtendedPath(dstRoot)
 	}
 
-	return srcRoot, dstRoot, expectFolders, expectRootFolder
+	return srcRoot, dstRoot, expectFolders, expectRootFolder, addedDirAtDest
 }
 
 func (s *scenario) validateProperties() {
 	destPropsRetrieved := false
 	var destProps map[string]*objectProperties // map of all files, and their properties, that now exist at the destination
 
-	_, _, expectFolders, expectRootFolder := s.getTransferInfo()
+	_, _, expectFolders, expectRootFolder, addedDirAtDest := s.getTransferInfo()
 
 	// for everything that should have been transferred, verify that any expected properties have been transferred to the destination
 	expectedFilesAndFolders := s.fs.getForStatus(common.ETransferStatus.Success(), expectFolders, expectRootFolder)
@@ -250,7 +253,8 @@ func (s *scenario) validateProperties() {
 			destProps = s.state.dest.getAllProperties(s.a)
 		}
 
-		actual, ok := destProps[f.name]
+		destName := fixSlashes(path.Join(addedDirAtDest, f.name), s.fromTo.To())
+		actual, ok := destProps[destName]
 		if !ok {
 			// this shouldn't happen, because we only run if validateTransferStates passed, but check anyway
 			// TODO: JohnR: need to remove the strip top dir prefix from the map (and normalize the delimiters)
