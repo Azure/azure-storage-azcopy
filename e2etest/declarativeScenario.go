@@ -47,8 +47,10 @@ type scenario struct {
 	stripTopDir bool // TODO: figure out how we'll control and use this
 
 	// internal declarative runner state
-	a     asserter
-	state scenarioState // TODO: does this really need to be a separate struct?
+	a          asserter
+	state      scenarioState // TODO: does this really need to be a separate struct?
+	needResume bool
+	chToStdin  chan string
 }
 
 type scenarioState struct {
@@ -78,9 +80,17 @@ func (s *scenario) Run() {
 
 	// execute
 	s.runAzCopy()
-
 	if s.a.Failed() {
 		return // execution failed. No point in running validation
+	}
+
+	// resume if needed
+	if s.needResume {
+		// TODO: create a method something like runAzCopy, but which does a resume, based on the job id returned inside runAzCopy
+		s.a.Error("Resume support is not built yet")
+	}
+	if s.a.Failed() {
+		return // resume failed. No point in running validation
 	}
 
 	// check
@@ -136,6 +146,9 @@ func (s *scenario) assignSourceAndDest() {
 }
 
 func (s *scenario) runAzCopy() {
+	s.chToStdin = make(chan string) // unubuffered seems the most predictable for our usages
+	defer close(s.chToStdin)
+
 	r := newTestRunner()
 	r.SetAllFlags(s.p)
 
@@ -157,7 +170,7 @@ func (s *scenario) runAzCopy() {
 		s.operation,
 		s.state.source.getParam(s.stripTopDir, useSas),
 		s.state.dest.getParam(false, useSas),
-		afterStart)
+		afterStart, s.chToStdin)
 
 	if !wasClean {
 		s.a.AssertNoErr(err, "running AzCopy")
@@ -329,4 +342,10 @@ func (s *scenario) CreateFiles(fs testFiles, atSource bool) {
 	} else {
 		s.state.dest.createFiles(s.a, fs, false)
 	}
+}
+
+func (s *scenario) CancelAndResume() {
+	s.a.Assert(s.p.cancelFromStdin, equals(), true, "cancelFromStdin must be set in parameters, to use CancelAndResume")
+	s.needResume = true
+	s.chToStdin <- "cancel"
 }

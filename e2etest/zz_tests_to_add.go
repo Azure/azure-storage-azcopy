@@ -11,9 +11,18 @@ package e2etest
 //
 //   Next framework _development_ tasks
 //      DONE Change expectation lists from string to interface{}
-//  	Content preservation tests
-//		In progress: Properties preservation tests ***** normalize delimiters and remove the propagated source dir (if no strip top dir) in the auto-validation
-//      A resume test
+//  	DONE at framework level. But still have todos for getting/setting some properties) Properties preservation tests
+//      DONE in draft form A resume test
+//
+//   Discussion points
+//     How to use it outside AzCopy? (Maybe let it mature a little first, then abstract out the running of AzCopy)
+//
+//  Framework gaps
+//		Creating remote files more quickly (or at least in parallel). Right now, it takes too long to do the setup for tests with non-trivial file sizes
+//      Putting content in all our remote test files (done for blob, but not for others, and for some tests content is needed)
+//      Content preservation verification. Content preservation tests. Will need a way, in resourceManager, to ask it for some proof of what the content of a specific file is.
+//          Maybe a getSha256Hash method? (I'm suggesting that hashing type, since MD5 can misleading. Just downloading the MD5 from storage doesn't
+//          prove that the file has that content.  Using Sha256 makes it very clear that we need to download the blob and hash it oursleves)
 //
 //   Suggested near-term goal:
 //		Complete the following suites:

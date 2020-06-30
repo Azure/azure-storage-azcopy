@@ -20,6 +20,54 @@
 
 package e2etest
 
+import (
+	"testing"
+	"time"
+)
+
 // Purpose: Tests for how we respond to errors. Maybe also resume?
 
 // TODO: include how we clean up destination files/blobs after errors
+
+// This test runs a transfer partially, then cancel the job, then resumes it
+func TestError_CanResume(t *testing.T) {
+	// TODO: as at 1 July 2020, this test doesn't pass, but if you run it, it will tell you why (all to do with missing parts of the framework)
+	//   It's here as one possible approach for testing resume.
+	// TODO: the current test data volume might be a bit big
+	RunScenarios(
+		t,
+		eOperation.CopyAndSync(),
+		eTestFromTo.AllSourcesToOneDest(), // TODO: or should we make this AllPairs?
+		eValidate.AutoPlusContent(),       // important to validate file content after a resume  // TODO: as at 1 July 2020, content validation isn't supported yet, so this test will fail
+		params{
+			recursive:       true,
+			capMbps:         50,   // at this speed the payload should take about 50 seconds to move
+			cancelFromStdin: true, // needed to use hookHelper.CancelAndResume()
+		},
+		&hooks{beforeRunJob: func(h hookHelper) {
+			go func() {
+				// wait a while, until we are probably somewhere the middle of the transfer, and then
+				// kill AzCopy and resume it
+				// Must do this in a separate GoRoutine, since we are (ab)using the beforeRunJob hook, and the job won't start
+				// unit our hook func returns
+				time.Sleep(20 * time.Second)
+				h.CancelAndResume()
+			}()
+		}},
+		testFiles{
+			// Make a payload this is big enough to last for a minute or so, at our capped speed as per params above.
+			// Make the files in it big enough to have multiple chunks, since that's the more interesting case for resume.
+			defaultSize: "50M",
+			shouldTransfer: []interface{}{
+				folder(""),
+				"a",
+				"b",
+				folder("fold1"),
+				"fold1/f",
+				"fold1/g",
+				folder("fold1/fold2"),
+				"fold1/j",
+				"fold1/k",
+			},
+		})
+}

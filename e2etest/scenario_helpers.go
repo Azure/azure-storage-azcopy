@@ -24,7 +24,6 @@ package e2etest
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/url"
@@ -542,7 +541,7 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, shareURL azfile.Sha
 }
 
 func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile.ShareURL) map[string]*objectProperties {
-	a.AssertNoErr(errors.New("enumerateShareFileProperties is not yet implemeted"))
+
 	//root := shareURL.NewRootDirectoryURL()
 	// TODO use root.ListFilesAndDirectoriesSegment()
 	// TODO: nakulkar-msft ?

@@ -150,6 +150,7 @@ type params struct {
 	deleteDestination         common.DeleteDestination
 	s2sSourceChangeValidation bool
 	metadata                  string
+	cancelFromStdin           bool
 }
 
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level
@@ -425,6 +426,9 @@ type hookHelper interface {
 
 	// CreateFiles creates the specified files (overwriting any that are already there of the same name)
 	CreateFiles(fs testFiles, atSource bool)
+
+	// CancelAndResume tells the runner to cancel the running AzCopy job (with "cancel" to stdin) and the resume the job
+	CancelAndResume()
 }
 
 ///////

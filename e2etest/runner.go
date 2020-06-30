@@ -66,6 +66,7 @@ func (t *TestRunner) SetAllFlags(p params) {
 		t.flags[key] = fmt.Sprintf(format, value)
 	}
 
+	// TODO: TODO: nakulkar-msft there will be many more to add here
 	set("recursive", p.recursive, false)
 	set("include-path", p.includePath, "")
 	set("include-after", p.includeAfter, "")
@@ -73,6 +74,7 @@ func (t *TestRunner) SetAllFlags(p params) {
 	set("block-size-mb", p.blockSizeMB, float32(0))
 	set("s2s-detect-source-changed", p.s2sSourceChangeValidation, false)
 	set("metadata", p.metadata, "")
+	set("cancel-from-stdin", p.cancelFromStdin, false)
 }
 
 func (t *TestRunner) SetAwaitOpenFlag() {
@@ -90,7 +92,7 @@ func (t *TestRunner) computeArgs() []string {
 
 // execCommandWithOutput replaces Go's exec.Command().Output, but appends an extra parameter and
 // breaks up the c.Run() call into its component parts. Both changes are to assist debugging
-func (t *TestRunner) execDebuggableWithOutput(name string, args []string, afterStart func() string) ([]byte, error) {
+func (t *TestRunner) execDebuggableWithOutput(name string, args []string, afterStart func() string, chToStdin <-chan string) ([]byte, error) {
 	debug := isLaunchedByDebugger
 	if debug {
 		args = append(args, "--await-continue")
@@ -118,13 +120,29 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string, afterS
 			beginAzCopyDebugging(stdin)
 		}
 
+		// perform a specific post-start action
 		if afterStart != nil {
 			msgToApp := afterStart() // perform a local action, here in the test suite, that may optionally produce a message to send to the the app
 			if msgToApp != "" {
-				_, _ = stdin.Write([]byte(msgToApp + "\n"))
+				_, _ = stdin.Write([]byte(msgToApp + "\n")) // TODO: maybe change this to use chToStdIn
 			}
 		}
 
+		// allow on-going messages to stdin
+		if chToStdin != nil {
+			go func() {
+				for {
+					msg, ok := <-chToStdin
+					if ok {
+						_, _ = stdin.Write([]byte(msg + "\n"))
+					} else {
+						break
+					}
+				}
+			}()
+		}
+
+		// wait for completion
 		runErr = c.Wait()
 	}
 
@@ -137,7 +155,7 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string, afterS
 	return stdout.Bytes(), runErr
 }
 
-func (t *TestRunner) ExecuteCopyOrSyncCommand(operation Operation, src, dst string, afterStart func() string) (CopyOrSyncCommandResult, bool, error) {
+func (t *TestRunner) ExecuteCopyOrSyncCommand(operation Operation, src, dst string, afterStart func() string, chToStdin <-chan string) (CopyOrSyncCommandResult, bool, error) {
 	capLen := func(b []byte) []byte {
 		if len(b) < 1024 {
 			return b
@@ -157,7 +175,7 @@ func (t *TestRunner) ExecuteCopyOrSyncCommand(operation Operation, src, dst stri
 	}
 
 	args := append([]string{verb, src, dst}, t.computeArgs()...)
-	out, err := t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args, afterStart)
+	out, err := t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args, afterStart, chToStdin)
 
 	wasClean := true
 	stdErr := make([]byte, 0)
