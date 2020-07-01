@@ -75,6 +75,7 @@ func (t *TestRunner) SetAllFlags(p params) {
 	set("s2s-detect-source-changed", p.s2sSourceChangeValidation, false)
 	set("metadata", p.metadata, "")
 	set("cancel-from-stdin", p.cancelFromStdin, false)
+	set("overwrite", p.overwrite, "")
 }
 
 func (t *TestRunner) SetAwaitOpenFlag() {
@@ -88,6 +89,11 @@ func (t *TestRunner) computeArgs() []string {
 	}
 
 	return append(args, "--output-type=json")
+}
+
+// A special "sentinel value", that signals we want to terminate a process, not send it a real message
+func (TestRunner) terminationSentinel() string {
+	return "azCopyE2eTerminateProcess"
 }
 
 // execCommandWithOutput replaces Go's exec.Command().Output, but appends an extra parameter and
@@ -134,7 +140,12 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string, afterS
 				for {
 					msg, ok := <-chToStdin
 					if ok {
-						_, _ = stdin.Write([]byte(msg + "\n"))
+						if msg == t.terminationSentinel() {
+							// if we get this special value, we kill the process. Using the special value saves us from having to have a second channel
+							_ = c.Process.Kill()
+						} else {
+							_, _ = stdin.Write([]byte(msg + "\n"))
+						}
 					} else {
 						break
 					}

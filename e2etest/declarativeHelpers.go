@@ -151,6 +151,7 @@ type params struct {
 	s2sSourceChangeValidation bool
 	metadata                  string
 	cancelFromStdin           bool
+	overwrite                 string
 }
 
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level
@@ -427,8 +428,20 @@ type hookHelper interface {
 	// CreateFiles creates the specified files (overwriting any that are already there of the same name)
 	CreateFiles(fs testFiles, atSource bool)
 
-	// CancelAndResume tells the runner to cancel the running AzCopy job (with "cancel" to stdin) and the resume the job
-	CancelAndResume()
+	// RequestResumeAfterExit tells the runner to resume the AzCopy job (once) after it exits
+	RequestResumeAfterFailure()
+
+	// CancelProcess tells the runner to cancel the running AzCopy job (with "cancel" to stdin)
+	CancelProcess()
+
+	// KillProcess tells the runner to terminate the process of  the running AzCopy job
+	KillProcess()
+
+	// You should almost never need to call this method, because generally the test framework will make assertions for you
+	// to assert that files you've said should transfer did indeed transfer as you specified.
+	// But, in the very rare cases where your hook code needs to make an assertion,
+	// you can use this method.  It makes the assertion in the correct test context for the scenario that is running.
+	Assert(obtained interface{}, comp comparison, expected interface{}, comment ...string)
 }
 
 ///////
@@ -447,4 +460,12 @@ type hooks struct {
 	// before, during or after AzCopy's scanning phase.  If this hook is set, AzCopy won't open its first file, to start
 	// transferring data, until this function executes.
 	beforeOpenFirstFile hookFunc
+
+	// called just before the job is resumed, in cases where the first run failed and resume on failure has been requested
+	beforeResume hookFunc
+
+	// Called at the very end of the job
+	// This accommodates the rare occasions when the test code itself (not the test framework) needs to make an assertion
+	// at the end of the job. Which the hook code MUST do by calling hookHelper.Assert, not the testing.T directly)
+	afterRunScenario hookFunc
 }
