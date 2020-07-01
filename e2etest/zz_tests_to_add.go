@@ -23,6 +23,10 @@ package e2etest
 //     Need to hook it into build
 //     Need to gradually remove python tests, but only remove those that are covered by the new suite.
 //     Also need to remove the "unit" tests in cmd that actually hit the service. Probably they can all be covered by the new suite.
+//     What do we want to do about the recursive flag?  Just leave it how it is now, set to a specific value for each test?
+//        Or, do we want to have a feature where we can tell the framework to also run additional non-recursive scenarios?  We shouldn't have to write any more
+//        test code, because the framework could just automatically know "Oh, I'm doing the non-recursive case. Anything in "shouldTransfer" which
+//        is not at root level should be treated as if its in "shouldIgnore".
 //
 //  Framework gaps
 //		IMPORTANT Creating remote files more quickly (or at least in parallel). Right now, it takes too long to do the setup for tests with non-trivial file sizes
