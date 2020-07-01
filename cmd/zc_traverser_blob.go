@@ -179,8 +179,6 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 				}
 			}
 
-			marker = lResp.NextMarker
-
 			// process the blobs returned in this result segment
 			for _, blobInfo := range lResp.Segment.BlobItems {
 				// if the blob represents a hdi folder, then skip it
@@ -204,6 +202,8 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 				)
 				enqueueOutput(storedObject, nil)
 			}
+
+			marker = lResp.NextMarker
 		}
 		return nil
 	}
