@@ -121,3 +121,89 @@ func TestFilter_IncludeAfter(t *testing.T) {
 			},
 		})
 }
+
+// Generally, each filter test should target one filter.  We did once have a bug though, where combining
+// include-path with other filters didn't work properly. This test should give us some protection against that.
+// In particular, this tests asserts how the various path and pattern related filters should combine with each other.
+func TestFilter_CombineCommonFilters(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Copy(), // for Sync, include-path doesn't make sense and isn't supported
+		eTestFromTo.AllSourcesToOneDest(),
+		eValidate.Auto(),
+		params{
+			recursive:      true,
+			includePath:    "dog;donkey/seal;ferret.txt;frog.txt;goat.txt", // mix of directories and files, all relative to the root
+			excludePath:    "dog/seal;donkey/seal/frog.txt",                // mix of directories and files, all relative to the root
+			includePattern: "f*",
+			excludePattern: "ferret*",
+			// Include path includes a whole subdir, from which the include pattern includes only the f*s.
+			// The exclude path excludes a specific frog.txt in a specific directory,
+			// and the exclude pattern excludes the all ferret files.
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldIgnore: []interface{}{
+				// since this is such a long list, and it has a repetitive structure, the "shouldTransfer" files are included,
+				// (just as comments) in the shouldIgnore list, so that the structure can be seen. We don't normally need (or want)
+				// to do that. But it seemed useful here.
+				// All folders are excluded, because the params include file-only filters.
+				// Naming convention in this test: d* = directory; s* = subdirectory; f* (and one g*) = file
+				folder(""),
+				"ferret.txt",
+				"fox.txt",
+				//"frog.txt", in shouldTransfer
+				"goat.txt",
+				folder("dog"),
+				"dog/ferret.txt",
+				//"dog/fox.txt", in shouldTransfer
+				//"dog/frog.txt", in shouldTransfer
+				"dog/goat.txt",
+				folder("dog/seal"),
+				"dog/seal/ferret.txt",
+				"dog/seal/fox.txt",
+				"dog/seal/frog.txt",
+				"dog/seal/goat.txt",
+				folder("dog/skunk"),
+				"dog/skunk/ferret.txt",
+				//"dog/skunk/fox.txt", in shouldTransfer
+				//"dog/skunk/frog.txt", in shouldTransfer
+				"dog/skunk/goat.txt",
+				folder("dog/snail"),
+				"dog/snail/ferret.txt",
+				//"dog/snail/fox.txt", in shouldTransfer
+				//"dog/snail/frog.txt", in shouldTransfer
+				"dog/snail/goat.txt",
+				"donkey/ferret.txt",
+				"donkey/fox.txt",
+				"donkey/frog.txt",
+				"donkey/goat.txt",
+				folder("donkey/seal"),
+				"donkey/seal/ferret.txt",
+				//"donkey/seal/fox.txt", in shouldTransfer
+				"donkey/seal/frog.txt",
+				"donkey/seal/goat.txt",
+				folder("donkey/skunk"),
+				"donkey/skunk/ferret.txt",
+				"donkey/skunk/fox.txt",
+				"donkey/skunk/frog.txt",
+				"donkey/skunk/goat.txt",
+				folder("donkey/snail"),
+				"donkey/snail/ferret.txt",
+				"donkey/snail/fox.txt",
+				"donkey/snail/frog.txt",
+				"donkey/snail/goat.txt",
+			},
+			shouldTransfer: []interface{}{
+				"dog/fox.txt",
+				"dog/frog.txt",
+				"dog/skunk/fox.txt",
+				"dog/skunk/frog.txt",
+				"dog/snail/fox.txt",
+				"dog/snail/frog.txt",
+				"donkey/seal/fox.txt",
+				"frog.txt",
+			},
+		})
+}

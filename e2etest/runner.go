@@ -69,6 +69,9 @@ func (t *TestRunner) SetAllFlags(p params) {
 	// TODO: TODO: nakulkar-msft there will be many more to add here
 	set("recursive", p.recursive, false)
 	set("include-path", p.includePath, "")
+	set("exclude-path", p.excludePath, "")
+	set("include-pattern", p.includePattern, "")
+	set("exclude-pattern", p.excludePattern, "")
 	set("include-after", p.includeAfter, "")
 	set("cap-mbps", p.capMbps, float32(0))
 	set("block-size-mb", p.blockSizeMB, float32(0))
