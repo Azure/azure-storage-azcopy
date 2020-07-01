@@ -22,6 +22,7 @@ package e2etest
 //     And see gaps, below
 //     Need to hook it into build
 //     Need to gradually remove python tests, but only remove those that are covered by the new suite.
+//     Also need to remove the "unit" tests in cmd that actually hit the service. Probably they can all be covered by the new suite.
 //
 //  Framework gaps
 //		IMPORTANT Creating remote files more quickly (or at least in parallel). Right now, it takes too long to do the setup for tests with non-trivial file sizes
