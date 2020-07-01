@@ -144,13 +144,14 @@ To leverage this command, please install the necessary extension via: pip3 insta
 in your PATH. For more information on this step, please visit https://aka.ms/azcopy/clfs.
 
 This command is a simple option for moving existing data to cloud storage for use with specific Microsoft high-performance computing cache products. 
-Because these products use a proprietary cloud filesystem format to manage data, you must populate storage by using the cache service 
-instead of through a native copy command. This command lets you transfer data without using the cache - for example, 
+Because these products use a proprietary cloud filesystem format to manage data, that data cannot be loaded through the native copy command. 
+Instead, the data must be loaded through the cache product itself OR via this load command, which uses the correct proprietary format.
+This command lets you transfer data without using the cache - for example, 
 to pre-populate storage or to add files to a working set without increasing cache load.
 
 The destination is an empty Azure Storage Container. When the transfer is complete, the destination container can be used with an Azure HPC Cache instance or Avere vFXT for Azure cluster.
 
-NOTE: This is a preview release of the load command. Please report any issues on Github.
+NOTE: This is a preview release of the load command. Please report any issues on the AzCopy Github repo.
 `,
 	Example: `
 Load an entire directory with a SAS:
@@ -223,13 +224,15 @@ Load an entire directory with a SAS:
 		clfsOutputParser.finishParsing()
 
 		err = clfscmd.Wait()
+		exitCode := common.EExitCode.Success()
 		if err != nil {
 			glcm.Error("Job failed due to error: " + err.Error())
+			exitCode = common.EExitCode.Error()
 		}
 
 		glcm.Exit(func(format common.OutputFormat) string {
 			return ""
-		}, common.EExitCode.Success())
+		}, exitCode)
 	},
 }
 
@@ -237,7 +240,7 @@ func init() {
 	loadCmd.AddCommand(loadClfsCmd)
 	loadClfsCmd.PersistentFlags().BoolVar(&loadCmdRawInput.newSession, "new-session", true, "start a new job rather than continuing an existing one whose tracking information is kept at --state-path.")
 	loadClfsCmd.PersistentFlags().StringVar(&loadCmdRawInput.statePath, "state-path", "", "required path to a local directory for job state tracking. The path must point to an existing directory in order to resume a job. It must be empty for a new job.")
-	loadClfsCmd.PersistentFlags().StringVar(&loadCmdRawInput.compression, "compression-type", "LZ4", "specify the compression type to use for the transfers.")
+	loadClfsCmd.PersistentFlags().StringVar(&loadCmdRawInput.compression, "compression-type", "LZ4", "specify the compression type to use for the transfers. Available values are: DISABLED,LZ4.")
 	loadClfsCmd.PersistentFlags().Uint32Var(&loadCmdRawInput.maxErrorsToTolerate, "max-errors", 0, "specify the maximum number of transfer failures to tolerate. If enough errors occur, stop the job immediately.")
 	loadClfsCmd.PersistentFlags().BoolVar(&loadCmdRawInput.preserveHardlinks, "preserve-hardlinks", false, "preserve hard link relationships.")
 	loadClfsCmd.PersistentFlags().StringVar(&loadCmdRawInput.logLevel, "log-level", "INFO", "define the log verbosity for the log file, available levels: DEBUG, INFO, WARNING, ERROR.")
