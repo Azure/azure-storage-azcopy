@@ -2,10 +2,10 @@ module github.com/Azure/azure-storage-azcopy
 
 require (
 	cloud.google.com/go/storage v1.8.0
-	github.com/Azure/azure-pipeline-go v0.2.1
-	github.com/Azure/azure-storage-blob-go v0.7.0
+	github.com/Azure/azure-pipeline-go v0.2.2
+	github.com/Azure/azure-storage-blob-go v0.10.0
 	github.com/Azure/azure-storage-file-go v0.7.0
-	github.com/Azure/go-autorest v10.15.2+incompatible
+	github.com/Azure/go-autorest/autorest/adal v0.8.3
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
 	github.com/cpuguy83/go-md2man v1.0.10 // indirect
 	github.com/danieljoos/wincred v1.0.1
@@ -18,12 +18,12 @@ require (
 	github.com/mattn/go-ieproxy v0.0.1
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
-	github.com/pkg/errors v0.8.1
+	github.com/pkg/errors v0.9.1
 	github.com/smartystreets/goconvey v0.0.0-20190330032615-68dc04aab96a // indirect
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/pflag v1.0.2 // indirect
 	github.com/stretchr/objx v0.1.1 // indirect
-	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
+	golang.org/x/crypto v0.0.0-20191206172530-e9b2fee46413
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a
 	golang.org/x/sys v0.0.0-20200511232937-7e40ca221e25

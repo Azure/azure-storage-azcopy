@@ -280,15 +280,15 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	if blockSize == 0 {
 		blockSize = uint32(common.DefaultBlockBlobBlockSize)
 		//Workaround to support transfer of small files from GCP.
-		//This workaround is in place because GCP sends back a Response code 200 instead of Response code 209
+		//This workaround is in place because GCP sends back a Response code 200 instead of Response code 206
 		//when file size is smaller than the blockSize.
-		if int64(blockSize) > sourceSize && sourceSize != 0 && plan.FromTo == common.EFromTo.GCPBlob() {
-			if sourceSize < 0 {
-				panic(fmt.Errorf("GCP sourceSize cannot be negative\n"))
-			} else {
-				blockSize = uint32(sourceSize) / 2
-			}
-		}
+		//if int64(blockSize) > sourceSize && sourceSize != 0 && plan.FromTo == common.EFromTo.GCPBlob() {
+		//	if sourceSize < 0 {
+		//		panic(fmt.Errorf("GCP sourceSize cannot be negative\n"))
+		//	} else {
+		//		blockSize = uint32(sourceSize) / 2
+		//	}
+		//}
 		for ; uint32(sourceSize/int64(blockSize)) > common.MaxNumberOfBlocksPerBlob; blockSize = 2 * blockSize {
 		}
 	}

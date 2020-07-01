@@ -61,6 +61,11 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 	// compute chunk count
 	chunkSize := transferInfo.BlockSize
 	srcSize := transferInfo.SourceSize
+	fromTo := jptm.FromTo()
+	//Set chunk size to srcSize when size is less than 256MB to use CopyBlobFromURL and transfer in one request.
+	if srcSize <= azblob.BlockBlobMaxUploadBlobBytes && fromTo.IsS2S() {
+		chunkSize = uint32(srcSize)
+	}
 	numChunks := getNumChunks(srcSize, chunkSize)
 	if numChunks > common.MaxNumberOfBlocksPerBlob {
 		return nil, fmt.Errorf("BlockSize %d for source of size %d is not correct. Number of blocks will exceed the limit", chunkSize, srcSize)
