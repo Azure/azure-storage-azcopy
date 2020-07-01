@@ -541,11 +541,82 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, shareURL azfile.Sha
 }
 
 func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile.ShareURL) map[string]*objectProperties {
+	var dirQ []azfile.DirectoryURL
+	result := make(map[string]*objectProperties)
 
-	//root := shareURL.NewRootDirectoryURL()
-	// TODO use root.ListFilesAndDirectoriesSegment()
-	// TODO: nakulkar-msft ?
-	return nil
+	root := shareURL.NewRootDirectoryURL()
+	dirQ = append(dirQ, root)
+	for i := 0; i < len(dirQ); i++ {
+		currentDirURL := dirQ[i]
+		for marker := (azfile.Marker{}); marker.NotDone(); {
+			lResp, err := currentDirURL.ListFilesAndDirectoriesSegment(context.TODO(), marker, azfile.ListFilesAndDirectoriesOptions{})
+			a.AssertNoErr(err)
+
+			// Process the files and folders we listed
+			for _, fileInfo := range lResp.FileItems {
+				fileURL := currentDirURL.NewFileURL(fileInfo.Name)
+				fgpr, err := fileURL.GetProperties(context.TODO())
+				a.AssertNoErr(err)
+
+				// Construct the properties object
+				fileSize := fgpr.ContentLength()
+				creationTime, err := time.Parse(azfile.ISO8601, fgpr.FileCreationTime())
+				a.AssertNoErr(err)
+				lastWriteTime, err := time.Parse(azfile.ISO8601, fgpr.FileLastWriteTime())
+				a.AssertNoErr(err)
+				contentHeader := fgpr.NewHTTPHeaders()
+				h := contentHeaders{
+					cacheControl:       &contentHeader.CacheControl,
+					contentDisposition: &contentHeader.ContentDisposition,
+					contentEncoding:    &contentHeader.ContentEncoding,
+					contentLanguage:    &contentHeader.ContentLanguage,
+					contentType:        &contentHeader.ContentType,
+					contentMD5:         contentHeader.ContentMD5,
+				}
+				fileAttrs := fgpr.FileAttributes()
+				filePermissions := fgpr.FilePermissionKey()
+
+				props := objectProperties{
+					isFolder:           false, // no folders in Blob
+					size:               &fileSize,
+					nameValueMetadata:  fgpr.NewMetadata(),
+					contentHeaders:     &h,
+					creationTime:       &creationTime,
+					lastWriteTime:      &lastWriteTime,
+					smbAttributes:      &fileAttrs, //TODO
+					smbPermissionsSddl: &filePermissions,
+				}
+
+				result[fileInfo.Name] = &props
+			}
+
+			for _, dirInfo := range lResp.DirectoryItems {
+				dirURL := currentDirURL.NewDirectoryURL(dirInfo.Name)
+				dgpr, err := dirURL.GetProperties(context.TODO())
+				a.AssertNoErr(err)
+
+				// Construct the properties object
+				creationTime, err := time.Parse(azfile.ISO8601, dgpr.FileCreationTime())
+				a.AssertNoErr(err)
+				lastWriteTime, err := time.Parse(azfile.ISO8601, dgpr.FileLastWriteTime())
+				a.AssertNoErr(err)
+
+				props := objectProperties{
+					isFolder:          true,
+					nameValueMetadata: dgpr.NewMetadata(),
+					creationTime:      &creationTime,
+					lastWriteTime:     &lastWriteTime,
+				}
+
+				result[dirInfo.Name] = &props
+				dirQ = append(dirQ, dirURL)
+			}
+
+			marker = lResp.NextMarker
+		}
+	}
+
+	return result
 }
 
 func (scenarioHelper) generateBFSPathsFromList(c asserter, filesystemURL azbfs.FileSystemURL, fileList []string) {
