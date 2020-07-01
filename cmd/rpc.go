@@ -43,6 +43,9 @@ func inprocSend(rpcCmd common.RpcCmd, requestData interface{}, responseData inte
 	case common.ERpcCmd.CopyJobPartOrder():
 		*(responseData.(*common.CopyJobPartOrderResponse)) = ste.ExecuteNewCopyJobPartOrder(*requestData.(*common.CopyJobPartOrderRequest))
 
+	case common.ERpcCmd.GetJobLCMWrapper():
+		*(responseData.(*common.LifecycleMgr)) = ste.GetJobLCMWrapper(*requestData.(*common.JobID))
+
 	case common.ERpcCmd.ListJobs():
 		*(responseData.(*common.ListJobsResponse)) = ste.ListJobs()
 

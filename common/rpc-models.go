@@ -17,6 +17,7 @@ type RpcCmd string
 
 func (RpcCmd) None() RpcCmd               { return RpcCmd("--none--") }
 func (RpcCmd) CopyJobPartOrder() RpcCmd   { return RpcCmd("CopyJobPartOrder") }
+func (RpcCmd) GetJobLCMWrapper() RpcCmd   { return RpcCmd("GetJobLCMWrapper") }
 func (RpcCmd) ListJobs() RpcCmd           { return RpcCmd("ListJobs") }
 func (RpcCmd) ListJobSummary() RpcCmd     { return RpcCmd("ListJobSummary") }
 func (RpcCmd) ListSyncJobSummary() RpcCmd { return RpcCmd("ListSyncJobSummary") }
@@ -213,7 +214,7 @@ type ListContainerResponse struct {
 type ListJobSummaryResponse struct {
 	ErrorMsg  string
 	Timestamp time.Time `json:"-"`
-	JobID     JobID     `json:"-"`
+	JobID     JobID
 	// TODO: added for debugging purpose. remove later
 	ActiveConnections int64 `json:",string"`
 	// CompleteJobOrdered determines whether the Job has been completely ordered or not

@@ -57,3 +57,10 @@ func (s *pathUtilsSuite) TestStripQueryFromSaslessUrl(c *chk.C) {
 		c.Assert(q, chk.Equals, t.expectedQuery)
 	}
 }
+
+func (s *pathUtilsSuite) TestToReversedString(c *chk.C) {
+	t := &benchmarkTraverser{}
+	c.Assert("1", chk.Equals, t.toReversedString(1))
+	c.Assert("01", chk.Equals, t.toReversedString(10))
+	c.Assert("54321", chk.Equals, t.toReversedString(12345))
+}

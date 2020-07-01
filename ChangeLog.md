@@ -1,6 +1,34 @@
 
 # Change Log
 
+## Version 10.5
+
+### New features
+
+1. A new way to quickly copy only files changed after a certain date/time. The `copy` command now accepts
+the parameter `--include-after`. It takes an ISO 8601-formatted date, and will copy only those files that were 
+changed on or after the given date/time. When processing large numbers of files, this is faster than `sync` or 
+`--overwrite=IfSourceNewer`.  But it does require the user to specify the date to be used.  E.g. `2020-08-19T15:04:00Z` 
+for a UTC time, `2020-08-19T15:04` for a time in the local timezone of the machine running Azcopy, 
+or `2020-08-19` for midnight (00:00), also in the local timezone. 
+1. Each job now logs its start time precisely in the log file, using ISO 8601 format.  This is useful if you want to 
+use that start date as the `--include-after` parameter to a later job on the same directory. Look for "ISO 8601 START TIME" 
+in the log. 
+ 
+
+
+## Version 10.4.3
+
+### Bug fixes
+
+1. Fixed bug where AzCopy errored if a filename ended with slash character. (E.g. backslash at end of a Linux filename.)
+
+## Version 10.4.2
+
+### Bug fixes
+
+1. Fixed bug in overwrite prompt for folders.
+
 ## Version 10.4.1
 
 ### New features

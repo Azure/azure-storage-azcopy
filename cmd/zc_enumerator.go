@@ -210,10 +210,6 @@ type blobPropsProvider interface {
 // a constructor is used so that in case the storedObject has to change, the callers would get a compilation error
 // and it forces all necessary properties to be always supplied and not forgotten
 func newStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time, size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) storedObject {
-	if strings.HasSuffix(relativePath, "\\") || strings.HasSuffix(relativePath, "/") {
-		panic("un-trimmed path provided to newStoredObject. This is not allowed") // since sync will get confused if it sometimes sees a path trimmed and sometimes untrimmed
-	}
-
 	obj := storedObject{
 		name:               name,
 		relativePath:       relativePath,
@@ -295,7 +291,8 @@ type enumerationCounterFunc func(entityType common.EntityType)
 // ctx, pipeline are only required for remote resources.
 // followSymlinks is only required for local resources (defaults to false)
 // errorOnDirWOutRecursive is used by copy.
-func initResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel chan string, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (resourceTraverser, error) {
+func initResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo,
+	followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc) (resourceTraverser, error) {
 	var output resourceTraverser
 	var p *pipeline.Pipeline
 
@@ -321,7 +318,7 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 	}
 
 	// Feed list of files channel into new list traverser
-	if listofFilesChannel != nil {
+	if listOfFilesChannel != nil {
 		if location.IsLocal() {
 			// First, ignore all escaped stars. Stars can be valid characters on many platforms (out of the 3 we support though, Windows is the only that cannot support it).
 			// In the future, should we end up supporting another OS that does not treat * as a valid character, we should turn these checks into a map-check against runtime.GOOS.
@@ -332,7 +329,7 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 			}
 		}
 
-		output = newListTraverser(resource, location, credential, ctx, recursive, toFollow, getProperties, listofFilesChannel, incrementEnumerationCounter)
+		output = newListTraverser(resource, location, credential, ctx, recursive, toFollow, getProperties, listOfFilesChannel, incrementEnumerationCounter)
 		return output, nil
 	}
 
@@ -390,9 +387,9 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output = newBlobAccountTraverser(resourceURL, *p, *ctx, incrementEnumerationCounter)
+			output = newBlobAccountTraverser(resourceURL, *p, *ctx, includeDirectoryStubs, incrementEnumerationCounter)
 		} else {
-			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter)
 		}
 	case common.ELocation.File():
 		resourceURL, err := resource.FullURL()
@@ -617,10 +614,10 @@ func newCopyEnumerator(traverser resourceTraverser, filters []objectFilter, obje
 	}
 }
 
-func LogStdoutAndJobLog(toLog string) {
+func WarnStdoutAndJobLog(toLog string) {
 	glcm.Info(toLog)
 	if ste.JobsAdmin != nil {
-		ste.JobsAdmin.LogToJobLog(toLog)
+		ste.JobsAdmin.LogToJobLog(toLog, pipeline.LogWarning)
 	}
 }
 

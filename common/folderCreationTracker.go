@@ -22,6 +22,7 @@ package common
 
 import (
 	"net/url"
+	"strings"
 	"sync"
 )
 
@@ -83,10 +84,20 @@ func (f *simpleFolderTracker) ShouldSetProperties(folder string, overwrite Overw
 
 		// prompt only if we didn't create this folder
 		if overwrite == EOverwriteOption.Prompt() && !exists {
-			// get rid of SAS before prompting
-			parsedURL, _ := url.Parse(folder)
-			parsedURL.RawQuery = ""
-			return prompter.ShouldOverwrite(parsedURL.String(), EEntityType.Folder())
+			cleanedFolderPath := folder
+
+			// if it's a local Windows path, skip since it doesn't have SAS and won't parse correctly as an URL
+			if !strings.HasPrefix(folder, EXTENDED_PATH_PREFIX) {
+				// get rid of SAS before prompting
+				parsedURL, _ := url.Parse(folder)
+
+				// really make sure that it's not a local path
+				if parsedURL.Scheme != "" && parsedURL.Host != "" {
+					parsedURL.RawQuery = ""
+					cleanedFolderPath = parsedURL.String()
+				}
+			}
+			return prompter.ShouldOverwrite(cleanedFolderPath, EEntityType.Folder())
 		}
 
 		return exists

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -20,12 +21,6 @@ import (
 
 func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) (*copyEnumerator, error) {
 	var traverser resourceTraverser
-
-	// Warn about AWS S3 -> Blob being in preview
-	// Don't bother checking To if S3 is the from-- We do not support anything other than S3->Azure at the moment, regarding S3
-	if cca.fromTo.From() == common.ELocation.S3() {
-		glcm.Info("AWS S3 to Azure Blob copy is currently in preview. Validate the copy operation carefully before removing your data at source.")
-	}
 
 	srcCredInfo := common.CredentialInfo{}
 	var isPublic bool
@@ -49,14 +44,14 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// If preserve properties is enabled, but get properties in backend is disabled, turn it on
 	// If source change validation is enabled on files to remote, turn it on (consider a separate flag entirely?)
 	getRemoteProperties := (cca.fromTo.From() == common.ELocation.File() && !cca.fromTo.To().IsRemote()) || // If download, we still need LMT and MD5 from files.
-		(cca.fromTo.From() == common.ELocation.File() && cca.fromTo.To().IsRemote() && cca.s2sSourceChangeValidation) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties anyway (according to the old code)
+		(cca.fromTo.From() == common.ELocation.File() && cca.fromTo.To().IsRemote() && (cca.s2sSourceChangeValidation || cca.includeAfter != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise if we are using includeAfter, which requires LMTs.
 		(cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() && cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
 	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
 	jobPartOrder.S2SSourceChangeValidation = cca.s2sSourceChangeValidation
 	jobPartOrder.DestLengthValidation = cca.CheckLength
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
 
-	traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, func(common.EntityType) {})
+	traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, cca.includeDirectoryStubs, func(common.EntityType) {})
 
 	if err != nil {
 		return nil, err
@@ -128,7 +123,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				logDstContainerCreateFailureOnce.Do(func() {
 					glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 				})
-				ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err))
+				ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err), pipeline.LogWarning)
 				seenFailedContainers[dstContainerName] = true
 			}
 		} else if cca.fromTo.From().IsRemote() { // if the destination has implicit container names
@@ -160,7 +155,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						logDstContainerCreateFailureOnce.Do(func() {
 							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
-						ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", bucketName, err))
+						ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", bucketName, err), pipeline.LogWarning)
 						seenFailedContainers[bucketName] = true
 					}
 				}
@@ -181,7 +176,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						logDstContainerCreateFailureOnce.Do(func() {
 							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
-						ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err))
+						ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err), pipeline.LogWarning)
 						seenFailedContainers[dstContainerName] = true
 					}
 				}
@@ -196,7 +191,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters, cca.preserveSMBInfo, cca.preserveSMBPermissions.IsTruthy())
 	glcm.Info(message)
 	if ste.JobsAdmin != nil {
-		ste.JobsAdmin.LogToJobLog(message)
+		ste.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
 	}
 
 	processor := func(object storedObject) error {
@@ -210,7 +205,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 				if err != nil {
 					if _, ok := seenFailedContainers[object.containerName]; !ok {
-						LogStdoutAndJobLog(fmt.Sprintf("failed to add transfers from container %s as it has an invalid name. Please manually transfer from this container to one with a valid name.", object.containerName))
+						WarnStdoutAndJobLog(fmt.Sprintf("failed to add transfers from container %s as it has an invalid name. Please manually transfer from this container to one with a valid name.", object.containerName))
 						seenFailedContainers[object.containerName] = true
 					}
 					return nil
@@ -267,7 +262,7 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, func(common.EntityType) {})
+	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, false, func(common.EntityType) {})
 
 	if err != nil {
 		return false
@@ -279,6 +274,10 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 // Initialize the modular filters outside of copy to increase readability.
 func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 	filters := make([]objectFilter, 0) // same as []objectFilter{} under the hood
+
+	if cca.includeAfter != nil {
+		filters = append(filters, &includeAfterDateFilter{threshold: *cca.includeAfter})
+	}
 
 	if len(cca.includePatterns) != 0 {
 		filters = append(filters, &includeFilter{patterns: cca.includePatterns}) // TODO should this call buildIncludeFilters?
@@ -320,7 +319,7 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 	// finally, log any search prefix computed from these
 	if ste.JobsAdmin != nil {
 		if prefixFilter := filterSet(filters).GetEnumerationPreFilter(cca.recursive); prefixFilter != "" {
-			ste.JobsAdmin.LogToJobLog("Search prefix, which may be used to optimize scanning, is: " + prefixFilter) // "May be used" because we don't know here which enumerators will use it
+			ste.JobsAdmin.LogToJobLog("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, pipeline.LogInfo) // "May be used" because we don't know here which enumerators will use it
 		}
 	}
 
@@ -422,7 +421,6 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 
 // Because some invalid characters weren't being properly encoded by url.PathEscape, we're going to instead manually encode them.
 var encodedInvalidCharacters = map[rune]string{
-	0x00: "%00",
 	'<':  "%3C",
 	'>':  "%3E",
 	'\\': "%5C",
@@ -435,7 +433,6 @@ var encodedInvalidCharacters = map[rune]string{
 }
 
 var reverseEncodedChars = map[string]rune{
-	"%00": 0x00,
 	"%3C": '<',
 	"%3E": '>',
 	"%5C": '\\',
@@ -529,6 +526,15 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 		// Save to a directory
 		rootDir := filepath.Base(cca.source.Value)
 
+		/* In windows, when a user tries to copy whole volume (eg. D:\),  the upload destination
+		will contains "//"" in the files/directories names because of rootDir = "\" prefix. 
+		(e.g. D:\file.txt will end up as //file.txt).
+		Following code will get volume name from source and add volume name as prefix in rootDir
+		*/
+		if runtime.GOOS == "windows" && rootDir == `\` {
+			rootDir = filepath.VolumeName(common.ToShortPath(cca.source.Value))
+		}
+		
 		if cca.fromTo.From().IsRemote() {
 			ueRootDir, err := url.PathUnescape(rootDir)
 

@@ -22,6 +22,7 @@ package common
 
 import (
 	"errors"
+	"io"
 	"math"
 	"math/rand"
 	"sync"
@@ -33,7 +34,7 @@ const (
 
 var randomDataBytePool = NewMultiSizeSlicePool(randomSliceLength)
 
-func NewRandomDataGenerator(length int64) CloseableReaderAt {
+func NewRandomDataGenerator(length int64) *randomDataGenerator {
 	r := &randomDataGenerator{
 		length:    length,
 		randGen:   rand.New(rand.NewSource(rand.Int63())), // create new rand source, seeded from global one, so that after seeding we never lock the global one
@@ -52,6 +53,9 @@ type randomDataGenerator struct {
 	randBytes          []byte
 	randMu             *sync.Mutex
 	readIterationCount int
+
+	// for Seek and Read
+	pos int64
 }
 
 func (r *randomDataGenerator) couldBeNewSlice(s []byte) bool {
@@ -126,4 +130,36 @@ func (r *randomDataGenerator) freshenRandomData(count int) {
 
 	// TODO: add unit tests to assert the lack of compressibility (since for now we are just going
 	//   on tests of the .NET code from which randomDataGenerator was ported
+}
+
+// Read and Seek are not threadsafe. They're just here to allow usage from the e2e test suite
+func (r *randomDataGenerator) Read(p []byte) (n int, err error) {
+	remainingLen := r.length - r.pos
+	if remainingLen <= 0 {
+		return 0, io.EOF
+	}
+	if int64(len(p)) > remainingLen {
+		p = p[:remainingLen] // because our readAt implementation always tries to read the full slice (incorrect perhaps, but don't want to change it right now)
+	}
+	n, err = r.ReadAt(p, r.pos)
+	r.pos += int64(n)
+	return n, err
+}
+
+// Read and Seek are not threadsafe. They're just here to allow usage from the e2e test suite.
+// Naturally, since this is a random data generator (and we make no guarantees about
+// seeking and re-reading returning the same data), this method is trivially implemented.
+func (r *randomDataGenerator) Seek(offset int64, whence int) (int64, error) {
+	switch whence {
+	case io.SeekStart:
+		r.pos = offset
+	case io.SeekCurrent:
+		r.pos += offset
+	case io.SeekEnd:
+		r.pos = r.length - offset
+	}
+	if r.pos < 0 {
+		return 0, errors.New("seek before start")
+	}
+	return r.pos, nil
 }

@@ -62,22 +62,22 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 func (f localFileSourceInfoProvider) GetSMBProperties() (TypedSMBPropertyHolder, error) {
 	info, err := common.GetFileInformation(f.jptm.Info().Source)
 
-	return handleInfo{info}, err
+	return HandleInfo{info}, err
 }
 
-type handleInfo struct {
+type HandleInfo struct {
 	windows.ByHandleFileInformation
 }
 
-func (hi handleInfo) FileCreationTime() time.Time {
+func (hi HandleInfo) FileCreationTime() time.Time {
 	return time.Unix(0, hi.CreationTime.Nanoseconds())
 }
 
-func (hi handleInfo) FileLastWriteTime() time.Time {
+func (hi HandleInfo) FileLastWriteTime() time.Time {
 	return time.Unix(0, hi.CreationTime.Nanoseconds())
 }
 
-func (hi handleInfo) FileAttributes() azfile.FileAttributeFlags {
+func (hi HandleInfo) FileAttributes() azfile.FileAttributeFlags {
 	// Can't shorthand it because the function name overrides.
 	return azfile.FileAttributeFlags(hi.ByHandleFileInformation.FileAttributes)
 }

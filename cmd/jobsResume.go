@@ -85,6 +85,9 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 	// fetch a job status
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
+	glcmSwapOnce.Do(func() {
+		Rpc(common.ERpcCmd.GetJobLCMWrapper(), &cca.jobID, &glcm)
+	})
 	jobDone := summary.JobStatus.IsJobDone()
 	totalKnownCount = summary.TotalTransfers
 

@@ -29,30 +29,30 @@ type parseSizeSuite struct{}
 var _ = chk.Suite(&parseSizeSuite{})
 
 func (s *parseSizeSuite) TestParseSize(c *chk.C) {
-	b, _ := parseSizeString("123K", "x")
+	b, _ := ParseSizeString("123K", "x")
 	c.Assert(b, chk.Equals, int64(123*1024))
 
-	b, _ = parseSizeString("456m", "x")
+	b, _ = ParseSizeString("456m", "x")
 	c.Assert(b, chk.Equals, int64(456*1024*1024))
 
-	b, _ = parseSizeString("789G", "x")
+	b, _ = ParseSizeString("789G", "x")
 	c.Assert(b, chk.Equals, int64(789*1024*1024*1024))
 
 	expectedError := "foo-bar must be a number immediately followed by K, M or G. E.g. 12k or 200G"
 
-	_, err := parseSizeString("123", "foo-bar")
+	_, err := ParseSizeString("123", "foo-bar")
 	c.Assert(err.Error(), chk.Equals, expectedError)
 
-	_, err = parseSizeString("123 K", "foo-bar")
+	_, err = ParseSizeString("123 K", "foo-bar")
 	c.Assert(err.Error(), chk.Equals, expectedError)
 
-	_, err = parseSizeString("123KB", "foo-bar")
+	_, err = ParseSizeString("123KB", "foo-bar")
 	c.Assert(err.Error(), chk.Equals, expectedError)
 
-	_, err = parseSizeString("123T", "foo-bar") // we don't support terabytes
+	_, err = ParseSizeString("123T", "foo-bar") // we don't support terabytes
 	c.Assert(err.Error(), chk.Equals, expectedError)
 
-	_, err = parseSizeString("abcK", "foo-bar")
+	_, err = ParseSizeString("abcK", "foo-bar")
 	c.Assert(err.Error(), chk.Equals, expectedError)
 
 }
