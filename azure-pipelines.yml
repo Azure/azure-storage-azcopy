@@ -90,6 +90,10 @@ jobs:
           export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
           export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
           export TEST_DIRECTORY_PATH=$(pwd)/test-temp
+
+          # install the CLFSLoad extension
+          pip3 install clfsload
+
           python ./testSuite/scripts/run.py
         name: 'Run_smoke_tests'
         env:
@@ -111,7 +115,11 @@ jobs:
           S2S_SRC_FILE_ACCOUNT_SAS_URL: $(S2S_SRC_FILE_ACCOUNT_SAS_URL)
           S2S_SRC_S3_SERVICE_URL: $(S2S_SRC_S3_SERVICE_URL)
           SHARE_SAS_URL: $(SHARE_SAS_URL)
-      - script: python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"
+      - script: |
+          pip install azure-storage-blob==12.0.0b3
+          # the recent release 1.0.0b4 has a breaking change
+          pip install azure-core==1.0.0b3
+          python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"
         name: 'Release_the_distributed_mutex'
         # this runs even if the job was canceled (only if the mutex was acquired by this job)
         condition: and(always(), eq(variables['isMutexSet'], 'true'))

@@ -1,4 +1,6 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+// +build linux
+
+// Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,47 +23,21 @@
 package cmd
 
 import (
-	"time"
-
-	"github.com/Azure/azure-storage-azcopy/common"
-
-	chk "gopkg.in/check.v1"
+	"github.com/spf13/cobra"
 )
 
-type jobsListTestSuite struct{}
+// loadCmd represents the load command
+var loadCmd = &cobra.Command{
+	Use: "load",
+	// Note: the help messages are kept in this file on purpose, to limit the footprint of the change (easier migration later)
+	Short: "Sub-commands related to transferring data in specific formats",
+	Long:  "Sub-commands related to transferring data in specific formats, such as Microsoft's Avere Cloud FileSystem (CLFS) format.",
+	Example: `
+Load an entire directory to a container with a SAS in CLFS format:
+  - azcopy load clfs "/path/to/dir" "https://[account].blob.core.windows.net/[container]?[SAS]" --state-path="/path/to/state/path"
+`,
+}
 
-var _ = chk.Suite(&jobsListTestSuite{})
-
-func (s *jobsListTestSuite) TestSortJobs(c *chk.C) {
-	// setup
-	job2 := common.JobIDDetails{
-		JobId:         common.NewJobID(),
-		StartTime:     time.Now().UnixNano(),
-		CommandString: "dummy2",
-	}
-
-	// sleep for a bit so that the time stamp is different
-	time.Sleep(time.Millisecond)
-	job1 := common.JobIDDetails{
-		JobId:         common.NewJobID(),
-		StartTime:     time.Now().UnixNano(),
-		CommandString: "dummy1",
-	}
-
-	// sleep for a bit so that the time stamp is different
-	time.Sleep(time.Millisecond)
-	job0 := common.JobIDDetails{
-		JobId:         common.NewJobID(),
-		StartTime:     time.Now().UnixNano(),
-		CommandString: "dummy0",
-	}
-	jobsList := []common.JobIDDetails{job2, job1, job0}
-
-	// act
-	sortJobs(jobsList)
-
-	// verify
-	c.Assert(jobsList[0], chk.DeepEquals, job0)
-	c.Assert(jobsList[1], chk.DeepEquals, job1)
-	c.Assert(jobsList[2], chk.DeepEquals, job2)
+func init() {
+	rootCmd.AddCommand(loadCmd)
 }
