@@ -217,9 +217,9 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 
 // Holds the status of tranfers in this jptm
 type jobPartProgressInfo struct {
-	atomicTransfersCompleted int32
-	atomicTransfersSkipped   int32
-	atomicTransfersFailed    int32
+	transfersCompleted int
+	transfersSkipped   int
+	transfersFailed    int
 }
 
 // jobPartMgr represents the runtime information for a Job's Part
@@ -279,9 +279,10 @@ type jobPartMgr struct {
 	// numberOfTransfersDone_doNotUse represents the number of transfer of JobPartOrder
 	// which are either completed or failed
 	// numberOfTransfersDone_doNotUse determines the final cancellation of JobPartOrder
-	atomicTransfersDone uint32
-
-	progressInfo jobPartProgressInfo
+	atomicTransfersDone      uint32
+	atomicTransfersCompleted uint32
+	atomicTransfersFailed    uint32
+	atomicTransfersSkipped   uint32
 }
 
 func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {
@@ -312,6 +313,10 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 	// get the list of include / exclude transfers
 	includeTransfer, excludeTransfer := jpm.jobMgr.IncludeExclude()
+	if len(includeTransfer) > 0 || len(excludeTransfer) > 0 {
+		panic("List of transfers is obsolete.")
+	}
+
 	// *** Open the job part: process any job part plan-setting used by all transfers ***
 	dstData := plan.DstBlobData
 
@@ -353,34 +358,6 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		if ts == common.ETransferStatus.Success() {
 			jpm.ReportTransferDone(ts) // Don't schedule an already-completed/failed transfer
 			continue
-		}
-
-		// If the list of transfer to be included is passed
-		// then check current transfer exists in the list of included transfer
-		// If it doesn't exists, skip the transfer
-		if len(includeTransfer) > 0 {
-			// Get the source string from the part plan header
-			src, _, _ := plan.TransferSrcDstStrings(t)
-			// If source doesn't exists, skip the transfer
-			_, ok := includeTransfer[src]
-			if !ok {
-				jpm.ReportTransferDone(ts) // Don't schedule transfer which is not mentioned to be included
-				continue
-			}
-		}
-		// If the list of transfer to be excluded is passed
-		// then check the current transfer in the list of excluded transfer
-		// If it exists, then skip the transfer
-		if len(excludeTransfer) > 0 {
-			// Get the source string from the part plan header
-			src, _, _ := plan.TransferSrcDstStrings(t)
-			// If the source exists in the list of excluded transfer
-			// skip the transfer
-			_, ok := excludeTransfer[src]
-			if ok {
-				jpm.ReportTransferDone(ts) // Don't schedule transfer which is mentioned to be excluded
-				continue
-			}
 		}
 
 		// If the transfer was failed, then while rescheduling the transfer marking it Started.
@@ -675,11 +652,11 @@ func (jpm *jobPartMgr) deleteSnapshotsOption() common.DeleteSnapshotsOption {
 func (jpm *jobPartMgr) updateJobPartProgress(status common.TransferStatus) {
 	switch status {
 	case common.ETransferStatus.Success():
-		atomic.AddInt32(&jpm.progressInfo.atomicTransfersCompleted, 1)
+		atomic.AddUint32(&jpm.atomicTransfersCompleted, 1)
 	case common.ETransferStatus.Failed(), common.ETransferStatus.BlobTierFailure():
-		atomic.AddInt32(&jpm.progressInfo.atomicTransfersFailed, 1)
+		atomic.AddUint32(&jpm.atomicTransfersFailed, 1)
 	case common.ETransferStatus.SkippedEntityAlreadyExists(), common.ETransferStatus.SkippedBlobHasSnapshots():
-		atomic.AddInt32(&jpm.progressInfo.atomicTransfersSkipped, 1)
+		atomic.AddUint32(&jpm.atomicTransfersSkipped, 1)
 	default:
 		panic("Unexpected status")
 	}
@@ -697,7 +674,12 @@ func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfe
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d", plan.JobID, plan.PartNum, transfersDone, plan.NumTransfers))
 	}
 	if transfersDone == jpm.planMMF.Plan().NumTransfers {
-		jpm.jobMgr.ReportJobPartDone(jpm.progressInfo)
+		jppi := jobPartProgressInfo{
+			transfersCompleted: int(atomic.LoadUint32(&jpm.atomicTransfersCompleted)),
+			transfersSkipped:   int(atomic.LoadUint32(&jpm.atomicTransfersSkipped)),
+			transfersFailed:    int(atomic.LoadUint32(&jpm.atomicTransfersFailed)),
+		}
+		jpm.jobMgr.ReportJobPartDone(jppi)
 	}
 	return transfersDone
 }

@@ -76,19 +76,20 @@ func init() {
 	jobsCmd.AddCommand(lsCmd)
 
 	jobsCmd.PersistentFlags().StringVar(&commandLineInput.withStatus, "with-status", "All",
-		"only remove the jobs with this status, available values: Cancelled, Completed, Failed, InProgress, All")
+		"List the jobs with given status, available values: All, Cancelled, Failed, InProgress, Completed,"+
+			" CompletedWithErrors, CompletedWithFailures, CompletedWithErrorsAndSkipped")
 }
 
 // HandleListJobsCommand sends the ListJobs request to transfer engine
 // Print the Jobs in the history of Azcopy
 func HandleListJobsCommand(jobStatus common.JobStatus) error {
 	resp := common.ListJobsResponse{}
-	Rpc(common.ERpcCmd.ListJobs(), nil, &resp)
-	return PrintExistingJobIds(resp, jobStatus)
+	Rpc(common.ERpcCmd.ListJobs(), jobStatus, &resp)
+	return PrintExistingJobIds(resp)
 }
 
 // PrintExistingJobIds prints the response of listOrder command when listOrder command requested the list of existing jobs
-func PrintExistingJobIds(listJobResponse common.ListJobsResponse, jobStatus common.JobStatus) error {
+func PrintExistingJobIds(listJobResponse common.ListJobsResponse) error {
 	if listJobResponse.ErrorMessage != "" {
 		return fmt.Errorf("request failed with following error message: %s", listJobResponse.ErrorMessage)
 	}
@@ -107,9 +108,6 @@ func PrintExistingJobIds(listJobResponse common.ListJobsResponse, jobStatus comm
 		sb.WriteString("Existing Jobs \n")
 		for index := 0; index < len(listJobResponse.JobIDDetails); index++ {
 			jobDetail := listJobResponse.JobIDDetails[index]
-			if jobDetail.JobStatus != jobStatus {
-				continue
-			}
 			sb.WriteString(fmt.Sprintf("JobId: %s\nStart Time: %s\nStatus: %s\nCommand: %s\n\n",
 				jobDetail.JobId.String(),
 				time.Unix(0, jobDetail.StartTime).Format(time.RFC850),

@@ -490,9 +490,9 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 		part0Plan := jobPart0Mgr.Plan()
 		jobStatus := part0Plan.JobStatus() // status of part 0 is status of job as a whole
 		partsDone := atomic.AddUint32(&jm.partsDone, 1)
-		atomic.AddInt32(&jobProgressInfo.atomicTransfersCompleted, partProgressInfo.atomicTransfersCompleted)
-		atomic.AddInt32(&jobProgressInfo.atomicTransfersSkipped, partProgressInfo.atomicTransfersSkipped)
-		atomic.AddInt32(&jobProgressInfo.atomicTransfersFailed, partProgressInfo.atomicTransfersFailed)
+		jobProgressInfo.transfersCompleted += partProgressInfo.transfersCompleted
+		jobProgressInfo.transfersSkipped += partProgressInfo.transfersSkipped
+		jobProgressInfo.transfersFailed += partProgressInfo.transfersFailed
 
 		// If the last part is still awaited or other parts all still not complete,
 		// JobPart 0 status is not changed (unless we are cancelling)
@@ -507,8 +507,6 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 		if shouldLog {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("is part of Job which %d total number of parts done ", partsDone))
 		}
-
-		jm.chunkStatusLogger.FlushLog()
 	}
 
 	jobPart0Mgr, _ := jm.jobPartMgrs.Get(0)
@@ -529,9 +527,9 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("%s %v successfully cancelled", partDescription, jm.jobID))
 		}
 	case common.EJobStatus.InProgress():
-		part0Plan.SetJobStatus((common.EJobStatus).EnhanceJobStatusInfo(jobProgressInfo.atomicTransfersSkipped > 0,
-			jobProgressInfo.atomicTransfersFailed > 0,
-			jobProgressInfo.atomicTransfersCompleted > 0))
+		part0Plan.SetJobStatus((common.EJobStatus).EnhanceJobStatusInfo(jobProgressInfo.transfersSkipped > 0,
+			jobProgressInfo.transfersFailed > 0,
+			jobProgressInfo.transfersCompleted > 0))
 	}
 
 	jm.chunkStatusLogger.FlushLog() // TODO: remove once we sort out what will be calling CloseLog (currently nothing)

@@ -86,7 +86,7 @@ func MainSTE(concurrency ConcurrencySettings, targetRateInMegaBitsPerSec float64
 		func(writer http.ResponseWriter, request *http.Request) {
 			//var payload common.ListRequest
 			//deserialize(request, &payload)
-			serialize(ListJobs( /*payload*/ ), writer)
+			serialize(ListJobs(common.EJobStatus.All()), writer)
 		})
 	http.HandleFunc(common.ERpcCmd.ListJobSummary().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
@@ -603,7 +603,7 @@ func GetJobLCMWrapper(jobID common.JobID) common.LifecycleMgr {
 }
 
 // ListJobs returns the jobId of all the jobs existing in the current instance of azcopy
-func ListJobs() common.ListJobsResponse {
+func ListJobs(givenStatus common.JobStatus) common.ListJobsResponse {
 	// Resurrect all the Jobs from the existing JobPart Plan files
 	JobsAdmin.ResurrectJobParts()
 	// building the ListJobsResponse for sending response back to front-end
@@ -621,9 +621,11 @@ func ListJobs() common.ListJobsResponse {
 		if !found {
 			continue
 		}
-		listJobResponse.JobIDDetails = append(listJobResponse.JobIDDetails,
-			common.JobIDDetails{JobId: jobId, CommandString: jpm.Plan().CommandString(),
-				StartTime: jpm.Plan().StartTime, JobStatus: jpm.Plan().JobStatus()})
+		if givenStatus == common.EJobStatus.All() || givenStatus == jpm.Plan().JobStatus() {
+			listJobResponse.JobIDDetails = append(listJobResponse.JobIDDetails,
+				common.JobIDDetails{JobId: jobId, CommandString: jpm.Plan().CommandString(),
+					StartTime: jpm.Plan().StartTime, JobStatus: jpm.Plan().JobStatus()})
+		}
 
 		// Close the job part managers and the log.
 		jm.(*jobMgr).jobPartMgrs.Iterate(false, func(k common.PartNumber, v IJobPartMgr) {

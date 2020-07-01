@@ -90,7 +90,7 @@ func handleCleanJobsCommand(givenStatus common.JobStatus) error {
 
 	// we must query the jobs and find out which one to remove
 	resp := common.ListJobsResponse{}
-	Rpc(common.ERpcCmd.ListJobs(), nil, &resp)
+	Rpc(common.ERpcCmd.ListJobs(), common.EJobStatus.All(), &resp)
 
 	if resp.ErrorMessage != "" {
 		return errors.New("failed to query the list of jobs")
