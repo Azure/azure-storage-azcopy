@@ -147,7 +147,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		})
 
 		if ste.JobsAdmin != nil {
-			ste.JobsAdmin.LogToJobLog(fmt.Sprintf(`Failed to initialize the destination container %s. Your transfers to this container may still succeed if the container already exists. => (%s)`, containerName, err))
+			ste.JobsAdmin.LogToJobLog(fmt.Sprintf(`Failed to initialize the destination container %s. Your transfers to this container may still succeed if the container already exists. => (%s)`, containerName, err), pipeline.LogWarning)
 		}
 	}
 
@@ -245,8 +245,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				cName, err = containerResolver.ResolveName(object.containerName)
 
 				if err != nil {
-					if _, ok := seenFailedContainers[object.containerName]; !ok {
-					return nil
+					return createContainerFailureTransfer(object.containerName,
+						fmt.Sprintf("failed to add transfers from container %s as it has an invalid name. Please manually transfer from this container to one with a valid name.", object.containerName))
 				}
 
 				object.dstContainerName = cName
