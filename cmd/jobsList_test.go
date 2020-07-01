@@ -21,8 +21,9 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 
 	chk "gopkg.in/check.v1"
 )
@@ -31,7 +32,7 @@ type jobsListTestSuite struct{}
 
 var _ = chk.Suite(&jobsListTestSuite{})
 
-func (s *copyUtilTestSuite) TestSortJobs(c *chk.C) {
+func (s *jobsListTestSuite) TestSortJobs(c *chk.C) {
 	// setup
 	job2 := common.JobIDDetails{
 		JobId:         common.NewJobID(),

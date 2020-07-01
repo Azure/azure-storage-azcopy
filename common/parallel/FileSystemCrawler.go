@@ -32,15 +32,26 @@ type FileSystemEntry struct {
 	info     os.FileInfo
 }
 
+// represents a file info that we may have failed to obtain
+type failableFileInfo interface {
+	os.FileInfo
+	Error() error
+}
+
+type DirReader interface {
+	Readdir(dir *os.File, n int) ([]os.FileInfo, error)
+	Close()
+}
+
 // CrawlLocalDirectory specializes parallel.Crawl to work specifically on a local directory.
 // It does not follow symlinks.
 // The items in the CrawResult output channel are FileSystemEntry s.
 // For a wrapper that makes this look more like filepath.Walk, see parallel.Walk.
-func CrawlLocalDirectory(ctx context.Context, root string, parallelism int) <-chan CrawlResult {
+func CrawlLocalDirectory(ctx context.Context, root string, parallelism int, reader DirReader) <-chan CrawlResult {
 	return Crawl(ctx,
 		root,
-		func(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry)) error {
-			return enumerateOneFileSystemDirectory(dir, enqueueDir, enqueueOutput)
+		func(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry, error)) error {
+			return enumerateOneFileSystemDirectory(dir, enqueueDir, enqueueOutput, reader)
 		},
 		parallelism,
 	)
@@ -49,10 +60,10 @@ func CrawlLocalDirectory(ctx context.Context, root string, parallelism int) <-ch
 // Walk is similar to filepath.Walk.
 // But note the following difference is how WalkFunc is used:
 // 1. If fileError passed to walkFunc is not nil, then here the filePath passed to that function will usually be ""
-//    (whereas with filepath.Walk it will usually (always?) have a value)
+//    (whereas with filepath.Walk it will usually (always?) have a value).
 // 2. If the return value of walkFunc function is not nil, enumeration will always stop, not matter what the type of the error.
-//    (Unlike filepath.WalkFunc, where returning filePath.SkipDir is handled as a special case)
-func Walk(root string, parallelism int, walkFn filepath.WalkFunc) {
+//    (Unlike filepath.WalkFunc, where returning filePath.SkipDir is handled as a special case).
+func Walk(root string, parallelism int, parallelStat bool, walkFn filepath.WalkFunc) {
 	signalRootError := func(e error) {
 		_ = walkFn(root, nil, e)
 	}
@@ -83,8 +94,10 @@ func Walk(root string, parallelism int, walkFn filepath.WalkFunc) {
 	_ = r.Close()
 
 	// walk the stuff inside the root
+	reader, remainingParallelism := NewDirReader(parallelism, parallelStat)
+	defer reader.Close()
 	ctx, cancel := context.WithCancel(context.Background())
-	ch := CrawlLocalDirectory(ctx, root, parallelism)
+	ch := CrawlLocalDirectory(ctx, root, remainingParallelism, reader)
 	for crawlResult := range ch {
 		entry, err := crawlResult.Item()
 		if err == nil {
@@ -101,7 +114,7 @@ func Walk(root string, parallelism int, walkFn filepath.WalkFunc) {
 }
 
 // enumerateOneFileSystemDirectory is an implementation of EnumerateOneDirFunc specifically for the local file system
-func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry)) error {
+func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry, error), r DirReader) error {
 	dirString := dir.(string)
 
 	d, err := os.Open(dirString) // for directories, we don't need a special open with FILE_FLAG_BACKUP_SEMANTICS, because directory opening uses FindFirst which doesn't need that flag. https://blog.differentpla.net/blog/2007/05/25/findfirstfile-and-se_backup_name
@@ -112,7 +125,7 @@ func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), 
 
 	// enumerate immediate children
 	for {
-		list, err := d.Readdir(1024) // list it in chunks, so that if we get child dirs early, parallel workers can start working on them
+		list, err := r.Readdir(d, 1024) // list it in chunks, so that if we get child dirs early, parallel workers can start working on them
 		if err == io.EOF {
 			if len(list) > 0 {
 				panic("unexpected non-empty list")
@@ -122,6 +135,11 @@ func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), 
 			return err
 		}
 		for _, childInfo := range list {
+			if failable, ok := childInfo.(failableFileInfo); ok && failable.Error() != nil {
+				// while Readdir as a whole did not fail, this particular file info did
+				enqueueOutput(FileSystemEntry{}, failable.Error())
+				continue
+			}
 			childEntry := FileSystemEntry{
 				fullPath: filepath.Join(dirString, childInfo.Name()),
 				info:     childInfo,
@@ -130,7 +148,7 @@ func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), 
 			if childInfo.IsDir() && !isSymlink {
 				enqueueDir(childEntry.fullPath)
 			}
-			enqueueOutput(childEntry)
+			enqueueOutput(childEntry, nil)
 		}
 	}
 }

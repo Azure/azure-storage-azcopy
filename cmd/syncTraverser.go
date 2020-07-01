@@ -109,5 +109,5 @@ func newBlobTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (t *blobTrav
 		}
 	}
 
-	return newBlobTraverser(rawURL, p, ctx, cca.recursive, incrementEnumerationCounter), nil
+	return newBlobTraverser(rawURL, p, ctx, cca.recursive, false, incrementEnumerationCounter), nil
 }

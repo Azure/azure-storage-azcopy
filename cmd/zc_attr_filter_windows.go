@@ -45,7 +45,14 @@ func (f *attrFilter) appliesOnlyToFiles() bool {
 }
 
 func (f *attrFilter) doesPass(storedObject storedObject) bool {
-	fileName := common.GenerateFullPath(f.filePath, storedObject.relativePath)
+	fileName := ""
+	if strings.Index(f.filePath, "*") == -1 {
+		fileName = common.GenerateFullPath(f.filePath, storedObject.relativePath)
+	} else {
+		basePath := getPathBeforeFirstWildcard(f.filePath)
+		fileName = common.GenerateFullPath(basePath, storedObject.relativePath)
+	}
+
 	lpFileName, _ := syscall.UTF16PtrFromString(fileName)
 	attributes, err := syscall.GetFileAttributes(lpFileName)
 
