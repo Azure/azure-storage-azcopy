@@ -226,7 +226,7 @@ Load an entire directory with a SAS:
 		err = clfscmd.Wait()
 		exitCode := common.EExitCode.Success()
 		if err != nil {
-			glcm.Error("Job failed due to error: " + err.Error())
+			glcm.Error("Job failed due to extension error: " + err.Error())
 			exitCode = common.EExitCode.Error()
 		}
 
