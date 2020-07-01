@@ -69,7 +69,7 @@ func (t *BlobFSAccountTraverser) listContainers() ([]string, error) {
 				} else {
 					// realistically this should never ever happen
 					// but on the off-chance that it does, should we panic?
-					LogStdoutAndJobLog("filesystem listing returned nil filesystem name")
+					WarnStdoutAndJobLog("filesystem listing returned nil filesystem name")
 					continue
 				}
 

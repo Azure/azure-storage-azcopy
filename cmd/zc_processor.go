@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/pkg/errors"
 
@@ -116,7 +117,7 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 	}
 
 	if ste.JobsAdmin != nil {
-		ste.JobsAdmin.LogToJobLog(FinalPartCreatedMessage)
+		ste.JobsAdmin.LogToJobLog(FinalPartCreatedMessage, pipeline.LogInfo)
 	}
 
 	if s.reportFinalPartDispatched != nil {

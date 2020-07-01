@@ -50,7 +50,7 @@ func (r CrawlResult) Item() (interface{}, error) {
 }
 
 // must be safe to be simultaneously called by multiple go-routines, each with a different dir
-type EnumerateOneDirFunc func(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry)) error
+type EnumerateOneDirFunc func(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry, error)) error
 
 // Crawl crawls an abstract directory tree, using the supplied enumeration function.  May be use for whatever
 // that function can enumerate (i.e. not necessarily a local file system, just anything tree-structured)
@@ -168,9 +168,9 @@ func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (boo
 	addDir := func(d Directory) {
 		foundDirectories = append(foundDirectories, d)
 	}
-	addOutput := func(e DirectoryEntry) {
+	addOutput := func(de DirectoryEntry, er error) {
 		select {
-		case c.output <- CrawlResult{item: e}:
+		case c.output <- CrawlResult{item: de, err: er}:
 		case <-ctx.Done(): // don't block on full channel if cancelled
 		}
 	}

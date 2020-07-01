@@ -103,6 +103,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	// this if statement ladder remains instead of being separated to help determine valid combinations for sync
 	// consider making a map of valid source/dest combos and consolidating this to generic source/dest setups, akin to the lower if statement
+	// TODO: if expand the set of source/dest combos supported by sync, update this method the declarative test framework: // TODO: add support for account-to-account operations (for those from-tos that support that)
 	cooked.fromTo = inferFromTo(raw.src, raw.dst)
 	var err error
 	if cooked.fromTo == common.EFromTo.Unknown() {
@@ -422,6 +423,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	// fetch a job status and compute throughput if the first part was dispatched
 	if cca.firstPartOrdered() {
 		Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
+		Rpc(common.ERpcCmd.GetJobLCMWrapper(), &cca.jobID, &lcm)
 		jobDone = summary.JobStatus.IsJobDone()
 		totalKnownCount = summary.TotalTransfers
 
@@ -522,15 +524,10 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return err
 	}
 
-	// verifies credential type and initializes credential info.
-	// For sync, only one side need credential.
-	cca.credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
-		fromTo:         cca.fromTo,
-		source:         cca.source.Value,
-		destination:    cca.destination.Value,
-		sourceSAS:      cca.source.SAS,
-		destinationSAS: cca.destination.SAS,
-	})
+	// Verifies credential type and initializes credential info.
+	// Note that this is for the destination.
+	cca.credentialInfo, _, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(),
+		cca.destination.Value, cca.destination.SAS, false)
 
 	if err != nil {
 		return err

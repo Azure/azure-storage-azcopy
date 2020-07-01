@@ -32,12 +32,10 @@ type blobSourceInfoProvider struct {
 }
 
 func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
-	b, err := newDefaultRemoteSourceInfoProvider(jptm)
+	base, err := newDefaultRemoteSourceInfoProvider(jptm)
 	if err != nil {
 		return nil, err
 	}
-
-	base := b.(*defaultRemoteSourceInfoProvider)
 
 	return &blobSourceInfoProvider{defaultRemoteSourceInfoProvider: *base}, nil
 }
