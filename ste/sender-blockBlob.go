@@ -58,13 +58,36 @@ type blockBlobSenderBase struct {
 	muBlockIDs             *sync.Mutex
 }
 
-func getVerifiedChunkParams(transferInfo TransferInfo, memLimit int64) (chunkSize int64, numChunks uint32, err error) {
+func getVerifiedChunkParams(jptm IJobPartTransferMgr) (chunkSize int64, numChunks uint32, err error) {
+	transferInfo := jptm.Info()
+	memLimit := jptm.CacheLimiter().Limit()
+
 	chunkSize = transferInfo.BlockSize
 	srcSize := transferInfo.SourceSize
+	fromTo := jptm.FromTo()
+
+	//Set chunk size to srcSize when size is less than 256MB to use CopyBlobFromURL and transfer in one request.
+	if srcSize <= azblob.BlockBlobMaxUploadBlobBytes && fromTo.IsS2S() {
+		chunkSize = int64(srcSize)
+		//TODO nakulkar : chunkSize should be less than MaxBlockSize for CopyFromURL
+	}
+
 	numChunks = getNumChunks(srcSize, chunkSize)
+
+	if numChunks > common.MaxNumberOfBlocksPerBlob {
+		err = fmt.Errorf("Block size %d for source of size %d is not correct. Number of blocks will exceed the limit", chunkSize, srcSize)
+		return
+	}
 
 	toGiB := func(bytes int64) float64 {
 		return float64(bytes) / float64(1024*1024*1024)
+	}
+
+	if chunkSize > common.MaxBlockBlobBlockSize {
+		// mercy, please
+		err = fmt.Errorf("block size of %.2fGiB for file %s of size %.2fGiB exceeds maxmimum allowed block size for a BlockBlob",
+			toGiB(chunkSize), transferInfo.Source, toGiB(transferInfo.SourceSize))
+		return
 	}
 
 	if common.MinParallelChunkCountThreshold >= memLimit/chunkSize {
@@ -84,24 +107,12 @@ func getVerifiedChunkParams(transferInfo TransferInfo, memLimit int64) (chunkSiz
 		return
 	}
 
-	if chunkSize > common.MaxBlockBlobBlockSize {
-		// mercy, please
-		err = fmt.Errorf("block size of %.2fGiB for file %s of size %.2fGiB exceeds maxmimum allowed block size for a BlockBlob",
-			toGiB(chunkSize), transferInfo.Source, toGiB(transferInfo.SourceSize))
-		return
-	}
-
-	if numChunks > common.MaxNumberOfBlocksPerBlob {
-		err = fmt.Errorf("Block size %d for source of size %d is not correct. Number of blocks will exceed the limit", chunkSize, srcSize)
-		return
-	}
-
 	return
 }
 
 func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType azblob.AccessTierType) (*blockBlobSenderBase, error) {
 	// compute chunk count
-	chunkSize, numChunks, err := getVerifiedChunkParams(jptm.Info(), jptm.CacheLimiter().Limit())
+	chunkSize, numChunks, err := getVerifiedChunkParams(jptm)
 	if err != nil {
 		return nil, err
 	}

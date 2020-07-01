@@ -69,6 +69,11 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 		return c.generateCreateEmptyBlob(id)
 	}
 
+	if c.NumChunks() == 1 && adjustedChunkSize <= int64(azblob.BlockBlobMaxUploadBlobBytes) {
+		setPutListNeed(&c.atomicPutListIndicator, putListNotNeeded)
+		return c.generateStartCopyBlobFromURL(id, blockIndex, adjustedChunkSize)
+
+	}
 	setPutListNeed(&c.atomicPutListIndicator, putListNeeded)
 	return c.generatePutBlockFromURL(id, blockIndex, adjustedChunkSize)
 }
@@ -160,6 +165,32 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 			c.jptm.FailActiveSend("Staging block from URL", err)
 			return
 		}
+	})
+}
+
+func (c *urlToBlockBlobCopier) generateStartCopyBlobFromURL(id common.ChunkID, blockIndex int32, adjustedChunkSize int64) chunkFunc {
+	return createSendToRemoteChunkFunc(c.jptm, id, func() {
+
+		encodedBlockID := c.generateEncodedBlockID()
+
+		c.setBlockID(blockIndex, encodedBlockID)
+
+		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
+
+		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+
+		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
+			c.jptm.FailActiveUpload("Pacing block", err)
+		}
+
+		_, err := c.destBlockBlobURL.CopyFromURL(ctxWithLatestServiceVersion, c.srcURL, c.metadataToApply,
+			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil)
+
+		if err != nil {
+			c.jptm.FailActiveSend("Copy Blob from URL", err)
+			return
+		}
+
 	})
 }
 
