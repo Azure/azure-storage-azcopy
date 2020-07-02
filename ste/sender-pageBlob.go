@@ -240,48 +240,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 	}
 
 	// Set tier, https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
-	if s.destBlobTier != azblob.AccessTierNone {
-		// Ensure destBlobTier is not block blob tier, i.e. not Hot, Cool and Archive.
-		// Note: When copying from page blob source, the inferred blob tier could be Hot.
-		var blockBlobTier common.BlockBlobTier
-		if err := blockBlobTier.Parse(string(s.destBlobTier)); err != nil { // i.e it's not block blob tier
-			// Set the latest service version from sdk as service version in the context.
-			ctxWithLatestServiceVersion := context.WithValue(s.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-
-			// Let's check if we can confirm we'll be able to check the destination blob's account info.
-			// A SAS token, even with write-only permissions is enough. OR, OAuth with the account owner.
-			// We can't guess that last information, so we'll take a gamble and try to get account info anyway.
-			destParts := azblob.NewBlobURLParts(s.destPageBlobURL.URL())
-			mustGet := destParts.SAS.Encode() != ""
-
-			// Get the account info and check if we should attempt to set it.
-			prepareDestAccountInfo(s.destPageBlobURL.BlobURL, s.jptm, ctxWithLatestServiceVersion, mustGet)
-			shouldSet := BlobTierAllowed(s.destBlobTier)
-
-			if shouldSet {
-				if _, err := s.destPageBlobURL.SetTier(ctxWithLatestServiceVersion, s.destBlobTier, azblob.LeaseAccessConditions{}); err != nil {
-					if s.jptm.Info().S2SSrcBlobTier != azblob.AccessTierNone {
-						s.jptm.LogTransferInfo(pipeline.LogError, s.jptm.Info().Source, s.jptm.Info().Destination, "Failed to replicate blob tier at destination. Try transferring with the flag --s2s-preserve-access-tier=false")
-						s2sAccessTierFailureLogStdout.Do(func() {
-							glcm := common.GetLifecycleMgr()
-							// Info, rather than error. Error kills azcopy.
-							glcm.Info("One or more blobs have failed blob tier replication at the destination. Try transferring with the flag --s2s-preserve-access-tier=false")
-						})
-					}
-
-					// If we don't think it was possible for the tier setting to fail, we should error out.
-					if !tierSetPossibleFail {
-						s.jptm.FailActiveSendWithStatus("Setting PageBlob tier ", err, common.ETransferStatus.BlobTierFailure())
-					} else {
-						s.jptm.LogTransferInfo(pipeline.LogWarning, s.jptm.Info().Source, s.jptm.Info().Destination, "Cannot set destination page blob to the pending access tier ("+string(s.destBlobTier)+"), because either the destination account or blob type does not support it. The transfer will still succeed.")
-					}
-					return
-				}
-			} else {
-				s.jptm.LogTransferInfo(pipeline.LogWarning, s.jptm.Info().Source, s.jptm.Info().Destination, "The intended tier ("+string(s.destBlobTier)+") isn't available on the destination blob type or storage account, so it was left as the default.")
-			}
-		}
-	}
+	AttemptSetBlobTier(s.jptm, s.destBlobTier, s.destPageBlobURL.BlobURL, s.jptm.Context())
 
 	return
 }
