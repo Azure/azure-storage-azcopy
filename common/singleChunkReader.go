@@ -80,6 +80,40 @@ type CloseableReaderAt interface {
 // Factory method for data source for singleChunkReader
 type ChunkReaderSourceFactory func() (CloseableReaderAt, error)
 
+func DocumentationForDependencyOnChangeDetection() {
+	// This function does nothing, except remind you to read the following, which is essential
+	// to the correctness of AzCopy.
+
+	// *** If the code that calls this singleChunkReader reads to the end of the buffer, then
+	//     closeBuffer will automatically be called. If the calling subsequently Seeks back to
+	//     the start, and Reads again, then singleChunkReader will re-retrieve the data from disk.
+	//     That's exactly what happens if a chunk upload fails, and AzCopy's HTTP pipeline does a retry.
+	//
+	//     Here's the problem: There is no guarantee that the data obtained from the re-read matches the
+	//     data that was retrieved the first time. It might be different. Specifically the data from the
+	//     second disk read might be different from the first if some other process modified the file).
+	//     And, importantly, AzCopy uses only the FIRST version when computing the MD5 hash of the file.
+	//
+	//	   So if the file changed, we'll upload the new version, but use the hash from the old one. That's
+	//     clearly unacceptable because the hash will be invalid.
+	//
+	//     To solve that, we rely on our change detection logic in ste/xfer-anyToRemote-file.go/epilogueWithCleanupSendToRemote.
+	//     If some other process has changed the file, then that change detection logic will kick in,
+	//     and fail the transfer.  Therefore no _successful_ transfer will suffer from
+	//     a re-read chunk being different from what was hashed.
+	//
+	//     Search for usages of this function DocumentationForDependencyOnChangeDetection(), to see all places that
+	//     have been "commented" with a "call" to it.
+	//
+	//     Why do we re-read from disk like this? Because if we didn't we'd have to keep every chunk in RAM until the
+	//     Storage Service acknowledged each request, and we assume that would substantially increase RAM usage.
+
+	// Why do we have a function just for documentation? Because (a) the function gives us a compiler-checked
+	// way to refer to the documentation from all relevant places, (b) IDEs can find usages of the function to
+	// see where its referenced and (c) this is so important to the correctness of AzCopy, that it seemed sensible
+	// to do something that was hard to ignore.
+}
+
 type singleChunkReader struct {
 	// context used to allow cancellation of blocking operations
 	// (Yes, ideally contexts are not stored in structs, but we need it inside Read, and there's no way for it to be passed in there)
@@ -248,8 +282,10 @@ func (cr *singleChunkReader) retryBlockingPrefetchIfNecessary() error {
 }
 
 // Seeks within this chunk
-// Seeking is used for retries, and also by some code to get length (by seeking to end)
+// Seeking is used for retries, and also by some code to get length (by seeking to end).
 func (cr *singleChunkReader) Seek(offset int64, whence int) (int64, error) {
+	DocumentationForDependencyOnChangeDetection() // <-- read the documentation here
+
 	cr.use()
 	defer cr.unuse()
 
@@ -275,8 +311,10 @@ func (cr *singleChunkReader) Seek(offset int64, whence int) (int64, error) {
 	return cr.positionInChunk, nil
 }
 
-// Reads from within this chunk
+// Reads from within this chunk.
 func (cr *singleChunkReader) Read(p []byte) (n int, err error) {
+	DocumentationForDependencyOnChangeDetection() // <-- read the documentation here
+
 	cr.use()
 	defer cr.unuse()
 
@@ -329,7 +367,10 @@ func (cr *singleChunkReader) doRead(p []byte, freeBufferOnEof bool) (n int, err 
 	return bytesCopied, nil
 }
 
+// Disposes of the buffer to save RAM.
 func (cr *singleChunkReader) closeBuffer() {
+	DocumentationForDependencyOnChangeDetection() // <-- read the documentation here
+
 	if cr.buffer == nil {
 		return
 	}
@@ -399,7 +440,10 @@ func (cr *singleChunkReader) GetPrologueState() PrologueState {
 	return PrologueState{LeadingBytes: leadingBytes}
 }
 
+// Writes the buffer to a hasher. Does not alter positionInChunk
 func (cr *singleChunkReader) WriteBufferTo(h hash.Hash) {
+	DocumentationForDependencyOnChangeDetection() // <-- read the documentation here
+
 	cr.use()
 	defer cr.unuse()
 
