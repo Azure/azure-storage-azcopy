@@ -619,6 +619,7 @@ func (TransferStatus) NotStarted() TransferStatus { return TransferStatus(0) }
 //   Outdated:
 //     Transfer started & at least 1 chunk has successfully been transfered.
 //     Used to resume a transfer that started to avoid transferring all chunks thereby improving performance
+// Update(Jul 2020): This represents the state of transfer as soon as the file is scheduled.
 func (TransferStatus) Started() TransferStatus { return TransferStatus(1) }
 
 // Transfer successfully completed

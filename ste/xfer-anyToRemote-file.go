@@ -196,6 +196,8 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 
 	// step 1. perform initial checks
 	if jptm.WasCanceled() {
+		/* This is the earliest we detect jptm has been cancelled before scheduling chunks */
+		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
 	}
