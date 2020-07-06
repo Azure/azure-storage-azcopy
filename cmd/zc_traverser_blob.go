@@ -116,7 +116,9 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
 
-		return processIfPassedFilters(filters, storedObject, processor)
+		err := processIfPassedFilters(filters, storedObject, processor)
+		_, err = getProcessingError(err)
+		return err
 	}
 
 	// get the container URL so that we can list the blobs
@@ -182,6 +184,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			}
 
 			processErr := processIfPassedFilters(filters, storedObject, processor)
+			_, processErr = getProcessingError(processErr)
 			if processErr != nil {
 				return processErr
 			}

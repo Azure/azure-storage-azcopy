@@ -263,8 +263,16 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 				}
 
 				if !seenPaths.HasSeen(result) {
-					seenPaths.Record(result)
-					return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
+					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
+					// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
+					skipped, err := getProcessingError(err)
+
+					// If the file was skipped, don't record it.
+					if !skipped {
+						seenPaths.Record(result)
+					}
+
+					return err
 				} else {
 					if fileInfo.IsDir() {
 						// We can't output a warning here (and versions 10.3.x never did)
@@ -294,7 +302,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
 
-		return processIfPassedFilters(filters,
+		err := processIfPassedFilters(filters,
 			newStoredObject(
 				preprocessor,
 				singleFileInfo.Name(),
@@ -309,6 +317,8 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 			),
 			processor,
 		)
+		_, err = getProcessingError(err)
+		return err
 	} else {
 		if t.recursive {
 			processFile := func(filePath string, fileInfo os.FileInfo, fileError error) error {
@@ -334,6 +344,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 					t.incrementEnumerationCounter(entityType)
 				}
 
+				// This is an exception to the rule. We don't strip the error here, because WalkWithSymlinks catches it.
 				return processIfPassedFilters(filters,
 					newStoredObject(
 						preprocessor,
@@ -418,7 +429,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 						"", // Local has no such thing as containers
 					),
 					processor)
-
+				_, err = getProcessingError(err)
 				if err != nil {
 					return err
 				}

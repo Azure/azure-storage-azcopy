@@ -87,7 +87,9 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 				t.incrementEnumerationCounter(common.EEntityType.File())
 			}
 
-			return processIfPassedFilters(filters, storedObject, processor)
+			err := processIfPassedFilters(filters, storedObject, processor)
+			_, err = getProcessingError(err)
+			return err
 		}
 	}
 
@@ -137,7 +139,9 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(s.entityType)
 		}
-		return processIfPassedFilters(filters, s, processor)
+		err := processIfPassedFilters(filters, s, processor)
+		_, err = getProcessingError(err)
+		return err
 	}
 
 	// get the directory URL so that we can list the files
