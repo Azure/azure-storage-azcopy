@@ -88,15 +88,19 @@ func UnfurlSymlinks(symlinkPath string) (result string, err error) {
 				return result, err
 			}
 
-			// We need to discern whether the item symlinked is under the same directory as the symlink.
-			// This is because when this happens, we only get a relative path, not a full path.
-			// So we'll check for the existence of the item under the relative path, and otherwise treat it as a full path.
-			sameDir := filepath.Join(filepath.Dir(item), result)
-			if _, err = os.Stat(sameDir); err == nil {
-				result = sameDir
-			} else {
-				result = common.ToExtendedPath(result)
+			// Previously, we'd try to detect if the read link was a relative path by appending and stat'ing the item
+			// However, it seems to be a fairly unlikely and hard to reproduce scenario upon investigation (Couldn't manage to reproduce the scenario)
+			// So it was dropped. However, on the off chance, we'll still do it if syntactically it makes sense.
+			if len(result) == 0 || result[0] == '.' { // A relative path being "" or "." likely (and in the latter case, on our officially supported OSes, always) means that it's just the same folder.
+				result = filepath.Dir(item)
+			} else if !os.IsPathSeparator(result[0]) { // We can assume that a relative path won't start with a separator
+				possiblyResult := filepath.Join(filepath.Dir(item), result)
+				if _, err := os.Lstat(possiblyResult); err == nil {
+					result = possiblyResult
+				}
 			}
+
+			result = common.ToExtendedPath(result)
 
 			unfurlingPlan = append(unfurlingPlan, result)
 		} else {
@@ -221,14 +225,20 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 
 				if rStat.IsDir() {
 					if !seenPaths.HasSeen(result) {
-						seenPaths.Record(result)
-						seenPaths.Record(slPath) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
-						walkQueue = append(walkQueue, walkItem{
-							fullPath:     result,
-							relativeBase: computedRelativePath,
-						})
+						err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
+						// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
+						skipped, err := getProcessingError(err)
+
+						if !skipped { // Don't go any deeper (or record it) if we skipped it.
+							seenPaths.Record(result)
+							seenPaths.Record(slPath) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
+							walkQueue = append(walkQueue, walkItem{
+								fullPath:     result,
+								relativeBase: computedRelativePath,
+							})
+						}
 						// enumerate the FOLDER now (since its presence in seenDirs will prevent its properties getting enumerated later)
-						return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
+						return err
 					} else {
 						glcm.Info(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
 					}
