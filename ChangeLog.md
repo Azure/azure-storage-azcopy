@@ -20,7 +20,7 @@ or `2020-08-19` for midnight (00:00), also in the local timezone.
 1. Each job now logs its start time precisely in the log file, using ISO 8601 format.  This is useful if you want to 
 use that start date as the `--include-after` parameter to a later job on the same directory. Look for "ISO 8601 START TIME" 
 in the log.
-1. Stop treating zero-item job as failure, to improved the user experience. 
+1. Stop treating zero-item job as failure, to improve the user experience. 
 1. Improved the naming of files being generated in benchmark command, by reversing the digits. 
 Doing so allows the names to not be an alphabetic series, which used to negatively impact the performance on the service side.
 1. Azcopy can now detect when setting a blob tier would be impossible. If azcopy cannot check the destination account type, a new transfer failure status will be set: `TierAvailabilityCheckFailure`
