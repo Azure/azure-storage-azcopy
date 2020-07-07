@@ -74,7 +74,7 @@ func (hi handleInfo) FileCreationTime() time.Time {
 }
 
 func (hi handleInfo) FileLastWriteTime() time.Time {
-	return time.Unix(0, hi.CreationTime.Nanoseconds())
+	return time.Unix(0, hi.LastWriteTime.Nanoseconds())
 }
 
 func (hi handleInfo) FileAttributes() azfile.FileAttributeFlags {
