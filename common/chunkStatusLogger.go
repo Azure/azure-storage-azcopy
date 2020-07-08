@@ -127,10 +127,17 @@ func (WaitReason) QueueToWrite() WaitReason         { return WaitReason{11, "Que
 func (WaitReason) DiskIO() WaitReason               { return WaitReason{12, "DiskIO"} }            // waiting on disk read/write to complete
 func (WaitReason) S2SCopyOnWire() WaitReason        { return WaitReason{13, "S2SCopyOnWire"} }     // waiting for S2S copy on wire get finished. extra status used only by S2S copy
 func (WaitReason) Epilogue() WaitReason             { return WaitReason{14, "Epilogue"} }          // File-level epilogue processing (e.g. Commit block list, or other final operation on local or remote object (e.g. flush))
-func (WaitReason) ChunkDone() WaitReason            { return WaitReason{15, "Done"} }              // not waiting on anything. Chunk is done.
+
+// extra ones for start of uploads (prior to chunk scheduling)
+func (WaitReason) XferStart() WaitReason           { return WaitReason{15, "XferStart"} }
+func (WaitReason) OpenLocalSource() WaitReason     { return WaitReason{16, "OpenLocalSource"} }
+func (WaitReason) ModifiedTimeRefresh() WaitReason { return WaitReason{17, "ModifiedTimeRefresh"} }
+func (WaitReason) LockDestination() WaitReason     { return WaitReason{18, "LockDestination"} }
+
+func (WaitReason) ChunkDone() WaitReason { return WaitReason{19, "Done"} } // not waiting on anything. Chunk is done.
 // NOTE: when adding new statuses please renumber to make Cancelled numerically the last, to avoid
 // the need to also change numWaitReasons()
-func (WaitReason) Cancelled() WaitReason { return WaitReason{16, "Cancelled"} } // transfer was cancelled.  All chunks end with either Done or Cancelled.
+func (WaitReason) Cancelled() WaitReason { return WaitReason{20, "Cancelled"} } // transfer was cancelled.  All chunks end with either Done or Cancelled.
 
 // TODO: consider change the above so that they don't create new struct on every call?  Is that necessary/useful?
 //     Note: reason it's not using the normal enum approach, where it only has a number, is to try to optimize
@@ -143,6 +150,13 @@ func (WaitReason) Cancelled() WaitReason { return WaitReason{16, "Cancelled"} } 
 // That makes it easy for end-users of the counts (i.e. logging and display code) to show the state counts
 // in a meaningful left-to-right sequential order.
 var uploadWaitReasons = []WaitReason{
+
+	// pseudo-chunk stats (whole-of-file level) that happen before any chunks get scheduled
+	EWaitReason.XferStart(),
+	EWaitReason.OpenLocalSource(),
+	EWaitReason.ModifiedTimeRefresh(),
+	EWaitReason.LockDestination(),
+
 	// These first two happen in the transfer initiation function (i.e. the chunkfunc creation loop)
 	// So their total is constrained to the size of the goroutine pool that runs those functions.
 	// (e.g. 64, given the GR pool sizing as at Feb 2019)
@@ -340,6 +354,10 @@ func (csl *chunkStatusLogger) main(chunkLogPath string) {
 // We obtain and track the old state within the chunkID itself. The alternative, of having a threadsafe
 // map in the chunkStatusLogger, to track and look up the states, is considered a risk for performance.
 func (csl *chunkStatusLogger) countStateTransition(id ChunkID, newReason WaitReason) {
+
+	// NOTE to maintainers: this routine must be idempotent. E.g. for some whole-of-file pseudo chunks,
+	// they may be set to "Done" more than once.  So this routine should work OK if status is set to
+	// a status that the chunk already has
 
 	// Flip the chunk's state to indicate the new thing that it's waiting for now
 	oldReasonIndex := atomic.SwapInt32(id.waitReasonIndex, newReason.index)

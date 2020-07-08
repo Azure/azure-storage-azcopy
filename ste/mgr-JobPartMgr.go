@@ -295,6 +295,12 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	// partplan file is opened and mapped when job part is added
 	//jpm.planMMF = jpm.filename.Map() // Open the job part plan file & memory-map it in
 	plan := jpm.planMMF.Plan()
+	if plan.PartNum == 0 && plan.NumTransfers == 0 {
+		/* This will wind down the transfer and report summary */
+		plan.SetJobStatus(common.EJobStatus.Completed())
+		return
+	}
+
 	// get the list of include / exclude transfers
 	includeTransfer, excludeTransfer := jpm.jobMgr.IncludeExclude()
 	// *** Open the job part: process any job part plan-setting used by all transfers ***
@@ -583,8 +589,34 @@ func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byt
 	return common.ResourceHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer), ContentLanguage: jpm.httpHeaders.ContentLanguage, ContentDisposition: jpm.httpHeaders.ContentDisposition, ContentEncoding: jpm.httpHeaders.ContentEncoding, CacheControl: jpm.httpHeaders.CacheControl}, jpm.metadata
 }
 
+// TODO do we want these charset=utf-8?
+var builtinTypes = map[string]string{
+	".css":  "text/css;",
+	".gif":  "image/gif",
+	".htm":  "text/html;",
+	".html": "text/html;",
+	".jpeg": "image/jpeg",
+	".jpg":  "image/jpeg",
+	".js":   "application/javascript",
+	".mjs":  "application/javascript",
+	".pdf":  "application/pdf",
+	".png":  "image/png",
+	".svg":  "image/svg+xml",
+	".wasm": "application/wasm",
+	".webp": "image/webp",
+	".xml":  "text/xml;",
+}
+
 func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []byte) string {
-	if guessedType := mime.TypeByExtension(filepath.Ext(fullFilePath)); guessedType != "" {
+	fileExtension := filepath.Ext(fullFilePath)
+
+	// short-circuit for common static website files
+	// mime.TypeByExtension takes the registry into account, which is most often undesirable in practice
+	if override, ok := builtinTypes[strings.ToLower(fileExtension)]; ok {
+		return override
+	}
+
+	if guessedType := mime.TypeByExtension(fileExtension); guessedType != "" {
 		return guessedType
 	}
 

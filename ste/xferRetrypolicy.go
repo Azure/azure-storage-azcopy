@@ -251,6 +251,8 @@ func NewBFSXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 						}
 					} else if _, ok := err.(net.Error); ok {
 						action = "Retry: net.Error and Temporary() or Timeout()"
+					} else if err == io.ErrUnexpectedEOF {
+						action = "Retry: io.UnexpectedEOF"
 					} else {
 						action = "NoRetry: unrecognized error"
 					}
@@ -421,6 +423,8 @@ func NewBlobXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 						}
 					} else if _, ok := err.(net.Error); ok {
 						action = "Retry: net.Error"
+					} else if err == io.ErrUnexpectedEOF {
+						action = "Retry: io.UnexpectedEOF"
 					} else {
 						action = "NoRetry: unrecognized error"
 					}

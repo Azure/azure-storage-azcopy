@@ -165,6 +165,11 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 	}
 
 	// Then let's set the security info.
+	// We don't know or control the order in which we visit
+	// elements of the tree (e.g. we don't know or care whether we are doing A/B before A/B/C).
+	// Therefore we must use must use SetNamedSecurityInfo, NOT TreeSetNamedSecurityInfo.
+	// (TreeSetNamedSecurityInfo, with TREE_SEC_INFO_RESET, would definitely NOT be safe to call in a situation
+	// where we don't know the order in which we visit elements of the tree).
 	// TODO: review and potentially remove the use of the global mutex here, once we finish drilling into issues
 	//   observed when setting ACLs concurrently on a test UNC share.
 	//   BTW, testing indicates no measurable perf difference, between using the mutex and not, in the cases tested.

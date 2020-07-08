@@ -320,6 +320,18 @@ func createNewBlockBlob(c *chk.C, container azblob.ContainerURL, prefix string) 
 	return
 }
 
+func createNewDirectoryStub(c *chk.C, container azblob.ContainerURL, dirPath string) {
+	dir := container.NewBlockBlobURL(dirPath)
+
+	cResp, err := dir.Upload(ctx, bytes.NewReader(nil), azblob.BlobHTTPHeaders{},
+		azblob.Metadata{"hdi_isfolder": "true"}, azblob.BlobAccessConditions{})
+
+	c.Assert(err, chk.IsNil)
+	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+
+	return
+}
+
 func createNewAzureShare(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
 	share, name = getShareURL(c, fsu)
 

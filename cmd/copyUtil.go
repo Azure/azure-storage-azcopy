@@ -133,7 +133,7 @@ func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, u
 
 	if err != nil {
 		if ste.JobsAdmin != nil {
-			ste.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to check if destination is a folder or a file (ADLSg2). Assuming the destination is a file: %s", err))
+			ste.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to check if destination is a folder or a file (ADLSg2). Assuming the destination is a file: %s", err), pipeline.LogWarning)
 		}
 	}
 
@@ -151,7 +151,7 @@ func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *ur
 	_, err := directoryURL.GetProperties(ctx)
 	if err != nil {
 		if ste.JobsAdmin != nil {
-			ste.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err))
+			ste.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err), pipeline.LogWarning)
 		}
 
 		return false

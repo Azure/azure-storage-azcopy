@@ -78,3 +78,7 @@ func ToShortPath(long string) string {
 
 	return long
 }
+
+func IsShortPath(s string) bool {
+	return s == ToShortPath(s)
+}

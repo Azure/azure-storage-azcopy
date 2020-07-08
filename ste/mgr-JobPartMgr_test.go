@@ -21,7 +21,6 @@
 package ste
 
 import (
-	"fmt"
 	chk "gopkg.in/check.v1"
 	"strings"
 	"testing"
@@ -49,13 +48,12 @@ func (s *jobPartMgrTestSuite) TestInferContentType(c *chk.C) {
 		"/usr/foo/bla.png":             "image/png",
 		"/usr/foo/bla.multiple.dot.js": "application/javascript",
 		"/usr/foo/no/extension":        "application/octet-stream",
+		"/usr/foo/bla.HTML":            "text/html",
 	}
 
 	// Action & Assert
 	for testPath, expectedType := range testCases {
 		contentType := partMgr.inferContentType(testPath, make([]byte, 5))
-
-		fmt.Println(testPath + ": " + contentType)
 
 		// make sure the inferred type is correct
 		// we use Contains to check because charset is also in contentType

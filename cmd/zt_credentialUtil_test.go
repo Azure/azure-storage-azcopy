@@ -87,6 +87,6 @@ func (s *credentialUtilSuite) TestCheckAuthSafeForTargetIsCalledWhenGettingAuthT
 	_, _, err := doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(),
 		"http://notblob.example.com", "", true, mockGetCredTypeFromEnvVar)
 	c.Assert(err, chk.NotNil)
-	c.Assert(strings.Contains(err.Error(), "azure authentication to notblob.example.com is not enabled in AzCopy"),
+	c.Assert(strings.Contains(err.Error(), "If this URL is in fact an Azure service, you can enable Azure authentication to notblob.example.com."),
 		chk.Equals, true)
 }

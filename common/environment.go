@@ -38,6 +38,8 @@ type EnvironmentVariable struct {
 var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ConcurrencyValue(),
 	EEnvironmentVariable.TransferInitiationPoolSize(),
+	EEnvironmentVariable.EnumerationPoolSize(),
+	EEnvironmentVariable.ParallelStatFiles(),
 	EEnvironmentVariable.LogLocation(),
 	EEnvironmentVariable.JobPlanLocation(),
 	EEnvironmentVariable.BufferGB(),
@@ -100,11 +102,20 @@ func (EnvironmentVariable) TransferInitiationPoolSize() EnvironmentVariable {
 	}
 }
 
+const azCopyConcurrentScan = "AZCOPY_CONCURRENT_SCAN"
+
 func (EnvironmentVariable) EnumerationPoolSize() EnvironmentVariable {
 	return EnvironmentVariable{
-		Name:        "AZCOPY_CONCURRENT_SCAN",
-		Description: "Controls the (max) degree of parallelism used during enumeration. Only affects parallelized enumerators",
-		Hidden:      true, // hidden for now. We might not need to make it public? E.g. if we just cap it to the concurrency value or something?
+		Name:        azCopyConcurrentScan,
+		Description: "Controls the (max) degree of parallelism used during scanning. Only affects parallelized enumerators, which include Azure Files and Local File Systems.",
+	}
+}
+
+func (EnvironmentVariable) ParallelStatFiles() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_PARALLEL_STAT_FILES",
+		Description:  "Causes AzCopy to look up file properties on parallel 'threads' when scanning the local file system.  The threads are drawn from the pool defined by " + azCopyConcurrentScan + ".  Setting this to true may improve scanning performance on Linux.  Not needed or recommended on Windows.",
+		DefaultValue: "false", // we are defaulting to false even on Linux, because it does create more load, in terms of file system IOPS, and we don't yet have a large enough variety of real-world test cases to justify the default being true
 	}
 }
 

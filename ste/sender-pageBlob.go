@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -173,6 +174,8 @@ func (s *pageBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
 	return remoteObjectExists(s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}))
 }
 
+var premiumPageBlobTierRegex = regexp.MustCompile(`P\d+`)
+
 func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
 
 	// Create file pacer now.  Safe to create now, because we know that if Prologue is called the Epilogue will be to
@@ -237,27 +240,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 	}
 
 	// Set tier, https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
-	if s.destBlobTier != azblob.AccessTierNone {
-		// Ensure destBlobTier is not block blob tier, i.e. not Hot, Cool and Archive.
-		// Note: When copying from page blob source, the inferred blob tier could be Hot.
-		var blockBlobTier common.BlockBlobTier
-		if err := blockBlobTier.Parse(string(s.destBlobTier)); err != nil { // i.e it's not block blob tier
-			// Set the latest service version from sdk as service version in the context.
-			ctxWithLatestServiceVersion := context.WithValue(s.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-			if _, err := s.destPageBlobURL.SetTier(ctxWithLatestServiceVersion, s.destBlobTier, azblob.LeaseAccessConditions{}); err != nil {
-				if s.jptm.Info().S2SSrcBlobTier != azblob.AccessTierNone {
-					s.jptm.LogTransferInfo(pipeline.LogError, s.jptm.Info().Source, s.jptm.Info().Destination, "Failed to replicate blob tier at destination. Try transferring with the flag --s2s-preserve-access-tier=false")
-					s2sAccessTierFailureLogStdout.Do(func() {
-						glcm := common.GetLifecycleMgr()
-						glcm.Error("One or more blobs have failed blob tier replication at the destination. Try transferring with the flag --s2s-preserve-access-tier=false")
-					})
-				}
-
-				s.jptm.FailActiveSendWithStatus("Setting PageBlob tier ", err, common.ETransferStatus.BlobTierFailure())
-				return
-			}
-		}
-	}
+	AttemptSetBlobTier(s.jptm, s.destBlobTier, s.destPageBlobURL.BlobURL, s.jptm.Context())
 
 	return
 }

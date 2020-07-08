@@ -23,10 +23,13 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"net/url"
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -43,6 +46,8 @@ var outputFormatRaw string
 var cancelFromStdin bool
 var azcopyOutputFormat common.OutputFormat
 var cmdLineCapMegaBitsPerSecond float64
+var azcopyAwaitContinue bool
+var azcopyAwaitAllowOpenFiles bool
 
 // It's not pretty that this one is read directly by credential util.
 // But doing otherwise required us passing it around in many places, even though really
@@ -57,6 +62,13 @@ var rootCmd = &cobra.Command{
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+
+		glcm.E2EEnableAwaitAllowOpenFiles(azcopyAwaitAllowOpenFiles)
+		if azcopyAwaitContinue {
+			glcm.E2EAwaitContinue()
+		}
+
+		timeAtPrestart := time.Now()
 
 		err := azcopyOutputFormat.Parse(outputFormatRaw)
 		glcm.SetOutputFormat(azcopyOutputFormat)
@@ -91,6 +103,16 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 		enumerationParallelism = concurrencySettings.EnumerationPoolSize.Value
+		enumerationParallelStatFiles = concurrencySettings.ParallelStatFiles.Value
+
+		// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
+		// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
+		// job is running. I.e. using this later with --include-after is _guaranteed_ to pick up all files that changed during
+		// or after this job
+		adjustedTime := timeAtPrestart.Add(-5 * time.Second)
+		startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed after this job started, use the parameter --%s=%s",
+			common.IncludeAfterFlagName, includeAfterDateFilter{}.FormatAsUTC(adjustedTime))
+		ste.JobsAdmin.LogToJobLog(startTimeMessage, pipeline.LogInfo)
 
 		// spawn a routine to fetch and compare the local application's version against the latest version available
 		// if there's a newer version that can be used, then write the suggestion to stderr
@@ -105,6 +127,7 @@ var rootCmd = &cobra.Command{
 
 // hold a pointer to the global lifecycle controller so that commands could output messages and exit properly
 var glcm = common.GetLifecycleMgr()
+var glcmSwapOnce = &sync.Once{}
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
@@ -142,8 +165,16 @@ func init() {
 	// Note: this is due to Windows not supporting signals properly
 	rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false, "Used by partner teams to send in `cancel` through stdin to stop a job.")
 
+	// special E2E testing flags
+	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitContinue, "await-continue", false, "Used when debugging, to tell AzCopy to await `continue` on stdin before starting any work. Assists with debugging AzCopy via attach-to-process")
+	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitAllowOpenFiles, "await-open", false, "Used when debugging, to tell AzCopy to await `open` on stdin, after scanning but before opening the first file. Assists with testing cases around file modifications between scanning and usage")
+
 	// reserved for partner teams
 	rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
+
+	// debug-only
+	rootCmd.PersistentFlags().MarkHidden("await-continue")
+	rootCmd.PersistentFlags().MarkHidden("await-open")
 }
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where
