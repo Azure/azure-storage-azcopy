@@ -279,6 +279,7 @@ golang/protobuf, Copyright 2010 The Go Authors.  All rights reserved.
 jiacfan/keyctl, Copyright (c) 2015, Jesse Sipprell. All rights reserved.
 go, Copyright (c) 2009 The Go Authors. All rights reserved.
 spf13/pflag, Copyright (c) 2012 Alex Ogier. All rights reserved. Copyright (c) 2012 The Go Authors. All rights reserved.
+google/uuid, Copyright (c) 2009,2014 Google Inc. All rights reserved.
 
 BSD 3-Clause "New" or "Revised" License
 

@@ -5,17 +5,38 @@
 
 ### New features
 
+1. Improved scanning performance for most cases by adding support for parallel local and Blob enumeration.
+1. Added download support for the benchmark command.
 1. A new way to quickly copy only files changed after a certain date/time. The `copy` command now accepts
 the parameter `--include-after`. It takes an ISO 8601-formatted date, and will copy only those files that were 
 changed on or after the given date/time. When processing large numbers of files, this is faster than `sync` or 
 `--overwrite=IfSourceNewer`.  But it does require the user to specify the date to be used.  E.g. `2020-08-19T15:04:00Z` 
 for a UTC time, `2020-08-19T15:04` for a time in the local timezone of the machine running Azcopy, 
 or `2020-08-19` for midnight (00:00), also in the local timezone. 
+1. When detecting content type for common static website files, use the commonly correct values instead of looking them up in the registry.
+1. Allow the remove command to delete blob directory stubs which have metadata hdi_isfolder=true.
+1. The S3 to Blob feature now has GA support. 
+1. Added support for load command on Linux based on Microsoft Avere's CLFSLoad extension.
 1. Each job now logs its start time precisely in the log file, using ISO 8601 format.  This is useful if you want to 
 use that start date as the `--include-after` parameter to a later job on the same directory. Look for "ISO 8601 START TIME" 
-in the log. 
+in the log.
+1. Stop treating zero-item job as failure, to improve the user experience. 
+1. Improved the naming of files being generated in benchmark command, by reversing the digits. 
+Doing so allows the names to not be an alphabetic series, which used to negatively impact the performance on the service side.
 1. Azcopy can now detect when setting a blob tier would be impossible. If azcopy cannot check the destination account type, a new transfer failure status will be set: `TierAvailabilityCheckFailure`
 
+### Bug fixes
+
+1. Fixed the SAS timestamp parsing issue.
+1. Transfers to the File Service with a read-only SAS were failing because we try listing properties for the parent directories.
+The user experience is improved by ignoring this benign error and try creating parent directories directly.
+1. Fixed issue with mixed SAS and AD authentication in the sync command.
+1. Fixed file creation error on Linux when decompression is turned on.
+1. Fixed issue on Windows for files with extended charset such as [%00 - %19, %0A-%0F, %1A-%1F].
+1. Enabled recovering from unexpectedEOF error.
+1. Fixed issue in which attribute filters does not work if source path contains an asterisk in it.
+1. Fixed issue of unexpected upload destination when uploading a whole drive in Windows (e.g. "D:\").
+ 
 
 ## Version 10.4.3
 
