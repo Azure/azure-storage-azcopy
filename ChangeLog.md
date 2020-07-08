@@ -27,6 +27,7 @@ Doing so allows the names to not be an alphabetic series, which used to negative
 
 ### Bug fixes
 
+1. Fixed the persistence of last-write-time (as part of SMB info when uploading) for Azure Files. It was using the creation time erroneously.
 1. Fixed the SAS timestamp parsing issue.
 1. Transfers to the File Service with a read-only SAS were failing because we try listing properties for the parent directories.
 The user experience is improved by ignoring this benign error and try creating parent directories directly.
