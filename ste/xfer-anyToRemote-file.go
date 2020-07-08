@@ -147,7 +147,7 @@ func AttemptSetBlobTier(jptm IJobPartTransferMgr, blobTier azblob.AccessTierType
 				if tierSetPossibleFail {
 					jptm.LogTransferInfo(pipeline.LogWarning, jptm.Info().Source, jptm.Info().Destination, "Cannot set destination block blob to the pending access tier ("+string(blobTier)+"), because either the destination account or blob type does not support it. The transfer will still succeed.")
 				} else {
-					jptm.FailActiveSendWithStatus("Setting BlockBlob tier", err, common.ETransferStatus.BlobTierFailure())
+					jptm.FailActiveSendWithStatus("Setting tier", err, common.ETransferStatus.BlobTierFailure())
 				}
 			}
 		} else {
