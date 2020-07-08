@@ -634,6 +634,8 @@ func (TransferStatus) SkippedEntityAlreadyExists() TransferStatus { return Trans
 
 func (TransferStatus) SkippedBlobHasSnapshots() TransferStatus { return TransferStatus(-4) }
 
+func (TransferStatus) TierAvailabilityCheckFailure() TransferStatus { return TransferStatus(-5) }
+
 func (ts TransferStatus) ShouldTransfer() bool {
 	return ts == ETransferStatus.NotStarted() || ts == ETransferStatus.Started()
 }
