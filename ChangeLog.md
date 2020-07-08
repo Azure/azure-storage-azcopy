@@ -14,7 +14,7 @@ or `2020-08-19` for midnight (00:00), also in the local timezone.
 1. Each job now logs its start time precisely in the log file, using ISO 8601 format.  This is useful if you want to 
 use that start date as the `--include-after` parameter to a later job on the same directory. Look for "ISO 8601 START TIME" 
 in the log. 
- 
+1. Azcopy can now detect when setting a blob tier would be impossible. If azcopy cannot check the destination account type, a new transfer failure status will be set: `TierAvailabilityCheckFailure`
 
 
 ## Version 10.4.3
@@ -89,10 +89,6 @@ contained directly in a container or virtual directory include `/*` at the end o
    If necessary, you can add to the the list with the command-line flag: `--trusted-microsoft-suffixes`. For security,
    you should only add Microsoft Azure domains. 
 1. When transferring over a million files, AzCopy will reduces its progress reporting frequency from every 2 seconds to every 2 minutes.   
-
-### New features
-
-1. Azcopy can now detect when setting a blob tier would be impossible. If azcopy cannot check the destination account type, a new transfer failure status will be set: `TierAvailabilityCheckFailure`
 
 ### Breaking changes
 
