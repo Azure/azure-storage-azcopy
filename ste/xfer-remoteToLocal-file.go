@@ -59,6 +59,8 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 	// If the transfer was cancelled, then report transfer as done
 	// TODO Question: the above comment had this following text too: "and increasing the bytestransferred by the size of the source." what does it mean?
 	if jptm.WasCanceled() {
+		/* This is the earliest we detect that jptm has been cancelled before we schedule chunks */
+		jptm.SetStatus(common.ETransferStatus.Cancelled())
 		jptm.ReportTransferDone()
 		return
 	}
@@ -299,6 +301,12 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.Epilogue())
 	defer jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
+
+	if jptm.WasCanceled() {
+		// This is where we first realize that the transfer is cancelled. Further statements are no-op and
+		// do not set any transfer status because they all of them verify that jptm is live.
+		jptm.SetStatus(common.ETransferStatus.Cancelled())
+	}
 
 	haveNonEmptyFile := activeDstFile != nil
 	if haveNonEmptyFile {
