@@ -197,7 +197,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 	// step 1. perform initial checks
 	if jptm.WasCanceled() {
 		/* This is the earliest we detect jptm has been cancelled before scheduling chunks */
-		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.SetStatus(common.ETransferStatus.Cancelled())
 		jptm.ReportTransferDone()
 		return
 	}
@@ -492,6 +492,11 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.Epilogue())
 	defer jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 
+	if jptm.WasCanceled() {
+		// This is where we detect that transfer has been cancelled. Further statments do not act on
+		// dead jptm. We set the status here.
+		jptm.SetStatus(common.ETransferStatus.Cancelled())
+	}
 	if jptm.IsLive() {
 		if _, isS2SCopier := s.(s2sCopier); sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation) {
 			// Check the source to see if it was changed during transfer. If it was, mark the transfer as failed.
@@ -582,7 +587,6 @@ func commonSenderCompletion(jptm IJobPartTransferMgr, s sender, info TransferInf
 			jptm.Log(pipeline.LogDebug, "Finalizing Transfer")
 		}
 	} else {
-		jptm.SetStatus(common.ETransferStatus.Failed())
 		if jptm.ShouldLog(pipeline.LogDebug) {
 			jptm.Log(pipeline.LogDebug, "Finalizing Transfer Cancellation/Failure")
 		}

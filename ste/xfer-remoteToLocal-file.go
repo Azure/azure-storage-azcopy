@@ -60,7 +60,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 	// TODO Question: the above comment had this following text too: "and increasing the bytestransferred by the size of the source." what does it mean?
 	if jptm.WasCanceled() {
 		/* This is the earliest we detect that jptm has been cancelled before we schedule chunks */
-		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.SetStatus(common.ETransferStatus.Cancelled())
 		jptm.ReportTransferDone()
 		return
 	}
@@ -302,6 +302,12 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.Epilogue())
 	defer jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 
+	if jptm.WasCanceled() {
+		// This is where we first realize that the transfer is cancelled. Further statements are no-op and
+		// do not set any transfer status because they all of them verify that jptm is live.
+		jptm.SetStatus(common.ETransferStatus.Cancelled())
+	}
+
 	haveNonEmptyFile := activeDstFile != nil
 	if haveNonEmptyFile {
 
@@ -373,7 +379,6 @@ func commonDownloaderCompletion(jptm IJobPartTransferMgr, info TransferInfo, ent
 	// we leave these transfer status alone
 	// in case of errors, the status was already set, so we don't need to do anything here either
 	if jptm.IsDeadInflight() || jptm.IsDeadBeforeStart() {
-		jptm.SetStatus(common.ETransferStatus.Failed())
 		// If failed, log and delete the "bad" local file
 		// If the current transfer status value is less than or equal to 0
 		// then transfer either failed or was cancelled

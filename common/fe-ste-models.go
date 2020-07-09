@@ -625,7 +625,7 @@ func (TransferStatus) Started() TransferStatus { return TransferStatus(1) }
 // Transfer successfully completed
 func (TransferStatus) Success() TransferStatus { return TransferStatus(2) }
 
-// Transfer failed due to some error. This status does represent the state when transfer is cancelled
+// Transfer failed due to some error.
 func (TransferStatus) Failed() TransferStatus { return TransferStatus(-1) }
 
 // Transfer failed due to failure while Setting blob tier.
@@ -636,6 +636,8 @@ func (TransferStatus) SkippedEntityAlreadyExists() TransferStatus { return Trans
 func (TransferStatus) SkippedBlobHasSnapshots() TransferStatus { return TransferStatus(-4) }
 
 func (TransferStatus) TierAvailabilityCheckFailure() TransferStatus { return TransferStatus(-5) }
+
+func (TransferStatus) Cancelled() TransferStatus { return TransferStatus(-6) }
 
 func (ts TransferStatus) ShouldTransfer() bool {
 	return ts == ETransferStatus.NotStarted() || ts == ETransferStatus.Started()

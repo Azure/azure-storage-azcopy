@@ -34,7 +34,7 @@ func remoteToLocal_folder(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer p
 	// If the transfer was cancelled, then report transfer as done
 	if jptm.WasCanceled() {
 		/* This is the earliest we detect that jptm was cancelled, before we go to destination */
-		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.SetStatus(common.ETransferStatus.Cancelled())
 		jptm.ReportTransferDone()
 		return
 	}

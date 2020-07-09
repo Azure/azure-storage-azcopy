@@ -31,7 +31,7 @@ func anyToRemote_folder(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.
 	// step 1. perform initial checks
 	if jptm.WasCanceled() {
 		/* This is earliest we detect that jptm has been cancelled before we reach destination */
-		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.SetStatus(common.ETransferStatus.Cancelled())
 		jptm.ReportTransferDone()
 		return
 	}

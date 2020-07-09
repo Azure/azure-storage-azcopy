@@ -333,6 +333,9 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 	// Resume all the failed / In Progress Transfers.
 	case common.EJobStatus.InProgress(),
 		common.EJobStatus.Completed(),
+		common.EJobStatus.CompletedWithErrors(),
+		common.EJobStatus.CompletedWithSkipped(),
+		common.EJobStatus.CompletedWithErrorsAndSkipped(),
 		common.EJobStatus.Cancelled(),
 		common.EJobStatus.Paused():
 		//go func() {

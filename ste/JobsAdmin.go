@@ -455,7 +455,7 @@ func (ja *jobsAdmin) transferProcessor(workerID int) {
 			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo, fmt.Sprintf(" is not picked up worked %d because transfer was cancelled", workerID))
 			}
-			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.SetStatus(common.ETransferStatus.Cancelled())
 			jptm.ReportTransferDone()
 		} else {
 			// TODO fix preceding space

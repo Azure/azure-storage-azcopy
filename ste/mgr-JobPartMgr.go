@@ -657,6 +657,7 @@ func (jpm *jobPartMgr) updateJobPartProgress(status common.TransferStatus) {
 		atomic.AddUint32(&jpm.atomicTransfersFailed, 1)
 	case common.ETransferStatus.SkippedEntityAlreadyExists(), common.ETransferStatus.SkippedBlobHasSnapshots():
 		atomic.AddUint32(&jpm.atomicTransfersSkipped, 1)
+	case common.ETransferStatus.Cancelled():
 	default:
 		panic("Unexpected status")
 	}

@@ -79,7 +79,7 @@ func init() {
 	// NOTE: we have way more job status than we normally need, only show the most common ones
 	jobsCleanCmd.PersistentFlags().StringVar(&commandLineInput.withStatus, "with-status", "All",
 		"only remove the jobs with this status, available values: All, Cancelled, Failed, Completed"+
-			" CompletedWithErrors, CompletedWithFailures, CompletedWithErrorsAndSkipped")
+			" CompletedWithErrors, CompletedWithSkipped, CompletedWithErrorsAndSkipped")
 }
 
 func handleCleanJobsCommand(givenStatus common.JobStatus) error {
