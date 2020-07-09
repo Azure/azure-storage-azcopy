@@ -285,10 +285,12 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 		loggedError := false
 		log := glcm.(*mockedLifecycleManager).infoLog
 		count := len(log)
-		for x := <-log; count > 0; count = len(log) {
+		for count > 0 {
+			x := <-log
 			if strings.Contains(x, "invalid name") {
 				loggedError = true
 			}
+			count = len(log)
 		}
 
 		c.Assert(loggedError, chk.Equals, true)
