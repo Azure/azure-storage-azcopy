@@ -73,7 +73,7 @@ func (hi HandleInfo) FileCreationTime() time.Time {
 	return time.Unix(0, hi.CreationTime.Nanoseconds())
 }
 
-func (hi handleInfo) FileLastWriteTime() time.Time {
+func (hi HandleInfo) FileLastWriteTime() time.Time {
 	return time.Unix(0, hi.LastWriteTime.Nanoseconds())
 }
 
