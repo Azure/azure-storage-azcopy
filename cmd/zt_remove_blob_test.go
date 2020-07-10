@@ -420,3 +420,53 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubs(c *chk.C) {
 		}
 	})
 }
+
+func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubsWithListOfFiles(c *chk.C) {
+	bsu := getBSU()
+	vdirName := "vdir1/"
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+	blobAndDirStubsList := scenarioHelper{}.generateCommonRemoteScenarioForWASB(c, containerURL, vdirName)
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobAndDirStubsList), chk.Not(chk.Equals), 0)
+
+	// set up another empty dir
+	vdirName2 := "emptydir"
+	createNewDirectoryStub(c, containerURL, vdirName2)
+	blobAndDirStubsList = append(blobAndDirStubsList, vdirName2)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String())
+	raw.recursive = true
+
+	// make the input for list-of-files
+	listOfFiles := []string{vdirName, vdirName2}
+	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(c, listOfFiles)
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobAndDirStubsList))
+
+		// validate that the right transfers were sent
+		validateRemoveTransfersAreScheduled(c, true, blobAndDirStubsList, mockedRPC)
+	})
+
+	// turn off recursive, this time an error should be thrown
+	raw.recursive = false
+	mockedRPC.reset()
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.NotNil)
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+	})
+}
