@@ -401,7 +401,8 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubs(c *chk.C) {
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobAndDirStubsList))
 
 		// validate that the right transfers were sent
-		expectedTransfers := scenarioHelper{}.shaveOffPrefix(blobAndDirStubsList, vdirName)
+		expectedTransfers := scenarioHelper{}.shaveOffPrefix(blobAndDirStubsList, strings.TrimSuffix(vdirName, "/"))
+		expectedTransfers = scenarioHelper{}.shaveOffPrefix(expectedTransfers, "/")
 		validateRemoveTransfersAreScheduled(c, true, expectedTransfers, mockedRPC)
 	})
 
