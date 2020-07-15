@@ -39,13 +39,15 @@ var NothingToRemoveError = errors.New("nothing found to remove")
 // provide an enumerator that lists a given resource (Blob, File)
 // and schedule delete transfers to remove them
 // TODO: Make this merge into the other copy refactor code
+// TODO: initEnumerator is significantly more verbose at this point, evaluate the impact of switching over
 func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, err error) {
 	var sourceTraverser resourceTraverser
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &cca.credentialInfo, nil, cca.listOfFilesChannel, cca.recursive, false, func(common.EntityType) {})
+	sourceTraverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &cca.credentialInfo, nil,
+		cca.listOfFilesChannel, cca.recursive, false, cca.includeDirectoryStubs, func(common.EntityType) {})
 
 	// report failure to create traverser
 	if err != nil {
@@ -66,7 +68,7 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	fpo, message := newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters, false, false)
 	glcm.Info(message)
 	if ste.JobsAdmin != nil {
-		ste.JobsAdmin.LogToJobLog(message)
+		ste.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
 	}
 
 	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo)

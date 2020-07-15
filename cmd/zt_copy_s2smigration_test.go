@@ -282,7 +282,16 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.NotNil)
 
-		loggedError := glcm.(*mockedLifecycleManager).logContainsText("invalid name", time.Second)
+		loggedError := false
+		log := glcm.(*mockedLifecycleManager).infoLog
+		count := len(log)
+		for count > 0 {
+			x := <-log
+			if strings.Contains(x, "invalid name") {
+				loggedError = true
+			}
+			count = len(log)
+		}
 
 		c.Assert(loggedError, chk.Equals, true)
 	})

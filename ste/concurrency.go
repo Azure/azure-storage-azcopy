@@ -106,6 +106,10 @@ type ConcurrencySettings struct {
 	// EnumerationPoolSize is size of auxiliary goroutine pool used in enumerators (only some of which are in fact parallelized)
 	EnumerationPoolSize *ConfiguredInt
 
+	// ParallelStatFiles says whether file.Stat calls should be parallelized during enumeration. May help enumeration performance
+	// on Linux, but is not necessary and should not be activate on Windows.
+	ParallelStatFiles *ConfiguredBool
+
 	// MaxIdleConnections is the max number of idle TCP connections to keep open
 	MaxIdleConnections int
 
@@ -143,6 +147,7 @@ func NewConcurrencySettings(maxFileAndSocketHandles int, requestAutoTuneGRs bool
 		MaxMainPoolSize:            maxMainPoolSize,
 		TransferInitiationPoolSize: getTransferInitiationPoolSize(),
 		EnumerationPoolSize:        getEnumerationPoolSize(),
+		ParallelStatFiles:          getParallelStatFiles(),
 		CheckCpuWhenTuning:         getCheckCpuUsageWhenTuning(),
 	}
 
@@ -234,6 +239,15 @@ func getEnumerationPoolSize() *ConfiguredInt {
 
 	return &ConfiguredInt{defaultEnumerationPoolSize, false, envVar.Name, "hard-coded default"}
 
+}
+
+func getParallelStatFiles() *ConfiguredBool {
+	envVar := common.EEnvironmentVariable.ParallelStatFiles()
+	if c := tryNewConfiguredBool(envVar); c != nil {
+		return c
+	}
+
+	return &ConfiguredBool{false, false, envVar.Name, "hard-coded default"}
 }
 
 func getCheckCpuUsageWhenTuning() *ConfiguredBool {

@@ -62,7 +62,7 @@ type IJobMgr interface {
 	ConfirmAllTransfersScheduled()
 	ResetAllTransfersScheduled()
 	PipelineLogInfo() pipeline.LogOptions
-	ReportJobPartDone() uint32
+	ReportJobPartDone(jobPartProgressInfo)
 	Context() context.Context
 	Cancel()
 	// TODO: added for debugging purpose. remove later
@@ -88,6 +88,7 @@ type IJobMgr interface {
 func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel, commandString string, logFileFolder string) IJobMgr {
 	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
 	enableChunkLogOutput := level.ToPipelineLogLevel() == pipeline.LogDebug
+	jobPartProgressCh := make(chan jobPartProgressInfo)
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
 		httpClient:                    NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
 		logger:                        common.NewJobLogger(jobID, level, appLogger, logFileFolder),
@@ -97,9 +98,11 @@ func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID 
 		pipelineNetworkStats:          newPipelineNetworkStats(JobsAdmin.(*jobsAdmin).concurrencyTuner), // let the stats coordinate with the concurrency tuner
 		exclusiveDestinationMapHolder: &atomic.Value{},
 		initMu:                        &sync.Mutex{},
+		jobPartProgress:               jobPartProgressCh,
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
 	jm.logJobsAdminMessages()
+	go jm.reportJobPartDoneHandler()
 	return &jm
 }
 
@@ -124,33 +127,39 @@ func (jm *jobMgr) reset(appCtx context.Context, commandString string) IJobMgr {
 }
 
 func (jm *jobMgr) logConcurrencyParameters() {
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Number of CPUs: %d", runtime.NumCPU()))
+	level := pipeline.LogWarning // log all this stuff at warning level, so that it can still be see it when running at that level. (It won't have the WARN prefix, because we don't add that)
+
+	jm.logger.Log(level, fmt.Sprintf("Number of CPUs: %d", runtime.NumCPU()))
 	// TODO: label max file buffer ram with how we obtained it (env var or default)
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max file buffer RAM %.3f GB",
+	jm.logger.Log(level, fmt.Sprintf("Max file buffer RAM %.3f GB",
 		float32(JobsAdmin.(*jobsAdmin).cacheLimiter.Limit())/(1024*1024*1024)))
 
 	dynamicMessage := ""
 	if jm.concurrency.AutoTuneMainPool() {
 		dynamicMessage = " will be dynamically tuned up to "
 	}
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent network operations: %s%d (%s)",
+	jm.logger.Log(level, fmt.Sprintf("Max concurrent network operations: %s%d (%s)",
 		dynamicMessage,
 		jm.concurrency.MaxMainPoolSize.Value,
 		jm.concurrency.MaxMainPoolSize.GetDescription()))
 
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Check CPU usage when dynamically tuning concurrency: %t (%s)",
+	jm.logger.Log(level, fmt.Sprintf("Check CPU usage when dynamically tuning concurrency: %t (%s)",
 		jm.concurrency.CheckCpuWhenTuning.Value,
 		jm.concurrency.CheckCpuWhenTuning.GetDescription()))
 
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent transfer initiation routines: %d (%s)",
+	jm.logger.Log(level, fmt.Sprintf("Max concurrent transfer initiation routines: %d (%s)",
 		jm.concurrency.TransferInitiationPoolSize.Value,
 		jm.concurrency.TransferInitiationPoolSize.GetDescription()))
 
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max enumeration routines: %d (%s)",
+	jm.logger.Log(level, fmt.Sprintf("Max enumeration routines: %d (%s)",
 		jm.concurrency.EnumerationPoolSize.Value,
 		jm.concurrency.EnumerationPoolSize.GetDescription()))
 
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max open files when downloading: %d (auto-computed)",
+	jm.logger.Log(level, fmt.Sprintf("Parallelize getting file properties (file.Stat): %t (%s)",
+		jm.concurrency.ParallelStatFiles.Value,
+		jm.concurrency.ParallelStatFiles.GetDescription()))
+
+	jm.logger.Log(level, fmt.Sprintf("Max open files when downloading: %d (auto-computed)",
 		jm.concurrency.MaxOpenDownloadFiles))
 }
 
@@ -209,6 +218,8 @@ type jobMgr struct {
 
 	initMu    *sync.Mutex
 	initState *jobMgrInitState
+
+	jobPartProgress chan jobPartProgressInfo
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -461,29 +472,45 @@ func (jm *jobMgr) ResetAllTransfersScheduled() {
 }
 
 // ReportJobPartDone is called to report that a job part completed or failed
-func (jm *jobMgr) ReportJobPartDone() uint32 {
+func (jm *jobMgr) ReportJobPartDone(progressInfo jobPartProgressInfo) {
+	jm.jobPartProgress <- progressInfo
+}
+
+func (jm *jobMgr) reportJobPartDoneHandler() {
+	var haveFinalPart bool
+	var jobProgressInfo jobPartProgressInfo
 	shouldLog := jm.ShouldLog(pipeline.LogInfo)
 
-	jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
-	if !ok {
-		jm.Panic(fmt.Errorf("Failed to find Job %v, Part #0", jm.jobID))
-	}
-	part0Plan := jobPart0Mgr.Plan()
-	jobStatus := part0Plan.JobStatus() // status of part 0 is status of job as a whole
+	for {
+		partProgressInfo := <-jm.jobPartProgress
+		jobPart0Mgr, ok := jm.jobPartMgrs.Get(0)
+		if !ok {
+			jm.Panic(fmt.Errorf("Failed to find Job %v, Part #0", jm.jobID))
+		}
+		part0Plan := jobPart0Mgr.Plan()
+		jobStatus := part0Plan.JobStatus() // status of part 0 is status of job as a whole
+		partsDone := atomic.AddUint32(&jm.partsDone, 1)
+		jobProgressInfo.transfersCompleted += partProgressInfo.transfersCompleted
+		jobProgressInfo.transfersSkipped += partProgressInfo.transfersSkipped
+		jobProgressInfo.transfersFailed += partProgressInfo.transfersFailed
 
-	partsDone := atomic.AddUint32(&jm.partsDone, 1)
-	// If the last part is still awaited or other parts all still not complete,
-	// JobPart 0 status is not changed (unless we are cancelling)
-	allKnownPartsDone := partsDone == jm.jobPartMgrs.Count()
-	haveFinalPart := atomic.LoadInt32(&jm.atomicFinalPartOrderedIndicator) == 1
-	isCancelling := jobStatus == common.EJobStatus.Cancelling()
-	shouldComplete := allKnownPartsDone && (haveFinalPart || isCancelling)
-	if !shouldComplete {
+		// If the last part is still awaited or other parts all still not complete,
+		// JobPart 0 status is not changed (unless we are cancelling)
+		haveFinalPart = atomic.LoadInt32(&jm.atomicFinalPartOrderedIndicator) == 1
+		allKnownPartsDone := partsDone == jm.jobPartMgrs.Count()
+		isCancelling := jobStatus == common.EJobStatus.Cancelling()
+		shouldComplete := allKnownPartsDone && (haveFinalPart || isCancelling)
+		if shouldComplete {
+			break
+		} //Else log and wait for next part to complete
+
 		if shouldLog {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("is part of Job which %d total number of parts done ", partsDone))
 		}
-		return partsDone
 	}
+
+	jobPart0Mgr, _ := jm.jobPartMgrs.Get(0)
+	part0Plan := jobPart0Mgr.Plan() // status of part 0 is status of job as whole.
 
 	partDescription := "all parts of entire Job"
 	if !haveFinalPart {
@@ -493,19 +520,19 @@ func (jm *jobMgr) ReportJobPartDone() uint32 {
 		jm.Log(pipeline.LogInfo, fmt.Sprintf("%s %s successfully completed, cancelled or paused", partDescription, jm.jobID.String()))
 	}
 
-	switch jobStatus {
+	switch part0Plan.JobStatus() {
 	case common.EJobStatus.Cancelling():
 		part0Plan.SetJobStatus(common.EJobStatus.Cancelled())
 		if shouldLog {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("%s %v successfully cancelled", partDescription, jm.jobID))
 		}
 	case common.EJobStatus.InProgress():
-		part0Plan.SetJobStatus((common.EJobStatus).Completed())
+		part0Plan.SetJobStatus((common.EJobStatus).EnhanceJobStatusInfo(jobProgressInfo.transfersSkipped > 0,
+			jobProgressInfo.transfersFailed > 0,
+			jobProgressInfo.transfersCompleted > 0))
 	}
 
 	jm.chunkStatusLogger.FlushLog() // TODO: remove once we sort out what will be calling CloseLog (currently nothing)
-
-	return partsDone
 }
 
 func (jm *jobMgr) getInMemoryTransitJobState() InMemoryTransitJobState {
@@ -543,7 +570,11 @@ func (jm *jobMgr) logJobsAdminMessages() {
 	for {
 		select {
 		case msg := <-JobsAdmin.MessagesForJobLog():
-			jm.Log(pipeline.LogInfo, msg)
+			prefix := ""
+			if msg.LogLevel <= pipeline.LogWarning {
+				prefix = fmt.Sprintf("%s: ", common.LogLevel(msg.LogLevel)) // so readers can find serious ones, but information ones still look uncluttered without INFO:
+			}
+			jm.Log(pipeline.LogWarning, prefix+msg.string) // use LogError here, so that it forces these to get logged, even if user is running at warning level instead of Info.  They won't have "warning" prefix, if Info level was passed in to MessagesForJobLog
 		default:
 			return
 		}

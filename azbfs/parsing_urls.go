@@ -99,7 +99,7 @@ func (up BfsURLParts) URL() url.URL {
 
 	sas := up.SAS.Encode()
 	if sas != "" {
-		if len(rawQuery) >= 0 {
+		if len(rawQuery) > 0 {
 			rawQuery += "&"
 		}
 		rawQuery += sas

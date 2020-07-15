@@ -547,6 +547,7 @@ func (jptm *jobPartTransferMgr) hasStartedWork() bool {
 // the raw status values do not reflect possible cancellation.
 // Do not call directly. Use IsDeadBeforeStart or IsDeadInflight
 // instead because they usually require different handling
+// Practically, a jptm is dead as soon as the context is releeased.
 func (jptm *jobPartTransferMgr) isDead() bool {
 	return jptm.TransferStatusIgnoringCancellation() < 0 || jptm.WasCanceled()
 }
@@ -818,7 +819,7 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 		panic("cannot report the same transfer done twice")
 	}
 
-	return jptm.jobPartMgr.ReportTransferDone()
+	return jptm.jobPartMgr.ReportTransferDone(jptm.jobPartPlanTransfer.TransferStatus())
 }
 
 func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {

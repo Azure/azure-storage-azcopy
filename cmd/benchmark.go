@@ -23,27 +23,28 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
+
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
-	"net/url"
-	"strconv"
-	"strings"
 )
 
 // represents the raw benchmark command input from the user
 type rawBenchmarkCmdArgs struct {
-	// no src, since it's implicitly the auto-data-generator used for benchmarking
-
-	// where are we uploading the benchmark data to ?
-	dst string
+	// The destination/src endpoint we are benchmarking.
+	target string
 
 	// parameters controlling the auto-generated data
 	sizePerFile    string
 	fileCount      uint
 	deleteTestData bool
+	numOfFolders   uint
 
 	// options from flags
 	blockSizeMB  float64
@@ -52,6 +53,7 @@ type rawBenchmarkCmdArgs struct {
 	blobType     string
 	output       string
 	logVerbosity string
+	mode         string
 }
 
 const (
@@ -60,7 +62,7 @@ const (
 	sizeStringDescription = "a number immediately followed by K, M or G. E.g. 12k or 200G"
 )
 
-func parseSizeString(s string, name string) (int64, error) {
+func ParseSizeString(s string, name string) (int64, error) {
 
 	message := name + " must be " + sizeStringDescription
 
@@ -107,7 +109,7 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return dummyCooked, errors.New(common.FileCountParam + " must be greater than zero")
 	}
 
-	bytesPerFile, err := parseSizeString(raw.sizePerFile, common.SizePerFileParam)
+	bytesPerFile, err := ParseSizeString(raw.sizePerFile, common.SizePerFileParam)
 	if err != nil {
 		return dummyCooked, err
 	}
@@ -123,12 +125,24 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	c := rawCopyCmdArgs{}
 	c.setMandatoryDefaults()
 
-	// src must be string, but needs to indicate that its for benchmark and encode what we want
-	c.src = benchmarkSourceHelper{}.ToUrl(raw.fileCount, bytesPerFile)
-
-	c.dst, err = raw.appendVirtualDir(raw.dst, virtualDir)
+	benchMode := common.BenchMarkMode(0)
+	err = benchMode.Parse(raw.mode)
 	if err != nil {
 		return dummyCooked, err
+	}
+	downloadMode := benchMode == common.EBenchMarkMode.Download()
+
+	if downloadMode {
+		//We to write to NULL device, so our measurements are not masked by disk perf
+		c.dst = os.DevNull
+		c.src = raw.target
+	} else { // Upload
+		// src must be string, but needs to indicate that its for benchmark and encode what we want
+		c.src = benchmarkSourceHelper{}.ToUrl(raw.fileCount, bytesPerFile, raw.numOfFolders)
+		c.dst, err = raw.appendVirtualDir(raw.target, virtualDir)
+		if err != nil {
+			return dummyCooked, err
+		}
 	}
 
 	c.recursive = true                                     // because source is directory-like, in which case recursive is required
@@ -147,7 +161,13 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
-	if raw.deleteTestData {
+	if downloadMode {
+		glcm.Info(fmt.Sprintf("Benchmarking downloads from %s.", cooked.source.Value))
+	} else {
+		glcm.Info(fmt.Sprintf("Benchmarking uploads to %s.", cooked.destination.Value))
+	}
+
+	if !downloadMode && raw.deleteTestData {
 		// set up automatic cleanup
 		cooked.followupJobArgs, err = raw.createCleanupJobArgs(cooked.destination, raw.logVerbosity)
 		if err != nil {
@@ -234,35 +254,41 @@ type benchmarkSourceHelper struct{}
 // you want a URL that can't possibly be a real one, so we'll use that
 const benchmarkSourceHost = "benchmark.invalid"
 
-func (h benchmarkSourceHelper) ToUrl(fileCount uint, bytesPerFile int64) string {
-	return fmt.Sprintf("https://%s?fc=%d&bpf=%d", benchmarkSourceHost, fileCount, bytesPerFile)
+func (h benchmarkSourceHelper) ToUrl(fileCount uint, bytesPerFile int64, numOfFolders uint) string {
+	return fmt.Sprintf("https://%s?fc=%d&bpf=%d&nf=%d", benchmarkSourceHost, fileCount, bytesPerFile, numOfFolders)
 }
 
-func (h benchmarkSourceHelper) FromUrl(s string) (fileCount uint, bytesPerFile int64, err error) {
+func (h benchmarkSourceHelper) FromUrl(s string) (fileCount uint, bytesPerFile int64, numOfFolders uint, err error) {
 	// TODO: consider replace with regex?
 
 	expectedPrefix := "https://" + benchmarkSourceHost + "?"
 	if !strings.HasPrefix(s, expectedPrefix) {
-		return 0, 0, errors.New("invalid benchmark source string")
+		return 0, 0, 0, errors.New("invalid benchmark source string")
 	}
 	s = strings.TrimPrefix(s, expectedPrefix)
 	pieces := strings.Split(s, "&")
-	if len(pieces) != 2 ||
+	if len(pieces) != 3 ||
 		!strings.HasPrefix(pieces[0], "fc=") ||
-		!strings.HasPrefix(pieces[1], "bpf=") {
-		return 0, 0, errors.New("invalid benchmark source string")
+		!strings.HasPrefix(pieces[1], "bpf=") ||
+		!strings.HasPrefix(pieces[2], "nf=") {
+		return 0, 0, 0, errors.New("invalid benchmark source string")
 	}
 	pieces[0] = strings.Split(pieces[0], "=")[1]
 	pieces[1] = strings.Split(pieces[1], "=")[1]
+	pieces[2] = strings.Split(pieces[2], "=")[1]
 	fc, err := strconv.ParseUint(pieces[0], 10, 64)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	bpf, err := strconv.ParseInt(pieces[1], 10, 64)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
-	return uint(fc), bpf, nil
+	nf, err := strconv.ParseUint(pieces[2], 10, 64)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	return uint(fc), bpf, uint(nf), nil
 }
 
 var benchCmd *cobra.Command
@@ -283,7 +309,7 @@ func init() {
 			// TODO: if/when we support benchmarking for S2S, note that the current code to set userAgent string in
 			//   jobPartMgr will need to be changed if we want it to still set the benchmarking suffix for S2S
 			if len(args) == 1 {
-				raw.dst = args[0]
+				raw.target = args[0]
 			} else {
 				return errors.New("wrong number of arguments, please refer to the help page on usage of this command")
 			}
@@ -311,12 +337,14 @@ func init() {
 
 	benchCmd.PersistentFlags().StringVar(&raw.sizePerFile, common.SizePerFileParam, "250M", "size of each auto-generated data file. Must be "+sizeStringDescription)
 	benchCmd.PersistentFlags().UintVar(&raw.fileCount, common.FileCountParam, common.FileCountDefault, "number of auto-generated data files to use")
+	benchCmd.PersistentFlags().UintVar(&raw.numOfFolders, "number-of-folders", 0, "If larger than 0, create folders to divide up the data.")
 	benchCmd.PersistentFlags().BoolVar(&raw.deleteTestData, "delete-test-data", true, "if true, the benchmark data will be deleted at the end of the benchmark run.  Set it to false if you want to keep the data at the destination - e.g. to use it for manual tests outside benchmark mode")
 
 	benchCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB). Default is automatically calculated based on file size. Decimal fractions are allowed - e.g. 0.25. Identical to the same-named parameter in the copy command")
 	benchCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "defines the type of blob at the destination. Used to allow benchmarking different blob types. Identical to the same-named parameter in the copy command")
 	benchCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. (By default the hash is NOT created.) Identical to the same-named parameter in the copy command")
 	benchCmd.PersistentFlags().BoolVar(&raw.checkLength, "check-length", true, "Check the length of a file on the destination after the transfer. If there is a mismatch between source and destination, the transfer is marked as failed.")
+	benchCmd.PersistentFlags().StringVar(&raw.mode, "mode", "upload", "Defines if Azcopy should test uploads or downloads from this target. Valid values are 'upload' and 'download'. Defaulted option is 'upload'.")
 
 	// TODO use constant for default value or, better, move loglevel param to root cmd?
 	benchCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs).")

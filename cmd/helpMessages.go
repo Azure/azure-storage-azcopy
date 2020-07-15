@@ -286,11 +286,11 @@ Remove only the blobs inside of a virtual directory, but don't remove any subdir
 
 Remove a subset of blobs in a virtual directory (For example: remove only jpg and pdf files, or if the blob name is "exactName"):
 
-   - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --include="*.jpg;*.pdf;exactName"
+   - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --include-pattern="*.jpg;*.pdf;exactName"
 
 Remove an entire virtual directory but exclude certain blobs from the scope (For example: every blob that starts with foo or ends with bar):
 
-   - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --exclude="foo*;*bar"
+   - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --exclude-pattern="foo*;*bar"
 
 Remove specific blobs and virtual directories by putting their relative paths (NOT URL-encoded) in a file:
 
@@ -359,11 +359,11 @@ Sync only the files inside of a directory but not subdirectories or the files in
 
 Sync a subset of files in a directory (For example: only jpg and pdf files, or if the file name is "exactName"):
 
-   - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --include="*.jpg;*.pdf;exactName"
+   - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --include-pattern="*.jpg;*.pdf;exactName"
 
 Sync an entire directory but exclude certain files from the scope (For example: every file that starts with foo or ends with bar):
 
-   - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --exclude="foo*;*bar"
+   - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --exclude-pattern="foo*;*bar"
 
 Sync a single blob:
 
@@ -399,30 +399,41 @@ const benchCmdShortDescription = "Performs a performance benchmark"
 // TODO: document whether we delete the uploaded data
 
 const benchCmdLongDescription = `
-Runs a performance benchmark by uploading test data to a specified destination. The test data is automatically generated.
+Runs a performance benchmark by uploading or downloading test data to or from a specified destination. 
+For uploads, the test data is automatically generated.
 
-The benchmark command runs the same upload process as 'copy', except that: 
+The benchmark command runs the same process as 'copy', except that: 
 
-  - There's no source parameter.  The command requires only a destination URL. In the current release, this destination URL must refer to a blob container.
-  
-  - The payload is described by command line parameters, which control how many files are auto-generated and 
+  - Instead of requiring both source and destination parameters, benchmark takes just one. This is the 
+    blob container, Azure Files Share, or ADLS Gen 2 File System that you want to upload to or download from.
+
+  - The 'mode' parameter describes whether AzCopy should test uploads to or downloads from given target. Valid values are 'Upload'
+    and 'Download'. Default value is 'Upload'.
+
+  - For upload benchmarks, the payload is described by command line parameters, which control how many files are auto-generated and 
     how big they are. The generation process takes place entirely in memory. Disk is not used.
+
+  - For downloads, the payload consists of whichever files already exist at the source. (See example below about how to generate
+    test files if needed).
   
   - Only a few of the optional parameters that are available to the copy command are supported.
   
   - Additional diagnostics are measured and reported.
   
-  - By default, the transferred data is deleted at the end of the test run.
+  - For uploads, the default behaviour is to delete the transferred data at the end of the test run.  For downloads, the data
+    is never actually saved locally.
 
 Benchmark mode will automatically tune itself to the number of parallel TCP connections that gives 
 the maximum throughput. It will display that number at the end. To prevent auto-tuning, set the 
 AZCOPY_CONCURRENCY_VALUE environment variable to a specific number of connections. 
 
-All the usual authentication types are supported. However, the most convenient approach for benchmarking is typically
-to create an empty container with a SAS token and use SAS authentication.
+All the usual authentication types are supported. However, the most convenient approach for benchmarking upload is typically
+to create an empty container with a SAS token and use SAS authentication. (Download mode requires a set of test data to be
+present in the target container.)
+  
 `
 
-const benchCmdExample = `Run a benchmark test with default parameters (suitable for benchmarking networks up to 1 Gbps):'
+const benchCmdExample = `Run an upload benchmark with default parameters (suitable for benchmarking networks up to 1 Gbps):'
 
    - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>"
 
@@ -434,5 +445,13 @@ Same as above, but use 50,000 files, each 8 MiB in size and compute their MD5 ha
 in the copy command). The purpose of --put-md5 when benchmarking is to test whether MD5 computation affects throughput for the 
 selected file count and size:
 
-   - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 50000 --size-per-file 8M --put-md5
+   - azcopy bench --mode='Upload' "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 50000 --size-per-file 8M --put-md5
+
+Run a benchmark test that downloads existing files from a target
+
+   - azcopy bench --mode='Download' "https://[account].blob.core.windows.net/[container]?<SAS?"
+
+Run an upload that does not delete the transferred files. (These files can then serve as the payload for a download test)
+
+   - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 100 --delete-test-data=false
 `
