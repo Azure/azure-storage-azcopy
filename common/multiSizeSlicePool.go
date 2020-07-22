@@ -27,7 +27,7 @@ import (
 // A pool of byte slices
 // Like sync.Pool, but strongly-typed to byte slices
 type ByteSlicePooler interface {
-	RentSlice(desiredLength uint32) []byte
+	RentSlice(desiredLength int64) []byte
 	ReturnSlice(slice []byte)
 	Prune()
 }
@@ -83,7 +83,7 @@ type multiSizeSlicePool struct {
 }
 
 // Create new slice pool capable of pooling slices up to maxSliceLength in size
-func NewMultiSizeSlicePool(maxSliceLength uint32) ByteSlicePooler {
+func NewMultiSizeSlicePool(maxSliceLength int64) ByteSlicePooler {
 	maxSlotIndex, _ := getSlotInfo(maxSliceLength)
 	poolsBySize := make([]*simpleSlicePool, maxSlotIndex+1)
 	for i := 0; i <= maxSlotIndex; i++ {
@@ -97,12 +97,12 @@ var indexOf32KSlot, _ = getSlotInfo(32 * 1024)
 
 // For a given requested len(slice), this returns the slot index to use, and the max
 // cap(slice) of the slices that will be found at that index
-func getSlotInfo(exactSliceLength uint32) (slotIndex int, maxCapInSlot int) {
+func getSlotInfo(exactSliceLength int64) (slotIndex int, maxCapInSlot int) {
 	if exactSliceLength <= 0 {
 		panic("exact slice length must be greater than zero")
 	}
 	// raw slot index is fast computation of the base-2 logarithm, rounded down...
-	rawSlotIndex := 31 - bits.LeadingZeros32(exactSliceLength)
+	rawSlotIndex := 63 - bits.LeadingZeros64(uint64(exactSliceLength))
 
 	// ...but in most cases we actually want to round up.
 	// E.g. we want 255 to go into the same bucket as 256. Why? because we want exact
@@ -111,7 +111,7 @@ func getSlotInfo(exactSliceLength uint32) (slotIndex int, maxCapInSlot int) {
 	// all the allocated capacity (i.e. len == cap).  That gives the most efficient use of RAM.
 	// The only time we don't want to round up, is if we already had an exact power of
 	// 2 to start with.
-	isExactPowerOfTwo := bits.OnesCount32(exactSliceLength) == 1
+	isExactPowerOfTwo := bits.OnesCount64(uint64(exactSliceLength)) == 1
 	if isExactPowerOfTwo {
 		slotIndex = rawSlotIndex
 	} else {
@@ -149,7 +149,7 @@ func getMaxSliceCountInPool(slotIndex int) int {
 // Note that the returned slice may contain non-zero data - i.e. old data from the previous time it was used.
 // That's safe IFF you are going to do the likes of io.ReadFull to read into it, since you know that all of the
 // old bytes will be overwritten in that case.
-func (mp *multiSizeSlicePool) RentSlice(desiredSize uint32) []byte {
+func (mp *multiSizeSlicePool) RentSlice(desiredSize int64) []byte {
 	slotIndex, maxCapInSlot := getSlotInfo(desiredSize)
 
 	// get the pool that most closely corresponds to the desired size
@@ -177,7 +177,7 @@ func (mp *multiSizeSlicePool) RentSlice(desiredSize uint32) []byte {
 
 // returns the slice to its pool
 func (mp *multiSizeSlicePool) ReturnSlice(slice []byte) {
-	slotIndex, _ := getSlotInfo(uint32(cap(slice))) // be sure to use capacity, not length, here
+	slotIndex, _ := getSlotInfo(int64(cap(slice))) // be sure to use capacity, not length, here
 
 	// get the pool that most closely corresponds to the desired size
 	pool := mp.poolsBySize[slotIndex]

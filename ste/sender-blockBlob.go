@@ -38,7 +38,7 @@ import (
 type blockBlobSenderBase struct {
 	jptm             IJobPartTransferMgr
 	destBlockBlobURL azblob.BlockBlobURL
-	chunkSize        uint32
+	chunkSize        int64
 	numChunks        uint32
 	pacer            pacer
 	blockIDs         []string
@@ -103,7 +103,7 @@ func (s *blockBlobSenderBase) SendableEntityType() common.EntityType {
 	return common.EEntityType.File()
 }
 
-func (s *blockBlobSenderBase) ChunkSize() uint32 {
+func (s *blockBlobSenderBase) ChunkSize() int64 {
 	return s.chunkSize
 }
 

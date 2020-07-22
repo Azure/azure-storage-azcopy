@@ -89,7 +89,7 @@ type IJobPartTransferMgr interface {
 }
 
 type TransferInfo struct {
-	BlockSize              uint32
+	BlockSize              int64
 	Source                 string
 	SourceSize             int64
 	Destination            string
@@ -278,11 +278,11 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	// We need to set the blockSize in such way that number of blocks per blob
 	// does not exceeds 50000 (max number of block per blob)
 	if blockSize == 0 {
-		blockSize = uint32(common.DefaultBlockBlobBlockSize)
-		for ; uint32(sourceSize/int64(blockSize)) > common.MaxNumberOfBlocksPerBlob; blockSize = 2 * blockSize {
+		blockSize = common.DefaultBlockBlobBlockSize
+		for ; uint32(sourceSize/blockSize) > common.MaxNumberOfBlocksPerBlob; blockSize = 2 * blockSize {
 		}
 	}
-	blockSize = common.Iffuint32(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
+	blockSize = common.Iffint64(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
 
 	return TransferInfo{
 		BlockSize:                      blockSize,

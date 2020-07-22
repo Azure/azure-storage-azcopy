@@ -35,7 +35,7 @@ import (
 type appendBlobSenderBase struct {
 	jptm              IJobPartTransferMgr
 	destAppendBlobURL azblob.AppendBlobURL
-	chunkSize         uint32
+	chunkSize         int64
 	numChunks         uint32
 	pacer             pacer
 	// Headers and other info that we will apply to the destination
@@ -57,7 +57,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 	chunkSize := transferInfo.BlockSize
 	// If the given chunk Size for the Job is greater than maximum append blob block size i.e 4 MB,
 	// then set chunkSize as 4 MB.
-	chunkSize = common.Iffuint32(
+	chunkSize = common.Iffint64(
 		chunkSize > common.MaxAppendBlobBlockSize,
 		common.MaxAppendBlobBlockSize,
 		chunkSize)
@@ -92,7 +92,7 @@ func (s *appendBlobSenderBase) SendableEntityType() common.EntityType {
 	return common.EEntityType.File()
 }
 
-func (s *appendBlobSenderBase) ChunkSize() uint32 {
+func (s *appendBlobSenderBase) ChunkSize() int64 {
 	return s.chunkSize
 }
 

@@ -265,7 +265,7 @@ type cookedSyncCmdArgs struct {
 	preserveSMBInfo        bool
 	putMd5                 bool
 	md5ValidationOption    common.HashValidationOption
-	blockSize              uint32
+	blockSize              int64
 	logVerbosity           common.LogLevel
 	forceIfReadOnly        bool
 	backupMode             bool

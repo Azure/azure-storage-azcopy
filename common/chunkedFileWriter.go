@@ -157,7 +157,7 @@ func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, id ChunkID, chunkS
 	}
 
 	// read into a buffer
-	buffer := w.slicePool.RentSlice(uint32(chunkSize))
+	buffer := w.slicePool.RentSlice(chunkSize)
 	readStart := time.Now()
 	_, err := io.ReadFull(chunkContents, buffer)
 	close(readDone)

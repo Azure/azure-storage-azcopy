@@ -270,7 +270,7 @@ type JobPartPlanDstBlob struct {
 	Metadata       [MetadataMaxBytes]byte
 
 	// Specifies the maximum size of block which determines the number of chunks and chunk size of a transfer
-	BlockSize uint32
+	BlockSize int64
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
