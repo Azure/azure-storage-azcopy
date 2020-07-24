@@ -1,7 +1,19 @@
 
 # Change Log
 
-## Version 10.5
+## Version 10.5.1
+
+### New features
+
+- Allow more accurate values for job status in `jobs` commands, e.g. completed with failed or skipped transfers.
+
+### Bug fixes
+
+- Fixed issue with removing blobs with hdi_isfolder=true metadata when the list-of-files flag is used.
+- Manually unfurl symbolic links to fix long file path issue on UNC locations.
+
+
+## Version 10.5.0
 
 ### New features
 
