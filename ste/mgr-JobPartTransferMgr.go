@@ -183,6 +183,8 @@ type jobPartTransferMgr struct {
 
 	numChunks uint32
 
+	transferInfo *TransferInfo
+
 	actionAfterLastChunk func()
 
 	/*
@@ -229,6 +231,10 @@ func (jptm *jobPartTransferMgr) GetSourceCompressionType() (common.CompressionTy
 }
 
 func (jptm *jobPartTransferMgr) Info() TransferInfo {
+	if jptm.transferInfo != nil {
+		return *jptm.transferInfo
+	}
+
 	plan := jptm.jobPartMgr.Plan()
 	src, dst, _ := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
@@ -280,11 +286,19 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	if blockSize == 0 {
 		blockSize = common.DefaultBlockBlobBlockSize
 		for ; uint32(sourceSize/blockSize) > common.MaxNumberOfBlocksPerBlob; blockSize = 2 * blockSize {
+			if blockSize > common.AzCopyBlockSizeThreshold {
+				/*
+				 * For a RAM usage of 0.5G/core, we would have 4G memory on typical 8 core device, meaning at a blockSize of 256M,
+				 * we can have 4 blocks in core, waiting for a disk or n/w operation. Any higher block size would *sort of*
+				 * serialize n/w and disk operations, and is better avoided.
+				 */
+				blockSize = blockSize / common.MaxNumberOfBlocksPerBlob
+				break
+			}
 		}
 	}
-	blockSize = common.Iffint64(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
 
-	return TransferInfo{
+	jptm.transferInfo = &TransferInfo{
 		BlockSize:                      blockSize,
 		Source:                         src,
 		SourceSize:                     sourceSize,
@@ -303,6 +317,8 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		SrcBlobType:    srcBlobType,
 		S2SSrcBlobTier: srcBlobTier,
 	}
+
+	return *jptm.transferInfo
 }
 
 func (jptm *jobPartTransferMgr) Context() context.Context {

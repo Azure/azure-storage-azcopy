@@ -61,10 +61,11 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 	// compute chunk count
 	chunkSize := transferInfo.BlockSize
 	srcSize := transferInfo.SourceSize
-	numChunks := getNumChunks(srcSize, chunkSize)
-	if numChunks > common.MaxNumberOfBlocksPerBlob {
-		return nil, fmt.Errorf("BlockSize %d for source of size %d is not correct. Number of blocks will exceed the limit", chunkSize, srcSize)
+	if chunkSize > common.MaxBlockBlobBlockSize {
+		// mercy, please
+		return nil, fmt.Errorf("Source size %d exceeds maxmimum allowed limit for a BlockBlob", srcSize)
 	}
+	numChunks := getNumChunks(srcSize, chunkSize)
 
 	destURL, err := url.Parse(destination)
 	if err != nil {
