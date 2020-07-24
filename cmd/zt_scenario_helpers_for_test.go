@@ -178,8 +178,9 @@ func (scenarioHelper) generateCommonRemoteScenarioForWASB(c *chk.C, containerURL
 	}
 
 	if prefix != "" {
-		createNewDirectoryStub(c, containerURL, strings.TrimSuffix(prefix, "/"))
-		blobList = append(blobList, "")
+		rootDir := strings.TrimSuffix(prefix, "/")
+		createNewDirectoryStub(c, containerURL, rootDir)
+		blobList = append(blobList, rootDir)
 	}
 
 	createNewDirectoryStub(c, containerURL, prefix+"sub1")

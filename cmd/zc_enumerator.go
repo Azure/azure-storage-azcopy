@@ -329,7 +329,7 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 			}
 		}
 
-		output = newListTraverser(resource, location, credential, ctx, recursive, toFollow, getProperties, listOfFilesChannel, incrementEnumerationCounter)
+		output = newListTraverser(resource, location, credential, ctx, recursive, toFollow, getProperties, listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter)
 		return output, nil
 	}
 
@@ -356,7 +356,7 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 			}()
 
 			baseResource := resource.CloneWithValue(cleanLocalPath(basePath))
-			output = newListTraverser(baseResource, location, nil, nil, recursive, toFollow, getProperties, globChan, incrementEnumerationCounter)
+			output = newListTraverser(baseResource, location, nil, nil, recursive, toFollow, getProperties, globChan, includeDirectoryStubs, incrementEnumerationCounter)
 		} else {
 			output = newLocalTraverser(resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter)
 		}
@@ -659,9 +659,24 @@ func passedFilters(filters []objectFilter, storedObject storedObject) bool {
 	return true
 }
 
+// This error should be treated as a flag, that we didn't fail processing, but instead, we just didn't process it.
+// Currently, this is only really used for symlink processing, but it _is_ an error, so it must be handled in all new traversers.
+// Basically, anywhere processIfPassedFilters is called, additionally call getProcessingError.
+var ignoredError = errors.New("FileIgnored")
+
+func getProcessingError(errin error) (ignored bool, err error) {
+	if errin == ignoredError {
+		return true, nil
+	}
+
+	return false, err
+}
+
 func processIfPassedFilters(filters []objectFilter, storedObject storedObject, processor objectProcessor) (err error) {
 	if passedFilters(filters, storedObject) {
 		err = processor(storedObject)
+	} else {
+		err = ignoredError
 	}
 
 	return

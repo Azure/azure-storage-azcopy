@@ -136,6 +136,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		}
 
 		err := processIfPassedFilters(filters, storedObject, processor)
+		_, err = getProcessingError(err)
 
 		// short-circuit if we don't have anything else to scan
 		if isBlob || err != nil {
@@ -219,12 +220,15 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			return workerError
 		}
 
+
+
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
 
 		object := item.(storedObject)
 		processErr := processIfPassedFilters(filters, object, processor)
+		_, processErr = getProcessingError(processErr)
 		if processErr != nil {
 			cancelWorkers()
 			return processErr

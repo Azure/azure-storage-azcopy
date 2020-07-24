@@ -93,7 +93,7 @@ func (t *s3Traverser) traverse(preprocessor objectMorpher, processor objectProce
 				filters,
 				storedObject,
 				processor)
-
+			_, err = getProcessingError(err)
 			if err != nil {
 				return err
 			}
@@ -158,7 +158,7 @@ func (t *s3Traverser) traverse(preprocessor objectMorpher, processor objectProce
 		err = processIfPassedFilters(filters,
 			storedObject,
 			processor)
-
+		_, err = getProcessingError(err)
 		if err != nil {
 			return
 		}

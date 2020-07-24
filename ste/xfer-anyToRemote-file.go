@@ -34,7 +34,6 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
@@ -42,7 +41,7 @@ import (
 // That's alright, but it's good to know on the off chance.
 // This sync.Once is present to ensure we output information about a S2S access tier preservation failure to stdout once
 var s2sAccessTierFailureLogStdout sync.Once
-var checkLengthFailureOnReadOnlyDst sync 	.Once
+var checkLengthFailureOnReadOnlyDst sync.Once
 
 // This sync.Once and string pair ensures that we only get a user's destination account kind once when handling set-tier
 // Premium block blob doesn't support tiering, and page blobs only support P1-80.
@@ -197,6 +196,8 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 
 	// step 1. perform initial checks
 	if jptm.WasCanceled() {
+		/* This is the earliest we detect jptm has been cancelled before scheduling chunks */
+		jptm.SetStatus(common.ETransferStatus.Cancelled())
 		jptm.ReportTransferDone()
 		return
 	}
@@ -491,6 +492,11 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.Epilogue())
 	defer jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 
+	if jptm.WasCanceled() {
+		// This is where we detect that transfer has been cancelled. Further statments do not act on
+		// dead jptm. We set the status here.
+		jptm.SetStatus(common.ETransferStatus.Cancelled())
+	}
 	if jptm.IsLive() {
 		if _, isS2SCopier := s.(s2sCopier); sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation) {
 			// Check the source to see if it was changed during transfer. If it was, mark the transfer as failed.

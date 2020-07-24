@@ -73,7 +73,7 @@ func (s *genericFilterSuite) TestExcludeFilter(c *chk.C) {
 	for _, file := range filesToNotPass {
 		dummyProcessor := &dummyProcessor{}
 		err := processIfPassedFilters(excludeFilterList, storedObject{name: file}, dummyProcessor.process)
-		c.Assert(err, chk.IsNil)
+		c.Assert(err, chk.Equals, ignoredError)
 		c.Assert(len(dummyProcessor.record), chk.Equals, 0)
 	}
 }

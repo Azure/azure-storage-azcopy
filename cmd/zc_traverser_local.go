@@ -21,6 +21,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/common/parallel"
@@ -66,6 +67,50 @@ func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
 	}
 
 	return fileInfo, true, nil
+}
+
+func UnfurlSymlinks(symlinkPath string) (result string, err error) {
+	unfurlingPlan := []string{symlinkPath}
+
+	for len(unfurlingPlan) > 0 {
+		item := unfurlingPlan[0]
+
+		fi, err := os.Lstat(item)
+
+		if err != nil {
+			return item, err
+		}
+
+		if fi.Mode()&os.ModeSymlink != 0 {
+			result, err := os.Readlink(item)
+
+			if err != nil {
+				return result, err
+			}
+
+			// Previously, we'd try to detect if the read link was a relative path by appending and stat'ing the item
+			// However, it seems to be a fairly unlikely and hard to reproduce scenario upon investigation (Couldn't manage to reproduce the scenario)
+			// So it was dropped. However, on the off chance, we'll still do it if syntactically it makes sense.
+			if len(result) == 0 || result[0] == '.' { // A relative path being "" or "." likely (and in the latter case, on our officially supported OSes, always) means that it's just the same folder.
+				result = filepath.Dir(item)
+			} else if !os.IsPathSeparator(result[0]) { // We can assume that a relative path won't start with a separator
+				possiblyResult := filepath.Join(filepath.Dir(item), result)
+				if _, err := os.Lstat(possiblyResult); err == nil {
+					result = possiblyResult
+				}
+			}
+
+			result = common.ToExtendedPath(result)
+
+			unfurlingPlan = append(unfurlingPlan, result)
+		} else {
+			return item, nil
+		}
+
+		unfurlingPlan = unfurlingPlan[1:]
+	}
+
+	return "", errors.New("failed to unfurl symlink: exited loop early")
 }
 
 type seenPathsRecorder interface {
@@ -153,7 +198,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 				if !followSymlinks {
 					return nil // skip it
 				}
-				result, err := filepath.EvalSymlinks(filePath)
+				result, err := UnfurlSymlinks(filePath)
 
 				if err != nil {
 					WarnStdoutAndJobLog(fmt.Sprintf("Failed to resolve symlink %s: %s", filePath, err))
@@ -180,14 +225,20 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 
 				if rStat.IsDir() {
 					if !seenPaths.HasSeen(result) {
-						seenPaths.Record(result)
-						seenPaths.Record(slPath) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
-						walkQueue = append(walkQueue, walkItem{
-							fullPath:     result,
-							relativeBase: computedRelativePath,
-						})
+						err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
+						// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
+						skipped, err := getProcessingError(err)
+
+						if !skipped { // Don't go any deeper (or record it) if we skipped it.
+							seenPaths.Record(result)
+							seenPaths.Record(slPath) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
+							walkQueue = append(walkQueue, walkItem{
+								fullPath:     result,
+								relativeBase: computedRelativePath,
+							})
+						}
 						// enumerate the FOLDER now (since its presence in seenDirs will prevent its properties getting enumerated later)
-						return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
+						return err
 					} else {
 						WarnStdoutAndJobLog(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
 					}
@@ -222,8 +273,16 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 				}
 
 				if !seenPaths.HasSeen(result) {
-					seenPaths.Record(result)
-					return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
+					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
+					// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
+					skipped, err := getProcessingError(err)
+
+					// If the file was skipped, don't record it.
+					if !skipped {
+						seenPaths.Record(result)
+					}
+
+					return err
 				} else {
 					if fileInfo.IsDir() {
 						// We can't output a warning here (and versions 10.3.x never did)
@@ -253,7 +312,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
 
-		return processIfPassedFilters(filters,
+		err := processIfPassedFilters(filters,
 			newStoredObject(
 				preprocessor,
 				singleFileInfo.Name(),
@@ -268,6 +327,8 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 			),
 			processor,
 		)
+		_, err = getProcessingError(err)
+		return err
 	} else {
 		if t.recursive {
 			processFile := func(filePath string, fileInfo os.FileInfo, fileError error) error {
@@ -293,6 +354,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 					t.incrementEnumerationCounter(entityType)
 				}
 
+				// This is an exception to the rule. We don't strip the error here, because WalkWithSymlinks catches it.
 				return processIfPassedFilters(filters,
 					newStoredObject(
 						preprocessor,
@@ -332,7 +394,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 						// Because this only goes one layer deep, we can just append the filename to fullPath and resolve with it.
 						symlinkPath := common.GenerateFullPath(t.fullPath, singleFile.Name())
 						// Evaluate the symlink
-						result, err := filepath.EvalSymlinks(symlinkPath)
+						result, err := UnfurlSymlinks(symlinkPath)
 
 						if err != nil {
 							return err
@@ -377,7 +439,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 						"", // Local has no such thing as containers
 					),
 					processor)
-
+				_, err = getProcessingError(err)
 				if err != nil {
 					return err
 				}
