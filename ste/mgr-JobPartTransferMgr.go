@@ -297,6 +297,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 			}
 		}
 	}
+	blockSize = common.Iffint64(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
 
 	jptm.transferInfo = &TransferInfo{
 		BlockSize:                      blockSize,
