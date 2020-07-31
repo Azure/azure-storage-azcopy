@@ -77,12 +77,13 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 			toGiB(chunkSize), toGiB(jptm.CacheLimiter().Limit()))
 	}
 
-	if common.AzCopyParallelChunkCountThreshold >= jptm.CacheLimiter().Limit()/chunkSize {
+	if common.MinParallelChunkCountThreshold >= jptm.CacheLimiter().Limit()/chunkSize {
 		glcm := common.GetLifecycleMgr()
 		msg := fmt.Sprintf("Using a blocksize of %.2fGiB for file %s. AzCopy is limited to use %.2fGiB of memory."+
-			"Consider providing atleast %.2fGiB to AzCopy, using environment variable AZCOPY_BUFFER_GB.",
+			"Consider providing atleast %.2fGiB to AzCopy, using environment variable %s.",
 			toGiB(chunkSize), transferInfo.Source, toGiB(jptm.CacheLimiter().Limit()),
-			toGiB(common.AzCopyParallelChunkCountThreshold*chunkSize))
+			toGiB(common.MinParallelChunkCountThreshold*chunkSize),
+			common.EEnvironmentVariable.BufferGB().Name)
 
 		lowMemoryLimitAdvice.Do(func() { glcm.Info(msg) })
 	}

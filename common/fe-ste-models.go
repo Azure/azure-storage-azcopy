@@ -885,14 +885,14 @@ func (i *InvalidMetadataHandleOption) UnmarshalJSON(b []byte) error {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const (
-	DefaultBlockBlobBlockSize         = 8 * 1024 * 1024
-	MaxBlockBlobBlockSize             = 4000 * 1024 * 1024
-	MaxAppendBlobBlockSize            = 4 * 1024 * 1024
-	DefaultPageBlobChunkSize          = 4 * 1024 * 1024
-	DefaultAzureFileChunkSize         = 4 * 1024 * 1024
-	MaxNumberOfBlocksPerBlob          = 50000
-	AzCopyBlockSizeThreshold          = 256 * 1024 * 1024
-	AzCopyParallelChunkCountThreshold = 4 /* Arbitrary(?) minimum number of chunks for AzCopy to be performant */
+	DefaultBlockBlobBlockSize      = 8 * 1024 * 1024
+	MaxBlockBlobBlockSize          = 4000 * 1024 * 1024
+	MaxAppendBlobBlockSize         = 4 * 1024 * 1024
+	DefaultPageBlobChunkSize       = 4 * 1024 * 1024
+	DefaultAzureFileChunkSize      = 4 * 1024 * 1024
+	MaxNumberOfBlocksPerBlob       = 50000
+	BlockSizeThreshold             = 256 * 1024 * 1024
+	MinParallelChunkCountThreshold = 4 /* minimum number of chunks in parallel for AzCopy to be performant. */
 )
 
 // This struct represent a single transfer entry with source and destination details

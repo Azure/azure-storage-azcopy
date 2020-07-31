@@ -286,13 +286,13 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	if blockSize == 0 {
 		blockSize = common.DefaultBlockBlobBlockSize
 		for ; uint32(sourceSize/blockSize) > common.MaxNumberOfBlocksPerBlob; blockSize = 2 * blockSize {
-			if blockSize > common.AzCopyBlockSizeThreshold {
+			if blockSize > common.BlockSizeThreshold {
 				/*
 				 * For a RAM usage of 0.5G/core, we would have 4G memory on typical 8 core device, meaning at a blockSize of 256M,
 				 * we can have 4 blocks in core, waiting for a disk or n/w operation. Any higher block size would *sort of*
 				 * serialize n/w and disk operations, and is better avoided.
 				 */
-				blockSize = blockSize / common.MaxNumberOfBlocksPerBlob
+				blockSize = sourceSize / common.MaxNumberOfBlocksPerBlob
 				break
 			}
 		}
