@@ -324,6 +324,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 				noBlobProps,
 				noMetdata,
 				"", // Local has no such thing as containers
+				"", // versionID field is an attribute of blobs only.
 			),
 			processor,
 		)
@@ -367,6 +368,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 						noBlobProps,
 						noMetdata,
 						"", // Local has no such thing as containers
+						"", // versionID is an attribute of blob
 					),
 					processor)
 			}
@@ -437,6 +439,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 						noBlobProps,
 						noMetdata,
 						"", // Local has no such thing as containers
+						"", // versionID is an attribute of blob
 					),
 					processor)
 				_, err = getProcessingError(err)

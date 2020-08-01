@@ -103,6 +103,7 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 			noBlobProps,
 			noMetdata, // not supplying metadata, since we can't below and it would be inconsistent to do so here
 			bfsURLParts.FileSystemName,
+			"",
 		)
 
 		if t.incrementEnumerationCounter != nil {
@@ -136,7 +137,8 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 			contentProps,
 			noBlobProps,
 			noMetdata,
-			bfsURLParts.FileSystemName)
+			bfsURLParts.FileSystemName, 
+			"")
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(common.EEntityType.Folder())
 		}
@@ -190,6 +192,7 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 				noBlobProps,
 				noMetdata,
 				bfsURLParts.FileSystemName,
+				"",
 			)
 
 			if t.incrementEnumerationCounter != nil {

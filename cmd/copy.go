@@ -77,6 +77,7 @@ type rawCopyCmdArgs struct {
 	includeAfter          string
 	legacyInclude         string // used only for warnings
 	legacyExclude         string // used only for warnings
+	listOfVersionIDs      string
 
 	// filters from flags
 	listOfFilesToCopy string
@@ -272,6 +273,24 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	}
 
 	cooked.fromTo = fromTo
+
+	// Get file path from user which would contain list of all versionIDs
+	// Process the file line by line and then prepare a list of all version ids of the blob.
+	if raw.listOfVersionIDs != "" {
+		filePtr, err := os.Open(raw.listOfVersionIDs)
+		if err != nil {
+			return cooked, err
+		}
+		defer filePtr.Close()
+		scanner := bufio.NewScanner(filePtr)
+		scanner.Split(bufio.ScanLines)
+		var versionIDs []string
+		for scanner.Scan() {
+			versionIDs = append(versionIDs, scanner.Text())
+		}
+		cooked.listOfVersionIDs = versionIDs
+	}
+
 	cooked.recursive = raw.recursive
 	cooked.followSymlinks = raw.followSymlinks
 	cooked.forceIfReadOnly = raw.forceIfReadOnly
@@ -786,6 +805,8 @@ type cookedCopyCmdArgs struct {
 	excludeFileAttributes []string
 	includeAfter          *time.Time
 
+	// list of version ids
+	listOfVersionIDs []string
 	// filters from flags
 	listOfFilesChannel chan string // Channels are nullable.
 	recursive          bool

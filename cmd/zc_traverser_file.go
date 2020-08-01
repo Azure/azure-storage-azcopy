@@ -81,6 +81,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 				noBlobProps,
 				common.FromAzFileMetadataToCommonMetadata(fileProperties.NewMetadata()), // .NewMetadata() seems odd to call here, but it does actually obtain the metadata.
 				targetURLParts.ShareName,
+				"",
 			)
 
 			if t.incrementEnumerationCounter != nil {
@@ -140,6 +141,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			noBlobProps,
 			meta,
 			targetURLParts.ShareName,
+			"",
 		), nil
 	}
 

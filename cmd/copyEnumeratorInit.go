@@ -51,7 +51,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.DestLengthValidation = cca.CheckLength
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
 
-	traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, cca.includeDirectoryStubs, func(common.EntityType) {})
+	traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, cca.includeDirectoryStubs, func(common.EntityType) {}, cca.listOfVersionIDs)
 
 	if err != nil {
 		return nil, err
@@ -262,7 +262,7 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, false, func(common.EntityType) {})
+	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, false, func(common.EntityType) {}, nil)
 
 	if err != nil {
 		return false
@@ -505,6 +505,10 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 			} else {
 				relativePath = ""
 			}
+
+			if object.versionID != "" {
+				relativePath += ("." + object.versionID)
+			}
 		}
 
 		return pathEncodeRules(relativePath, cca.fromTo, source)
@@ -527,14 +531,14 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 		rootDir := filepath.Base(cca.source.Value)
 
 		/* In windows, when a user tries to copy whole volume (eg. D:\),  the upload destination
-		will contains "//"" in the files/directories names because of rootDir = "\" prefix. 
+		will contains "//"" in the files/directories names because of rootDir = "\" prefix.
 		(e.g. D:\file.txt will end up as //file.txt).
 		Following code will get volume name from source and add volume name as prefix in rootDir
 		*/
 		if runtime.GOOS == "windows" && rootDir == `\` {
 			rootDir = filepath.VolumeName(common.ToShortPath(cca.source.Value))
 		}
-		
+
 		if cca.fromTo.From().IsRemote() {
 			ueRootDir, err := url.PathUnescape(rootDir)
 

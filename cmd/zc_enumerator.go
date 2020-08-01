@@ -79,7 +79,8 @@ type storedObject struct {
 	// access tier, only included by blob traverser.
 	blobAccessTier azblob.AccessTierType
 	// metadata, included in S2S transfers
-	Metadata common.Metadata
+	Metadata  common.Metadata
+	versionID string
 }
 
 const (
@@ -164,6 +165,7 @@ func (s *storedObject) ToNewCopyTransfer(
 		ContentMD5:         s.md5,
 		Metadata:           s.Metadata,
 		BlobType:           s.blobType,
+		VersionId:          s.versionID,
 		// set this below, conditionally: BlobTier
 	}
 
@@ -209,7 +211,7 @@ type blobPropsProvider interface {
 
 // a constructor is used so that in case the storedObject has to change, the callers would get a compilation error
 // and it forces all necessary properties to be always supplied and not forgotten
-func newStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time, size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) storedObject {
+func newStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time, size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string, versionID string) storedObject {
 	obj := storedObject{
 		name:               name,
 		relativePath:       relativePath,
@@ -226,6 +228,7 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, en
 		blobAccessTier:     blobProps.AccessTier(),
 		Metadata:           meta,
 		containerName:      containerName,
+		versionID:          versionID,
 	}
 
 	// Folders don't have size, and root ones shouldn't have names in the storedObject. Ensure those rules are consistently followed
@@ -292,7 +295,7 @@ type enumerationCounterFunc func(entityType common.EntityType)
 // followSymlinks is only required for local resources (defaults to false)
 // errorOnDirWOutRecursive is used by copy.
 func initResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo,
-	followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc) (resourceTraverser, error) {
+	followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds []string) (resourceTraverser, error) {
 	var output resourceTraverser
 	var p *pipeline.Pipeline
 
@@ -388,6 +391,8 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 			}
 
 			output = newBlobAccountTraverser(resourceURL, *p, *ctx, includeDirectoryStubs, incrementEnumerationCounter)
+		} else if listOfVersionIds != nil {
+			output = newBlobVersionsTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds)
 		} else {
 			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter)
 		}
