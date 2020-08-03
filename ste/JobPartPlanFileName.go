@@ -201,6 +201,10 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		DeleteSnapshotsOption:          order.BlobAttributes.DeleteSnapshotsOption,
 	}
 
+	for _, transfer := range order.Transfers {
+		jpph.SourceVersionIDs = append(jpph.SourceVersionIDs, transfer.VersionID)
+	}
+
 	// Copy any strings into their respective fields
 	// do NOT copy Source/DestinationRoot.SAS, since we do NOT persist SASs
 	copy(jpph.SourceRoot[:], order.SourceRoot.Value)
@@ -268,8 +272,8 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			SrcMetadataLength:           int16(srcMetadataLength),
 			SrcBlobTypeLength:           int16(len(order.Transfers[t].BlobType)),
 			SrcBlobTierLength:           int16(len(order.Transfers[t].BlobTier)),
-
-			atomicTransferStatus: common.ETransferStatus.Started(), // Default
+			SrcVersionIDLength:          int16(len(order.Transfers[t].VersionID)),
+			atomicTransferStatus:        common.ETransferStatus.Started(), // Default
 			//ChunkNum:                getNumChunks(uint64(order.Transfers[t].SourceSize), uint64(data.BlockSize)),
 		}
 		eof += writeValue(file, &jppt) // Write the transfer entry
@@ -280,7 +284,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		currentSrcStringOffset += int64(jppt.SrcLength + jppt.DstLength + jppt.SrcContentTypeLength +
 			jppt.SrcContentEncodingLength + jppt.SrcContentLanguageLength + jppt.SrcContentDispositionLength +
 			jppt.SrcCacheControlLength + jppt.SrcContentMD5Length + jppt.SrcMetadataLength +
-			jppt.SrcBlobTypeLength + jppt.SrcBlobTierLength)
+			jppt.SrcBlobTypeLength + jppt.SrcBlobTierLength + jppt.SrcVersionIDLength)
 	}
 
 	// All the transfers were written; now write each transfer's src/dst strings
@@ -346,6 +350,11 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		}
 		if len(order.Transfers[t].BlobTier) != 0 {
 			bytesWritten, err = file.WriteString(string(order.Transfers[t].BlobTier))
+			common.PanicIfErr(err)
+			eof += int64(bytesWritten)
+		}
+		if order.Transfers[t].VersionID != "" {
+			bytesWritten, err = file.WriteString(string(order.Transfers[t].VersionID))
 			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}

@@ -23,15 +23,11 @@ package cmd
 import (
 	"context"
 	"errors"
-	// "fmt"
-	// "github.com/Azure/azure-storage-azcopy/common/parallel"
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"net/url"
 	"strings"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	// "github.com/pkg/errors"
-	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type blobVersionsTraverser struct {
@@ -71,13 +67,13 @@ func (t *blobVersionsTraverser) getBlobProperties(versionID string) (props *azbl
 	if err != nil {
 		return props, err
 	}
-	
+
 	// if there was no problem getting the properties, it implies that we are looking at a single blob
 	if gCopyUtil.doesBlobRepresentAFolder(props.NewMetadata()) {
 		return props, errors.New("This is not a blob")
 	}
 	return props, nil
-	
+
 }
 
 func (t *blobVersionsTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
@@ -123,12 +119,12 @@ func (t *blobVersionsTraverser) traverse(preprocessor objectMorpher, processor o
 func newBlobVersionsTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool,
 	incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds []string) (t *blobVersionsTraverser) {
 	return &blobVersionsTraverser{
-		rawURL:                rawURL,
-		p:                     p,
-		ctx:                   ctx,
-		recursive:             recursive,
-		includeDirectoryStubs: includeDirectoryStubs, 
-		incrementEnumerationCounter: incrementEnumerationCounter, 
-		listOfVersionIds: listOfVersionIds,
+		rawURL:                      rawURL,
+		p:                           p,
+		ctx:                         ctx,
+		recursive:                   recursive,
+		includeDirectoryStubs:       includeDirectoryStubs,
+		incrementEnumerationCounter: incrementEnumerationCounter,
+		listOfVersionIds:            listOfVersionIds,
 	}
 }

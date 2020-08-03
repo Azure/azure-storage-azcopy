@@ -497,20 +497,19 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 		if source {
 			relativePath = ""
 		} else {
+			if object.versionID != "" {
+				relativePath += "/" + object.versionID
+			}
 			if dstIsDir {
 				// Our source points to a specific file (and so has no relative path)
 				// but our dest does not point to a specific file, it just points to a directory,
 				// and so relativePath needs the _name_ of the source.
-				relativePath = "/" + object.name
+				relativePath += "/" + object.name
 			} else {
-				relativePath = ""
-			}
-
-			if object.versionID != "" {
-				relativePath += ("." + object.versionID)
+				relativePath += ""
 			}
 		}
-
+		
 		return pathEncodeRules(relativePath, cca.fromTo, source)
 	}
 

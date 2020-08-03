@@ -1553,7 +1553,7 @@ func init() {
 		"In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false to bypass copying access tier. (default true). ")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sSourceChangeValidation, "s2s-detect-source-changed", false, "Detect if the source file/blob changes while it is being read. (This parameter only applies to service to service copies, because the corresponding check is permanently enabled for uploads and downloads.)")
 	cpCmd.PersistentFlags().StringVar(&raw.s2sInvalidMetadataHandleOption, "s2s-handle-invalid-metadata", common.DefaultInvalidMetadataHandleOption.String(), "Specifies how invalid metadata keys are handled. Available options: ExcludeIfInvalid, FailIfInvalid, RenameIfInvalid. (default 'ExcludeIfInvalid').")
-
+	cpCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-version-ids", "", "Provides a list of version ids of a blob to download")
 	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
 	// right before transferring in ste(backend).
 	// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),
