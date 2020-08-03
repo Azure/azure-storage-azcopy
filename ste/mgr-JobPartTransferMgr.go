@@ -236,8 +236,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType :=
 		plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
-	// // srcVersionID := plan.SourceVersionIDs[int(jptm.transferIndex)]
-	// srcVersionID := ""
+	srcVersionID := plan.SourceVersionIDs[int(jptm.transferIndex)]
 	// If the length of destination SAS is greater than 0
 	// it means the destination is remote url and destination SAS
 	// has been stripped from the destination before persisting it in
@@ -274,18 +273,19 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		src = sUrl.String()
 	}
 
-	// if len(srcVersionID) > 0 {
-	// 	sURL, e := url.Parse(src)
-	// 	if e != nil {
-	// 		panic(e)
-	// 	}
-	// 	if len(sURL.RawQuery) > 0 {
-	// 		sURL.RawQuery += "&" + srcVersionID
-	// 	} else {
-	// 		sURL.RawQuery = srcVersionID
-	// 	}
-	// 	src = sURL.String()
-	// }
+	if len(srcVersionID) > 0 {
+		srcVersionID = "versionId=" + srcVersionID
+		sURL, e := url.Parse(src)
+		if e != nil {
+			panic(e)
+		}
+		if len(sURL.RawQuery) > 0 {
+			sURL.RawQuery += "&" + srcVersionID
+		} else {
+			sURL.RawQuery = srcVersionID
+		}
+		src = sURL.String()
+	}
 	sourceSize := plan.Transfer(jptm.transferIndex).SourceSize
 	var blockSize = dstBlobData.BlockSize
 	// If the blockSize is 0, then User didn't provide any blockSize

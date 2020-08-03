@@ -127,9 +127,6 @@ func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (sour
 	srcExtraQuery := string(jpph.SourceExtraQuery[:jpph.SourceExtraQueryLength])
 	dstRoot := string(jpph.DestinationRoot[:jpph.DestinationRootLength])
 	dstExtraQuery := string(jpph.DestExtraQuery[:jpph.DestExtraQueryLength])
-	if jpph.SourceVersionIDs != nil && len(jpph.SourceVersionIDs) > 0 {
-		srcExtraQuery += "versionId=" + jpph.SourceVersionIDs[int(transferIndex)]
-	}
 	jppt := jpph.Transfer(transferIndex)
 	isFolder = jppt.EntityType == common.EEntityType.Folder()
 
@@ -325,7 +322,6 @@ type JobPartPlanTransfer struct {
 	SrcMetadataLength           int16
 	SrcBlobTypeLength           int16
 	SrcBlobTierLength           int16
-	SrcVersionIDLength          int16
 
 	// Any fields below this comment are NOT constants; they may change over as the transfer is processed.
 	// Care must be taken to read/write to these fields in a thread-safe way!
