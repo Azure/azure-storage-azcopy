@@ -285,7 +285,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 			if len(sURL.RawQuery) > 0 {
 				sURL.RawQuery += "&" + versionID
 			} else {
-				sURL.RawQuery = srcSAS
+				sURL.RawQuery = versionID
 			}
 			src = sURL.String()
 		}

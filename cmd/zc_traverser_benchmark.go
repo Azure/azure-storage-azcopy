@@ -90,7 +90,6 @@ func (t *benchmarkTraverser) traverse(preprocessor objectMorpher, processor obje
 			noContentProps,
 			noBlobProps,
 			noMetdata,
-			"", 
 			""), processor)
 		_, err = getProcessingError(err)
 		if err != nil {

@@ -130,7 +130,6 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			blobPropertiesResponseAdapter{blobProperties},
 			common.FromAzBlobMetadataToCommonMetadata(blobProperties.NewMetadata()), // .NewMetadata() seems odd to call, but it does actually retrieve the metadata from the blob properties.
 			blobUrlParts.ContainerName,
-			"",
 		)
 
 		if t.incrementEnumerationCounter != nil {
@@ -202,7 +201,6 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 					adapter, // adapter satisfies both interfaces
 					common.FromAzBlobMetadataToCommonMetadata(blobInfo.Metadata),
 					blobUrlParts.ContainerName,
-					"",
 				)
 				enqueueOutput(storedObject, nil)
 			}

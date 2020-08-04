@@ -80,7 +80,6 @@ type storedObject struct {
 	blobAccessTier azblob.AccessTierType
 	// metadata, included in S2S transfers
 	Metadata  common.Metadata
-	versionID string
 }
 
 const (
@@ -168,9 +167,6 @@ func (s *storedObject) ToNewCopyTransfer(
 		// set this below, conditionally: BlobTier
 	}
 
-	// Added blob version id in source metadata
-	t.Metadata["versionID"] = s.versionID
-
 	if preserveBlobTier {
 		t.BlobTier = s.blobAccessTier
 	}
@@ -213,7 +209,7 @@ type blobPropsProvider interface {
 
 // a constructor is used so that in case the storedObject has to change, the callers would get a compilation error
 // and it forces all necessary properties to be always supplied and not forgotten
-func newStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time, size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string, versionID string) storedObject {
+func newStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time, size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) storedObject {
 	obj := storedObject{
 		name:               name,
 		relativePath:       relativePath,
@@ -230,7 +226,6 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, en
 		blobAccessTier:     blobProps.AccessTier(),
 		Metadata:           meta,
 		containerName:      containerName,
-		versionID:          versionID,
 	}
 
 	// Folders don't have size, and root ones shouldn't have names in the storedObject. Ensure those rules are consistently followed

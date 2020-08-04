@@ -91,8 +91,9 @@ func (t *blobVersionsTraverser) traverse(preprocessor objectMorpher, processor o
 			blobPropertiesResponseAdapter{blobProperties},
 			common.FromAzBlobMetadataToCommonMetadata(blobProperties.NewMetadata()),
 			blobURLParts.ContainerName,
-			versionID,
 		)
+
+		storedObject.Metadata["versionID"] = versionID
 
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(common.EEntityType.File())

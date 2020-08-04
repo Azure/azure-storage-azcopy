@@ -497,8 +497,8 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 		if source {
 			relativePath = ""
 		} else {
-			if object.versionID != "" {
-				relativePath += "/" + object.versionID
+			if versionID, ok := object.Metadata["versionID"]; ok {
+				relativePath += "/" + versionID
 			}
 			if dstIsDir {
 				// Our source points to a specific file (and so has no relative path)
