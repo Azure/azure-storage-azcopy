@@ -57,39 +57,52 @@ type blockBlobSenderBase struct {
 	muBlockIDs             *sync.Mutex
 }
 
-func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType azblob.AccessTierType) (*blockBlobSenderBase, error) {
-	transferInfo := jptm.Info()
-
-	// compute chunk count
-	chunkSize := transferInfo.BlockSize
+func getVerifiedChunkParams(transferInfo TransferInfo, memLimit int64) (chunkSize int64, numChunks uint32, err error) {
+	chunkSize = transferInfo.BlockSize
 	srcSize := transferInfo.SourceSize
-	numChunks := getNumChunks(srcSize, chunkSize)
+	numChunks = getNumChunks(srcSize, chunkSize)
+
 	toGiB := func(bytes int64) float64 {
 		return float64(bytes) / float64(1024*1024*1024)
 	}
-	if chunkSize > common.MaxBlockBlobBlockSize {
-		// mercy, please
-		return nil, fmt.Errorf("Source size %d exceeds maxmimum allowed limit for a BlockBlob", srcSize)
-	}
 
-	if chunkSize >= jptm.CacheLimiter().Limit() {
-		return nil, fmt.Errorf("Cannot use a block size of %.2fGiB. AzCopy is limited to use only %.2fGiB of memory",
-			toGiB(chunkSize), toGiB(jptm.CacheLimiter().Limit()))
-	}
-
-	if common.MinParallelChunkCountThreshold >= jptm.CacheLimiter().Limit()/chunkSize {
+	if common.MinParallelChunkCountThreshold >= memLimit/chunkSize {
 		glcm := common.GetLifecycleMgr()
 		msg := fmt.Sprintf("Using a blocksize of %.2fGiB for file %s. AzCopy is limited to use %.2fGiB of memory."+
 			"Consider providing atleast %.2fGiB to AzCopy, using environment variable %s.",
-			toGiB(chunkSize), transferInfo.Source, toGiB(jptm.CacheLimiter().Limit()),
+			toGiB(chunkSize), transferInfo.Source, toGiB(memLimit),
 			toGiB(common.MinParallelChunkCountThreshold*chunkSize),
 			common.EEnvironmentVariable.BufferGB().Name)
 
 		lowMemoryLimitAdvice.Do(func() { glcm.Info(msg) })
 	}
 
+	if chunkSize >= memLimit {
+		err = fmt.Errorf("Cannot use a block size of %.2fGiB. AzCopy is limited to use only %.2fGiB of memory",
+			toGiB(chunkSize), toGiB(memLimit))
+		return
+	}
+
+	if chunkSize > common.MaxBlockBlobBlockSize {
+		// mercy, please
+		err = fmt.Errorf("block size of %.2fGiB for file %s of size %.2fGiB exceeds maxmimum allowed limit for a BlockBlob",
+			toGiB(chunkSize), transferInfo.Source, toGiB(transferInfo.SourceSize))
+		return
+	}
+
 	if numChunks > common.MaxNumberOfBlocksPerBlob {
-		return nil, fmt.Errorf("BlockSize %d for source of size %d is not correct. Number of blocks will exceed the limit", chunkSize, srcSize)
+		err = fmt.Errorf("BlockSize %d for source of size %d is not correct. Number of blocks will exceed the limit", chunkSize, srcSize)
+		return
+	}
+
+	return
+}
+
+func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType azblob.AccessTierType) (*blockBlobSenderBase, error) {
+	// compute chunk count
+	chunkSize, numChunks, err := getVerifiedChunkParams(jptm.Info(), jptm.CacheLimiter().Limit())
+	if err != nil {
+		return nil, err
 	}
 
 	destURL, err := url.Parse(destination)
