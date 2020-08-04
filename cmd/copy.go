@@ -439,10 +439,11 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	}
 
 	versionsChan := make(chan string)
+	var filePtr *os.File
 	// Get file path from user which would contain list of all versionIDs
 	// Process the file line by line and then prepare a list of all version ids of the blob.
 	if raw.listOfVersionIDs != "" {
-		f, err = os.Open(raw.listOfVersionIDs)
+		filePtr, err = os.Open(raw.listOfVersionIDs)
 
 		if err != nil {
 			return cooked, fmt.Errorf("cannot open %s file passed with the list-of-file flag", raw.listOfFilesToCopy)
@@ -460,8 +461,8 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 			}
 		}
 
-		if f != nil {
-			scanner := bufio.NewScanner(f)
+		if filePtr != nil {
+			scanner := bufio.NewScanner(filePtr)
 			checkBOM := false
 			headerLineNum := 0
 			firstLineIsCurlyBrace := false
