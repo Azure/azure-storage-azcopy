@@ -190,8 +190,7 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 				contentProps,
 				noBlobProps,
 				noMetdata,
-				bfsURLParts.FileSystemName,
-			)
+				bfsURLParts.FileSystemName)
 
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter(entityType)

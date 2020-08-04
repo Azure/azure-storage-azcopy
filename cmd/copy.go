@@ -274,23 +274,6 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 
 	cooked.fromTo = fromTo
 
-	// Get file path from user which would contain list of all versionIDs
-	// Process the file line by line and then prepare a list of all version ids of the blob.
-	if raw.listOfVersionIDs != "" {
-		filePtr, err := os.Open(raw.listOfVersionIDs)
-		if err != nil {
-			return cooked, err
-		}
-		defer filePtr.Close()
-		scanner := bufio.NewScanner(filePtr)
-		scanner.Split(bufio.ScanLines)
-		var versionIDs []string
-		for scanner.Scan() {
-			versionIDs = append(versionIDs, scanner.Text())
-		}
-		cooked.listOfVersionIDs = versionIDs
-	}
-
 	cooked.recursive = raw.recursive
 	cooked.followSymlinks = raw.followSymlinks
 	cooked.forceIfReadOnly = raw.forceIfReadOnly
@@ -453,6 +436,67 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 			return cooked, err
 		}
 		cooked.includeAfter = &parsedIncludeAfter
+	}
+
+	versionsChan := make(chan string)
+	// Get file path from user which would contain list of all versionIDs
+	// Process the file line by line and then prepare a list of all version ids of the blob.
+	if raw.listOfVersionIDs != "" {
+		f, err = os.Open(raw.listOfVersionIDs)
+
+		if err != nil {
+			return cooked, fmt.Errorf("cannot open %s file passed with the list-of-file flag", raw.listOfFilesToCopy)
+		}
+	}
+
+	go func() {
+		defer close(versionsChan)
+
+		addToChannel := func(v string, paramName string) {
+			// empty strings should be ignored, otherwise the source root itself is selected
+			if len(v) > 0 {
+				raw.warnIfHasWildcard(includeWarningOncer, paramName, v)
+				versionsChan <- v
+			}
+		}
+
+		if f != nil {
+			scanner := bufio.NewScanner(f)
+			checkBOM := false
+			headerLineNum := 0
+			firstLineIsCurlyBrace := false
+
+			for scanner.Scan() {
+				v := scanner.Text()
+
+				if !checkBOM {
+					v = strings.TrimPrefix(v, utf8BOM)
+					checkBOM = true
+				}
+
+				if headerLineNum <= 1 {
+					cleanedLine := strings.Replace(strings.Replace(v, " ", "", -1), "\t", "", -1)
+					cleanedLine = strings.TrimSuffix(cleanedLine, "[") // don't care which line this is on, could be third line
+					if cleanedLine == "{" && headerLineNum == 0 {
+						firstLineIsCurlyBrace = true
+					} else {
+						const jsonStart = "{\"Files\":"
+						jsonStartNoBrace := strings.TrimPrefix(jsonStart, "{")
+						isJSON := cleanedLine == jsonStart || firstLineIsCurlyBrace && cleanedLine == jsonStartNoBrace
+						if isJSON {
+							glcm.Error("The format for list-of-files has changed. The old JSON format is no longer supported")
+						}
+					}
+					headerLineNum++
+				}
+
+				addToChannel(v, "list-of-versions")
+			}
+		}
+	}()
+
+	if raw.listOfVersionIDs != ""  {
+		cooked.listOfVersionIDs = versionsChan
 	}
 
 	cooked.metadata = raw.metadata
@@ -806,7 +850,7 @@ type cookedCopyCmdArgs struct {
 	includeAfter          *time.Time
 
 	// list of version ids
-	listOfVersionIDs []string
+	listOfVersionIDs chan string
 	// filters from flags
 	listOfFilesChannel chan string // Channels are nullable.
 	recursive          bool

@@ -23,10 +23,9 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common/parallel"
 	"net/url"
 	"strings"
-
-	"github.com/Azure/azure-storage-azcopy/common/parallel"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -220,6 +219,8 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			cancelWorkers()
 			return workerError
 		}
+
+
 
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(common.EEntityType.File())

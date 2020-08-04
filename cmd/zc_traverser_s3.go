@@ -87,8 +87,7 @@ func (t *s3Traverser) traverse(preprocessor objectMorpher, processor objectProce
 				&oie,
 				noBlobProps,
 				oie.NewCommonMetadata(),
-				t.s3URLParts.BucketName,
-			)
+				t.s3URLParts.BucketName)
 
 			err = processIfPassedFilters(
 				filters,

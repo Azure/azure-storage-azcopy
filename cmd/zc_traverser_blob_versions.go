@@ -37,7 +37,7 @@ type blobVersionsTraverser struct {
 	recursive                   bool
 	includeDirectoryStubs       bool
 	incrementEnumerationCounter enumerationCounterFunc
-	listOfVersionIds            []string
+	listOfVersionIds            chan string
 }
 
 func (t *blobVersionsTraverser) isDirectory(isSource bool) bool {
@@ -69,7 +69,8 @@ func (t *blobVersionsTraverser) getBlobProperties(versionID string) (props *azbl
 func (t *blobVersionsTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
 	blobURLParts := azblob.NewBlobURLParts(*t.rawURL)
 
-	for _, versionID := range t.listOfVersionIds {
+	versionID, ok := <-t.listOfVersionIds
+	for ; ok; versionID, ok = <-t.listOfVersionIds  {
 		blobProperties, err := t.getBlobProperties(versionID)
 
 		if err != nil {
@@ -108,7 +109,7 @@ func (t *blobVersionsTraverser) traverse(preprocessor objectMorpher, processor o
 }
 
 func newBlobVersionsTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool,
-	incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds []string) (t *blobVersionsTraverser) {
+	incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string) (t *blobVersionsTraverser) {
 	return &blobVersionsTraverser{
 		rawURL:                      rawURL,
 		p:                           p,

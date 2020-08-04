@@ -14,7 +14,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 15
+const DataSchemaVersion common.Version = 14
 
 const (
 	CustomHeaderMaxBytes = 256
@@ -126,6 +126,7 @@ func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (sour
 	srcExtraQuery := string(jpph.SourceExtraQuery[:jpph.SourceExtraQueryLength])
 	dstRoot := string(jpph.DestinationRoot[:jpph.DestinationRootLength])
 	dstExtraQuery := string(jpph.DestExtraQuery[:jpph.DestExtraQueryLength])
+
 	jppt := jpph.Transfer(transferIndex)
 	isFolder = jppt.EntityType == common.EEntityType.Folder()
 
