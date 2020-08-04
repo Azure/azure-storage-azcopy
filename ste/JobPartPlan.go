@@ -14,7 +14,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 14
+const DataSchemaVersion common.Version = 15
 
 const (
 	CustomHeaderMaxBytes = 256
@@ -45,7 +45,6 @@ type JobPartPlanHeader struct {
 	SourceRootLength       uint16            // The length of the source root path
 	SourceRoot             [1000]byte        // The root directory of the source
 	SourceExtraQueryLength uint16
-	SourceVersionIDs       []string
 	SourceExtraQuery       [1000]byte // Extra query params applicable to the source
 	DestinationRootLength  uint16     // The length of the destination root path
 	DestinationRoot        [1000]byte // The root directory of the destination

@@ -201,10 +201,6 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		DeleteSnapshotsOption:          order.BlobAttributes.DeleteSnapshotsOption,
 	}
 
-	for _, transfer := range order.Transfers {
-		jpph.SourceVersionIDs = append(jpph.SourceVersionIDs, transfer.VersionID)
-	}
-
 	// Copy any strings into their respective fields
 	// do NOT copy Source/DestinationRoot.SAS, since we do NOT persist SASs
 	copy(jpph.SourceRoot[:], order.SourceRoot.Value)
@@ -284,7 +280,6 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			jppt.SrcContentEncodingLength + jppt.SrcContentLanguageLength + jppt.SrcContentDispositionLength +
 			jppt.SrcCacheControlLength + jppt.SrcContentMD5Length + jppt.SrcMetadataLength +
 			jppt.SrcBlobTypeLength + jppt.SrcBlobTierLength)
-		// + jppt.SrcVersionIDLength)
 	}
 
 	// All the transfers were written; now write each transfer's src/dst strings
@@ -353,11 +348,6 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}
-		// if order.Transfers[t].VersionID != "" {
-		// 	bytesWritten, err = file.WriteString(string(order.Transfers[t].VersionID))
-		// 	common.PanicIfErr(err)
-		// 	eof += int64(bytesWritten)
-		// }
 	}
 	// the file is closed to due to defer above
 }

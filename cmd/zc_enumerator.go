@@ -165,9 +165,11 @@ func (s *storedObject) ToNewCopyTransfer(
 		ContentMD5:         s.md5,
 		Metadata:           s.Metadata,
 		BlobType:           s.blobType,
-		VersionID:          s.versionID,
 		// set this below, conditionally: BlobTier
 	}
+
+	// Added blob version id in source metadata
+	t.Metadata["versionID"] = s.versionID
 
 	if preserveBlobTier {
 		t.BlobTier = s.blobAccessTier

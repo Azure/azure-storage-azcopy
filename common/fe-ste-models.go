@@ -910,7 +910,6 @@ type CopyTransfer struct {
 	CacheControl       string
 	ContentMD5         []byte
 	Metadata           Metadata
-	VersionID          string
 	// Properties for S2S blob copy
 	BlobType azblob.BlobType
 	BlobTier azblob.AccessTierType

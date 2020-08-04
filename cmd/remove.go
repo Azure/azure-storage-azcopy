@@ -97,5 +97,5 @@ func init() {
 	deleteCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When deleting an Azure Files file or folder, force the deletion to work even if the existing object is has its read-only attribute set")
 	deleteCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "Defines the location of a file which contains the list of files and directories to be deleted. The relative paths should be delimited by line breaks, and the paths should NOT be URL-encoded.")
 	deleteCmd.PersistentFlags().StringVar(&raw.deleteSnapshotsOption, "delete-snapshots", "", "By default, the delete operation fails if a blob has snapshots. Specify 'include' to remove the root blob and all its snapshots; alternatively specify 'only' to remove only the snapshots but keep the root blob.")
-	deleteCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-version-ids", "", "Provides a list of version ids of a blob to delete")
+	deleteCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-versions", "",  "Specifies a file where each version id is listed on a separate line. Ensure that the source must point to a single blob and all the version ids specified in the file using this flag must belong to the source blob only.")
 }

@@ -1,4 +1,4 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+// Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,12 +22,12 @@ package cmd
 
 import (
 	"context"
-	"errors"
+	"net/url"
+	"strings"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"net/url"
-	"strings"
 )
 
 type blobVersionsTraverser struct {
@@ -63,17 +63,7 @@ func (t *blobVersionsTraverser) getBlobProperties(versionID string) (props *azbl
 
 	blobURL := azblob.NewBlobURL(blobURLParts.URL(), t.p)
 	props, err = blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{})
-
-	if err != nil {
-		return props, err
-	}
-
-	// if there was no problem getting the properties, it implies that we are looking at a single blob
-	if gCopyUtil.doesBlobRepresentAFolder(props.NewMetadata()) {
-		return props, errors.New("This is not a blob")
-	}
-	return props, nil
-
+	return props, err
 }
 
 func (t *blobVersionsTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
@@ -122,7 +112,6 @@ func newBlobVersionsTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.
 		rawURL:                      rawURL,
 		p:                           p,
 		ctx:                         ctx,
-		recursive:                   recursive,
 		includeDirectoryStubs:       includeDirectoryStubs,
 		incrementEnumerationCounter: incrementEnumerationCounter,
 		listOfVersionIds:            listOfVersionIds,
