@@ -34,7 +34,6 @@ type blobVersionsTraverser struct {
 	rawURL                      *url.URL
 	p                           pipeline.Pipeline
 	ctx                         context.Context
-	recursive                   bool
 	includeDirectoryStubs       bool
 	incrementEnumerationCounter enumerationCounterFunc
 	listOfVersionIds            chan string
@@ -93,8 +92,7 @@ func (t *blobVersionsTraverser) traverse(preprocessor objectMorpher, processor o
 			common.FromAzBlobMetadataToCommonMetadata(blobProperties.NewMetadata()),
 			blobURLParts.ContainerName,
 		)
-
-		storedObject.Metadata["versionID"] = versionID
+		storedObject.blobVersionID = versionID
 
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(common.EEntityType.File())

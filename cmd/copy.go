@@ -452,11 +452,8 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 
 	go func() {
 		defer close(versionsChan)
-
-		addToChannel := func(v string, paramName string) {
-			// empty strings should be ignored, otherwise the source root itself is selected
+		addToChannel := func(v string) {
 			if len(v) > 0 {
-				raw.warnIfHasWildcard(includeWarningOncer, paramName, v)
 				versionsChan <- v
 			}
 		}
@@ -464,9 +461,6 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		if filePtr != nil {
 			scanner := bufio.NewScanner(filePtr)
 			checkBOM := false
-			headerLineNum := 0
-			firstLineIsCurlyBrace := false
-
 			for scanner.Scan() {
 				v := scanner.Text()
 
@@ -475,23 +469,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 					checkBOM = true
 				}
 
-				if headerLineNum <= 1 {
-					cleanedLine := strings.Replace(strings.Replace(v, " ", "", -1), "\t", "", -1)
-					cleanedLine = strings.TrimSuffix(cleanedLine, "[") // don't care which line this is on, could be third line
-					if cleanedLine == "{" && headerLineNum == 0 {
-						firstLineIsCurlyBrace = true
-					} else {
-						const jsonStart = "{\"Files\":"
-						jsonStartNoBrace := strings.TrimPrefix(jsonStart, "{")
-						isJSON := cleanedLine == jsonStart || firstLineIsCurlyBrace && cleanedLine == jsonStartNoBrace
-						if isJSON {
-							glcm.Error("The format for list-of-files has changed. The old JSON format is no longer supported")
-						}
-					}
-					headerLineNum++
-				}
-
-				addToChannel(v, "list-of-versions")
+				addToChannel(v)
 			}
 		}
 	}()

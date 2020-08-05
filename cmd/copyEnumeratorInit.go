@@ -65,7 +65,9 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// Check if the destination is a directory so we can correctly decide where our files land
 	isDestDir := cca.isDestDirectory(cca.destination, &ctx)
-
+	if cca.listOfVersionIDs != nil && !(cca.fromTo.To() == cca.fromTo.To().Local() || cca.fromTo.To() == cca.fromTo.To().Unknown()) && !isDestDir {
+		return nil, errors.New("Incorrect: destination must be a local directory")
+	}
 	srcLevel, err := determineLocationLevel(cca.source.Value, cca.fromTo.From(), true)
 
 	if err != nil {
@@ -497,14 +499,15 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 		if source {
 			relativePath = ""
 		} else {
-			if versionID, ok := object.Metadata["versionID"]; ok {
-				relativePath += "/" + versionID
-			}
 			if dstIsDir {
 				// Our source points to a specific file (and so has no relative path)
 				// but our dest does not point to a specific file, it just points to a directory,
 				// and so relativePath needs the _name_ of the source.
-				relativePath += "/" + object.name
+				processedVID := ""
+				if len(object.blobVersionID) > 0 {
+					processedVID = strings.ReplaceAll(object.blobVersionID, ":", "-") + "-"
+				} 
+				relativePath += "/" + processedVID + object.name
 			} else {
 				relativePath += ""
 			}
