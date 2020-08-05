@@ -4,13 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
+	"log"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -65,8 +67,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// Check if the destination is a directory so we can correctly decide where our files land
 	isDestDir := cca.isDestDirectory(cca.destination, &ctx)
-	if cca.listOfVersionIDs != nil && !(cca.fromTo.To() == cca.fromTo.To().Local() || cca.fromTo.To() == cca.fromTo.To().Unknown()) && !isDestDir {
-		return nil, errors.New("Incorrect: destination must be a local directory")
+	if cca.listOfVersionIDs != nil && (!(cca.fromTo.To() == cca.fromTo.To().Local() || cca.fromTo.To() == cca.fromTo.To().Unknown()) || !isDestDir) {
+		log.Fatalf("Destination must be a local directory")
 	}
 	srcLevel, err := determineLocationLevel(cca.source.Value, cca.fromTo.From(), true)
 
