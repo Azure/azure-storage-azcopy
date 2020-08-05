@@ -312,7 +312,6 @@ type JobPartPlanTransfer struct {
 	SourceSize int64
 	// CompletionTime represents the time at which transfer was completed
 	CompletionTime uint64
-	VersionID      string
 
 	// For S2S copy, per Transfer source's properties
 	// TODO: ensure the length is enough

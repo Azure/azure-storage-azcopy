@@ -508,13 +508,13 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 				processedVID := ""
 				if len(object.blobVersionID) > 0 {
 					processedVID = strings.ReplaceAll(object.blobVersionID, ":", "-") + "-"
-				} 
+				}
 				relativePath += "/" + processedVID + object.name
 			} else {
-				relativePath += ""
+				relativePath = ""
 			}
 		}
-		
+
 		return pathEncodeRules(relativePath, cca.fromTo, source)
 	}
 
