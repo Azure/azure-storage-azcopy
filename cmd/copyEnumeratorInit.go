@@ -67,8 +67,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// Check if the destination is a directory so we can correctly decide where our files land
 	isDestDir := cca.isDestDirectory(cca.destination, &ctx)
-	if cca.listOfVersionIDs != nil && (!(cca.fromTo.To() == cca.fromTo.To().Local() || cca.fromTo.To() == cca.fromTo.To().Unknown()) || !isDestDir) {
-		log.Fatalf("Destination must be a local directory")
+	if cca.listOfVersionIDs != nil && (!(cca.fromTo == common.EFromTo.BlobLocal() || cca.fromTo == common.EFromTo.BlobTrash()) || isSourceDir || !isDestDir) {
+		log.Fatalf("Either source is not a blob or destination is not a local folder")
 	}
 	srcLevel, err := determineLocationLevel(cca.source.Value, cca.fromTo.From(), true)
 

@@ -79,8 +79,8 @@ type storedObject struct {
 	// access tier, only included by blob traverser.
 	blobAccessTier azblob.AccessTierType
 	// metadata, included in S2S transfers
-	Metadata  common.Metadata
-	blobVersionID	string
+	Metadata      common.Metadata
+	blobVersionID string
 }
 
 const (
@@ -165,7 +165,7 @@ func (s *storedObject) ToNewCopyTransfer(
 		ContentMD5:         s.md5,
 		Metadata:           s.Metadata,
 		BlobType:           s.blobType,
-		BlobVersionID:		s.blobVersionID,
+		BlobVersionID:      s.blobVersionID,
 		// set this below, conditionally: BlobTier
 	}
 
@@ -390,7 +390,7 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 			}
 
 			output = newBlobAccountTraverser(resourceURL, *p, *ctx, includeDirectoryStubs, incrementEnumerationCounter)
-		} else if listOfVersionIds != nil{
+		} else if listOfVersionIds != nil {
 			output = newBlobVersionsTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds)
 		} else {
 			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter)

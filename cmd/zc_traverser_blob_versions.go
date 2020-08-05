@@ -69,7 +69,7 @@ func (t *blobVersionsTraverser) traverse(preprocessor objectMorpher, processor o
 	blobURLParts := azblob.NewBlobURLParts(*t.rawURL)
 
 	versionID, ok := <-t.listOfVersionIds
-	for ; ok; versionID, ok = <-t.listOfVersionIds  {
+	for ; ok; versionID, ok = <-t.listOfVersionIds {
 		blobProperties, err := t.getBlobProperties(versionID)
 
 		if err != nil {

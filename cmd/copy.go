@@ -472,7 +472,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		}
 	}()
 
-	if raw.listOfVersionIDs != ""  {
+	if raw.listOfVersionIDs != "" {
 		cooked.listOfVersionIDs = versionsChan
 	}
 
