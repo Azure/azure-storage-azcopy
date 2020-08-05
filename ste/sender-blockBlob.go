@@ -69,7 +69,7 @@ func getVerifiedChunkParams(transferInfo TransferInfo, memLimit int64) (chunkSiz
 	if common.MinParallelChunkCountThreshold >= memLimit/chunkSize {
 		glcm := common.GetLifecycleMgr()
 		msg := fmt.Sprintf("Using a blocksize of %.2fGiB for file %s. AzCopy is limited to use %.2fGiB of memory."+
-			"Consider providing atleast %.2fGiB to AzCopy, using environment variable %s.",
+			"Consider providing at least %.2fGiB to AzCopy, using environment variable %s.",
 			toGiB(chunkSize), transferInfo.Source, toGiB(memLimit),
 			toGiB(common.MinParallelChunkCountThreshold*chunkSize),
 			common.EEnvironmentVariable.BufferGB().Name)
@@ -85,13 +85,13 @@ func getVerifiedChunkParams(transferInfo TransferInfo, memLimit int64) (chunkSiz
 
 	if chunkSize > common.MaxBlockBlobBlockSize {
 		// mercy, please
-		err = fmt.Errorf("block size of %.2fGiB for file %s of size %.2fGiB exceeds maxmimum allowed limit for a BlockBlob",
+		err = fmt.Errorf("block size of %.2fGiB for file %s of size %.2fGiB exceeds maxmimum allowed block size for a BlockBlob",
 			toGiB(chunkSize), transferInfo.Source, toGiB(transferInfo.SourceSize))
 		return
 	}
 
 	if numChunks > common.MaxNumberOfBlocksPerBlob {
-		err = fmt.Errorf("BlockSize %d for source of size %d is not correct. Number of blocks will exceed the limit", chunkSize, srcSize)
+		err = fmt.Errorf("Block size %d for source of size %d is not correct. Number of blocks will exceed the limit", chunkSize, srcSize)
 		return
 	}
 
