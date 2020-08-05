@@ -22,11 +22,12 @@ package e2etest
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/cmd"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"math"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/cmd"
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 ///////////////
@@ -51,7 +52,7 @@ type objectProperties struct {
 	nameValueMetadata  map[string]string
 	creationTime       *time.Time
 	lastWriteTime      *time.Time
-	smbAttributes      *string
+	smbAttributes      *uint32
 	smbPermissionsSddl *string
 }
 

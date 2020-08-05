@@ -135,21 +135,14 @@ func (s scenarioHelper) enumerateLocalProperties(a asserter, dirpath string) map
 		size := info.Size()
 		lastWriteTime := info.ModTime()
 		var pCreationTime *time.Time
-		var pSmbAttributes *string
+		var pSmbAttributes *uint32
 		var pSmbPermissionsSddl *string
 		if runtime.GOOS == "windows" {
 			var creationTime time.Time
 			lastWriteTime, creationTime = osScenarioHelper{}.getFileDates(a, fullpath)
 			pCreationTime = &creationTime
-			// TODO: nakulkar-msft the osScenarioHelper methods here will need to be implemented before
-			//   attribute preservation can be tested. The easiest way to implement them will be to rely on existing AzCopy code
-			//   similar to what getFileDates does (see a few lines above)
-			/*
-				smbAttributes := osScenarioHelper{}.getSmbAttributes(a, fullpath)
-				pSmbAttributes = &smbAttributes
-				smbPermissionsSddl := osScenarioHelper{}.getSmbSddl(a, fullPath)
-				pSmbPermissionsSddl = &smbPermissionsSddl
-			*/
+			pSmbAttributes = osScenarioHelper{}.getFileAttrs(a, fullpath)
+			pSmbPermissionsSddl = osScenarioHelper{}.getFileSDDLString(a, fullpath)
 		}
 		props := objectProperties{
 			isFolder:           info.IsDir(),
@@ -541,11 +534,82 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, shareURL azfile.Sha
 }
 
 func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile.ShareURL) map[string]*objectProperties {
+	var dirQ []azfile.DirectoryURL
+	result := make(map[string]*objectProperties)
 
-	//root := shareURL.NewRootDirectoryURL()
-	// TODO use root.ListFilesAndDirectoriesSegment()
-	// TODO: nakulkar-msft ?
-	return nil
+	root := shareURL.NewRootDirectoryURL()
+	dirQ = append(dirQ, root)
+	for i := 0; i < len(dirQ); i++ {
+		currentDirURL := dirQ[i]
+		for marker := (azfile.Marker{}); marker.NotDone(); {
+			lResp, err := currentDirURL.ListFilesAndDirectoriesSegment(context.TODO(), marker, azfile.ListFilesAndDirectoriesOptions{})
+			a.AssertNoErr(err)
+
+			// Process the files and folders we listed
+			for _, fileInfo := range lResp.FileItems {
+				fileURL := currentDirURL.NewFileURL(fileInfo.Name)
+				fProps, err := fileURL.GetProperties(context.TODO())
+				a.AssertNoErr(err)
+
+				// Construct the properties object
+				fileSize := fProps.ContentLength()
+				creationTime, err := time.Parse(azfile.ISO8601, fProps.FileCreationTime())
+				a.AssertNoErr(err)
+				lastWriteTime, err := time.Parse(azfile.ISO8601, fProps.FileLastWriteTime())
+				a.AssertNoErr(err)
+				contentHeader := fProps.NewHTTPHeaders()
+				h := contentHeaders{
+					cacheControl:       &contentHeader.CacheControl,
+					contentDisposition: &contentHeader.ContentDisposition,
+					contentEncoding:    &contentHeader.ContentEncoding,
+					contentLanguage:    &contentHeader.ContentLanguage,
+					contentType:        &contentHeader.ContentType,
+					contentMD5:         contentHeader.ContentMD5,
+				}
+				fileAttrs := uint32(azfile.ParseFileAttributeFlagsString(fProps.FileAttributes()))
+				filePermissions := fProps.FilePermissionKey()
+
+				props := objectProperties{
+					isFolder:           false, // no folders in Blob
+					size:               &fileSize,
+					nameValueMetadata:  fProps.NewMetadata(),
+					contentHeaders:     &h,
+					creationTime:       &creationTime,
+					lastWriteTime:      &lastWriteTime,
+					smbAttributes:      &fileAttrs,
+					smbPermissionsSddl: &filePermissions,
+				}
+
+				result[fileInfo.Name] = &props
+			}
+
+			for _, dirInfo := range lResp.DirectoryItems {
+				dirURL := currentDirURL.NewDirectoryURL(dirInfo.Name)
+				dProps, err := dirURL.GetProperties(context.TODO())
+				a.AssertNoErr(err)
+
+				// Construct the properties object
+				creationTime, err := time.Parse(azfile.ISO8601, dProps.FileCreationTime())
+				a.AssertNoErr(err)
+				lastWriteTime, err := time.Parse(azfile.ISO8601, dProps.FileLastWriteTime())
+				a.AssertNoErr(err)
+
+				props := objectProperties{
+					isFolder:          true,
+					nameValueMetadata: dProps.NewMetadata(),
+					creationTime:      &creationTime,
+					lastWriteTime:     &lastWriteTime,
+				}
+
+				result[dirInfo.Name] = &props
+				dirQ = append(dirQ, dirURL)
+			}
+
+			marker = lResp.NextMarker
+		}
+	}
+
+	return result
 }
 
 func (scenarioHelper) generateBFSPathsFromList(c asserter, filesystemURL azbfs.FileSystemURL, fileList []string) {

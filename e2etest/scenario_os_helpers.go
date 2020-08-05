@@ -23,6 +23,10 @@
 
 package e2etest
 
+import (
+	"time"
+)
+
 type osScenarioHelper struct{}
 
 // set file attributes to test file

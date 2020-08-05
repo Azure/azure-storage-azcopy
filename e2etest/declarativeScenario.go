@@ -22,11 +22,13 @@ package e2etest
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // E.g. if we have enumerationSuite/TestFooBar/Copy-LocalBlob the scenario is "Copy-LocalBlob"
@@ -278,12 +280,10 @@ func (s *scenario) validateProperties() {
 
 		// validate all the different things
 		s.validateMetadata(expected.nameValueMetadata, actual.nameValueMetadata)
-		// add more methods like s.validateMetadata for the other things that need to be validated
-		if expected.lastWriteTime != nil ||
-			expected.creationTime != nil ||
-			expected.smbAttributes != nil ||
-			expected.smbPermissionsSddl != nil ||
-			expected.contentHeaders != nil {
+		s.validateContentHeaders(expected.contentHeaders, actual.contentHeaders)
+		s.validateCreateTime(expected.creationTime, actual.creationTime)
+		s.validateLastWriteTime(expected.lastWriteTime, actual.lastWriteTime)
+		if expected.smbPermissionsSddl != nil {
 			s.a.Error("validateProperties does not yet support the properties you are using")
 			// TODO: nakulkar-msft it will be necessary to validate all of these
 		}
@@ -302,6 +302,26 @@ func (s *scenario) validateMetadata(expected, actual map[string]string) {
 			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("Expect value for key '%s' to be '%s' but found '%s'", key, exValue, actualValue))
 		}
 	}
+}
+
+func (s *scenario) validateContentHeaders(expected, actual *contentHeaders) {
+	s.a.Assert(expected, equals(), actual, fmt.Sprintf("Content header mismatch: Expected %+v, obtained %+v",
+		reflect.ValueOf(expected), reflect.ValueOf(actual)))
+}
+
+func (s *scenario) validateCreateTime(expected, actual *time.Time) {
+	s.a.Assert(expected, equals(), actual, "Create time mismatch: Expected %s, obtained %s",
+		expected.Format(time.RFC3339), actual.Format(time.RFC3339))
+}
+
+func (s *scenario) validateLastWriteTime(expected, actual *time.Time) {
+	s.a.Assert(expected, equals(), actual, "Create time mismatch: Expected %s, obtained %s",
+		expected.Format(time.RFC3339), actual.Format(time.RFC3339))
+}
+
+func (s *scenario) validateSMBAttrs(expected, actual *uint32) {
+	s.a.Assert(expected, equals(), actual, fmt.Sprintf("SMB Attrs mismatch: Expected %d, obtained, %d",
+		reflect.ValueOf(expected), reflect.ValueOf(actual)))
 }
 
 func (s *scenario) cleanup() {
