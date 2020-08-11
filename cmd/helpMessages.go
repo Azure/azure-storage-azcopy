@@ -336,6 +336,9 @@ The built-in lookup table is small but on Unix it is augmented by the local syst
   - /etc/apache/mime.types
 
 On Windows, MIME types are extracted from the registry.
+
+Please also note that sync works off of the last modified times exclusively. So in the case of Azure File <-> Azure File,
+the header field Last-Modified is used instead of x-ms-file-change-time, which means that metadata changes at the source can also trigger a full copy.
 `
 
 const syncCmdExample = `
