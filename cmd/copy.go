@@ -444,7 +444,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	if raw.listOfVersionIDs != "" {
 		filePtr, err = os.Open(raw.listOfVersionIDs)
 		if err != nil {
-			return cooked, fmt.Errorf("cannot open %s file passed with the list-of-file flag", raw.listOfVersionIDs)
+			return cooked, fmt.Errorf("cannot open %s file passed with the list-of-versions flag", raw.listOfVersionIDs)
 		}
 	}
 

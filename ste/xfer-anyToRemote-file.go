@@ -33,8 +33,8 @@ import (
 	"sync"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // This code for blob tier safety is _not_ safe for multiple jobs at once.
@@ -171,10 +171,18 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 
 		if srcURL.Hostname() == dstURL.Hostname() &&
 			srcURL.EscapedPath() == dstURL.EscapedPath() {
-			jptm.LogSendError(info.Source, info.Destination, "Transfer source and destination are the same, which would cause data loss. Aborting transfer.", 0)
-			jptm.SetStatus(common.ETransferStatus.Failed())
-			jptm.ReportTransferDone()
-			return
+
+			srcRQ := srcURL.Query()
+			dstRQ := dstURL.Query()
+			if (len(srcRQ["versionId"]) > 0 || len(srcRQ["versionid"]) > 0) && !(len(dstRQ["versionId"]) > 0 || len(dstRQ["versionid"]) > 0) {
+				// Case: Replacing the current version of the blob with the previous version.
+				// In this particular case, source URL should contain version id and destination URL should not have any version id specified
+			} else {
+				jptm.LogSendError(info.Source, info.Destination, "Transfer source and destination are the same, which would cause data loss. Aborting transfer.", 0)
+				jptm.SetStatus(common.ETransferStatus.Failed())
+				jptm.ReportTransferDone()
+				return
+			}
 		}
 	}
 

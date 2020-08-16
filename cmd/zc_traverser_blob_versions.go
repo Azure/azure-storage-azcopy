@@ -48,9 +48,8 @@ func (t *blobVersionsTraverser) isDirectory(isSource bool) bool {
 		return isDirDirect
 	}
 
-	_, err := t.getBlobProperties("")
-
-	return err != nil
+	// The base blob may not exist in some cases.
+	return false
 }
 
 func (t *blobVersionsTraverser) getBlobProperties(versionID string) (props *azblob.BlobGetPropertiesResponse, err error) {
