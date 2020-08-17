@@ -23,12 +23,12 @@ package common
 import (
 	"context"
 	"errors"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"hash"
 	"io"
-	"math"
 	"runtime"
 	"sync"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 // Reader of ONE chunk of a file. Maybe used to re-read multiple times (e.g. if
@@ -201,7 +201,7 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 
 	// prepare to read
 	cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.DiskIO())
-	targetBuffer := cr.slicePool.RentSlice(uint32Checked(cr.length))
+	targetBuffer := cr.slicePool.RentSlice(cr.length)
 
 	// read WITHOUT holding the "close" lock.  While we don't have the lock, we mutate ONLY local variables, no instance state.
 	// (Don't release the other lock, muMaster, since that's unnecessary would make it harder to reason about behaviour - e.g. is something other than Close happening?)
@@ -421,12 +421,4 @@ func stack() []byte {
 		}
 		buf = make([]byte, 2*len(buf))
 	}
-}
-
-// while we never expect any out of range errors, due to chunk sizes fitting easily into uint32, here we make sure
-func uint32Checked(i int64) uint32 {
-	if i > math.MaxUint32 {
-		panic("int64 out of range for cast to uint32")
-	}
-	return uint32(i)
 }

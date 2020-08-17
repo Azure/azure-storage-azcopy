@@ -77,6 +77,7 @@ type rawCopyCmdArgs struct {
 	includeAfter          string
 	legacyInclude         string // used only for warnings
 	legacyExclude         string // used only for warnings
+	listOfVersionIDs      string
 
 	// filters from flags
 	listOfFilesToCopy string
@@ -162,13 +163,13 @@ func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []strin
 // to use fractions of a MiB. E.g.
 // 0.25 = 256 KiB
 // 0.015625 = 16 KiB
-func blockSizeInBytes(rawBlockSizeInMiB float64) (uint32, error) {
+func blockSizeInBytes(rawBlockSizeInMiB float64) (int64, error) {
 	if rawBlockSizeInMiB < 0 {
 		return 0, errors.New("negative block size not allowed")
 	}
 	rawSizeInBytes := rawBlockSizeInMiB * 1024 * 1024 // internally we use bytes, but users' convenience the command line uses MiB
-	if rawSizeInBytes > math.MaxUint32 {
-		return 0, errors.New("block size too big for uint32")
+	if rawSizeInBytes > math.MaxInt64 {
+		return 0, errors.New("block size too big for int64")
 	}
 	const epsilon = 0.001 // arbitrarily using a tolerance of 1000th of a byte
 	_, frac := math.Modf(rawSizeInBytes)
@@ -176,7 +177,7 @@ func blockSizeInBytes(rawBlockSizeInMiB float64) (uint32, error) {
 	if !isWholeNumber {
 		return 0, fmt.Errorf("while fractional numbers of MiB are allowed as the block size, the fraction must result to a whole number of bytes. %.12f MiB resolves to %.3f bytes", rawBlockSizeInMiB, rawSizeInBytes)
 	}
-	return uint32(math.Round(rawSizeInBytes)), nil
+	return int64(math.Round(rawSizeInBytes)), nil
 }
 
 // validates and transform raw input into cooked input
@@ -434,6 +435,45 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 			return cooked, err
 		}
 		cooked.includeAfter = &parsedIncludeAfter
+	}
+
+	versionsChan := make(chan string)
+	var filePtr *os.File
+	// Get file path from user which would contain list of all versionIDs
+	// Process the file line by line and then prepare a list of all version ids of the blob.
+	if raw.listOfVersionIDs != "" {
+		filePtr, err = os.Open(raw.listOfVersionIDs)
+		if err != nil {
+			return cooked, fmt.Errorf("cannot open %s file passed with the list-of-versions flag", raw.listOfVersionIDs)
+		}
+	}
+
+	go func() {
+		defer close(versionsChan)
+		addToChannel := func(v string) {
+			if len(v) > 0 {
+				versionsChan <- v
+			}
+		}
+
+		if filePtr != nil {
+			scanner := bufio.NewScanner(filePtr)
+			checkBOM := false
+			for scanner.Scan() {
+				v := scanner.Text()
+
+				if !checkBOM {
+					v = strings.TrimPrefix(v, utf8BOM)
+					checkBOM = true
+				}
+
+				addToChannel(v)
+			}
+		}
+	}()
+
+	if raw.listOfVersionIDs != "" {
+		cooked.listOfVersionIDs = versionsChan
 	}
 
 	cooked.metadata = raw.metadata
@@ -786,6 +826,8 @@ type cookedCopyCmdArgs struct {
 	excludeFileAttributes []string
 	includeAfter          *time.Time
 
+	// list of version ids
+	listOfVersionIDs chan string
 	// filters from flags
 	listOfFilesChannel chan string // Channels are nullable.
 	recursive          bool
@@ -796,7 +838,7 @@ type cookedCopyCmdArgs struct {
 	autoDecompress     bool
 
 	// options from flags
-	blockSize uint32
+	blockSize int64
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType          []azblob.BlobType
 	blobType                 common.BlobType
@@ -957,7 +999,7 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	return nil
 }
 
-func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.ResourceString, blockSize uint32) error {
+func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.ResourceString, blockSize int64) error {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// if no block size is set, then use default value
@@ -1532,7 +1574,7 @@ func init() {
 		"In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false to bypass copying access tier. (default true). ")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sSourceChangeValidation, "s2s-detect-source-changed", false, "Detect if the source file/blob changes while it is being read. (This parameter only applies to service to service copies, because the corresponding check is permanently enabled for uploads and downloads.)")
 	cpCmd.PersistentFlags().StringVar(&raw.s2sInvalidMetadataHandleOption, "s2s-handle-invalid-metadata", common.DefaultInvalidMetadataHandleOption.String(), "Specifies how invalid metadata keys are handled. Available options: ExcludeIfInvalid, FailIfInvalid, RenameIfInvalid. (default 'ExcludeIfInvalid').")
-
+	cpCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-versions", "", "Specifies a file where each version id is listed on a separate line. Ensure that the source must point to a single blob and all the version ids specified in the file using this flag must belong to the source blob only. AzCopy will download the specified versions in the destination folder provided.")
 	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
 	// right before transferring in ste(backend).
 	// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),

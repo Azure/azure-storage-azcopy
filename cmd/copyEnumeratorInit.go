@@ -4,13 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
+	"log"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -51,7 +53,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.DestLengthValidation = cca.CheckLength
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
 
-	traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, cca.includeDirectoryStubs, func(common.EntityType) {})
+	traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, cca.includeDirectoryStubs, func(common.EntityType) {}, cca.listOfVersionIDs)
 
 	if err != nil {
 		return nil, err
@@ -65,7 +67,9 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// Check if the destination is a directory so we can correctly decide where our files land
 	isDestDir := cca.isDestDirectory(cca.destination, &ctx)
-
+	if cca.listOfVersionIDs != nil && (!(cca.fromTo == common.EFromTo.BlobLocal() || cca.fromTo == common.EFromTo.BlobTrash()) || isSourceDir || !isDestDir) {
+		log.Fatalf("Either source is not a blob or destination is not a local folder")
+	}
 	srcLevel, err := determineLocationLevel(cca.source.Value, cca.fromTo.From(), true)
 
 	if err != nil {
@@ -262,7 +266,7 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, false, func(common.EntityType) {})
+	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, false, func(common.EntityType) {}, cca.listOfVersionIDs)
 
 	if err != nil {
 		return false
@@ -501,7 +505,11 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 				// Our source points to a specific file (and so has no relative path)
 				// but our dest does not point to a specific file, it just points to a directory,
 				// and so relativePath needs the _name_ of the source.
-				relativePath = "/" + object.name
+				processedVID := ""
+				if len(object.blobVersionID) > 0 {
+					processedVID = strings.ReplaceAll(object.blobVersionID, ":", "-") + "-"
+				}
+				relativePath += "/" + processedVID + object.name
 			} else {
 				relativePath = ""
 			}
@@ -527,14 +535,14 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 		rootDir := filepath.Base(cca.source.Value)
 
 		/* In windows, when a user tries to copy whole volume (eg. D:\),  the upload destination
-		will contains "//"" in the files/directories names because of rootDir = "\" prefix. 
+		will contains "//"" in the files/directories names because of rootDir = "\" prefix.
 		(e.g. D:\file.txt will end up as //file.txt).
 		Following code will get volume name from source and add volume name as prefix in rootDir
 		*/
 		if runtime.GOOS == "windows" && rootDir == `\` {
 			rootDir = filepath.VolumeName(common.ToShortPath(cca.source.Value))
 		}
-		
+
 		if cca.fromTo.From().IsRemote() {
 			ueRootDir, err := url.PathUnescape(rootDir)
 

@@ -268,6 +268,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			SrcMetadataLength:           int16(srcMetadataLength),
 			SrcBlobTypeLength:           int16(len(order.Transfers[t].BlobType)),
 			SrcBlobTierLength:           int16(len(order.Transfers[t].BlobTier)),
+			SrcBlobVersionIDLength:      int16(len(order.Transfers[t].BlobVersionID)),
 
 			atomicTransferStatus: common.ETransferStatus.Started(), // Default
 			//ChunkNum:                getNumChunks(uint64(order.Transfers[t].SourceSize), uint64(data.BlockSize)),
@@ -280,7 +281,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		currentSrcStringOffset += int64(jppt.SrcLength + jppt.DstLength + jppt.SrcContentTypeLength +
 			jppt.SrcContentEncodingLength + jppt.SrcContentLanguageLength + jppt.SrcContentDispositionLength +
 			jppt.SrcCacheControlLength + jppt.SrcContentMD5Length + jppt.SrcMetadataLength +
-			jppt.SrcBlobTypeLength + jppt.SrcBlobTierLength)
+			jppt.SrcBlobTypeLength + jppt.SrcBlobTierLength + jppt.SrcBlobVersionIDLength)
 	}
 
 	// All the transfers were written; now write each transfer's src/dst strings
@@ -346,6 +347,11 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		}
 		if len(order.Transfers[t].BlobTier) != 0 {
 			bytesWritten, err = file.WriteString(string(order.Transfers[t].BlobTier))
+			common.PanicIfErr(err)
+			eof += int64(bytesWritten)
+		}
+		if len(order.Transfers[t].BlobVersionID) != 0 {
+			bytesWritten, err = file.WriteString(order.Transfers[t].BlobVersionID)
 			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}

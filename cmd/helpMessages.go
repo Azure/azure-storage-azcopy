@@ -109,6 +109,10 @@ Download a subset of containers within a storage account by using a wildcard sym
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container*name]" "/path/to/dir" --recursive
 
+Download all the versions of a blob from Azure Storage to local directory. Ensure that source is a valid blob, destination is a local folder and versionidsFile which takes in a path to the file where each version is written on a separate line. All the specified versions will get downloaded in the destination folder specified.
+
+  - azcopy cp "https://[srcaccount].blob.core.windows.net/[containername]/[blobname]" "/path/to/dir" --list-of-versions="/another/path/to/dir/[versionidsFile]"
+
 Copy a single blob to another blob by using a SAS token.
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
@@ -292,6 +296,10 @@ Remove an entire virtual directory but exclude certain blobs from the scope (For
 
    - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --exclude-pattern="foo*;*bar"
 
+Remove specified version ids of a blob from Azure Strorage. Ensure that source is a valid blob and versionidsFile which takes in a path to the file where each version is written on a separate line. All the specified versions will be removed from Azure Storage.
+
+  - azcopy rm "https://[srcaccount].blob.core.windows.net/[containername]/[blobname]" "/path/to/dir" --list-of-versions="/path/to/dir/[versionidsFile]"
+
 Remove specific blobs and virtual directories by putting their relative paths (NOT URL-encoded) in a file:
 
    - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/parent/dir]" --recursive=true --list-of-files=/usr/bar/list.txt
@@ -336,6 +344,9 @@ The built-in lookup table is small but on Unix it is augmented by the local syst
   - /etc/apache/mime.types
 
 On Windows, MIME types are extracted from the registry.
+
+Please also note that sync works off of the last modified times exclusively. So in the case of Azure File <-> Azure File,
+the header field Last-Modified is used instead of x-ms-file-change-time, which means that metadata changes at the source can also trigger a full copy.
 `
 
 const syncCmdExample = `

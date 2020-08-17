@@ -50,7 +50,7 @@ type URLHolder interface {
 type azureFileSenderBase struct {
 	jptm         IJobPartTransferMgr
 	fileOrDirURL URLHolder
-	chunkSize    uint32
+	chunkSize    int64
 	numChunks    uint32
 	pipeline     pipeline.Pipeline
 	pacer        pacer
@@ -127,7 +127,7 @@ func (u *azureFileSenderBase) dirURL() azfile.DirectoryURL {
 	return u.fileOrDirURL.(azfile.DirectoryURL)
 }
 
-func (u *azureFileSenderBase) ChunkSize() uint32 {
+func (u *azureFileSenderBase) ChunkSize() int64 {
 	return u.chunkSize
 }
 

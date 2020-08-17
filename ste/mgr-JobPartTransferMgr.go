@@ -89,7 +89,7 @@ type IJobPartTransferMgr interface {
 }
 
 type TransferInfo struct {
-	BlockSize              uint32
+	BlockSize              int64
 	Source                 string
 	SourceSize             int64
 	Destination            string
@@ -183,6 +183,8 @@ type jobPartTransferMgr struct {
 
 	numChunks uint32
 
+	transferInfo *TransferInfo
+
 	actionAfterLastChunk func()
 
 	/*
@@ -229,11 +231,15 @@ func (jptm *jobPartTransferMgr) GetSourceCompressionType() (common.CompressionTy
 }
 
 func (jptm *jobPartTransferMgr) Info() TransferInfo {
+	if jptm.transferInfo != nil {
+		return *jptm.transferInfo
+	}
+
 	plan := jptm.jobPartMgr.Plan()
 	src, dst, _ := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
 
-	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType :=
+	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType, versionID :=
 		plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
 	// If the length of destination SAS is greater than 0
@@ -272,19 +278,42 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		src = sUrl.String()
 	}
 
+	if versionID != "" {
+		versionID = "versionId=" + versionID
+		sURL, e := url.Parse(src)
+		if e != nil {
+			panic(e)
+		}
+		if len(sURL.RawQuery) > 0 {
+			sURL.RawQuery += "&" + versionID
+		} else {
+			sURL.RawQuery = versionID
+		}
+		src = sURL.String()
+	}
+
 	sourceSize := plan.Transfer(jptm.transferIndex).SourceSize
 	var blockSize = dstBlobData.BlockSize
 	// If the blockSize is 0, then User didn't provide any blockSize
 	// We need to set the blockSize in such way that number of blocks per blob
 	// does not exceeds 50000 (max number of block per blob)
 	if blockSize == 0 {
-		blockSize = uint32(common.DefaultBlockBlobBlockSize)
-		for ; uint32(sourceSize/int64(blockSize)) > common.MaxNumberOfBlocksPerBlob; blockSize = 2 * blockSize {
+		blockSize = common.DefaultBlockBlobBlockSize
+		for ; uint32(sourceSize/blockSize) > common.MaxNumberOfBlocksPerBlob; blockSize = 2 * blockSize {
+			if blockSize > common.BlockSizeThreshold {
+				/*
+				 * For a RAM usage of 0.5G/core, we would have 4G memory on typical 8 core device, meaning at a blockSize of 256M,
+				 * we can have 4 blocks in core, waiting for a disk or n/w operation. Any higher block size would *sort of*
+				 * serialize n/w and disk operations, and is better avoided.
+				 */
+				blockSize = sourceSize / common.MaxNumberOfBlocksPerBlob
+				break
+			}
 		}
 	}
-	blockSize = common.Iffuint32(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
+	blockSize = common.Iffint64(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
 
-	return TransferInfo{
+	jptm.transferInfo = &TransferInfo{
 		BlockSize:                      blockSize,
 		Source:                         src,
 		SourceSize:                     sourceSize,
@@ -303,6 +332,8 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		SrcBlobType:    srcBlobType,
 		S2SSrcBlobTier: srcBlobTier,
 	}
+
+	return *jptm.transferInfo
 }
 
 func (jptm *jobPartTransferMgr) Context() context.Context {

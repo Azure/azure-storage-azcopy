@@ -116,7 +116,7 @@ func (jm *jobMgr) reset(appCtx context.Context, commandString string) IJobMgr {
 	// since the log file is opened in case of resume, list and many other operations
 	// for which commandString passed is empty, the length check is added
 	if len(commandString) > 0 {
-		jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Job-Command %s", commandString))
+		jm.logger.Log(pipeline.LogError, fmt.Sprintf("Job-Command %s", commandString))
 	}
 	jm.logConcurrencyParameters()
 	jm.ctx, jm.cancel = context.WithCancel(appCtx)
