@@ -21,7 +21,7 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"testing"
 )
 

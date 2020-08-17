@@ -69,7 +69,7 @@ func TestProperties_NameValueMetadataCanBeUploaded(t *testing.T) {
 }
 
 // TODO: add some tests (or modify the above) to make assertions about case preservation (or not) in metadata
-//    See https://github.com/Azure/azure-storage-azcopy/issues/113 (which incidentally, I'm not observing in the tests above, for reasons unknown)
+//    See https://github.com/Azure/azure-storage-azcopy/v10/issues/113 (which incidentally, I'm not observing in the tests above, for reasons unknown)
 
 /* todo
 func TestProperties_SMBDates(t *testing.T) {

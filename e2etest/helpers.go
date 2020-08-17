@@ -27,7 +27,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
 	"io/ioutil"
 	"math/rand"
@@ -36,8 +36,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	minio "github.com/minio/minio-go"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"

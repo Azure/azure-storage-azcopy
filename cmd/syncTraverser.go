@@ -27,8 +27,8 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
 // TODO: Get rid of highly situational constructors.

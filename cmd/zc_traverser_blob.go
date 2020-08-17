@@ -23,7 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common/parallel"
+	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 	"net/url"
 	"strings"
 
@@ -31,7 +31,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/pkg/errors"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // allow us to iterate through a path pointing to the blob endpoint
@@ -219,8 +219,6 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			cancelWorkers()
 			return workerError
 		}
-
-		
 
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(common.EEntityType.File())

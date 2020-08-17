@@ -1,4 +1,4 @@
-module github.com/Azure/azure-storage-azcopy
+module github.com/Azure/azure-storage-azcopy/v10
 
 require (
 	github.com/Azure/azure-pipeline-go v0.2.3

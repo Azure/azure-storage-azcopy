@@ -1,16 +1,16 @@
 package cmd
 
-import "github.com/Azure/azure-storage-azcopy/common"
+import "github.com/Azure/azure-storage-azcopy/v10/common"
 
 // ===================================== ROOT COMMAND ===================================== //
 const rootCmdShortDescription = "AzCopy is a command line tool that moves data into and out of Azure Storage."
 
 const rootCmdLongDescription = "AzCopy " + common.AzcopyVersion +
 	`
-Project URL: github.com/Azure/azure-storage-azcopy
+Project URL: github.com/Azure/azure-storage-azcopy/v10
 
 AzCopy is a command line tool that moves data into and out of Azure Storage.
-To report issues or to learn more about the tool, go to github.com/Azure/azure-storage-azcopy
+To report issues or to learn more about the tool, go to github.com/Azure/azure-storage-azcopy/v10
 
 The general format of the commands is: 'azcopy [command] [arguments] --[flag-name]=[flag-value]'.
 `

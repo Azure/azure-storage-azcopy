@@ -34,7 +34,7 @@ import (
 	"github.com/minio/minio-go"
 	"github.com/minio/minio-go/pkg/credentials"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 )
 
 // ==============================================================================================
