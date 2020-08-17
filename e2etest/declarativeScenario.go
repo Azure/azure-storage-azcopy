@@ -25,7 +25,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"reflect"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -305,23 +304,23 @@ func (s *scenario) validateMetadata(expected, actual map[string]string) {
 }
 
 func (s *scenario) validateContentHeaders(expected, actual *contentHeaders) {
-	s.a.Assert(expected, equals(), actual, fmt.Sprintf("Content header mismatch: Expected %+v, obtained %+v",
-		reflect.ValueOf(expected), reflect.ValueOf(actual)))
+	s.a.Assert(expected, equals(), actual, fmt.Sprintf("Content header mismatch: Expected %v, obtained %v",
+		expected, actual))
 }
 
 func (s *scenario) validateCreateTime(expected, actual *time.Time) {
-	s.a.Assert(expected, equals(), actual, "Create time mismatch: Expected %s, obtained %s",
-		expected.Format(time.RFC3339), actual.Format(time.RFC3339))
+	s.a.Assert(expected, equals(), actual, fmt.Sprintf("Create time mismatch: Expected %v, obtained %v",
+		expected, actual))
 }
 
 func (s *scenario) validateLastWriteTime(expected, actual *time.Time) {
-	s.a.Assert(expected, equals(), actual, "Create time mismatch: Expected %s, obtained %s",
-		expected.Format(time.RFC3339), actual.Format(time.RFC3339))
+	s.a.Assert(expected, equals(), actual, fmt.Sprintf("Create time mismatch: Expected %v, obtained %v",
+		expected, actual))
 }
 
 func (s *scenario) validateSMBAttrs(expected, actual *uint32) {
-	s.a.Assert(expected, equals(), actual, fmt.Sprintf("SMB Attrs mismatch: Expected %d, obtained, %d",
-		reflect.ValueOf(expected), reflect.ValueOf(actual)))
+	s.a.Assert(expected, equals(), actual, fmt.Sprintf("SMB Attrs mismatch: Expected %v, obtained, %v",
+		expected, actual))
 }
 
 func (s *scenario) cleanup() {

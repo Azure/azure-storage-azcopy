@@ -21,8 +21,10 @@
 package e2etest
 
 import (
+	"encoding/hex"
 	"fmt"
 	"math"
+	"reflect"
 	"strings"
 	"time"
 
@@ -40,6 +42,25 @@ type contentHeaders struct {
 	contentLanguage    *string
 	contentType        *string
 	contentMD5         []byte
+}
+
+func (h *contentHeaders) String() string {
+	var ret string
+	if h == nil {
+		return "[nil]"
+	}
+
+	ret += "[\n"
+
+	ret += fmt.Sprintln("cacheControl: " + reflect.ValueOf(h.cacheControl).Elem().String())
+	ret += fmt.Sprintln("contentDisposition: " + reflect.ValueOf(h.contentDisposition).Elem().String())
+	ret += fmt.Sprintln("contentEncoding: " + reflect.ValueOf(h.contentLanguage).Elem().String())
+	ret += fmt.Sprintln("contentType: " + reflect.ValueOf(h.contentType).Elem().String())
+	ret += fmt.Sprintln("contentMD5: " + hex.EncodeToString(h.contentMD5))
+
+	ret += "]\n"
+
+	return ret
 }
 
 // The full set of properties, dates, info etc, that we can potentially preserve for a file or folder
