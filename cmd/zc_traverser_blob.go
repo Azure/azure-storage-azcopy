@@ -220,7 +220,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			return workerError
 		}
 
-
+		
 
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(common.EEntityType.File())

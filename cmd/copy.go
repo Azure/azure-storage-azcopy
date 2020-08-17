@@ -77,6 +77,7 @@ type rawCopyCmdArgs struct {
 	includeAfter          string
 	legacyInclude         string // used only for warnings
 	legacyExclude         string // used only for warnings
+	listOfVersionIDs      string
 
 	// filters from flags
 	listOfFilesToCopy string
@@ -436,6 +437,45 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		cooked.includeAfter = &parsedIncludeAfter
 	}
 
+	versionsChan := make(chan string)
+	var filePtr *os.File
+	// Get file path from user which would contain list of all versionIDs
+	// Process the file line by line and then prepare a list of all version ids of the blob.
+	if raw.listOfVersionIDs != "" {
+		filePtr, err = os.Open(raw.listOfVersionIDs)
+		if err != nil {
+			return cooked, fmt.Errorf("cannot open %s file passed with the list-of-versions flag", raw.listOfVersionIDs)
+		}
+	}
+
+	go func() {
+		defer close(versionsChan)
+		addToChannel := func(v string) {
+			if len(v) > 0 {
+				versionsChan <- v
+			}
+		}
+
+		if filePtr != nil {
+			scanner := bufio.NewScanner(filePtr)
+			checkBOM := false
+			for scanner.Scan() {
+				v := scanner.Text()
+
+				if !checkBOM {
+					v = strings.TrimPrefix(v, utf8BOM)
+					checkBOM = true
+				}
+
+				addToChannel(v)
+			}
+		}
+	}()
+
+	if raw.listOfVersionIDs != "" {
+		cooked.listOfVersionIDs = versionsChan
+	}
+
 	cooked.metadata = raw.metadata
 	cooked.contentType = raw.contentType
 	cooked.contentEncoding = raw.contentEncoding
@@ -786,6 +826,8 @@ type cookedCopyCmdArgs struct {
 	excludeFileAttributes []string
 	includeAfter          *time.Time
 
+	// list of version ids
+	listOfVersionIDs chan string
 	// filters from flags
 	listOfFilesChannel chan string // Channels are nullable.
 	recursive          bool
@@ -1532,7 +1574,7 @@ func init() {
 		"In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false to bypass copying access tier. (default true). ")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sSourceChangeValidation, "s2s-detect-source-changed", false, "Detect if the source file/blob changes while it is being read. (This parameter only applies to service to service copies, because the corresponding check is permanently enabled for uploads and downloads.)")
 	cpCmd.PersistentFlags().StringVar(&raw.s2sInvalidMetadataHandleOption, "s2s-handle-invalid-metadata", common.DefaultInvalidMetadataHandleOption.String(), "Specifies how invalid metadata keys are handled. Available options: ExcludeIfInvalid, FailIfInvalid, RenameIfInvalid. (default 'ExcludeIfInvalid').")
-
+	cpCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-versions", "", "Specifies a file where each version id is listed on a separate line. Ensure that the source must point to a single blob and all the version ids specified in the file using this flag must belong to the source blob only. AzCopy will download the specified versions in the destination folder provided.")
 	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
 	// right before transferring in ste(backend).
 	// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),

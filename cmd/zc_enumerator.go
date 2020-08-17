@@ -79,7 +79,8 @@ type storedObject struct {
 	// access tier, only included by blob traverser.
 	blobAccessTier azblob.AccessTierType
 	// metadata, included in S2S transfers
-	Metadata common.Metadata
+	Metadata      common.Metadata
+	blobVersionID string
 }
 
 const (
@@ -164,6 +165,7 @@ func (s *storedObject) ToNewCopyTransfer(
 		ContentMD5:         s.md5,
 		Metadata:           s.Metadata,
 		BlobType:           s.blobType,
+		BlobVersionID:      s.blobVersionID,
 		// set this below, conditionally: BlobTier
 	}
 
@@ -292,7 +294,7 @@ type enumerationCounterFunc func(entityType common.EntityType)
 // followSymlinks is only required for local resources (defaults to false)
 // errorOnDirWOutRecursive is used by copy.
 func initResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo,
-	followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc) (resourceTraverser, error) {
+	followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string) (resourceTraverser, error) {
 	var output resourceTraverser
 	var p *pipeline.Pipeline
 
@@ -388,6 +390,8 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 			}
 
 			output = newBlobAccountTraverser(resourceURL, *p, *ctx, includeDirectoryStubs, incrementEnumerationCounter)
+		} else if listOfVersionIds != nil {
+			output = newBlobVersionsTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds)
 		} else {
 			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter)
 		}

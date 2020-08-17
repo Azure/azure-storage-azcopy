@@ -109,6 +109,10 @@ Download a subset of containers within a storage account by using a wildcard sym
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container*name]" "/path/to/dir" --recursive
 
+Download all the versions of a blob from Azure Storage to local directory. Ensure that source is a valid blob, destination is a local folder and versionidsFile which takes in a path to the file where each version is written on a separate line. All the specified versions will get downloaded in the destination folder specified.
+
+  - azcopy cp "https://[srcaccount].blob.core.windows.net/[containername]/[blobname]" "/path/to/dir" --list-of-versions="/another/path/to/dir/[versionidsFile]"
+
 Copy a single blob to another blob by using a SAS token.
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
@@ -291,6 +295,10 @@ Remove a subset of blobs in a virtual directory (For example: remove only jpg an
 Remove an entire virtual directory but exclude certain blobs from the scope (For example: every blob that starts with foo or ends with bar):
 
    - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --exclude-pattern="foo*;*bar"
+
+Remove specified version ids of a blob from Azure Strorage. Ensure that source is a valid blob and versionidsFile which takes in a path to the file where each version is written on a separate line. All the specified versions will be removed from Azure Storage.
+
+  - azcopy rm "https://[srcaccount].blob.core.windows.net/[containername]/[blobname]" "/path/to/dir" --list-of-versions="/path/to/dir/[versionidsFile]"
 
 Remove specific blobs and virtual directories by putting their relative paths (NOT URL-encoded) in a file:
 

@@ -914,8 +914,9 @@ type CopyTransfer struct {
 	Metadata           Metadata
 
 	// Properties for S2S blob copy
-	BlobType azblob.BlobType
-	BlobTier azblob.AccessTierType
+	BlobType      azblob.BlobType
+	BlobTier      azblob.AccessTierType
+	BlobVersionID string
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -239,7 +239,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	src, dst, _ := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
 
-	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType :=
+	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType, versionID :=
 		plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
 	// If the length of destination SAS is greater than 0
@@ -276,6 +276,20 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 			sUrl.RawQuery = srcSAS
 		}
 		src = sUrl.String()
+	}
+
+	if versionID != "" {
+		versionID = "versionId=" + versionID
+		sURL, e := url.Parse(src)
+		if e != nil {
+			panic(e)
+		}
+		if len(sURL.RawQuery) > 0 {
+			sURL.RawQuery += "&" + versionID
+		} else {
+			sURL.RawQuery = versionID
+		}
+		src = sURL.String()
 	}
 
 	sourceSize := plan.Transfer(jptm.transferIndex).SourceSize
