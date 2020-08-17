@@ -22,9 +22,10 @@ package ste
 
 import (
 	"context"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // pacer is used by callers whose activity must be controlled to a certain pace
@@ -71,7 +72,7 @@ type tokenBucketPacer struct {
 	done                       chan struct{}
 }
 
-func newTokenBucketPacer(bytesPerSecond int64, expectedBytesPerCoarseRequest uint32) *tokenBucketPacer {
+func newTokenBucketPacer(bytesPerSecond int64, expectedBytesPerCoarseRequest int64) *tokenBucketPacer {
 	p := &tokenBucketPacer{atomicTokenBucket: bytesPerSecond / 4, // seed it immediately with part-of-a-second's worth, to avoid a sluggish start
 		atomicTargetBytesPerSecond: bytesPerSecond,
 		expectedBytesPerRequest:    int64(expectedBytesPerCoarseRequest),

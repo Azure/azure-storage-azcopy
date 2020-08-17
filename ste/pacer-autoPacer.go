@@ -22,12 +22,13 @@ package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type autopacer interface {
@@ -75,7 +76,7 @@ var (
 	shouldPaceOncer     sync.Once
 )
 
-func newPageBlobAutoPacer(bytesPerSecond int64, expectedBytesPerRequest uint32, isFair bool, logger common.ILogger) autopacer {
+func newPageBlobAutoPacer(bytesPerSecond int64, expectedBytesPerRequest int64, isFair bool, logger common.ILogger) autopacer {
 
 	shouldPaceOncer.Do(func() {
 		raw := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.PacePageBlobs())
@@ -89,7 +90,7 @@ func newPageBlobAutoPacer(bytesPerSecond int64, expectedBytesPerRequest uint32, 
 	}
 }
 
-func newAutoPacer(bytesPerSecond int64, expectedBytesPerRequest uint32, isFair bool, logger common.ILogger, logPrefix string) autopacer {
+func newAutoPacer(bytesPerSecond int64, expectedBytesPerRequest int64, isFair bool, logger common.ILogger, logPrefix string) autopacer {
 
 	// TODO support an additive increase approach, if/when we use this pacer for account throughput as a whole?
 	//     Why is fairness important there - because there may be other instances of AzCopy hitting the same account,

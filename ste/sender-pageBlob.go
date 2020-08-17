@@ -39,7 +39,7 @@ type pageBlobSenderBase struct {
 	jptm            IJobPartTransferMgr
 	destPageBlobURL azblob.PageBlobURL
 	srcSize         int64
-	chunkSize       uint32
+	chunkSize       int64
 	numChunks       uint32
 	pacer           pacer
 	// Headers and other info that we will apply to the destination
@@ -83,7 +83,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 	chunkSize := transferInfo.BlockSize
 	// If the given chunk Size for the Job is invalid for page blob or greater than maximum page size,
 	// then set chunkSize as maximum pageSize.
-	chunkSize = common.Iffuint32(
+	chunkSize = common.Iffint64(
 		chunkSize > common.DefaultPageBlobChunkSize || (chunkSize%azblob.PageBlobPageBytes != 0),
 		common.DefaultPageBlobChunkSize,
 		chunkSize)
@@ -162,7 +162,7 @@ func (s *pageBlobSenderBase) SendableEntityType() common.EntityType {
 	return common.EEntityType.File()
 }
 
-func (s *pageBlobSenderBase) ChunkSize() uint32 {
+func (s *pageBlobSenderBase) ChunkSize() int64 {
 	return s.chunkSize
 }
 

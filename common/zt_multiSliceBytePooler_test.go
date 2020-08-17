@@ -21,8 +21,9 @@
 package common
 
 import (
-	chk "gopkg.in/check.v1"
 	"math"
+
+	chk "gopkg.in/check.v1"
 )
 
 type multiSliceBytePoolerSuite struct{}
@@ -55,7 +56,7 @@ func (s *multiSliceBytePoolerSuite) TestMultiSliceSlotInfo(c *chk.C) {
 		roundedLogBase2 := int(math.Round(logBase2 + 0.49999999999999)) // rounds up unless already exact(ish)
 
 		// now lets see if the pooler is working as we expect
-		slotIndex, maxCap := getSlotInfo(uint32(x.size))
+		slotIndex, maxCap := getSlotInfo(int64(x.size))
 
 		c.Assert(slotIndex, chk.Equals, roundedLogBase2)     // this what, mathematically, we expect
 		c.Assert(slotIndex, chk.Equals, x.expectedSlotIndex) // this what our test case said (should be same)

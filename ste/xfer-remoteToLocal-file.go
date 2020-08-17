@@ -53,7 +53,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 
 	// step 2: get the source, destination info for the transfer.
 	fileSize := int64(info.SourceSize)
-	downloadChunkSize := int64(info.BlockSize)
+	downloadChunkSize := info.BlockSize
 
 	// step 3: Perform initial checks
 	// If the transfer was cancelled, then report transfer as done

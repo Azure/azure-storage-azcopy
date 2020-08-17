@@ -14,7 +14,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 14
+const DataSchemaVersion common.Version = 15
 
 const (
 	CustomHeaderMaxBytes = 256
@@ -270,7 +270,7 @@ type JobPartPlanDstBlob struct {
 	Metadata       [MetadataMaxBytes]byte
 
 	// Specifies the maximum size of block which determines the number of chunks and chunk size of a transfer
-	BlockSize uint32
+	BlockSize int64
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -162,13 +162,13 @@ func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []strin
 // to use fractions of a MiB. E.g.
 // 0.25 = 256 KiB
 // 0.015625 = 16 KiB
-func blockSizeInBytes(rawBlockSizeInMiB float64) (uint32, error) {
+func blockSizeInBytes(rawBlockSizeInMiB float64) (int64, error) {
 	if rawBlockSizeInMiB < 0 {
 		return 0, errors.New("negative block size not allowed")
 	}
 	rawSizeInBytes := rawBlockSizeInMiB * 1024 * 1024 // internally we use bytes, but users' convenience the command line uses MiB
-	if rawSizeInBytes > math.MaxUint32 {
-		return 0, errors.New("block size too big for uint32")
+	if rawSizeInBytes > math.MaxInt64 {
+		return 0, errors.New("block size too big for int64")
 	}
 	const epsilon = 0.001 // arbitrarily using a tolerance of 1000th of a byte
 	_, frac := math.Modf(rawSizeInBytes)
@@ -176,7 +176,7 @@ func blockSizeInBytes(rawBlockSizeInMiB float64) (uint32, error) {
 	if !isWholeNumber {
 		return 0, fmt.Errorf("while fractional numbers of MiB are allowed as the block size, the fraction must result to a whole number of bytes. %.12f MiB resolves to %.3f bytes", rawBlockSizeInMiB, rawSizeInBytes)
 	}
-	return uint32(math.Round(rawSizeInBytes)), nil
+	return int64(math.Round(rawSizeInBytes)), nil
 }
 
 // validates and transform raw input into cooked input
@@ -796,7 +796,7 @@ type cookedCopyCmdArgs struct {
 	autoDecompress     bool
 
 	// options from flags
-	blockSize uint32
+	blockSize int64
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType          []azblob.BlobType
 	blobType                 common.BlobType
@@ -957,7 +957,7 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	return nil
 }
 
-func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.ResourceString, blockSize uint32) error {
+func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.ResourceString, blockSize int64) error {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// if no block size is set, then use default value
