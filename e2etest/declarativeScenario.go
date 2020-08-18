@@ -304,21 +304,37 @@ func (s *scenario) validateMetadata(expected, actual map[string]string) {
 }
 
 func (s *scenario) validateContentHeaders(expected, actual *contentHeaders) {
+	if expected == nil {
+		// These properties were not explicitly stated for verification
+		return
+	}
 	s.a.Assert(expected, equals(), actual, fmt.Sprintf("Content header mismatch: Expected %v, obtained %v",
 		expected, actual))
 }
 
 func (s *scenario) validateCreateTime(expected, actual *time.Time) {
+	if expected == nil {
+		// These properties were not explicitly stated for verification
+		return
+	}
 	s.a.Assert(expected, equals(), actual, fmt.Sprintf("Create time mismatch: Expected %v, obtained %v",
 		expected, actual))
 }
 
 func (s *scenario) validateLastWriteTime(expected, actual *time.Time) {
+	if expected == nil {
+		// These properties were not explicitly stated for verification
+		return
+	}
 	s.a.Assert(expected, equals(), actual, fmt.Sprintf("Create time mismatch: Expected %v, obtained %v",
 		expected, actual))
 }
 
 func (s *scenario) validateSMBAttrs(expected, actual *uint32) {
+	if expected == nil {
+		// These properties were not explicitly stated for verification
+		return
+	}
 	s.a.Assert(expected, equals(), actual, fmt.Sprintf("SMB Attrs mismatch: Expected %v, obtained, %v",
 		expected, actual))
 }
