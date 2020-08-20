@@ -1463,7 +1463,7 @@ func isStdinPipeIn() (bool, error) {
 	// if the stdin is a named pipe, then we assume there will be data on the stdin
 	// the reason for this assumption is that we do not know when will the data come in
 	// it could come in right away, or come in 10 minutes later
-	return info.Mode()&os.ModeNamedPipe != 0, nil
+	return info.Mode()&(os.ModeNamedPipe|os.ModeSocket) != 0, nil
 }
 
 // TODO check file size, max is 4.75TB
