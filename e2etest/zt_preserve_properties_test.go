@@ -22,6 +22,8 @@ package e2etest
 
 import (
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // Purpose: Tests for preserving transferred properties, info and ACLs.  Both those possessed by the original source file/folder,
@@ -52,7 +54,7 @@ func TestProperties_NameValueMetadataCanBeUploaded(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Copy(), // Sync doesn't support the command-line metadata flag
-		eTestFromTo.AllUploads(),
+		eTestFromTo.Other(common.EFromTo.LocalBlob()), /* Change this to all S2S after we implement GetProperties on Filestore */
 		eValidate.Auto(),
 		params{
 			recursive: true,
