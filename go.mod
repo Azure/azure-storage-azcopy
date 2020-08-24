@@ -2,7 +2,7 @@ module github.com/Azure/azure-storage-azcopy
 
 require (
 	github.com/Azure/azure-pipeline-go v0.2.3
-	github.com/Azure/azure-storage-blob-go v0.10.1-0.20200812020820-59b3010ad575
+	github.com/Azure/azure-storage-blob-go v0.10.1-0.20200824062944-a2f1bbcdc200
 	github.com/Azure/azure-storage-file-go v0.8.0
 	github.com/Azure/go-autorest/autorest/adal v0.8.3
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
