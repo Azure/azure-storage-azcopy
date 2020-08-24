@@ -41,3 +41,13 @@ func (osScenarioHelper) setAttributesForLocalFiles(c asserter, dirPath string, f
 func (osScenarioHelper) getFileDates(c asserter, filePath string) (createdTime, lastWriteTime time.Time) {
 	panic("should never be called")
 }
+
+func (osScenarioHelper) getFileAttrs(c asserter, filepath string) *uint32 {
+	var ret uint32
+	return &ret
+}
+
+func (osScenarioHelper) getFileSDDLString(c asserter, filepath string) *string {
+	ret := ""
+	return &ret
+}
