@@ -3,6 +3,8 @@ github.com/Azure/azure-pipeline-go v0.2.3 h1:7U9HBg1JFK3jHl5qmo4CTZKFTVgMwdFHMVt
 github.com/Azure/azure-pipeline-go v0.2.3/go.mod h1:x841ezTBIMG6O3lAcl8ATHnsOPVl2bqk7S3ta6S6u4k=
 github.com/Azure/azure-storage-blob-go v0.10.1-0.20200812020820-59b3010ad575 h1:HCjBwzJuZMwD3YV9smcW0RasmVcyInEoeQkjguQZ8JY=
 github.com/Azure/azure-storage-blob-go v0.10.1-0.20200812020820-59b3010ad575/go.mod h1:xYPuViXYxj3pq75sxfxeUn0EIXMEUfyTCBPlPPHZqPM=
+github.com/Azure/azure-storage-blob-go v0.10.1-0.20200824104847-02c174f6f946 h1:mUYG4bsPYa6UZdDY7ZYwvmOlsCiY7qUN+ChLoVxk+lM=
+github.com/Azure/azure-storage-blob-go v0.10.1-0.20200824104847-02c174f6f946/go.mod h1:xYPuViXYxj3pq75sxfxeUn0EIXMEUfyTCBPlPPHZqPM=
 github.com/Azure/azure-storage-file-go v0.8.0 h1:OX8DGsleWLUE6Mw4R/OeWEZMvsTIpwN94J59zqKQnTI=
 github.com/Azure/azure-storage-file-go v0.8.0/go.mod h1:3w3mufGcMjcOJ3w+4Gs+5wsSgkT7xDwWWqMMIrXtW4c=
 github.com/Azure/go-autorest/autorest v0.9.0 h1:MRvx8gncNaXJqOoLmhNjUAKh33JJF8LyxPhomEtOsjs=

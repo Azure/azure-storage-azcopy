@@ -115,6 +115,7 @@ func BlobTierAllowed(destTier azblob.AccessTierType) bool {
 }
 
 func AttemptSetBlobTier(jptm IJobPartTransferMgr, blobTier azblob.AccessTierType, blobURL azblob.BlobURL, ctx context.Context) {
+
 	if jptm.IsLive() && blobTier != azblob.AccessTierNone {
 		// Set the latest service version from sdk as service version in the context.
 		ctxWithLatestServiceVersion := context.WithValue(ctx, ServiceAPIVersionOverride, azblob.ServiceVersion)

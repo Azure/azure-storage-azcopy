@@ -229,18 +229,19 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
 	}
 
+	destBlobTier := azblob.PremiumPageBlobAccessTierP10
 	if _, err := s.destPageBlobURL.Create(s.jptm.Context(),
 		s.srcSize,
 		0,
 		s.headersToApply,
 		s.metadataToApply,
-		azblob.BlobAccessConditions{}); err != nil {
+		azblob.BlobAccessConditions{}, destBlobTier); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}
 
 	// Set tier, https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
-	AttemptSetBlobTier(s.jptm, s.destBlobTier, s.destPageBlobURL.BlobURL, s.jptm.Context())
+	// AttemptSetBlobTier(s.jptm, s.destBlobTier, s.destPageBlobURL.BlobURL, s.jptm.Context())
 
 	return
 }
