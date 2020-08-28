@@ -114,47 +114,47 @@ func BlobTierAllowed(destTier azblob.AccessTierType) bool {
 	}
 }
 
-func AttemptSetBlobTier(jptm IJobPartTransferMgr, blobTier azblob.AccessTierType, blobURL azblob.BlobURL, ctx context.Context) {
-
-	if jptm.IsLive() && blobTier != azblob.AccessTierNone {
-		// Set the latest service version from sdk as service version in the context.
-		ctxWithLatestServiceVersion := context.WithValue(ctx, ServiceAPIVersionOverride, azblob.ServiceVersion)
-
-		// Let's check if we can confirm we'll be able to check the destination blob's account info.
-		// A SAS token, even with write-only permissions is enough. OR, OAuth with the account owner.
-		// We can't guess that last information, so we'll take a gamble and try to get account info anyway.
-		destParts := azblob.NewBlobURLParts(blobURL.URL())
-		mustGet := destParts.SAS.Encode() != ""
-
-		prepareDestAccountInfo(blobURL, jptm, ctxWithLatestServiceVersion, mustGet)
-		tierAvailable := BlobTierAllowed(blobTier)
-
-		if tierAvailable {
-			_, err := blobURL.SetTier(ctxWithLatestServiceVersion, blobTier, azblob.LeaseAccessConditions{})
-			if err != nil {
-				// This uses a currently true assumption about the code:
-				// the blobTier passed into this is the destination blob tier, which may be overridden by the user.
-				// If the user overrides the blob tier, S2SSrcBlobTier is not overridden.
-				if jptm.Info().S2SSrcBlobTier == blobTier {
-					jptm.LogTransferInfo(pipeline.LogError, jptm.Info().Source, jptm.Info().Destination, "Failed to replicate blob tier at destination. Try transferring with the flag --s2s-preserve-access-tier=false")
-					s2sAccessTierFailureLogStdout.Do(func() {
-						glcm := common.GetLifecycleMgr()
-						glcm.Info("One or more blobs have failed blob tier replication at the destination. Try transferring with the flag --s2s-preserve-access-tier=false")
-					})
-				}
-
-				// If we know the destination tier is possible, something's wrong and we should error out.
-				if tierSetPossibleFail {
-					jptm.LogTransferInfo(pipeline.LogWarning, jptm.Info().Source, jptm.Info().Destination, "Cannot set destination block blob to the pending access tier ("+string(blobTier)+"), because either the destination account or blob type does not support it. The transfer will still succeed.")
-				} else {
-					jptm.FailActiveSendWithStatus("Setting tier", err, common.ETransferStatus.BlobTierFailure())
-				}
-			}
-		} else {
-			jptm.LogTransferInfo(pipeline.LogWarning, jptm.Info().Source, jptm.Info().Destination, "The intended tier ("+string(blobTier)+") isn't available on the destination blob type or storage account, so it was left as the default.")
-		}
-	}
-}
+//func AttemptSetBlobTier(jptm IJobPartTransferMgr, blobTier azblob.AccessTierType, blobURL azblob.BlobURL, ctx context.Context) {
+//
+//	if jptm.IsLive() && blobTier != azblob.AccessTierNone {
+//		// Set the latest service version from sdk as service version in the context.
+//		ctxWithLatestServiceVersion := context.WithValue(ctx, ServiceAPIVersionOverride, azblob.ServiceVersion)
+//
+//		// Let's check if we can confirm we'll be able to check the destination blob's account info.
+//		// A SAS token, even with write-only permissions is enough. OR, OAuth with the account owner.
+//		// We can't guess that last information, so we'll take a gamble and try to get account info anyway.
+//		destParts := azblob.NewBlobURLParts(blobURL.URL())
+//		mustGet := destParts.SAS.Encode() != ""
+//
+//		prepareDestAccountInfo(blobURL, jptm, ctxWithLatestServiceVersion, mustGet)
+//		tierAvailable := BlobTierAllowed(blobTier)
+//
+//		if tierAvailable {
+//			_, err := blobURL.SetTier(ctxWithLatestServiceVersion, blobTier, azblob.LeaseAccessConditions{})
+//			if err != nil {
+//				// This uses a currently true assumption about the code:
+//				// the blobTier passed into this is the destination blob tier, which may be overridden by the user.
+//				// If the user overrides the blob tier, S2SSrcBlobTier is not overridden.
+//				if jptm.Info().S2SSrcBlobTier == blobTier {
+//					jptm.LogTransferInfo(pipeline.LogError, jptm.Info().Source, jptm.Info().Destination, "Failed to replicate blob tier at destination. Try transferring with the flag --s2s-preserve-access-tier=false")
+//					s2sAccessTierFailureLogStdout.Do(func() {
+//						glcm := common.GetLifecycleMgr()
+//						glcm.Info("One or more blobs have failed blob tier replication at the destination. Try transferring with the flag --s2s-preserve-access-tier=false")
+//					})
+//				}
+//
+//				// If we know the destination tier is possible, something's wrong and we should error out.
+//				if tierSetPossibleFail {
+//					jptm.LogTransferInfo(pipeline.LogWarning, jptm.Info().Source, jptm.Info().Destination, "Cannot set destination block blob to the pending access tier ("+string(blobTier)+"), because either the destination account or blob type does not support it. The transfer will still succeed.")
+//				} else {
+//					jptm.FailActiveSendWithStatus("Setting tier", err, common.ETransferStatus.BlobTierFailure())
+//				}
+//			}
+//		} else {
+//			jptm.LogTransferInfo(pipeline.LogWarning, jptm.Info().Source, jptm.Info().Destination, "The intended tier ("+string(blobTier)+") isn't available on the destination blob type or storage account, so it was left as the default.")
+//		}
+//	}
+//}
 
 // xfer.go requires just a single xfer function for the whole job.
 // This routine serves that role for uploads and S2S copies, and redirects for each transfer to a file or folder implementation

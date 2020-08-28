@@ -229,13 +229,12 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
 	}
 
-	destBlobTier := azblob.PremiumPageBlobAccessTierP10
 	if _, err := s.destPageBlobURL.Create(s.jptm.Context(),
 		s.srcSize,
 		0,
 		s.headersToApply,
 		s.metadataToApply,
-		azblob.BlobAccessConditions{}, destBlobTier); err != nil {
+		azblob.BlobAccessConditions{}, azblob.PremiumPageBlobAccessTierType(s.destBlobTier)); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}
