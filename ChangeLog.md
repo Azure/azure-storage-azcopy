@@ -5,8 +5,8 @@
 
 ### New features
 
-1. ``azcopy sync`` now supports the persistence of ACLs between supported resources (Windows and Azure Files) using the --persist-smb-permissions flag.
-1. ``azcopy sync`` now supports the persistence of SMB property info between supported resources (Windows and Azure Files) using the --persist-smb-info flag. The information that can be preserved is Created Time, Last Write Time and Attributes (e.g. Read Only).
+1. ``azcopy sync`` now supports the persistence of ACLs between supported resources (Azure Files) using the ``--preserve-smb-permissions`` flag.
+1. ``azcopy sync`` now supports the persistence of SMB property info between supported resources (Azure Files) using the ``--preserve-smb-info`` flag. The information that can be preserved is Created Time, Last Write Time and Attributes (e.g. Read Only).
 1. Added support for [higher block & blob size](https://docs.microsoft.com/en-us/rest/api/storageservices/put-block#remarks) 
     - For service version ``2019-12-12`` or higher, the block size can now be less than or equal to ``4000 MiB``. The maximum size of a block blob therefore can be ``190.7 TiB (4000 MiB X 50,000 blocks)``
 1. Added support for [Blob Versioning](https://docs.microsoft.com/en-us/azure/storage/blobs/versioning-overview)
