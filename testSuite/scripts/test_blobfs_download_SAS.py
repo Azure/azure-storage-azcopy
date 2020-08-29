@@ -5,13 +5,14 @@ import shutil
 
 class BlobFs_Download_SAS_User_Scenarios(unittest.TestCase):
     def setUp(self):
-        self.cachedAzCopyOAuthTokenInfo = os.environ['AZCOPY_OAUTH_TOKEN_INFO']
-        os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = ''
+        cmd = util.Command("login").add_arguments("--service-principal").add_flags("application-id", os.environ['ACTIVE_DIRECTORY_APPLICATION_ID'])
+        cmd.execute_azcopy_copy_command()
         self.cachedAzCopyAccountKey = os.environ['ACCOUNT_KEY']
         os.environ['ACCOUNT_KEY'] = ''
 
     def tearDown(self):
-        os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = self.cachedAzCopyOAuthTokenInfo
+        cmd = util.Command("logout")
+        cmd.execute_azcopy_copy_command()
         os.environ['ACCOUNT_KEY'] = self.cachedAzCopyAccountKey
 
     def test_blobfs_sas_download_1Kb_file(self):

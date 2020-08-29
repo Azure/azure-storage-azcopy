@@ -76,7 +76,7 @@ jobs:
           # -timeout 25m as our tests typically run between 10-15m and I'd rather have some headroom.
           # "-check.v" (must be after package list) outputs timings
           set -e
-          go test -timeout 25m -race -short -cover ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v"
+          go test -timeout 35m -race -short -cover ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v"
           GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
         name: 'Run_unit_tests'
         env:
@@ -94,14 +94,15 @@ jobs:
           # install the CLFSLoad extension
           pip3 install clfsload
 
-          python ./testSuite/scripts/run.py
+          keyctl session test python ./testSuite/scripts/run.py
         name: 'Run_smoke_tests'
         env:
           ACCOUNT_NAME: $(ACCOUNT_NAME)
           ACCOUNT_KEY: $(ACCOUNT_KEY)
           AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
           AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-          AZCOPY_OAUTH_TOKEN_INFO: $(AZCOPY_OAUTH_TOKEN_INFO)
+          ACTIVE_DIRECTORY_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
+          AZCOPY_SPA_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
           CONTAINER_OAUTH_URL: $(CONTAINER_OAUTH_URL)
           CONTAINER_OAUTH_VALIDATE_SAS_URL: $(CONTAINER_OAUTH_VALIDATE_SAS_URL)
           CONTAINER_SAS_URL: $(CONTAINER_SAS_URL)

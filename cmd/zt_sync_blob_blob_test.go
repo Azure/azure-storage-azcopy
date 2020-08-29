@@ -165,6 +165,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIdenticalDestination(c *chk.C) {
 
 // regular container->container sync where destination is missing some files from source, and also has some extra files
 func (s *cmdIntegrationSuite) TestSyncS2SWithMismatchedDestination(c *chk.C) {
+	c.Skip("Enable after setting Account to non-HNS")
 	bsu := getBSU()
 	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
 	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
@@ -556,6 +557,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SBetweenVirtualDirs(c *chk.C) {
 // examine situation where a blob has the same name as virtual dir
 // trailing slash is used to disambiguate the path as a vdir
 func (s *cmdIntegrationSuite) TestSyncS2SBetweenVirtualDirsWithConflictingBlob(c *chk.C) {
+	c.Skip("Enable after setting Account to non-HNS")
 	bsu := getBSU()
 	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
 	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
