@@ -101,6 +101,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderContainer(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDir(c *chk.C) {
+	c.Skip("Enable after setting Account to non-HNS")
 	bsu := getBSU()
 	vdirName := "vdir1/vdir2/vdir3/"
 
@@ -254,6 +255,7 @@ func (s *cmdIntegrationSuite) TestRemoveWithIncludeAndExcludeFlag(c *chk.C) {
 
 // note: list-of-files flag is used
 func (s *cmdIntegrationSuite) TestRemoveListOfBlobsAndVirtualDirs(c *chk.C) {
+	c.Skip("Enable after setting Account to non-HNS")
 	bsu := getBSU()
 	vdirName := "megadir"
 
@@ -374,6 +376,7 @@ func (s *cmdIntegrationSuite) TestRemoveListOfBlobsWithIncludeAndExclude(c *chk.
 }
 
 func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubs(c *chk.C) {
+	c.Skip("Enable after setting Account to non-HNS")
 	bsu := getBSU()
 	vdirName := "vdir1/"
 
@@ -423,6 +426,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubs(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubsWithListOfFiles(c *chk.C) {
+	c.Skip("Enable after setting Account to non-HNS")
 	bsu := getBSU()
 	vdirName := "vdir1/"
 
