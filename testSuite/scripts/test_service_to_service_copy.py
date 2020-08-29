@@ -12,6 +12,8 @@ import os.path
 class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
 
     def setUp(self):
+        cmd = util.Command("login").add_arguments("--service-principal").add_flags("application-id", os.environ['ACTIVE_DIRECTORY_APPLICATION_ID'])
+        cmd.execute_azcopy_copy_command()
         # init bucket_name
         common_prefix = 's2scopybucket'
 
@@ -21,6 +23,10 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         self.bucket_name_file_blob = util.get_resource_name(common_prefix + 'fileblob')
         self.bucket_name_s3_blob = util.get_resource_name(common_prefix + 's3blob')
         self.bucket_name_block_append_page = util.get_resource_name(common_prefix + 'blockappendpage')
+
+    def tearDown(self):
+        cmd = util.Command("logout")
+        cmd.execute_azcopy_copy_command()
 
     ##################################
     # Test from blob to blob copy.

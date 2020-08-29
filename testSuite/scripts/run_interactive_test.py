@@ -97,7 +97,7 @@ def init():
             check_env_not_exist('CONTAINER_OAUTH_URL') or check_env_not_exist('CONTAINER_OAUTH_VALIDATE_SAS_URL') or \
             check_env_not_exist('SHARE_SAS_URL') or check_env_not_exist('PREMIUM_CONTAINER_SAS_URL') or \
             check_env_not_exist('FILESYSTEM_URL') or check_env_not_exist('ACCOUNT_NAME') or \
-            check_env_not_exist('ACCOUNT_KEY') or check_env_not_exist('AZCOPY_OAUTH_TOKEN_INFO'):
+            check_env_not_exist('ACCOUNT_KEY'):
         parse_config_file_set_env()
 
     # Get the environment variables value
