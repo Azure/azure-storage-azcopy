@@ -550,7 +550,7 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 			if err == nil {
 				rootDir = ueRootDir
 			} else {
-				panic("unexpected un-escapeable rootDir name")
+				panic("unexpected inescapable rootDir name")
 			}
 		}
 
@@ -583,7 +583,7 @@ func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir b
 	isRemoveFromFolderAware := fromTo == common.EFromTo.FileTrash()
 	if bothFolderAware || isRemoveFromFolderAware {
 		if !recursive {
-			return common.EFolderPropertiesOption.NoFolders(), // does't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
+			return common.EFolderPropertiesOption.NoFolders(), // doesn't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
 				"Any empty folders will not be processed, because --recursive was not specified" +
 					getSuffix(false)
 		}

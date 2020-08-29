@@ -88,7 +88,7 @@ func UnfurlSymlinks(symlinkPath string) (result string, err error) {
 				return result, err
 			}
 
-			// Previously, we'd try to detect if the read link was a relative path by appending and stat'ing the item
+			// Previously, we'd try to detect if the read link was a relative path by appending and starting the item
 			// However, it seems to be a fairly unlikely and hard to reproduce scenario upon investigation (Couldn't manage to reproduce the scenario)
 			// So it was dropped. However, on the off chance, we'll still do it if syntactically it makes sense.
 			if len(result) == 0 || result[0] == '.' { // A relative path being "" or "." likely (and in the latter case, on our officially supported OSes, always) means that it's just the same folder.
@@ -418,7 +418,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 
 				if singleFile.IsDir() {
 					continue
-					// it does't make sense to transfer directory properties when not recursing
+					// it doesn't make sense to transfer directory properties when not recurring
 				}
 
 				if t.incrementEnumerationCounter != nil {

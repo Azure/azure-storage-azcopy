@@ -113,11 +113,11 @@ type rawCopyCmdArgs struct {
 	excludeBlobType string
 	// Opt-in flag to persist SMB ACLs to Azure Files.
 	preserveSMBPermissions bool
-	preserveOwner          bool // works in conjunction with perserveSmbPermissions
+	preserveOwner          bool // works in conjunction with preserveSmbPermissions
 	// Opt-in flag to persist additional SMB properties to Azure Files. Named ...info instead of ...properties
 	// because the latter was similar enough to preserveSMBPermissions to induce user error
 	preserveSMBInfo bool
-	// Flag to enable Window's special priviledges
+	// Flag to enable Window's special privileges
 	backupMode bool
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
 	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
@@ -677,7 +677,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 
 	// If the user has provided some input with excludeBlobType flag, parse the input.
 	if len(raw.excludeBlobType) > 0 {
-		// Split the string using delimeter ';' and parse the individual blobType
+		// Split the string using delimiter ';' and parse the individual blobType
 		blobTypes := strings.Split(raw.excludeBlobType, ";")
 		for _, blobType := range blobTypes {
 			var eBlobType common.BlobType
@@ -882,7 +882,7 @@ type cookedCopyCmdArgs struct {
 
 	// Whether the user wants to preserve the SMB ACLs assigned to their files when moving between resources that are SMB ACL aware.
 	preserveSMBPermissions common.PreservePermissionsOption
-	// Whether the user wants to perserve the SMB properties ...
+	// Whether the user wants to preserve the SMB properties ...
 	preserveSMBInfo bool
 
 	// Whether to enable Windows special privileges

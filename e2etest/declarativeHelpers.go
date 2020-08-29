@@ -369,7 +369,7 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 			// temp
 			if fromTo.From() == common.ELocation.S3() ||
 				fromTo.From() == common.ELocation.BlobFS() || fromTo.To() == common.ELocation.BlobFS() {
-				continue // until we impelment the declarativeResoucreManagers
+				continue // until we implement the declarativeResourceManagers
 			}
 
 			// check filter
