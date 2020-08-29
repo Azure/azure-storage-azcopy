@@ -225,12 +225,6 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		cooked.preserveAccessTier = raw.s2sPreserveAccessTier
 	}
 
-	// In case of S2S transfers, log info message to inform the users that MD5 check doesn't work for S2S Transfers.
-	// This is because we cannot calculate MD5 hash of the data stored at a remote locations.
-	if cooked.putMd5 && cooked.fromTo.IsS2S() {
-		glcm.Info(" --put-md5 flag to check data consistency between source and destination doesn't work for S2S Transfers (i.e. When both the source and the destination are remote).")
-	}
-
 	return cooked, nil
 }
 
