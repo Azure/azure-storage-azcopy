@@ -47,10 +47,10 @@ type scenario struct {
 	stripTopDir bool // TODO: figure out how we'll control and use this
 
 	// internal declarative runner state
-	a          asserter
-	state      scenarioState // TODO: does this really need to be a separate struct?
-	needResume bool
-	chToStdin  chan string
+	a                  asserter
+	state              scenarioState // TODO: does this really need to be a separate struct?
+	resumeAfterFailure bool
+	chToStdin          chan string
 }
 
 type scenarioState struct {
@@ -62,6 +62,7 @@ type scenarioState struct {
 // Run runs one test scenario
 func (s *scenario) Run() {
 	defer s.cleanup()
+	defer s.runHook(s.hs.afterRunScenario)
 
 	// setup
 	s.assignSourceAndDest() // what/where are they
@@ -79,13 +80,16 @@ func (s *scenario) Run() {
 	}
 
 	// execute
-	s.runAzCopy()
+	succeeded := s.runAzCopy()
 	if s.a.Failed() {
 		return // execution failed. No point in running validation
 	}
 
 	// resume if needed
-	if s.needResume {
+	if !succeeded && s.resumeAfterFailure {
+		if !s.runHook(s.hs.beforeResume) {
+			return
+		}
 		// TODO: create a method something like runAzCopy, but which does a resume, based on the job id returned inside runAzCopy
 		s.a.Error("Resume support is not built yet")
 	}
@@ -145,7 +149,7 @@ func (s *scenario) assignSourceAndDest() {
 	s.state.dest = createTestResource(s.fromTo.To())
 }
 
-func (s *scenario) runAzCopy() {
+func (s *scenario) runAzCopy() bool {
 	s.chToStdin = make(chan string) // unubuffered seems the most predictable for our usages
 	defer close(s.chToStdin)
 
@@ -172,11 +176,17 @@ func (s *scenario) runAzCopy() {
 		s.state.dest.getParam(false, useSas),
 		afterStart, s.chToStdin)
 
+	// some errors (e.g. failures of individual files) are to be expected
 	if !wasClean {
+		if s.resumeAfterFailure {
+			// we are ready for even the !wasClean case, so don't assert there was no error. Just return
+			return false
+		}
 		s.a.AssertNoErr(err, "running AzCopy")
 	}
 
 	s.state.result = &result
+	return err == nil
 }
 
 func (s *scenario) validateTransferStates() {
@@ -344,8 +354,20 @@ func (s *scenario) CreateFiles(fs testFiles, atSource bool) {
 	}
 }
 
-func (s *scenario) CancelAndResume() {
-	s.a.Assert(s.p.cancelFromStdin, equals(), true, "cancelFromStdin must be set in parameters, to use CancelAndResume")
-	s.needResume = true
+// If you use this with Cancel or KillProcess, you should call this FIRST to avoid risk of race conditions
+func (s *scenario) RequestResumeAfterFailure() {
+	s.resumeAfterFailure = true
+}
+
+func (s *scenario) CancelProcess() {
+	s.a.Assert(s.p.cancelFromStdin, equals(), true, "cancelFromStdin must be set in parameters, to use Cancel")
 	s.chToStdin <- "cancel"
+}
+
+func (s *scenario) KillProcess() {
+	s.chToStdin <- TestRunner{}.terminationSentinel()
+}
+
+func (s *scenario) Assert(obtained interface{}, comp comparison, expected interface{}, comment ...string) {
+	s.a.Assert(obtained, comp, expected, comment...)
 }
