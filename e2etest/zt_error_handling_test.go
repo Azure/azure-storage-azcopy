@@ -20,16 +20,13 @@
 
 package e2etest
 
-import (
-	"testing"
-	"time"
-)
-
 // Purpose: Tests for how we respond to errors. Maybe also resume?
 
 // TODO: include how we clean up destination files/blobs after errors
 
 // This test runs a transfer partially, then cancel the job, then resumes it
+/*
+ *
 func TestError_CanResume(t *testing.T) {
 	// TODO: as at 1 July 2020, this test doesn't pass, but if you run it, it will tell you why (all to do with missing parts of the framework)
 	//   It's here as one possible approach for testing resume.
@@ -71,3 +68,11 @@ func TestError_CanResume(t *testing.T) {
 			},
 		})
 }
+
+
+*/
+///* Go fmt is messing things
+//				"fold1/k",
+//			},
+//		})
+//}

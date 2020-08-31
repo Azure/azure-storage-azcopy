@@ -21,11 +21,12 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/JeffreyRichter/enum/enum"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/JeffreyRichter/enum/enum"
 )
 
 ///////////
@@ -90,7 +91,7 @@ func (a *testingAsserter) Assert(obtained interface{}, comp comparison, expected
 	// TODO: if obtained or expected is a pointer, do we want to dereference it before comparing?  Do we even need that in our codebase?
 	ok := false
 	if comp.equals {
-		ok = obtained == expected
+		ok = reflect.DeepEqual(obtained, expected)
 	} else {
 		ok = obtained != expected
 	}
