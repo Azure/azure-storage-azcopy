@@ -112,11 +112,12 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 		isPublicResource = false
 
 		if isContainer {
-			bURLparts := azblob.NewBlobURLParts(*resourceURL)
-			bURLparts.BlobName = ""
-			containerURL := azblob.NewContainerURL(bURLparts.URL(), p)
+			// Scenario 1: When resourceURL points to a container
+			bURLParts := azblob.NewBlobURLParts(*resourceURL)
+			bURLParts.BlobName = ""
+			containerURL := azblob.NewContainerURL(bURLParts.URL(), p)
 
-			if bURLparts.ContainerName == "" || strings.Contains(bURLparts.ContainerName, "*") {
+			if bURLParts.ContainerName == "" || strings.Contains(bURLParts.ContainerName, "*") {
 				// Service level searches can't possibly be public.
 				return false
 			}
@@ -125,6 +126,18 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 				isPublicResource = true
 			}
 		} else {
+			// Scenario 2: When resourceURL points to a virtual directory.
+			// Check if the virtual directory is accessible by doing GetProperties on container.
+			// Virtual directory can be accessed/scanned only when its parent container is public.
+			bURLParts := azblob.NewBlobURLParts(*resourceURL)
+			bURLParts.BlobName = ""
+			containerURL := azblob.NewContainerURL(bURLParts.URL(), p)
+			if _, err := containerURL.GetProperties(ctx, azblob.LeaseAccessConditions{}); err == nil {
+				isPublicResource = true
+				return
+			}
+
+			// Scenario 3: When resourceURL points to a blob
 			blobURL := azblob.NewBlobURL(*resourceURL, p)
 			if _, err := blobURL.GetProperties(ctx, azblob.BlobAccessConditions{}); err == nil {
 				isPublicResource = true
@@ -138,7 +151,7 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 	if !oAuthTokenExists() { // no oauth token found, then directly return anonymous credential
 		isPublicResource := checkPublic()
 
-		// No forms of auth are present.
+		// No forms of auth are present.no SAS token or OAuth token is present and the resource is not public
 		if !isPublicResource {
 			return common.ECredentialType.Unknown(), isPublicResource, errors.New("no SAS token or OAuth token is present and the resource is not public")
 		}
