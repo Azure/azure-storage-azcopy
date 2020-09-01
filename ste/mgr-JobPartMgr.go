@@ -215,7 +215,7 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Holds the status of tranfers in this jptm
+// Holds the status of transfers in this jptm
 type jobPartProgressInfo struct {
 	transfersCompleted int
 	transfersSkipped   int
@@ -435,7 +435,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 		RetryDelay:    UploadRetryDelay,
 		MaxRetryDelay: UploadMaxRetryDelay}
 
-	var statsAccForSip *pipelineNetworkStats = nil // we don'nt accumulate stats on the source info provider
+	var statsAccForSip *pipelineNetworkStats = nil // we don't accumulate stats on the source info provider
 
 	// Create source info provider's pipeline for S2S copy.
 	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() {

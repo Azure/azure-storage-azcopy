@@ -160,7 +160,7 @@ func (s *appendBlobSenderBase) Cleanup() {
 		// There is a possibility that some uncommitted blocks will be there
 		// Delete the uncommitted blobs
 		// TODO: particularly, given that this is an APPEND blob, do we really need to delete it?  But if we don't delete it,
-		//   it will still be in an ambigous situation with regard to how much has been added to it.  Probably best to delete
+		//   it will still be in an ambiguous situation with regard to how much has been added to it.  Probably best to delete
 		//   to be consistent with other
 		deletionContext, cancelFunc := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancelFunc()

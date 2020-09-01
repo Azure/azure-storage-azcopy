@@ -73,13 +73,13 @@ func (v AccountSASSignatureValues) NewSASQueryParameters(sharedKeyCredential *Sh
 }
 
 // The AccountSASPermissions type simplifies creating the permissions string for an Azure Storage Account SAS.
-// Initialize an instance of this type and then call its String method to set AccountSASSignatureValues's Permissions field.
+// Initialize an instance of this type and then call its String method to set AccountSASSignatureValues' Permissions field.
 type AccountSASPermissions struct {
 	Read, Write, Delete, List, Add, Create, Update, Process bool
 }
 
 // String produces the SAS permissions string for an Azure Storage account.
-// Call this method to set AccountSASSignatureValues's Permissions field.
+// Call this method to set AccountSASSignatureValues' Permissions field.
 func (p AccountSASPermissions) String() string {
 	var buffer bytes.Buffer
 	if p.Read {
@@ -109,7 +109,7 @@ func (p AccountSASPermissions) String() string {
 	return buffer.String()
 }
 
-// Parse initializes the AccountSASPermissions's fields from a string.
+// Parse initializes the AccountSASPermissions' fields from a string.
 func (p *AccountSASPermissions) Parse(s string) error {
 	*p = AccountSASPermissions{} // Clear out the flags
 	for _, r := range s {
@@ -138,13 +138,13 @@ func (p *AccountSASPermissions) Parse(s string) error {
 }
 
 // The AccountSASServices type simplifies creating the services string for an Azure Storage Account SAS.
-// Initialize an instance of this type and then call its String method to set AccountSASSignatureValues's Services field.
+// Initialize an instance of this type and then call its String method to set AccountSASSignatureValues' Services field.
 type AccountSASServices struct {
 	Blob, Queue, File bool
 }
 
 // String produces the SAS services string for an Azure Storage account.
-// Call this method to set AccountSASSignatureValues's Services field.
+// Call this method to set AccountSASSignatureValues' Services field.
 func (s AccountSASServices) String() string {
 	var buffer bytes.Buffer
 	if s.Blob {
@@ -178,13 +178,13 @@ func (a *AccountSASServices) Parse(s string) error {
 }
 
 // The AccountSASResourceTypes type simplifies creating the resource types string for an Azure Storage Account SAS.
-// Initialize an instance of this type and then call its String method to set AccountSASSignatureValues's ResourceTypes field.
+// Initialize an instance of this type and then call its String method to set AccountSASSignatureValues' ResourceTypes field.
 type AccountSASResourceTypes struct {
 	Service, Container, Object bool
 }
 
 // String produces the SAS resource types string for an Azure Storage account.
-// Call this method to set AccountSASSignatureValues's ResourceTypes field.
+// Call this method to set AccountSASSignatureValues' ResourceTypes field.
 func (rt AccountSASResourceTypes) String() string {
 	var buffer bytes.Buffer
 	if rt.Service {

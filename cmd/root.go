@@ -117,7 +117,7 @@ var rootCmd = &cobra.Command{
 		// spawn a routine to fetch and compare the local application's version against the latest version available
 		// if there's a newer version that can be used, then write the suggestion to stderr
 		// however if this takes too long the message won't get printed
-		// Note: this function is neccessary for non-help, non-login commands, since they don't reach the corresponding
+		// Note: this function is necessary for non-help, non-login commands, since they don't reach the corresponding
 		// beginDetectNewVersion call in Execute (below)
 		beginDetectNewVersion()
 
