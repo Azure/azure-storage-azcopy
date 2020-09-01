@@ -32,7 +32,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, err
 		// If S2S and source takes OAuthToken as its cred type (OR) source takes anonymous as its cred type, but it's not public and there's no SAS
 	} else if cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() &&
-		(srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() ||
+		(srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() || srcCredInfo.CredentialType == common.ECredentialType.AutoLogin() ||
 			(srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && !isPublic && cca.source.SAS == "")) {
 		// TODO: Generate a SAS token if it's blob -> *
 		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource")

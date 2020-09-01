@@ -64,6 +64,15 @@ func (EnvironmentVariable) UserDir() EnvironmentVariable {
 	}
 }
 
+func (EnvironmentVariable) ApplicationID() EnvironmentVariable {
+	// Used for auto-login.
+	return EnvironmentVariable{
+		Name:        "AZCOPY_ACTIVE_DIRECTORY_APPLICATION_ID",
+		Description: "The Azure Active Directory application id used for Service Principal authentication.",
+		Hidden:      true,
+	}
+}
+
 func (EnvironmentVariable) ClientSecret() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_SPA_CLIENT_SECRET",

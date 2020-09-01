@@ -26,11 +26,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/minio/minio-go/pkg/s3utils"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
+
+	"github.com/minio/minio-go/pkg/s3utils"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -42,6 +43,7 @@ import (
 )
 
 var once sync.Once
+var autoOAuth sync.Once
 
 // only one UserOAuthTokenManager should exists in azcopy-v2 process in cmd(FE) module for current user.
 // (given appAppPathFolder is mapped to current user)
@@ -67,6 +69,46 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 	})
 
 	return currentUserOAuthTokenManager
+}
+
+/*
+ * GetInstanceOAuthTokenInfo returns OAuth token, obtained by auto-login,
+ * for current instance of AzCopy.
+ */
+func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
+	var err error
+	autoOAuth.Do(func() {
+		var lca loginCmdArgs
+		// Fill up lca
+		lca.persistToken = false
+
+		lca.applicationID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
+		lca.certPath = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
+		lca.clientSecret = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
+		if lca.applicationID != "" && (lca.certPass != "" || lca.clientSecret != "") {
+			// we've enough details for SPN login
+			lca.servicePrincipal = true
+			err = lca.process()
+			if err == nil {
+				return
+			}
+		}
+
+		// Place holder for MSI stuff
+
+		//Fallback: Device login
+		lca.servicePrincipal = false
+		err = lca.process()
+		if err == nil {
+			return
+		}
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return GetUserOAuthTokenManagerInstance(), nil
 }
 
 // ==============================================================================================
@@ -145,7 +187,8 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 
 		// No forms of auth are present.no SAS token or OAuth token is present and the resource is not public
 		if !isPublicResource {
-			return common.ECredentialType.Unknown(), isPublicResource, errors.New("no SAS token or OAuth token is present and the resource is not public")
+			/* We dont return error here, the caller can either auto-login or fail */
+			return common.ECredentialType.Unknown(), isPublicResource, nil
 		}
 
 		return common.ECredentialType.Anonymous(), isPublicResource, nil
@@ -191,7 +234,8 @@ func getBlobFSCredentialType(ctx context.Context, blobResourceURL string, standa
 	if name != "" && key != "" { // TODO: To remove, use for internal testing, SharedKey should not be supported from commandline
 		return common.ECredentialType.SharedKey(), nil
 	} else {
-		return common.ECredentialType.Unknown(), errors.New("OAuth token, SAS token, or shared key should be provided for Blob FS")
+		/* We dont return error here. The caller can either fail or attempt auto-login */
+		return common.ECredentialType.Unknown(), nil
 	}
 }
 
@@ -245,7 +289,7 @@ func GetCredTypeFromEnvVar() common.CredentialType {
 	}
 
 	// Remove the env var after successfully fetching once,
-	// in case of env var is further spreading into child processes unexpectedly.
+	// in case of env var is further spreading into child processes unexpectly.
 	glcm.ClearEnvironmentVariable(common.EEnvironmentVariable.CredentialType())
 
 	// Try to get the value set.
@@ -302,7 +346,8 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 		// these auth types don't pick up anything from environment vars, so they are not the focus of this routine
 		return nil
 	case common.ECredentialType.OAuthToken(),
-		common.ECredentialType.SharedKey():
+		common.ECredentialType.SharedKey(),
+		common.ECredentialType.AutoLogin():
 		// Files doesn't currently support OAuth, but it's a valid azure endpoint anyway, so it'll pass the check.
 		if resourceType != common.ELocation.Blob() && resourceType != common.ELocation.BlobFS() && resourceType != common.ELocation.File() {
 			// There may be a reason for files->blob to specify this.
@@ -406,6 +451,15 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 			if credType, isPublic, err = getBlobCredentialType(ctx, resource, isSource, resourceSAS != ""); err != nil {
 				return common.ECredentialType.Unknown(), false, err
 			}
+			if credType == common.ECredentialType.Unknown() {
+				_, err = GetOAuthTokenManagerInstance()
+				if err != nil {
+					// could not auto-login
+					err = errors.New("no SAS token or OAuth token is present and the resource is not public")
+					return common.ECredentialType.Unknown(), isPublic, err
+				}
+				credType = common.ECredentialType.AutoLogin()
+			}
 		case common.ELocation.File():
 			if credType, err = getAzureFileCredentialType(); err != nil {
 				return common.ECredentialType.Unknown(), false, err
@@ -413,6 +467,15 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		case common.ELocation.BlobFS():
 			if credType, err = getBlobFSCredentialType(ctx, resource, resourceSAS != ""); err != nil {
 				return common.ECredentialType.Unknown(), false, err
+			}
+			if credType == common.ECredentialType.Unknown() {
+				_, err = GetOAuthTokenManagerInstance()
+				if err != nil {
+					// could not auto-login
+					err = errors.New("OAuth token, SAS token, or shared key should be provided for Blob FS")
+					return common.ECredentialType.Unknown(), isPublic, err
+				}
+				credType = common.ECredentialType.AutoLogin()
 			}
 		case common.ELocation.S3():
 			accessKeyID := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
@@ -438,7 +501,8 @@ func getCredentialInfoForLocation(ctx context.Context, location common.Location,
 	credInfo.CredentialType, isPublic, err = getCredentialTypeForLocation(ctx, location, resource, resourceSAS, isSource)
 
 	// flesh out the rest of the fields, for those types that require it
-	if credInfo.CredentialType == common.ECredentialType.OAuthToken() {
+	if credInfo.CredentialType == common.ECredentialType.OAuthToken()  ||
+	   credInfo.CredentialType == common.ECredentialType.AutoLogin() {
 		uotm := GetUserOAuthTokenManagerInstance()
 
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {

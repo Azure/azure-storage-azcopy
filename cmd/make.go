@@ -77,10 +77,20 @@ func (cma cookedMakeCmdArgs) getCredentialType(ctx context.Context) (credentialT
 		if credentialType, err = getBlobFSCredentialType(ctx, cma.resourceURL.String(), false); err != nil {
 			return common.ECredentialType.Unknown(), err
 		}
+		if credentialType == common.ECredentialType.Unknown() {
+			/* perform auto-login here */
+			err = errors.New("OAuth token, SAS token, or shared key should be provided for Blob FS")
+			return common.ECredentialType.Unknown(), err
+		}
 	case common.ELocation.Blob():
 		// The resource URL cannot be public access URL, as it need delete permission.
 		credentialType, _, err = getBlobCredentialType(ctx, cma.resourceURL.String(), false, false)
 		if err != nil {
+			return common.ECredentialType.Unknown(), err
+		}
+		if credentialType == common.ECredentialType.Unknown() {
+			/* perform auto-login here */
+			err = errors.New("OAuth token, SAS token, or shared key should be provided for Blob FS")
 			return common.ECredentialType.Unknown(), err
 		}
 	case common.ELocation.File():

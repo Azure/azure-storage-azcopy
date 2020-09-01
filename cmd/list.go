@@ -110,7 +110,8 @@ func HandleListContainerCommand(unparsedSource string, location common.Location)
 		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
 	} else if location == location.File() && source.SAS == "" {
 		return errors.New("azure files requires a SAS token for authentication")
-	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() ||
+		credentialInfo.CredentialType == common.ECredentialType.AutoLogin() {
 		uotm := GetUserOAuthTokenManagerInstance()
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err

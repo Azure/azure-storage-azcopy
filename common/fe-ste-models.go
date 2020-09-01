@@ -775,6 +775,7 @@ func (CredentialType) OAuthToken() CredentialType  { return CredentialType(1) } 
 func (CredentialType) Anonymous() CredentialType   { return CredentialType(2) } // For Azure, SAS or public.
 func (CredentialType) SharedKey() CredentialType   { return CredentialType(3) } // For Azure, SharedKey
 func (CredentialType) S3AccessKey() CredentialType { return CredentialType(4) } // For S3, AccessKeyID and SecretAccessKey
+func (CredentialType) AutoLogin() CredentialType   { return CredentialType(5) } // Auto login using OAuth
 
 func (ct CredentialType) String() string {
 	return enum.StringInt(ct, reflect.TypeOf(ct))
