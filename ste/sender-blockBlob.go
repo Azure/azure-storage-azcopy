@@ -181,16 +181,15 @@ func (s *blockBlobSenderBase) Epilogue() {
 		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", blockIDs))
 
 		// commit the blocks.
+		if !ValidateTier(jptm, s.destBlobTier, s.destBlockBlobURL.BlobURL, s.jptm.Context()) {
+			s.destBlobTier = azblob.DefaultAccessTier
+		}
+
 		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, s.destBlobTier); err != nil {
 			jptm.FailActiveSend("Committing block list", err)
 			return
 		}
 	}
-
-	// Set tier
-	// GPv2 or Blob Storage is supported, GPv1 is not supported, can only set to blob without snapshot in active status.
-	// https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
-	// AttemptSetBlobTier(jptm, s.destBlobTier, s.destBlockBlobURL.BlobURL, s.jptm.Context())
 }
 
 func (s *blockBlobSenderBase) Cleanup() {
