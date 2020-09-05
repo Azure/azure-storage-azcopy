@@ -205,7 +205,7 @@ func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Lo
 			return
 		}
 
-		// Return immediately here because we know this'll be safe.
+		// Return immediately here because we know this will be safe.
 		return
 	}
 
@@ -242,7 +242,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	tempDest := raw.dst
 
 	if strings.EqualFold(tempDest, common.Dev_Null) && runtime.GOOS == "windows" {
-		tempDest = common.Dev_Null // map all capitalizations of "NUL"/"nul" to one because (on Windows) they all mean the same thing
+		tempDest = common.Dev_Null // map all capitalization of "NUL"/"nul" to one because (on Windows) they all mean the same thing
 	}
 
 	// Check if source has a trailing wildcard on a URL
@@ -1440,7 +1440,7 @@ func getPerfDisplayText(perfDiagnosticStrings []string, constraint common.PerfCo
 		perfString = "[States: " + strings.Join(perfDiagnosticStrings, ", ") + "], "
 	}
 
-	haveBeenRunningLongEnoughToStabilize := durationOfJob.Seconds() > 30                                    // this duration is an arbitrary guestimate
+	haveBeenRunningLongEnoughToStabilize := durationOfJob.Seconds() > 30                                    // this duration is an arbitrary guesstimate
 	if constraint != common.EPerfConstraint.Unknown() && haveBeenRunningLongEnoughToStabilize && !isBench { // don't display when benchmarking, because we got some spurious slow "disk" constraint reports there - which would be confusing given there is no disk in release 1 of benchmarking
 		diskString = fmt.Sprintf(" (%s may be limiting speed)", constraint)
 	} else {
