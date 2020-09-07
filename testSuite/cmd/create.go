@@ -53,6 +53,7 @@ func init() {
 	cacheControl := ""
 	contentMD5 := ""
 	location := ""
+	tier := azblob.DefaultAccessTier
 
 	createCmd := &cobra.Command{
 		Use:     "create",
@@ -98,7 +99,7 @@ func init() {
 							ContentLanguage:    contentLanguage,
 							ContentMD5:         md5,
 							CacheControl:       cacheControl,
-						})
+						}, tier)
 				default:
 					panic(fmt.Errorf("not implemented %v", resourceType))
 				}
@@ -229,7 +230,7 @@ func createContainer(container string) {
 	}
 }
 
-func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobHTTPHeaders azblob.BlobHTTPHeaders) {
+func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobHTTPHeaders azblob.BlobHTTPHeaders, tier azblob.AccessTierType) {
 	url, err := url.Parse(blobURL)
 	if err != nil {
 		fmt.Println("error parsing the blob sas ", err)
@@ -256,7 +257,7 @@ func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobH
 		blobHTTPHeaders,
 		metadata,
 		azblob.BlobAccessConditions{},
-		azblob.DefaultAccessTier)
+		tier)
 	if err != nil {
 		fmt.Println(fmt.Sprintf("error uploading the blob %v", err))
 		os.Exit(1)
