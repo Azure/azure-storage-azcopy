@@ -577,7 +577,7 @@ func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byt
 
 // TODO do we want these charset=utf-8?
 var builtinTypes = map[string]string{
-	".css":  "text/css;",
+	".css":  "text/css",
 	".gif":  "image/gif",
 	".htm":  "text/html",
 	".html": "text/html",
@@ -590,7 +590,7 @@ var builtinTypes = map[string]string{
 	".svg":  "image/svg+xml",
 	".wasm": "application/wasm",
 	".webp": "image/webp",
-	".xml":  "text/xml;",
+	".xml":  "text/xml",
 }
 
 func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []byte) string {

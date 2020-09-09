@@ -240,7 +240,7 @@ func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobH
 
 	randomString := createStringWithRandomChars(int(blobSize))
 	if blobHTTPHeaders.ContentType == "" {
-		blobHTTPHeaders.ContentType = http.DetectContentType([]byte(randomString))
+		blobHTTPHeaders.ContentType = strings.Split(http.DetectContentType([]byte(randomString)), ";")[0]
 	}
 
 	// Generate a content MD5 for the new blob if requested
@@ -320,7 +320,7 @@ func createFile(fileURLStr string, fileSize uint32, metadata azfile.Metadata, fi
 
 	randomString := createStringWithRandomChars(int(fileSize))
 	if fileHTTPHeaders.ContentType == "" {
-		fileHTTPHeaders.ContentType = http.DetectContentType([]byte(randomString))
+		fileHTTPHeaders.ContentType = strings.Split(http.DetectContentType([]byte(randomString)), ";")[0]
 	}
 
 	// Generate a content MD5 for the new blob if requested
@@ -386,7 +386,7 @@ func createObject(objectURLStr string, objectSize uint32, o minio.PutObjectOptio
 
 	randomString := createStringWithRandomChars(int(objectSize))
 	if o.ContentType == "" {
-		o.ContentType = http.DetectContentType([]byte(randomString))
+		o.ContentType = strings.Split(http.DetectContentType([]byte(randomString)), ";")[0]
 	}
 
 	_, err = s3Client.PutObject(s3URLParts.BucketName, s3URLParts.ObjectKey, bytes.NewReader([]byte(randomString)), int64(objectSize), o)
