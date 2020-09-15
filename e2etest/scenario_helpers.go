@@ -580,7 +580,11 @@ func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile
 					smbPermissionsSddl: &filePermissions,
 				}
 
-				result[fileInfo.Name] = &props
+				relativePath := lResp.DirectoryPath + "/"
+				if relativePath == "/" {
+					relativePath = ""
+				}
+				result[relativePath+fileInfo.Name] = &props
 			}
 
 			for _, dirInfo := range lResp.DirectoryItems {

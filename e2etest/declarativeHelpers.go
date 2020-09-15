@@ -152,6 +152,8 @@ type params struct {
 	s2sSourceChangeValidation bool
 	metadata                  string
 	cancelFromStdin           bool
+	preserveSMBPermissions    common.PreservePermissionsOption
+	preserveSMBInfo           bool
 }
 
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level
