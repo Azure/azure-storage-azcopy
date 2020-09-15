@@ -24,6 +24,7 @@ package e2etest
 
 import (
 	"context"
+	"crypto/md5"
 	"fmt"
 	"io/ioutil"
 	"net/url"
@@ -110,9 +111,14 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, dirPath string, f
 			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
 			//			//   by local files. E.g. not contentHeaders or metadata).
 		} else {
-			_, err = s.generateLocalFile(
+			sourceData, err := s.generateLocalFile(
 				filepath.Join(dirPath, file.name),
 				file.creationProperties.sizeBytes(c, defaultSize))
+			contentMD5 := md5.Sum(sourceData)
+			if file.creationProperties.contentHeaders == nil {
+				file.creationProperties.contentHeaders = &contentHeaders{}
+			}
+			file.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
 			c.AssertNoErr(err)
 			//TODO: nakulkar-msft you'll need to set up things like attributes, and other relevant things from
 			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
@@ -304,8 +310,14 @@ func (scenarioHelper) generateBlobsFromList(c asserter, containerURL azblob.Cont
 		}
 		ad := blobResourceAdapter{b}
 		blob := containerURL.NewBlockBlobURL(b.name)
+		reader, sourceData := getRandomDataAndReader(b.creationProperties.sizeBytes(c, defaultSize))
+		contentMD5 := md5.Sum(sourceData)
+		if b.creationProperties.contentHeaders == nil {
+			b.creationProperties.contentHeaders = &contentHeaders{}
+		}
+		b.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
 		cResp, err := blob.Upload(ctx,
-			common.NewRandomDataGenerator(int64(b.creationProperties.sizeBytes(c, defaultSize))),
+			reader,
 			ad.toHeaders(),
 			ad.toMetadata(),
 			azblob.BlobAccessConditions{})
