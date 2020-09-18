@@ -568,7 +568,10 @@ func (jpm *jobPartMgr) AutoDecompress() bool {
 }
 
 func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata) {
-	// if dataFileToXfer is nil or len(dataFileToXfer) < 512, the default content type will be "application/octet-stream"
+	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType {
+		return jpm.httpHeaders, jpm.metadata
+	}
+
 	return common.ResourceHTTPHeaders{
 		ContentType:        jpm.inferContentType(fullFilePath, dataFileToXfer),
 		ContentLanguage:    jpm.httpHeaders.ContentLanguage,
@@ -608,6 +611,7 @@ func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []by
 		return guessedType
 	}
 
+	// if dataFileToXfer is nil, the default content type will be "application/octet-stream"
 	return http.DetectContentType(dataFileToXfer)
 }
 
