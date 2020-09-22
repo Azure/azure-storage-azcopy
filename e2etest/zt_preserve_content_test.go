@@ -20,10 +20,37 @@
 
 package e2etest
 
+import (
+	"github.com/Azure/azure-storage-azcopy/common"
+	"testing"
+)
+
 // Purpose: Tests for preserving the content of transferred files. (Including use of MD5 hashes to allow error detection)
 
 // TODO: include decopression
 // TODO; inpclude account-to-account copy
+
+func TestContent_AtRemote(t *testing.T) {
+	expectedMap := map[string]string{"foo": "abc", "bar": "def"}
+
+	RunScenarios(
+		t,
+		eOperation.Copy(), // Sync doesn't support the command-line metadata flag
+		eTestFromTo.Other(common.EFromTo.LocalBlob()), // TODO: Metadata copy not supported while performing S2S transfers
+		eValidate.AutoPlusContent(),
+		params{
+			recursive: true,
+			metadata:  "foo=abc;bar=def",
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder("", verifyOnly{with{nameValueMetadata: expectedMap}}), // root folder
+				f("filea", verifyOnly{with{nameValueMetadata: expectedMap}}),
+			},
+		})
+}
 
 //func TestChange_ValidateFileContentAtRemote(t *testing.T) {
 //	RunScenarios(

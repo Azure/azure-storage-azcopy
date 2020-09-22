@@ -384,6 +384,32 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 	return result
 }
 
+func (s scenarioHelper) downloadBlobContent(a asserter, containerURL azblob.ContainerURL, resourceRelPath string) []byte {
+	blobURL := containerURL.NewBlobURL(resourceRelPath)
+	downloadResp, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
+	a.AssertNoErr(err)
+
+	retryReader := downloadResp.Body(azblob.RetryReaderOptions{})
+	defer retryReader.Close()
+
+	destData, err := ioutil.ReadAll(retryReader)
+	a.AssertNoErr(err)
+	return destData[:]
+
+	//for marker := (azblob.Marker{}); marker.NotDone(); {
+	//	listBlob, err := containerURL.ListBlobsFlatSegment(context.TO DO(), marker, azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true, Versions: true}})
+	//	a.AssertNoErr(err)
+	//
+	//	for _, blobInfo := range listBlob.Segment.BlobItems {
+	//		if relativePath == blobInfo.Name {
+	//
+	//		}
+	//	}
+	//}
+	//a.Error("Could not find the blob while listing blobs in container")
+	//return nil
+}
+
 func (scenarioHelper) generatePageBlobsFromList(c asserter, containerURL azblob.ContainerURL, blobList []string, data string) {
 	for _, blobName := range blobList {
 		//Create the blob (PUT blob)
@@ -657,6 +683,19 @@ func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile
 	}
 
 	return result
+}
+
+func (s scenarioHelper) downloadFileContent(a asserter, shareURL azfile.ShareURL, resourceRelPath string) []byte {
+	fileURL := shareURL.NewRootDirectoryURL().NewFileURL(resourceRelPath)
+	downloadResp, err := fileURL.Download(ctx, 0, azfile.CountToEnd, false)
+	a.AssertNoErr(err)
+
+	retryReader := downloadResp.Body(azfile.RetryReaderOptions{})
+	defer retryReader.Close() // The client must close the response body when finished with it
+
+	destData, err := ioutil.ReadAll(retryReader)
+	downloadResp.Body(azfile.RetryReaderOptions{})
+	return destData
 }
 
 func (scenarioHelper) generateBFSPathsFromList(c asserter, filesystemURL azbfs.FileSystemURL, fileList []string) {

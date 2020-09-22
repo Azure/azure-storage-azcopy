@@ -49,6 +49,9 @@ type resourceManager interface {
 	// Used for verification
 	getAllProperties(a asserter) map[string]*objectProperties
 
+	// Download
+	downloadContent(a asserter, resourceRelPath string) []byte
+
 	// cleanup gets rid of everything that setup created
 	// (Takes no param, because the resourceManager is expected to track its own state. E.g. "what did I make")
 	cleanup(a asserter)
@@ -93,6 +96,11 @@ func (r *resourceLocal) getAllProperties(a asserter) map[string]*objectPropertie
 	return scenarioHelper{}.enumerateLocalProperties(a, r.dirPath)
 }
 
+func (r *resourceLocal) downloadContent(a asserter, resourceRelPath string) []byte {
+	//return scenarioHelper{}.enumerateLocalProperties(a, r.dirPath)
+	panic("Not Implemented")
+}
+
 ///////
 
 type resourceBlobContainer struct {
@@ -132,6 +140,10 @@ func (r *resourceBlobContainer) isContainerLike() bool {
 
 func (r *resourceBlobContainer) getAllProperties(a asserter) map[string]*objectProperties {
 	return scenarioHelper{}.enumerateContainerBlobProperties(a, *r.containerURL)
+}
+
+func (r *resourceBlobContainer) downloadContent(a asserter, resourceRelPath string) []byte {
+	return scenarioHelper{}.downloadBlobContent(a, *r.containerURL, resourceRelPath)
 }
 
 /////
@@ -175,6 +187,10 @@ func (r *resourceAzureFileShare) getAllProperties(a asserter) map[string]*object
 	return scenarioHelper{}.enumerateShareFileProperties(a, *r.shareURL)
 }
 
+func (r *resourceAzureFileShare) downloadContent(a asserter, resourceRelPath string) []byte {
+	return scenarioHelper{}.downloadFileContent(a, *r.shareURL, resourceRelPath)
+}
+
 ////
 
 type resourceDummy struct{}
@@ -201,4 +217,8 @@ func (r *resourceDummy) isContainerLike() bool {
 
 func (r *resourceDummy) getAllProperties(a asserter) map[string]*objectProperties {
 	panic("not impelmented")
+}
+
+func (r *resourceDummy) downloadContent(a asserter, _ string) []byte {
+	return make([]byte, 0)
 }

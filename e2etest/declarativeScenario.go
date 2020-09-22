@@ -21,6 +21,7 @@
 package e2etest
 
 import (
+	"crypto/md5"
 	"fmt"
 	"os"
 	"path"
@@ -104,7 +105,7 @@ func (s *scenario) Run() {
 		return // no point in doing more validation
 	}
 	if s.validate == eValidate.AutoPlusContent() {
-		panic("validation of the transferred file content is not yet implemented")
+		s.validateContent()
 	}
 }
 
@@ -285,6 +286,28 @@ func (s *scenario) validateProperties() {
 		if expected.smbPermissionsSddl != nil {
 			s.a.Error("validateProperties does not yet support the properties you are using")
 			// TODO: nakulkar-msft it will be necessary to validate all of these
+		}
+	}
+}
+
+func (s *scenario) validateContent() {
+	_, _, expectFolders, expectRootFolder, addedDirAtDest := s.getTransferInfo()
+
+	// for everything that should have been transferred, verify that any expected properties have been transferred to the destination
+	expectedFilesAndFolders := s.fs.getForStatus(common.ETransferStatus.Success(), expectFolders, expectRootFolder)
+	for _, f := range expectedFilesAndFolders {
+		if f.creationProperties.contentHeaders == nil {
+			s.a.Failed()
+		}
+		if !f.isFolder() {
+			expectedContentMD5 := f.creationProperties.contentHeaders.contentMD5
+			resourceRelPath := fixSlashes(path.Join(addedDirAtDest, f.name), s.fromTo.To())
+			actualContent := s.state.dest.downloadContent(s.a, resourceRelPath)
+			actualContentMD5 := md5.Sum(actualContent)
+			s.a.Assert(expectedContentMD5, equals(), actualContentMD5[:], "Content MD5 validation failed")
+
+			// We don't need to check the content md5 of all the remote resources. Checking for just one entity should do.
+			return
 		}
 	}
 }

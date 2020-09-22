@@ -21,7 +21,6 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
 	"testing"
 )
 
@@ -52,8 +51,8 @@ func TestProperties_NameValueMetadataCanBeUploaded(t *testing.T) {
 
 	RunScenarios(
 		t,
-		eOperation.Copy(), // Sync doesn't support the command-line metadata flag
-		eTestFromTo.Other(common.EFromTo.LocalFile()), // TODO: Metadata copy not supported while performing S2S transfers
+		eOperation.Copy(),        // Sync doesn't support the command-line metadata flag
+		eTestFromTo.AllUploads(), // TODO: Metadata copy not supported while performing S2S transfers
 		eValidate.Auto(),
 		params{
 			recursive: true,
