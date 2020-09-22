@@ -30,24 +30,62 @@ import (
 // TODO: include decopression
 // TODO; inpclude account-to-account copy
 
-func TestContent_AtRemote(t *testing.T) {
-	expectedMap := map[string]string{"foo": "abc", "bar": "def"}
+func TestContent_AtBlobStorage(t *testing.T) {
 
 	RunScenarios(
 		t,
 		eOperation.Copy(), // Sync doesn't support the command-line metadata flag
-		eTestFromTo.Other(common.EFromTo.LocalBlob()), // TODO: Metadata copy not supported while performing S2S transfers
+		eTestFromTo.Other(common.EFromTo.LocalBlob()),
 		eValidate.AutoPlusContent(),
 		params{
 			recursive: true,
-			metadata:  "foo=abc;bar=def",
 		},
 		nil,
 		testFiles{
-			defaultSize: "1K",
+			defaultSize: "4M",
 			shouldTransfer: []interface{}{
-				folder("", verifyOnly{with{nameValueMetadata: expectedMap}}), // root folder
-				f("filea", verifyOnly{with{nameValueMetadata: expectedMap}}),
+				folder(""), // root folder
+				f("filea"),
+			},
+		})
+}
+
+func TestContent_AtFileShare(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Copy(), // Sync doesn't support the command-line metadata flag
+		eTestFromTo.Other(common.EFromTo.LocalFile()),
+		eValidate.AutoPlusContent(),
+		params{
+			recursive: true,
+		},
+		nil,
+		testFiles{
+			defaultSize: "4M",
+			shouldTransfer: []interface{}{
+				folder(""), // root folder
+				folder("folder1"),
+				f("folder1/filea"),
+			},
+		})
+}
+
+func TestContent_BlobToBlob(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Copy(), // Sync doesn't support the command-line metadata flag
+		// eTestFromTo.Other(common.EFromTo.BlobBlob()),
+		eTestFromTo.Other(common.EFromTo.BlobBlob()),
+		eValidate.AutoPlusContent(),
+		params{
+			recursive: true,
+		},
+		nil,
+		testFiles{
+			defaultSize: "8M",
+			shouldTransfer: []interface{}{
+				folder(""), // root folder
+				f("filea"),
 			},
 		})
 }
