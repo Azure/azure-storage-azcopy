@@ -119,6 +119,11 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, dirPath string, f
 				file.creationProperties.contentHeaders = &contentHeaders{}
 			}
 			file.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+
+			//if file.verificationProperties.contentHeaders == nil {
+			//	file.verificationProperties.contentHeaders = &contentHeaders{}
+			//}
+			//file.verificationProperties.contentHeaders.contentMD5 = contentMD5[:]
 			c.AssertNoErr(err)
 			//TODO: nakulkar-msft you'll need to set up things like attributes, and other relevant things from
 			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
@@ -316,9 +321,16 @@ func (scenarioHelper) generateBlobsFromList(c asserter, containerURL azblob.Cont
 			b.creationProperties.contentHeaders = &contentHeaders{}
 		}
 		b.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+
+		//if b.verificationProperties.contentHeaders == nil {
+		//	b.verificationProperties.contentHeaders = &contentHeaders{}
+		//}
+		//b.verificationProperties.contentHeaders.contentMD5 = contentMD5[:]
+		headers := ad.toHeaders()
+		headers.ContentMD5 = contentMD5[:]
 		cResp, err := blob.Upload(ctx,
 			reader,
-			ad.toHeaders(),
+			headers,
 			ad.toMetadata(),
 			azblob.BlobAccessConditions{})
 		c.AssertNoErr(err)
@@ -533,9 +545,28 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, shareURL azfile.Sha
 			generateParentsForAzureFile(c, file)
 
 			// create the file itself
-			cResp, err := file.Create(ctx, int64(f.creationProperties.sizeBytes(c, defaultSize)), ad.toHeaders(), ad.toMetadata())
+			fileSize := int64(f.creationProperties.sizeBytes(c, defaultSize))
+			contentR, contentD := getRandomDataAndReader(int(fileSize))
+			contentMD5 := md5.Sum(contentD)
+			if f.creationProperties.contentHeaders == nil {
+				f.creationProperties.contentHeaders = &contentHeaders{}
+			}
+			f.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+
+			//if f.verificationProperties.contentHeaders == nil {
+			//	f.verificationProperties.contentHeaders = &contentHeaders{}
+			//}
+			//f.verificationProperties.contentHeaders.contentMD5 = contentMD5[:]
+			headers := ad.toHeaders()
+			headers.ContentMD5 = contentMD5[:]
+			cResp, err := file.Create(ctx, fileSize, headers, ad.toMetadata())
 			c.AssertNoErr(err)
 			c.Assert(cResp.StatusCode(), equals(), 201)
+
+			_, err = file.UploadRange(context.Background(), 0, contentR, nil)
+			if err == nil {
+				c.Failed()
+			}
 
 			// TODO: do we want to put some random content into it?
 		}

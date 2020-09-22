@@ -305,11 +305,38 @@ func (s *scenario) validateMetadata(expected, actual map[string]string) {
 
 func (s *scenario) validateContentHeaders(expected, actual *contentHeaders) {
 	if expected == nil {
-		// These properties were not explicitly stated for verification
 		return
 	}
-	s.a.Assert(expected, equals(), actual, fmt.Sprintf("Content header mismatch: Expected %v, obtained %v",
-		expected, actual))
+
+	if expected.cacheControl != nil {
+		s.a.Assert(expected.cacheControl, equals(), actual.cacheControl,
+			fmt.Sprintf("Content cache control mismatch: Expected %v, obtained %v", expected.cacheControl, actual.cacheControl))
+	}
+
+	if expected.contentDisposition != nil {
+		s.a.Assert(expected.contentDisposition, equals(), actual.contentDisposition,
+			fmt.Sprintf("Content disposition mismatch: Expected %v, obtained %v", expected.contentDisposition, actual.contentDisposition))
+	}
+
+	if expected.contentEncoding != nil {
+		s.a.Assert(expected.contentEncoding, equals(), actual.contentEncoding,
+			fmt.Sprintf("Content encoding mismatch: Expected %v, obtained %v", expected.contentEncoding, actual.contentEncoding))
+	}
+
+	if expected.contentLanguage != nil {
+		s.a.Assert(expected.contentLanguage, equals(), actual.contentLanguage,
+			fmt.Sprintf("Content language mismatch: Expected %v, obtained %v", expected.contentLanguage, actual.contentLanguage))
+	}
+
+	if expected.contentType != nil {
+		s.a.Assert(expected.contentType, equals(), actual.contentType,
+			fmt.Sprintf("Content type mismatch: Expected %v, obtained %v", expected.contentType, actual.contentType))
+	}
+
+	if expected.contentMD5 != nil {
+		s.a.Assert(expected.contentMD5, equals(), actual.contentMD5,
+			fmt.Sprintf("Content MD5 mismatch: Expected %v, obtained %v", expected.contentMD5, actual.contentMD5))
+	}
 }
 
 func (s *scenario) validateCreateTime(expected, actual *time.Time) {

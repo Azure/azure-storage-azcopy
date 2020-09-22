@@ -20,23 +20,35 @@
 
 package e2etest
 
-import (
-	"testing"
-)
-
 // Purpose: Tests for preserving the content of transferred files. (Including use of MD5 hashes to allow error detection)
 
 // TODO: include decopression
 // TODO; inpclude account-to-account copy
 
-func TestChange_ValidateFileContentAtRemote(t *testing.T) {
-
-}
-
-func TestChange_ValidateFileContentAtLocal(t *testing.T) {
-
-}
-
-func TestChange_ValidateFileContentAfterS2STransfer(t *testing.T) {
-
-}
+//func TestChange_ValidateFileContentAtRemote(t *testing.T) {
+//	RunScenarios(
+//		t,
+//		eOperation.Copy(),
+//		eTestFromTo.AllUploads(),
+//		eValidate.Auto(),
+//		params{
+//			recursive: true,
+//		},
+//		nil,
+//		testFiles{
+//			defaultSize: "1K",
+//			shouldTransfer: []interface{}{
+//				"file1",
+//				"folder1/file2",
+//				"folder1/file3",
+//			},
+//		})
+//}
+//
+//func TestChange_ValidateFileContentAtLocal(t *testing.T) {
+//
+//}
+//
+//func TestChange_ValidateFileContentAfterS2STransfer(t *testing.T) {
+//
+//}
