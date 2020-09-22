@@ -279,6 +279,10 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 	filters := make([]objectFilter, 0) // same as []objectFilter{} under the hood
 
+	if cca.includeBefore != nil {
+		filters = append(filters, &includeBeforeDateFilter{threshold: *cca.includeBefore})
+	}
+
 	if cca.includeAfter != nil {
 		filters = append(filters, &includeAfterDateFilter{threshold: *cca.includeAfter})
 	}

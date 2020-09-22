@@ -435,6 +435,68 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithPattern(c *chk.C
 	})
 }
 
+func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeBefore_UTC(c *chk.C) {
+	s.doTestUploadDirectoryToContainerWithIncludeBefore(true, c)
+}
+
+func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeBefore_LocalTime(c *chk.C) {
+	s.doTestUploadDirectoryToContainerWithIncludeBefore(false, c)
+}
+
+func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeBefore(useUtc bool, c *chk.C) {
+	bsu := getBSU()
+
+	// set up the source with numerous files
+	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirPath)
+	originalContent := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirPath, "")
+
+	// add newer files, which we wish to include
+	filesToInclude := []string{"important.txt", "includeSub/amazing.txt", "includeSub/wow/amazing.txt"}
+	scenarioHelper{}.generateLocalFilesFromList(c, srcDirPath, filesToInclude)
+
+	// sleep a little longer, to give clear LMT separation between the files above and those below (should not be copied)
+	time.Sleep(1500 * time.Millisecond)
+	includeFrom := time.Now()
+	extraIgnoredFiles := []string{"ignored.txt", "includeSub/ignored.txt", "includeSub/wow/ignored.txt"}
+	scenarioHelper{}.generateLocalFilesFromList(c, srcDirPath, extraIgnoredFiles)
+
+	// set up an empty container
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultCopyRawInput(srcDirPath, rawContainerURLWithSAS.String())
+	raw.recursive = true
+	if useUtc {
+		raw.includeBefore = includeFrom.UTC().Format(time.RFC3339)
+	} else {
+		raw.includeBefore = includeFrom.Format("2006-01-02T15:04:05") // local time, no timezone
+	}
+
+	runCopyAndVerify(c, raw, func(err error) {
+		var includeTransfers []string
+		includeTransfers = append(originalContent, filesToInclude...)
+
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(includeTransfers))
+
+		// validate that the right transfers were sent
+		expectedTransfers := scenarioHelper{}.shaveOffPrefix(includeTransfers, filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING)
+		validateUploadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING,
+			common.AZCOPY_PATH_SEPARATOR_STRING+filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING, expectedTransfers, mockedRPC)
+	})
+}
+
+
 func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeAfter_UTC(c *chk.C) {
 	s.doTestUploadDirectoryToContainerWithIncludeAfter(true, c)
 }
