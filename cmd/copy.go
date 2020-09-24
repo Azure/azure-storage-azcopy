@@ -1481,9 +1481,13 @@ func init() {
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 { // redirection
 				var userFromTo common.FromTo
-				err := userFromTo.Parse(raw.fromTo)
-				if err != nil {
-					return fmt.Errorf("fatal: incorrect from-to argument passed: %s", raw.fromTo)
+				if raw.fromTo == "" {
+					userFromTo = common.EFromTo.Unknown()
+				} else {
+					err := userFromTo.Parse(raw.fromTo)
+					if err != nil {
+						return fmt.Errorf("fatal: incorrect from-to argument passed: %s", raw.fromTo)
+					}
 				}
 
 				stdinPipeIn, err := isStdinPipeIn()
