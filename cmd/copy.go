@@ -1481,29 +1481,29 @@ func init() {
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 { // redirection
 				var userFromTo common.FromTo
-				err := userFromTo.Parse(raw.fromTo)
-				if err != nil {
-					return fmt.Errorf("fatal: failed to parsr from-to argument: %s", err)
+				if raw.fromTo == "" {
+					userFromTo = common.EFromTo.Unknown()
+				} else {
+					err := userFromTo.Parse(raw.fromTo)
+					if err != nil {
+						return fmt.Errorf("fatal: incorrect from-to argument passed: %s", raw.fromTo)
+					}
 				}
+
 				stdinPipeIn, err := isStdinPipeIn()
-				if userFromTo == common.EFromTo.PipeBlob() && stdinPipeIn == true {
+				if err != nil {
+					return fmt.Errorf("fatal: failed to read from Stdin due to error: %s", err)
+				}
+
+				if (userFromTo == common.EFromTo.PipeBlob() || userFromTo == common.EFromTo.Unknown()) && stdinPipeIn == true {
 					raw.src = pipeLocation
 					raw.dst = args[0]
-				} else if userFromTo == common.EFromTo.BlobPipe() && stdinPipeIn == false {
+				} else if userFromTo == common.EFromTo.BlobPipe() || userFromTo == common.EFromTo.Unknown() {
+					// In case of BlobPage, if pipe is missing, content will be echoed on the terminal
 					raw.src = args[0]
 					raw.dst = pipeLocation
 				} else {
-					if stdinPipeIn == true {
-						raw.src = pipeLocation
-						raw.dst = args[0]
-					} else {
-						if err != nil {
-							return fmt.Errorf("fatal: failed to read from Stdin due to error: %s", err)
-						} else {
-							raw.src = args[0]
-							raw.dst = pipeLocation
-						}
-					}
+					return fmt.Errorf("fatal: incorrect from-to argument passed: %s", raw.fromTo)
 				}
 			} else if len(args) == 2 { // normal copy
 				raw.src = args[0]
