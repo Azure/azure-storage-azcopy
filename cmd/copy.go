@@ -1480,15 +1480,24 @@ func init() {
 		Example:    copyCmdExample,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 { // redirection
-				if stdinPipeIn, err := isStdinPipeIn(); stdinPipeIn == true {
+				if raw.fromTo == common.EFromTo.PipeBlob().String() {
 					raw.src = pipeLocation
 					raw.dst = args[0]
+				} else if raw.fromTo == common.EFromTo.BlobPipe().String() {
+					raw.src = args[0]
+					raw.dst = pipeLocation
 				} else {
-					if err != nil {
-						return fmt.Errorf("fatal: failed to read from Stdin due to error: %s", err)
+					fmt.Printf("Argument FromTo not specified. Verifying source/destination on the basis of stdPipeIn/stdPipeOut.")
+					if stdinPipeIn, err := isStdinPipeIn(); stdinPipeIn == true {
+						raw.src = pipeLocation
+						raw.dst = args[0]
 					} else {
-						raw.src = args[0]
-						raw.dst = pipeLocation
+						if err != nil {
+							return fmt.Errorf("fatal: failed to read from Stdin due to error: %s", err)
+						} else {
+							raw.src = args[0]
+							raw.dst = pipeLocation
+						}
 					}
 				}
 			} else if len(args) == 2 { // normal copy
