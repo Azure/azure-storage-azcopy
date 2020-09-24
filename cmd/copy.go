@@ -1463,7 +1463,7 @@ func isStdinPipeIn() (bool, error) {
 	// if the stdin is a named pipe, then we assume there will be data on the stdin
 	// the reason for this assumption is that we do not know when will the data come in
 	// it could come in right away, or come in 10 minutes later
-	return info.Mode()&os.ModeNamedPipe != 0, nil
+	return info.Mode()&(os.ModeNamedPipe|os.ModeSocket) != 0, nil
 }
 
 // TODO check file size, max is 4.75TB
@@ -1480,15 +1480,20 @@ func init() {
 		Example:    copyCmdExample,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 { // redirection
-				if raw.fromTo == common.EFromTo.PipeBlob().String() {
+				var userFromTo common.FromTo
+				err := userFromTo.Parse(raw.fromTo)
+				if err != nil {
+					return fmt.Errorf("fatal: failed to parsr from-to argument: %s", err)
+				}
+				stdinPipeIn, err := isStdinPipeIn()
+				if userFromTo == common.EFromTo.PipeBlob() && stdinPipeIn == true {
 					raw.src = pipeLocation
 					raw.dst = args[0]
-				} else if raw.fromTo == common.EFromTo.BlobPipe().String() {
+				} else if userFromTo == common.EFromTo.BlobPipe() && stdinPipeIn == false {
 					raw.src = args[0]
 					raw.dst = pipeLocation
 				} else {
-					fmt.Printf("Argument FromTo not specified. Verifying source/destination on the basis of stdPipeIn/stdPipeOut.")
-					if stdinPipeIn, err := isStdinPipeIn(); stdinPipeIn == true {
+					if stdinPipeIn == true {
 						raw.src = pipeLocation
 						raw.dst = args[0]
 					} else {
