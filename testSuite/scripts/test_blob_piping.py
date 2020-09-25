@@ -14,55 +14,55 @@ class BlobPipingTests(unittest.TestCase):
         # it is assumed that the default block size is much larger than 1KB.
 
         # create file of size 1KB
-        self.skipTest("Disabled")
-        # filename = "test_1kb_blob_piping_upload.txt"
-        # source_file_path = util.create_test_file(filename, 1024)
-        #
-        # # compute source md5 to compare later
-        # source_file_md5 = compute_md5(source_file_path)
-        #
-        # # upload 1KB file using azcopy
-        # destination_url = util.get_resource_sas(filename)
-        # azcopy_cmd = util.Command("copy").add_arguments(destination_url).string()
-        # self.assertTrue(execute_command_with_pipe(azcopy_cmd, source_file_to_pipe=source_file_path))
-        #
-        # # downloading the uploaded file
-        # destination_file_path = util.test_directory_path + "/test_1kb_blob_piping_download.txt"
-        # self.assertTrue(execute_command_with_pipe(azcopy_cmd, destination_file_to_pipe=destination_file_path))
-        #
-        # # compute destination md5 to compare
-        # destination_file_md5 = compute_md5(destination_file_path)
-        #
-        # # verifying the downloaded blob
-        # self.assertEqual(source_file_md5, destination_file_md5)
+        filename = "test_1kb_blob_piping_upload.txt"
+        source_file_path = util.create_test_file(filename, 1024)
+
+        # compute source md5 to compare later
+        source_file_md5 = compute_md5(source_file_path)
+
+        # upload 1KB file using azcopy
+        destination_url = util.get_resource_sas(filename)
+        azcopy_cmd = util.Command("copy").add_arguments(destination_url).add_flags("from-to", "PipeBlob").string()
+        self.assertTrue(execute_command_with_pipe(azcopy_cmd, source_file_to_pipe=source_file_path))
+
+        # downloading the uploaded file
+        azcopy_cmd = util.Command("copy").add_arguments(destination_url).add_flags("from-to", "BlobPipe").string()
+        destination_file_path = util.test_directory_path + "/test_1kb_blob_piping_download.txt"
+        self.assertTrue(execute_command_with_pipe(azcopy_cmd, destination_file_to_pipe=destination_file_path))
+
+        # compute destination md5 to compare
+        destination_file_md5 = compute_md5(destination_file_path)
+
+        # verifying the downloaded blob
+        self.assertEqual(source_file_md5, destination_file_md5)
 
     def test_piping_upload_and_download_large_file(self):
         # large means azcopy has to rotate buffers when uploading.
 
         # create file of size 8MB
-        self.skipTest("Disabled")
-        # filename = "test_8mb_blob_piping_upload.txt"
-        # source_file_path = util.create_test_file(filename, 8 * 1024 * 1024)
-        #
-        # # compute source md5 to compare later
-        # source_file_md5 = compute_md5(source_file_path)
-        #
-        # # uploadfile using azcopy
-        # # TODO reviewers please note, this used to use a 4MB file, with a 1 KiB block size, but now we don't support block sizes
-        # #    smaller than 1 MB. I've compensated slightly by changing it to an 8 MB file
-        # destination_url = util.get_resource_sas(filename)
-        # azcopy_cmd = util.Command("copy").add_arguments(destination_url).add_flags("block-size-mb", '1').string()
-        # self.assertTrue(execute_command_with_pipe(azcopy_cmd, source_file_to_pipe=source_file_path))
-        #
-        # # downloading the uploaded file
-        # destination_file_path = util.test_directory_path + "/test_8mb_blob_piping_download.txt"
-        # self.assertTrue(execute_command_with_pipe(azcopy_cmd, destination_file_to_pipe=destination_file_path))
-        #
-        # # compute destination md5 to compare
-        # destination_file_md5 = compute_md5(destination_file_path)
-        #
-        # # verifying the downloaded blob
-        # self.assertEqual(source_file_md5, destination_file_md5)
+        filename = "test_8mb_blob_piping_upload.txt"
+        source_file_path = util.create_test_file(filename, 8 * 1024 * 1024)
+
+        # compute source md5 to compare later
+        source_file_md5 = compute_md5(source_file_path)
+
+        # uploadfile using azcopy
+        # TODO reviewers please note, this used to use a 4MB file, with a 1 KiB block size, but now we don't support block sizes
+        #    smaller than 1 MB. I've compensated slightly by changing it to an 8 MB file
+        destination_url = util.get_resource_sas(filename)
+        azcopy_cmd = util.Command("copy").add_arguments(destination_url).add_flags("block-size-mb", '1').add_flags("from-to", "PipeBlob").string()
+        self.assertTrue(execute_command_with_pipe(azcopy_cmd, source_file_to_pipe=source_file_path))
+
+        # downloading the uploaded file
+        azcopy_cmd = util.Command("copy").add_arguments(destination_url).add_flags("block-size-mb", '1').add_flags("from-to", "BlobPipe").string()
+        destination_file_path = util.test_directory_path + "/test_8mb_blob_piping_download.txt"
+        self.assertTrue(execute_command_with_pipe(azcopy_cmd, destination_file_to_pipe=destination_file_path))
+
+        # compute destination md5 to compare
+        destination_file_md5 = compute_md5(destination_file_path)
+
+        # verifying the downloaded blob
+        self.assertEqual(source_file_md5, destination_file_md5)
 
 
 # compute the md5 of a given file
