@@ -8,7 +8,6 @@ from test_blobfs_upload_sharedkey import *
 from test_blobfs_upload_oauth import *
 from test_blobfs_download_sharedkey import *
 from test_blobfs_download_oauth import *
-from test_blob_piping import *
 from test_blob_sync import *
 from test_service_to_service_copy import *
 from test_blobfs_download_SAS import *
@@ -204,7 +203,6 @@ def main():
     init()
 
     test_class_to_run = [LoadUserScenario,
-                         BlobPipingTests,
                          File_Service_2_Service_Copy_User_Scenario,
                          Blob_Sync_User_Scenario,
                          File_Sync_User_Scenario,
