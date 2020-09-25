@@ -230,7 +230,7 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
     test_directory_path = new_dir_path
     test_bfs_account_url = filesystem_url
     test_bfs_sas_account_url = filesystem_sas_url
-    if not (test_bfs_account_url.endswith("/") and test_bfs_account_url.endwith("\\")):
+    if not (test_bfs_account_url.endswith("/") and test_bfs_account_url.endswith("\\")):
         test_bfs_account_url = test_bfs_account_url + "/"
     test_container_url = container_sas
     test_oauth_container_url = container_oauth

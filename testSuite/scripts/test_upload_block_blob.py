@@ -8,6 +8,13 @@ from stat import *
 import utility as util
 
 class Block_Upload_User_Scenarios(unittest.TestCase):
+    def setUp(self):
+        cmd = util.Command("login").add_arguments("--service-principal").add_flags("application-id", os.environ['ACTIVE_DIRECTORY_APPLICATION_ID'])
+        cmd.execute_azcopy_copy_command()
+
+    def tearDown(self):
+        cmd = util.Command("logout")
+        cmd.execute_azcopy_copy_command()
 
     def util_test_1kb_blob_upload(self, use_oauth_session=False):
         # Creating a single File Of size 1 KB
