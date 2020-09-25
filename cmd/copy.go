@@ -1480,30 +1480,28 @@ func init() {
 		Example:    copyCmdExample,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 { // redirection
-				var userFromTo common.FromTo
+				// Enforce the usage of from-to flag when pipes are involved
 				if raw.fromTo == "" {
-					userFromTo = common.EFromTo.Unknown()
-				} else {
-					err := userFromTo.Parse(raw.fromTo)
-					if err != nil {
-						return fmt.Errorf("fatal: incorrect from-to argument passed: %s", raw.fromTo)
+					return fmt.Errorf("fatal: from-to argument required")
+				}
+				var userFromTo common.FromTo
+				err := userFromTo.Parse(raw.fromTo)
+				if err != nil || (userFromTo != common.EFromTo.PipeBlob() && userFromTo != common.EFromTo.BlobPipe()) {
+					return fmt.Errorf("fatal: invalid from-to argument passed: %s", raw.fromTo)
+				}
+
+				if userFromTo == common.EFromTo.PipeBlob() {
+					// Case 1: PipeBlob. Check for the std input pipe
+					stdinPipeIn, err := isStdinPipeIn()
+					if stdinPipeIn == false || err != nil {
+						return fmt.Errorf("fatal: failed to read from Stdin due to error: %s", err)
 					}
-				}
-
-				stdinPipeIn, err := isStdinPipeIn()
-				if err != nil {
-					return fmt.Errorf("fatal: failed to read from Stdin due to error: %s", err)
-				}
-
-				if (userFromTo == common.EFromTo.PipeBlob() || userFromTo == common.EFromTo.Unknown()) && stdinPipeIn == true {
 					raw.src = pipeLocation
 					raw.dst = args[0]
-				} else if userFromTo == common.EFromTo.BlobPipe() || userFromTo == common.EFromTo.Unknown() {
-					// In case of BlobPage, if pipe is missing, content will be echoed on the terminal
+				} else {
+					// Case 2: BlobPipe. In this case if pipe is missing, content will be echoed on the terminal
 					raw.src = args[0]
 					raw.dst = pipeLocation
-				} else {
-					return fmt.Errorf("fatal: incorrect from-to argument passed: %s", raw.fromTo)
 				}
 			} else if len(args) == 2 { // normal copy
 				raw.src = args[0]
