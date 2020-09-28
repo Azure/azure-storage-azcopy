@@ -14,7 +14,6 @@ class BlobPipingTests(unittest.TestCase):
         # it is assumed that the default block size is much larger than 1KB.
 
         # create file of size 1KB
-        self.skipTest("Disabled")
         filename = "test_1kb_blob_piping_upload.txt"
         source_file_path = util.create_test_file(filename, 1024)
 
@@ -41,7 +40,6 @@ class BlobPipingTests(unittest.TestCase):
         # large means azcopy has to rotate buffers when uploading.
 
         # create file of size 8MB
-        self.skipTest("Disabled")
         filename = "test_8mb_blob_piping_upload.txt"
         source_file_path = util.create_test_file(filename, 8 * 1024 * 1024)
 
