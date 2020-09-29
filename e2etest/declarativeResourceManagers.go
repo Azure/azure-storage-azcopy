@@ -208,7 +208,7 @@ func (r *resourceDummy) cleanup(_ asserter) {
 
 func (r *resourceDummy) getParam(stripTopDir bool, _ bool) string {
 	assertNoStripTopDir(stripTopDir)
-	return "foobar"
+	return "" // returning foobar is causing problems in
 }
 
 func (r *resourceDummy) isContainerLike() bool {

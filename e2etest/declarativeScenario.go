@@ -138,6 +138,8 @@ func (s *scenario) assignSourceAndDest() {
 		case common.ELocation.S3():
 			s.a.Error("Not implementd yet for S3")
 			return &resourceDummy{}
+		case common.ELocation.Unknown():
+			return &resourceDummy{}
 		default:
 			panic(fmt.Sprintf("location type '%s' is not yet supported in declarative tests", loc))
 		}
@@ -168,7 +170,7 @@ func (s *scenario) runAzCopy() {
 
 	// run AzCopy
 	const useSas = true // TODO: support other auth options (see params of RunTest)
-	result, wasClean, err := r.ExecuteCopyOrSyncCommand(
+	result, wasClean, err := r.ExecuteAzCopyCommand(
 		s.operation,
 		s.state.source.getParam(s.stripTopDir, useSas),
 		s.state.dest.getParam(false, useSas),

@@ -153,6 +153,27 @@ func TestFilter_IncludePattern(t *testing.T) {
 		})
 }
 
+func TestFilter_Remove(t *testing.T) {
+
+	RunScenarios(
+		t,
+		eOperation.Remove(),
+		eTestFromTo.AllRemove(),
+		eValidate.Auto(),
+		params{
+			recursive: true,
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""), // root dir
+				"file1.txt",
+				"subdir/file2",
+			},
+		})
+}
+
 func TestFilter_ExcludePath(t *testing.T) {
 
 	RunScenarios(
