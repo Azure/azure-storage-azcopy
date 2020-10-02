@@ -285,7 +285,7 @@ func (scenarioHelper) generateBlobsFromList(c *chk.C, containerURL azblob.Contai
 	for _, blobName := range blobList {
 		blob := containerURL.NewBlockBlobURL(blobName)
 		cResp, err := blob.Upload(ctx, strings.NewReader(data), azblob.BlobHTTPHeaders{},
-			nil, azblob.BlobAccessConditions{})
+			nil, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier)
 		c.Assert(err, chk.IsNil)
 		c.Assert(cResp.StatusCode(), chk.Equals, 201)
 	}
@@ -306,6 +306,7 @@ func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.Co
 			},
 			azblob.Metadata{},
 			azblob.BlobAccessConditions{},
+			azblob.DefaultPremiumBlobAccessTier,
 		)
 		c.Assert(err, chk.IsNil)
 		c.Assert(cResp.StatusCode(), chk.Equals, 201)
@@ -355,12 +356,9 @@ func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.
 func (scenarioHelper) generateBlockBlobWithAccessTier(c *chk.C, containerURL azblob.ContainerURL, blobName string, accessTier azblob.AccessTierType) {
 	blob := containerURL.NewBlockBlobURL(blobName)
 	cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
-		nil, azblob.BlobAccessConditions{})
+		nil, azblob.BlobAccessConditions{}, accessTier)
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
-
-	_, err = blob.SetTier(ctx, accessTier, azblob.LeaseAccessConditions{})
-	c.Assert(err, chk.IsNil)
 }
 
 // create the demanded objects
@@ -692,7 +690,7 @@ func validateCopyTransfersAreScheduled(c *chk.C, isSrcEncoded bool, isDstEncoded
 			if runtime.GOOS == "windows" {
 				// Decode unsafe dst characters on windows
 				pathParts := strings.Split(dstRelativeFilePath, "/")
-				invalidChars := `<>\/:"|?*` + string(0x00)
+				invalidChars := `<>\/:"|?*` + string(rune(0x00))
 
 				for _, c := range strings.Split(invalidChars, "") {
 					for k, p := range pathParts {

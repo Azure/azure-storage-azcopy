@@ -685,9 +685,8 @@ type BlockBlobTier uint8
 
 func (BlockBlobTier) None() BlockBlobTier    { return BlockBlobTier(0) }
 func (BlockBlobTier) Hot() BlockBlobTier     { return BlockBlobTier(1) }
-func (BlockBlobTier) Cold() BlockBlobTier    { return BlockBlobTier(2) } // TODO: not sure why cold is here.
-func (BlockBlobTier) Cool() BlockBlobTier    { return BlockBlobTier(3) }
-func (BlockBlobTier) Archive() BlockBlobTier { return BlockBlobTier(4) }
+func (BlockBlobTier) Cool() BlockBlobTier    { return BlockBlobTier(2) }
+func (BlockBlobTier) Archive() BlockBlobTier { return BlockBlobTier(3) }
 
 func (bbt BlockBlobTier) String() string {
 	return enum.StringInt(bbt, reflect.TypeOf(bbt))
