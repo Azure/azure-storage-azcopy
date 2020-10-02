@@ -104,6 +104,7 @@ type rawCopyCmdArgs struct {
 	CheckLength              bool
 	deleteSnapshotsOption    string
 	// defines the type of the blob at the destination in case of upload / account to account copy
+	blobTags      string
 	blobType      string
 	blockBlobTier string
 	pageBlobTier  string
@@ -485,6 +486,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 	cooked.includeDirectoryStubs = raw.includeDirectoryStubs
+	cooked.blobTags = raw.blobTags
 
 	// Make sure the given input is the one of the enums given by the blob SDK
 	err = cooked.deleteSnapshotsOption.Parse(raw.deleteSnapshotsOption)
@@ -857,6 +859,7 @@ type cookedCopyCmdArgs struct {
 	md5ValidationOption      common.HashValidationOption
 	CheckLength              bool
 	logVerbosity             common.LogLevel
+	blobTags                 string
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
 
@@ -1090,6 +1093,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			PutMd5:                   cca.putMd5,
 			MD5ValidationOption:      cca.md5ValidationOption,
 			DeleteSnapshotsOption:    cca.deleteSnapshotsOption,
+			BlobTagString:            cca.blobTags,
 		},
 		CommandString:  cca.commandString,
 		CredentialInfo: cca.credentialInfo,
@@ -1575,6 +1579,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sSourceChangeValidation, "s2s-detect-source-changed", false, "Detect if the source file/blob changes while it is being read. (This parameter only applies to service to service copies, because the corresponding check is permanently enabled for uploads and downloads.)")
 	cpCmd.PersistentFlags().StringVar(&raw.s2sInvalidMetadataHandleOption, "s2s-handle-invalid-metadata", common.DefaultInvalidMetadataHandleOption.String(), "Specifies how invalid metadata keys are handled. Available options: ExcludeIfInvalid, FailIfInvalid, RenameIfInvalid. (default 'ExcludeIfInvalid').")
 	cpCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-versions", "", "Specifies a file where each version id is listed on a separate line. Ensure that the source must point to a single blob and all the version ids specified in the file using this flag must belong to the source blob only. AzCopy will download the specified versions in the destination folder provided.")
+	cpCmd.PersistentFlags().StringVar(&raw.blobTags, "blob-tags", "", "Upload to Azure Storage with these key-value pairs as blob tags.")
 	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
 	// right before transferring in ste(backend).
 	// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),

@@ -2,9 +2,10 @@ module github.com/Azure/azure-storage-azcopy
 
 require (
 	github.com/Azure/azure-pipeline-go v0.2.3
-	github.com/Azure/azure-storage-blob-go v0.10.1-0.20200824104847-02c174f6f946
+	github.com/Azure/azure-storage-blob-go v0.10.1-0.20200925020501-8327933c9aaa
 	github.com/Azure/azure-storage-file-go v0.8.0
-	github.com/Azure/go-autorest/autorest/adal v0.8.3
+	github.com/Azure/go-autorest/autorest v0.9.0 // indirect
+	github.com/Azure/go-autorest/autorest/adal v0.9.2
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
 	github.com/cpuguy83/go-md2man v1.0.10 // indirect
 	github.com/danieljoos/wincred v1.0.1
@@ -22,10 +23,10 @@ require (
 	github.com/spf13/pflag v1.0.2 // indirect
 	github.com/stretchr/objx v0.1.1 // indirect
 	github.com/stretchr/testify v1.3.0 // indirect
-	golang.org/x/crypto v0.0.0-20191206172530-e9b2fee46413
+	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
-	golang.org/x/sys v0.0.0-20191220220014-0732a990476f
-	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127
+	golang.org/x/sys v0.0.0-20200828194041-157a740278f4
+	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f
 	gopkg.in/ini.v1 v1.42.0 // indirect
 	gopkg.in/yaml.v2 v2.2.2 // indirect
 )

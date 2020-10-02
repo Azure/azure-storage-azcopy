@@ -99,7 +99,7 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 		if !ValidateTier(jptm, c.destBlobTier, c.destBlockBlobURL.BlobURL, c.jptm.Context()) {
 			c.destBlobTier = azblob.DefaultAccessTier
 		}
-		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.headersToApply, c.metadataToApply, azblob.BlobAccessConditions{}, c.destBlobTier); err != nil {
+		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.headersToApply, c.metadataToApply, azblob.BlobAccessConditions{}, c.destBlobTier, c.blobTagsMap); err != nil {
 			jptm.FailActiveSend("Creating empty blob", err)
 			return
 		}

@@ -19,6 +19,7 @@ const DataSchemaVersion common.Version = 15
 const (
 	CustomHeaderMaxBytes = 256
 	MetadataMaxBytes     = 1000 // If > 65536, then jobPartPlanBlobData's MetadataLength field's type must change
+	BlobTagsMaxBytes     = 1000
 	BlobTierMaxBytes     = 10
 )
 
@@ -162,7 +163,7 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
 // TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder
 // TODO: Refactor return type to an object
 func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType, blobTier azblob.AccessTierType,
-	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType, blobVersionID string) {
+	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType, blobVersionID string, blobTagsMap common.BlobTagsMap) {
 	var err error
 	t := jpph.Transfer(transferIndex)
 
@@ -204,6 +205,12 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 		metadata, err = common.UnMarshalToCommonMetadata(tmpMetaData)
 		common.PanicIfErr(err)
 		offset += int64(t.SrcMetadataLength)
+	}
+	if t.SrcBlobTagsLength != 0 {
+		tmpBlobTags := jpph.getString(offset, t.SrcBlobTagsLength)
+		blobTagsMap, err = common.UnMarshalToCommonBlobTags(tmpBlobTags)
+		common.PanicIfErr(err)
+		offset += int64(t.SrcBlobTagsLength)
 	}
 	if t.SrcBlobTypeLength != 0 {
 		tmpBlobTypeStr := []byte(jpph.getString(offset, t.SrcBlobTypeLength))
@@ -272,6 +279,9 @@ type JobPartPlanDstBlob struct {
 	MetadataLength uint16
 	Metadata       [MetadataMaxBytes]byte
 
+	BlobTagsLength uint16
+	BlobTags       [BlobTagsMaxBytes]byte
+
 	// Specifies the maximum size of block which determines the number of chunks and chunk size of a transfer
 	BlockSize int64
 }
@@ -322,6 +332,7 @@ type JobPartPlanTransfer struct {
 	SrcCacheControlLength       int16
 	SrcContentMD5Length         int16
 	SrcMetadataLength           int16
+	SrcBlobTagsLength           int16
 	SrcBlobTypeLength           int16
 	SrcBlobTierLength           int16
 	SrcBlobVersionIDLength      int16

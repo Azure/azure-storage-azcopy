@@ -101,6 +101,9 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	if len(order.BlobAttributes.Metadata) > len(JobPartPlanDstBlob{}.Metadata) {
 		panic(fmt.Errorf("metadata string is too large: %q", order.BlobAttributes.Metadata))
 	}
+	if len(order.BlobAttributes.BlobTagString) > len(JobPartPlanDstBlob{}.BlobTags) {
+		panic(fmt.Errorf("blob tags string is too large: %q", order.BlobAttributes.BlobTagString))
+	}
 
 	// This nested function writes a structure value to an io.Writer & returns the number of bytes written
 	writeValue := func(writer io.Writer, v interface{}) int64 {
@@ -184,6 +187,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			BlockBlobTier:            order.BlobAttributes.BlockBlobTier,
 			PageBlobTier:             order.BlobAttributes.PageBlobTier,
 			MetadataLength:           uint16(len(order.BlobAttributes.Metadata)),
+			BlobTagsLength:           uint16(len(order.BlobAttributes.BlobTagString)),
 			BlockSize:                blockSize,
 		},
 		DstLocalData: JobPartPlanDstLocal{
@@ -213,6 +217,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	copy(jpph.DstBlobData.ContentDisposition[:], order.BlobAttributes.ContentDisposition)
 	copy(jpph.DstBlobData.CacheControl[:], order.BlobAttributes.CacheControl)
 	copy(jpph.DstBlobData.Metadata[:], order.BlobAttributes.Metadata)
+	copy(jpph.DstBlobData.BlobTags[:], order.BlobAttributes.BlobTagString)
 
 	eof += writeValue(file, &jpph)
 
@@ -280,7 +285,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 
 		currentSrcStringOffset += int64(jppt.SrcLength + jppt.DstLength + jppt.SrcContentTypeLength +
 			jppt.SrcContentEncodingLength + jppt.SrcContentLanguageLength + jppt.SrcContentDispositionLength +
-			jppt.SrcCacheControlLength + jppt.SrcContentMD5Length + jppt.SrcMetadataLength +
+			jppt.SrcCacheControlLength + jppt.SrcContentMD5Length + jppt.SrcMetadataLength + jppt.SrcBlobTagsLength +
 			jppt.SrcBlobTypeLength + jppt.SrcBlobTierLength + jppt.SrcBlobVersionIDLength)
 	}
 
@@ -337,6 +342,14 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			common.PanicIfErr(err)
 
 			bytesWritten, err = file.WriteString(metadataStr)
+			common.PanicIfErr(err)
+			eof += int64(bytesWritten)
+		}
+		if order.Transfers[t].BlobTags != nil {
+			blobTagsStr, err := order.Transfers[t].BlobTags.Marshal()
+			common.PanicIfErr(err)
+
+			bytesWritten, err = file.WriteString(blobTagsStr)
 			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}

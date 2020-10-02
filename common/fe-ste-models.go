@@ -911,6 +911,7 @@ type CopyTransfer struct {
 	CacheControl       string
 	ContentMD5         []byte
 	Metadata           Metadata
+	BlobTags           BlobTagsMap
 
 	// Properties for S2S blob copy
 	BlobType      azblob.BlobType
@@ -922,10 +923,15 @@ type CopyTransfer struct {
 
 // Metadata used in AzCopy.
 type Metadata map[string]string
+type BlobTagsMap azblob.BlobTagsMap
 
 // ToAzBlobMetadata converts metadata to azblob's metadata.
 func (m Metadata) ToAzBlobMetadata() azblob.Metadata {
 	return azblob.Metadata(m)
+}
+
+func (bt BlobTagsMap) ToAzureBlobTags() azblob.BlobTagsMap {
+	return azblob.BlobTagsMap(bt)
 }
 
 // ToAzFileMetadata converts metadata to azfile's metadata.
@@ -953,11 +959,32 @@ func (m Metadata) Marshal() (string, error) {
 	return string(b), nil
 }
 
+func (blobTagsMap BlobTagsMap) Marshal() (string, error) {
+	b, err := json.Marshal(blobTagsMap)
+	if err != nil {
+		return "", err
+	}
+
+	return string(b), nil
+}
+
 // UnMarshalToCommonMetadata unmarshals string to common metadata.
 func UnMarshalToCommonMetadata(metadataString string) (Metadata, error) {
 	var result Metadata
 	if metadataString != "" {
 		err := json.Unmarshal([]byte(metadataString), &result)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return result, nil
+}
+
+func UnMarshalToCommonBlobTags(blobTagsString string) (BlobTagsMap, error) {
+	var result BlobTagsMap
+	if blobTagsString != "" {
+		err := json.Unmarshal([]byte(blobTagsString), &result)
 		if err != nil {
 			return nil, err
 		}

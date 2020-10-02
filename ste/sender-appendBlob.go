@@ -44,6 +44,7 @@ type appendBlobSenderBase struct {
 	// the properties of the local file
 	headersToApply  azblob.BlobHTTPHeaders
 	metadataToApply azblob.Metadata
+	blobTagsMap     azblob.BlobTagsMap
 
 	soleChunkFuncSemaphore *semaphore.Weighted
 }
@@ -141,7 +142,7 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 	}
 
 	destinationModified = true
-	_, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{})
+	_, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, s.blobTagsMap)
 	if err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return

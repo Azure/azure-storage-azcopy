@@ -54,6 +54,7 @@ func init() {
 	contentMD5 := ""
 	location := ""
 	tier := azblob.DefaultAccessTier
+	blobTags := ""
 
 	createCmd := &cobra.Command{
 		Use:     "create",
@@ -99,7 +100,9 @@ func init() {
 							ContentLanguage:    contentLanguage,
 							ContentMD5:         md5,
 							CacheControl:       cacheControl,
-						}, tier)
+						},
+						tier,
+						blobTags)
 				default:
 					panic(fmt.Errorf("not implemented %v", resourceType))
 				}
@@ -166,6 +169,7 @@ func init() {
 	createCmd.PersistentFlags().StringVar(&contentMD5, "content-md5", "", "content MD5 for blob.")
 	createCmd.PersistentFlags().StringVar(&location, "location", "", "Location of the Azure account or S3 bucket to create")
 	createCmd.PersistentFlags().BoolVar(&genMD5, "generate-md5", false, "auto-generate MD5 for a new blob")
+	createCmd.PersistentFlags().StringVar(&blobTags, "blob-tags", "", "set blob tags while creating blob")
 
 }
 
@@ -181,6 +185,20 @@ func getBlobMetadata(metadataString string) azblob.Metadata {
 	}
 
 	return metadata
+}
+
+func getBlobTagsMap(blobTagsString string) azblob.BlobTagsMap {
+	var blobTagsMap azblob.BlobTagsMap
+
+	if len(blobTagsString) > 0 {
+		blobTagsMap = azblob.BlobTagsMap{}
+		for _, keyAndValue := range strings.Split(blobTagsString, ";") { // key/value pairs are separated by ';'
+			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+			blobTagsMap[kv[0]] = kv[1]
+		}
+	}
+
+	return blobTagsMap
 }
 
 func getFileMetadata(metadataString string) azfile.Metadata {
@@ -230,7 +248,7 @@ func createContainer(container string) {
 	}
 }
 
-func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobHTTPHeaders azblob.BlobHTTPHeaders, tier azblob.AccessTierType) {
+func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobHTTPHeaders azblob.BlobHTTPHeaders, tier azblob.AccessTierType, blobTagsString string) {
 	url, err := url.Parse(blobURL)
 	if err != nil {
 		fmt.Println("error parsing the blob sas ", err)
@@ -257,7 +275,8 @@ func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobH
 		blobHTTPHeaders,
 		metadata,
 		azblob.BlobAccessConditions{},
-		tier)
+		tier,
+		getBlobTagsMap(blobTagsString))
 	if err != nil {
 		fmt.Println(fmt.Sprintf("error uploading the blob %v", err))
 		os.Exit(1)

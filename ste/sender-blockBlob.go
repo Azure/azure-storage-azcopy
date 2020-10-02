@@ -52,6 +52,7 @@ type blockBlobSenderBase struct {
 	// the properties of the local file
 	headersToApply  azblob.BlobHTTPHeaders
 	metadataToApply azblob.Metadata
+	blobTagsMap     azblob.BlobTagsMap
 
 	atomicPutListIndicator int32
 	muBlockIDs             *sync.Mutex
@@ -135,7 +136,8 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		headersToApply:   props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply:  props.SrcMetadata.ToAzBlobMetadata(),
 		destBlobTier:     destBlobTier,
-		muBlockIDs:       &sync.Mutex{}}, nil
+		muBlockIDs:       &sync.Mutex{},
+		blobTagsMap:      props.SrcBlobTags.ToAzureBlobTags()}, nil
 }
 
 func (s *blockBlobSenderBase) SendableEntityType() common.EntityType {
@@ -185,7 +187,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 			s.destBlobTier = azblob.DefaultAccessTier
 		}
 
-		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, s.destBlobTier); err != nil {
+		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, s.destBlobTier, s.blobTagsMap); err != nil {
 			jptm.FailActiveSend("Committing block list", err)
 			return
 		}

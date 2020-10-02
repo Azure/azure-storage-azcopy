@@ -20,7 +20,7 @@ import (
 type IJobPartTransferMgr interface {
 	FromTo() common.FromTo
 	Info() TransferInfo
-	ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata)
+	ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTagsMap common.BlobTagsMap)
 	LastModifiedTime() time.Time
 	PreserveLastModifiedTime() (time.Time, bool)
 	ShouldPutMd5() bool
@@ -145,6 +145,7 @@ func (i TransferInfo) entityTypeLogIndicator() string {
 type SrcProperties struct {
 	SrcHTTPHeaders common.ResourceHTTPHeaders // User for S2S copy, where per transfer's src properties need be set in destination.
 	SrcMetadata    common.Metadata
+	SrcBlobTags    common.BlobTagsMap
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -239,7 +240,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	src, dst, _ := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
 
-	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType, versionID :=
+	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType, versionID, blobTagsMap :=
 		plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
 	// If the length of destination SAS is greater than 0
@@ -328,6 +329,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		SrcProperties: SrcProperties{
 			SrcHTTPHeaders: srcHTTPHeaders,
 			SrcMetadata:    srcMetadata,
+			SrcBlobTags:    blobTagsMap,
 		},
 		SrcBlobType:    srcBlobType,
 		S2SSrcBlobTier: srcBlobTier,
@@ -428,7 +430,7 @@ func (jptm *jobPartTransferMgr) ScheduleChunks(chunkFunc chunkFunc) {
 	jptm.jobPartMgr.ScheduleChunks(chunkFunc)
 }
 
-func (jptm *jobPartTransferMgr) ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata) {
+func (jptm *jobPartTransferMgr) ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTagsMap common.BlobTagsMap) {
 	return jptm.jobPartMgr.(*jobPartMgr).resourceDstData(jptm.Info().Source, dataFileToXfer)
 }
 
