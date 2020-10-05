@@ -21,6 +21,7 @@
 package e2etest
 
 import (
+	"crypto/md5"
 	"fmt"
 	"os"
 	"path"
@@ -66,8 +67,8 @@ func (s *scenario) Run() {
 
 	// setup
 	s.assignSourceAndDest() // what/where are they
-	s.state.source.createLocation(s.a)
-	s.state.dest.createLocation(s.a)
+	s.state.source.createLocation(s.a, s)
+	s.state.dest.createLocation(s.a, s)
 	s.state.source.createFiles(s.a, s.fs, true)
 	s.state.dest.createFiles(s.a, s.fs, false)
 	if s.a.Failed() {
@@ -104,7 +105,7 @@ func (s *scenario) Run() {
 		return // no point in doing more validation
 	}
 	if s.validate == eValidate.AutoPlusContent() {
-		panic("validation of the transferred file content is not yet implemented")
+		s.validateContent()
 	}
 }
 
@@ -137,6 +138,8 @@ func (s *scenario) assignSourceAndDest() {
 		case common.ELocation.S3():
 			s.a.Error("Not implementd yet for S3")
 			return &resourceDummy{}
+		case common.ELocation.Unknown():
+			return &resourceDummy{}
 		default:
 			panic(fmt.Sprintf("location type '%s' is not yet supported in declarative tests", loc))
 		}
@@ -167,7 +170,7 @@ func (s *scenario) runAzCopy() {
 
 	// run AzCopy
 	const useSas = true // TODO: support other auth options (see params of RunTest)
-	result, wasClean, err := r.ExecuteCopyOrSyncCommand(
+	result, wasClean, err := r.ExecuteAzCopyCommand(
 		s.operation,
 		s.state.source.getParam(s.stripTopDir, useSas),
 		s.state.dest.getParam(false, useSas),
@@ -179,8 +182,23 @@ func (s *scenario) runAzCopy() {
 
 	s.state.result = &result
 }
-
+func (s *scenario) validateRemove() {
+	removedFiles := s.fs.toTestObjects(s.fs.shouldTransfer, false)
+	props := s.state.source.getAllProperties(s.a)
+	if len(removedFiles) != len(props) {
+		s.a.Failed()
+	}
+	for _, removeFile := range removedFiles {
+		if _, ok := props[removeFile.name]; !ok {
+			s.a.Failed()
+		}
+	}
+}
 func (s *scenario) validateTransferStates() {
+	if s.operation == eOperation.Remove() {
+		s.validateRemove()
+		return
+	}
 
 	if s.p.deleteDestination != common.EDeleteDestination.False() {
 		// TODO: implement deleteDestinationValidation
@@ -289,6 +307,28 @@ func (s *scenario) validateProperties() {
 	}
 }
 
+func (s *scenario) validateContent() {
+	_, _, expectFolders, expectRootFolder, addedDirAtDest := s.getTransferInfo()
+
+	// for everything that should have been transferred, verify that any expected properties have been transferred to the destination
+	expectedFilesAndFolders := s.fs.getForStatus(common.ETransferStatus.Success(), expectFolders, expectRootFolder)
+	for _, f := range expectedFilesAndFolders {
+		if f.creationProperties.contentHeaders == nil {
+			s.a.Failed()
+		}
+		if !f.isFolder() {
+			expectedContentMD5 := f.creationProperties.contentHeaders.contentMD5
+			resourceRelPath := fixSlashes(path.Join(addedDirAtDest, f.name), s.fromTo.To())
+			actualContent := s.state.dest.downloadContent(s.a, resourceRelPath)
+			actualContentMD5 := md5.Sum(actualContent)
+			s.a.Assert(expectedContentMD5, equals(), actualContentMD5[:], "Content MD5 validation failed")
+
+			// We don't need to check the content md5 of all the remote resources. Checking for just one entity should do.
+			return
+		}
+	}
+}
+
 //// Individual property validation routines
 
 func (s *scenario) validateMetadata(expected, actual map[string]string) {
@@ -305,11 +345,38 @@ func (s *scenario) validateMetadata(expected, actual map[string]string) {
 
 func (s *scenario) validateContentHeaders(expected, actual *contentHeaders) {
 	if expected == nil {
-		// These properties were not explicitly stated for verification
 		return
 	}
-	s.a.Assert(expected, equals(), actual, fmt.Sprintf("Content header mismatch: Expected %v, obtained %v",
-		expected, actual))
+
+	if expected.cacheControl != nil {
+		s.a.Assert(expected.cacheControl, equals(), actual.cacheControl,
+			fmt.Sprintf("Content cache control mismatch: Expected %v, obtained %v", expected.cacheControl, actual.cacheControl))
+	}
+
+	if expected.contentDisposition != nil {
+		s.a.Assert(expected.contentDisposition, equals(), actual.contentDisposition,
+			fmt.Sprintf("Content disposition mismatch: Expected %v, obtained %v", expected.contentDisposition, actual.contentDisposition))
+	}
+
+	if expected.contentEncoding != nil {
+		s.a.Assert(expected.contentEncoding, equals(), actual.contentEncoding,
+			fmt.Sprintf("Content encoding mismatch: Expected %v, obtained %v", expected.contentEncoding, actual.contentEncoding))
+	}
+
+	if expected.contentLanguage != nil {
+		s.a.Assert(expected.contentLanguage, equals(), actual.contentLanguage,
+			fmt.Sprintf("Content language mismatch: Expected %v, obtained %v", expected.contentLanguage, actual.contentLanguage))
+	}
+
+	if expected.contentType != nil {
+		s.a.Assert(expected.contentType, equals(), actual.contentType,
+			fmt.Sprintf("Content type mismatch: Expected %v, obtained %v", expected.contentType, actual.contentType))
+	}
+
+	if expected.contentMD5 != nil {
+		s.a.Assert(expected.contentMD5, equals(), actual.contentMD5,
+			fmt.Sprintf("Content MD5 mismatch: Expected %v, obtained %v", expected.contentMD5, actual.contentMD5))
+	}
 }
 
 func (s *scenario) validateCreateTime(expected, actual *time.Time) {

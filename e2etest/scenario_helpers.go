@@ -24,6 +24,7 @@ package e2etest
 
 import (
 	"context"
+	"crypto/md5"
 	"fmt"
 	"io/ioutil"
 	"net/url"
@@ -110,9 +111,19 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, dirPath string, f
 			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
 			//			//   by local files. E.g. not contentHeaders or metadata).
 		} else {
-			_, err = s.generateLocalFile(
+			sourceData, err := s.generateLocalFile(
 				filepath.Join(dirPath, file.name),
 				file.creationProperties.sizeBytes(c, defaultSize))
+			contentMD5 := md5.Sum(sourceData)
+			if file.creationProperties.contentHeaders == nil {
+				file.creationProperties.contentHeaders = &contentHeaders{}
+			}
+			file.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+
+			//if file.verificationProperties.contentHeaders == nil {
+			//	file.verificationProperties.contentHeaders = &contentHeaders{}
+			//}
+			//file.verificationProperties.contentHeaders.contentMD5 = contentMD5[:]
 			c.AssertNoErr(err)
 			//TODO: nakulkar-msft you'll need to set up things like attributes, and other relevant things from
 			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
@@ -304,9 +315,22 @@ func (scenarioHelper) generateBlobsFromList(c asserter, containerURL azblob.Cont
 		}
 		ad := blobResourceAdapter{b}
 		blob := containerURL.NewBlockBlobURL(b.name)
+		reader, sourceData := getRandomDataAndReader(b.creationProperties.sizeBytes(c, defaultSize))
+		contentMD5 := md5.Sum(sourceData)
+		if b.creationProperties.contentHeaders == nil {
+			b.creationProperties.contentHeaders = &contentHeaders{}
+		}
+		b.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+
+		//if b.verificationProperties.contentHeaders == nil {
+		//	b.verificationProperties.contentHeaders = &contentHeaders{}
+		//}
+		//b.verificationProperties.contentHeaders.contentMD5 = contentMD5[:]
+		headers := ad.toHeaders()
+		headers.ContentMD5 = contentMD5[:]
 		cResp, err := blob.Upload(ctx,
-			common.NewRandomDataGenerator(int64(b.creationProperties.sizeBytes(c, defaultSize))),
-			ad.toHeaders(),
+			reader,
+			headers,
 			ad.toMetadata(),
 			azblob.BlobAccessConditions{})
 		c.AssertNoErr(err)
@@ -358,6 +382,32 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 	}
 
 	return result
+}
+
+func (s scenarioHelper) downloadBlobContent(a asserter, containerURL azblob.ContainerURL, resourceRelPath string) []byte {
+	blobURL := containerURL.NewBlobURL(resourceRelPath)
+	downloadResp, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
+	a.AssertNoErr(err)
+
+	retryReader := downloadResp.Body(azblob.RetryReaderOptions{})
+	defer retryReader.Close()
+
+	destData, err := ioutil.ReadAll(retryReader)
+	a.AssertNoErr(err)
+	return destData[:]
+
+	//for marker := (azblob.Marker{}); marker.NotDone(); {
+	//	listBlob, err := containerURL.ListBlobsFlatSegment(context.TO DO(), marker, azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true, Versions: true}})
+	//	a.AssertNoErr(err)
+	//
+	//	for _, blobInfo := range listBlob.Segment.BlobItems {
+	//		if relativePath == blobInfo.Name {
+	//
+	//		}
+	//	}
+	//}
+	//a.Error("Could not find the blob while listing blobs in container")
+	//return nil
 }
 
 func (scenarioHelper) generatePageBlobsFromList(c asserter, containerURL azblob.ContainerURL, blobList []string, data string) {
@@ -521,9 +571,28 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, shareURL azfile.Sha
 			generateParentsForAzureFile(c, file)
 
 			// create the file itself
-			cResp, err := file.Create(ctx, int64(f.creationProperties.sizeBytes(c, defaultSize)), ad.toHeaders(), ad.toMetadata())
+			fileSize := int64(f.creationProperties.sizeBytes(c, defaultSize))
+			contentR, contentD := getRandomDataAndReader(int(fileSize))
+			contentMD5 := md5.Sum(contentD)
+			if f.creationProperties.contentHeaders == nil {
+				f.creationProperties.contentHeaders = &contentHeaders{}
+			}
+			f.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+
+			//if f.verificationProperties.contentHeaders == nil {
+			//	f.verificationProperties.contentHeaders = &contentHeaders{}
+			//}
+			//f.verificationProperties.contentHeaders.contentMD5 = contentMD5[:]
+			headers := ad.toHeaders()
+			headers.ContentMD5 = contentMD5[:]
+			cResp, err := file.Create(ctx, fileSize, headers, ad.toMetadata())
 			c.AssertNoErr(err)
 			c.Assert(cResp.StatusCode(), equals(), 201)
+
+			_, err = file.UploadRange(context.Background(), 0, contentR, nil)
+			if err == nil {
+				c.Failed()
+			}
 
 			// TODO: do we want to put some random content into it?
 		}
@@ -580,7 +649,11 @@ func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile
 					smbPermissionsSddl: &filePermissions,
 				}
 
-				result[fileInfo.Name] = &props
+				relativePath := lResp.DirectoryPath + "/"
+				if relativePath == "/" {
+					relativePath = ""
+				}
+				result[relativePath+fileInfo.Name] = &props
 			}
 
 			for _, dirInfo := range lResp.DirectoryItems {
@@ -610,6 +683,19 @@ func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile
 	}
 
 	return result
+}
+
+func (s scenarioHelper) downloadFileContent(a asserter, shareURL azfile.ShareURL, resourceRelPath string) []byte {
+	fileURL := shareURL.NewRootDirectoryURL().NewFileURL(resourceRelPath)
+	downloadResp, err := fileURL.Download(ctx, 0, azfile.CountToEnd, false)
+	a.AssertNoErr(err)
+
+	retryReader := downloadResp.Body(azfile.RetryReaderOptions{})
+	defer retryReader.Close() // The client must close the response body when finished with it
+
+	destData, err := ioutil.ReadAll(retryReader)
+	downloadResp.Body(azfile.RetryReaderOptions{})
+	return destData
 }
 
 func (scenarioHelper) generateBFSPathsFromList(c asserter, filesystemURL azbfs.FileSystemURL, fileList []string) {
