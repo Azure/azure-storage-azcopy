@@ -154,6 +154,7 @@ type params struct {
 	cancelFromStdin           bool
 	preserveSMBPermissions    common.PreservePermissionsOption
 	preserveSMBInfo           bool
+	appendSourcePath          string // c1; c1\f1.txt
 }
 
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level

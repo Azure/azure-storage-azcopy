@@ -74,6 +74,9 @@ func (s *scenario) Run() {
 	if s.a.Failed() {
 		return // setup failed. No point in running the test
 	}
+	if s.GetModifiableParameters().appendSourcePath != "" {
+		s.state.source.appendSourcePath(s.GetModifiableParameters().appendSourcePath, true)
+	}
 
 	// call pre-run hook
 	if !s.runHook(s.hs.beforeRunJob) {
@@ -96,6 +99,10 @@ func (s *scenario) Run() {
 	}
 
 	// check
+	if s.operation == eOperation.Remove() {
+		s.validateRemove()
+		return
+	}
 	s.validateTransferStates()
 	if s.a.Failed() {
 		return // no point in doing more validation
@@ -182,7 +189,18 @@ func (s *scenario) runAzCopy() {
 
 	s.state.result = &result
 }
-
+func (s *scenario) validateRemove() {
+	removedFiles := s.fs.toTestObjects(s.fs.shouldTransfer, false)
+	props := s.state.source.getAllProperties(s.a)
+	if len(removedFiles) != len(props) {
+		s.a.Failed()
+	}
+	for _, removeFile := range removedFiles {
+		if _, ok := props[removeFile.name]; !ok {
+			s.a.Failed()
+		}
+	}
+}
 func (s *scenario) validateTransferStates() {
 
 	if s.p.deleteDestination != common.EDeleteDestination.False() {

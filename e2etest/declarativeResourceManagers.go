@@ -61,6 +61,9 @@ type resourceManager interface {
 
 	// isContainerLike returns true if the resource is a top-level cloud-based resource (e.g. a container, a File Share, etc)
 	isContainerLike() bool
+
+	// appendSourcePath appends path to create relative path
+	appendSourcePath(string, bool)
 }
 
 ///////////////
@@ -90,6 +93,10 @@ func (r *resourceLocal) getParam(stripTopDir bool, _ bool) string {
 
 func (r *resourceLocal) isContainerLike() bool {
 	return false
+}
+
+func (r *resourceLocal) appendSourcePath(filePath string, _ bool) {
+	r.dirPath += "/" + filePath
 }
 
 func (r *resourceLocal) getAllProperties(a asserter) map[string]*objectProperties {
@@ -138,6 +145,12 @@ func (r *resourceBlobContainer) isContainerLike() bool {
 	return true
 }
 
+func (r *resourceBlobContainer) appendSourcePath(filePath string, useSas bool) {
+	if useSas {
+		r.rawSasURL.Path += "/" + filePath
+	}
+}
+
 func (r *resourceBlobContainer) getAllProperties(a asserter) map[string]*objectProperties {
 	return scenarioHelper{}.enumerateContainerBlobProperties(a, *r.containerURL)
 }
@@ -183,6 +196,12 @@ func (r *resourceAzureFileShare) isContainerLike() bool {
 	return true
 }
 
+func (r *resourceAzureFileShare) appendSourcePath(filePath string, useSas bool) {
+	if useSas {
+		r.rawSasURL.Path += "/" + filePath
+	}
+}
+
 func (r *resourceAzureFileShare) getAllProperties(a asserter) map[string]*objectProperties {
 	return scenarioHelper{}.enumerateShareFileProperties(a, *r.shareURL)
 }
@@ -221,4 +240,7 @@ func (r *resourceDummy) getAllProperties(a asserter) map[string]*objectPropertie
 
 func (r *resourceDummy) downloadContent(a asserter, _ string) []byte {
 	return make([]byte, 0)
+}
+
+func (r *resourceDummy) appendSourcePath(_ string, _ bool) {
 }

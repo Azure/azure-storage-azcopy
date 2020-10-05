@@ -153,7 +153,7 @@ func TestFilter_IncludePattern(t *testing.T) {
 		})
 }
 
-func TestFilter_Remove(t *testing.T) {
+func TestFilter_RemoveFile(t *testing.T) {
 
 	RunScenarios(
 		t,
@@ -161,15 +161,64 @@ func TestFilter_Remove(t *testing.T) {
 		eTestFromTo.AllRemove(),
 		eValidate.Auto(),
 		params{
-			recursive: true,
+			appendSourcePath: "file2.txt",
 		},
 		nil,
 		testFiles{
 			defaultSize: "1K",
 			shouldTransfer: []interface{}{
-				folder(""), // root dir
 				"file1.txt",
-				"subdir/file2",
+			},
+			shouldIgnore: []interface{}{
+				"file2.txt",
+			},
+		})
+}
+
+func TestFilter_RemoveFolder(t *testing.T) {
+
+	RunScenarios(
+		t,
+		eOperation.Remove(),
+		eTestFromTo.AllRemove(),
+		eValidate.Auto(),
+		params{
+			recursive:        true,
+			appendSourcePath: "folder2/",
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				"file1.txt",
+				"folder1/file11.txt",
+				"folder1/file12.txt",
+			},
+			shouldIgnore: []interface{}{
+				"folder2/file21.txt",
+				"folder2/file22.txt",
+			},
+		})
+}
+
+func TestFilter_RemoveContainer(t *testing.T) {
+
+	RunScenarios(
+		t,
+		eOperation.Remove(),
+		eTestFromTo.AllRemove(),
+		eValidate.Auto(),
+		params{
+			recursive:        true,
+			appendSourcePath: "",
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				"file1.txt",
+				"folder1/file11.txt",
+				"folder1/file12.txt",
 			},
 		})
 }
