@@ -67,15 +67,12 @@ func (s *scenario) Run() {
 
 	// setup
 	s.assignSourceAndDest() // what/where are they
-	s.state.source.createLocation(s.a)
-	s.state.dest.createLocation(s.a)
+	s.state.source.createLocation(s.a, s)
+	s.state.dest.createLocation(s.a, s)
 	s.state.source.createFiles(s.a, s.fs, true)
 	s.state.dest.createFiles(s.a, s.fs, false)
 	if s.a.Failed() {
 		return // setup failed. No point in running the test
-	}
-	if s.GetModifiableParameters().appendSourcePath != "" {
-		s.state.source.appendSourcePath(s.GetModifiableParameters().appendSourcePath, true)
 	}
 
 	// call pre-run hook
@@ -99,10 +96,6 @@ func (s *scenario) Run() {
 	}
 
 	// check
-	if s.operation == eOperation.Remove() {
-		s.validateRemove()
-		return
-	}
 	s.validateTransferStates()
 	if s.a.Failed() {
 		return // no point in doing more validation
@@ -202,6 +195,10 @@ func (s *scenario) validateRemove() {
 	}
 }
 func (s *scenario) validateTransferStates() {
+	if s.operation == eOperation.Remove() {
+		s.validateRemove()
+		return
+	}
 
 	if s.p.deleteDestination != common.EDeleteDestination.False() {
 		// TODO: implement deleteDestinationValidation

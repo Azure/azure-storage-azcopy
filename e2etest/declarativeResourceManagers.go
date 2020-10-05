@@ -38,7 +38,7 @@ func assertNoStripTopDir(stripTopDir bool) {
 type resourceManager interface {
 
 	// creates an empty container/share/directory etc
-	createLocation(a asserter)
+	createLocation(a asserter, s *scenario)
 
 	// creates the test files in the location. Implementers can assume that createLocation has been called first.
 	// This method may be called multiple times, in which case it should overwrite any like-named files that are already there.
@@ -62,7 +62,7 @@ type resourceManager interface {
 	// isContainerLike returns true if the resource is a top-level cloud-based resource (e.g. a container, a File Share, etc)
 	isContainerLike() bool
 
-	// appendSourcePath appends path to create relative path
+	// appendSourcePath appends a path to creates absolute path
 	appendSourcePath(string, bool)
 }
 
@@ -72,8 +72,11 @@ type resourceLocal struct {
 	dirPath string
 }
 
-func (r *resourceLocal) createLocation(a asserter) {
+func (r *resourceLocal) createLocation(a asserter, s *scenario) {
 	r.dirPath = TestResourceFactory{}.CreateLocalDirectory(a)
+	if s.GetModifiableParameters().relativeSourcePath != "" {
+		s.state.source.appendSourcePath(s.GetModifiableParameters().relativeSourcePath, true)
+	}
 }
 
 func (r *resourceLocal) createFiles(a asserter, fs testFiles, isSource bool) {
@@ -116,10 +119,13 @@ type resourceBlobContainer struct {
 	rawSasURL    *url.URL
 }
 
-func (r *resourceBlobContainer) createLocation(a asserter) {
+func (r *resourceBlobContainer) createLocation(a asserter, s *scenario) {
 	cu, _, rawSasURL := TestResourceFactory{}.CreateNewContainer(a, r.accountType)
 	r.containerURL = &cu
 	r.rawSasURL = &rawSasURL
+	if s.GetModifiableParameters().relativeSourcePath != "" {
+		s.state.source.appendSourcePath(s.GetModifiableParameters().relativeSourcePath, true)
+	}
 }
 
 func (r *resourceBlobContainer) createFiles(a asserter, fs testFiles, isSource bool) {
@@ -163,14 +169,17 @@ func (r *resourceBlobContainer) downloadContent(a asserter, resourceRelPath stri
 
 type resourceAzureFileShare struct {
 	accountType AccountType
-	shareURL    *azfile.ShareURL
+	shareURL    *azfile.ShareURL // // TODO: Either eliminate SDK URLs from ResourceManager or provide means to edit it (File SDK) for which pipeline is required
 	rawSasURL   *url.URL
 }
 
-func (r *resourceAzureFileShare) createLocation(a asserter) {
+func (r *resourceAzureFileShare) createLocation(a asserter, s *scenario) {
 	su, _, rawSasURL := TestResourceFactory{}.CreateNewFileShare(a, EAccountType.Standard())
 	r.shareURL = &su
 	r.rawSasURL = &rawSasURL
+	if s.GetModifiableParameters().relativeSourcePath != "" {
+		s.state.source.appendSourcePath(s.GetModifiableParameters().relativeSourcePath, true)
+	}
 }
 
 func (r *resourceAzureFileShare) createFiles(a asserter, fs testFiles, isSource bool) {
@@ -214,7 +223,7 @@ func (r *resourceAzureFileShare) downloadContent(a asserter, resourceRelPath str
 
 type resourceDummy struct{}
 
-func (r *resourceDummy) createLocation(a asserter) {
+func (r *resourceDummy) createLocation(a asserter, s *scenario) {
 
 }
 
@@ -227,7 +236,7 @@ func (r *resourceDummy) cleanup(_ asserter) {
 
 func (r *resourceDummy) getParam(stripTopDir bool, _ bool) string {
 	assertNoStripTopDir(stripTopDir)
-	return "" // returning foobar is causing problems in
+	return ""
 }
 
 func (r *resourceDummy) isContainerLike() bool {

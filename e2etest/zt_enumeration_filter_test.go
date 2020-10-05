@@ -161,7 +161,7 @@ func TestFilter_RemoveFile(t *testing.T) {
 		eTestFromTo.AllRemove(),
 		eValidate.Auto(),
 		params{
-			appendSourcePath: "file2.txt",
+			relativeSourcePath: "file2.txt",
 		},
 		nil,
 		testFiles{
@@ -183,8 +183,8 @@ func TestFilter_RemoveFolder(t *testing.T) {
 		eTestFromTo.AllRemove(),
 		eValidate.Auto(),
 		params{
-			recursive:        true,
-			appendSourcePath: "folder2/",
+			recursive:          true,
+			relativeSourcePath: "folder2/",
 		},
 		nil,
 		testFiles{
@@ -209,8 +209,8 @@ func TestFilter_RemoveContainer(t *testing.T) {
 		eTestFromTo.AllRemove(),
 		eValidate.Auto(),
 		params{
-			recursive:        true,
-			appendSourcePath: "",
+			recursive:          true,
+			relativeSourcePath: "",
 		},
 		nil,
 		testFiles{
