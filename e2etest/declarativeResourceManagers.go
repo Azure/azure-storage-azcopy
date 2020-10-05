@@ -75,7 +75,7 @@ type resourceLocal struct {
 func (r *resourceLocal) createLocation(a asserter, s *scenario) {
 	r.dirPath = TestResourceFactory{}.CreateLocalDirectory(a)
 	if s.GetModifiableParameters().relativeSourcePath != "" {
-		s.state.source.appendSourcePath(s.GetModifiableParameters().relativeSourcePath, true)
+		r.appendSourcePath(s.GetModifiableParameters().relativeSourcePath, true)
 	}
 }
 
@@ -124,7 +124,7 @@ func (r *resourceBlobContainer) createLocation(a asserter, s *scenario) {
 	r.containerURL = &cu
 	r.rawSasURL = &rawSasURL
 	if s.GetModifiableParameters().relativeSourcePath != "" {
-		s.state.source.appendSourcePath(s.GetModifiableParameters().relativeSourcePath, true)
+		r.appendSourcePath(s.GetModifiableParameters().relativeSourcePath, true)
 	}
 }
 
@@ -178,7 +178,7 @@ func (r *resourceAzureFileShare) createLocation(a asserter, s *scenario) {
 	r.shareURL = &su
 	r.rawSasURL = &rawSasURL
 	if s.GetModifiableParameters().relativeSourcePath != "" {
-		s.state.source.appendSourcePath(s.GetModifiableParameters().relativeSourcePath, true)
+		r.appendSourcePath(s.GetModifiableParameters().relativeSourcePath, true)
 	}
 }
 
