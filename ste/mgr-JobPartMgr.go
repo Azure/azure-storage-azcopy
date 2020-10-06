@@ -577,10 +577,10 @@ func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byt
 
 // TODO do we want these charset=utf-8?
 var builtinTypes = map[string]string{
-	".css":  "text/css;",
+	".css":  "text/css",
 	".gif":  "image/gif",
-	".htm":  "text/html;",
-	".html": "text/html;",
+	".htm":  "text/html",
+	".html": "text/html",
 	".jpeg": "image/jpeg",
 	".jpg":  "image/jpeg",
 	".js":   "application/javascript",
@@ -590,7 +590,7 @@ var builtinTypes = map[string]string{
 	".svg":  "image/svg+xml",
 	".wasm": "application/wasm",
 	".webp": "image/webp",
-	".xml":  "text/xml;",
+	".xml":  "text/xml",
 }
 
 func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []byte) string {
@@ -602,11 +602,16 @@ func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []by
 		return override
 	}
 
+	/*
+	 * Below functions return utf-8 as default charset for text files. Discard
+	 * charset if it exists, safer to omit charset instead of defaulting to
+	 * a wrong one.
+	 */
 	if guessedType := mime.TypeByExtension(fileExtension); guessedType != "" {
-		return guessedType
+		return strings.Split(guessedType, ";")[0]
 	}
 
-	return http.DetectContentType(dataFileToXfer)
+	return strings.Split(http.DetectContentType(dataFileToXfer), ";")[0]
 }
 
 func (jpm *jobPartMgr) BlobTypeOverride() common.BlobType {
