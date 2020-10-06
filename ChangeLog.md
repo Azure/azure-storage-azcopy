@@ -1,6 +1,15 @@
 
 # Change Log
 
+## Version 10.6.1
+
+### Bug fixes
+
+1. Fix bug with enumerating public folder using /*.
+1. Fix bug with OAuth login in `azcopy sync`.
+1. Fix incorrect `STDIN` location for Pipe by enforcing `--from-to` flag.
+1. Allow piping to use OAuth login.
+
 ## Version 10.6.0
 
 ### New features
