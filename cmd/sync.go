@@ -533,6 +533,17 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return err
 	}
 
+	srcCredInfo, _, err := getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true)
+
+	if err != nil {
+		return err
+	}
+
+	// If the source wants OAuth and the destination doesn't, override the credential type because this could be a download, or oauth to SAS.
+	if srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() && cca.credentialInfo.CredentialType != common.ECredentialType.OAuthToken() {
+		cca.credentialInfo = srcCredInfo
+	}
+
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
 	if cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
