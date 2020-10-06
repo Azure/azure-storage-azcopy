@@ -968,8 +968,17 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 		return fmt.Errorf("fatal: cannot write to Stdout due to error: %s", err.Error())
 	}
 
+	// The isPublic flag is useful in S2S transfers but doesn't much matter for download. Fortunately, no S2S happens here.
+	// This means that if there's auth, there's auth. We're happy and can move on.
+	// getCredentialInfoForLocation also populates oauth token fields... so, it's very easy.
+	credInfo, _, err := getCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, true)
+
+	if err != nil {
+		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
+	}
+
 	// step 1: initialize pipeline
-	p, err := createBlobPipeline(ctx, common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+	p, err := createBlobPipeline(ctx, credInfo)
 	if err != nil {
 		return err
 	}
@@ -1007,8 +1016,15 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 		blockSize = pipingDefaultBlockSize
 	}
 
+	// getCredentialInfoForLocation populates oauth token fields... so, it's very easy.
+	credInfo, _, err := getCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, false)
+
+	if err != nil {
+		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
+	}
+
 	// step 0: initialize pipeline
-	p, err := createBlobPipeline(ctx, common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+	p, err := createBlobPipeline(ctx, credInfo)
 	if err != nil {
 		return err
 	}
