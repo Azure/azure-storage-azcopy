@@ -329,8 +329,10 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 	} else {
 		expectedContentType = http.DetectContentType(mmap)
 	}
+	expectedContentType = strings.Split(expectedContentType, ";")[0]
 	if !validateString(expectedContentType, get.ContentType()) {
-		fmt.Println("mismatch content type between actual and user given file content type")
+		str1 := fmt.Sprintf(" %s    %s", expectedContentType, get.ContentType())
+		fmt.Println(str1 + "mismatch content type between actual and user given file content type")
 		os.Exit(1)
 	}
 

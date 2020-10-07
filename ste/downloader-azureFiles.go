@@ -51,7 +51,7 @@ func (bd *azureFilesDownloader) init(jptm IJobPartTransferMgr) {
 }
 
 func (bd *azureFilesDownloader) isInitialized() bool {
-	// TODO: only day, do we really want this object to be able to exist in an uninitizalide state?
+	// TODO: only day, do we really want this object to be able to exist in an uninitialized state?
 	//   Could/should we refactor the construction...?
 	return bd.jptm != nil
 }

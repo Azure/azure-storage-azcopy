@@ -23,12 +23,15 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
+	"golang.org/x/sys/windows"
 )
 
 type osScenarioHelper struct{}
@@ -72,4 +75,20 @@ func (osScenarioHelper) getFileDates(c asserter, filePath string) (createdTime, 
 	c.AssertNoErr(err)
 	hi := ste.HandleInfo{h} // TODO: do we want to rely on AzCopy code in tests like this? It does save a little time in test framework dev
 	return hi.FileCreationTime(), hi.FileLastWriteTime()
+}
+
+func (osScenarioHelper) getFileAttrs(c asserter, filepath string) *uint32 {
+	fileinfo, err := os.Stat(filepath)
+	c.AssertNoErr(err)
+	stat := fileinfo.Sys().(*syscall.Win32FileAttributeData)
+
+	return &(stat.FileAttributes)
+}
+
+func (osScenarioHelper) getFileSDDLString(c asserter, filepath string) *string {
+	sd, err := windows.GetNamedSecurityInfo(filepath, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.GROUP_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
+	c.AssertNoErr(err)
+	ret := sd.String()
+
+	return &ret
 }

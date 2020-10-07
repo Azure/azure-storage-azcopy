@@ -653,7 +653,7 @@ func GetJobFromTo(r common.GetJobFromToRequest) common.GetJobFromToResponse {
 		jm, _ = JobsAdmin.JobMgr(r.JobID)
 	}
 
-	// Get zero'th part of the job part plan.
+	// Get zeroth part of the job part plan.
 	jp0, ok := jm.JobPartMgr(0)
 	if !ok {
 		return common.GetJobFromToResponse{

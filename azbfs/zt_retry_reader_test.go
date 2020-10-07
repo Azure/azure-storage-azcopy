@@ -26,7 +26,7 @@ type perByteReader struct {
 	doInjectTimes          int
 	injectedError          error
 
-	// sleepDuraion and closeChannel are only use in "forced cancellation" tests
+	// sleepDuration and closeChannel are only use in "forced cancellation" tests
 	sleepDuration time.Duration
 	closeChannel  chan struct{}
 }
@@ -270,7 +270,7 @@ func (r *aztestsSuite) TestRetryReaderReadNegativeNormalFail(c *chk.C) {
 	c.Assert(n, chk.Equals, 0)
 	c.Assert(err, chk.Equals, body.injectedError)
 
-	// Check that we recieved the right notification callbacks
+	// Check that we received the right notification callbacks
 	// We only expect two failed tries in this test, but only one
 	// of the would have had willRetry = true
 	c.Assert(failureMethodNumCalls, chk.Equals, 2)           // this is the number of calls we counted

@@ -396,7 +396,7 @@ func (AzureFileParentDirCreator) getParentDirectoryURL(uh URLHolder, p pipeline.
 
 // verifyAndHandleCreateErrors handles create errors, StatusConflict is ignored, as specific level directory could be existing.
 // Report http.StatusForbidden, as user should at least have read and write permission of the destination,
-// and there is no permission on directory level, i.e. create directory is a general permission for each level diretories for Azure file.
+// and there is no permission on directory level, i.e. create directory is a general permission for each level directories for Azure file.
 func (AzureFileParentDirCreator) verifyAndHandleCreateErrors(err error) error {
 	if err != nil {
 		sErr, sErrOk := err.(azfile.StorageError)

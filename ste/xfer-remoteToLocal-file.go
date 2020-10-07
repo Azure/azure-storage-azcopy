@@ -161,7 +161,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		dstFile = devNullWriter{}
 	} else {
 		// Normal scenario, create the destination file as expected
-		// Use pseudo chunk id to alow our usual state tracking mechanism to keep count of how many
+		// Use pseudo chunk id to allow our usual state tracking mechanism to keep count of how many
 		// file creations are running at any given instant, for perf diagnostics
 		pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.CreateLocalFile())

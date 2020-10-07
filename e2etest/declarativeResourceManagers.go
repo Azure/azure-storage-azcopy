@@ -38,7 +38,7 @@ func assertNoStripTopDir(stripTopDir bool) {
 type resourceManager interface {
 
 	// creates an empty container/share/directory etc
-	createLocation(a asserter)
+	createLocation(a asserter, s *scenario)
 
 	// creates the test files in the location. Implementers can assume that createLocation has been called first.
 	// This method may be called multiple times, in which case it should overwrite any like-named files that are already there.
@@ -49,6 +49,9 @@ type resourceManager interface {
 	// Used for verification
 	getAllProperties(a asserter) map[string]*objectProperties
 
+	// Download
+	downloadContent(a asserter, resourceRelPath string) []byte
+
 	// cleanup gets rid of everything that setup created
 	// (Takes no param, because the resourceManager is expected to track its own state. E.g. "what did I make")
 	cleanup(a asserter)
@@ -58,6 +61,9 @@ type resourceManager interface {
 
 	// isContainerLike returns true if the resource is a top-level cloud-based resource (e.g. a container, a File Share, etc)
 	isContainerLike() bool
+
+	// appendSourcePath appends a path to creates absolute path
+	appendSourcePath(string, bool)
 }
 
 ///////////////
@@ -66,8 +72,11 @@ type resourceLocal struct {
 	dirPath string
 }
 
-func (r *resourceLocal) createLocation(a asserter) {
+func (r *resourceLocal) createLocation(a asserter, s *scenario) {
 	r.dirPath = TestResourceFactory{}.CreateLocalDirectory(a)
+	if s.GetModifiableParameters().relativeSourcePath != "" {
+		r.appendSourcePath(s.GetModifiableParameters().relativeSourcePath, true)
+	}
 }
 
 func (r *resourceLocal) createFiles(a asserter, fs testFiles, isSource bool) {
@@ -89,8 +98,17 @@ func (r *resourceLocal) isContainerLike() bool {
 	return false
 }
 
+func (r *resourceLocal) appendSourcePath(filePath string, _ bool) {
+	r.dirPath += "/" + filePath
+}
+
 func (r *resourceLocal) getAllProperties(a asserter) map[string]*objectProperties {
 	return scenarioHelper{}.enumerateLocalProperties(a, r.dirPath)
+}
+
+func (r *resourceLocal) downloadContent(a asserter, resourceRelPath string) []byte {
+	//return scenarioHelper{}.enumerateLocalProperties(a, r.dirPath)
+	panic("Not Implemented")
 }
 
 ///////
@@ -101,10 +119,13 @@ type resourceBlobContainer struct {
 	rawSasURL    *url.URL
 }
 
-func (r *resourceBlobContainer) createLocation(a asserter) {
+func (r *resourceBlobContainer) createLocation(a asserter, s *scenario) {
 	cu, _, rawSasURL := TestResourceFactory{}.CreateNewContainer(a, r.accountType)
 	r.containerURL = &cu
 	r.rawSasURL = &rawSasURL
+	if s.GetModifiableParameters().relativeSourcePath != "" {
+		r.appendSourcePath(s.GetModifiableParameters().relativeSourcePath, true)
+	}
 }
 
 func (r *resourceBlobContainer) createFiles(a asserter, fs testFiles, isSource bool) {
@@ -130,22 +151,35 @@ func (r *resourceBlobContainer) isContainerLike() bool {
 	return true
 }
 
+func (r *resourceBlobContainer) appendSourcePath(filePath string, useSas bool) {
+	if useSas {
+		r.rawSasURL.Path += "/" + filePath
+	}
+}
+
 func (r *resourceBlobContainer) getAllProperties(a asserter) map[string]*objectProperties {
 	return scenarioHelper{}.enumerateContainerBlobProperties(a, *r.containerURL)
+}
+
+func (r *resourceBlobContainer) downloadContent(a asserter, resourceRelPath string) []byte {
+	return scenarioHelper{}.downloadBlobContent(a, *r.containerURL, resourceRelPath)
 }
 
 /////
 
 type resourceAzureFileShare struct {
 	accountType AccountType
-	shareURL    *azfile.ShareURL
+	shareURL    *azfile.ShareURL // // TODO: Either eliminate SDK URLs from ResourceManager or provide means to edit it (File SDK) for which pipeline is required
 	rawSasURL   *url.URL
 }
 
-func (r *resourceAzureFileShare) createLocation(a asserter) {
+func (r *resourceAzureFileShare) createLocation(a asserter, s *scenario) {
 	su, _, rawSasURL := TestResourceFactory{}.CreateNewFileShare(a, EAccountType.Standard())
 	r.shareURL = &su
 	r.rawSasURL = &rawSasURL
+	if s.GetModifiableParameters().relativeSourcePath != "" {
+		r.appendSourcePath(s.GetModifiableParameters().relativeSourcePath, true)
+	}
 }
 
 func (r *resourceAzureFileShare) createFiles(a asserter, fs testFiles, isSource bool) {
@@ -171,15 +205,25 @@ func (r *resourceAzureFileShare) isContainerLike() bool {
 	return true
 }
 
+func (r *resourceAzureFileShare) appendSourcePath(filePath string, useSas bool) {
+	if useSas {
+		r.rawSasURL.Path += "/" + filePath
+	}
+}
+
 func (r *resourceAzureFileShare) getAllProperties(a asserter) map[string]*objectProperties {
 	return scenarioHelper{}.enumerateShareFileProperties(a, *r.shareURL)
+}
+
+func (r *resourceAzureFileShare) downloadContent(a asserter, resourceRelPath string) []byte {
+	return scenarioHelper{}.downloadFileContent(a, *r.shareURL, resourceRelPath)
 }
 
 ////
 
 type resourceDummy struct{}
 
-func (r *resourceDummy) createLocation(a asserter) {
+func (r *resourceDummy) createLocation(a asserter, s *scenario) {
 
 }
 
@@ -192,7 +236,7 @@ func (r *resourceDummy) cleanup(_ asserter) {
 
 func (r *resourceDummy) getParam(stripTopDir bool, _ bool) string {
 	assertNoStripTopDir(stripTopDir)
-	return "foobar"
+	return ""
 }
 
 func (r *resourceDummy) isContainerLike() bool {
@@ -201,4 +245,11 @@ func (r *resourceDummy) isContainerLike() bool {
 
 func (r *resourceDummy) getAllProperties(a asserter) map[string]*objectProperties {
 	panic("not impelmented")
+}
+
+func (r *resourceDummy) downloadContent(a asserter, _ string) []byte {
+	return make([]byte, 0)
+}
+
+func (r *resourceDummy) appendSourcePath(_ string, _ bool) {
 }

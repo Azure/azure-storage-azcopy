@@ -41,7 +41,7 @@ func (f localFileSourceInfoProvider) Properties() (*SrcProperties, error) {
 	// create simulated headers, to represent what we want to propagate to the destination based on
 	// this file
 
-	headers, metadata := f.jptm.ResourceDstData(nil) // we don't have a known MIME type yet, so pass nil for the sniffed content of thefile
+	headers, metadata := f.jptm.ResourceDstData(nil) // we don't have a known MIME type yet, so pass nil for the sniffed content of the file
 
 	return &SrcProperties{
 		SrcHTTPHeaders: common.ResourceHTTPHeaders{

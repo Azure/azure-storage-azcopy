@@ -245,7 +245,7 @@ func GetCredTypeFromEnvVar() common.CredentialType {
 	}
 
 	// Remove the env var after successfully fetching once,
-	// in case of env var is further spreading into child processes unexpectly.
+	// in case of env var is further spreading into child processes unexpectedly.
 	glcm.ClearEnvironmentVariable(common.EEnvironmentVariable.CredentialType())
 
 	// Try to get the value set.
