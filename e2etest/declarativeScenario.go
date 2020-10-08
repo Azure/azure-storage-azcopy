@@ -124,7 +124,8 @@ func (s *scenario) assignSourceAndDest() {
 	createTestResource := func(loc common.Location) resourceManager {
 		// TODO: handle account to account (multi-container) scenarios
 		switch loc {
-		case common.ELocation.Local():
+		case common.ELocation.Local(),
+			common.ELocation.Pipe():
 			return &resourceLocal{}
 		case common.ELocation.File():
 			return &resourceAzureFileShare{accountType: EAccountType.Standard()}
@@ -133,10 +134,10 @@ func (s *scenario) assignSourceAndDest() {
 			// TODO: handle wider variety of account types
 			return &resourceBlobContainer{accountType: EAccountType.Standard()}
 		case common.ELocation.BlobFS():
-			s.a.Error("Not implementd yet for blob FS")
+			s.a.Error("Not implemented yet for blob FS")
 			return &resourceDummy{}
 		case common.ELocation.S3():
-			s.a.Error("Not implementd yet for S3")
+			s.a.Error("Not implemented yet for S3")
 			return &resourceDummy{}
 		case common.ELocation.Unknown():
 			return &resourceDummy{}
@@ -174,7 +175,7 @@ func (s *scenario) runAzCopy() {
 		s.operation,
 		s.state.source.getParam(s.stripTopDir, useSas),
 		s.state.dest.getParam(false, useSas),
-		afterStart, s.chToStdin)
+		afterStart, s.chToStdin, s)
 
 	if !wasClean {
 		s.a.AssertNoErr(err, "running AzCopy")

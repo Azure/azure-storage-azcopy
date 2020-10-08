@@ -155,6 +155,7 @@ type params struct {
 	preserveSMBPermissions    common.PreservePermissionsOption
 	preserveSMBInfo           bool
 	relativeSourcePath        string
+	fromTo                    string
 }
 
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level
@@ -172,6 +173,7 @@ func (Operation) Copy() Operation        { return Operation(1) }
 func (Operation) Sync() Operation        { return Operation(2) }
 func (Operation) CopyAndSync() Operation { return eOperation.Copy() & eOperation.Sync() }
 func (Operation) Remove() Operation      { return Operation(3) }
+func (Operation) Redirection() Operation { return Operation(4) } // Pipe Upload & Download
 
 func (o Operation) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
@@ -182,7 +184,8 @@ func (o Operation) getValues() []Operation {
 	switch o {
 	case eOperation.Copy(),
 		eOperation.Sync(),
-		eOperation.Remove():
+		eOperation.Remove(),
+		eOperation.Redirection():
 		return []Operation{o}
 	case eOperation.CopyAndSync():
 		return []Operation{eOperation.Copy(), eOperation.Sync()}
@@ -312,6 +315,25 @@ func (TestFromTo) AllRemove() TestFromTo {
 		},
 		tos: []common.Location{
 			common.ELocation.Unknown(),
+		},
+	}
+}
+
+func (TestFromTo) AllPipeRedirection() TestFromTo {
+	return TestFromTo{
+		desc:                   "AllPipeRedirection",
+		useAllTos:              true,
+		suppressAutoFileToFile: true, // not needed for AllPairs
+		froms: []common.Location{
+			common.ELocation.Pipe(),
+			common.ELocation.Blob(),
+		},
+		tos: []common.Location{
+			common.ELocation.Pipe(),
+			common.ELocation.Blob(),
+		},
+		filter: func(ft common.FromTo) bool {
+			return ft.From() != ft.To()
 		},
 	}
 }
