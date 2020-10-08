@@ -23,6 +23,7 @@ package e2etest
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -78,6 +79,7 @@ func (t *TestRunner) SetAllFlags(p params) {
 	set("s2s-detect-source-changed", p.s2sSourceChangeValidation, false)
 	set("metadata", p.metadata, "")
 	set("cancel-from-stdin", p.cancelFromStdin, false)
+	set("from-to", p.fromTo, "")
 }
 
 func (t *TestRunner) SetAwaitOpenFlag() {
@@ -157,8 +159,67 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string, afterS
 	}
 	return stdout.Bytes(), runErr
 }
+func (t *TestRunner) executePipingCommand(src, dst string, fromTo common.FromTo) ([]byte, error) {
+	// Cannot
+	flags := []string{"--from-to=" + fromTo.String()}
+	flags = append(flags, t.computeArgs()...)
+	var cmd1 *exec.Cmd
+	var cmd2 *exec.Cmd
+	if fromTo == common.EFromTo.PipeBlob() {
+		args := []string{"cp", dst}
+		args = append(args, flags...)
+		cmd1 = exec.Command("cat", src)
+		cmd2 = exec.Command(GlobalInputManager{}.GetExecutablePath(), args...)
+	} else {
+		args := []string{"cp", src}
+		args = append(args, flags...)
+		cmd1 = exec.Command(GlobalInputManager{}.GetExecutablePath(), args...)
+		cmd2 = exec.Command("tee", dst)
+	}
+	return executeMultipleCommands(cmd1, cmd2)
+}
 
-func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, afterStart func() string, chToStdin <-chan string) (CopyOrSyncCommandResult, bool, error) {
+// executeMultipleCommands as the name suggests takes two or more commands in input and execute them.
+// For any two adjacent commands, it connects the stdOut of first command with the stdIn of next command.
+// This will be primarily useful when working with pipes
+func executeMultipleCommands(commands ...*exec.Cmd) ([]byte, error) {
+	if len(commands) <= 1 {
+		return nil, errors.New("at least two commands required")
+	}
+
+	var stdOut bytes.Buffer
+	var stdErr bytes.Buffer
+
+	// Connect the stdout of the first command with the stdIn of the second command. Do that for every two consecutive commands. (Linked List)
+	last := len(commands) - 1
+	for i, cmd := range commands[:last] {
+		var runErr error
+		if commands[i+1].Stdin, runErr = cmd.StdoutPipe(); runErr != nil {
+			return nil, runErr
+		}
+		// Also connect each command's stdErr to the buffer
+		cmd.Stderr = &stdErr
+	}
+	commands[last].Stdout, commands[last].Stderr = &stdOut, &stdErr
+
+	// Iterate over each command one by one and trigger start.
+	// instead of err := c.Run(), we do the following
+	for _, cmd := range commands {
+		if runErr := cmd.Start(); runErr != nil {
+			return stdOut.Bytes(), runErr
+		}
+	}
+	// Iterate over each command and wait till it gets executed
+	for _, cmd := range commands {
+		if runErr := cmd.Wait(); runErr != nil {
+			return stdOut.Bytes(), runErr
+		}
+	}
+
+	return stdOut.Bytes(), nil
+}
+
+func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, afterStart func() string, chToStdin <-chan string, s *scenario) (CopyOrSyncCommandResult, bool, error) {
 	capLen := func(b []byte) []byte {
 		if len(b) < 1024 {
 			return b
@@ -170,6 +231,7 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 	verb := ""
 	switch operation {
 	case eOperation.Copy():
+	case eOperation.Redirection():
 		verb = "copy"
 	case eOperation.Sync():
 		verb = "sync"
@@ -179,12 +241,18 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 		panic("unsupported operation type")
 	}
 
-	args := []string{verb, src, dst}
-	if operation == eOperation.Remove() {
-		args = args[:2]
+	var out []byte
+	var err error
+	if operation == eOperation.Redirection() {
+		out, err = t.executePipingCommand(src, dst, s.fromTo)
+	} else {
+		args := []string{verb, src, dst}
+		if operation == eOperation.Remove() {
+			args = args[:2]
+		}
+		args = append(args, t.computeArgs()...)
+		out, err = t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args, afterStart, chToStdin)
 	}
-	args = append(args, t.computeArgs()...)
-	out, err := t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args, afterStart, chToStdin)
 
 	wasClean := true
 	stdErr := make([]byte, 0)
@@ -211,7 +279,7 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 
 	return CopyOrSyncCommandResult{},
 		false,
-		fmt.Errorf("azcopy run error: %w\n  with stderr: %s\n  and stdout: %s\n  from args %v", err, stdErr, out, args)
+		fmt.Errorf("azcopy run error: %w\n  with stderr: %s\n  and stdout: %s", err, stdErr, out)
 }
 
 func (t *TestRunner) SetTransferStatusFlag(value string) {
