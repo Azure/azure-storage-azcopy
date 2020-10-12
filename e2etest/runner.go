@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -168,13 +169,21 @@ func (t *TestRunner) executePipingCommand(src, dst string, fromTo common.FromTo)
 	if fromTo == common.EFromTo.PipeBlob() {
 		args := []string{"cp", dst}
 		args = append(args, flags...)
-		cmd1 = exec.Command("cat", src)
+		if runtime.GOOS == "windows" {
+			cmd1 = exec.Command("type", src)
+		} else {
+			cmd1 = exec.Command("cat", src)
+		}
 		cmd2 = exec.Command(GlobalInputManager{}.GetExecutablePath(), args...)
 	} else {
 		args := []string{"cp", src}
 		args = append(args, flags...)
 		cmd1 = exec.Command(GlobalInputManager{}.GetExecutablePath(), args...)
-		cmd2 = exec.Command("tee", dst)
+		if runtime.GOOS == "windows" {
+			cmd2 = exec.Command("tee", "-FilePath", src)
+		} else {
+			cmd2 = exec.Command("tee", dst)
+		}
 	}
 	return executeMultipleCommands(cmd1, cmd2)
 }
@@ -230,8 +239,8 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 
 	verb := ""
 	switch operation {
-	case eOperation.Copy():
-	case eOperation.Redirection():
+	case eOperation.Copy(),
+		eOperation.Redirection():
 		verb = "copy"
 	case eOperation.Sync():
 		verb = "sync"
@@ -245,14 +254,15 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 	var err error
 	if operation == eOperation.Redirection() {
 		out, err = t.executePipingCommand(src, dst, s.fromTo)
-	} else {
-		args := []string{verb, src, dst}
-		if operation == eOperation.Remove() {
-			args = args[:2]
-		}
-		args = append(args, t.computeArgs()...)
-		out, err = t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args, afterStart, chToStdin)
+		return CopyOrSyncCommandResult{}, true, nil
 	}
+
+	args := []string{verb, src, dst}
+	if operation == eOperation.Remove() {
+		args = args[:2]
+	}
+	args = append(args, t.computeArgs()...)
+	out, err = t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args, afterStart, chToStdin)
 
 	wasClean := true
 	stdErr := make([]byte, 0)

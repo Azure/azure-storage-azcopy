@@ -38,7 +38,7 @@ func TestPipe_Upload(t *testing.T) {
 		},
 		nil,
 		testFiles{
-			defaultSize: "4M",
+			defaultSize: "1K",
 			shouldTransfer: []interface{}{
 				"filea.txt",
 			},
