@@ -53,6 +53,7 @@ type IJobPartMgr interface {
 	getFolderCreationTracker() common.FolderCreationTracker
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 	FolderDeletionManager() common.FolderDeletionManager
+	Context() context.Context //Parent JobMgr's context
 }
 
 type serviceAPIVersionOverride struct{}
@@ -644,6 +645,10 @@ func (jpm *jobPartMgr) FolderDeletionManager() common.FolderDeletionManager {
 	}
 
 	return jpm.jobMgrInitState.folderDeletionManager
+}
+
+func (jpm *jobPartMgr) Context() context.Context {
+	return jpm.jobMgr.Context()
 }
 
 func (jpm *jobPartMgr) localDstData() *JobPartPlanDstLocal {

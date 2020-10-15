@@ -187,6 +187,8 @@ type jobPartTransferMgr struct {
 
 	actionAfterLastChunk func()
 
+	err error
+
 	/*
 		@Parteek removed 3/23 morning, as jeff ad equivalent
 		// transfer chunks are put into this channel and execution engine takes chunk out of this channel.
@@ -489,10 +491,21 @@ func (jptm *jobPartTransferMgr) SetActionAfterLastChunk(f func()) {
 // Call Done when a chunk has completed its transfer; this method returns the number of chunks completed so far
 func (jptm *jobPartTransferMgr) ReportChunkDone(id common.ChunkID) (lastChunk bool, chunksDone uint32) {
 
+	// If we want to retry for some errors..
+	if jptm.err != nil {
+		if stgErr, ok := jptm.err.(azblob.StorageError); ok && stgErr.ServiceCode() == azblob.ServiceCodeBlobArchived {
+			//1. Delete the blob
+			//2. Reset the jptm
+			//3. Reschedule the jptm
+			//return
+		}
+
+	}
 	// Tell the id to remember that we (the jptm) have been told about its completion
 	// Will panic if we've already been told about its completion before.
 	// Why? As defensive programming, since if we accidentally counted one chunk twice, we'd complete
 	// before another was finish. Which would be bad
+
 	id.SetCompletionNotificationSent()
 
 	// track progress
@@ -694,6 +707,7 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 	//  in that case, the logs would be repeated
 	//  as of april 9th, 2019, there's no obvious solution without adding more complexity into this part of the code, which is already not pretty and kind of everywhere
 	//  consider redesign the lifecycle management in ste
+	jptm.err = err
 	if !jptm.WasCanceled() {
 		jptm.Cancel()
 		serviceCode, status, msg := ErrorEx{err}.ErrorCodeAndString()
@@ -733,6 +747,30 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 	// TODO: ... Is that really ideal, having to call ReportChunkDone for all the chunks AFTER cancellation?
 	// TODO: ... but it is currently necessary,because of the way the transfer is only considered done (and automatic epilogue only triggers)
 	// TODO: ... if all expected chunks report as done
+}
+
+//Reset the jptm to prepare for a retry. Clear counters and stats
+//This is not thread safe and should be performed after last chunk for this jptm failed,
+// and before we report back to JobMgr (ie befor we execute ReportTransferDone())
+func (jptm *jobPartTransferMgr) reset() {
+	jptm.Log(pipeline.LogError, "Resetting jptm with") // TODO knarasim - log what file we're resetting
+
+	jptm.ctx, jptm.cancel = context.WithCancel(jptm.jobPartMgr.Context())
+	atomic.StoreInt64(&jptm.atomicSuccessfulBytes, 0)
+	atomic.StoreUint32(&jptm.atomicChunksDone, 0)
+	jptm.EnsureDestinationUnlocked()
+	jptm.numChunks = 0 // This will be set again by prologue
+	jptm.SetStatus(common.ETransferStatus.NotStarted())
+	jptm.SetErrorCode(int32(0))
+	jptm.err = nil
+
+	/*
+	 * Note on other members of jptm.
+	 * jptm.atomicCompletionIndicator is used to report back to JobMgr. We've not yet reported back to jobMgr
+	 * and hence we do not reset this counter.
+	 * Once you modify the destination, we should not reset jptm.atomicDestModifiedIndicator
+	 */
+
 }
 
 func (jptm *jobPartTransferMgr) PipelineLogInfo() pipeline.LogOptions {
