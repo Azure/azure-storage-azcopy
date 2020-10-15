@@ -494,10 +494,30 @@ func (jptm *jobPartTransferMgr) ReportChunkDone(id common.ChunkID) (lastChunk bo
 	// If we want to retry for some errors..
 	if jptm.err != nil {
 		if stgErr, ok := jptm.err.(azblob.StorageError); ok && stgErr.ServiceCode() == azblob.ServiceCodeBlobArchived {
+			//Archived blob. We try to remove the blob and then reschedule this file for a retransfer. If deletion failed,
+			// we do not retry again.
+			msg := "Blob archived. Attempting to delete the blob"
+			jptm.LogTransferInfo(pipeline.LogError, jptm.Info().Source, jptm.Info().Destination, msg)
+
 			//1. Delete the blob
-			//2. Reset the jptm
-			//3. Reschedule the jptm
-			//return
+			u, _ := url.Parse(jptm.Info().Destination)
+			blobURL := azblob.NewBlobURL(*u, jptm.jobPartMgr.Pipeline())
+			deletionContext, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancelFn()
+			_, err := blobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+
+			if err != nil {
+				_, status, msg := ErrorEx{err}.ErrorCodeAndString()
+				requestID := ErrorEx{err}.MSRequestID()
+				fullMsg := fmt.Sprintf("%s. When %s. X-Ms-Request-Id: %s\n", msg, "Deleting archived blob", requestID)
+				jptm.LogUploadError(jptm.Info().Source, jptm.Info().Destination, fullMsg, status)
+			} else {
+				//2. Reset the jptm
+				jptm.reset()
+				//3. Reschedule transfer
+				jptm.RescheduleTransfer()
+				return
+			} // else we fallback to original workflow and fail this transfer
 		}
 
 	}
@@ -753,9 +773,11 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 //This is not thread safe and should be performed after last chunk for this jptm failed,
 // and before we report back to JobMgr (ie befor we execute ReportTransferDone())
 func (jptm *jobPartTransferMgr) reset() {
-	jptm.Log(pipeline.LogError, "Resetting jptm with") // TODO knarasim - log what file we're resetting
+	jptm.LogTransferInfo(pipeline.LogError, jptm.Info().Source, jptm.Info().Destination, "Resetting jptm.")
 
-	jptm.ctx, jptm.cancel = context.WithCancel(jptm.jobPartMgr.Context())
+	jobID := jptm.jobPartMgr.Plan().JobID
+	jm, _ := JobsAdmin.JobMgr(jobID)
+	jptm.ctx, jptm.cancel = context.WithCancel(jm.Context())
 	atomic.StoreInt64(&jptm.atomicSuccessfulBytes, 0)
 	atomic.StoreUint32(&jptm.atomicChunksDone, 0)
 	jptm.EnsureDestinationUnlocked()
@@ -889,6 +911,10 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 	}
 
 	return jptm.jobPartMgr.ReportTransferDone(jptm.jobPartPlanTransfer.TransferStatus())
+}
+
+func (jptm *jobPartTransferMgr) Pipeline() pipeline.Pipeline {
+	return jptm.jobPartMgr.Pipeline()
 }
 
 func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {

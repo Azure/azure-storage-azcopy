@@ -49,11 +49,11 @@ type IJobPartMgr interface {
 	ChunkStatusLogger() common.ChunkStatusLogger
 	common.ILogger
 	SourceProviderPipeline() pipeline.Pipeline
+	Pipeline() pipeline.Pipeline
 	getOverwritePrompter() *overwritePrompter
 	getFolderCreationTracker() common.FolderCreationTracker
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 	FolderDeletionManager() common.FolderDeletionManager
-	Context() context.Context //Parent JobMgr's context
 }
 
 type serviceAPIVersionOverride struct{}
@@ -647,10 +647,6 @@ func (jpm *jobPartMgr) FolderDeletionManager() common.FolderDeletionManager {
 	return jpm.jobMgrInitState.folderDeletionManager
 }
 
-func (jpm *jobPartMgr) Context() context.Context {
-	return jpm.jobMgr.Context()
-}
-
 func (jpm *jobPartMgr) localDstData() *JobPartPlanDstLocal {
 	return &jpm.Plan().DstLocalData
 }
@@ -729,6 +725,10 @@ func (jpm *jobPartMgr) ChunkStatusLogger() common.ChunkStatusLogger {
 
 func (jpm *jobPartMgr) SourceProviderPipeline() pipeline.Pipeline {
 	return jpm.sourceProviderPipeline
+}
+
+func (jpm *jobPartMgr) Pipeline() pipeline.Pipeline {
+	return jpm.pipeline
 }
 
 // TODO: Can we delete this method?
