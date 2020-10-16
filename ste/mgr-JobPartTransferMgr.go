@@ -782,7 +782,7 @@ func (jptm *jobPartTransferMgr) reset() {
 	atomic.StoreUint32(&jptm.atomicChunksDone, 0)
 	jptm.EnsureDestinationUnlocked()
 	jptm.numChunks = 0 // This will be set again by prologue
-	jptm.SetStatus(common.ETransferStatus.NotStarted())
+	jptm.jobPartPlanTransfer.SetTransferStatus(common.ETransferStatus.Started(), true)
 	jptm.SetErrorCode(int32(0))
 	jptm.err = nil
 
