@@ -52,6 +52,7 @@ type blockBlobSenderBase struct {
 	// the properties of the local file
 	headersToApply  azblob.BlobHTTPHeaders
 	metadataToApply azblob.Metadata
+	blobTagsToApply azblob.BlobTagsMap
 
 	atomicPutListIndicator int32
 	muBlockIDs             *sync.Mutex
@@ -134,6 +135,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		blockIDs:         make([]string, numChunks),
 		headersToApply:   props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply:  props.SrcMetadata.ToAzBlobMetadata(),
+		blobTagsToApply:  props.SrcBlobTags.ToAzBlobTagsMap(),
 		destBlobTier:     destBlobTier,
 		muBlockIDs:       &sync.Mutex{}}, nil
 }
@@ -185,9 +187,21 @@ func (s *blockBlobSenderBase) Epilogue() {
 			s.destBlobTier = azblob.DefaultAccessTier
 		}
 
-		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, s.destBlobTier); err != nil {
+		blobTags := s.blobTagsToApply
+		setTagsRequired := setTagsRequired(blobTags)
+		if setTagsRequired {
+			blobTags = azblob.BlobTagsMap{}
+		}
+
+		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, s.destBlobTier, s.blobTagsToApply); err != nil {
 			jptm.FailActiveSend("Committing block list", err)
 			return
+		}
+
+		if setTagsRequired {
+			if _, err := s.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, nil, nil, nil, s.blobTagsToApply); err != nil {
+				s.jptm.Log(pipeline.LogWarning, err.Error())
+			}
 		}
 	}
 }

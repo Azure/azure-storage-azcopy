@@ -916,12 +916,17 @@ type CopyTransfer struct {
 	BlobType      azblob.BlobType
 	BlobTier      azblob.AccessTierType
 	BlobVersionID string
+	// Blob index tags categorize data in your storage account utilizing key-value tag attributes
+	BlobTags BlobTags
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Metadata used in AzCopy.
 type Metadata map[string]string
+
+// BlobTags is a map of tags
+type BlobTags map[string]string
 
 // ToAzBlobMetadata converts metadata to azblob's metadata.
 func (m Metadata) ToAzBlobMetadata() azblob.Metadata {
@@ -933,6 +938,11 @@ func (m Metadata) ToAzFileMetadata() azfile.Metadata {
 	return azfile.Metadata(m)
 }
 
+// ToAzBlobTagsMap converts BlobTagsMap to azblob's BlobTagsMap
+func (bt BlobTags) ToAzBlobTagsMap() azblob.BlobTagsMap {
+	return azblob.BlobTagsMap(bt)
+}
+
 // FromAzBlobMetadataToCommonMetadata converts azblob's metadata to common metadata.
 func FromAzBlobMetadataToCommonMetadata(m azblob.Metadata) Metadata {
 	return Metadata(m)
@@ -941,6 +951,11 @@ func FromAzBlobMetadataToCommonMetadata(m azblob.Metadata) Metadata {
 // FromAzFileMetadataToCommonMetadata converts azfile's metadata to common metadata.
 func FromAzFileMetadataToCommonMetadata(m azfile.Metadata) Metadata {
 	return Metadata(m)
+}
+
+// FromAzBlobTagsMapToCommonBlobTags converts azblob's BlobTagsMap to common BlobTags
+func FromAzBlobTagsMapToCommonBlobTags(azbt azblob.BlobTagsMap) BlobTags {
+	return BlobTags(azbt)
 }
 
 // Marshal marshals metadata to string.
@@ -1015,6 +1030,29 @@ func (m Metadata) ExcludeInvalidKey() (retainedMetadata Metadata, excludedMetada
 	}
 
 	return
+}
+
+func (bt BlobTags) ToString() string {
+	lst := make([]string, 0)
+	for k, v := range bt {
+		lst = append(lst, k+"&"+v)
+	}
+	return strings.Join(lst, ";")
+}
+
+func ToCommonBlobTagsMap(blobTagsString string) BlobTags {
+	if blobTagsString == "" {
+		return nil
+	}
+
+	blobTagsMap := BlobTags{}
+	if len(blobTagsString) > 0 {
+		for _, keyAndValue := range strings.Split(blobTagsString, ";") { // key/value pairs are separated by ';'
+			kv := strings.Split(keyAndValue, "&") // key/value are separated by '&'
+			blobTagsMap[kv[0]] = kv[1]
+		}
+	}
+	return blobTagsMap
 }
 
 const metadataRenamedKeyPrefix = "rename_"

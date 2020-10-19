@@ -48,6 +48,7 @@ type pageBlobSenderBase struct {
 	// the properties of the local file
 	headersToApply  azblob.BlobHTTPHeaders
 	metadataToApply azblob.Metadata
+	blobTagsToApply azblob.BlobTagsMap
 	destBlobTier    azblob.AccessTierType
 	// filePacer is necessary because page blobs have per-blob throughput limits. The limits depend on
 	// what type of page blob it is (e.g. premium) and can be significantly lower than the blob account limit.
@@ -234,14 +235,28 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		destBlobTier = azblob.DefaultPremiumBlobAccessTier
 	}
 
+	blobTags := s.blobTagsToApply
+	setTagsRequired := setTagsRequired(blobTags)
+	if setTagsRequired {
+		blobTags = azblob.BlobTagsMap{}
+	}
+
 	if _, err := s.destPageBlobURL.Create(s.jptm.Context(),
 		s.srcSize,
 		0,
 		s.headersToApply,
 		s.metadataToApply,
-		azblob.BlobAccessConditions{}, destBlobTier); err != nil {
+		azblob.BlobAccessConditions{},
+		destBlobTier,
+		blobTags); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
+	}
+
+	if setTagsRequired {
+		if _, err := s.destPageBlobURL.SetTags(s.jptm.Context(), nil, nil, nil, nil, nil, nil, s.blobTagsToApply); err != nil {
+			s.jptm.Log(pipeline.LogWarning, err.Error())
+		}
 	}
 
 	return

@@ -101,6 +101,10 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		cca.stripTopDir = true
 	}
 
+	if cca.fromTo != common.EFromTo.LocalBlob() && cca.blobTags != nil {
+		return nil, fmt.Errorf("blob tags can only be set for transfer from local to blob")
+	}
+
 	// Create a S3 bucket resolver
 	// Giving it nothing to work with as new names will be added as we traverse.
 	var containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
@@ -238,6 +242,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			cca.s2sPreserveAccessTier,
 			jobPartOrder.Fpo,
 		)
+		transfer.BlobTags = cca.blobTags
 
 		if shouldSendToSte {
 			return addTransfer(&jobPartOrder, transfer, cca)

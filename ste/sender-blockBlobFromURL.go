@@ -99,9 +99,21 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 		if !ValidateTier(jptm, c.destBlobTier, c.destBlockBlobURL.BlobURL, c.jptm.Context()) {
 			c.destBlobTier = azblob.DefaultAccessTier
 		}
-		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.headersToApply, c.metadataToApply, azblob.BlobAccessConditions{}, c.destBlobTier); err != nil {
+
+		blobTags := c.blobTagsToApply
+		setTagsRequired := setTagsRequired(blobTags)
+		if setTagsRequired {
+			blobTags = azblob.BlobTagsMap{}
+		}
+		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.headersToApply, c.metadataToApply, azblob.BlobAccessConditions{}, c.destBlobTier, blobTags); err != nil {
 			jptm.FailActiveSend("Creating empty blob", err)
 			return
+		}
+
+		if setTagsRequired {
+			if _, err := c.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, nil, nil, nil, c.blobTagsToApply); err != nil {
+				c.jptm.Log(pipeline.LogWarning, err.Error())
+			}
 		}
 	})
 }

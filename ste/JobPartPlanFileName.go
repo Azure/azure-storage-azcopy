@@ -101,6 +101,18 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	if len(order.BlobAttributes.Metadata) > len(JobPartPlanDstBlob{}.Metadata) {
 		panic(fmt.Errorf("metadata string is too large: %q", order.BlobAttributes.Metadata))
 	}
+	if len(order.BlobAttributes.BlobTagsString) > len(JobPartPlanDstBlob{}.BlobTags) {
+		panic(fmt.Errorf("blob tags string is too large: %q", order.BlobAttributes.BlobTagsString))
+	}
+	/*
+	*	TODO: Remove this comment
+	*	Since I've already verified that at most 10 blob tags can be set and put a restriction on key and value,
+	*	there is no need to check the length. size of JobPartPlanDstBlob{}.BlobTags = 4kb
+	*	key(128) + value(256) + separator('&', 1) = 385
+	*	10 tags * 385 = 3850
+	*	+ 10 * characters(';', 1) for delimiter
+	*   = 3860 characters at max
+	 */
 
 	// This nested function writes a structure value to an io.Writer & returns the number of bytes written
 	writeValue := func(writer io.Writer, v interface{}) int64 {
@@ -185,6 +197,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			PageBlobTier:             order.BlobAttributes.PageBlobTier,
 			MetadataLength:           uint16(len(order.BlobAttributes.Metadata)),
 			BlockSize:                blockSize,
+			BlobTagsLength:           uint16(len(order.BlobAttributes.BlobTagsString)),
 		},
 		DstLocalData: JobPartPlanDstLocal{
 			PreserveLastModifiedTime: order.BlobAttributes.PreserveLastModifiedTime,
@@ -213,6 +226,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	copy(jpph.DstBlobData.ContentDisposition[:], order.BlobAttributes.ContentDisposition)
 	copy(jpph.DstBlobData.CacheControl[:], order.BlobAttributes.CacheControl)
 	copy(jpph.DstBlobData.Metadata[:], order.BlobAttributes.Metadata)
+	copy(jpph.DstBlobData.BlobTags[:], order.BlobAttributes.BlobTagsString)
 
 	eof += writeValue(file, &jpph)
 
@@ -249,6 +263,15 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		if srcMetadataLength > math.MaxInt16 {
 			panic(fmt.Sprintf("The metadata on source file %s exceeds azcopy's current maximum metadata length, and cannot be processed.", order.Transfers[t].Source))
 		}
+
+		srcBlobTagsLength := 0
+		if order.Transfers[t].BlobTags != nil {
+			blobTagsStr := order.Transfers[t].BlobTags.ToString()
+			srcBlobTagsLength = len(blobTagsStr)
+		}
+		if srcBlobTagsLength > math.MaxInt16 {
+			panic(fmt.Sprintf("The length of tags %s exceeds maximum allowed length, and cannot be processed.", order.Transfers[t].BlobTags))
+		}
 		// Create & initialize this transfer's Job Part Plan Transfer
 		jppt := JobPartPlanTransfer{
 			SrcOffset:      currentSrcStringOffset, // SrcOffset of the src string
@@ -269,6 +292,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			SrcBlobTypeLength:           int16(len(order.Transfers[t].BlobType)),
 			SrcBlobTierLength:           int16(len(order.Transfers[t].BlobTier)),
 			SrcBlobVersionIDLength:      int16(len(order.Transfers[t].BlobVersionID)),
+			SrcBlobTagsLength:           int16(srcBlobTagsLength),
 
 			atomicTransferStatus: common.ETransferStatus.Started(), // Default
 			//ChunkNum:                getNumChunks(uint64(order.Transfers[t].SourceSize), uint64(data.BlockSize)),
@@ -281,7 +305,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		currentSrcStringOffset += int64(jppt.SrcLength + jppt.DstLength + jppt.SrcContentTypeLength +
 			jppt.SrcContentEncodingLength + jppt.SrcContentLanguageLength + jppt.SrcContentDispositionLength +
 			jppt.SrcCacheControlLength + jppt.SrcContentMD5Length + jppt.SrcMetadataLength +
-			jppt.SrcBlobTypeLength + jppt.SrcBlobTierLength + jppt.SrcBlobVersionIDLength)
+			jppt.SrcBlobTypeLength + jppt.SrcBlobTierLength + jppt.SrcBlobVersionIDLength + jppt.SrcBlobTagsLength)
 	}
 
 	// All the transfers were written; now write each transfer's src/dst strings
@@ -352,6 +376,12 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		}
 		if len(order.Transfers[t].BlobVersionID) != 0 {
 			bytesWritten, err = file.WriteString(order.Transfers[t].BlobVersionID)
+			common.PanicIfErr(err)
+			eof += int64(bytesWritten)
+		}
+		if len(order.Transfers[t].BlobTags) != 0 {
+			blobTagsStr := order.Transfers[t].BlobTags.ToString()
+			bytesWritten, err = file.WriteString(blobTagsStr)
 			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}

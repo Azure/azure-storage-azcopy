@@ -44,6 +44,7 @@ type appendBlobSenderBase struct {
 	// the properties of the local file
 	headersToApply  azblob.BlobHTTPHeaders
 	metadataToApply azblob.Metadata
+	blobTagsToApply azblob.BlobTagsMap
 
 	soleChunkFuncSemaphore *semaphore.Weighted
 }
@@ -141,10 +142,20 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 	}
 
 	destinationModified = true
-	_, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{})
-	if err != nil {
+	blobTags := s.blobTagsToApply
+	setTagsRequired := setTagsRequired(blobTags)
+	if setTagsRequired {
+		blobTags = azblob.BlobTagsMap{}
+	}
+	if _, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, blobTags); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
+	}
+
+	if setTagsRequired {
+		if _, err := s.destAppendBlobURL.SetTags(s.jptm.Context(), nil, nil, nil, nil, nil, nil, s.blobTagsToApply); err != nil {
+			s.jptm.Log(pipeline.LogWarning, err.Error())
+		}
 	}
 	return
 }
