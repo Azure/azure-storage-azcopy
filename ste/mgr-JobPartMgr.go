@@ -253,6 +253,8 @@ type jobPartMgr struct {
 
 	metadata common.Metadata
 
+	blobTags common.BlobTags
+
 	blobTypeOverride common.BlobType // User specified blob type
 
 	preserveLastModifiedTime bool
@@ -339,6 +341,14 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
 			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
 			jpm.metadata[kv[0]] = kv[1]
+		}
+	}
+	blobTagsStr := string(dstData.BlobTags[:dstData.BlobTagsLength])
+	jpm.blobTags = common.BlobTags{}
+	if len(blobTagsStr) > 0 {
+		for _, keyAndValue := range strings.Split(blobTagsStr, ";") { // key/value pairs are separated by ';'
+			kv := strings.Split(keyAndValue, "&") // key/value are separated by '&'
+			jpm.blobTags[kv[0]] = kv[1]
 		}
 	}
 
@@ -567,12 +577,12 @@ func (jpm *jobPartMgr) AutoDecompress() bool {
 	return jpm.Plan().AutoDecompress
 }
 
-func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata) {
+func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags) {
 	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
-		return jpm.httpHeaders, jpm.metadata
+		return jpm.httpHeaders, jpm.metadata, jpm.blobTags
 	}
 
-	return common.ResourceHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer), ContentLanguage: jpm.httpHeaders.ContentLanguage, ContentDisposition: jpm.httpHeaders.ContentDisposition, ContentEncoding: jpm.httpHeaders.ContentEncoding, CacheControl: jpm.httpHeaders.CacheControl}, jpm.metadata
+	return common.ResourceHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer), ContentLanguage: jpm.httpHeaders.ContentLanguage, ContentDisposition: jpm.httpHeaders.ContentDisposition, ContentEncoding: jpm.httpHeaders.ContentEncoding, CacheControl: jpm.httpHeaders.CacheControl}, jpm.metadata, jpm.blobTags
 }
 
 // TODO do we want these charset=utf-8?

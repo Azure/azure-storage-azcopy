@@ -1046,11 +1046,9 @@ func ToCommonBlobTagsMap(blobTagsString string) BlobTags {
 	}
 
 	blobTagsMap := BlobTags{}
-	if len(blobTagsString) > 0 {
-		for _, keyAndValue := range strings.Split(blobTagsString, ";") { // key/value pairs are separated by ';'
-			kv := strings.Split(keyAndValue, "&") // key/value are separated by '&'
-			blobTagsMap[kv[0]] = kv[1]
-		}
+	for _, keyAndValue := range strings.Split(blobTagsString, ";") { // key/value pairs are separated by ';'
+		kv := strings.Split(keyAndValue, "&") // key/value are separated by '&'
+		blobTagsMap[kv[0]] = kv[1]
 	}
 	return blobTagsMap
 }
