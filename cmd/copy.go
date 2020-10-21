@@ -968,8 +968,17 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 		return fmt.Errorf("fatal: cannot write to Stdout due to error: %s", err.Error())
 	}
 
+	// The isPublic flag is useful in S2S transfers but doesn't much matter for download. Fortunately, no S2S happens here.
+	// This means that if there's auth, there's auth. We're happy and can move on.
+	// getCredentialInfoForLocation also populates oauth token fields... so, it's very easy.
+	credInfo, _, err := getCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, true)
+
+	if err != nil {
+		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
+	}
+
 	// step 1: initialize pipeline
-	p, err := createBlobPipeline(ctx, common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+	p, err := createBlobPipeline(ctx, credInfo)
 	if err != nil {
 		return err
 	}
@@ -1007,8 +1016,15 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 		blockSize = pipingDefaultBlockSize
 	}
 
+	// getCredentialInfoForLocation populates oauth token fields... so, it's very easy.
+	credInfo, _, err := getCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, false)
+
+	if err != nil {
+		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
+	}
+
 	// step 0: initialize pipeline
-	p, err := createBlobPipeline(ctx, common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+	p, err := createBlobPipeline(ctx, credInfo)
 	if err != nil {
 		return err
 	}
@@ -1482,7 +1498,7 @@ func init() {
 			if len(args) == 1 { // redirection
 				// Enforce the usage of from-to flag when pipes are involved
 				if raw.fromTo == "" {
-					return fmt.Errorf("fatal: from-to argument required")
+					return fmt.Errorf("fatal: from-to argument required, PipeBlob (upload) or BlobPipe (download) is acceptable")
 				}
 				var userFromTo common.FromTo
 				err := userFromTo.Parse(raw.fromTo)
@@ -1551,7 +1567,7 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.forceWrite, "overwrite", "true", "Overwrite the conflicting files and blobs at the destination if this flag is set to true. (default 'true') Possible values include 'true', 'false', 'prompt', and 'ifSourceNewer'. For destinations that support folders, conflicting folder-level properties will be overwritten this flag is 'true' or if a positive response is provided to the prompt.")
 	cpCmd.PersistentFlags().BoolVar(&raw.autoDecompress, "decompress", false, "Automatically decompress files when downloading, if their content-encoding indicates that they are compressed. The supported content-encoding values are 'gzip' and 'deflate'. File extensions of '.gz'/'.gzip' or '.zz' aren't necessary, but will be removed if present.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Look into sub-directories recursively when uploading from local file system.")
-	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS.")
+	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS. Piping: BlobPipe, PipeBlob")
 	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "", "Optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from the container "+
 		"or the account. Use of this flag is not applicable for copying data from non azure-service to service. More than one blob should be separated by ';'. ")
 	// options change how the transfers are performed

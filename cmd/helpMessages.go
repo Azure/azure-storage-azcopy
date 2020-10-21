@@ -59,7 +59,11 @@ Upload a single file by using a SAS token:
 
 Upload a single file by using a SAS token and piping (block blobs only):
   
-  - cat "/path/to/file.txt" | azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
+  - cat "/path/to/file.txt" | azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" --from-to PipeBlob
+
+Upload a single file by using OAuth and piping (block blobs only):
+
+  - cat "/path/to/file.txt" | azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --from-to PipeBlob
 
 Upload an entire directory by using a SAS token:
   
@@ -85,7 +89,11 @@ Download a single file by using a SAS token:
 
 Download a single file by using a SAS token and then piping the output to a file (block blobs only):
   
-  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" > "/path/to/file.txt"
+  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" --from-to BlobPipe > "/path/to/file.txt"
+
+Download a single file by using OAuth and then piping the output to a file (block blobs only):
+  
+  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --from-to BlobPipe > "/path/to/file.txt"
 
 Download an entire directory by using a SAS token:
   
