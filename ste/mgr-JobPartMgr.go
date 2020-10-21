@@ -670,7 +670,7 @@ func (jpm *jobPartMgr) updateJobPartProgress(status common.TransferStatus) {
 		atomic.AddUint32(&jpm.atomicTransfersSkipped, 1)
 	case common.ETransferStatus.Cancelled():
 	default:
-		panic("Unexpected status")
+		jpm.Log(pipeline.LogError, fmt.Sprintf("Unexpected status: %v", status.String()))
 	}
 }
 
