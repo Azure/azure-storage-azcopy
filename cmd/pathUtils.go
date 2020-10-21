@@ -96,7 +96,7 @@ func GetResourceRoot(resource string, location common.Location) (resourceBase st
 		return resource, err
 	}
 
-	// todo: reduce code-duplicateyness, maybe?
+	// todo: reduce code-delicateness, maybe?
 	switch location {
 	case common.ELocation.Unknown(),
 		common.ELocation.Benchmark(): // do nothing

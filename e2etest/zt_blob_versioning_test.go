@@ -1,4 +1,3 @@
-// +build !windows
 // Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,35 +18,4 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// TODO this file was forked from the cmd package, it needs to cleaned to keep only the necessary part
-
 package e2etest
-
-import (
-	"time"
-)
-
-type osScenarioHelper struct{}
-
-// set file attributes to test file
-func (osScenarioHelper) setAttributesForLocalFile() error {
-	panic("should never be called")
-}
-
-func (osScenarioHelper) setAttributesForLocalFiles(c asserter, dirPath string, fileList []string, attrList []string) {
-	panic("should never be called")
-}
-
-func (osScenarioHelper) getFileDates(c asserter, filePath string) (createdTime, lastWriteTime time.Time) {
-	panic("should never be called")
-}
-
-func (osScenarioHelper) getFileAttrs(c asserter, filepath string) *uint32 {
-	var ret uint32
-	return &ret
-}
-
-func (osScenarioHelper) getFileSDDLString(c asserter, filepath string) *string {
-	ret := ""
-	return &ret
-}

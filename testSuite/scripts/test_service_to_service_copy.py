@@ -12,6 +12,8 @@ import os.path
 class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
 
     def setUp(self):
+        cmd = util.Command("login").add_arguments("--service-principal").add_flags("application-id", os.environ['ACTIVE_DIRECTORY_APPLICATION_ID'])
+        cmd.execute_azcopy_copy_command()
         # init bucket_name
         common_prefix = 's2scopybucket'
 
@@ -21,6 +23,10 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         self.bucket_name_file_blob = util.get_resource_name(common_prefix + 'fileblob')
         self.bucket_name_s3_blob = util.get_resource_name(common_prefix + 's3blob')
         self.bucket_name_block_append_page = util.get_resource_name(common_prefix + 'blockappendpage')
+
+    def tearDown(self):
+        cmd = util.Command("logout")
+        cmd.execute_azcopy_copy_command()
 
     ##################################
     # Test from blob to blob copy.
@@ -594,6 +600,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
                 src_bucket_url, "Blob", dst_container_url, "Blob", size, "AppendBlob", "", "", "", "AppendBlob", no_blob_tier)
 
     def test_copy_single_file_from_s3_object_to_blockblob_with_default_blobtier(self):
+        if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
+            self.skipTest('S3 testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_block_append_page)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
         blob_sizes = [0, 1, 8*1024*1024 - 1, 8 * 1024*1024]

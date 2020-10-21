@@ -95,7 +95,7 @@ type loginCmdArgs struct {
 	identityObjectID   string
 	identityResourceID string
 
-	//Requried to sign in with a SPN (Service Principal Name)
+	//Required to sign in with a SPN (Service Principal Name)
 	applicationID string
 	certPath      string
 	certPass      string

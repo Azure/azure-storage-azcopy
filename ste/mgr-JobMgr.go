@@ -565,7 +565,7 @@ func (jm *jobMgr) ChunkStatusLogger() common.ChunkStatusLogger {
 	return jm.chunkStatusLogger
 }
 
-// TODO: find a better way for JobsAdmin to log (it doesn't have direct access to the job log, because it was originally designed to support multilpe jobs
+// TODO: find a better way for JobsAdmin to log (it doesn't have direct access to the job log, because it was originally designed to support multiple jobs
 func (jm *jobMgr) logJobsAdminMessages() {
 	for {
 		select {

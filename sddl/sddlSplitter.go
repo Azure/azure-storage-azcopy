@@ -28,7 +28,7 @@ import (
 	"strings"
 )
 
-var translateSID = OSTranslateSID // this layer of indirection is to support unit testing. TODO: it's ugly to set a global to test. Do somemthing better one day
+var translateSID = OSTranslateSID // this layer of indirection is to support unit testing. TODO: it's ugly to set a global to test. Do something better one day
 
 func IffInt(condition bool, tVal, fVal int) int {
 	if condition {

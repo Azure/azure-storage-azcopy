@@ -215,7 +215,7 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Holds the status of tranfers in this jptm
+// Holds the status of transfers in this jptm
 type jobPartProgressInfo struct {
 	transfersCompleted int
 	transfersSkipped   int
@@ -435,7 +435,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 		RetryDelay:    UploadRetryDelay,
 		MaxRetryDelay: UploadMaxRetryDelay}
 
-	var statsAccForSip *pipelineNetworkStats = nil // we don'nt accumulate stats on the source info provider
+	var statsAccForSip *pipelineNetworkStats = nil // we don't accumulate stats on the source info provider
 
 	// Create source info provider's pipeline for S2S copy.
 	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() {
@@ -568,19 +568,24 @@ func (jpm *jobPartMgr) AutoDecompress() bool {
 }
 
 func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata) {
-	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
+	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType {
 		return jpm.httpHeaders, jpm.metadata
 	}
 
-	return common.ResourceHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer), ContentLanguage: jpm.httpHeaders.ContentLanguage, ContentDisposition: jpm.httpHeaders.ContentDisposition, ContentEncoding: jpm.httpHeaders.ContentEncoding, CacheControl: jpm.httpHeaders.CacheControl}, jpm.metadata
+	return common.ResourceHTTPHeaders{
+		ContentType:        jpm.inferContentType(fullFilePath, dataFileToXfer),
+		ContentLanguage:    jpm.httpHeaders.ContentLanguage,
+		ContentDisposition: jpm.httpHeaders.ContentDisposition,
+		ContentEncoding:    jpm.httpHeaders.ContentEncoding,
+		CacheControl:       jpm.httpHeaders.CacheControl}, jpm.metadata
 }
 
 // TODO do we want these charset=utf-8?
 var builtinTypes = map[string]string{
-	".css":  "text/css;",
+	".css":  "text/css",
 	".gif":  "image/gif",
-	".htm":  "text/html;",
-	".html": "text/html;",
+	".htm":  "text/html",
+	".html": "text/html",
 	".jpeg": "image/jpeg",
 	".jpg":  "image/jpeg",
 	".js":   "application/javascript",
@@ -590,7 +595,7 @@ var builtinTypes = map[string]string{
 	".svg":  "image/svg+xml",
 	".wasm": "application/wasm",
 	".webp": "image/webp",
-	".xml":  "text/xml;",
+	".xml":  "text/xml",
 }
 
 func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []byte) string {
@@ -602,11 +607,17 @@ func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []by
 		return override
 	}
 
+	/*
+	 * Below functions return utf-8 as default charset for text files. Discard
+	 * charset if it exists, safer to omit charset instead of defaulting to
+	 * a wrong one.
+	 */
 	if guessedType := mime.TypeByExtension(fileExtension); guessedType != "" {
-		return guessedType
+		return strings.Split(guessedType, ";")[0]
 	}
 
-	return http.DetectContentType(dataFileToXfer)
+	// if dataFileToXfer is nil, the default content type will be "application/octet-stream"
+	return strings.Split(http.DetectContentType(dataFileToXfer), ";")[0]
 }
 
 func (jpm *jobPartMgr) BlobTypeOverride() common.BlobType {
@@ -659,7 +670,7 @@ func (jpm *jobPartMgr) updateJobPartProgress(status common.TransferStatus) {
 		atomic.AddUint32(&jpm.atomicTransfersSkipped, 1)
 	case common.ETransferStatus.Cancelled():
 	default:
-		panic("Unexpected status")
+		jpm.Log(pipeline.LogError, fmt.Sprintf("Unexpected status: %v", status.String()))
 	}
 }
 

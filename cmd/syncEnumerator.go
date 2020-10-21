@@ -68,10 +68,17 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		return nil, err
 	}
 
+	// Because we can't trust cca.credinfo, given that it's for the overall job, not the individual traversers, we get cred info again here.
+	dstCredInfo, _, err := getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false)
+
+	if err != nil {
+		return nil, err
+	}
+
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
-	destinationTraverser, err := initResourceTraverser(cca.destination, cca.fromTo.To(), &ctx, &cca.credentialInfo, nil, nil, cca.recursive, true, false, func(entityType common.EntityType) {
+	destinationTraverser, err := initResourceTraverser(cca.destination, cca.fromTo.To(), &ctx, &dstCredInfo, nil, nil, cca.recursive, true, false, func(entityType common.EntityType) {
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 		}

@@ -59,7 +59,11 @@ Upload a single file by using a SAS token:
 
 Upload a single file by using a SAS token and piping (block blobs only):
   
-  - cat "/path/to/file.txt" | azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
+  - cat "/path/to/file.txt" | azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" --from-to PipeBlob
+
+Upload a single file by using OAuth and piping (block blobs only):
+
+  - cat "/path/to/file.txt" | azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --from-to PipeBlob
 
 Upload an entire directory by using a SAS token:
   
@@ -85,7 +89,11 @@ Download a single file by using a SAS token:
 
 Download a single file by using a SAS token and then piping the output to a file (block blobs only):
   
-  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" > "/path/to/file.txt"
+  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" --from-to BlobPipe > "/path/to/file.txt"
+
+Download a single file by using OAuth and then piping the output to a file (block blobs only):
+  
+  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --from-to BlobPipe > "/path/to/file.txt"
 
 Download an entire directory by using a SAS token:
   
@@ -296,9 +304,9 @@ Remove an entire virtual directory but exclude certain blobs from the scope (For
 
    - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --exclude-pattern="foo*;*bar"
 
-Remove specified version ids of a blob from Azure Strorage. Ensure that source is a valid blob and versionidsFile which takes in a path to the file where each version is written on a separate line. All the specified versions will be removed from Azure Storage.
+Remove specified version ids of a blob from Azure Storage. Ensure that source is a valid blob and versionidsfile which takes in a path to the file where each version is written on a separate line. All the specified versions will be removed from Azure Storage.
 
-  - azcopy rm "https://[srcaccount].blob.core.windows.net/[containername]/[blobname]" "/path/to/dir" --list-of-versions="/path/to/dir/[versionidsFile]"
+  - azcopy rm "https://[srcaccount].blob.core.windows.net/[containername]/[blobname]" "/path/to/dir" --list-of-versions="/path/to/dir/[versionidsfile]"
 
 Remove specific blobs and virtual directories by putting their relative paths (NOT URL-encoded) in a file:
 

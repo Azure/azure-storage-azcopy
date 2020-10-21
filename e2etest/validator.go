@@ -49,6 +49,10 @@ func fixSlashes(s string, loc common.Location) string {
 	return s
 }
 
+func (Validator) ValidateRemoveTransfer(c asserter, isSrcEncoded bool, isDstEncoded bool,
+	sourcePrefix string, destinationPrefix string, expectedTransfers []*testObject, actualTransfers []common.TransferDetail, statusToTest common.TransferStatus) {
+	// TODO: Think of how to validate files in case of remove
+}
 func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool, isDstEncoded bool,
 	sourcePrefix string, destinationPrefix string, expectedTransfers []*testObject, actualTransfers []common.TransferDetail, statusToTest common.TransferStatus) {
 
@@ -83,7 +87,7 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 			if runtime.GOOS == "windows" {
 				// Decode unsafe dst characters on windows
 				pathParts := strings.Split(dstRelativeFilePath, "/")
-				invalidChars := `<>\/:"|?*` + string(0x00)
+				invalidChars := `<>\/:"|?*` + string(rune(0x00))
 
 				for _, c := range strings.Split(invalidChars, "") {
 					for k, p := range pathParts {
