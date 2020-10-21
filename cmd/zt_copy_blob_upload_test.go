@@ -446,10 +446,9 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeBefore_Lo
 func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeBefore(useUtc bool, c *chk.C) {
 	bsu := getBSU()
 
-	// set up the source with numerous files
+	// set up the source directory
 	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(srcDirPath)
-	originalContent := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirPath, "")
 
 	// add newer files, which we wish to include
 	filesToInclude := []string{"important.txt", "includeSub/amazing.txt", "includeSub/wow/amazing.txt"}
@@ -481,16 +480,13 @@ func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeBefore(
 	}
 
 	runCopyAndVerify(c, raw, func(err error) {
-		var includeTransfers []string
-		includeTransfers = append(originalContent, filesToInclude...)
-
 		c.Assert(err, chk.IsNil)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(includeTransfers))
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(filesToInclude))
 
 		// validate that the right transfers were sent
-		expectedTransfers := scenarioHelper{}.shaveOffPrefix(includeTransfers, filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING)
+		expectedTransfers := scenarioHelper{}.shaveOffPrefix(filesToInclude, filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING)
 		validateUploadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING,
 			common.AZCOPY_PATH_SEPARATOR_STRING+filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING, expectedTransfers, mockedRPC)
 	})
