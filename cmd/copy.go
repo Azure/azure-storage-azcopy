@@ -1463,7 +1463,7 @@ func isStdinPipeIn() (bool, error) {
 	// if the stdin is a named pipe, then we assume there will be data on the stdin
 	// the reason for this assumption is that we do not know when will the data come in
 	// it could come in right away, or come in 10 minutes later
-	return info.Mode()&os.ModeNamedPipe != 0, nil
+	return info.Mode()&(os.ModeNamedPipe|os.ModeSocket) != 0, nil
 }
 
 // TODO check file size, max is 4.75TB
@@ -1480,16 +1480,28 @@ func init() {
 		Example:    copyCmdExample,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 { // redirection
-				if stdinPipeIn, err := isStdinPipeIn(); stdinPipeIn == true {
+				// Enforce the usage of from-to flag when pipes are involved
+				if raw.fromTo == "" {
+					return fmt.Errorf("fatal: from-to argument required")
+				}
+				var userFromTo common.FromTo
+				err := userFromTo.Parse(raw.fromTo)
+				if err != nil || (userFromTo != common.EFromTo.PipeBlob() && userFromTo != common.EFromTo.BlobPipe()) {
+					return fmt.Errorf("fatal: invalid from-to argument passed: %s", raw.fromTo)
+				}
+
+				if userFromTo == common.EFromTo.PipeBlob() {
+					// Case 1: PipeBlob. Check for the std input pipe
+					stdinPipeIn, err := isStdinPipeIn()
+					if stdinPipeIn == false || err != nil {
+						return fmt.Errorf("fatal: failed to read from Stdin due to error: %s", err)
+					}
 					raw.src = pipeLocation
 					raw.dst = args[0]
 				} else {
-					if err != nil {
-						return fmt.Errorf("fatal: failed to read from Stdin due to error: %s", err)
-					} else {
-						raw.src = args[0]
-						raw.dst = pipeLocation
-					}
+					// Case 2: BlobPipe. In this case if pipe is missing, content will be echoed on the terminal
+					raw.src = args[0]
+					raw.dst = pipeLocation
 				}
 			} else if len(args) == 2 { // normal copy
 				raw.src = args[0]

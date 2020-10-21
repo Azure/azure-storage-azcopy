@@ -61,7 +61,8 @@ type serviceAPIVersionOverride struct{}
 var ServiceAPIVersionOverride = serviceAPIVersionOverride{}
 
 // DefaultServiceApiVersion is the default value of service api version that is set as value to the ServiceAPIVersionOverride in every Job's context.
-var DefaultServiceApiVersion = common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.DefaultServiceApiVersion())
+var DefaultServiceApiVersion = comm
+on.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.DefaultServiceApiVersion())
 
 // NewVersionPolicy creates a factory that can override the service version
 // set in the request header.
@@ -582,10 +583,10 @@ func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byt
 
 // TODO do we want these charset=utf-8?
 var builtinTypes = map[string]string{
-	".css":  "text/css;",
+	".css":  "text/css",
 	".gif":  "image/gif",
-	".htm":  "text/html;",
-	".html": "text/html;",
+	".htm":  "text/html",
+	".html": "text/html",
 	".jpeg": "image/jpeg",
 	".jpg":  "image/jpeg",
 	".js":   "application/javascript",
@@ -595,7 +596,7 @@ var builtinTypes = map[string]string{
 	".svg":  "image/svg+xml",
 	".wasm": "application/wasm",
 	".webp": "image/webp",
-	".xml":  "text/xml;",
+	".xml":  "text/xml",
 }
 
 func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []byte) string {
@@ -607,12 +608,17 @@ func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []by
 		return override
 	}
 
+	/*
+	 * Below functions return utf-8 as default charset for text files. Discard
+	 * charset if it exists, safer to omit charset instead of defaulting to
+	 * a wrong one.
+	 */
 	if guessedType := mime.TypeByExtension(fileExtension); guessedType != "" {
-		return guessedType
+		return strings.Split(guessedType, ";")[0]
 	}
 
 	// if dataFileToXfer is nil, the default content type will be "application/octet-stream"
-	return http.DetectContentType(dataFileToXfer)
+	return strings.Split(http.DetectContentType(dataFileToXfer), ";")[0]
 }
 
 func (jpm *jobPartMgr) BlobTypeOverride() common.BlobType {
