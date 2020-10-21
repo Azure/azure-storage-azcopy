@@ -568,11 +568,16 @@ func (jpm *jobPartMgr) AutoDecompress() bool {
 }
 
 func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata) {
-	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
+	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType {
 		return jpm.httpHeaders, jpm.metadata
 	}
 
-	return common.ResourceHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer), ContentLanguage: jpm.httpHeaders.ContentLanguage, ContentDisposition: jpm.httpHeaders.ContentDisposition, ContentEncoding: jpm.httpHeaders.ContentEncoding, CacheControl: jpm.httpHeaders.CacheControl}, jpm.metadata
+	return common.ResourceHTTPHeaders{
+		ContentType:        jpm.inferContentType(fullFilePath, dataFileToXfer),
+		ContentLanguage:    jpm.httpHeaders.ContentLanguage,
+		ContentDisposition: jpm.httpHeaders.ContentDisposition,
+		ContentEncoding:    jpm.httpHeaders.ContentEncoding,
+		CacheControl:       jpm.httpHeaders.CacheControl}, jpm.metadata
 }
 
 // TODO do we want these charset=utf-8?
@@ -611,6 +616,7 @@ func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []by
 		return strings.Split(guessedType, ";")[0]
 	}
 
+	// if dataFileToXfer is nil, the default content type will be "application/octet-stream"
 	return strings.Split(http.DetectContentType(dataFileToXfer), ";")[0]
 }
 
