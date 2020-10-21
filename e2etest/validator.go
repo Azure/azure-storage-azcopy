@@ -83,7 +83,7 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 			if runtime.GOOS == "windows" {
 				// Decode unsafe dst characters on windows
 				pathParts := strings.Split(dstRelativeFilePath, "/")
-				invalidChars := `<>\/:"|?*` + string(0x00)
+				invalidChars := `<>\/:"|?*` + string(rune(0x00))
 
 				for _, c := range strings.Split(invalidChars, "") {
 					for k, p := range pathParts {
