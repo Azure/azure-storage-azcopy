@@ -61,8 +61,7 @@ type serviceAPIVersionOverride struct{}
 var ServiceAPIVersionOverride = serviceAPIVersionOverride{}
 
 // DefaultServiceApiVersion is the default value of service api version that is set as value to the ServiceAPIVersionOverride in every Job's context.
-var DefaultServiceApiVersion = comm
-on.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.DefaultServiceApiVersion())
+var DefaultServiceApiVersion = common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.DefaultServiceApiVersion())
 
 // NewVersionPolicy creates a factory that can override the service version
 // set in the request header.
