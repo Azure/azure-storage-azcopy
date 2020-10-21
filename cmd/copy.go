@@ -795,6 +795,11 @@ func validateBackupMode(backupMode bool, fromTo common.FromTo) error {
 }
 
 func validatePutMd5(putMd5 bool, fromTo common.FromTo) error {
+	// In case of S2S transfers, log info message to inform the users that MD5 check doesn't work for S2S Transfers.
+	// This is because we cannot calculate MD5 hash of the data stored at a remote locations.
+	if putMd5 && fromTo.IsS2S() {
+		glcm.Info(" --put-md5 flag to check data consistency between source and destination is not applicable for S2S Transfers (i.e. When both the source and the destination are remote). AzCopy cannot compute MD5 hash of data stored at remote location.")
+	}
 	if putMd5 && !fromTo.IsUpload() {
 		return fmt.Errorf("put-md5 is set but the job is not an upload")
 	}
