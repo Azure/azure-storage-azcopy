@@ -257,7 +257,8 @@ func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobH
 		blobHTTPHeaders,
 		metadata,
 		azblob.BlobAccessConditions{},
-		tier)
+		tier,
+		azblob.BlobTagsMap{})
 	if err != nil {
 		fmt.Println(fmt.Sprintf("error uploading the blob %v", err))
 		os.Exit(1)
