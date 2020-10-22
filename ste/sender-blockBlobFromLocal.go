@@ -94,8 +94,15 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		if !ValidateTier(jptm, u.destBlobTier, u.destBlockBlobURL.BlobURL, u.jptm.Context()) {
 			u.destBlobTier = azblob.DefaultAccessTier
 		}
+
+		blobTags := u.blobTagsToApply
+		setTagsRequired := setTagsRequired(blobTags)
+		if setTagsRequired {
+			blobTags = azblob.BlobTagsMap{}
+		}
+
 		if jptm.Info().SourceSize == 0 {
-			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{}, u.destBlobTier, u.blobTagsToApply)
+			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{}, u.destBlobTier, blobTags)
 		} else {
 			// File with content
 
@@ -109,13 +116,19 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 
 			// Upload the file
 			body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
-			_, err = u.destBlockBlobURL.Upload(jptm.Context(), body, u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{}, u.destBlobTier, u.blobTagsToApply)
+			_, err = u.destBlockBlobURL.Upload(jptm.Context(), body, u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{}, u.destBlobTier, blobTags)
 		}
 
 		// if the put blob is a failure, update the transfer status to failed
 		if err != nil {
 			jptm.FailActiveUpload("Uploading blob", err)
 			return
+		}
+
+		if setTagsRequired {
+			if _, err := u.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, nil, nil, nil, u.blobTagsToApply); err != nil {
+				u.jptm.Log(pipeline.LogWarning, err.Error())
+			}
 		}
 	})
 }

@@ -5,6 +5,10 @@ github.com/Azure/azure-storage-blob-go v0.10.1-0.20200824104847-02c174f6f946 h1:
 github.com/Azure/azure-storage-blob-go v0.10.1-0.20200824104847-02c174f6f946/go.mod h1:xYPuViXYxj3pq75sxfxeUn0EIXMEUfyTCBPlPPHZqPM=
 github.com/Azure/azure-storage-blob-go v0.10.1-0.20200925020501-8327933c9aaa h1:V5j4i91erSkeDcyMc5KPWpYYqv+NGrIR/Vr245VgAtE=
 github.com/Azure/azure-storage-blob-go v0.10.1-0.20200925020501-8327933c9aaa/go.mod h1:A0u4VjtpgZJ7Y7um/+ix2DHBuEKFC6sEIlj0xc13a4Q=
+github.com/Azure/azure-storage-blob-go v0.10.1-0.20201022035055-d3e73462651f h1:4gi/NEJecfn9/4sl6MD6EClmLq2/Im8auLCBc5tpl6Q=
+github.com/Azure/azure-storage-blob-go v0.10.1-0.20201022035055-d3e73462651f/go.mod h1:A0u4VjtpgZJ7Y7um/+ix2DHBuEKFC6sEIlj0xc13a4Q=
+github.com/Azure/azure-storage-blob-go v0.10.1-0.20201022074806-8d8fc11be726 h1:4lkg21Kc87fF+d+A424tMeVwuXhaCCIyfk/rrRpw9pI=
+github.com/Azure/azure-storage-blob-go v0.10.1-0.20201022074806-8d8fc11be726/go.mod h1:A0u4VjtpgZJ7Y7um/+ix2DHBuEKFC6sEIlj0xc13a4Q=
 github.com/Azure/azure-storage-file-go v0.8.0 h1:OX8DGsleWLUE6Mw4R/OeWEZMvsTIpwN94J59zqKQnTI=
 github.com/Azure/azure-storage-file-go v0.8.0/go.mod h1:3w3mufGcMjcOJ3w+4Gs+5wsSgkT7xDwWWqMMIrXtW4c=
 github.com/Azure/go-autorest v14.2.0+incompatible h1:V5VMDjClD3GiElqLWO7mz2MxNAK/vTfRHdAubSIPRgs=
