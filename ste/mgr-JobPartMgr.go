@@ -577,9 +577,9 @@ func (jpm *jobPartMgr) AutoDecompress() bool {
 	return jpm.Plan().AutoDecompress
 }
 
-func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata) {
+func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags) {
 	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType {
-		return jpm.httpHeaders, jpm.metadata
+		return jpm.httpHeaders, jpm.metadata, jpm.blobTags
 	}
 
 	return common.ResourceHTTPHeaders{
@@ -587,7 +587,7 @@ func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byt
 		ContentLanguage:    jpm.httpHeaders.ContentLanguage,
 		ContentDisposition: jpm.httpHeaders.ContentDisposition,
 		ContentEncoding:    jpm.httpHeaders.ContentEncoding,
-		CacheControl:       jpm.httpHeaders.CacheControl}, jpm.metadata
+		CacheControl:       jpm.httpHeaders.CacheControl}, jpm.metadata, jpm.blobTags
 }
 
 // TODO do we want these charset=utf-8?
