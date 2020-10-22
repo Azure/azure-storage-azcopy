@@ -1,6 +1,18 @@
 
 # Change Log
 
+## Version 10.6.1
+
+### Bug fixes
+
+1. Fix issue [#971](https://github.com/Azure/azure-storage-azcopy/issues/971) with scanning directories on a public container
+1. Fix issue with piping where source and destinations were reversed
+1. Allow piping to use OAuth login
+1. Fix issue where transfers with ``overwrite`` flag set to ``IfSourceNewer`` would work incorrectly
+1. Fix issue [#1139](https://github.com/Azure/azure-storage-azcopy/issues/1139), incorrect content type in BlobStorage
+1. Issue [#1192](https://github.com/Azure/azure-storage-azcopy/issues/1192), intermittent panic when AzCopy job is abort
+1. Fix issue with auto-detected content types for 0 length files
+
 ## Version 10.6.0
 
 ### New features

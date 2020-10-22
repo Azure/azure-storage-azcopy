@@ -224,11 +224,9 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		destinationModified = true
 	}
 
-	if ps.CanInferContentType() {
-		// sometimes, specifically when reading local files, we have more info
-		// about the file type at this time than what we had before
-		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
-	}
+	// sometimes, specifically when reading local files, we have more info
+	// about the file type at this time than what we had before
+	s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
 
 	destBlobTier := azblob.PremiumPageBlobAccessTierType(s.destBlobTier)
 	if !ValidateTier(s.jptm, s.destBlobTier, s.destPageBlobURL.BlobURL, s.jptm.Context()) {

@@ -32,9 +32,9 @@ type PrologueState struct {
 	LeadingBytes []byte
 }
 
-func (ps PrologueState) CanInferContentType() bool {
-	return len(ps.LeadingBytes) > 0 // we can have a go, if we have some leading bytes
-}
+//func (ps PrologueState) CanInferContentType() bool {
+//	return len(ps.LeadingBytes) > 0 // we can have a go, if we have some leading bytes
+//}
 
 func (ps PrologueState) GetInferredContentType(jptm cutdownJptm) string {
 	headers, _, _ := jptm.ResourceDstData(ps.LeadingBytes)

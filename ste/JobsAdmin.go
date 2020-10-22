@@ -221,9 +221,9 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 }
 
 // Decide on a max amount of RAM we are willing to use. This functions as a cap, and prevents excessive usage.
-// There's no measure of physical RAM in the STD library, so we guestimate conservatively, based on  CPU count (logical, not phyiscal CPUs)
+// There's no measure of physical RAM in the STD library, so we guesstimate conservatively, based on  CPU count (logical, not physical CPUs)
 // Note that, as at Feb 2019, the multiSizeSlicePooler uses additional RAM, over this level, since it includes the cache of
-// currently-unnused, re-useable slices, that is not tracked by cacheLimiter.
+// currently-unused, re-usable slices, that is not tracked by cacheLimiter.
 // Also, block sizes that are not powers of two result in extra usage over and above this limit. (E.g. 100 MB blocks each
 // count 100 MB towards this limit, but actually consume 128 MB)
 func getMaxRamForChunks() int64 {
@@ -744,8 +744,8 @@ func (ja *jobsAdmin) slicePoolPruneLoop() {
 	}
 }
 
-// TODO: review or replace (or confirm to leave as is?)  Originally, JobAdmin couldn't use invidual job logs because there could
-// be several concurrent jobs running. That's not the case any more, so this is safe now, but it does't quite fit with the
+// TODO: review or replace (or confirm to leave as is?)  Originally, JobAdmin couldn't use individual job logs because there could
+// be several concurrent jobs running. That's not the case any more, so this is safe now, but it doesn't quite fit with the
 // architecture around it.
 func (ja *jobsAdmin) LogToJobLog(msg string, level pipeline.LogLevel) {
 	select {

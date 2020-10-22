@@ -472,7 +472,7 @@ func (jptm *jobPartTransferMgr) BlobTiers() (blockBlobTier common.BlockBlobTier,
 // JobHasLowFileCount returns an estimate of whether we only have a very small number of files in the overall job
 // (An "estimate" because it actually only looks at the current job part)
 func (jptm *jobPartTransferMgr) JobHasLowFileCount() bool {
-	// TODO: review this guestimated threshold
+	// TODO: review this guesstimated threshold
 	// Threshold is chosen because for a single large file (in Windows-based test configuration with approx 9.5 Gps disks)
 	// one file gets between 2 or 5 Gbps (depending on other factors), but we really want at least 4 times that throughput.
 	// So a minimal threshold would be 4.
@@ -580,7 +580,7 @@ func (jptm *jobPartTransferMgr) hasStartedWork() bool {
 // the raw status values do not reflect possible cancellation.
 // Do not call directly. Use IsDeadBeforeStart or IsDeadInflight
 // instead because they usually require different handling
-// Practically, a jptm is dead as soon as the context is releeased.
+// Practically, a jptm is dead as soon as the context is released.
 func (jptm *jobPartTransferMgr) isDead() bool {
 	return jptm.TransferStatusIgnoringCancellation() < 0 || jptm.WasCanceled()
 }
@@ -651,7 +651,7 @@ func (jptm *jobPartTransferMgr) FailActiveS2SCopyWithStatus(where string, err er
 	jptm.failActiveTransfer(transferErrorCodeCopyFailed, where, err, failureStatus)
 }
 
-// TODO: FailActive* need be further refactored with a seperate workitem.
+// TODO: FailActive* need be further refactored with a separate workitem.
 func (jptm *jobPartTransferMgr) TempJudgeUploadOrCopy() (isUpload, isCopy bool) {
 	fromTo := jptm.FromTo()
 
@@ -797,7 +797,7 @@ func (jptm *jobPartTransferMgr) LogS2SCopyError(source, destination, errorMsg st
 	jptm.logTransferError(transferErrorCodeCopyFailed, source, destination, errorMsg, status)
 }
 
-// TODO: Log*Error need be further refactored with a seperate workitem.
+// TODO: Log*Error need be further refactored with a separate workitem.
 func (jptm *jobPartTransferMgr) LogSendError(source, destination, errorMsg string, status int) {
 	isUpload, isCopy := jptm.TempJudgeUploadOrCopy()
 

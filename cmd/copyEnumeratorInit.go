@@ -45,7 +45,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// On S2S transfers the following rules apply:
 	// If preserve properties is enabled, but get properties in backend is disabled, turn it on
 	// If source change validation is enabled on files to remote, turn it on (consider a separate flag entirely?)
-	getRemoteProperties := (cca.fromTo.From() == common.ELocation.File() && !cca.fromTo.To().IsRemote()) || // If download, we still need LMT and MD5 from files.
+	getRemoteProperties := cca.forceWrite == common.EOverwriteOption.IfSourceNewer() ||
+		(cca.fromTo.From() == common.ELocation.File() && !cca.fromTo.To().IsRemote()) || // If download, we still need LMT and MD5 from files.
 		(cca.fromTo.From() == common.ELocation.File() && cca.fromTo.To().IsRemote() && (cca.s2sSourceChangeValidation || cca.includeAfter != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise if we are using includeAfter, which requires LMTs.
 		(cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() && cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
 	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
@@ -555,7 +556,7 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 			if err == nil {
 				rootDir = ueRootDir
 			} else {
-				panic("unexpected un-escapeable rootDir name")
+				panic("unexpected inescapable rootDir name")
 			}
 		}
 
@@ -588,7 +589,7 @@ func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir b
 	isRemoveFromFolderAware := fromTo == common.EFromTo.FileTrash()
 	if bothFolderAware || isRemoveFromFolderAware {
 		if !recursive {
-			return common.EFolderPropertiesOption.NoFolders(), // does't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
+			return common.EFolderPropertiesOption.NoFolders(), // doesn't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
 				"Any empty folders will not be processed, because --recursive was not specified" +
 					getSuffix(false)
 		}

@@ -107,7 +107,7 @@ func (httpClient *HTTPClient) send(rpcCmd common.RpcCmd, requestData interface{}
 		return err
 	}
 
-	// Read response data, deserialie it and return it (via out responseData parameter) & error
+	// Read response data, deserialize it and return it (via out responseData parameter) & error
 	responseJson, err := ioutil.ReadAll(response.Body)
 	response.Body.Close()
 	if err != nil {

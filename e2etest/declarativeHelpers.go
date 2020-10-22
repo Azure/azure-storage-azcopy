@@ -21,11 +21,12 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/JeffreyRichter/enum/enum"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/JeffreyRichter/enum/enum"
 )
 
 ///////////
@@ -90,7 +91,7 @@ func (a *testingAsserter) Assert(obtained interface{}, comp comparison, expected
 	// TODO: if obtained or expected is a pointer, do we want to dereference it before comparing?  Do we even need that in our codebase?
 	ok := false
 	if comp.equals {
-		ok = obtained == expected
+		ok = reflect.DeepEqual(obtained, expected)
 	} else {
 		ok = obtained != expected
 	}
@@ -151,6 +152,9 @@ type params struct {
 	s2sSourceChangeValidation bool
 	metadata                  string
 	cancelFromStdin           bool
+	preserveSMBPermissions    common.PreservePermissionsOption
+	preserveSMBInfo           bool
+	relativeSourcePath        string
 }
 
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level
@@ -167,6 +171,7 @@ type Operation uint8
 func (Operation) Copy() Operation        { return Operation(1) }
 func (Operation) Sync() Operation        { return Operation(2) }
 func (Operation) CopyAndSync() Operation { return eOperation.Copy() & eOperation.Sync() }
+func (Operation) Remove() Operation      { return Operation(3) }
 
 func (o Operation) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
@@ -176,7 +181,8 @@ func (o Operation) String() string {
 func (o Operation) getValues() []Operation {
 	switch o {
 	case eOperation.Copy(),
-		eOperation.Sync():
+		eOperation.Sync(),
+		eOperation.Remove():
 		return []Operation{o}
 	case eOperation.CopyAndSync():
 		return []Operation{eOperation.Copy(), eOperation.Sync()}
@@ -294,6 +300,22 @@ func (TestFromTo) AllAzureS2S() TestFromTo {
 	return result
 }
 
+// AllRemove represents the subset of AllPairs that are remove/delete
+func (TestFromTo) AllRemove() TestFromTo {
+	return TestFromTo{
+		desc:      "AllRemove",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(),
+			common.ELocation.File(),
+			common.ELocation.BlobFS(),
+		},
+		tos: []common.Location{
+			common.ELocation.Unknown(),
+		},
+	}
+}
+
 // Other is for when you want to list one or more specific from-tos that the test should cover.
 // Generally avoid this method, because it does not automatically pick up new pairs as we add new supported
 // resource types to AzCopy.
@@ -347,7 +369,13 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 
 			// parse the combination and see if its valid
 			var fromTo common.FromTo
-			err := fromTo.Parse(from.String() + to.String())
+			var err error
+			if to == common.ELocation.Unknown() {
+				err = fromTo.Parse(from.String() + "Trash")
+			} else {
+				err = fromTo.Parse(from.String() + to.String())
+			}
+
 			if err != nil {
 				continue // this pairing wasn't valid
 			}
@@ -369,7 +397,7 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 			// temp
 			if fromTo.From() == common.ELocation.S3() ||
 				fromTo.From() == common.ELocation.BlobFS() || fromTo.To() == common.ELocation.BlobFS() {
-				continue // until we impelment the declarativeResoucreManagers
+				continue // until we implement the declarativeResourceManagers
 			}
 
 			// check filter

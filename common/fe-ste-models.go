@@ -983,7 +983,7 @@ func UnMarshalToCommonMetadata(metadataString string) (Metadata, error) {
 
 // isValidMetadataKey checks if the given string is a valid metadata key for Azure.
 // For Azure, metadata key must adhere to the naming rules for C# identifiers.
-// As testing, reserved keyworkds for C# identifiers are also valid metadata key. (e.g. this, int)
+// As testing, reserved keywords for C# identifiers are also valid metadata key. (e.g. this, int)
 // TODO: consider to use "[A-Za-z_]\w*" to replace this implementation, after ensuring the complexity is O(N).
 func isValidMetadataKey(key string) bool {
 	for i := 0; i < len(key); i++ {
