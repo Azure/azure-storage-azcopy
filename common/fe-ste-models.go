@@ -1035,9 +1035,9 @@ func (m Metadata) ExcludeInvalidKey() (retainedMetadata Metadata, excludedMetada
 func (bt BlobTags) ToString() string {
 	lst := make([]string, 0)
 	for k, v := range bt {
-		lst = append(lst, k+"&"+v)
+		lst = append(lst, k+"="+v)
 	}
-	return strings.Join(lst, ";")
+	return strings.Join(lst, "&")
 }
 
 func ToCommonBlobTagsMap(blobTagsString string) BlobTags {
@@ -1046,8 +1046,8 @@ func ToCommonBlobTagsMap(blobTagsString string) BlobTags {
 	}
 
 	blobTagsMap := BlobTags{}
-	for _, keyAndValue := range strings.Split(blobTagsString, ";") { // key/value pairs are separated by ';'
-		kv := strings.Split(keyAndValue, "&") // key/value are separated by '&'
+	for _, keyAndValue := range strings.Split(blobTagsString, "&") { // key/value pairs are separated by ';'
+		kv := strings.Split(keyAndValue, "=") // key/value are separated by '&'
 		blobTagsMap[kv[0]] = kv[1]
 	}
 	return blobTagsMap

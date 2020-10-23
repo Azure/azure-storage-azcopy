@@ -6,6 +6,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -346,9 +347,11 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	blobTagsStr := string(dstData.BlobTags[:dstData.BlobTagsLength])
 	jpm.blobTags = common.BlobTags{}
 	if len(blobTagsStr) > 0 {
-		for _, keyAndValue := range strings.Split(blobTagsStr, ";") { // key/value pairs are separated by ';'
-			kv := strings.Split(keyAndValue, "&") // key/value are separated by '&'
-			jpm.blobTags[kv[0]] = kv[1]
+		for _, keyAndValue := range strings.Split(blobTagsStr, "&") { // key/value pairs are separated by ';'
+			kv := strings.Split(keyAndValue, "=") // key/value are separated by '&'
+			key, _ := url.QueryUnescape(kv[0])
+			value, _ := url.QueryUnescape(kv[1])
+			jpm.blobTags[key] = value
 		}
 	}
 

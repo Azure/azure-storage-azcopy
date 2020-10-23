@@ -846,15 +846,24 @@ func validateBlobTagsKeyValue(bt common.BlobTags) error {
 		return errors.New("at-most 10 tags can be associated with a blob")
 	}
 	for k, v := range bt {
-		if k == "" || len(k) > 128 || len(v) > 256 {
+		key, err := url.QueryUnescape(k)
+		if err != nil {
+			return err
+		}
+		value, err := url.QueryUnescape(v)
+		if err != nil {
+			return err
+		}
+
+		if key == "" || len(key) > 128 || len(value) > 256 {
 			return errors.New("tag keys must be between 1 and 128 characters, and tag values must be between 0 and 256 characters")
 		}
 
-		if !isValidBlobTagsKeyValue(k) {
+		if !isValidBlobTagsKeyValue(key) {
 			return errors.New("incorrect character set used in key: " + k)
 		}
 
-		if !isValidBlobTagsKeyValue(v) {
+		if !isValidBlobTagsKeyValue(value) {
 			return errors.New("incorrect character set used in value: " + v)
 		}
 	}
