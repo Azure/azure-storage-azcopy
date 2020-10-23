@@ -129,6 +129,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 		pacer:                  pacer,
 		headersToApply:         props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply:        props.SrcMetadata.ToAzBlobMetadata(),
+		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
 		destBlobTier:           destBlobTier,
 		filePacer:              newNullAutoPacer(), // defer creation of real one to Prologue
 		destPageRangeOptimizer: destRangeOptimizer,

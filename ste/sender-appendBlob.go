@@ -86,6 +86,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 		pacer:                  pacer,
 		headersToApply:         props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply:        props.SrcMetadata.ToAzBlobMetadata(),
+		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
 		soleChunkFuncSemaphore: semaphore.NewWeighted(1)}, nil
 }
 
