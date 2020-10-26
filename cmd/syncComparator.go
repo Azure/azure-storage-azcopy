@@ -48,7 +48,12 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject storedO
 
 	// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
 	if present {
-		defer delete(f.sourceIndex.indexMap, destinationObject.relativePath)
+
+		// DEBUG don't remove the entry, as there is a risk of double counting a remote destination (trying to figure out why)
+		// defer delete(f.sourceIndex.indexMap, destinationObject.relativePath)
+		if sourceObjectInMap.haveSeen {
+			return nil
+		}
 
 		if sourceObjectInMap.isMoreRecentThan(destinationObject) {
 			err := f.copyTransferScheduler(sourceObjectInMap)
@@ -56,6 +61,10 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject storedO
 				return err
 			}
 		}
+
+		// mark the source object as seen so that we don't transfer it again
+		sourceObjectInMap.haveSeen = true
+		f.sourceIndex.indexMap[destinationObject.relativePath] = sourceObjectInMap
 	} else {
 		// purposefully ignore the error from destinationCleaner
 		// it's a tolerable error, since it just means some extra destination object might hang around a bit longer

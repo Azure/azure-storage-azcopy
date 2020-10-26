@@ -62,7 +62,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 		}
-	}, nil)
+	}, nil, cca.logVerbosity.ToPipelineLogLevel())
 
 	if err != nil {
 		return nil, err
@@ -82,7 +82,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 		}
-	}, nil)
+	}, nil, cca.logVerbosity.ToPipelineLogLevel())
 	if err != nil {
 		return nil, err
 	}
@@ -151,6 +151,9 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			if err != nil {
 				return err
 			}
+
+			// DEBUG let the garbage collector delete the map that could be huge by now
+			indexer.indexMap = make(map[string]storedObject)
 
 			jobInitiated, err := transferScheduler.dispatchFinalPart()
 			// sync cleanly exits if nothing is scheduled.

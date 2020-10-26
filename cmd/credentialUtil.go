@@ -555,11 +555,19 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo) (credType common.
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
-func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo) (pipeline.Pipeline, error) {
+func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
 	credential := common.CreateBlobCredential(ctx, credInfo, common.CredentialOpOptions{
 		//LogInfo:  glcm.Info, //Comment out for debugging
 		LogError: glcm.Info,
 	})
+
+	logOption := pipeline.LogOptions{}
+	if azcopyScanningLogger != nil {
+		logOption = pipeline.LogOptions{
+			Log:       azcopyScanningLogger.Log,
+			ShouldLog: func(level pipeline.LogLevel) bool { return level <= logLevel },
+		}
+	}
 
 	return ste.NewBlobPipeline(
 		credential,
@@ -567,6 +575,7 @@ func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo) (pi
 			Telemetry: azblob.TelemetryOptions{
 				Value: glcm.AddUserAgentPrefix(common.UserAgent),
 			},
+			Log: logOption,
 		},
 		ste.XferRetryOptions{
 			Policy:        0,

@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	pipeline2 "github.com/Azure/azure-pipeline-go/pipeline"
 	"net/url"
 	"strings"
 
@@ -103,7 +104,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 			return err
 		}
 	case common.ELocation.Blob():
-		p, err := createBlobPipeline(ctx, credentialInfo)
+		p, err := createBlobPipeline(ctx, credentialInfo, pipeline2.LogNone)
 		if err != nil {
 			return err
 		}

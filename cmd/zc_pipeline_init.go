@@ -9,14 +9,14 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
-func initPipeline(ctx context.Context, location common.Location, credential common.CredentialInfo) (p pipeline.Pipeline, err error) {
+func initPipeline(ctx context.Context, location common.Location, credential common.CredentialInfo, logLevel pipeline.LogLevel) (p pipeline.Pipeline, err error) {
 	switch location {
 	case common.ELocation.Local(),
 		common.ELocation.Benchmark():
 		// Gracefully return
 		return nil, nil
 	case common.ELocation.Blob():
-		p, err = createBlobPipeline(ctx, credential)
+		p, err = createBlobPipeline(ctx, credential, logLevel)
 	case common.ELocation.File():
 		p, err = createFilePipeline(ctx, credential)
 	case common.ELocation.BlobFS():

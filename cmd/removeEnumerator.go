@@ -46,8 +46,7 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &cca.credentialInfo, nil,
-		cca.listOfFilesChannel, cca.recursive, false, cca.includeDirectoryStubs, func(common.EntityType) {}, cca.listOfVersionIDs)
+	sourceTraverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &cca.credentialInfo, nil, cca.listOfFilesChannel, cca.recursive, false, cca.includeDirectoryStubs, func(common.EntityType) {}, cca.listOfVersionIDs, cca.logVerbosity.ToPipelineLogLevel())
 
 	// report failure to create traverser
 	if err != nil {

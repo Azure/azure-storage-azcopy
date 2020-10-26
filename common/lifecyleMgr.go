@@ -62,6 +62,7 @@ type LifecycleMgr interface {
 	E2EAwaitContinue()                                           // used by E2E tests
 	E2EAwaitAllowOpenFiles()                                     // used by E2E tests
 	E2EEnableAwaitAllowOpenFiles(enable bool)                    // used by E2E tests
+	RegisterCloseFunc(func())
 }
 
 func GetLifecycleMgr() LifecycleMgr {
@@ -83,6 +84,7 @@ type lifecycleMgr struct {
 	allowCancelFromStdIn  bool           // allow user to send in 'cancel' from the stdin to stop the current job
 	e2eAllowAwaitContinue bool           // allow the user to send 'continue' from stdin to start the current job
 	e2eAllowAwaitOpen     bool           // allow the user to send 'open' from stdin to allow the opening of the first file
+	closeFunc             func()         // used to close logs before exiting
 }
 
 type userInput struct {
@@ -310,6 +312,10 @@ func (lcm *lifecycleMgr) SurrenderControl() {
 	select {}
 }
 
+func (lcm *lifecycleMgr) RegisterCloseFunc(closeFunc func()) {
+	lcm.closeFunc = closeFunc
+}
+
 func (lcm *lifecycleMgr) processOutputMessage() {
 	// this function constantly pulls out message to output
 	// and pass them onto the right handler based on the output format
@@ -331,8 +337,10 @@ func (lcm *lifecycleMgr) processOutputMessage() {
 
 func (lcm *lifecycleMgr) processNoneOutput(msgToOutput outputMessage) {
 	if msgToOutput.msgType == eOutputMessageType.Error() {
+		lcm.closeFunc()
 		os.Exit(int(EExitCode.Error()))
 	} else if msgToOutput.shouldExitProcess() {
+		lcm.closeFunc()
 		os.Exit(int(msgToOutput.exitCode))
 	}
 
@@ -351,6 +359,7 @@ func (lcm *lifecycleMgr) processJSONOutput(msgToOutput outputMessage) {
 
 	// exit if needed
 	if msgToOutput.shouldExitProcess() {
+		lcm.closeFunc()
 		os.Exit(int(msgToOutput.exitCode))
 	} else if msgType == eOutputMessageType.Prompt() {
 		// read the response to the prompt and send it back through the channel
@@ -377,6 +386,7 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 			fmt.Println("\n" + msgToOutput.msgContent)
 		}
 		if msgToOutput.shouldExitProcess() {
+			lcm.closeFunc()
 			os.Exit(int(msgToOutput.exitCode))
 		}
 

@@ -48,6 +48,8 @@ var azcopyOutputFormat common.OutputFormat
 var cmdLineCapMegaBitsPerSecond float64
 var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
+var azcopyScanningLogger common.ILoggerResetable
+var azcopyCurrentJobID common.JobID
 
 // It's not pretty that this one is read directly by credential util.
 // But doing otherwise required us passing it around in many places, even though really
@@ -136,6 +138,14 @@ func Execute(azsAppPathFolder, logPathFolder string, jobPlanFolder string, maxFi
 	azcopyLogPathFolder = logPathFolder
 	azcopyJobPlanFolder = jobPlanFolder
 	azcopyMaxFileAndSocketHandles = maxFileAndSocketHandles
+	azcopyCurrentJobID = common.NewJobID()
+
+	// set up the front end scanning logger
+	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, common.ELogLevel.Debug(), azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger.OpenLog()
+	glcm.RegisterCloseFunc(func() {
+		azcopyScanningLogger.CloseLog()
+	})
 
 	if err := rootCmd.Execute(); err != nil {
 		glcm.Error(err.Error())
@@ -194,7 +204,7 @@ func beginDetectNewVersion() chan struct{} {
 		}
 
 		// step 1: initialize pipeline
-		p, err := createBlobPipeline(context.TODO(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+		p, err := createBlobPipeline(context.TODO(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, pipeline.LogNone)
 		if err != nil {
 			return
 		}

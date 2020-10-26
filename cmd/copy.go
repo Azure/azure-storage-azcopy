@@ -182,12 +182,6 @@ func blockSizeInBytes(rawBlockSizeInMiB float64) (int64, error) {
 	return int64(math.Round(rawSizeInBytes)), nil
 }
 
-// validates and transform raw input into cooked input
-func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
-	// generate a unique job ID
-	return raw.cookWithId(common.NewJobID())
-}
-
 // returns result of stripping and if striptopdir is enabled
 // if nothing happens, the original source is returned
 func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Location) (result string, stripTopDir bool, err error) {
@@ -229,10 +223,10 @@ func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Lo
 	return
 }
 
-func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, error) {
+func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 
 	cooked := cookedCopyCmdArgs{
-		jobID: jobId,
+		jobID: azcopyCurrentJobID,
 	}
 
 	fromTo, err := validateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
@@ -1045,7 +1039,7 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 1: initialize pipeline
-	p, err := createBlobPipeline(ctx, credInfo)
+	p, err := createBlobPipeline(ctx, credInfo, pipeline.LogNone)
 	if err != nil {
 		return err
 	}
@@ -1091,7 +1085,7 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 0: initialize pipeline
-	p, err := createBlobPipeline(ctx, credInfo)
+	p, err := createBlobPipeline(ctx, credInfo, pipeline.LogNone)
 	if err != nil {
 		return err
 	}

@@ -146,8 +146,8 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		}
 	}
 
-	// generate a new job ID
-	cooked.jobID = common.NewJobID()
+	// use the globally generated JobID
+	cooked.jobID = azcopyCurrentJobID
 
 	cooked.blockSize, err = blockSizeInBytes(raw.blockSizeMB)
 	if err != nil {

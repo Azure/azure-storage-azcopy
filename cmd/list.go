@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	pipeline2 "github.com/Azure/azure-pipeline-go/pipeline"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -119,7 +120,7 @@ func HandleListContainerCommand(unparsedSource string, location common.Location)
 		}
 	}
 
-	traverser, err := initResourceTraverser(source, location, &ctx, &credentialInfo, nil, nil, true, false, false, func(common.EntityType) {}, nil)
+	traverser, err := initResourceTraverser(source, location, &ctx, &credentialInfo, nil, nil, true, false, false, func(common.EntityType) {}, nil, pipeline2.LogNone)
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())
