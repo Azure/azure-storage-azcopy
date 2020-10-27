@@ -286,8 +286,7 @@ func (rca resumeCmdArgs) process() error {
 		destinationSAS: rca.DestinationSAS,
 	}); err != nil {
 		return err
-	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() ||
-		credentialInfo.CredentialType == common.ECredentialType.Anonymous() {
+	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
 		uotm := GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {

@@ -89,6 +89,31 @@ func (EnvironmentVariable) CertificatePassword() EnvironmentVariable {
 	}
 }
 
+// For MSI login
+func (EnvironmentVariable) IdentityClientID() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_MSI_CLIENT_ID",
+		Description: "Client ID for User-assigned identity",
+		Hidden:      true,
+	}
+}
+
+func (EnvironmentVariable) IdentityObjectID() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_MSI_OBJECT_ID",
+		Description: "Object ID for user-assigned identity",
+		Hidden:      true,
+	}
+}
+
+func (EnvironmentVariable) IdentityResourceString() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_MSI_RESOURCE_STRING",
+		Description: "Resource String for user-assigned identity",
+		Hidden:      true,
+	}
+}
+
 func (EnvironmentVariable) ConcurrencyValue() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_CONCURRENCY_VALUE",
