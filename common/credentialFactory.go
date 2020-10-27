@@ -93,8 +93,7 @@ func (o CredentialOpOptions) cancel() {
 func CreateBlobCredential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) azblob.Credential {
 	credential := azblob.NewAnonymousCredential()
 
-	if credInfo.CredentialType == ECredentialType.OAuthToken() ||
-		credInfo.CredentialType == ECredentialType.AutoLogin() {
+	if credInfo.CredentialType == ECredentialType.OAuthToken() {
 		if credInfo.OAuthTokenInfo.IsEmpty() {
 			options.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
 		}
@@ -162,7 +161,7 @@ func CreateBlobFSCredential(ctx context.Context, credInfo CredentialInfo, option
 	cred := azbfs.NewAnonymousCredential()
 
 	switch credInfo.CredentialType {
-	case ECredentialType.OAuthToken(), ECredentialType.AutoLogin():
+	case ECredentialType.OAuthToken():
 		if credInfo.OAuthTokenInfo.IsEmpty() {
 			options.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
 		}

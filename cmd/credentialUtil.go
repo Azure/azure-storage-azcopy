@@ -346,8 +346,7 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 		// these auth types don't pick up anything from environment vars, so they are not the focus of this routine
 		return nil
 	case common.ECredentialType.OAuthToken(),
-		common.ECredentialType.SharedKey(),
-		common.ECredentialType.AutoLogin():
+		common.ECredentialType.SharedKey():
 		// Files doesn't currently support OAuth, but it's a valid azure endpoint anyway, so it'll pass the check.
 		if resourceType != common.ELocation.Blob() && resourceType != common.ELocation.BlobFS() && resourceType != common.ELocation.File() {
 			// There may be a reason for files->blob to specify this.
@@ -458,7 +457,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 					err = errors.New("no SAS token or OAuth token is present and the resource is not public")
 					return common.ECredentialType.Unknown(), isPublic, err
 				}
-				credType = common.ECredentialType.AutoLogin()
+				credType = common.ECredentialType.OAuthToken()
 			}
 		case common.ELocation.File():
 			if credType, err = getAzureFileCredentialType(); err != nil {
@@ -475,7 +474,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 					err = errors.New("OAuth token, SAS token, or shared key should be provided for Blob FS")
 					return common.ECredentialType.Unknown(), isPublic, err
 				}
-				credType = common.ECredentialType.AutoLogin()
+				credType = common.ECredentialType.OAuthToken()
 			}
 		case common.ELocation.S3():
 			accessKeyID := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
@@ -501,8 +500,7 @@ func getCredentialInfoForLocation(ctx context.Context, location common.Location,
 	credInfo.CredentialType, isPublic, err = getCredentialTypeForLocation(ctx, location, resource, resourceSAS, isSource)
 
 	// flesh out the rest of the fields, for those types that require it
-	if credInfo.CredentialType == common.ECredentialType.OAuthToken()  ||
-	   credInfo.CredentialType == common.ECredentialType.AutoLogin() {
+	if credInfo.CredentialType == common.ECredentialType.OAuthToken() {
 		uotm := GetUserOAuthTokenManagerInstance()
 
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
