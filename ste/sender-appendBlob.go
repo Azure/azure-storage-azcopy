@@ -143,8 +143,8 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 	destinationModified = true
 	blobTags := s.blobTagsToApply
 	setTagsRequired := setTagsRequired(blobTags)
-	if setTagsRequired {
-		blobTags = azblob.BlobTagsMap{}
+	if setTagsRequired || len(blobTags) == 0 {
+		blobTags = nil
 	}
 	if _, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, blobTags); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)

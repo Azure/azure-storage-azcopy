@@ -187,11 +187,11 @@ func (s *blockBlobSenderBase) Epilogue() {
 
 		blobTags := s.blobTagsToApply
 		setTagsRequired := setTagsRequired(blobTags)
-		if setTagsRequired {
-			blobTags = azblob.BlobTagsMap{}
+		if setTagsRequired || len(blobTags) == 0 {
+			blobTags = nil
 		}
 
-		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, s.destBlobTier, s.blobTagsToApply); err != nil {
+		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, s.destBlobTier, blobTags); err != nil {
 			jptm.FailActiveSend("Committing block list", err)
 			return
 		}

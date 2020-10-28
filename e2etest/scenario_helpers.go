@@ -332,7 +332,7 @@ func (scenarioHelper) generateBlobsFromList(c asserter, containerURL azblob.Cont
 			reader,
 			headers,
 			ad.toMetadata(),
-			azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, azblob.BlobTagsMap{})
+			azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil)
 		c.AssertNoErr(err)
 		c.Assert(cResp.StatusCode(), equals(), 201)
 	}
@@ -423,7 +423,7 @@ func (scenarioHelper) generatePageBlobsFromList(c asserter, containerURL azblob.
 			azblob.Metadata{},
 			azblob.BlobAccessConditions{},
 			azblob.DefaultPremiumBlobAccessTier,
-			azblob.BlobTagsMap{},
+			nil,
 		)
 		c.AssertNoErr(err)
 		c.Assert(cResp.StatusCode(), equals(), 201)
@@ -453,7 +453,7 @@ func (scenarioHelper) generateAppendBlobsFromList(c asserter, containerURL azblo
 			},
 			azblob.Metadata{},
 			azblob.BlobAccessConditions{},
-			azblob.BlobTagsMap{},
+			nil,
 		)
 		c.AssertNoErr(err)
 		c.Assert(cResp.StatusCode(), equals(), 201)
@@ -474,7 +474,7 @@ func (scenarioHelper) generateAppendBlobsFromList(c asserter, containerURL azblo
 func (scenarioHelper) generateBlockBlobWithAccessTier(c asserter, containerURL azblob.ContainerURL, blobName string, accessTier azblob.AccessTierType) {
 	blob := containerURL.NewBlockBlobURL(blobName)
 	cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
-		nil, azblob.BlobAccessConditions{}, accessTier, azblob.BlobTagsMap{})
+		nil, azblob.BlobAccessConditions{}, accessTier, nil)
 	c.AssertNoErr(err)
 	c.Assert(cResp.StatusCode(), equals(), 201)
 }

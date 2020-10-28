@@ -102,8 +102,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		cca.stripTopDir = true
 	}
 
-	if cca.fromTo != common.EFromTo.LocalBlob() && cca.blobTags != nil {
-		return nil, fmt.Errorf("blob tags can only be set for transfer from local to blob")
+	if cca.fromTo.To() != common.ELocation.Blob() && cca.blobTags != nil {
+		return nil, fmt.Errorf("blob tags can only be set when transferring to blob storage")
 	}
 
 	// Create a S3 bucket resolver

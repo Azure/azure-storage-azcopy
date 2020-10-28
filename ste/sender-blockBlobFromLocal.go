@@ -97,8 +97,8 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 
 		blobTags := u.blobTagsToApply
 		setTagsRequired := setTagsRequired(blobTags)
-		if setTagsRequired {
-			blobTags = azblob.BlobTagsMap{}
+		if setTagsRequired || len(blobTags) == 0 {
+			blobTags = nil
 		}
 
 		if jptm.Info().SourceSize == 0 {

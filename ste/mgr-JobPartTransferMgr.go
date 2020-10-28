@@ -240,7 +240,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	src, dst, _ := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
 
-	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType, versionID, srcBlobTags :=
+	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType, versionID, blobTags :=
 		plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
 	// If the length of destination SAS is greater than 0
@@ -313,6 +313,16 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		}
 	}
 	blockSize = common.Iffint64(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
+
+	var srcBlobTags common.BlobTags
+	if blobTags != nil {
+		srcBlobTags = common.BlobTags{}
+		for k, v := range blobTags {
+			key, _ := url.QueryUnescape(k)
+			value, _ := url.QueryUnescape(v)
+			srcBlobTags[key] = value
+		}
+	}
 
 	jptm.transferInfo = &TransferInfo{
 		BlockSize:                      blockSize,

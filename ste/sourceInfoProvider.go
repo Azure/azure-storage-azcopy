@@ -125,6 +125,7 @@ func (p *defaultRemoteSourceInfoProvider) Properties() (*SrcProperties, error) {
 	return &SrcProperties{
 		SrcHTTPHeaders: p.transferInfo.SrcHTTPHeaders,
 		SrcMetadata:    p.transferInfo.SrcMetadata,
+		SrcBlobTags:    p.transferInfo.SrcBlobTags,
 	}, nil
 }
 

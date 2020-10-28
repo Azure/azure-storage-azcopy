@@ -102,8 +102,8 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 
 		blobTags := c.blobTagsToApply
 		setTagsRequired := setTagsRequired(blobTags)
-		if setTagsRequired {
-			blobTags = azblob.BlobTagsMap{}
+		if setTagsRequired || len(blobTags) == 0 {
+			blobTags = nil
 		}
 		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.headersToApply, c.metadataToApply, azblob.BlobAccessConditions{}, c.destBlobTier, blobTags); err != nil {
 			jptm.FailActiveSend("Creating empty blob", err)

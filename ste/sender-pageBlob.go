@@ -236,8 +236,8 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 
 	blobTags := s.blobTagsToApply
 	setTagsRequired := setTagsRequired(blobTags)
-	if setTagsRequired {
-		blobTags = azblob.BlobTagsMap{}
+	if setTagsRequired || len(blobTags) == 0 {
+		blobTags = nil
 	}
 
 	if _, err := s.destPageBlobURL.Create(s.jptm.Context(),

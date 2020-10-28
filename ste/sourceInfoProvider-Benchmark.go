@@ -38,6 +38,7 @@ func (b benchmarkSourceInfoProvider) Properties() (*SrcProperties, error) {
 	return &SrcProperties{
 		SrcHTTPHeaders: common.ResourceHTTPHeaders{},
 		SrcMetadata:    common.Metadata{},
+		SrcBlobTags:    common.BlobTags{},
 	}, nil
 }
 
