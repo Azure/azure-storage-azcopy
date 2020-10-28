@@ -172,12 +172,14 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 		if srcURL.Hostname() == dstURL.Hostname() &&
 			srcURL.EscapedPath() == dstURL.EscapedPath() {
 
+			// src and dst point to the same object
+			// if src does not have snapshot/versionId, then error out as we cannot copy into the object itself
+			// if dst has snapshot or versionId specified, do not error and let the service fail the request with clear message
 			srcRQ := srcURL.Query()
 			dstRQ := dstURL.Query()
-			if (len(srcRQ["versionId"]) > 0 || len(srcRQ["versionid"]) > 0) && !(len(dstRQ["versionId"]) > 0 || len(dstRQ["versionid"]) > 0) {
-				// Case: Replacing the current version of the blob with the previous version.
-				// In this particular case, source URL should contain version id and destination URL should not have any version id specified
-			} else {
+
+			// note that query is now all lower case at this point
+			if len(srcRQ["snapshot"]) == 0 && len(srcRQ["versionid"]) == 0 && len(dstRQ["snapshot"]) == 0 && len(dstRQ["versionid"]) == 0 {
 				jptm.LogSendError(info.Source, info.Destination, "Transfer source and destination are the same, which would cause data loss. Aborting transfer.", 0)
 				jptm.SetStatus(common.ETransferStatus.Failed())
 				jptm.ReportTransferDone()
