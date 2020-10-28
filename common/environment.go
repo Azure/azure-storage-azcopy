@@ -64,6 +64,12 @@ func (EnvironmentVariable) UserDir() EnvironmentVariable {
 	}
 }
 
+func (EnvironmentVariable) AutoLoginType() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_LOGIN_TYPE",
+		Description: "Credential type to access Azure Resource, available values SPN, MSI and DEVICE - sequentially for Service Principal, Managed Service Identity and Device workflow",
+	}
+}
 func (EnvironmentVariable) ApplicationID() EnvironmentVariable {
 	// Used for auto-login.
 	return EnvironmentVariable{

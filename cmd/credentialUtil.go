@@ -82,35 +82,35 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 		// Fill up lca
 		lca.persistToken = false
 
-		lca.applicationID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
-		lca.certPath = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
-		lca.clientSecret = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
-		if lca.applicationID != "" && (lca.certPass != "" || lca.clientSecret != "") {
-			// we've enough details for SPN login
-			lca.servicePrincipal = true
+		switch glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AutoLoginType()) {
+		case "SPN":
+			lca.applicationID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
+			lca.certPath = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
+			lca.clientSecret = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
+			if lca.applicationID != "" && (lca.certPass != "" || lca.clientSecret != "") {
+				lca.servicePrincipal = true
+				err = lca.process()
+				if err == nil {
+					return
+				}
+			}
+
+		case "MSI":
+			lca.identityClientID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.IdentityClientID())
+			lca.identityObjectID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.IdentityObjectID())
+			lca.identityResourceID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.IdentityResourceString())
+			lca.identity = true
 			err = lca.process()
 			if err == nil {
 				return
 			}
-		}
-		lca.servicePrincipal = false
 
-		lca.identityClientID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.IdentityClientID())
-		lca.identityObjectID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.IdentityObjectID())
-		lca.identityResourceID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.IdentityResourceString())
-		lca.identity = true
-		if lca.identityClientID != "" || lca.identityObjectID != "" || lca.identityResourceID != "" {
+		case "DEVICE":
+			lca.identity = false
 			err = lca.process()
 			if err == nil {
 				return
 			}
-		}
-
-		//Fallback: Device login
-		lca.identity = false
-		err = lca.process()
-		if err == nil {
-			return
 		}
 	})
 
