@@ -102,10 +102,6 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		cca.stripTopDir = true
 	}
 
-	if cca.fromTo.To() != common.ELocation.Blob() && cca.blobTags != nil {
-		return nil, fmt.Errorf("blob tags can only be set when transferring to blob storage")
-	}
-
 	// Create a S3 bucket resolver
 	// Giving it nothing to work with as new names will be added as we traverse.
 	var containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)

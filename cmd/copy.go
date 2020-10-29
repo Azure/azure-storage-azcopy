@@ -488,6 +488,9 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 	cooked.includeDirectoryStubs = raw.includeDirectoryStubs
 
+	if cooked.fromTo.To() != common.ELocation.Blob() && raw.blobTags != "" {
+		return cooked, errors.New("blob tags can only be set when transferring to blob storage")
+	}
 	blobTags := common.ToCommonBlobTagsMap(raw.blobTags)
 	err = validateBlobTagsKeyValue(blobTags)
 	if err != nil {

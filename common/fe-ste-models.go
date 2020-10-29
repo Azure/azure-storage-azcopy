@@ -925,9 +925,6 @@ type CopyTransfer struct {
 // Metadata used in AzCopy.
 type Metadata map[string]string
 
-// BlobTags is a map of tags
-type BlobTags map[string]string
-
 // ToAzBlobMetadata converts metadata to azblob's metadata.
 func (m Metadata) ToAzBlobMetadata() azblob.Metadata {
 	return azblob.Metadata(m)
@@ -938,11 +935,6 @@ func (m Metadata) ToAzFileMetadata() azfile.Metadata {
 	return azfile.Metadata(m)
 }
 
-// ToAzBlobTagsMap converts BlobTagsMap to azblob's BlobTagsMap
-func (bt BlobTags) ToAzBlobTagsMap() azblob.BlobTagsMap {
-	return azblob.BlobTagsMap(bt)
-}
-
 // FromAzBlobMetadataToCommonMetadata converts azblob's metadata to common metadata.
 func FromAzBlobMetadataToCommonMetadata(m azblob.Metadata) Metadata {
 	return Metadata(m)
@@ -951,11 +943,6 @@ func FromAzBlobMetadataToCommonMetadata(m azblob.Metadata) Metadata {
 // FromAzFileMetadataToCommonMetadata converts azfile's metadata to common metadata.
 func FromAzFileMetadataToCommonMetadata(m azfile.Metadata) Metadata {
 	return Metadata(m)
-}
-
-// FromAzBlobTagsMapToCommonBlobTags converts azblob's BlobTagsMap to common BlobTags
-func FromAzBlobTagsMapToCommonBlobTags(azbt azblob.BlobTagsMap) BlobTags {
-	return BlobTags(azbt)
 }
 
 // Marshal marshals metadata to string.
@@ -1032,6 +1019,19 @@ func (m Metadata) ExcludeInvalidKey() (retainedMetadata Metadata, excludedMetada
 	return
 }
 
+// BlobTags is a map of key-value pair
+type BlobTags map[string]string
+
+// ToAzBlobTagsMap converts BlobTagsMap to azblob's BlobTagsMap
+func (bt BlobTags) ToAzBlobTagsMap() azblob.BlobTagsMap {
+	return azblob.BlobTagsMap(bt)
+}
+
+// FromAzBlobTagsMapToCommonBlobTags converts azblob's BlobTagsMap to common BlobTags
+func FromAzBlobTagsMapToCommonBlobTags(azbt azblob.BlobTagsMap) BlobTags {
+	return BlobTags(azbt)
+}
+
 func (bt BlobTags) ToString() string {
 	lst := make([]string, 0)
 	for k, v := range bt {
@@ -1046,8 +1046,8 @@ func ToCommonBlobTagsMap(blobTagsString string) BlobTags {
 	}
 
 	blobTagsMap := BlobTags{}
-	for _, keyAndValue := range strings.Split(blobTagsString, "&") { // key/value pairs are separated by ';'
-		kv := strings.Split(keyAndValue, "=") // key/value are separated by '&'
+	for _, keyAndValue := range strings.Split(blobTagsString, "&") { // key/value pairs are separated by '&'
+		kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
 		blobTagsMap[kv[0]] = kv[1]
 	}
 	return blobTagsMap
