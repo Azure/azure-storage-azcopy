@@ -40,7 +40,7 @@ import (
 // This code for blob tier safety is _not_ safe for multiple jobs at once.
 // That's alright, but it's good to know on the off chance.
 // This sync.Once is present to ensure we output information about a S2S access tier preservation failure to stdout once
-var s2sAccessTierFailureLogStdout sync.Once
+var tierNotAllowedFailure sync.Once
 var checkLengthFailureOnReadOnlyDst sync.Once
 
 // This sync.Once and string pair ensures that we only get a user's destination account kind once when handling set-tier
@@ -131,12 +131,12 @@ func ValidateTier(jptm IJobPartTransferMgr, blobTier azblob.AccessTierType, blob
 		tierAvailable := BlobTierAllowed(blobTier)
 
 		if tierAvailable {
-			if tierSetPossibleFail {
-				jptm.LogTransferInfo(pipeline.LogWarning, jptm.Info().Source, jptm.Info().Destination, "Cannot set destination block blob to the pending access tier ("+string(blobTier)+"), because either the destination account or blob type does not support it. The transfer will still succeed.")
-			}
 			return true
 		} else {
-			jptm.LogTransferInfo(pipeline.LogWarning, jptm.Info().Source, jptm.Info().Destination, "The intended tier ("+string(blobTier)+") isn't available on the destination blob type or storage account, so it was left as the default.")
+			tierNotAllowedFailure.Do(func() {
+				glcm := common.GetLifecycleMgr()
+				glcm.Info("Destination could not accommodate the tier " + string(blobTier) + ". Going ahead with the default tier. In case of service to service transfer, consider setting the flag --s2s-preserve-access-tier=false.")
+			})
 			return false
 		}
 	} else {

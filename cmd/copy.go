@@ -660,12 +660,12 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		if cooked.blobType != common.EBlobType.Detect() && cooked.fromTo.To() != common.ELocation.Blob() {
 			return cooked, fmt.Errorf("blob-type is not supported for the scenario (%s)", cooked.fromTo.String())
 		}
-		// Disabling blob tier override, when copying block -> block blob or page -> page blob, blob tier will be kept,
-		// For s3 and file, only hot block blob tier is supported.
-		//if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
-		//	cooked.pageBlobTier != common.EPageBlobTier.None() {
-		//	return cooked, fmt.Errorf("blob-tier is not supported while copying from service to service")
-		//}
+
+		// Setting blob tier is supported only when destination is a blob storage. Disabling it for all the other transfer scenarios.
+		if (cooked.blockBlobTier != common.EBlockBlobTier.None() || cooked.pageBlobTier != common.EPageBlobTier.None()) &&
+			cooked.fromTo.To() != common.ELocation.Blob() {
+			return cooked, fmt.Errorf("blob-tier is not supported for the scenario (%s)", cooked.fromTo.String())
+		}
 		if cooked.noGuessMimeType {
 			return cooked, fmt.Errorf("no-guess-mime-type is not supported while copying from service to service")
 		}
