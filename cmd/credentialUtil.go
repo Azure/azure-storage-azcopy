@@ -80,38 +80,25 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 	autoOAuth.Do(func() {
 		var lca loginCmdArgs
 		// Fill up lca
-		lca.persistToken = false
-
 		switch glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AutoLoginType()) {
 		case "SPN":
 			lca.applicationID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
 			lca.certPath = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
 			lca.clientSecret = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
-			if lca.applicationID != "" && (lca.certPass != "" || lca.clientSecret != "") {
-				lca.servicePrincipal = true
-				err = lca.process()
-				if err == nil {
-					return
-				}
-			}
+			lca.servicePrincipal = true
 
 		case "MSI":
-			lca.identityClientID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.IdentityClientID())
-			lca.identityObjectID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.IdentityObjectID())
-			lca.identityResourceID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.IdentityResourceString())
+			lca.identityClientID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityClientID())
+			lca.identityObjectID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityObjectID())
+			lca.identityResourceID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityResourceString())
 			lca.identity = true
-			err = lca.process()
-			if err == nil {
-				return
-			}
 
 		case "DEVICE":
 			lca.identity = false
-			err = lca.process()
-			if err == nil {
-				return
-			}
 		}
+
+		lca.persistToken = false
+		err = lca.process()
 	})
 
 	if err != nil {
@@ -459,12 +446,10 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		case common.ELocation.Blob():
 			credType, isPublic, err = getBlobCredentialType(ctx, resource, isSource, resourceSAS != "")
 			if azErr, ok := err.(common.AzError); ok && azErr.Equals(common.EAzError.LoginCredMissing()) {
-				token, err := GetOAuthTokenManagerInstance()
-				if err != nil || token == nil {
-					// could not auto-login, return original error
-					return common.ECredentialType.Unknown(), isPublic, azErr
+				_, err := GetOAuthTokenManagerInstance()
+				if err == nil {
+					return common.ECredentialType.OAuthToken(), false, nil
 				}
-				credType = common.ECredentialType.OAuthToken()
 			}
 			if err != nil {
 				return common.ECredentialType.Unknown(), false, err
@@ -476,12 +461,11 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		case common.ELocation.BlobFS():
 			credType, err = getBlobFSCredentialType(ctx, resource, resourceSAS != "")
 			if azErr, ok := err.(common.AzError); ok && azErr.Equals(common.EAzError.LoginCredMissing()) {
-				token, err := GetOAuthTokenManagerInstance()
-				if err != nil || token == nil {
-					// could not auto-login, return original error
-					return common.ECredentialType.Unknown(), isPublic, azErr
+				_, err := GetOAuthTokenManagerInstance()
+				if err == nil {
+					// Autologin succeeded, we've oAuth token
+					return common.ECredentialType.OAuthToken(), false, nil
 				}
-				credType = common.ECredentialType.OAuthToken()
 			}
 			if err != nil {
 				return common.ECredentialType.Unknown(), false, err

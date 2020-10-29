@@ -75,7 +75,6 @@ func (EnvironmentVariable) ApplicationID() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_ACTIVE_DIRECTORY_APPLICATION_ID",
 		Description: "The Azure Active Directory application id used for Service Principal authentication.",
-		Hidden:      true,
 	}
 }
 
@@ -96,27 +95,24 @@ func (EnvironmentVariable) CertificatePassword() EnvironmentVariable {
 }
 
 // For MSI login
-func (EnvironmentVariable) IdentityClientID() EnvironmentVariable {
+func (EnvironmentVariable) ManagedIdentityClientID() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_MSI_CLIENT_ID",
 		Description: "Client ID for User-assigned identity",
-		Hidden:      true,
 	}
 }
 
-func (EnvironmentVariable) IdentityObjectID() EnvironmentVariable {
+func (EnvironmentVariable) ManagedIdentityObjectID() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_MSI_OBJECT_ID",
 		Description: "Object ID for user-assigned identity",
-		Hidden:      true,
 	}
 }
 
-func (EnvironmentVariable) IdentityResourceString() EnvironmentVariable {
+func (EnvironmentVariable) ManagedIdentityResourceString() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_MSI_RESOURCE_STRING",
 		Description: "Resource String for user-assigned identity",
-		Hidden:      true,
 	}
 }
 
