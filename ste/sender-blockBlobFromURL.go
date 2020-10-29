@@ -101,8 +101,8 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 		}
 
 		blobTags := c.blobTagsToApply
-		setTagsRequired := setTagsRequired(blobTags)
-		if setTagsRequired || len(blobTags) == 0 {
+		separateSetTagsRequired := separateSetTagsRequired(blobTags)
+		if separateSetTagsRequired || len(blobTags) == 0 {
 			blobTags = nil
 		}
 		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.headersToApply, c.metadataToApply, azblob.BlobAccessConditions{}, c.destBlobTier, blobTags); err != nil {
@@ -110,7 +110,7 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 			return
 		}
 
-		if setTagsRequired {
+		if separateSetTagsRequired {
 			if _, err := c.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, nil, nil, nil, c.blobTagsToApply); err != nil {
 				c.jptm.Log(pipeline.LogWarning, err.Error())
 			}

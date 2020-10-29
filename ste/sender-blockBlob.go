@@ -186,8 +186,8 @@ func (s *blockBlobSenderBase) Epilogue() {
 		}
 
 		blobTags := s.blobTagsToApply
-		setTagsRequired := setTagsRequired(blobTags)
-		if setTagsRequired || len(blobTags) == 0 {
+		separateSetTagsRequired := separateSetTagsRequired(blobTags)
+		if separateSetTagsRequired || len(blobTags) == 0 {
 			blobTags = nil
 		}
 
@@ -196,7 +196,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 			return
 		}
 
-		if setTagsRequired {
+		if separateSetTagsRequired {
 			if _, err := s.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, nil, nil, nil, s.blobTagsToApply); err != nil {
 				s.jptm.Log(pipeline.LogWarning, err.Error())
 			}

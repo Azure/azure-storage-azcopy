@@ -235,8 +235,8 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 	}
 
 	blobTags := s.blobTagsToApply
-	setTagsRequired := setTagsRequired(blobTags)
-	if setTagsRequired || len(blobTags) == 0 {
+	separateSetTagsRequired := separateSetTagsRequired(blobTags)
+	if separateSetTagsRequired || len(blobTags) == 0 {
 		blobTags = nil
 	}
 
@@ -252,7 +252,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		return
 	}
 
-	if setTagsRequired {
+	if separateSetTagsRequired {
 		if _, err := s.destPageBlobURL.SetTags(s.jptm.Context(), nil, nil, nil, nil, nil, nil, s.blobTagsToApply); err != nil {
 			s.jptm.Log(pipeline.LogWarning, err.Error())
 		}

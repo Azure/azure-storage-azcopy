@@ -207,7 +207,7 @@ func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pi
 const TagsHeaderMaxLength = 2000
 
 // If length of tags <= 2kb, pass it in the header x-ms-tags. Else do a separate SetTags call
-func setTagsRequired(tagsMap azblob.BlobTagsMap) bool {
+func separateSetTagsRequired(tagsMap azblob.BlobTagsMap) bool {
 	tagsLength := 0
 	for k, v := range tagsMap {
 		tagsLength += len(k) + len(v) + 2

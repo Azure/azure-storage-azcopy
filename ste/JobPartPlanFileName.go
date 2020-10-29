@@ -108,9 +108,9 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	*	TODO: Remove this comment
 	*	Since I've already verified that at most 10 blob tags can be set and put a restriction on key and value,
 	*	there is no need to check the length. size of JobPartPlanDstBlob{}.BlobTags = 4kb
-	*	key(128) + value(256) + separator('&', 1) = 385
+	*	key(128) + value(256) + separator('=', 1) = 385
 	*	10 tags * 385 = 3850
-	*	+ 10 * characters(';', 1) for delimiter
+	*	+ 10 * characters('&', 1) for delimiter
 	*   = 3860 characters at max
 	 */
 

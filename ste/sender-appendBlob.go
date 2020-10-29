@@ -142,8 +142,8 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 
 	destinationModified = true
 	blobTags := s.blobTagsToApply
-	setTagsRequired := setTagsRequired(blobTags)
-	if setTagsRequired || len(blobTags) == 0 {
+	separateSetTagsRequired := separateSetTagsRequired(blobTags)
+	if separateSetTagsRequired || len(blobTags) == 0 {
 		blobTags = nil
 	}
 	if _, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, blobTags); err != nil {
@@ -151,7 +151,7 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 		return
 	}
 
-	if setTagsRequired {
+	if separateSetTagsRequired {
 		if _, err := s.destAppendBlobURL.SetTags(s.jptm.Context(), nil, nil, nil, nil, nil, nil, s.blobTagsToApply); err != nil {
 			s.jptm.Log(pipeline.LogWarning, err.Error())
 		}

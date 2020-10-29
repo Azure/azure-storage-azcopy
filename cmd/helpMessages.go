@@ -85,7 +85,7 @@ Upload files and directories to Azure Storage account and set the query-string e
 		- azcopy cp "/path/*foo/*bar*" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --blob-tags="bla%20bla=foo&bla%20bla%202=bar"
 	- Keys and values are URL encoded and the key-value pairs are separated by an ampersand('&')
 	- https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-index-how-to?tabs=azure-portal
-	- While setting tags on the blobs, there are additional permissions('t' for tags and 'f' for find blobs by tags) in SAS without with service with give AuthZ error.
+	- While setting tags on the blobs, there are additional permissions('t' for tags) in SAS without which the service will give authorization error back.
 
 Download a single file by using OAuth authentication. If you have not yet logged into AzCopy, please run the azcopy login command before you run the following command.
 
@@ -173,7 +173,7 @@ Transfer files and directories to Azure Storage account and set the given query-
 		- azcopy cp "https://[account].blob.core.windows.net/[source_container]/[path/to/directory]?[SAS]" "https://[account].blob.core.windows.net/[destination_container]/[path/to/directory]?[SAS]" --blob-tags="bla%20bla=foo&bla%20bla%202=bar"
 	- Keys and values are URL encoded and the key-value pairs are separated by an ampersand('&')
 	- https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-index-how-to?tabs=azure-portal
-	- While setting tags on the blobs, there are additional permissions('t' for tags and 'f' for find blobs by tags) in SAS without with service with give AuthZ error.
+	- While setting tags on the blobs, there are additional permissions('t' for tags) in SAS without which the service will give authorization error back.
 `
 
 // ===================================== ENV COMMAND ===================================== //

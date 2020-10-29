@@ -96,8 +96,8 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		}
 
 		blobTags := u.blobTagsToApply
-		setTagsRequired := setTagsRequired(blobTags)
-		if setTagsRequired || len(blobTags) == 0 {
+		separateSetTagsRequired := separateSetTagsRequired(blobTags)
+		if separateSetTagsRequired || len(blobTags) == 0 {
 			blobTags = nil
 		}
 
@@ -125,7 +125,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 			return
 		}
 
-		if setTagsRequired {
+		if separateSetTagsRequired {
 			if _, err := u.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, nil, nil, nil, u.blobTagsToApply); err != nil {
 				u.jptm.Log(pipeline.LogWarning, err.Error())
 			}
