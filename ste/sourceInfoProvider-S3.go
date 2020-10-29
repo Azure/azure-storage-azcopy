@@ -90,6 +90,7 @@ func (p *s3SourceInfoProvider) Properties() (*SrcProperties, error) {
 	srcProperties := SrcProperties{
 		SrcHTTPHeaders: p.transferInfo.SrcHTTPHeaders,
 		SrcMetadata:    p.transferInfo.SrcMetadata,
+		SrcBlobTags:    p.transferInfo.SrcBlobTags,
 	}
 
 	// Get properties in backend.

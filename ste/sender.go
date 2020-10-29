@@ -203,3 +203,19 @@ func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pi
 		return newBlockBlobUploader(jptm, destination, p, pacer, sip) // If no blob type was inferred, assume block blob.
 	}
 }
+
+const TagsHeaderMaxLength = 2000
+
+// If length of tags <= 2kb, pass it in the header x-ms-tags. Else do a separate SetTags call
+func separateSetTagsRequired(tagsMap azblob.BlobTagsMap) bool {
+	tagsLength := 0
+	for k, v := range tagsMap {
+		tagsLength += len(k) + len(v) + 2
+	}
+
+	if tagsLength > TagsHeaderMaxLength {
+		return true
+	} else {
+		return false
+	}
+}

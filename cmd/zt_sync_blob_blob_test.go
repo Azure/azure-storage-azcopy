@@ -648,7 +648,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SADLSDirectory(c *chk.C) {
 
 	// create an ADLS Gen2 directory at the source with the exact same name as the vdir
 	_, err := srcContainerURL.NewBlockBlobURL(vdirName).Upload(context.Background(), bytes.NewReader(nil),
-		azblob.BlobHTTPHeaders{}, azblob.Metadata{"hdi_isfolder": "true"}, azblob.BlobAccessConditions{})
+		azblob.BlobHTTPHeaders{}, azblob.Metadata{"hdi_isfolder": "true"}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil)
 	c.Assert(err, chk.IsNil)
 
 	// set up interceptor

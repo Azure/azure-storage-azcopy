@@ -79,6 +79,14 @@ Upload files and directories by using a SAS token and wildcard (*) characters:
 
   - azcopy cp "/path/*foo/*bar*" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
 
+Upload files and directories to Azure Storage account and set the query-string encoded tags on the blob. 
+
+	- To set tags {key = "bla bla", val = "foo"} and {key = "bla bla 2", val = "bar"}, use the following syntax :
+		- azcopy cp "/path/*foo/*bar*" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --blob-tags="bla%20bla=foo&bla%20bla%202=bar"
+	- Keys and values are URL encoded and the key-value pairs are separated by an ampersand('&')
+	- https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-index-how-to?tabs=azure-portal
+	- While setting tags on the blobs, there are additional permissions('t' for tags) in SAS without which the service will give authorization error back.
+
 Download a single file by using OAuth authentication. If you have not yet logged into AzCopy, please run the azcopy login command before you run the following command.
 
   - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]" "/path/to/file.txt"
@@ -158,6 +166,14 @@ Copy all buckets to Blob Storage from an Amazon Web Services (AWS) region by usi
 Copy a subset of buckets by using a wildcard symbol (*) in the bucket name. Like the previous examples, you'll need an access key and a SAS token. Make sure to set the environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for AWS S3 source.
 
   - azcopy cp "https://s3.amazonaws.com/[bucket*name]/" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
+
+Transfer files and directories to Azure Storage account and set the given query-string encoded tags on the blob. 
+
+	- To set tags {key = "bla bla", val = "foo"} and {key = "bla bla 2", val = "bar"}, use the following syntax :
+		- azcopy cp "https://[account].blob.core.windows.net/[source_container]/[path/to/directory]?[SAS]" "https://[account].blob.core.windows.net/[destination_container]/[path/to/directory]?[SAS]" --blob-tags="bla%20bla=foo&bla%20bla%202=bar"
+	- Keys and values are URL encoded and the key-value pairs are separated by an ampersand('&')
+	- https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-index-how-to?tabs=azure-portal
+	- While setting tags on the blobs, there are additional permissions('t' for tags) in SAS without which the service will give authorization error back.
 `
 
 // ===================================== ENV COMMAND ===================================== //

@@ -239,6 +239,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			cca.s2sPreserveAccessTier,
 			jobPartOrder.Fpo,
 		)
+		transfer.BlobTags = cca.blobTags
 
 		if shouldSendToSte {
 			return addTransfer(&jobPartOrder, transfer, cca)

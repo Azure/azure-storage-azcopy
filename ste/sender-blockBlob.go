@@ -52,6 +52,7 @@ type blockBlobSenderBase struct {
 	// the properties of the local file
 	headersToApply  azblob.BlobHTTPHeaders
 	metadataToApply azblob.Metadata
+	blobTagsToApply azblob.BlobTagsMap
 
 	atomicPutListIndicator int32
 	muBlockIDs             *sync.Mutex
@@ -134,6 +135,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		blockIDs:         make([]string, numChunks),
 		headersToApply:   props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply:  props.SrcMetadata.ToAzBlobMetadata(),
+		blobTagsToApply:  props.SrcBlobTags.ToAzBlobTagsMap(),
 		destBlobTier:     destBlobTier,
 		muBlockIDs:       &sync.Mutex{}}, nil
 }
@@ -179,16 +181,27 @@ func (s *blockBlobSenderBase) Epilogue() {
 		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", blockIDs))
 
 		// commit the blocks.
-		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}); err != nil {
+		if !ValidateTier(jptm, s.destBlobTier, s.destBlockBlobURL.BlobURL, s.jptm.Context()) {
+			s.destBlobTier = azblob.DefaultAccessTier
+		}
+
+		blobTags := s.blobTagsToApply
+		separateSetTagsRequired := separateSetTagsRequired(blobTags)
+		if separateSetTagsRequired || len(blobTags) == 0 {
+			blobTags = nil
+		}
+
+		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, s.destBlobTier, blobTags); err != nil {
 			jptm.FailActiveSend("Committing block list", err)
 			return
 		}
-	}
 
-	// Set tier
-	// GPv2 or Blob Storage is supported, GPv1 is not supported, can only set to blob without snapshot in active status.
-	// https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
-	AttemptSetBlobTier(jptm, s.destBlobTier, s.destBlockBlobURL.BlobURL, s.jptm.Context())
+		if separateSetTagsRequired {
+			if _, err := s.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, nil, nil, nil, s.blobTagsToApply); err != nil {
+				s.jptm.Log(pipeline.LogWarning, err.Error())
+			}
+		}
+	}
 }
 
 func (s *blockBlobSenderBase) Cleanup() {

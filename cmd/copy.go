@@ -103,6 +103,8 @@ type rawCopyCmdArgs struct {
 	md5ValidationOption      string
 	CheckLength              bool
 	deleteSnapshotsOption    string
+
+	blobTags string
 	// defines the type of the blob at the destination in case of upload / account to account copy
 	blobType      string
 	blockBlobTier string
@@ -486,6 +488,16 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 	cooked.includeDirectoryStubs = raw.includeDirectoryStubs
 
+	if cooked.fromTo.To() != common.ELocation.Blob() && raw.blobTags != "" {
+		return cooked, errors.New("blob tags can only be set when transferring to blob storage")
+	}
+	blobTags := common.ToCommonBlobTagsMap(raw.blobTags)
+	err = validateBlobTagsKeyValue(blobTags)
+	if err != nil {
+		return cooked, err
+	}
+	cooked.blobTags = blobTags
+
 	// Make sure the given input is the one of the enums given by the blob SDK
 	err = cooked.deleteSnapshotsOption.Parse(raw.deleteSnapshotsOption)
 	if err != nil {
@@ -650,10 +662,10 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		}
 		// Disabling blob tier override, when copying block -> block blob or page -> page blob, blob tier will be kept,
 		// For s3 and file, only hot block blob tier is supported.
-		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
-			cooked.pageBlobTier != common.EPageBlobTier.None() {
-			return cooked, fmt.Errorf("blob-tier is not supported while copying from service to service")
-		}
+		//if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
+		//	cooked.pageBlobTier != common.EPageBlobTier.None() {
+		//	return cooked, fmt.Errorf("blob-tier is not supported while copying from service to service")
+		//}
 		if cooked.noGuessMimeType {
 			return cooked, fmt.Errorf("no-guess-mime-type is not supported while copying from service to service")
 		}
@@ -814,6 +826,53 @@ func validateMd5Option(option common.HashValidationOption, fromTo common.FromTo)
 	return nil
 }
 
+// Valid tag key and value characters include:
+// 1. Lowercase and uppercase letters (a-z, A-Z)
+// 2. Digits (0-9)
+// 3. A space ( )
+// 4. Plus (+), minus (-), period (.), solidus (/), colon (:), equals (=), and underscore (_)
+func isValidBlobTagsKeyValue(keyVal string) bool {
+	for _, c := range keyVal {
+		if !((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == ' ' || c == '+' ||
+			c == '-' || c == '.' || c == '/' || c == ':' || c == '=' || c == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+// ValidateBlobTagsKeyValue
+// The tag set may contain at most 10 tags. Tag keys and values are case sensitive.
+// Tag keys must be between 1 and 128 characters, and tag values must be between 0 and 256 characters.
+func validateBlobTagsKeyValue(bt common.BlobTags) error {
+	if len(bt) > 10 {
+		return errors.New("at-most 10 tags can be associated with a blob")
+	}
+	for k, v := range bt {
+		key, err := url.QueryUnescape(k)
+		if err != nil {
+			return err
+		}
+		value, err := url.QueryUnescape(v)
+		if err != nil {
+			return err
+		}
+
+		if key == "" || len(key) > 128 || len(value) > 256 {
+			return errors.New("tag keys must be between 1 and 128 characters, and tag values must be between 0 and 256 characters")
+		}
+
+		if !isValidBlobTagsKeyValue(key) {
+			return errors.New("incorrect character set used in key: " + k)
+		}
+
+		if !isValidBlobTagsKeyValue(value) {
+			return errors.New("incorrect character set used in value: " + v)
+		}
+	}
+	return nil
+}
+
 // represents the processed copy command input from the user
 type cookedCopyCmdArgs struct {
 	// from arguments
@@ -845,8 +904,11 @@ type cookedCopyCmdArgs struct {
 	// options from flags
 	blockSize int64
 	// list of blobTypes to exclude while enumerating the transfer
-	excludeBlobType          []azblob.BlobType
-	blobType                 common.BlobType
+	excludeBlobType []azblob.BlobType
+	blobType        common.BlobType
+	// Blob index tags categorize data in your storage account utilizing key-value tag attributes.
+	// These tags are automatically indexed and exposed as a queryable multi-dimensional index to easily find data.
+	blobTags                 common.BlobTags
 	blockBlobTier            common.BlockBlobTier
 	pageBlobTier             common.PageBlobTier
 	metadata                 string
@@ -1111,6 +1173,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			PutMd5:                   cca.putMd5,
 			MD5ValidationOption:      cca.md5ValidationOption,
 			DeleteSnapshotsOption:    cca.deleteSnapshotsOption,
+			BlobTagsString:           cca.blobTags.ToString(),
 		},
 		CommandString:  cca.commandString,
 		CredentialInfo: cca.credentialInfo,
@@ -1608,6 +1671,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sSourceChangeValidation, "s2s-detect-source-changed", false, "Detect if the source file/blob changes while it is being read. (This parameter only applies to service to service copies, because the corresponding check is permanently enabled for uploads and downloads.)")
 	cpCmd.PersistentFlags().StringVar(&raw.s2sInvalidMetadataHandleOption, "s2s-handle-invalid-metadata", common.DefaultInvalidMetadataHandleOption.String(), "Specifies how invalid metadata keys are handled. Available options: ExcludeIfInvalid, FailIfInvalid, RenameIfInvalid. (default 'ExcludeIfInvalid').")
 	cpCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-versions", "", "Specifies a file where each version id is listed on a separate line. Ensure that the source must point to a single blob and all the version ids specified in the file using this flag must belong to the source blob only. AzCopy will download the specified versions in the destination folder provided.")
+	cpCmd.PersistentFlags().StringVar(&raw.blobTags, "blob-tags", "", "Set tags on blobs to categorize data in your storage account")
 	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
 	// right before transferring in ste(backend).
 	// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),

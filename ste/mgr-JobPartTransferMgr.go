@@ -20,7 +20,7 @@ import (
 type IJobPartTransferMgr interface {
 	FromTo() common.FromTo
 	Info() TransferInfo
-	ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata)
+	ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags)
 	LastModifiedTime() time.Time
 	PreserveLastModifiedTime() (time.Time, bool)
 	ShouldPutMd5() bool
@@ -145,6 +145,7 @@ func (i TransferInfo) entityTypeLogIndicator() string {
 type SrcProperties struct {
 	SrcHTTPHeaders common.ResourceHTTPHeaders // User for S2S copy, where per transfer's src properties need be set in destination.
 	SrcMetadata    common.Metadata
+	SrcBlobTags    common.BlobTags
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -239,7 +240,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	src, dst, _ := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
 
-	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType, versionID :=
+	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType, versionID, blobTags :=
 		plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
 	// If the length of destination SAS is greater than 0
@@ -313,6 +314,16 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	}
 	blockSize = common.Iffint64(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
 
+	var srcBlobTags common.BlobTags
+	if blobTags != nil {
+		srcBlobTags = common.BlobTags{}
+		for k, v := range blobTags {
+			key, _ := url.QueryUnescape(k)
+			value, _ := url.QueryUnescape(v)
+			srcBlobTags[key] = value
+		}
+	}
+
 	jptm.transferInfo = &TransferInfo{
 		BlockSize:                      blockSize,
 		Source:                         src,
@@ -328,6 +339,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		SrcProperties: SrcProperties{
 			SrcHTTPHeaders: srcHTTPHeaders,
 			SrcMetadata:    srcMetadata,
+			SrcBlobTags:    srcBlobTags,
 		},
 		SrcBlobType:    srcBlobType,
 		S2SSrcBlobTier: srcBlobTier,
@@ -428,7 +440,7 @@ func (jptm *jobPartTransferMgr) ScheduleChunks(chunkFunc chunkFunc) {
 	jptm.jobPartMgr.ScheduleChunks(chunkFunc)
 }
 
-func (jptm *jobPartTransferMgr) ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata) {
+func (jptm *jobPartTransferMgr) ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags) {
 	return jptm.jobPartMgr.(*jobPartMgr).resourceDstData(jptm.Info().Source, dataFileToXfer)
 }
 

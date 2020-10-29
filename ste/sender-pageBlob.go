@@ -48,6 +48,7 @@ type pageBlobSenderBase struct {
 	// the properties of the local file
 	headersToApply  azblob.BlobHTTPHeaders
 	metadataToApply azblob.Metadata
+	blobTagsToApply azblob.BlobTagsMap
 	destBlobTier    azblob.AccessTierType
 	// filePacer is necessary because page blobs have per-blob throughput limits. The limits depend on
 	// what type of page blob it is (e.g. premium) and can be significantly lower than the blob account limit.
@@ -128,6 +129,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 		pacer:                  pacer,
 		headersToApply:         props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply:        props.SrcMetadata.ToAzBlobMetadata(),
+		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
 		destBlobTier:           destBlobTier,
 		filePacer:              newNullAutoPacer(), // defer creation of real one to Prologue
 		destPageRangeOptimizer: destRangeOptimizer,
@@ -227,18 +229,34 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 	// about the file type at this time than what we had before
 	s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
 
+	destBlobTier := azblob.PremiumPageBlobAccessTierType(s.destBlobTier)
+	if !ValidateTier(s.jptm, s.destBlobTier, s.destPageBlobURL.BlobURL, s.jptm.Context()) {
+		destBlobTier = azblob.DefaultPremiumBlobAccessTier
+	}
+
+	blobTags := s.blobTagsToApply
+	separateSetTagsRequired := separateSetTagsRequired(blobTags)
+	if separateSetTagsRequired || len(blobTags) == 0 {
+		blobTags = nil
+	}
+
 	if _, err := s.destPageBlobURL.Create(s.jptm.Context(),
 		s.srcSize,
 		0,
 		s.headersToApply,
 		s.metadataToApply,
-		azblob.BlobAccessConditions{}); err != nil {
+		azblob.BlobAccessConditions{},
+		destBlobTier,
+		blobTags); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}
 
-	// Set tier, https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
-	AttemptSetBlobTier(s.jptm, s.destBlobTier, s.destPageBlobURL.BlobURL, s.jptm.Context())
+	if separateSetTagsRequired {
+		if _, err := s.destPageBlobURL.SetTags(s.jptm.Context(), nil, nil, nil, nil, nil, nil, s.blobTagsToApply); err != nil {
+			s.jptm.Log(pipeline.LogWarning, err.Error())
+		}
+	}
 
 	return
 }
