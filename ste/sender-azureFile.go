@@ -152,9 +152,11 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		return
 	}
 
-	// sometimes, specifically when reading local files, we have more info
-	// about the file type at this time than what we had before
-	u.headersToApply.ContentType = state.GetInferredContentType(u.jptm)
+	if state.CanInferContentType() {
+		// sometimes, specifically when reading local files, we have more info
+		// about the file type at this time than what we had before
+		u.headersToApply.ContentType = state.GetInferredContentType(u.jptm)
+	}
 
 	stage, err := u.addPermissionsToHeaders(info, u.fileURL().URL())
 	if err != nil {
