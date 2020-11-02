@@ -69,7 +69,17 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 		return c.generateCreateEmptyBlob(id)
 	}
 
-	if c.NumChunks() == 1 && adjustedChunkSize <= int64(azblob.BlockBlobMaxUploadBlobBytes) {
+	if c.NumChunks() == 1 && adjustedChunkSize <= int64(azblob.BlockBlobMaxUploadBlobBytes) &&
+		c.blockBlobSenderBase.jptm.FromTo() == common.EFromTo.GCPBlob() {
+		/*
+		 * nakulkar: It is wrong to do this specifically for GCP sources. Why?
+		 * Because our sender is supposed to be source-agnostic, and should not
+		 * change its behaviour for individual sources, as long as the source satisfy sip
+		 * interface.
+		 * That said, GCP returns an invalid error with PutBlockFromURL which service cannot
+		 * handle. And.. this is the easisy way to fix this. For satisfaction, we'll add a TODO :P
+		 * TODO: Find a better logic.
+		 */
 		setPutListNeed(&c.atomicPutListIndicator, putListNotNeeded)
 		return c.generateStartCopyBlobFromURL(id, blockIndex, adjustedChunkSize)
 
