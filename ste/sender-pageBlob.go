@@ -225,8 +225,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		destinationModified = true
 	}
 
-	fromTo := s.jptm.FromTo()
-	if ps.CanInferContentType(fromTo) {
+	if s.jptm.CanInferContentType() {
 		// sometimes, specifically when reading local files, we have more info
 		// about the file type at this time than what we had before
 		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)

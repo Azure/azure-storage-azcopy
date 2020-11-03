@@ -157,10 +157,7 @@ func (s *blockBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
 }
 
 func (s *blockBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
-	fromTo := s.jptm.FromTo()
-	if ps.CanInferContentType(fromTo) {
-		// sometimes, specifically when reading local files, we have more info
-		// about the file type at this time than what we had before
+	if s.jptm.CanInferContentType() {
 		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
 	}
 	return false
