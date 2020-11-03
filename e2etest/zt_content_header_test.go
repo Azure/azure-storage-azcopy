@@ -25,49 +25,47 @@ import (
 	"testing"
 )
 
-//func TestHeader_SourceLocal(t *testing.T) {
-//	RunScenarios(
-//		t,
-//		eOperation.Copy(),
-//		eTestFromTo.Other(common.EFromTo.LocalBlob()),
-//		eValidate.AutoPlusContent(),
-//		params{
-//			recursive: true,
-//		},
-//		nil,
-//		testFiles{
-//			defaultSize: "1M",
-//			shouldTransfer: []interface{}{
-//				//folder("", ),
-//				f("file1.mp3", with{contentType: "audio/mpeg"}),
-//				f("file2.pdf", with{contentType: "application/pdf"}),
-//				f("file3.exe", with{contentType: "application/x-msdownload"}),
-//				f("file4.txt", with{contentType: "text/plain"}),
-//			},
-//		})
-//}
+func TestHeader_SourceLocal(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.LocalBlob()),
+		eValidate.AutoPlusContent(),
+		params{
+			recursive: true,
+		},
+		nil,
+		testFiles{
+			defaultSize: "1M",
+			shouldTransfer: []interface{}{
+				//folder("", ),
+				f("file1.mp3", with{contentType: "audio/mpeg"}),
+				f("file2.pdf", with{contentType: "application/pdf"}),
+				f("file4.txt", with{contentType: "text/plain"}),
+			},
+		})
+}
 
-//func TestHeader_SourceLocalEmptyFiles(t *testing.T) {
-//	RunScenarios(
-//		t,
-//		eOperation.Copy(),
-//		eTestFromTo.Other(common.EFromTo.LocalBlob()),
-//		eValidate.AutoPlusContent(),
-//		params{
-//			recursive: true,
-//		},
-//		nil,
-//		testFiles{
-//			defaultSize: "0K",
-//			shouldTransfer: []interface{}{
-//				//folder("", ),
-//				f("file1.mp3", with{contentType: "audio/mpeg"}),
-//				f("file2.pdf", with{contentType: "application/pdf"}),
-//				f("file3.exe", with{contentType: "application/x-msdownload"}),
-//				f("file4.txt", with{contentType: "text/plain"}),
-//			},
-//		})
-//}
+func TestHeader_SourceLocalEmptyFiles(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.LocalBlob()),
+		eValidate.AutoPlusContent(),
+		params{
+			recursive: true,
+		},
+		nil,
+		testFiles{
+			defaultSize: "0K",
+			shouldTransfer: []interface{}{
+				//folder("", ),
+				f("file1.mp3", with{contentType: "audio/mpeg"}),
+				f("file2.pdf", with{contentType: "application/pdf"}),
+				f("file4.txt", with{contentType: "text/plain"}),
+			},
+		})
+}
 
 func TestHeader_AllS2S(t *testing.T) {
 	RunScenarios(
