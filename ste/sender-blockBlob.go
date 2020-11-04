@@ -157,7 +157,7 @@ func (s *blockBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
 }
 
 func (s *blockBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
-	if s.jptm.CanInferContentType() {
+	if s.jptm.ShouldInferContentType() {
 		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
 	}
 	return false

@@ -86,7 +86,7 @@ type IJobPartTransferMgr interface {
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 	FolderDeletionManager() common.FolderDeletionManager
 	GetDestinationRoot() string
-	CanInferContentType() bool
+	ShouldInferContentType() bool
 }
 
 type TransferInfo struct {
@@ -883,7 +883,7 @@ func (jptm *jobPartTransferMgr) GetDestinationRoot() string {
 	return string(p.DestinationRoot[:p.DestinationRootLength])
 }
 
-func (jptm *jobPartTransferMgr) CanInferContentType() bool {
+func (jptm *jobPartTransferMgr) ShouldInferContentType() bool {
 	// For remote files, we preserve the content-type and we don't have to infer it using AzCopy
 	// For local files, even if the file size is 0B, we try to infer the content based on file extension
 	fromTo := jptm.FromTo()

@@ -136,7 +136,7 @@ func (s *appendBlobSenderBase) generateAppendBlockToRemoteFunc(id common.ChunkID
 }
 
 func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
-	if s.jptm.CanInferContentType() {
+	if s.jptm.ShouldInferContentType() {
 		// sometimes, specifically when reading local files, we have more info
 		// about the file type at this time than what we had before
 		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
