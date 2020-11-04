@@ -25,7 +25,10 @@ import (
 	"testing"
 )
 
+var fileExtensions = []string{".exe", ".cpp", ".java", ".py", ".go", ".mp3", ".mp4", ".pdf", ".gzip", ".txt", ".dat", ".bat", ".xlsx"}
+
 func TestHeader_SourceLocal(t *testing.T) {
+	extensionsMap := GetContentTypeMap(fileExtensions)
 	RunScenarios(
 		t,
 		eOperation.Copy(),
@@ -39,14 +42,18 @@ func TestHeader_SourceLocal(t *testing.T) {
 			defaultSize: "1M",
 			shouldTransfer: []interface{}{
 				//folder("", ),
-				f("file1.mp3", with{contentType: "audio/mpeg"}),
-				f("file2.pdf", with{contentType: "application/pdf"}),
-				f("file4.txt", with{contentType: "text/plain"}),
+				f("file1.mp3", with{contentType: extensionsMap[".mp3"]}),
+				f("file2.pdf", with{contentType: extensionsMap[".pdf"]}),
+				f("file3.exe", with{contentType: extensionsMap[".exe"]}),
+				f("file4.txt", with{contentType: extensionsMap[".txt"]}),
+				f("file5.mp4", with{contentType: extensionsMap[".mp4"]}),
+				f("file6.xlsx", with{contentType: extensionsMap[".xlsx"]}),
 			},
 		})
 }
 
 func TestHeader_SourceLocalEmptyFiles(t *testing.T) {
+	extensionsMap := GetContentTypeMap(fileExtensions)
 	RunScenarios(
 		t,
 		eOperation.Copy(),
@@ -60,14 +67,18 @@ func TestHeader_SourceLocalEmptyFiles(t *testing.T) {
 			defaultSize: "0K",
 			shouldTransfer: []interface{}{
 				//folder("", ),
-				f("file1.mp3", with{contentType: "audio/mpeg"}),
-				f("file2.pdf", with{contentType: "application/pdf"}),
-				f("file4.txt", with{contentType: "text/plain"}),
+				f("file1.mp3", with{contentType: extensionsMap[".mp3"]}),
+				f("file2.pdf", with{contentType: extensionsMap[".pdf"]}),
+				f("file3.exe", with{contentType: extensionsMap[".exe"]}),
+				f("file4.txt", with{contentType: extensionsMap[".txt"]}),
+				f("file3.mp4", with{contentType: extensionsMap[".mp4"]}),
+				f("file5.xlsx", with{contentType: extensionsMap[".xlsx"]}),
 			},
 		})
 }
 
 func TestHeader_AllS2S(t *testing.T) {
+	extensionsMap := GetContentTypeMap(fileExtensions)
 	RunScenarios(
 		t,
 		eOperation.Copy(),
@@ -81,16 +92,19 @@ func TestHeader_AllS2S(t *testing.T) {
 			defaultSize: "1K",
 			shouldTransfer: []interface{}{
 				//folder("", ),
-				f("file1.mp3", with{contentType: "audio/mpeg"}),
-				f("file2.pdf", with{contentType: "application/pdf"}),
-				f("file3.exe", with{contentType: "application/x-msdownload"}),
-				f("file4.txt", with{contentType: "text/plain"}),
+				f("file1.mp3", with{contentType: extensionsMap[".mp3"]}),
+				f("file2.pdf", with{contentType: extensionsMap[".pdf"]}),
+				f("file3.exe", with{contentType: extensionsMap[".exe"]}),
+				f("file4.txt", with{contentType: extensionsMap[".txt"]}),
+				f("file3.mp4", with{contentType: extensionsMap[".mp4"]}),
+				f("file5.xlsx", with{contentType: extensionsMap[".xlsx"]}),
 			},
 		})
 }
 
 // TODO: AutoPlusContent is not thread-safe. Look into that.
 func TestHeader_SourceBlobEmptyBlob(t *testing.T) {
+	extensionsMap := GetContentTypeMap(fileExtensions)
 	RunScenarios(
 		t,
 		eOperation.Copy(),
@@ -104,10 +118,12 @@ func TestHeader_SourceBlobEmptyBlob(t *testing.T) {
 			defaultSize: "0K",
 			shouldTransfer: []interface{}{
 				//folder("", ),
-				f("file1.mp3", with{contentType: "audio/mpeg"}),
-				f("file2.pdf", with{contentType: "application/pdf"}),
-				f("file3.exe", with{contentType: "application/x-msdownload"}),
-				f("file4.txt", with{contentType: "text/plain"}),
+				f("file1.mp3", with{contentType: extensionsMap[".mp3"]}),
+				f("file2.pdf", with{contentType: extensionsMap[".pdf"]}),
+				f("file3.exe", with{contentType: extensionsMap[".exe"]}),
+				f("file4.txt", with{contentType: extensionsMap[".txt"]}),
+				f("file3.mp4", with{contentType: extensionsMap[".mp4"]}),
+				f("file5.xlsx", with{contentType: extensionsMap[".xlsx"]}),
 			},
 		})
 }

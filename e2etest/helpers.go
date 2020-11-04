@@ -31,6 +31,7 @@ import (
 	chk "gopkg.in/check.v1"
 	"io/ioutil"
 	"math/rand"
+	"mime"
 	"net/url"
 	"os"
 	"strings"
@@ -656,4 +657,15 @@ func (checker *stringContainsChecker) Check(params []interface{}, names []string
 	return false, fmt.Sprintf("Failed to find substring in source string:\n\n"+
 		"SOURCE: %s\n"+
 		"EXPECTED: %s\n", aStr, bStr)
+}
+
+func GetContentTypeMap(fileExtensions []string) map[string]string {
+
+	extensionsMap := make(map[string]string, 0)
+	for _, ext := range fileExtensions {
+		if guessedType := mime.TypeByExtension(ext); guessedType != "" {
+			extensionsMap[ext] = strings.Split(guessedType, ";")[0]
+		}
+	}
+	return extensionsMap
 }

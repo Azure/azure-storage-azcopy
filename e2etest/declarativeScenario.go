@@ -370,7 +370,7 @@ func (s *scenario) validateContentHeaders(expected, actual *contentHeaders) {
 
 	if expected.contentType != nil {
 		s.a.Assert(expected.contentType, equals(), actual.contentType,
-			fmt.Sprintf("Content type mismatch: Expected %v, obtained %v", expected.contentType, actual.contentType))
+			fmt.Sprintf("Content type mismatch: Expected %v, obtained %v", *expected.contentType, *actual.contentType))
 	}
 
 	if expected.contentMD5 != nil {
