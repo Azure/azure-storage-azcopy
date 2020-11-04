@@ -350,27 +350,27 @@ func (s *scenario) validateContentHeaders(expected, actual *contentHeaders) {
 
 	if expected.cacheControl != nil {
 		s.a.Assert(expected.cacheControl, equals(), actual.cacheControl,
-			fmt.Sprintf("Content cache control mismatch: Expected %v, obtained %v", expected.cacheControl, actual.cacheControl))
+			fmt.Sprintf("Content cache control mismatch: Expected %v, obtained %v", *expected.cacheControl, *actual.cacheControl))
 	}
 
 	if expected.contentDisposition != nil {
 		s.a.Assert(expected.contentDisposition, equals(), actual.contentDisposition,
-			fmt.Sprintf("Content disposition mismatch: Expected %v, obtained %v", expected.contentDisposition, actual.contentDisposition))
+			fmt.Sprintf("Content disposition mismatch: Expected %v, obtained %v", *expected.contentDisposition, *actual.contentDisposition))
 	}
 
 	if expected.contentEncoding != nil {
 		s.a.Assert(expected.contentEncoding, equals(), actual.contentEncoding,
-			fmt.Sprintf("Content encoding mismatch: Expected %v, obtained %v", expected.contentEncoding, actual.contentEncoding))
+			fmt.Sprintf("Content encoding mismatch: Expected %v, obtained %v", *expected.contentEncoding, *actual.contentEncoding))
 	}
 
 	if expected.contentLanguage != nil {
 		s.a.Assert(expected.contentLanguage, equals(), actual.contentLanguage,
-			fmt.Sprintf("Content language mismatch: Expected %v, obtained %v", expected.contentLanguage, actual.contentLanguage))
+			fmt.Sprintf("Content language mismatch: Expected %v, obtained %v", *expected.contentLanguage, *actual.contentLanguage))
 	}
 
 	if expected.contentType != nil {
 		s.a.Assert(expected.contentType, equals(), actual.contentType,
-			fmt.Sprintf("Content type mismatch: Expected %v, obtained %v", expected.contentType, actual.contentType))
+			fmt.Sprintf("Content type mismatch: Expected %v, obtained %v", *expected.contentType, *actual.contentType))
 	}
 
 	if expected.contentMD5 != nil {

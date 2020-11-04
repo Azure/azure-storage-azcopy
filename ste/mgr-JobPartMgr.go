@@ -629,7 +629,6 @@ func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []by
 		return strings.Split(guessedType, ";")[0]
 	}
 
-	// if dataFileToXfer is nil, the default content type will be "application/octet-stream"
 	return strings.Split(http.DetectContentType(dataFileToXfer), ";")[0]
 }
 
