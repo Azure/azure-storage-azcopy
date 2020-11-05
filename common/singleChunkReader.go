@@ -156,7 +156,7 @@ func (cr *singleChunkReader) HasPrefetchedEntirelyZeros() bool {
 	defer cr.unuse()
 
 	if cr.buffer == nil {
-		return false // not prefetched (and, to simply error handling in teh caller, we don't call retryBlockingPrefetchIfNecessary here)
+		return false // not prefetched (and, to simply error handling in the caller, we don't call retryBlockingPrefetchIfNecessary here)
 	}
 
 	for _, b := range cr.buffer {
@@ -379,7 +379,7 @@ func (cr *singleChunkReader) Close() error {
 // reads as much as possible)
 func (cr *singleChunkReader) GetPrologueState() PrologueState {
 	cr.use()
-	// can't defer unuse here. See explict calls (plural) below
+	// can't defer unuse here. See explicit calls (plural) below
 
 	const mimeRecgonitionLen = 512
 	leadingBytes := make([]byte, mimeRecgonitionLen)

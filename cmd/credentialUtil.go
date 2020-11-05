@@ -80,7 +80,7 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 // 3. If there is cached OAuth token, indicating using token credential.
 // 4. If there is OAuth token info passed from env var, indicating using token credential. (Note: this is only for testing)
 // 5. Otherwise use anonymous credential.
-// The implementaion logic follows above rule, and adjusts sequence to save web request(for verifying public resource).
+// The implementation logic follows above rule, and adjusts sequence to save web request(for verifying public resource).
 func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePublic bool, standaloneSAS bool) (common.CredentialType, bool, error) {
 	resourceURL, err := url.Parse(blobResourceURL)
 
