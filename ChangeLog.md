@@ -1,6 +1,21 @@
 
 # Change Log
 
+## Version 10.7.0
+
+### New features
+1. Added support for auto-login when performing copy command. Please refer to our documentation for more info.
+1. Added ``blob-tags`` flag for setting [blob index tags](https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-index-how-to?tabs=azure-portal) when performing copy command. Please note that we support setting blob tags only when tags are explicitly specified. Refer to the [public documentations](https://docs.microsoft.com/en-us/rest/api/storageservices/put-blob#remarks) to know more.
+
+### Bug fixes
+
+1. Fixed issue [#1139](https://github.com/Azure/azure-storage-azcopy/issues/1139) to preserve content-type in service-to-service transfer.
+1. Fixed issue to allow snapshot restoring.
+1. Fixed issue with setting content-type of an empty file when performing copy command.
+
+### Improvements
+1. Added support for setting tier directly at the time of [upload](https://docs.microsoft.com/en-us/rest/api/storageservices/put-blob#remarks) API call instead of performing a separate [set tier](https://docs.microsoft.com/en-us/rest/api/storageservices/set-blob-tier) API call.
+
 ## Version 10.6.1
 
 ### Bug fixes
