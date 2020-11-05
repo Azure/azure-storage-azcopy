@@ -83,6 +83,15 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 			err = errors.New("no login type specified")
 			return
 		}
+
+		if tenantID := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.TenantID()); tenantID != "" {
+			lca.tenantID = tenantID
+		}
+
+		if endpoint := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AADEndpoint()); endpoint != "" {
+			lca.aadEndpoint = endpoint
+		}
+
 		// Fill up lca
 		switch glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AutoLoginType()) {
 		case "SPN":
