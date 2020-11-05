@@ -87,7 +87,8 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 		switch glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AutoLoginType()) {
 		case "SPN":
 			lca.applicationID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
-			lca.certPath = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
+			lca.certPath = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePath())
+			lca.certPass = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
 			lca.clientSecret = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
 			lca.servicePrincipal = true
 

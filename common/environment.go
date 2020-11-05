@@ -86,6 +86,13 @@ func (EnvironmentVariable) ClientSecret() EnvironmentVariable {
 	}
 }
 
+func (EnvironmentVariable) CertificatePath() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_SPA_CERT_PATH",
+		Description: "The path of the certificate used for Service Principal authentication",
+	}
+}
+
 func (EnvironmentVariable) CertificatePassword() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_SPA_CERT_PASSWORD",
