@@ -1,4 +1,4 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+// Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,19 +20,33 @@
 
 package common
 
-type cutdownJptm interface {
-	ResourceDstData(dataFileToXfer []byte) (headers ResourceHTTPHeaders, metadata Metadata, blobTags BlobTags)
+// AzError is to handle AzCopy internal errors in a fine way
+type AzError struct {
+	code          uint64
+	msg           string
+	additonalInfo string
 }
 
-// PrologueState contains info necessary for different sending operations' prologue.
-type PrologueState struct {
-	// Leading bytes are the early bytes of the file, to be used
-	// for mime-type detection (or nil if file is empty or the bytes code
-	// not be read).
-	LeadingBytes []byte
+// NewAzError composes an AzError with given code and messgae
+func NewAzError(base AzError, additionalInfo string) AzError {
+	base.additonalInfo = additionalInfo
+	return base
 }
 
-func (ps PrologueState) GetInferredContentType(jptm cutdownJptm) string {
-	headers, _, _ := jptm.ResourceDstData(ps.LeadingBytes)
-	return headers.ContentType
+func (err AzError) ErrorCode() uint64 {
+	return err.code
+}
+
+func (lhs AzError) Equals(rhs AzError) bool {
+	return lhs.code == rhs.code
+}
+
+func (err AzError) Error() string {
+	return err.msg + err.additonalInfo
+}
+
+var EAzError AzError
+
+func (err AzError) LoginCredMissing() AzError {
+	return AzError{uint64(1), "Login Credentials missing. ", ""}
 }

@@ -685,9 +685,8 @@ type BlockBlobTier uint8
 
 func (BlockBlobTier) None() BlockBlobTier    { return BlockBlobTier(0) }
 func (BlockBlobTier) Hot() BlockBlobTier     { return BlockBlobTier(1) }
-func (BlockBlobTier) Cold() BlockBlobTier    { return BlockBlobTier(2) } // TODO: not sure why cold is here.
-func (BlockBlobTier) Cool() BlockBlobTier    { return BlockBlobTier(3) }
-func (BlockBlobTier) Archive() BlockBlobTier { return BlockBlobTier(4) }
+func (BlockBlobTier) Cool() BlockBlobTier    { return BlockBlobTier(2) }
+func (BlockBlobTier) Archive() BlockBlobTier { return BlockBlobTier(3) }
 
 func (bbt BlockBlobTier) String() string {
 	return enum.StringInt(bbt, reflect.TypeOf(bbt))
@@ -917,6 +916,8 @@ type CopyTransfer struct {
 	BlobType      azblob.BlobType
 	BlobTier      azblob.AccessTierType
 	BlobVersionID string
+	// Blob index tags categorize data in your storage account utilizing key-value tag attributes
+	BlobTags BlobTags
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1016,6 +1017,40 @@ func (m Metadata) ExcludeInvalidKey() (retainedMetadata Metadata, excludedMetada
 	}
 
 	return
+}
+
+// BlobTags is a map of key-value pair
+type BlobTags map[string]string
+
+// ToAzBlobTagsMap converts BlobTagsMap to azblob's BlobTagsMap
+func (bt BlobTags) ToAzBlobTagsMap() azblob.BlobTagsMap {
+	return azblob.BlobTagsMap(bt)
+}
+
+// FromAzBlobTagsMapToCommonBlobTags converts azblob's BlobTagsMap to common BlobTags
+func FromAzBlobTagsMapToCommonBlobTags(azbt azblob.BlobTagsMap) BlobTags {
+	return BlobTags(azbt)
+}
+
+func (bt BlobTags) ToString() string {
+	lst := make([]string, 0)
+	for k, v := range bt {
+		lst = append(lst, k+"="+v)
+	}
+	return strings.Join(lst, "&")
+}
+
+func ToCommonBlobTagsMap(blobTagsString string) BlobTags {
+	if blobTagsString == "" {
+		return nil
+	}
+
+	blobTagsMap := BlobTags{}
+	for _, keyAndValue := range strings.Split(blobTagsString, "&") { // key/value pairs are separated by '&'
+		kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+		blobTagsMap[kv[0]] = kv[1]
+	}
+	return blobTagsMap
 }
 
 const metadataRenamedKeyPrefix = "rename_"

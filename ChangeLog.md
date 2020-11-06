@@ -1,6 +1,21 @@
 
 # Change Log
 
+## Version 10.7.0
+
+### New features
+1. Added support for auto-login when performing data commands(copy/sync/list/make/remove). Please refer to our documentation for more info.
+1. Added ``blob-tags`` flag for setting [blob index tags](https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-index-how-to?tabs=azure-portal) when performing copy command. Please note that we support setting blob tags only when tags are explicitly specified. Refer to the [public documentations](https://docs.microsoft.com/en-us/rest/api/storageservices/put-blob#remarks) to know more.
+
+### Bug fixes
+
+1. Fixed issue [#1139](https://github.com/Azure/azure-storage-azcopy/issues/1139) to preserve content-type in service-to-service transfer.
+1. Fixed issue to allow snapshot restoring.
+1. Fixed issue with setting content-type of an empty file when performing copy command.
+
+### Improvements
+1. Added support for setting tier directly at the time of [upload](https://docs.microsoft.com/en-us/rest/api/storageservices/put-blob#remarks) API call instead of performing a separate [set tier](https://docs.microsoft.com/en-us/rest/api/storageservices/set-blob-tier) API call.
+
 ## Version 10.6.1
 
 ### Bug fixes
@@ -17,8 +32,8 @@
 
 ### New features
 
-1. ``azcopy sync`` now supports the persistence of ACLs between supported resources (Windows and Azure Files) using the --persist-smb-permissions flag.
-1. ``azcopy sync`` now supports the persistence of SMB property info between supported resources (Windows and Azure Files) using the --persist-smb-info flag. The information that can be preserved is Created Time, Last Write Time and Attributes (e.g. Read Only).
+1. ``azcopy sync`` now supports the persistence of ACLs between supported resources (Azure Files) using the ``--preserve-smb-permissions`` flag.
+1. ``azcopy sync`` now supports the persistence of SMB property info between supported resources (Azure Files) using the ``--preserve-smb-info`` flag. The information that can be preserved is Created Time, Last Write Time and Attributes (e.g. Read Only).
 1. Added support for [higher block & blob size](https://docs.microsoft.com/en-us/rest/api/storageservices/put-block#remarks) 
     - For service version ``2019-12-12`` or higher, the block size can now be less than or equal to ``4000 MiB``. The maximum size of a block blob therefore can be ``190.7 TiB (4000 MiB X 50,000 blocks)``
 1. Added support for [Blob Versioning](https://docs.microsoft.com/en-us/azure/storage/blobs/versioning-overview)

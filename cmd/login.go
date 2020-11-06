@@ -23,9 +23,10 @@ package cmd
 import (
 	"context"
 	"errors"
+	"strings"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
-	"strings"
 )
 
 func init() {
@@ -44,6 +45,7 @@ func init() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			loginCmdArgs.certPass = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
 			loginCmdArgs.clientSecret = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
+			loginCmdArgs.persistToken = true
 
 			if loginCmdArgs.certPass != "" || loginCmdArgs.clientSecret != "" {
 				glcm.Info(environmentVariableNotice)
@@ -100,6 +102,7 @@ type loginCmdArgs struct {
 	certPath      string
 	certPass      string
 	clientSecret  string
+	persistToken  bool
 }
 
 type argValidity struct {
@@ -163,13 +166,13 @@ func (lca loginCmdArgs) process() error {
 	case lca.servicePrincipal:
 
 		if lca.certPath != "" {
-			if _, err := uotm.CertLogin(lca.tenantID, lca.aadEndpoint, lca.certPath, lca.certPass, lca.applicationID, true); err != nil {
+			if _, err := uotm.CertLogin(lca.tenantID, lca.aadEndpoint, lca.certPath, lca.certPass, lca.applicationID, lca.persistToken); err != nil {
 				return err
 			}
 
 			glcm.Info("SPN Auth via cert succeeded.")
 		} else {
-			if _, err := uotm.SecretLogin(lca.tenantID, lca.aadEndpoint, lca.clientSecret, lca.applicationID, true); err != nil {
+			if _, err := uotm.SecretLogin(lca.tenantID, lca.aadEndpoint, lca.clientSecret, lca.applicationID, lca.persistToken); err != nil {
 				return err
 			}
 
@@ -180,13 +183,13 @@ func (lca loginCmdArgs) process() error {
 			ClientID: lca.identityClientID,
 			ObjectID: lca.identityObjectID,
 			MSIResID: lca.identityResourceID,
-		}, true); err != nil {
+		}, lca.persistToken); err != nil {
 			return err
 		}
 		// For MSI login, info success message to user.
 		glcm.Info("Login with identity succeeded.")
 	default:
-		if _, err := uotm.UserLogin(lca.tenantID, lca.aadEndpoint, true); err != nil {
+		if _, err := uotm.UserLogin(lca.tenantID, lca.aadEndpoint, lca.persistToken); err != nil {
 			return err
 		}
 		// User fulfills login in browser, and there would be message in browser indicating whether login fulfilled successfully.

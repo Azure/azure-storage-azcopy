@@ -44,6 +44,7 @@ type appendBlobSenderBase struct {
 	// the properties of the local file
 	headersToApply  azblob.BlobHTTPHeaders
 	metadataToApply azblob.Metadata
+	blobTagsToApply azblob.BlobTagsMap
 
 	soleChunkFuncSemaphore *semaphore.Weighted
 }
@@ -85,6 +86,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 		pacer:                  pacer,
 		headersToApply:         props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply:        props.SrcMetadata.ToAzBlobMetadata(),
+		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
 		soleChunkFuncSemaphore: semaphore.NewWeighted(1)}, nil
 }
 
@@ -134,15 +136,27 @@ func (s *appendBlobSenderBase) generateAppendBlockToRemoteFunc(id common.ChunkID
 }
 
 func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
-	// sometimes, specifically when reading local files, we have more info
-	// about the file type at this time than what we had before
-	s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
+	if s.jptm.ShouldInferContentType() {
+		// sometimes, specifically when reading local files, we have more info
+		// about the file type at this time than what we had before
+		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
+	}
 
 	destinationModified = true
-	_, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{})
-	if err != nil {
+	blobTags := s.blobTagsToApply
+	separateSetTagsRequired := separateSetTagsRequired(blobTags)
+	if separateSetTagsRequired || len(blobTags) == 0 {
+		blobTags = nil
+	}
+	if _, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, blobTags); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
+	}
+
+	if separateSetTagsRequired {
+		if _, err := s.destAppendBlobURL.SetTags(s.jptm.Context(), nil, nil, nil, nil, nil, nil, s.blobTagsToApply); err != nil {
+			s.jptm.Log(pipeline.LogWarning, err.Error())
+		}
 	}
 	return
 }

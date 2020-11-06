@@ -518,7 +518,7 @@ def execute_azcopy_command(command):
     cmnd = azspath + " " + command
 
     try:
-        # executing the command with timeout to set 3 minutes / 180 sec.
+        # executing the command with timeout to set 3 minutes / 360 sec.
         subprocess.check_output(
             cmnd, stderr=subprocess.STDOUT, shell=True, timeout=360,
             universal_newlines=True)
@@ -556,9 +556,9 @@ def execute_azcopy_command_get_output(command):
     cmnd = azspath + " " + command
     output = ""
     try:
-        # executing the command with timeout set to 4 minutes / 240 sec.
+        # executing the command with timeout set to 6 minutes / 360 sec.
         output = subprocess.check_output(
-            cmnd, stderr=subprocess.STDOUT, shell=True, timeout=240,
+            cmnd, stderr=subprocess.STDOUT, shell=True, timeout=360,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
         # print("command failed with error code ", exec.returncode, " and message " + exec.output)
@@ -574,9 +574,9 @@ def verify_operation(command):
     test_suite_path = os.path.join(test_directory_path, test_suite_executable_name)
     command = test_suite_path + " " + command
     try:
-        # executing the command with timeout set to 4 minutes / 240 sec.
+        # executing the command with timeout set to 6 minutes / 360 sec.
         subprocess.check_output(
-            command, stderr=subprocess.STDOUT, shell=True, timeout=240,
+            command, stderr=subprocess.STDOUT, shell=True, timeout=360,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
         # print("command failed with error code ", exec.returncode, " and message " + exec.output)
@@ -590,7 +590,7 @@ def verify_operation_get_output(command):
     test_suite_path = os.path.join(test_directory_path, test_suite_executable_name)
     command = test_suite_path + " " + command
     try:
-        # executing the command with timeout set to 3 minutes / 180 sec.
+        # executing the command with timeout set to 10 minutes / 600 sec.
         output = subprocess.check_output(
             command, stderr=subprocess.STDOUT, shell=True, timeout=600,
             universal_newlines=True)
