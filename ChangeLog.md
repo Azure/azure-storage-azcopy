@@ -4,7 +4,7 @@
 ## Version 10.7.0
 
 ### New features
-1. Added support for auto-login when performing copy command. Please refer to our documentation for more info.
+1. Added support for auto-login when performing data commands(copy/sync/list/make/remove). Please refer to our documentation for more info.
 1. Added ``blob-tags`` flag for setting [blob index tags](https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-index-how-to?tabs=azure-portal) when performing copy command. Please note that we support setting blob tags only when tags are explicitly specified. Refer to the [public documentations](https://docs.microsoft.com/en-us/rest/api/storageservices/put-blob#remarks) to know more.
 
 ### Bug fixes
