@@ -146,6 +146,7 @@ func (uotm *UserOAuthTokenManager) MSILogin(ctx context.Context, identityInfo Id
 		return nil, err
 	}
 	oAuthTokenInfo.Token = *token
+	uotm.stashedInfo = oAuthTokenInfo
 
 	if persist {
 		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
@@ -217,6 +218,7 @@ func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint
 		return nil, err
 	}
 
+	uotm.stashedInfo = oAuthTokenInfo
 	if persist {
 		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
 		if err != nil {
@@ -396,6 +398,7 @@ func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, 
 	// TODO: Global default cert flag for true non interactive login?
 	// (Also could be useful if the user has multiple certificates they want to switch between in the same file.)
 	oAuthTokenInfo, err := certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID)
+	uotm.stashedInfo = oAuthTokenInfo
 
 	if persist && err == nil {
 		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
@@ -467,6 +470,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
 	}
+	uotm.stashedInfo = &oAuthTokenInfo
 
 	// to dump for diagnostic purposes:
 	// buf, _ := json.Marshal(oAuthTokenInfo)
