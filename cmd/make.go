@@ -68,17 +68,44 @@ type cookedMakeCmdArgs struct {
 	quota            int32 // quota is in GB
 }
 
+// getCredentialType gets the proper credential type for make command.
+func (cma cookedMakeCmdArgs) getCredentialType(ctx context.Context) (credentialType common.CredentialType, err error) {
+	credentialType = common.ECredentialType.Unknown()
+
+	switch cma.resourceLocation {
+	case common.ELocation.BlobFS():
+		if credentialType, err = getBlobFSCredentialType(ctx, cma.resourceURL.String(), false); err != nil {
+			return common.ECredentialType.Unknown(), err
+		}
+	case common.ELocation.Blob():
+		// The resource URL cannot be public access URL, as it need delete permission.
+		credentialType, _, err = getBlobCredentialType(ctx, cma.resourceURL.String(), false, false)
+		if err != nil {
+			return common.ECredentialType.Unknown(), err
+		}
+	case common.ELocation.File():
+		return common.ECredentialType.Anonymous(), nil
+	default:
+		credentialType = common.ECredentialType.Anonymous()
+		glcm.Info(fmt.Sprintf("Use anonymous credential by default for location '%v'", cma.resourceLocation))
+	}
+
+	return credentialType, nil
+}
+
 func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	resourceStringParts, err := SplitResourceString(cookedArgs.resourceURL.String(), cookedArgs.resourceLocation)
-	if err != nil {
+	credentialInfo := common.CredentialInfo{}
+	if credentialInfo.CredentialType, err = cookedArgs.getCredentialType(ctx); err != nil {
 		return err
-	}
-
-	credentialInfo, _, err := getCredentialInfoForLocation(ctx, cookedArgs.resourceLocation, resourceStringParts.Value, resourceStringParts.SAS, false)
-	if err != nil {
-		return err
+	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+		uotm := GetUserOAuthTokenManagerInstance()
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+			return err
+		} else {
+			credentialInfo.OAuthTokenInfo = *tokenInfo
+		}
 	}
 
 	switch cookedArgs.resourceLocation {
