@@ -224,10 +224,21 @@ func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Lo
 }
 
 func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
-
 	cooked := cookedCopyCmdArgs{
 		jobID: azcopyCurrentJobID,
 	}
+
+	err := cooked.logVerbosity.Parse(raw.logVerbosity)
+	if err != nil {
+		return cooked, err
+	}
+
+	// set up the front end scanning logger
+	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, cooked.logVerbosity, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger.OpenLog()
+	glcm.RegisterCloseFunc(func() {
+		azcopyScanningLogger.CloseLog()
+	})
 
 	fromTo, err := validateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
 	if err != nil {
@@ -316,10 +327,6 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 	err = cooked.pageBlobTier.Parse(raw.pageBlobTier)
-	if err != nil {
-		return cooked, err
-	}
-	err = cooked.logVerbosity.Parse(raw.logVerbosity)
 	if err != nil {
 		return cooked, err
 	}

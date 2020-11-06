@@ -18,9 +18,9 @@ func initPipeline(ctx context.Context, location common.Location, credential comm
 	case common.ELocation.Blob():
 		p, err = createBlobPipeline(ctx, credential, logLevel)
 	case common.ELocation.File():
-		p, err = createFilePipeline(ctx, credential)
+		p, err = createFilePipeline(ctx, credential, logLevel)
 	case common.ELocation.BlobFS():
-		p, err = createBlobFSPipeline(ctx, credential)
+		p, err = createBlobFSPipeline(ctx, credential, logLevel)
 	case common.ELocation.S3():
 		// Gracefully return because pipelines aren't used for S3
 		return nil, nil

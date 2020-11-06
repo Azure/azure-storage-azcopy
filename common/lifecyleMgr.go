@@ -27,6 +27,7 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 		inputQueue:           make(chan userInput, 1000),
 		allowCancelFromStdIn: false,
 		allowWatchInput:      false,
+		closeFunc:            func() {}, // noop since we have nothing to do by default
 	}
 
 	// kick off the single routine that processes output

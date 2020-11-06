@@ -116,7 +116,7 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
 	}
 
 	// create bfs pipeline
-	p, err := createBlobFSPipeline(ctx, cca.credentialInfo)
+	p, err := createBlobFSPipeline(ctx, cca.credentialInfo, cca.logVerbosity.ToPipelineLogLevel())
 	if err != nil {
 		return err
 	}

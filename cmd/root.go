@@ -140,13 +140,6 @@ func Execute(azsAppPathFolder, logPathFolder string, jobPlanFolder string, maxFi
 	azcopyMaxFileAndSocketHandles = maxFileAndSocketHandles
 	azcopyCurrentJobID = common.NewJobID()
 
-	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, common.ELogLevel.Debug(), azcopyLogPathFolder, "-scanning")
-	azcopyScanningLogger.OpenLog()
-	glcm.RegisterCloseFunc(func() {
-		azcopyScanningLogger.CloseLog()
-	})
-
 	if err := rootCmd.Execute(); err != nil {
 		glcm.Error(err.Error())
 	} else {
