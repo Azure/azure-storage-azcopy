@@ -81,9 +81,6 @@ type storedObject struct {
 	// metadata, included in S2S transfers
 	Metadata      common.Metadata
 	blobVersionID string
-
-	// DEBUG
-	haveSeen bool
 }
 
 const (

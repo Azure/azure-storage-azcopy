@@ -50,11 +50,6 @@ func (i *objectIndexer) store(storedObject storedObject) (err error) {
 // go through the remaining stored objects in the map to process them
 func (i *objectIndexer) traverse(processor objectProcessor, filters []objectFilter) (err error) {
 	for _, value := range i.indexMap {
-		// DEBUG skip entries that we've seen on the destination side
-		if value.haveSeen {
-			continue
-		}
-
 		err = processIfPassedFilters(filters, value, processor)
 		_, err = getProcessingError(err)
 		if err != nil {

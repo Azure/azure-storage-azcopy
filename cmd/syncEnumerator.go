@@ -152,9 +152,6 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 				return err
 			}
 
-			// DEBUG let the garbage collector delete the map that could be huge by now
-			indexer.indexMap = make(map[string]storedObject)
-
 			jobInitiated, err := transferScheduler.dispatchFinalPart()
 			// sync cleanly exits if nothing is scheduled.
 			if err != nil && err != NothingScheduledError {
