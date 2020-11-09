@@ -143,7 +143,7 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 	jppfn.Create(order)                                                                   // Convert the order to a plan file
 	jpm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString) // Get a this job part's job manager (create it if it doesn't exist)
 
-	if len(order.Transfers) == 0 && order.IsFinalPart {
+	if len(order.Transfers.List) == 0 && order.IsFinalPart {
 		/*
 		 * We set the status of this jobPart to Completed()
 		 * immediately after it is scheduled, and wind down
@@ -158,6 +158,9 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 		})
 	// Supply no plan MMF because we don't have one, and AddJobPart will create one on its own.
 	jpm.AddJobPart(order.PartNum, jppfn, nil, order.SourceRoot.SAS, order.DestinationRoot.SAS, true) // Add this part to the Job and schedule its transfers
+
+	// Update jobPart Status with the status Manager
+
 	return common.CopyJobPartOrderResponse{JobStarted: true}
 }
 

@@ -107,6 +107,15 @@ func ConsolidatePathSeparators(path string) string {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+//Transfers describes each file/folder being transferred in a given JobPartOrder, and
+//other auxilliary details of this order.
+type Transfers struct {
+	List                []CopyTransfer
+	TotalSizeBytes      int64
+	FileTransferCount   int
+	FolderTransferCount int
+}
+
 // This struct represents the job info (a single part) to be sent to the storage engine
 type CopyJobPartOrderRequest struct {
 	Version         Version         // version of azcopy
@@ -125,7 +134,7 @@ type CopyJobPartOrderRequest struct {
 	SourceRoot      ResourceString
 	DestinationRoot ResourceString
 
-	Transfers      []CopyTransfer
+	Transfers      Transfers
 	LogLevel       LogLevel
 	BlobAttributes BlobTransferAttributes
 	CommandString  string // commandString hold the user given command which is logged to the Job log file
