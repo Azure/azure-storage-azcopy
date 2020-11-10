@@ -42,7 +42,16 @@ func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer
 
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
-	e.Transfers.List = append(e.Transfers.List, transfer)
+	{
+		//Should this block be a function?
+		e.Transfers.List = append(e.Transfers.List, transfer)
+		e.Transfers.TotalSizeInBytes += uint64(transfer.SourceSize)
+		if transfer.EntityType == common.EEntityType.File() {
+			e.Transfers.FileTransferCount++
+		} else {
+			e.Transfers.FolderTransferCount++
+		}
+	}
 
 	return nil
 }

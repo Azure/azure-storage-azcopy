@@ -81,6 +81,10 @@ type IJobMgr interface {
 	PipelineNetworkStats() *pipelineNetworkStats
 	getOverwritePrompter() *overwritePrompter
 	common.ILoggerCloser
+
+	/* Status update functions */
+	SendJobPartCreatedMsg(msg jobPartCreatedMsg)
+	SendXferDoneMsg(msg xferDoneMsg)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

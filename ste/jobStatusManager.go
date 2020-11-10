@@ -20,18 +20,122 @@
 
 package ste
 
-import "github.com/Azure/azure-storage-azcopy/common"
+import (
+	"fmt"
 
-var jpp chan JobPartPlanHeader
-var js common.ListJobSummaryResponse
+	"github.com/Azure/azure-storage-azcopy/common"
+)
 
-func handleUpdateStatusMessage() {
+type jobPartCreatedMsg struct {
+	totalTransfers       uint32
+	isFinalPart          bool
+	totalBytesEnumerated uint64
+	fileTransfers        uint32
+	folderTransfer       uint32
+}
 
-	jpp = make(chan JobPartPlanHeader)
+type xferDoneMsg = common.TransferDetail
+type jobStatusManager struct {
+	js          common.ListJobSummaryResponse
+	partCreated chan jobPartCreatedMsg
+	xferDone    chan xferDoneMsg
+}
 
-	select {
-	case jpph := <-jpp:
-		js.CompleteJobOrdered = js.CompleteJobOrdered || jpph.IsFinalPart
+var jstm jobStatusManager
 
+/* These functions should not fail */
+func (jm *jobMgr) SendJobPartCreatedMsg(msg jobPartCreatedMsg) {
+	jstm.partCreated <- msg
+}
+
+func (jm *jobMgr) SendXferDoneMsg(msg xferDoneMsg) {
+	jstm.xferDone <- msg
+}
+
+func (jm *jobMgr) handleStatusUpdateMessage() {
+	js := &jstm.js
+	for {
+		select {
+		case msg := <-jstm.partCreated:
+			js.CompleteJobOrdered = js.CompleteJobOrdered || msg.isFinalPart
+			js.TotalTransfers += msg.totalTransfers
+			js.FileTransfers += msg.fileTransfers
+			js.FolderPropertyTransfers += msg.folderTransfer
+			js.TotalBytesEnumerated += msg.totalBytesEnumerated
+			js.TotalBytesExpected += msg.totalBytesEnumerated
+
+		case msg := <-jstm.xferDone:
+			switch msg.TransferStatus {
+			case common.ETransferStatus.Success():
+				js.TransfersCompleted++
+				js.TotalBytesTransferred += msg.TransferSize
+			case common.ETransferStatus.Failed(),
+				common.ETransferStatus.TierAvailabilityCheckFailure(),
+				common.ETransferStatus.BlobTierFailure():
+				js.TransfersFailed++
+				js.FailedTransfers = append(js.FailedTransfers, common.TransferDetail(msg))
+			case common.ETransferStatus.SkippedEntityAlreadyExists(),
+				common.ETransferStatus.SkippedBlobHasSnapshots():
+				js.TransfersSkipped++
+				js.SkippedTransfers = append(js.SkippedTransfers, common.TransferDetail(msg))
+			}
+
+		default:
+			part0, ok := jm.JobPartMgr(0)
+			if !ok {
+				panic(fmt.Errorf("error getting the 0th part of Job %s", jm.jobID))
+			}
+			part0PlanStatus := part0.Plan().JobStatus()
+
+			// Add on byte count from files in flight, to get a more accurate running total
+			js.TotalBytesTransferred += JobsAdmin.SuccessfulBytesInActiveFiles()
+			if js.TotalBytesExpected == 0 {
+				// if no bytes expected, and we should avoid dividing by 0 (which results in NaN)
+				js.PercentComplete = 100
+			} else {
+				js.PercentComplete = 100 * float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected)
+			}
+
+			// This is added to let FE to continue fetching the Job Progress Summary
+			// in case of resume. In case of resume, the Job is already completely
+			// ordered so the progress summary should be fetched until all job parts
+			// are iterated and have been scheduled
+			js.CompleteJobOrdered = js.CompleteJobOrdered || jm.AllTransfersScheduled()
+
+			js.BytesOverWire = uint64(JobsAdmin.BytesOverWire())
+
+			// Get the number of active go routines performing the transfer or executing the chunk Func
+			// TODO: added for debugging purpose. remove later (is covered by GetPerfInfo now anyway)
+			js.ActiveConnections = jm.ActiveConnections()
+
+			js.PerfStrings, js.PerfConstraint = jm.GetPerfInfo()
+
+			pipeStats := jm.PipelineNetworkStats()
+			if pipeStats != nil {
+				js.AverageIOPS = pipeStats.OperationsPerSecond()
+				js.AverageE2EMilliseconds = pipeStats.AverageE2EMilliseconds()
+				js.NetworkErrorPercentage = pipeStats.NetworkErrorPercentage()
+				js.ServerBusyPercentage = pipeStats.TotalServerBusyPercentage()
+			}
+
+			// If the status is cancelled, then no need to check for completerJobOrdered
+			// since user must have provided the consent to cancel an incompleteJob if that
+			// is the case.
+			if part0PlanStatus == common.EJobStatus.Cancelled() {
+				js.JobStatus = part0PlanStatus
+				js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped, part0.Plan().FromTo)
+			} else {
+				// Job is completed if Job order is complete AND ALL transfers are completed/failed
+				// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
+				if (js.CompleteJobOrdered) && (part0PlanStatus.IsJobDone()) {
+					js.JobStatus = part0PlanStatus
+				}
+
+				if js.JobStatus.IsJobDone() {
+					js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped, part0.Plan().FromTo)
+				}
+			}
+
+		}
 	}
 }
