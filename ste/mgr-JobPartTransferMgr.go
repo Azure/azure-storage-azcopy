@@ -864,6 +864,13 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 	}
 
 	//Update Status Manager
+	jptm.jobPartMgr.SendXferDoneMsg(xferDoneMsg{Src: jptm.transferInfo.Source,
+		Dst:                jptm.transferInfo.Destination,
+		IsFolderProperties: jptm.transferInfo.IsFolderPropertiesTransfer(),
+		TransferStatus:     jptm.jobPartPlanTransfer.TransferStatus(),
+		TransferSize:       uint64(jptm.transferInfo.SourceSize),
+		ErrorCode:          jptm.ErrorCode(),
+	})
 
 	return jptm.jobPartMgr.ReportTransferDone(jptm.jobPartPlanTransfer.TransferStatus())
 }
