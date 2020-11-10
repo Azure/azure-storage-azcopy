@@ -82,9 +82,11 @@ type IJobMgr interface {
 	getOverwritePrompter() *overwritePrompter
 	common.ILoggerCloser
 
-	/* Status update functions */
+	/* Status related functions */
 	SendJobPartCreatedMsg(msg jobPartCreatedMsg)
 	SendXferDoneMsg(msg xferDoneMsg)
+	ListJobSummary() common.ListJobSummaryResponse
+	ResurrectSummary(js common.ListJobSummaryResponse)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

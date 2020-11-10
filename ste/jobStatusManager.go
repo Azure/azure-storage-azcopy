@@ -22,6 +22,7 @@ package ste
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -37,6 +38,7 @@ type jobPartCreatedMsg struct {
 type xferDoneMsg = common.TransferDetail
 type jobStatusManager struct {
 	js          common.ListJobSummaryResponse
+	respChan    chan common.ListJobSummaryResponse
 	partCreated chan jobPartCreatedMsg
 	xferDone    chan xferDoneMsg
 }
@@ -52,8 +54,25 @@ func (jm *jobMgr) SendXferDoneMsg(msg xferDoneMsg) {
 	jstm.xferDone <- msg
 }
 
+func (jm *jobMgr) ListJobSummary() common.ListJobSummaryResponse {
+	return <-jstm.respChan
+}
+
+func (jm *jobMgr) ResurrectSummary(js common.ListJobSummaryResponse) {
+	jstm.js = js
+}
+
 func (jm *jobMgr) handleStatusUpdateMessage() {
 	js := &jstm.js
+	js.JobID = jm.jobID
+	js.CompleteJobOrdered = false
+	js.ErrorMsg = ""
+
+	/* construct channels */
+	jstm.respChan = make(chan common.ListJobSummaryResponse)
+	jstm.partCreated = make(chan jobPartCreatedMsg)
+	jstm.xferDone = make(chan xferDoneMsg)
+
 	for {
 		select {
 		case msg := <-jstm.partCreated:
@@ -135,6 +154,10 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 					js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped, part0.Plan().FromTo)
 				}
 			}
+
+			/* Display stats */
+			js.Timestamp = time.Now().UTC()
+			jstm.respChan <- *js
 
 		}
 	}
