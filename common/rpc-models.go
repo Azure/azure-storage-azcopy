@@ -111,9 +111,9 @@ func ConsolidatePathSeparators(path string) string {
 //other auxilliary details of this order.
 type Transfers struct {
 	List                []CopyTransfer
-	TotalSizeBytes      int64
-	FileTransferCount   int
-	FolderTransferCount int
+	TotalSizeInBytes    uint64
+	FileTransferCount   uint32
+	FolderTransferCount uint32
 }
 
 // This struct represents the job info (a single part) to be sent to the storage engine
@@ -306,6 +306,7 @@ type TransferDetail struct {
 	Dst                string
 	IsFolderProperties bool
 	TransferStatus     TransferStatus
+	TransferSize       uint64
 	ErrorCode          int32 `json:",string"`
 }
 

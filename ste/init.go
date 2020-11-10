@@ -160,6 +160,11 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 	jpm.AddJobPart(order.PartNum, jppfn, nil, order.SourceRoot.SAS, order.DestinationRoot.SAS, true) // Add this part to the Job and schedule its transfers
 
 	// Update jobPart Status with the status Manager
+	jpm.SendJobPartCreatedMsg(jobPartCreatedMsg{totalTransfers: uint32(len(order.Transfers.List)),
+		isFinalPart:          order.IsFinalPart,
+		totalBytesEnumerated: order.Transfers.TotalSizeInBytes,
+		fileTransfers:        order.Transfers.FileTransferCount,
+		folderTransfer:       order.Transfers.FolderTransferCount})
 
 	return common.CopyJobPartOrderResponse{JobStarted: true}
 }
