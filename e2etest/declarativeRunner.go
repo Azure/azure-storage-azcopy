@@ -91,7 +91,7 @@ func RunScenarios(
 	}
 
 	// run them in parallel if not debugging, but sequentially (for easier debugging) if a debugger is attached
-	parallel := !isLaunchedByDebugger // this only works if gops.exe is on your path. See azcopyDebugHelper.go for instructions.
+	parallel := false // this only works if gops.exe is on your path. See azcopyDebugHelper.go for instructions.
 	for _, s := range scenarios {
 		sen := s // capture to separate var inside the loop, for the parallel case
 		// use t.Run to get proper sub-test support

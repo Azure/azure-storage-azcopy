@@ -162,6 +162,7 @@ func TestFilter_RemoveFile(t *testing.T) {
 		eValidate.Auto(),
 		params{
 			relativeSourcePath: "file2.txt",
+			recursive:          true,
 		},
 		nil,
 		testFiles{
@@ -184,7 +185,7 @@ func TestFilter_RemoveFolder(t *testing.T) {
 		eValidate.Auto(),
 		params{
 			recursive:          true,
-			relativeSourcePath: "folder2/",
+			relativeSourcePath: "folder2",
 		},
 		nil,
 		testFiles{

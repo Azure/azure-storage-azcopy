@@ -25,6 +25,7 @@ import (
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"net/url"
 	"os"
+	"runtime"
 )
 
 func assertNoStripTopDir(stripTopDir bool) {
@@ -99,7 +100,11 @@ func (r *resourceLocal) isContainerLike() bool {
 }
 
 func (r *resourceLocal) appendSourcePath(filePath string, _ bool) {
-	r.dirPath += "/" + filePath
+	if runtime.GOOS == "windows" {
+		r.dirPath += "\\" + filePath
+	} else {
+		r.dirPath += "/" + filePath
+	}
 }
 
 func (r *resourceLocal) getAllProperties(a asserter) map[string]*objectProperties {
