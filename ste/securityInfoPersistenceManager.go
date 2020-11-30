@@ -2,6 +2,8 @@ package ste
 
 import (
 	"context"
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"net/url"
 	"sync"
 
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -65,8 +67,8 @@ func (sipm *securityInfoPersistenceManager) PutSDDL(sddlString string, shareURL 
 	return permKey, nil
 }
 
-func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareURL azfile.ShareURL) (string, error) {
-	fileURLParts := azfile.NewFileURLParts(shareURL.URL())
+func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareURL url.URL, p pipeline.Pipeline) (string, error) {
+	fileURLParts := azfile.NewFileURLParts(shareURL)
 	fileURLParts.SAS = azfile.SASQueryParameters{} // Clear the SAS query params since it's extra unnecessary length.
 	rawfURL := fileURLParts.URL()
 
@@ -82,8 +84,16 @@ func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareURL az
 		return perm.(string), nil
 	}
 
-	si, err := shareURL.GetPermission(sipm.ctx, id)
+	actionableShareURL := azfile.NewShareURL(shareURL, p)
+	// to clarify, the GetPermission call only works against the share root, and not against a share snapshot
+	// if we detect that the source is a snapshot, we simply get rid of the snapshot value
+	if len(fileURLParts.ShareSnapshot) != 0 {
+		fileURLParts := azfile.NewFileURLParts(shareURL)
+		fileURLParts.ShareSnapshot = "" // clear the snapshot value
+		actionableShareURL = azfile.NewShareURL(fileURLParts.URL(), p)
+	}
 
+	si, err := actionableShareURL.GetPermission(sipm.ctx, id)
 	if err != nil {
 		return "", err
 	}
