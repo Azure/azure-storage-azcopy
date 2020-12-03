@@ -25,10 +25,14 @@ jobs:
           GOARCH=386 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
           cp ThirdPartyNotice.txt $(Build.ArtifactStagingDirectory)
         displayName: 'Generate builds'
-
       - task: PublishBuildArtifacts@1
         displayName: 'Publish Artifacts'
         condition: succeededOrFailed()
+      - task: ComponentGovernanceComponentDetection@0
+        inputs:
+          scanType: 'Register'
+          verbosity: 'Verbose'
+          alertWarningLevel: 'High'
 
   - job: MacOS_Build
     pool:

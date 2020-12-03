@@ -1,0 +1,25 @@
+{
+  "Registrations": [
+    {
+      "Component": {
+        "Type": "go",
+        "go": { "Name": "github.com/Azure/azure-pipeline-go", "Version": "0.2.3" }
+      },
+      "DevelopmentDependency":[false]
+    },
+    {
+      "Component": {
+        "Type": "go",
+        "[Component Type]": { "Name": "github.com/JeffreyRichter/enum", "Version": "0.0.0" }
+      },
+      "DevelopmentDependency":[false]
+    },
+    {
+      "Component": {
+        "Type": "go",
+        "[Component Type]": { "Name": "github.com/davecgh/go-spew", "Version": "1.1.0" }
+      },
+      "DevelopmentDependency":[false]
+    }
+  ]
+}
