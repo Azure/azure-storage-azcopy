@@ -415,9 +415,13 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		jm, _ = JobsAdmin.JobMgr(jobID)
 	}
 
+	return jm.ListJobSummary()
+}
+
+func resurrectJobSummary(jm IJobMgr) common.ListJobSummaryResponse {
 	js := common.ListJobSummaryResponse{
 		Timestamp:          time.Now().UTC(),
-		JobID:              jobID,
+		JobID:              jm.JobID(),
 		ErrorMsg:           "",
 		JobStatus:          common.EJobStatus.InProgress(), // Default
 		CompleteJobOrdered: false,                          // default to false; returns true if ALL job parts have been ordered
@@ -430,7 +434,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	// Better to check overall status first, and see it as uncompleted on this call (and completed on the next call).
 	part0, ok := jm.JobPartMgr(0)
 	if !ok {
-		panic(fmt.Errorf("error getting the 0th part of Job %s", jobID))
+		panic(fmt.Errorf("error getting the 0th part of Job %s", jm.JobID()))
 	}
 	part0PlanStatus := part0.Plan().JobStatus()
 

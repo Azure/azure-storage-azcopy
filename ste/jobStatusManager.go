@@ -21,7 +21,7 @@
 package ste
 
 import (
-	"fmt"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -37,6 +37,8 @@ type jobPartCreatedMsg struct {
 type xferDoneMsg = common.TransferDetail
 type jobStatusManager struct {
 	js          common.ListJobSummaryResponse
+	respChan    chan common.ListJobSummaryResponse
+	listReq     chan bool
 	partCreated chan jobPartCreatedMsg
 	xferDone    chan xferDoneMsg
 }
@@ -52,8 +54,21 @@ func (jm *jobMgr) SendXferDoneMsg(msg xferDoneMsg) {
 	jstm.xferDone <- msg
 }
 
+func (jm *jobMgr) ListJobSummary() common.ListJobSummaryResponse {
+	return <-jstm.respChan
+}
+
+func (jm *jobMgr) ResurrectSummary(js common.ListJobSummaryResponse) {
+	jstm.js = js
+}
+
 func (jm *jobMgr) handleStatusUpdateMessage() {
+	var totalBytesTransferred uint64
 	js := &jstm.js
+	js.JobID = jm.jobID
+	js.CompleteJobOrdered = false
+	js.ErrorMsg = ""
+
 	for {
 		select {
 		case msg := <-jstm.partCreated:
@@ -68,7 +83,7 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			switch msg.TransferStatus {
 			case common.ETransferStatus.Success():
 				js.TransfersCompleted++
-				js.TotalBytesTransferred += msg.TransferSize
+				totalBytesTransferred += msg.TransferSize
 			case common.ETransferStatus.Failed(),
 				common.ETransferStatus.TierAvailabilityCheckFailure(),
 				common.ETransferStatus.BlobTierFailure():
@@ -80,15 +95,15 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				js.SkippedTransfers = append(js.SkippedTransfers, common.TransferDetail(msg))
 			}
 
-		default:
+		case <-time.After(2 * time.Second):
 			part0, ok := jm.JobPartMgr(0)
 			if !ok {
-				panic(fmt.Errorf("error getting the 0th part of Job %s", jm.jobID))
+				break
 			}
 			part0PlanStatus := part0.Plan().JobStatus()
 
 			// Add on byte count from files in flight, to get a more accurate running total
-			js.TotalBytesTransferred += JobsAdmin.SuccessfulBytesInActiveFiles()
+			js.TotalBytesTransferred = totalBytesTransferred + JobsAdmin.SuccessfulBytesInActiveFiles()
 			if js.TotalBytesExpected == 0 {
 				// if no bytes expected, and we should avoid dividing by 0 (which results in NaN)
 				js.PercentComplete = 100
@@ -135,6 +150,10 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 					js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped, part0.Plan().FromTo)
 				}
 			}
+
+			/* Display stats */
+			js.Timestamp = time.Now().UTC()
+			jstm.respChan <- *js
 
 		}
 	}
