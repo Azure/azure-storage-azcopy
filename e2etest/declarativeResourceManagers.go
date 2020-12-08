@@ -64,6 +64,9 @@ type resourceManager interface {
 
 	// appendSourcePath appends a path to creates absolute path
 	appendSourcePath(string, bool)
+
+	// create a snapshot for the source, and use it for the job
+	createSourceSnapshot(a asserter)
 }
 
 ///////////////
@@ -108,6 +111,10 @@ func (r *resourceLocal) getAllProperties(a asserter) map[string]*objectPropertie
 
 func (r *resourceLocal) downloadContent(a asserter, resourceRelPath string) []byte {
 	//return scenarioHelper{}.enumerateLocalProperties(a, r.dirPath)
+	panic("Not Implemented")
+}
+
+func (r *resourceLocal) createSourceSnapshot(a asserter) {
 	panic("Not Implemented")
 }
 
@@ -165,12 +172,17 @@ func (r *resourceBlobContainer) downloadContent(a asserter, resourceRelPath stri
 	return scenarioHelper{}.downloadBlobContent(a, *r.containerURL, resourceRelPath)
 }
 
+func (r *resourceBlobContainer) createSourceSnapshot(a asserter) {
+	panic("Not Implemented")
+}
+
 /////
 
 type resourceAzureFileShare struct {
 	accountType AccountType
 	shareURL    *azfile.ShareURL // // TODO: Either eliminate SDK URLs from ResourceManager or provide means to edit it (File SDK) for which pipeline is required
 	rawSasURL   *url.URL
+	snapshotID  string // optional, use a snapshot as the location instead
 }
 
 func (r *resourceAzureFileShare) createLocation(a asserter, s *scenario) {
@@ -194,11 +206,21 @@ func (r *resourceAzureFileShare) cleanup(a asserter) {
 
 func (r *resourceAzureFileShare) getParam(stripTopDir bool, useSas bool) string {
 	assertNoStripTopDir(stripTopDir)
+	var param url.URL
 	if useSas {
-		return r.rawSasURL.String()
+		param = *r.rawSasURL
 	} else {
-		return r.shareURL.String()
+		param = r.shareURL.URL()
 	}
+
+	// append the snapshot ID if present
+	if r.snapshotID != "" {
+		parts := azfile.NewFileURLParts(param)
+		parts.ShareSnapshot = r.snapshotID
+		param = parts.URL()
+	}
+
+	return param.String()
 }
 
 func (r *resourceAzureFileShare) isContainerLike() bool {
@@ -217,6 +239,10 @@ func (r *resourceAzureFileShare) getAllProperties(a asserter) map[string]*object
 
 func (r *resourceAzureFileShare) downloadContent(a asserter, resourceRelPath string) []byte {
 	return scenarioHelper{}.downloadFileContent(a, *r.shareURL, resourceRelPath)
+}
+
+func (r *resourceAzureFileShare) createSourceSnapshot(a asserter) {
+	r.snapshotID = TestResourceFactory{}.CreateNewFileShareSnapshot(a, *r.shareURL)
 }
 
 ////
@@ -253,3 +279,5 @@ func (r *resourceDummy) downloadContent(a asserter, _ string) []byte {
 
 func (r *resourceDummy) appendSourcePath(_ string, _ bool) {
 }
+
+func (r *resourceDummy) createSourceSnapshot(a asserter) {}

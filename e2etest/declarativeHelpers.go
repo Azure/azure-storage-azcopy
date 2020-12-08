@@ -152,7 +152,7 @@ type params struct {
 	s2sSourceChangeValidation bool
 	metadata                  string
 	cancelFromStdin           bool
-	preserveSMBPermissions    common.PreservePermissionsOption
+	preserveSMBPermissions    bool
 	preserveSMBInfo           bool
 	relativeSourcePath        string
 }
@@ -457,6 +457,9 @@ type hookHelper interface {
 
 	// CancelAndResume tells the runner to cancel the running AzCopy job (with "cancel" to stdin) and the resume the job
 	CancelAndResume()
+
+	// Create a source snapshot to use it as the source
+	CreateSourceSnapshot()
 }
 
 ///////
