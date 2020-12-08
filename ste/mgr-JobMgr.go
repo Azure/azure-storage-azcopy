@@ -94,7 +94,13 @@ type IJobMgr interface {
 func newJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel, commandString string, logFileFolder string) IJobMgr {
 	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
 	enableChunkLogOutput := level.ToPipelineLogLevel() == pipeline.LogDebug
+	/* Create book-keeping channels */
 	jobPartProgressCh := make(chan jobPartProgressInfo)
+	jstm.respChan = make(chan common.ListJobSummaryResponse)
+	jstm.listReq = make(chan bool)
+	jstm.partCreated = make(chan jobPartCreatedMsg)
+	jstm.xferDone = make(chan xferDoneMsg)
+
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
 		httpClient:                    NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
 		logger:                        common.NewJobLogger(jobID, level, logFileFolder, ""),
@@ -109,6 +115,7 @@ func newJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	jm.reset(appCtx, commandString)
 	jm.logJobsAdminMessages()
 	go jm.reportJobPartDoneHandler()
+	go jm.handleStatusUpdateMessage()
 	return &jm
 }
 

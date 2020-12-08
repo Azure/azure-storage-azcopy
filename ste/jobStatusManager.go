@@ -21,7 +21,6 @@
 package ste
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -39,6 +38,7 @@ type xferDoneMsg = common.TransferDetail
 type jobStatusManager struct {
 	js          common.ListJobSummaryResponse
 	respChan    chan common.ListJobSummaryResponse
+	listReq     chan bool
 	partCreated chan jobPartCreatedMsg
 	xferDone    chan xferDoneMsg
 }
@@ -55,6 +55,7 @@ func (jm *jobMgr) SendXferDoneMsg(msg xferDoneMsg) {
 }
 
 func (jm *jobMgr) ListJobSummary() common.ListJobSummaryResponse {
+	jstm.listReq <- true
 	return <-jstm.respChan
 }
 
@@ -67,11 +68,6 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 	js.JobID = jm.jobID
 	js.CompleteJobOrdered = false
 	js.ErrorMsg = ""
-
-	/* construct channels */
-	jstm.respChan = make(chan common.ListJobSummaryResponse)
-	jstm.partCreated = make(chan jobPartCreatedMsg)
-	jstm.xferDone = make(chan xferDoneMsg)
 
 	for {
 		select {
@@ -99,10 +95,15 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				js.SkippedTransfers = append(js.SkippedTransfers, common.TransferDetail(msg))
 			}
 
-		default:
+		case <-jstm.listReq:
+			/* Display stats */
+			js.Timestamp = time.Now().UTC()
+			jstm.respChan <- *js
+
+		case <-time.After(2 * time.Second):
 			part0, ok := jm.JobPartMgr(0)
 			if !ok {
-				panic(fmt.Errorf("error getting the 0th part of Job %s", jm.jobID))
+				break
 			}
 			part0PlanStatus := part0.Plan().JobStatus()
 
@@ -154,10 +155,6 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 					js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped, part0.Plan().FromTo)
 				}
 			}
-
-			/* Display stats */
-			js.Timestamp = time.Now().UTC()
-			jstm.respChan <- *js
 
 		}
 	}
