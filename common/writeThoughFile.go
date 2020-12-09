@@ -26,6 +26,7 @@ import (
 	"strings"
 )
 
+const IncludeBeforeFlagName = "include-before"
 const IncludeAfterFlagName = "include-after"
 const BackupModeFlagName = "backup" // original name, backup mode, matches the name used for the same thing in Robocopy
 const PreserveOwnerFlagName = "preserve-owner"

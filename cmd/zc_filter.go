@@ -259,10 +259,55 @@ func (f *includeAfterDateFilter) doesPass(storedObject storedObject) bool {
 		storedObject.lastModifiedTime.Equal(f.threshold) // >= is easier for users to understand than >
 }
 
-// ParseISO8601 parses ISO 8601 dates. This routine is needed because GoLang's time.Parse* routines require all expected
+func (_ includeAfterDateFilter) ParseISO8601(s string, chooseEarliest bool) (time.Time, error) {
+	return parseISO8601(s, chooseEarliest)
+}
+
+func (_ includeAfterDateFilter) FormatAsUTC(t time.Time) string {
+	return formatAsUTC(t)
+}
+
+// includeBeforeDateFilter includes files with Last Modified Times <= the specified threshold
+// Used for copy, but doesn't make conceptual sense for sync
+type includeBeforeDateFilter struct {
+	threshold time.Time
+}
+
+func (f *includeBeforeDateFilter) doesSupportThisOS() (msg string, supported bool) {
+	msg = ""
+	supported = true
+	return
+}
+
+func (f *includeBeforeDateFilter) appliesOnlyToFiles() bool {
+	return true
+	// because we don't currently (May 2020) have meaningful LMTs for folders. The meaningful time for a folder is the "change time" not the "last write time", and the change time can only be obtained via NtGetFileInformation, which we don't yet call.
+	// TODO: the consequence of this is that folder properties and folder acls can't be moved when using this filter.
+	//       Can we live with that, for now?
+}
+
+func (f *includeBeforeDateFilter) doesPass(storedObject storedObject) bool {
+	zeroTime := time.Time{}
+	if storedObject.lastModifiedTime == zeroTime {
+		panic("cannot use includeBeforeDateFilter on an object for which no Last Modified Time has been retrieved")
+	}
+
+	return storedObject.lastModifiedTime.Before(f.threshold) ||
+		storedObject.lastModifiedTime.Equal(f.threshold) // <= is easier for users to understand than <
+}
+
+func (_ includeBeforeDateFilter) ParseISO8601(s string, chooseEarliest bool) (time.Time, error) {
+	return parseISO8601(s, chooseEarliest)
+}
+
+func (_ includeBeforeDateFilter) FormatAsUTC(t time.Time) string {
+	return formatAsUTC(t)
+}
+
+// parseISO8601 parses ISO 8601 dates. This routine is needed because GoLang's time.Parse* routines require all expected
 // elements to be present.  I.e. you can't specify just a date, and have the time default to 00:00. But ISO 8601 requires
 // that and, for usability, that's what we want.  (So that users can omit the whole time, or at least the seconds portion of it, if they wish)
-func (_ includeAfterDateFilter) ParseISO8601(s string, chooseEarliest bool) (time.Time, error) {
+func parseISO8601(s string, chooseEarliest bool) (time.Time, error) {
 
 	// list of ISO-8601 Go-lang formats in descending order of completeness
 	formats := []string{
@@ -310,7 +355,7 @@ func (_ includeAfterDateFilter) ParseISO8601(s string, chooseEarliest bool) (tim
 	return time.Time{}, err
 }
 
-//FormatAsUTC is inverse of parseISO8601 (and always uses the most detailed format)
-func (_ includeAfterDateFilter) FormatAsUTC(t time.Time) string {
+// formatAsUTC is inverse of parseISO8601 (and always uses the most detailed format)
+func formatAsUTC(t time.Time) string {
 	return t.UTC().Format(time.RFC3339)
 }
