@@ -78,6 +78,8 @@ func (t *TestRunner) SetAllFlags(p params) {
 	set("s2s-detect-source-changed", p.s2sSourceChangeValidation, false)
 	set("metadata", p.metadata, "")
 	set("cancel-from-stdin", p.cancelFromStdin, false)
+	set("preserve-smb-info", p.preserveSMBInfo, false)
+	set("preserve-smb-permissions", p.preserveSMBPermissions, false)
 }
 
 func (t *TestRunner) SetAwaitOpenFlag() {

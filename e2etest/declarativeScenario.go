@@ -446,6 +446,10 @@ func (s *scenario) CreateFiles(fs testFiles, atSource bool) {
 	}
 }
 
+func (s *scenario) CreateSourceSnapshot() {
+	s.state.source.createSourceSnapshot(s.a)
+}
+
 func (s *scenario) CancelAndResume() {
 	s.a.Assert(s.p.cancelFromStdin, equals(), true, "cancelFromStdin must be set in parameters, to use CancelAndResume")
 	s.needResume = true

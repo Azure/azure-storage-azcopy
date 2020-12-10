@@ -123,9 +123,7 @@ func (p *fileSourceInfoProvider) GetSDDL() (string, error) {
 	}
 	fURLParts := azfile.NewFileURLParts(*presigned)
 	fURLParts.DirectoryOrFilePath = ""
-	shareURL := azfile.NewShareURL(fURLParts.URL(), p.jptm.SourceProviderPipeline())
-
-	sddlString, err := sipm.GetSDDLFromID(key, shareURL)
+	sddlString, err := sipm.GetSDDLFromID(key, fURLParts.URL(), p.jptm.SourceProviderPipeline())
 
 	return sddlString, err
 }
