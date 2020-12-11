@@ -1,6 +1,18 @@
 
 # Change Log
 
+## Version 10.8.0
+
+### New features
+1. Added option to [disable parallel blob listing](https://github.com/Azure/azure-storage-azcopy/pull/1263)
+1. Added support for uploading [large files](https://github.com/Azure/azure-storage-azcopy/pull/1254/files) upto 4TiB. Please refer the [public documentation](https://docs.microsoft.com/en-us/rest/api/storageservices/create-file) for more information
+1. Added support for `include-before`flag. Refer [this](https://github.com/Azure/azure-storage-azcopy/issues/1075) for more information
+
+### Bug fixes
+
+1. Fixed issue [#1246](https://github.com/Azure/azure-storage-azcopy/issues/1246) of security vulnerability in x/text package
+1. Fixed issue [share snapshot->share copy](https://github.com/Azure/azure-storage-azcopy/pull/1258) with smb permissions
+
 ## Version 10.7.0
 
 ### New features
