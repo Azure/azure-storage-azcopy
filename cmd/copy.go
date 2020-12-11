@@ -120,6 +120,8 @@ type rawCopyCmdArgs struct {
 	// Opt-in flag to persist additional SMB properties to Azure Files. Named ...info instead of ...properties
 	// because the latter was similar enough to preserveSMBPermissions to induce user error
 	preserveSMBInfo bool
+	// Opt-in flag to preserve the blob index tags during service to service transfer.
+	s2sPreserveBlobTags bool
 	// Flag to enable Window's special privileges
 	backupMode bool
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
@@ -508,6 +510,19 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		return cooked, err
 	}
 	cooked.blobTags = blobTags
+
+	// Check if user has provided `s2s-preserve-blob-tags` flag. If yes, we have to ensure that
+	// 1. Both source and destination must be blob storages.
+	// 2. `blob-tags` is not present as they create conflicting scenario of whether to preserve blob tags from the source or set user defined tags on the destination
+	if raw.s2sPreserveBlobTags {
+		if cooked.fromTo.From() != common.ELocation.Blob() && cooked.fromTo.To() != common.ELocation.Blob() {
+			return cooked, errors.New("blob index tags is a property of blobs only therefore both source and destination must be blob storage")
+		} else if raw.blobTags != "" {
+			return cooked, errors.New("both s2s-preserve-blob-tags and blob-tags flags cannot be used in conjunction")
+		} else {
+			cooked.s2sPreserveBlobTags = raw.s2sPreserveBlobTags
+		}
+	}
 
 	// Make sure the given input is the one of the enums given by the blob SDK
 	err = cooked.deleteSnapshotsOption.Parse(raw.deleteSnapshotsOption)
@@ -981,6 +996,8 @@ type cookedCopyCmdArgs struct {
 	// whether user wants to check if source has changed after enumerating, the default value is true.
 	// For S2S copy, as source is a remote resource, validating whether source has changed need additional request costs.
 	s2sSourceChangeValidation bool
+	// To specify whether user wants to preserve the blob index tags during service to service transfer.
+	s2sPreserveBlobTags bool
 	// specify how user wants to handle invalid metadata.
 	s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption
 
@@ -1070,7 +1087,7 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	// step 3: start download
 	blobURL := azblob.NewBlobURL(*u, p)
-	blobStream, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
+	blobStream, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
 	if err != nil {
 		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
 	}
@@ -1669,6 +1686,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files). For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault, "Only has an effect in downloads, and only when --preserve-smb-permissions is used. If true (the default), the file Owner and Group are preserved in downloads. If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group will be based on the user running AzCopy")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", false, "False by default. Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveBlobTags, "s2s-preserve-blob-tags", false, "Preserve index tags during service to service transfer from one blob storage to another")
 	cpCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
 	cpCmd.PersistentFlags().BoolVar(&raw.backupMode, common.BackupModeFlagName, false, "Activates Windows' SeBackupPrivilege for uploads, or SeRestorePrivilege for downloads, to allow AzCopy to see read all files, regardless of their file system permissions, and to restore all permissions. Requires that the account running AzCopy already has these permissions (e.g. has Administrator rights or is a member of the 'Backup Operators' group). All this flag does is activate privileges that the account already has")
 	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob or file. (By default the hash is NOT created.) Only available when uploading.")
