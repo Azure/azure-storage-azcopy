@@ -137,6 +137,7 @@ type CopyJobPartOrderRequest struct {
 	S2SSourceChangeValidation      bool
 	DestLengthValidation           bool
 	S2SInvalidMetadataHandleOption InvalidMetadataHandleOption
+	S2SPreserveBlobTags            bool
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,

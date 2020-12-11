@@ -53,6 +53,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.S2SSourceChangeValidation = cca.s2sSourceChangeValidation
 	jobPartOrder.DestLengthValidation = cca.CheckLength
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
+	jobPartOrder.S2SPreserveBlobTags = cca.s2sPreserveBlobTags
 
 	traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, cca.includeDirectoryStubs, func(common.EntityType) {}, cca.listOfVersionIDs)
 
