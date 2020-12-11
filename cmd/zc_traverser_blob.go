@@ -41,6 +41,10 @@ type blobTraverser struct {
 	ctx       context.Context
 	recursive bool
 
+	// parallel listing employs the hierarchical listing API which is more expensive
+	// cx should have the option to disable this optimization in the name of saving costs
+	parallelListing bool
+
 	// whether to include blobs that have metadata 'hdi_isfolder = true'
 	includeDirectoryStubs bool
 
@@ -93,7 +97,6 @@ func (t *blobTraverser) getPropertiesIfSingleBlob() (props *azblob.BlobGetProper
 
 func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
 	blobUrlParts := azblob.NewBlobURLParts(*t.rawURL)
-	util := copyHandlerUtil{}
 
 	// check if the url points to a single blob
 	blobProperties, isBlob, isDirStub, propErr := t.getPropertiesIfSingleBlob()
@@ -162,6 +165,15 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 	// as a performance optimization, get an extra prefix to do pre-filtering. It's typically the start portion of a blob name.
 	extraSearchPrefix := filterSet(filters).GetEnumerationPreFilter(t.recursive)
 
+	if t.parallelListing {
+		return t.parallelList(containerURL, blobUrlParts.ContainerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters)
+	}
+
+	return t.serialList(containerURL, blobUrlParts.ContainerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters)
+}
+
+func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, containerName string, searchPrefix string,
+	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) error {
 	// Define how to enumerate its contents
 	// This func must be thread safe/goroutine safe
 	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
@@ -183,24 +195,11 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			// process the blobs returned in this result segment
 			for _, blobInfo := range lResp.Segment.BlobItems {
 				// if the blob represents a hdi folder, then skip it
-				if util.doesBlobRepresentAFolder(blobInfo.Metadata) && !(t.includeDirectoryStubs && t.recursive) {
+				if t.doesBlobRepresentAFolder(blobInfo.Metadata) {
 					continue
 				}
 
-				relativePath := strings.TrimPrefix(blobInfo.Name, searchPrefix)
-				adapter := blobPropertiesAdapter{blobInfo.Properties}
-				storedObject := newStoredObject(
-					preprocessor,
-					getObjectNameOnly(blobInfo.Name),
-					relativePath,
-					common.EEntityType.File(),
-					blobInfo.Properties.LastModified,
-					*blobInfo.Properties.ContentLength,
-					adapter,
-					adapter, // adapter satisfies both interfaces
-					common.FromAzBlobMetadataToCommonMetadata(blobInfo.Metadata),
-					blobUrlParts.ContainerName,
-				)
+				storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, strings.TrimPrefix(blobInfo.Name, searchPrefix), containerName)
 				enqueueOutput(storedObject, nil)
 			}
 
@@ -220,8 +219,6 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			return workerError
 		}
 
-		
-
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
@@ -235,12 +232,83 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		}
 	}
 
-	return
+	return nil
+}
+
+func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, blobInfo azblob.BlobItemInternal, relativePath string, containerName string) storedObject {
+	adapter := blobPropertiesAdapter{blobInfo.Properties}
+	return newStoredObject(
+		preprocessor,
+		getObjectNameOnly(blobInfo.Name),
+		relativePath,
+		common.EEntityType.File(),
+		blobInfo.Properties.LastModified,
+		*blobInfo.Properties.ContentLength,
+		adapter,
+		adapter, // adapter satisfies both interfaces
+		common.FromAzBlobMetadataToCommonMetadata(blobInfo.Metadata),
+		containerName,
+	)
+}
+
+func (t *blobTraverser) doesBlobRepresentAFolder(metadata azblob.Metadata) bool {
+	util := copyHandlerUtil{}
+	return util.doesBlobRepresentAFolder(metadata) && !(t.includeDirectoryStubs && t.recursive)
+}
+
+func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerName string, searchPrefix string,
+	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) error {
+
+	for marker := (azblob.Marker{}); marker.NotDone(); {
+		// see the TO DO in GetEnumerationPreFilter if/when we make this more directory-aware
+
+		// look for all blobs that start with the prefix
+		// TODO optimize for the case where recursive is off
+		listBlob, err := containerURL.ListBlobsFlatSegment(t.ctx, marker,
+			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix + extraSearchPrefix, Details: azblob.BlobListingDetails{Metadata: true}})
+		if err != nil {
+			return fmt.Errorf("cannot list blobs. Failed with error %s", err.Error())
+		}
+
+		// process the blobs returned in this result segment
+		for _, blobInfo := range listBlob.Segment.BlobItems {
+			// if the blob represents a hdi folder, then skip it
+			if t.doesBlobRepresentAFolder(blobInfo.Metadata) {
+				continue
+			}
+
+			relativePath := strings.TrimPrefix(blobInfo.Name, searchPrefix)
+			// if recursive
+			if !t.recursive && strings.Contains(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING) {
+				continue
+			}
+
+			storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, relativePath, containerName)
+			if t.incrementEnumerationCounter != nil {
+				t.incrementEnumerationCounter(common.EEntityType.File())
+			}
+
+			processErr := processIfPassedFilters(filters, storedObject, processor)
+			_, processErr = getProcessingError(processErr)
+			if processErr != nil {
+				return processErr
+			}
+		}
+
+		marker = listBlob.NextMarker
+	}
+
+	return nil
 }
 
 func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool,
 	incrementEnumerationCounter enumerationCounterFunc) (t *blobTraverser) {
 	t = &blobTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, includeDirectoryStubs: includeDirectoryStubs,
-		incrementEnumerationCounter: incrementEnumerationCounter}
+		incrementEnumerationCounter: incrementEnumerationCounter, parallelListing: true}
+
+	if strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning())) == "true" {
+		// TODO log to frontend log that parallel listing was disabled, once the frontend log PR is merged
+		t.parallelListing = false
+	}
 	return
 }

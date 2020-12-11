@@ -41,6 +41,7 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ConcurrencyValue(),
 	EEnvironmentVariable.TransferInitiationPoolSize(),
 	EEnvironmentVariable.EnumerationPoolSize(),
+	EEnvironmentVariable.DisableHierarchicalScanning(),
 	EEnvironmentVariable.ParallelStatFiles(),
 	EEnvironmentVariable.BufferGB(),
 	EEnvironmentVariable.ShowPerfStates(),
@@ -173,7 +174,14 @@ const azCopyConcurrentScan = "AZCOPY_CONCURRENT_SCAN"
 func (EnvironmentVariable) EnumerationPoolSize() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        azCopyConcurrentScan,
-		Description: "Controls the (max) degree of parallelism used during scanning. Only affects parallelized enumerators, which include Azure Files and Local File Systems.",
+		Description: "Controls the (max) degree of parallelism used during scanning. Only affects parallelized enumerators, which include Azure Files/Blobs, and local file systems.",
+	}
+}
+
+func (EnvironmentVariable) DisableHierarchicalScanning() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_DISABLE_HIERARCHICAL_SCAN",
+		Description: "Applies only when Azure Blobs is the source. Concurrent scanning is faster but employs the hierarchical listing API, which can result in more IOs/cost. Specify 'true' to sacrifice performance but save on cost.",
 	}
 }
 

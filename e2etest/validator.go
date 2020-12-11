@@ -58,6 +58,17 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 
 	sourcePrefix = makeSlashesComparable(sourcePrefix)
 	destinationPrefix = makeSlashesComparable(destinationPrefix)
+	snapshotID := ""
+	if isSrcEncoded {
+		// i.e. source is a URL
+		srcPrefixURL, err := url.Parse(sourcePrefix)
+		if err == nil {
+			snapshotID = srcPrefixURL.Query().Get("sharesnapshot")
+			if snapshotID != "" {
+				sourcePrefix = strings.TrimSuffix(sourcePrefix, "?sharesnapshot="+snapshotID)
+			}
+		}
+	}
 
 	// validate that the right number of transfers were scheduled
 	c.Assert(len(actualTransfers), equals(), len(expectedTransfers),
@@ -78,6 +89,11 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 		}
 	})
 	for _, transfer := range actualTransfers {
+		if snapshotID != "" {
+			c.Assert(strings.Contains(transfer.Src, snapshotID), equals(), true)
+			transfer.Src = strings.TrimSuffix(transfer.Src, "?sharesnapshot="+snapshotID)
+		}
+
 		srcRelativeFilePath := strings.Trim(strings.TrimPrefix(makeSlashesComparable(transfer.Src), sourcePrefix), "/")
 		dstRelativeFilePath := strings.Trim(strings.TrimPrefix(makeSlashesComparable(transfer.Dst), destinationPrefix), "/")
 

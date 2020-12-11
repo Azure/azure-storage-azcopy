@@ -176,6 +176,12 @@ func (TestResourceFactory) CreateNewFileShare(c asserter, accountType AccountTyp
 	return fileShare, name, TestResourceFactory{}.GetFileShareULWithSAS(c, accountType, name).URL()
 }
 
+func (TestResourceFactory) CreateNewFileShareSnapshot(c asserter, fileShare azfile.ShareURL) (snapshotID string) {
+	resp, err := fileShare.CreateSnapshot(context.TODO(), azfile.Metadata{})
+	c.AssertNoErr(err)
+	return resp.Snapshot()
+}
+
 func (TestResourceFactory) CreateLocalDirectory(c asserter) (dstDirName string) {
 	dstDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
 	c.AssertNoErr(err)
