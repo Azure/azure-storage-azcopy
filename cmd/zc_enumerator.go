@@ -81,6 +81,7 @@ type storedObject struct {
 	// metadata, included in S2S transfers
 	Metadata      common.Metadata
 	blobVersionID string
+	blobTags      common.BlobTags
 }
 
 const (
@@ -166,7 +167,7 @@ func (s *storedObject) ToNewCopyTransfer(
 		Metadata:           s.Metadata,
 		BlobType:           s.blobType,
 		BlobVersionID:      s.blobVersionID,
-		// set this below, conditionally: BlobTier
+		BlobTags:           s.blobTags,
 	}
 
 	if preserveBlobTier {
@@ -389,11 +390,11 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output = newBlobAccountTraverser(resourceURL, *p, *ctx, includeDirectoryStubs, incrementEnumerationCounter)
+			output = newBlobAccountTraverser(resourceURL, *p, *ctx, includeDirectoryStubs, incrementEnumerationCounter, false)
 		} else if listOfVersionIds != nil {
 			output = newBlobVersionsTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds)
 		} else {
-			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter)
+			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, false)
 		}
 	case common.ELocation.File():
 		resourceURL, err := resource.FullURL()

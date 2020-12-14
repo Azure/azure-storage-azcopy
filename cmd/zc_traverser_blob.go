@@ -50,6 +50,9 @@ type blobTraverser struct {
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
+
+	// When user pro
+	s2sPreserveSourceTags bool
 }
 
 func (t *blobTraverser) isDirectory(isSource bool) bool {
@@ -95,6 +98,26 @@ func (t *blobTraverser) getPropertiesIfSingleBlob() (props *azblob.BlobGetProper
 	return nil, false, false, err
 }
 
+func (t *blobTraverser) getBlobTags(requestID *string, snapshot *string, versionID *string, ifTags *string) (common.BlobTags, error) {
+	// trim away the trailing slash before we check whether it's a single blob
+	// so that we can detect the directory stub in case there is one
+	blobUrlParts := azblob.NewBlobURLParts(*t.rawURL)
+	blobUrlParts.BlobName = strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)
+
+	// perform the check
+	blobURL := azblob.NewBlobURL(blobUrlParts.URL(), t.p)
+	blobTagsMap := make(common.BlobTags)
+	blobGetTagsResp, err := blobURL.GetTags(t.ctx, nil, requestID, snapshot, versionID, ifTags)
+	if err != nil {
+		return blobTagsMap, err
+	}
+
+	for _, blobTag := range blobGetTagsResp.BlobTagSet {
+		blobTagsMap[blobTag.Key] = blobTag.Value
+	}
+	return blobTagsMap, nil
+}
+
 func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
 	blobUrlParts := azblob.NewBlobURLParts(*t.rawURL)
 
@@ -133,6 +156,18 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			common.FromAzBlobMetadataToCommonMetadata(blobProperties.NewMetadata()), // .NewMetadata() seems odd to call, but it does actually retrieve the metadata from the blob properties.
 			blobUrlParts.ContainerName,
 		)
+
+		if t.s2sPreserveSourceTags {
+			blobTagsMap := common.BlobTags{}
+			versionId := blobProperties.VersionID()
+			blobTagsMap, err = t.getBlobTags(nil, nil, &versionId, nil)
+			if err != nil {
+				panic("Couldn't fetch blob tags due to error: " + err.Error())
+			}
+			if len(blobTagsMap) > 0 {
+				storedObject.blobTags = blobTagsMap
+			}
+		}
 
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(common.EEntityType.File())
@@ -200,6 +235,16 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 				}
 
 				storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, strings.TrimPrefix(blobInfo.Name, searchPrefix), containerName)
+
+				// Setting blob tags
+				blobTagsMap := common.BlobTags{}
+				if t.s2sPreserveSourceTags {
+					for _, blobTag := range blobInfo.BlobTags.BlobTagSet {
+						blobTagsMap[blobTag.Key] = blobTag.Value
+					}
+				}
+				storedObject.blobTags = blobTagsMap
+
 				enqueueOutput(storedObject, nil)
 			}
 
@@ -284,6 +329,16 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 			}
 
 			storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, relativePath, containerName)
+
+			// Setting blob tags
+			blobTagsMap := common.BlobTags{}
+			if t.s2sPreserveSourceTags {
+				for _, blobTag := range blobInfo.BlobTags.BlobTagSet {
+					blobTagsMap[blobTag.Key] = blobTag.Value
+				}
+			}
+			storedObject.blobTags = blobTagsMap
+
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter(common.EEntityType.File())
 			}
@@ -301,10 +356,9 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 	return nil
 }
 
-func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool,
-	incrementEnumerationCounter enumerationCounterFunc) (t *blobTraverser) {
+func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool) (t *blobTraverser) {
 	t = &blobTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, includeDirectoryStubs: includeDirectoryStubs,
-		incrementEnumerationCounter: incrementEnumerationCounter, parallelListing: true}
+		incrementEnumerationCounter: incrementEnumerationCounter, parallelListing: true, s2sPreserveSourceTags: s2sPreserveSourceTags}
 
 	if strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning())) == "true" {
 		// TODO log to frontend log that parallel listing was disabled, once the frontend log PR is merged
