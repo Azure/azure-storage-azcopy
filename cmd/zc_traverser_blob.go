@@ -236,14 +236,13 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 
 				storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, strings.TrimPrefix(blobInfo.Name, searchPrefix), containerName)
 
-				// Setting blob tags
-				blobTagsMap := common.BlobTags{}
 				if t.s2sPreserveSourceTags && blobInfo.BlobTags != nil {
+					blobTagsMap := common.BlobTags{}
 					for _, blobTag := range blobInfo.BlobTags.BlobTagSet {
 						blobTagsMap[blobTag.Key] = blobTag.Value
 					}
+					storedObject.blobTags = blobTagsMap
 				}
-				storedObject.blobTags = blobTagsMap
 
 				enqueueOutput(storedObject, nil)
 			}
@@ -332,13 +331,13 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 			storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, relativePath, containerName)
 
 			// Setting blob tags
-			blobTagsMap := common.BlobTags{}
 			if t.s2sPreserveSourceTags && blobInfo.BlobTags != nil {
+				blobTagsMap := common.BlobTags{}
 				for _, blobTag := range blobInfo.BlobTags.BlobTagSet {
 					blobTagsMap[blobTag.Key] = blobTag.Value
 				}
+				storedObject.blobTags = blobTagsMap
 			}
-			storedObject.blobTags = blobTagsMap
 
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter(common.EEntityType.File())
