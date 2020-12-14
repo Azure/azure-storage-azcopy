@@ -215,7 +215,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 		currentDirPath := dir.(string)
 		for marker := (azblob.Marker{}); marker.NotDone(); {
 			lResp, err := containerURL.ListBlobsHierarchySegment(t.ctx, marker, "/", azblob.ListBlobsSegmentOptions{Prefix: currentDirPath,
-				Details: azblob.BlobListingDetails{Metadata: true}})
+				Details: azblob.BlobListingDetails{Metadata: true, Tags: true}})
 			if err != nil {
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
@@ -238,7 +238,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 
 				// Setting blob tags
 				blobTagsMap := common.BlobTags{}
-				if t.s2sPreserveSourceTags {
+				if t.s2sPreserveSourceTags && blobInfo.BlobTags != nil {
 					for _, blobTag := range blobInfo.BlobTags.BlobTagSet {
 						blobTagsMap[blobTag.Key] = blobTag.Value
 					}
@@ -308,9 +308,10 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 		// see the TO DO in GetEnumerationPreFilter if/when we make this more directory-aware
 
 		// look for all blobs that start with the prefix
+		// Passing tags = true in the list call will save additional GetTags call
 		// TODO optimize for the case where recursive is off
 		listBlob, err := containerURL.ListBlobsFlatSegment(t.ctx, marker,
-			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix + extraSearchPrefix, Details: azblob.BlobListingDetails{Metadata: true}})
+			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix + extraSearchPrefix, Details: azblob.BlobListingDetails{Metadata: true, Tags: true}})
 		if err != nil {
 			return fmt.Errorf("cannot list blobs. Failed with error %s", err.Error())
 		}
@@ -332,7 +333,7 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 
 			// Setting blob tags
 			blobTagsMap := common.BlobTags{}
-			if t.s2sPreserveSourceTags {
+			if t.s2sPreserveSourceTags && blobInfo.BlobTags != nil {
 				for _, blobTag := range blobInfo.BlobTags.BlobTagSet {
 					blobTagsMap[blobTag.Key] = blobTag.Value
 				}
