@@ -344,6 +344,8 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			jpm.metadata[kv[0]] = kv[1]
 		}
 	}
+
+	// TODO: This is the problem here. We should not set blob tags  in jpb part manager.
 	blobTagsStr := string(dstData.BlobTags[:dstData.BlobTagsLength])
 	jpm.blobTags = common.BlobTags{}
 	if len(blobTagsStr) > 0 {
@@ -366,6 +368,8 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 	// *** Schedule this job part's transfers ***
 	for t := uint32(0); t < plan.NumTransfers; t++ {
+
+		// JPPT has information about tags in TransferInfo.SrcProperties
 		jppt := plan.Transfer(t)
 		ts := jppt.TransferStatus()
 		if ts == common.ETransferStatus.Success() {
