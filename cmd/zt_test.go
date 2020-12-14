@@ -625,7 +625,7 @@ func getContainerURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential, con
 		Protocol:      azblob.SASProtocolHTTPS,
 		ExpiryTime:    time.Now().UTC().Add(48 * time.Hour),
 		ContainerName: containerName,
-		Permissions:   azblob.ContainerSASPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, List: true}.String(),
+		Permissions:   azblob.ContainerSASPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, List: true, Tag: true}.String(),
 	}.NewSASQueryParameters(&credential)
 	c.Assert(err, chk.IsNil)
 
