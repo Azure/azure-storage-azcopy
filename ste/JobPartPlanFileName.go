@@ -101,10 +101,9 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	if len(order.BlobAttributes.Metadata) > len(JobPartPlanDstBlob{}.Metadata) {
 		panic(fmt.Errorf("metadata string is too large: %q", order.BlobAttributes.Metadata))
 	}
-	// TODO: Mohit come here: verify how we are populating BlobTagsString
-	//if len(order.BlobAttributes.BlobTagsString) > len(JobPartPlanDstBlob{}.BlobTags) {
-	//	panic(fmt.Errorf("blob tags string is too large: %q", order.BlobAttributes.BlobTagsString))
-	//}
+	if len(order.BlobAttributes.BlobTagsString) > len(JobPartPlanDstBlob{}.BlobTags) {
+		panic(fmt.Errorf("blob tags string is too large: %q", order.BlobAttributes.BlobTagsString))
+	}
 
 	// This nested function writes a structure value to an io.Writer & returns the number of bytes written
 	writeValue := func(writer io.Writer, v interface{}) int64 {
@@ -189,7 +188,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			PageBlobTier:             order.BlobAttributes.PageBlobTier,
 			MetadataLength:           uint16(len(order.BlobAttributes.Metadata)),
 			BlockSize:                blockSize,
-			//BlobTagsLength:           uint16(len(order.BlobAttributes.BlobTagsString)),
+			BlobTagsLength:           uint16(len(order.BlobAttributes.BlobTagsString)),
 		},
 		DstLocalData: JobPartPlanDstLocal{
 			PreserveLastModifiedTime: order.BlobAttributes.PreserveLastModifiedTime,
@@ -218,7 +217,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	copy(jpph.DstBlobData.ContentDisposition[:], order.BlobAttributes.ContentDisposition)
 	copy(jpph.DstBlobData.CacheControl[:], order.BlobAttributes.CacheControl)
 	copy(jpph.DstBlobData.Metadata[:], order.BlobAttributes.Metadata)
-	//copy(jpph.DstBlobData.BlobTags[:], order.BlobAttributes.BlobTagsString)
+	copy(jpph.DstBlobData.BlobTags[:], order.BlobAttributes.BlobTagsString)
 
 	eof += writeValue(file, &jpph)
 
@@ -371,6 +370,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}
+		// For S2S copy, write the source tags in job part plan transfer
 		if len(order.Transfers[t].BlobTags) != 0 {
 			blobTagsStr := order.Transfers[t].BlobTags.ToString()
 			bytesWritten, err = file.WriteString(blobTagsStr)

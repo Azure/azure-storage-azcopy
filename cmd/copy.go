@@ -1202,7 +1202,8 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			PutMd5:                   cca.putMd5,
 			MD5ValidationOption:      cca.md5ValidationOption,
 			DeleteSnapshotsOption:    cca.deleteSnapshotsOption,
-			//BlobTagsString:           cca.blobTags.ToString(),
+			// Setting tags when tags explicitly provided by the user through blob-tags flag
+			BlobTagsString: cca.blobTags.ToString(),
 		},
 		CommandString:  cca.commandString,
 		CredentialInfo: cca.credentialInfo,

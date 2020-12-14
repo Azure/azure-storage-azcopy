@@ -104,7 +104,7 @@ func newListTraverser(parent common.ResourceString, parentType common.Location, 
 		}
 
 		// Construct a traverser that goes through the child
-		traverser, err := initResourceTraverser(source, parentType, ctx, credential, &followSymlinks, nil, recursive, getProperties, includeDirectoryStubs, incrementEnumerationCounter, nil)
+		traverser, err := initResourceTraverser(source, parentType, ctx, credential, &followSymlinks, nil, recursive, getProperties, includeDirectoryStubs, incrementEnumerationCounter, nil, false)
 		if err != nil {
 			return nil, err
 		}
