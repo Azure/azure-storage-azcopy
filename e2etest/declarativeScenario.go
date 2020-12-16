@@ -275,7 +275,7 @@ func (s *scenario) validateProperties() {
 	// for everything that should have been transferred, verify that any expected properties have been transferred to the destination
 	expectedFilesAndFolders := s.fs.getForStatus(common.ETransferStatus.Success(), expectFolders, expectRootFolder)
 	for _, f := range expectedFilesAndFolders {
-		expected := &f.creationProperties // use verificationProperties (i.e. what we expect) NOT creationProperties (what we made at the source). They won't ALWAYS be the same
+		expected := f.verificationProperties // use verificationProperties (i.e. what we expect) NOT creationProperties (what we made at the source). They won't ALWAYS be the same
 		if expected == nil {
 			// nothing to verify
 			continue
@@ -349,17 +349,19 @@ func (s *scenario) validateMetadata(expected, actual map[string]string) {
 func (s *scenario) validateBlobTags(expected, actual common.BlobTags) {
 	s.a.Assert(len(expected), equals(), len(actual), "Both should have same number of tags")
 	for k, v := range expected {
-		k, err := url.QueryUnescape(k)
-		v, err = url.QueryUnescape(v)
+		exKey, err := url.QueryUnescape(k)
+		if err != nil {
+			s.a.Failed()
+		}
+		exValue, err := url.QueryUnescape(v)
 		if err != nil {
 			s.a.Failed()
 		}
 
-		exValue := expected[k]
-		actualValue, ok := actual[k]
-		s.a.Assert(ok, equals(), true, fmt.Sprintf("expect key '%s' to be found in destination metadata", k))
+		actualValue, ok := actual[exKey]
+		s.a.Assert(ok, equals(), true, fmt.Sprintf("expect key '%s' to be found in destination metadata", exKey))
 		if ok {
-			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("Expect value for key '%s' to be '%s' but found '%s'", k, exValue, actualValue))
+			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("Expect value for key '%s' to be '%s' but found '%s'", exKey, exValue, actualValue))
 		}
 	}
 }
@@ -394,10 +396,10 @@ func (s *scenario) validateContentHeaders(expected, actual *contentHeaders) {
 			fmt.Sprintf("Content type mismatch: Expected %v, obtained %v", *expected.contentType, *actual.contentType))
 	}
 
-	if expected.contentMD5 != nil {
-		s.a.Assert(expected.contentMD5, equals(), actual.contentMD5,
-			fmt.Sprintf("Content MD5 mismatch: Expected %v, obtained %v", expected.contentMD5, actual.contentMD5))
-	}
+	//if expected.contentMD5 != nil {
+	//	s.a.Assert(expected.contentMD5, equals(), actual.contentMD5,
+	//		fmt.Sprintf("Content MD5 mismatch: Expected %v, obtained %v", expected.contentMD5, actual.contentMD5))
+	//}
 }
 
 func (s *scenario) validateCreateTime(expected, actual *time.Time) {
