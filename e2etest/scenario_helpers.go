@@ -101,7 +101,7 @@ func (scenarioHelper) generateLocalFile(filePath string, fileSize int) ([]byte, 
 	return bigBuff, err
 }
 
-func (s scenarioHelper) generateLocalFilesFromList(c asserter, dirPath string, fileList []*testObject, defaultSize string) {
+func (s scenarioHelper) generateLocalFilesFromList(c asserter, dirPath string, fileList []*testObject, defaultSize string, p *params) {
 	for _, file := range fileList {
 		var err error
 		if file.isFolder() {
@@ -120,10 +120,9 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, dirPath string, f
 			}
 			file.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
 
-			//if file.verificationProperties.contentHeaders == nil {
-			//	file.verificationProperties.contentHeaders = &contentHeaders{}
-			//}
-			//file.verificationProperties.contentHeaders.contentMD5 = contentMD5[:]
+			if p != nil {
+				file.creationProperties.blobTags = common.ToCommonBlobTagsMap(p.blobTags)
+			}
 			c.AssertNoErr(err)
 			//TODO: nakulkar-msft you'll need to set up things like attributes, and other relevant things from
 			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
@@ -274,7 +273,7 @@ func (s scenarioHelper) generateBlobContainersAndBlobsFromLists(c asserter, serv
 		_, err := curl.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
 		c.AssertNoErr(err)
 
-		s.generateBlobsFromList(c, curl, blobList, defaultStringFileSize)
+		s.generateBlobsFromList(c, curl, blobList, defaultStringFileSize, nil)
 	}
 }
 
@@ -308,7 +307,7 @@ func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c asserter, s3Clien
 }
 
 // create the demanded blobs
-func (scenarioHelper) generateBlobsFromList(c asserter, containerURL azblob.ContainerURL, blobList []*testObject, defaultSize string) {
+func (scenarioHelper) generateBlobsFromList(c asserter, containerURL azblob.ContainerURL, blobList []*testObject, defaultSize string, p *params) {
 	for _, b := range blobList {
 		if b.isFolder() {
 			continue // no real folders in blob
@@ -316,11 +315,18 @@ func (scenarioHelper) generateBlobsFromList(c asserter, containerURL azblob.Cont
 		ad := blobResourceAdapter{b}
 		blob := containerURL.NewBlockBlobURL(b.name)
 		reader, sourceData := getRandomDataAndReader(b.creationProperties.sizeBytes(c, defaultSize))
+
+		// Setting content MD5
 		contentMD5 := md5.Sum(sourceData)
 		if b.creationProperties.contentHeaders == nil {
 			b.creationProperties.contentHeaders = &contentHeaders{}
 		}
 		b.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+
+		// Setting blob tags
+		if p != nil {
+			b.creationProperties.blobTags = common.ToCommonBlobTagsMap(p.blobTags)
+		}
 
 		//if b.verificationProperties.contentHeaders == nil {
 		//	b.verificationProperties.contentHeaders = &contentHeaders{}
@@ -332,7 +338,7 @@ func (scenarioHelper) generateBlobsFromList(c asserter, containerURL azblob.Cont
 			reader,
 			headers,
 			ad.toMetadata(),
-			azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil)
+			azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, ad.toBlobTags())
 		c.AssertNoErr(err)
 		c.Assert(cResp.StatusCode(), equals(), 201)
 	}
@@ -347,7 +353,7 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 
-		listBlob, err := containerURL.ListBlobsFlatSegment(context.TODO(), marker, azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true}})
+		listBlob, err := containerURL.ListBlobsFlatSegment(context.TODO(), marker, azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true, Tags: true}})
 		a.AssertNoErr(err)
 
 		for _, blobInfo := range listBlob.Segment.BlobItems {
@@ -373,6 +379,14 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 				creationTime:      bp.CreationTime,
 				lastWriteTime:     &bp.LastModified,
 				// smbAttributes and smbPermissions don't exist in blob
+			}
+
+			if blobInfo.BlobTags != nil {
+				blobTagsMap := common.BlobTags{}
+				for _, blobTag := range blobInfo.BlobTags.BlobTagSet {
+					blobTagsMap[blobTag.Key] = blobTag.Value
+				}
+				props.blobTags = blobTagsMap
 			}
 
 			result[relativePath] = &props
