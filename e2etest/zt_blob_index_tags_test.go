@@ -152,3 +152,25 @@ func TestTags_PreserveTagsMultipleBlobs(t *testing.T) {
 			},
 		})
 }
+
+func TestTags_PreserveTagsSpecialCharactersMultipleBlobs(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.BlobBlob()),
+		eValidate.AutoPlusContent(),
+		params{
+			recursive:           true,
+			s2sPreserveBlobTags: true,
+		},
+		nil,
+		testFiles{
+			defaultSize: "1M",
+			shouldTransfer: []interface{}{
+				folder(""),
+				folder("fdlr1"),
+				f("file1.txt", with{blobTags: "bla_bla=foo+-foo&bla/ :bla/2=bar"}),
+				f("fdlr1/file2.txt", with{blobTags: "foo/-foo=bar:bar&baz=blah&YeAr=2020"}),
+			},
+		})
+}
