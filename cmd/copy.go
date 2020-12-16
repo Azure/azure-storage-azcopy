@@ -1070,7 +1070,7 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	// step 3: start download
 	blobURL := azblob.NewBlobURL(*u, p)
-	blobStream, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
+	blobStream, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
 	if err != nil {
 		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
 	}

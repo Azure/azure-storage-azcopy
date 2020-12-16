@@ -123,7 +123,7 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		}
 		_, err := c.destPageBlobURL.UploadPagesFromURL(
 			enrichedContext, c.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize, nil,
-			azblob.PageBlobAccessConditions{}, azblob.ModifiedAccessConditions{})
+			azblob.PageBlobAccessConditions{}, azblob.ModifiedAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 		if err != nil {
 			c.jptm.FailActiveS2SCopy("Uploading page from URL", err)
 			return
@@ -133,7 +133,7 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 
 // GetDestinationLength gets the destination length.
 func (c *urlToPageBlobCopier) GetDestinationLength() (int64, error) {
-	properties, err := c.destPageBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{})
+	properties, err := c.destPageBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 	if err != nil {
 		return -1, err
 	}

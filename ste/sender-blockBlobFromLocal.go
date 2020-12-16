@@ -74,7 +74,7 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 		// step 3: put block to remote
 		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newPacedRequestBody(u.jptm.Context(), reader, u.pacer)
-		_, err := u.destBlockBlobURL.StageBlock(u.jptm.Context(), encodedBlockID, body, azblob.LeaseAccessConditions{}, nil)
+		_, err := u.destBlockBlobURL.StageBlock(u.jptm.Context(), encodedBlockID, body, azblob.LeaseAccessConditions{}, nil, azblob.ClientProvidedKeyOptions{})
 		if err != nil {
 			u.jptm.FailActiveUpload("Staging block", err)
 			return
@@ -102,7 +102,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		}
 
 		if jptm.Info().SourceSize == 0 {
-			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{}, u.destBlobTier, blobTags)
+			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{}, u.destBlobTier, blobTags, azblob.ClientProvidedKeyOptions{})
 		} else {
 			// File with content
 
@@ -116,7 +116,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 
 			// Upload the file
 			body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
-			_, err = u.destBlockBlobURL.Upload(jptm.Context(), body, u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{}, u.destBlobTier, blobTags)
+			_, err = u.destBlockBlobURL.Upload(jptm.Context(), body, u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{}, u.destBlobTier, blobTags, azblob.ClientProvidedKeyOptions{})
 		}
 
 		// if the put blob is a failure, update the transfer status to failed
@@ -153,7 +153,7 @@ func (u *blockBlobUploader) Epilogue() {
 }
 
 func (u *blockBlobUploader) GetDestinationLength() (int64, error) {
-	prop, err := u.destBlockBlobURL.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{})
+	prop, err := u.destBlockBlobURL.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 
 	if err != nil {
 		return -1, err
