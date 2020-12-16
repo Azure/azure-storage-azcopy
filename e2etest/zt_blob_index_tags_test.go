@@ -38,7 +38,7 @@ func TestTags_SetTagsSingleBlob(t *testing.T) {
 		},
 		nil,
 		testFiles{
-			defaultSize: "1K",
+			defaultSize: "1M",
 			shouldTransfer: []interface{}{
 				//folder("", ),
 				f("file1.txt", with{blobTags: blobTagsStr}),
@@ -47,6 +47,7 @@ func TestTags_SetTagsSingleBlob(t *testing.T) {
 }
 
 func TestTags_SetTagsSpecialCharactersSingleBlob(t *testing.T) {
+	blobTagsStr := "bla_bla=foo%2b-foo&bla%2fbla%2f2=bar"
 	RunScenarios(
 		t,
 		eOperation.Copy(),
@@ -54,14 +55,14 @@ func TestTags_SetTagsSpecialCharactersSingleBlob(t *testing.T) {
 		eValidate.AutoPlusContent(),
 		params{
 			recursive: true,
-			blobTags:  "bla%3Dbla=foo&bla%3Dbla%3D2=bar",
+			blobTags:  blobTagsStr,
 		},
 		nil,
 		testFiles{
-			defaultSize: "1K",
+			defaultSize: "1M",
 			shouldTransfer: []interface{}{
 				//folder("", ),
-				f("file1.txt"),
+				f("file1.txt", with{blobTags: blobTagsStr}),
 			},
 		})
 }
@@ -79,7 +80,7 @@ func TestTags_SetTagsMultipleBlobs(t *testing.T) {
 		},
 		nil,
 		testFiles{
-			defaultSize: "1K",
+			defaultSize: "1M",
 			shouldTransfer: []interface{}{
 				folder(""),
 				folder("fdlr1"),
@@ -102,7 +103,7 @@ func TestTags_PreserveTagsSingleBlob(t *testing.T) {
 		},
 		nil,
 		testFiles{
-			defaultSize: "1K",
+			defaultSize: "1M",
 			shouldTransfer: []interface{}{
 				//folder("", ),
 				f("file1.txt", with{blobTags: blobTagsStr}),
@@ -122,7 +123,7 @@ func TestTags_PreserveTagsSpecialCharactersSingleBlob(t *testing.T) {
 		},
 		nil,
 		testFiles{
-			defaultSize: "1K",
+			defaultSize: "1M",
 			shouldTransfer: []interface{}{
 				//folder("", ),
 				f("file1.txt", with{blobTags: "foo/-foo=bar:bar&baz=blah&YeAr=2020"}),
@@ -142,7 +143,7 @@ func TestTags_PreserveTagsMultipleBlobs(t *testing.T) {
 		},
 		nil,
 		testFiles{
-			defaultSize: "1K",
+			defaultSize: "1M",
 			shouldTransfer: []interface{}{
 				folder(""),
 				folder("fdlr1"),
