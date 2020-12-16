@@ -37,7 +37,7 @@ func (v AccountSASSignatureValues) NewSASQueryParameters(sharedKeyCredential *Sh
 	}
 	v.Permissions = perms.String()
 
-	startTime, expiryTime, _ := FormatTimesForSASSigning(v.StartTime, v.ExpiryTime, time.Time{})
+	startTime, expiryTime := FormatTimesForSASSigning(v.StartTime, v.ExpiryTime)
 
 	stringToSign := strings.Join([]string{
 		sharedKeyCredential.AccountName(),
@@ -75,7 +75,7 @@ func (v AccountSASSignatureValues) NewSASQueryParameters(sharedKeyCredential *Sh
 // The AccountSASPermissions type simplifies creating the permissions string for an Azure Storage Account SAS.
 // Initialize an instance of this type and then call its String method to set AccountSASSignatureValues' Permissions field.
 type AccountSASPermissions struct {
-	Read, Write, Delete, DeletePreviousVersion, List, Add, Create, Update, Process, Tag, FilterByTags bool
+	Read, Write, Delete, List, Add, Create, Update, Process bool
 }
 
 // String produces the SAS permissions string for an Azure Storage account.
@@ -91,9 +91,6 @@ func (p AccountSASPermissions) String() string {
 	if p.Delete {
 		buffer.WriteRune('d')
 	}
-	if p.DeletePreviousVersion {
-		buffer.WriteRune('x')
-	}
 	if p.List {
 		buffer.WriteRune('l')
 	}
@@ -108,12 +105,6 @@ func (p AccountSASPermissions) String() string {
 	}
 	if p.Process {
 		buffer.WriteRune('p')
-	}
-	if p.Tag {
-		buffer.WriteRune('t')
-	}
-	if p.FilterByTags {
-		buffer.WriteRune('f')
 	}
 	return buffer.String()
 }
@@ -139,14 +130,8 @@ func (p *AccountSASPermissions) Parse(s string) error {
 			p.Update = true
 		case 'p':
 			p.Process = true
-		case 'x':
-			p.Process = true
-		case 't':
-			p.Tag = true
-		case 'f':
-			p.FilterByTags = true
 		default:
-			return fmt.Errorf("invalid permission character: '%v'", r)
+			return fmt.Errorf("Invalid permission character: '%v'", r)
 		}
 	}
 	return nil
@@ -186,7 +171,7 @@ func (a *AccountSASServices) Parse(s string) error {
 		case 'f':
 			a.File = true
 		default:
-			return fmt.Errorf("invalid service character: '%v'", r)
+			return fmt.Errorf("Invalid service character: '%v'", r)
 		}
 	}
 	return nil
@@ -199,7 +184,7 @@ type AccountSASResourceTypes struct {
 }
 
 // String produces the SAS resource types string for an Azure Storage account.
-// Call this method to set AccountSASSignatureValues's ResourceTypes field.
+// Call this method to set AccountSASSignatureValues' ResourceTypes field.
 func (rt AccountSASResourceTypes) String() string {
 	var buffer bytes.Buffer
 	if rt.Service {
