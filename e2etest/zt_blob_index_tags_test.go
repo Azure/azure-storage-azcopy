@@ -26,6 +26,7 @@ import (
 )
 
 func TestTags_SetTagsSingleBlob(t *testing.T) {
+	blobTagsStr := "foo=bar&blah=bazz"
 	RunScenarios(
 		t,
 		eOperation.Copy(),
@@ -33,7 +34,27 @@ func TestTags_SetTagsSingleBlob(t *testing.T) {
 		eValidate.AutoPlusContent(),
 		params{
 			recursive: true,
-			blobTags:  "foo=bar",
+			blobTags:  blobTagsStr,
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				//folder("", ),
+				f("file1.txt", with{blobTags: blobTagsStr}),
+			},
+		})
+}
+
+func TestTags_SetTagsSpecialCharactersSingleBlob(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.LocalBlob()),
+		eValidate.AutoPlusContent(),
+		params{
+			recursive: true,
+			blobTags:  "bla%3Dbla=foo&bla%3Dbla%3D2=bar",
 		},
 		nil,
 		testFiles{
@@ -41,6 +62,92 @@ func TestTags_SetTagsSingleBlob(t *testing.T) {
 			shouldTransfer: []interface{}{
 				//folder("", ),
 				f("file1.txt"),
+			},
+		})
+}
+
+func TestTags_SetTagsMultipleBlobs(t *testing.T) {
+	blobTagsStr := "foo=bar&blah=bazz"
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.LocalBlob()),
+		eValidate.AutoPlusContent(),
+		params{
+			recursive: true,
+			blobTags:  blobTagsStr,
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				folder("fdlr1"),
+				f("file1.txt", with{blobTags: blobTagsStr}),
+				f("fdlr1/file2.txt", with{blobTags: blobTagsStr}),
+			},
+		})
+}
+
+func TestTags_PreserveTagsSingleBlob(t *testing.T) {
+	blobTagsStr := "foo/-foo=bar:bar&baz=blah&YeAr=2020"
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.BlobBlob()),
+		eValidate.AutoPlusContent(),
+		params{
+			recursive:           true,
+			s2sPreserveBlobTags: true,
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				//folder("", ),
+				f("file1.txt", with{blobTags: blobTagsStr}),
+			},
+		})
+}
+
+func TestTags_PreserveTagsSpecialCharactersSingleBlob(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.BlobBlob()),
+		eValidate.AutoPlusContent(),
+		params{
+			recursive:           true,
+			s2sPreserveBlobTags: true,
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				//folder("", ),
+				f("file1.txt", with{blobTags: "foo/-foo=bar:bar&baz=blah&YeAr=2020"}),
+			},
+		})
+}
+
+func TestTags_PreserveTagsMultipleBlobs(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.BlobBlob()),
+		eValidate.AutoPlusContent(),
+		params{
+			recursive:           true,
+			s2sPreserveBlobTags: true,
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				folder("fdlr1"),
+				f("file1.txt", with{blobTags: "foo=bar&baz=blah&YeAr=2020"}),
+				f("fdlr1/file2.txt", with{blobTags: "temp123=321pmet&zab=halb&rAeY=0202"}),
 			},
 		})
 }

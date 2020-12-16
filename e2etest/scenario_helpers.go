@@ -101,7 +101,7 @@ func (scenarioHelper) generateLocalFile(filePath string, fileSize int) ([]byte, 
 	return bigBuff, err
 }
 
-func (s scenarioHelper) generateLocalFilesFromList(c asserter, dirPath string, fileList []*testObject, defaultSize string, p *params) {
+func (s scenarioHelper) generateLocalFilesFromList(c asserter, dirPath string, fileList []*testObject, defaultSize string) {
 	for _, file := range fileList {
 		var err error
 		if file.isFolder() {
@@ -120,9 +120,6 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, dirPath string, f
 			}
 			file.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
 
-			if p != nil {
-				file.creationProperties.blobTags = common.ToCommonBlobTagsMap(p.blobTags)
-			}
 			c.AssertNoErr(err)
 			//TODO: nakulkar-msft you'll need to set up things like attributes, and other relevant things from
 			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
@@ -273,7 +270,7 @@ func (s scenarioHelper) generateBlobContainersAndBlobsFromLists(c asserter, serv
 		_, err := curl.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
 		c.AssertNoErr(err)
 
-		s.generateBlobsFromList(c, curl, blobList, defaultStringFileSize, nil)
+		s.generateBlobsFromList(c, curl, blobList, defaultStringFileSize)
 	}
 }
 
@@ -307,7 +304,7 @@ func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c asserter, s3Clien
 }
 
 // create the demanded blobs
-func (scenarioHelper) generateBlobsFromList(c asserter, containerURL azblob.ContainerURL, blobList []*testObject, defaultSize string, p *params) {
+func (scenarioHelper) generateBlobsFromList(c asserter, containerURL azblob.ContainerURL, blobList []*testObject, defaultSize string) {
 	for _, b := range blobList {
 		if b.isFolder() {
 			continue // no real folders in blob
@@ -318,27 +315,20 @@ func (scenarioHelper) generateBlobsFromList(c asserter, containerURL azblob.Cont
 
 		// Setting content MD5
 		contentMD5 := md5.Sum(sourceData)
-		if b.creationProperties.contentHeaders == nil {
+		if ad.obj.creationProperties.contentHeaders == nil {
 			b.creationProperties.contentHeaders = &contentHeaders{}
 		}
-		b.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+		ad.obj.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
 
-		// Setting blob tags
-		if p != nil {
-			b.creationProperties.blobTags = common.ToCommonBlobTagsMap(p.blobTags)
-		}
-
-		//if b.verificationProperties.contentHeaders == nil {
-		//	b.verificationProperties.contentHeaders = &contentHeaders{}
-		//}
-		//b.verificationProperties.contentHeaders.contentMD5 = contentMD5[:]
 		headers := ad.toHeaders()
 		headers.ContentMD5 = contentMD5[:]
 		cResp, err := blob.Upload(ctx,
 			reader,
 			headers,
 			ad.toMetadata(),
-			azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, ad.toBlobTags())
+			azblob.BlobAccessConditions{},
+			azblob.DefaultAccessTier,
+			ad.toBlobTags())
 		c.AssertNoErr(err)
 		c.Assert(cResp.StatusCode(), equals(), 201)
 	}
