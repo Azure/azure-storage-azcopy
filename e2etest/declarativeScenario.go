@@ -23,6 +23,7 @@ package e2etest
 import (
 	"crypto/md5"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -69,8 +70,8 @@ func (s *scenario) Run() {
 	s.assignSourceAndDest() // what/where are they
 	s.state.source.createLocation(s.a, s)
 	s.state.dest.createLocation(s.a, s)
-	s.state.source.createFiles(s.a, s.fs, &s.p, true)
-	s.state.dest.createFiles(s.a, s.fs, &s.p, false)
+	s.state.source.createFiles(s.a, s.fs, true)
+	s.state.dest.createFiles(s.a, s.fs, false)
 	if s.a.Failed() {
 		return // setup failed. No point in running the test
 	}
@@ -347,12 +348,18 @@ func (s *scenario) validateMetadata(expected, actual map[string]string) {
 // Validate blob tags
 func (s *scenario) validateBlobTags(expected, actual common.BlobTags) {
 	s.a.Assert(len(expected), equals(), len(actual), "Both should have same number of tags")
-	for key := range expected {
-		exValue := expected[key]
-		actualValue, ok := actual[key]
-		s.a.Assert(ok, equals(), true, fmt.Sprintf("expect key '%s' to be found in destination metadata", key))
+	for k, v := range expected {
+		k, err := url.QueryUnescape(k)
+		v, err = url.QueryUnescape(v)
+		if err != nil {
+			s.a.Failed()
+		}
+
+		exValue := expected[k]
+		actualValue, ok := actual[k]
+		s.a.Assert(ok, equals(), true, fmt.Sprintf("expect key '%s' to be found in destination metadata", k))
 		if ok {
-			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("Expect value for key '%s' to be '%s' but found '%s'", key, exValue, actualValue))
+			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("Expect value for key '%s' to be '%s' but found '%s'", k, exValue, actualValue))
 		}
 	}
 }
@@ -387,10 +394,10 @@ func (s *scenario) validateContentHeaders(expected, actual *contentHeaders) {
 			fmt.Sprintf("Content type mismatch: Expected %v, obtained %v", *expected.contentType, *actual.contentType))
 	}
 
-	//if expected.contentMD5 != nil {
-	//	s.a.Assert(expected.contentMD5, equals(), actual.contentMD5,
-	//		fmt.Sprintf("Content MD5 mismatch: Expected %v, obtained %v", expected.contentMD5, actual.contentMD5))
-	//}
+	if expected.contentMD5 != nil {
+		s.a.Assert(expected.contentMD5, equals(), actual.contentMD5,
+			fmt.Sprintf("Content MD5 mismatch: Expected %v, obtained %v", expected.contentMD5, actual.contentMD5))
+	}
 }
 
 func (s *scenario) validateCreateTime(expected, actual *time.Time) {
@@ -454,9 +461,9 @@ func (s *scenario) GetTestFiles() testFiles {
 
 func (s *scenario) CreateFiles(fs testFiles, atSource bool) {
 	if atSource {
-		s.state.source.createFiles(s.a, fs, &s.p, true)
+		s.state.source.createFiles(s.a, fs, true)
 	} else {
-		s.state.dest.createFiles(s.a, fs, &s.p, false)
+		s.state.dest.createFiles(s.a, fs, false)
 	}
 }
 
