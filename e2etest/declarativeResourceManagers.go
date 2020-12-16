@@ -43,7 +43,7 @@ type resourceManager interface {
 	// creates the test files in the location. Implementers can assume that createLocation has been called first.
 	// This method may be called multiple times, in which case it should overwrite any like-named files that are already there.
 	// (e.g. when test need to create files with later modification dates, they will trigger a second call to this)
-	createFiles(a asserter, fs testFiles, isSource bool)
+	createFiles(a asserter, fs testFiles, p *params, isSource bool)
 
 	// Gets the names and properties of all files (and, if applicable, folders) that exist.
 	// Used for verification
@@ -82,8 +82,8 @@ func (r *resourceLocal) createLocation(a asserter, s *scenario) {
 	}
 }
 
-func (r *resourceLocal) createFiles(a asserter, fs testFiles, isSource bool) {
-	scenarioHelper{}.generateLocalFilesFromList(a, r.dirPath, fs.allObjects(isSource), fs.defaultSize)
+func (r *resourceLocal) createFiles(a asserter, fs testFiles, p *params, isSource bool) {
+	scenarioHelper{}.generateLocalFilesFromList(a, r.dirPath, fs.allObjects(isSource), fs.defaultSize, p)
 }
 
 func (r *resourceLocal) cleanup(_ asserter) {
@@ -135,8 +135,8 @@ func (r *resourceBlobContainer) createLocation(a asserter, s *scenario) {
 	}
 }
 
-func (r *resourceBlobContainer) createFiles(a asserter, fs testFiles, isSource bool) {
-	scenarioHelper{}.generateBlobsFromList(a, *r.containerURL, fs.allObjects(isSource), fs.defaultSize)
+func (r *resourceBlobContainer) createFiles(a asserter, fs testFiles, p *params, isSource bool) {
+	scenarioHelper{}.generateBlobsFromList(a, *r.containerURL, fs.allObjects(isSource), fs.defaultSize, p)
 }
 
 func (r *resourceBlobContainer) cleanup(a asserter) {
@@ -194,7 +194,7 @@ func (r *resourceAzureFileShare) createLocation(a asserter, s *scenario) {
 	}
 }
 
-func (r *resourceAzureFileShare) createFiles(a asserter, fs testFiles, isSource bool) {
+func (r *resourceAzureFileShare) createFiles(a asserter, fs testFiles, p *params, isSource bool) {
 	scenarioHelper{}.generateAzureFilesFromList(a, *r.shareURL, fs.allObjects(isSource), fs.defaultSize)
 }
 
@@ -253,7 +253,7 @@ func (r *resourceDummy) createLocation(a asserter, s *scenario) {
 
 }
 
-func (r *resourceDummy) createFiles(a asserter, fs testFiles, isSource bool) {
+func (r *resourceDummy) createFiles(a asserter, fs testFiles, p *params, isSource bool) {
 
 }
 
