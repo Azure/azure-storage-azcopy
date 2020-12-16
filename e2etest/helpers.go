@@ -222,7 +222,7 @@ func createNewBlockBlob(c asserter, container azblob.ContainerURL, prefix string
 	blob, name = getBlockBlobURL(c, container, prefix)
 
 	cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
-		nil, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil)
+		nil, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{})
 
 	c.AssertNoErr(err)
 	c.Assert(cResp.StatusCode(), equals(), 201)
@@ -266,7 +266,7 @@ func generateParentsForAzureFile(c asserter, fileURL azfile.FileURL) {
 func createNewAppendBlob(c asserter, container azblob.ContainerURL, prefix string) (blob azblob.AppendBlobURL, name string) {
 	blob, name = getAppendBlobURL(c, container, prefix)
 
-	resp, err := blob.Create(ctx, azblob.BlobHTTPHeaders{}, nil, azblob.BlobAccessConditions{}, nil)
+	resp, err := blob.Create(ctx, azblob.BlobHTTPHeaders{}, nil, azblob.BlobAccessConditions{}, nil, azblob.ClientProvidedKeyOptions{})
 
 	c.AssertNoErr(err)
 	c.Assert(resp.StatusCode(), equals(), 201)
@@ -276,7 +276,7 @@ func createNewAppendBlob(c asserter, container azblob.ContainerURL, prefix strin
 func createNewPageBlob(c asserter, container azblob.ContainerURL, prefix string) (blob azblob.PageBlobURL, name string) {
 	blob, name = getPageBlobURL(c, container, prefix)
 
-	resp, err := blob.Create(ctx, azblob.PageBlobPageBytes*10, 0, azblob.BlobHTTPHeaders{}, nil, azblob.BlobAccessConditions{}, azblob.DefaultPremiumBlobAccessTier, nil)
+	resp, err := blob.Create(ctx, azblob.PageBlobPageBytes*10, 0, azblob.BlobHTTPHeaders{}, nil, azblob.BlobAccessConditions{}, azblob.DefaultPremiumBlobAccessTier, nil, azblob.ClientProvidedKeyOptions{})
 
 	c.AssertNoErr(err)
 	c.Assert(resp.StatusCode(), equals(), 201)
@@ -515,7 +515,7 @@ func disableSoftDelete(c asserter, bsu azblob.ServiceURL) {
 }
 
 func validateUpload(c asserter, blobURL azblob.BlockBlobURL) {
-	resp, err := blobURL.Download(ctx, 0, 0, azblob.BlobAccessConditions{}, false)
+	resp, err := blobURL.Download(ctx, 0, 0, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
 	c.AssertNoErr(err)
 	data, _ := ioutil.ReadAll(resp.Response().Body)
 	c.Assert(len(data), equals(), 0)

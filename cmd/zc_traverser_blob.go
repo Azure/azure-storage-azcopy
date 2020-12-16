@@ -81,7 +81,7 @@ func (t *blobTraverser) getPropertiesIfSingleBlob() (props *azblob.BlobGetProper
 
 	// perform the check
 	blobURL := azblob.NewBlobURL(blobUrlParts.URL(), t.p)
-	props, err = blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{})
+	props, err = blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 
 	// if there was no problem getting the properties, it means that we are looking at a single blob
 	if err == nil {
