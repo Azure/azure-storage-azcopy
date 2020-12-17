@@ -70,7 +70,7 @@ func newLocalTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (*localTrav
 	return traverser, nil
 }
 
-func newBlobTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (t *blobTraverser, err error) {
+func newBlobTraverserForSync(cca *cookedSyncCmdArgs, isSource bool, cpkInfo common.CpkScopeInfo) (t *blobTraverser, err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// figure out the right URL
@@ -109,5 +109,5 @@ func newBlobTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (t *blobTrav
 		}
 	}
 
-	return newBlobTraverser(rawURL, p, ctx, cca.recursive, false, incrementEnumerationCounter), nil
+	return newBlobTraverser(rawURL, p, ctx, cca.recursive, false, incrementEnumerationCounter, cpkInfo), nil
 }

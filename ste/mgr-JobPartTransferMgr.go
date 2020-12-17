@@ -20,7 +20,7 @@ import (
 type IJobPartTransferMgr interface {
 	FromTo() common.FromTo
 	Info() TransferInfo
-	ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags)
+	ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags, info common.CpkScopeInfo)
 	LastModifiedTime() time.Time
 	PreserveLastModifiedTime() (time.Time, bool)
 	ShouldPutMd5() bool
@@ -28,7 +28,7 @@ type IJobPartTransferMgr interface {
 	BlobTypeOverride() common.BlobType
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	JobHasLowFileCount() bool
-	//ScheduleChunk(chunkFunc chunkFunc)
+	CpkScopeInfo() common.CpkScopeInfo
 	Context() context.Context
 	SlicePool() common.ByteSlicePooler
 	CacheLimiter() common.CacheLimiter
@@ -147,6 +147,7 @@ type SrcProperties struct {
 	SrcHTTPHeaders common.ResourceHTTPHeaders // User for S2S copy, where per transfer's src properties need be set in destination.
 	SrcMetadata    common.Metadata
 	SrcBlobTags    common.BlobTags
+	// SrcCpkScopeInfo common.CpkScopeInfo
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -441,7 +442,7 @@ func (jptm *jobPartTransferMgr) ScheduleChunks(chunkFunc chunkFunc) {
 	jptm.jobPartMgr.ScheduleChunks(chunkFunc)
 }
 
-func (jptm *jobPartTransferMgr) ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags) {
+func (jptm *jobPartTransferMgr) ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags, info common.CpkScopeInfo) {
 	return jptm.jobPartMgr.(*jobPartMgr).resourceDstData(jptm.Info().Source, dataFileToXfer)
 }
 
@@ -478,6 +479,10 @@ func (jptm *jobPartTransferMgr) BlobTypeOverride() common.BlobType {
 
 func (jptm *jobPartTransferMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {
 	return jptm.jobPartMgr.BlobTiers()
+}
+
+func (jptm *jobPartTransferMgr) CpkScopeInfo() common.CpkScopeInfo {
+	return jptm.jobPartMgr.CpkScopeInfo()
 }
 
 // JobHasLowFileCount returns an estimate of whether we only have a very small number of files in the overall job

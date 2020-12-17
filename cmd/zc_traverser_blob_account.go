@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -37,6 +38,7 @@ type blobAccountTraverser struct {
 	containerPattern      string
 	cachedContainers      []string
 	includeDirectoryStubs bool
+	cpkInfo               common.CpkScopeInfo
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
@@ -95,7 +97,7 @@ func (t *blobAccountTraverser) traverse(preprocessor objectMorpher, processor ob
 
 	for _, v := range cList {
 		containerURL := t.accountURL.NewContainerURL(v).URL()
-		containerTraverser := newBlobTraverser(&containerURL, t.p, t.ctx, true, t.includeDirectoryStubs, t.incrementEnumerationCounter)
+		containerTraverser := newBlobTraverser(&containerURL, t.p, t.ctx, true, t.includeDirectoryStubs, t.incrementEnumerationCounter, t.cpkInfo)
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
@@ -110,7 +112,7 @@ func (t *blobAccountTraverser) traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc) (t *blobAccountTraverser) {
+func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, cpkInfo common.CpkScopeInfo) (t *blobAccountTraverser) {
 	bURLParts := azblob.NewBlobURLParts(*rawURL)
 	cPattern := bURLParts.ContainerName
 
@@ -120,7 +122,7 @@ func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.C
 	}
 
 	t = &blobAccountTraverser{p: p, ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter,
-		accountURL: azblob.NewServiceURL(bURLParts.URL(), p), containerPattern: cPattern, includeDirectoryStubs: includeDirectoryStubs}
+		accountURL: azblob.NewServiceURL(bURLParts.URL(), p), containerPattern: cPattern, includeDirectoryStubs: includeDirectoryStubs, cpkInfo: cpkInfo}
 
 	return
 }

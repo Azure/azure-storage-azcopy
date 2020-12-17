@@ -268,6 +268,9 @@ type JobPartPlanDstBlob struct {
 	// Specifies the cache control of the blob
 	CacheControl [CustomHeaderMaxBytes]byte
 
+	CpkScopeInfo       [CustomHeaderMaxBytes]byte
+	CpkScopeInfoLength uint16
+
 	// Specifies the tier if this is a block or page blob
 	BlockBlobTier common.BlockBlobTier
 	PageBlobTier  common.PageBlobTier

@@ -181,6 +181,7 @@ type BlobTransferAttributes struct {
 	ContentLanguage          string                // Specifies the language of the content
 	ContentDisposition       string                // Specifies the content disposition
 	CacheControl             string                // Specifies the cache control header
+	CpkScopeInfo             CpkScopeInfo          //
 	BlockBlobTier            BlockBlobTier         // Specifies the tier to set on the block blobs.
 	PageBlobTier             PageBlobTier          // Specifies the tier to set on the page blobs.
 	Metadata                 string                // User-defined Name-value pairs associated with the blob

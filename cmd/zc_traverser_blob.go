@@ -50,6 +50,8 @@ type blobTraverser struct {
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
+
+	cpkInfo common.CpkScopeInfo
 }
 
 func (t *blobTraverser) isDirectory(isSource bool) bool {
@@ -81,7 +83,12 @@ func (t *blobTraverser) getPropertiesIfSingleBlob() (props *azblob.BlobGetProper
 
 	// perform the check
 	blobURL := azblob.NewBlobURL(blobUrlParts.URL(), t.p)
-	props, err = blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+
+	encryptionScope := t.cpkInfo.EncryptionScope
+	cpkOption := azblob.ClientProvidedKeyOptions{
+		EncryptionScope: &encryptionScope,
+	}
+	props, err = blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, cpkOption)
 
 	// if there was no problem getting the properties, it means that we are looking at a single blob
 	if err == nil {
@@ -302,9 +309,9 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 }
 
 func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool,
-	incrementEnumerationCounter enumerationCounterFunc) (t *blobTraverser) {
+	incrementEnumerationCounter enumerationCounterFunc, cpkInfo common.CpkScopeInfo) (t *blobTraverser) {
 	t = &blobTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, includeDirectoryStubs: includeDirectoryStubs,
-		incrementEnumerationCounter: incrementEnumerationCounter, parallelListing: true}
+		incrementEnumerationCounter: incrementEnumerationCounter, parallelListing: true, cpkInfo: cpkInfo}
 
 	if strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning())) == "true" {
 		// TODO log to frontend log that parallel listing was disabled, once the frontend log PR is merged

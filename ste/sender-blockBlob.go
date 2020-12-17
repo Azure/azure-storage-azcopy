@@ -54,6 +54,7 @@ type blockBlobSenderBase struct {
 	metadataToApply azblob.Metadata
 	blobTagsToApply azblob.BlobTagsMap
 
+	cpkOptions             azblob.ClientProvidedKeyOptions
 	atomicPutListIndicator int32
 	muBlockIDs             *sync.Mutex
 }
@@ -122,6 +123,9 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 	// may have guessed.
 	destBlobTier := inferredAccessTierType
 	blockBlobTierOverride, _ := jptm.BlobTiers()
+
+	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
+	encryptionScope := jptm.CpkScopeInfo().EncryptionScope
 	if blockBlobTierOverride != common.EBlockBlobTier.None() {
 		destBlobTier = blockBlobTierOverride.ToAccessTierType()
 	}
@@ -136,6 +140,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		headersToApply:   props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply:  props.SrcMetadata.ToAzBlobMetadata(),
 		blobTagsToApply:  props.SrcBlobTags.ToAzBlobTagsMap(),
+		cpkOptions:       azblob.ClientProvidedKeyOptions{EncryptionScope: &encryptionScope},
 		destBlobTier:     destBlobTier,
 		muBlockIDs:       &sync.Mutex{}}, nil
 }
@@ -153,7 +158,7 @@ func (s *blockBlobSenderBase) NumChunks() uint32 {
 }
 
 func (s *blockBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
-	return remoteObjectExists(s.destBlockBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{}))
+	return remoteObjectExists(s.destBlockBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkOptions))
 }
 
 func (s *blockBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
@@ -191,7 +196,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 			blobTags = nil
 		}
 
-		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, s.destBlobTier, blobTags, azblob.ClientProvidedKeyOptions{}); err != nil {
+		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, s.destBlobTier, blobTags, s.cpkOptions); err != nil {
 			jptm.FailActiveSend("Committing block list", err)
 			return
 		}

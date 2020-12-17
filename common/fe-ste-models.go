@@ -910,6 +910,7 @@ type CopyTransfer struct {
 	ContentLanguage    string
 	CacheControl       string
 	ContentMD5         []byte
+	CpkScopeInfo       CpkScopeInfo
 	Metadata           Metadata
 
 	// Properties for S2S blob copy
@@ -1364,4 +1365,30 @@ func (p PreservePermissionsOption) IsTruthy() bool {
 	default:
 		panic("unknown permissions option")
 	}
+}
+
+// CpkScopeInfo specifies the name of the encryption scope to use to encrypt the data provided in the request. If not specified,
+// encryption is performed with the default account encryption scope. For more information, see Encryption at Rest for Azure Storage Services.
+type CpkScopeInfo struct {
+	EncryptionScope string
+}
+
+func (csi CpkScopeInfo) Marshal() (string, error) {
+	result, err := json.Marshal(csi)
+	if err != nil {
+		return "", err
+	}
+	return string(result), nil
+}
+
+func UnmarshalToCpkScopeInfo(cpkScopeInfoStr string) (CpkScopeInfo, error) {
+	var result CpkScopeInfo
+	if cpkScopeInfoStr != "" {
+		err := json.Unmarshal([]byte(cpkScopeInfoStr), &result)
+		if err != nil {
+			return result, err
+		}
+	}
+
+	return result, nil
 }

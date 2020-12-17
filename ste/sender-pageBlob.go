@@ -50,6 +50,7 @@ type pageBlobSenderBase struct {
 	metadataToApply azblob.Metadata
 	blobTagsToApply azblob.BlobTagsMap
 	destBlobTier    azblob.AccessTierType
+	cpkOptions      azblob.ClientProvidedKeyOptions
 	// filePacer is necessary because page blobs have per-blob throughput limits. The limits depend on
 	// what type of page blob it is (e.g. premium) and can be significantly lower than the blob account limit.
 	// Using a automatic pacer here lets us find the right rate for this particular page blob, at which
@@ -120,6 +121,9 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 		destBlobTier = pageBlobTierOverride.ToAccessTierType()
 	}
 
+	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
+	encryptionScope := jptm.CpkScopeInfo().EncryptionScope
+
 	s := &pageBlobSenderBase{
 		jptm:                   jptm,
 		destPageBlobURL:        destPageBlobURL,
@@ -133,6 +137,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 		destBlobTier:           destBlobTier,
 		filePacer:              newNullAutoPacer(), // defer creation of real one to Prologue
 		destPageRangeOptimizer: destRangeOptimizer,
+		cpkOptions:             azblob.ClientProvidedKeyOptions{EncryptionScope: &encryptionScope},
 	}
 
 	if s.isInManagedDiskImportExportAccount() && jptm.ShouldPutMd5() {
@@ -173,7 +178,7 @@ func (s *pageBlobSenderBase) NumChunks() uint32 {
 }
 
 func (s *pageBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
-	return remoteObjectExists(s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{}))
+	return remoteObjectExists(s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkOptions))
 }
 
 var premiumPageBlobTierRegex = regexp.MustCompile(`P\d+`)
@@ -204,7 +209,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		// FileSize                : 1073742336  (equals our s.srcSize, i.e. the size of the disk file)
 		// Size                    : 1073741824
 
-		p, err := s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+		p, err := s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkOptions)
 		if err != nil {
 			s.jptm.FailActiveSend("Checking size of managed disk blob", err)
 			return
@@ -249,7 +254,8 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		s.metadataToApply,
 		azblob.BlobAccessConditions{},
 		destBlobTier,
-		blobTags, azblob.ClientProvidedKeyOptions{}); err != nil {
+		blobTags,
+		s.cpkOptions); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}

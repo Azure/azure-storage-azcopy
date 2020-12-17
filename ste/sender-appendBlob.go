@@ -42,10 +42,10 @@ type appendBlobSenderBase struct {
 	// object. For S2S, these come from the source service.
 	// When sending local data, they are computed based on
 	// the properties of the local file
-	headersToApply  azblob.BlobHTTPHeaders
-	metadataToApply azblob.Metadata
-	blobTagsToApply azblob.BlobTagsMap
-
+	headersToApply         azblob.BlobHTTPHeaders
+	metadataToApply        azblob.Metadata
+	blobTagsToApply        azblob.BlobTagsMap
+	cpkOptions             azblob.ClientProvidedKeyOptions
 	soleChunkFuncSemaphore *semaphore.Weighted
 }
 
@@ -78,6 +78,9 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 		return nil, err
 	}
 
+	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
+	encryptionScope := jptm.CpkScopeInfo().EncryptionScope
+
 	return &appendBlobSenderBase{
 		jptm:                   jptm,
 		destAppendBlobURL:      destAppendBlobURL,
@@ -87,6 +90,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 		headersToApply:         props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply:        props.SrcMetadata.ToAzBlobMetadata(),
 		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
+		cpkOptions:             azblob.ClientProvidedKeyOptions{EncryptionScope: &encryptionScope},
 		soleChunkFuncSemaphore: semaphore.NewWeighted(1)}, nil
 }
 
@@ -103,7 +107,7 @@ func (s *appendBlobSenderBase) NumChunks() uint32 {
 }
 
 func (s *appendBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
-	return remoteObjectExists(s.destAppendBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{}))
+	return remoteObjectExists(s.destAppendBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkOptions))
 }
 
 // Returns a chunk-func for sending append blob to remote
@@ -148,7 +152,7 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 	if separateSetTagsRequired || len(blobTags) == 0 {
 		blobTags = nil
 	}
-	if _, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, blobTags, azblob.ClientProvidedKeyOptions{}); err != nil {
+	if _, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, blobTags, s.cpkOptions); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}

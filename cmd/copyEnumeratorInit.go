@@ -240,6 +240,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			jobPartOrder.Fpo,
 		)
 		transfer.BlobTags = cca.blobTags
+		transfer.CpkScopeInfo = cca.cpkScopeInfo
 
 		if shouldSendToSte {
 			return addTransfer(&jobPartOrder, transfer, cca)

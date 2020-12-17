@@ -65,7 +65,7 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 		_, err := c.destAppendBlobURL.AppendBlockFromURL(ctxWithLatestServiceVersion, c.srcURL, id.OffsetInFile(), adjustedChunkSize,
 			azblob.AppendBlobAccessConditions{
 				AppendPositionAccessConditions: azblob.AppendPositionAccessConditions{IfAppendPositionEqual: id.OffsetInFile()},
-			}, azblob.ModifiedAccessConditions{}, nil, azblob.ClientProvidedKeyOptions{})
+			}, azblob.ModifiedAccessConditions{}, nil, c.cpkOptions)
 		if err != nil {
 			c.jptm.FailActiveS2SCopy("Appending block from URL", err)
 			return
@@ -77,7 +77,7 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 
 // GetDestinationLength gets the destination length.
 func (c *urlToAppendBlobCopier) GetDestinationLength() (int64, error) {
-	properties, err := c.destAppendBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+	properties, err := c.destAppendBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{}, c.cpkOptions)
 	if err != nil {
 		return -1, err
 	}

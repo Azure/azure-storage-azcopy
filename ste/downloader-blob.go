@@ -109,12 +109,16 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 			accessConditions = azblob.BlobAccessConditions{}
 		}
 
+		// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
+		encryptionScope := jptm.CpkScopeInfo().EncryptionScope
+		cpkOptions := azblob.ClientProvidedKeyOptions{EncryptionScope: &encryptionScope}
+
 		// At this point we create an HTTP(S) request for the desired portion of the blob, and
 		// wait until we get the headers back... but we have not yet read its whole body.
 		// The Download method encapsulates any retries that may be necessary to get to the point of receiving response headers.
 		jptm.LogChunkStatus(id, common.EWaitReason.HeaderResponse())
 		enrichedContext := withRetryNotification(jptm.Context(), bd.filePacer)
-		get, err := srcBlobURL.Download(enrichedContext, id.OffsetInFile(), length, accessConditions, false, azblob.ClientProvidedKeyOptions{})
+		get, err := srcBlobURL.Download(enrichedContext, id.OffsetInFile(), length, accessConditions, false, cpkOptions)
 		if err != nil {
 			jptm.FailActiveDownload("Downloading response body", err) // cancel entire transfer because this chunk has failed
 			return
