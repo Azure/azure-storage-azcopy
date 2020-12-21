@@ -20,7 +20,7 @@ import (
 type IJobPartTransferMgr interface {
 	FromTo() common.FromTo
 	Info() TransferInfo
-	ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags, info common.CpkScopeInfo)
+	ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags, cpkInfo common.CpkInfo, cpkScopeInfo common.CpkScopeInfo)
 	LastModifiedTime() time.Time
 	PreserveLastModifiedTime() (time.Time, bool)
 	ShouldPutMd5() bool
@@ -28,6 +28,7 @@ type IJobPartTransferMgr interface {
 	BlobTypeOverride() common.BlobType
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	JobHasLowFileCount() bool
+	CpkInfo() common.CpkInfo
 	CpkScopeInfo() common.CpkScopeInfo
 	Context() context.Context
 	SlicePool() common.ByteSlicePooler
@@ -442,7 +443,7 @@ func (jptm *jobPartTransferMgr) ScheduleChunks(chunkFunc chunkFunc) {
 	jptm.jobPartMgr.ScheduleChunks(chunkFunc)
 }
 
-func (jptm *jobPartTransferMgr) ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags, info common.CpkScopeInfo) {
+func (jptm *jobPartTransferMgr) ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags, cpkInfo common.CpkInfo, cpkScopeInfo common.CpkScopeInfo) {
 	return jptm.jobPartMgr.(*jobPartMgr).resourceDstData(jptm.Info().Source, dataFileToXfer)
 }
 
@@ -479,6 +480,10 @@ func (jptm *jobPartTransferMgr) BlobTypeOverride() common.BlobType {
 
 func (jptm *jobPartTransferMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {
 	return jptm.jobPartMgr.BlobTiers()
+}
+
+func (jptm *jobPartTransferMgr) CpkInfo() common.CpkInfo {
+	return jptm.jobPartMgr.CpkInfo()
 }
 
 func (jptm *jobPartTransferMgr) CpkScopeInfo() common.CpkScopeInfo {

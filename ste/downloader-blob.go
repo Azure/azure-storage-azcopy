@@ -110,8 +110,7 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 		}
 
 		// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
-		encryptionScope := jptm.CpkScopeInfo().EncryptionScope
-		cpkOptions := azblob.ClientProvidedKeyOptions{EncryptionScope: &encryptionScope}
+		cpkOptions := common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
 
 		// At this point we create an HTTP(S) request for the desired portion of the blob, and
 		// wait until we get the headers back... but we have not yet read its whole body.

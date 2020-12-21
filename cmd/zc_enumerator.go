@@ -293,8 +293,7 @@ type enumerationCounterFunc func(entityType common.EntityType)
 // ctx, pipeline are only required for remote resources.
 // followSymlinks is only required for local resources (defaults to false)
 // errorOnDirWOutRecursive is used by copy.
-func initResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo,
-	followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string) (resourceTraverser, error) {
+func initResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string, cpkInfo common.CpkInfo, cpkScopeInfo common.CpkScopeInfo) (resourceTraverser, error) {
 	var output resourceTraverser
 	var p *pipeline.Pipeline
 
@@ -389,11 +388,11 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output = newBlobAccountTraverser(resourceURL, *p, *ctx, includeDirectoryStubs, incrementEnumerationCounter, common.CpkScopeInfo{})
+			output = newBlobAccountTraverser(resourceURL, *p, *ctx, includeDirectoryStubs, incrementEnumerationCounter, cpkInfo, cpkScopeInfo)
 		} else if listOfVersionIds != nil {
-			output = newBlobVersionsTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, common.CpkScopeInfo{})
+			output = newBlobVersionsTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkInfo, cpkScopeInfo)
 		} else {
-			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, common.CpkScopeInfo{})
+			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, cpkInfo, cpkScopeInfo)
 		}
 	case common.ELocation.File():
 		resourceURL, err := resource.FullURL()

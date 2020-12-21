@@ -125,7 +125,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 	blockBlobTierOverride, _ := jptm.BlobTiers()
 
 	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
-	encryptionScope := jptm.CpkScopeInfo().EncryptionScope
+	cpkOptions := common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
 	if blockBlobTierOverride != common.EBlockBlobTier.None() {
 		destBlobTier = blockBlobTierOverride.ToAccessTierType()
 	}
@@ -140,7 +140,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		headersToApply:   props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply:  props.SrcMetadata.ToAzBlobMetadata(),
 		blobTagsToApply:  props.SrcBlobTags.ToAzBlobTagsMap(),
-		cpkOptions:       azblob.ClientProvidedKeyOptions{EncryptionScope: &encryptionScope},
+		cpkOptions:       cpkOptions,
 		destBlobTier:     destBlobTier,
 		muBlockIDs:       &sync.Mutex{}}, nil
 }

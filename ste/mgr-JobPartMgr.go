@@ -35,6 +35,7 @@ type IJobPartMgr interface {
 	RescheduleTransfer(jptm IJobPartTransferMgr)
 	BlobTypeOverride() common.BlobType
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
+	CpkInfo() common.CpkInfo
 	CpkScopeInfo() common.CpkScopeInfo
 	ShouldPutMd5() bool
 	SAS() (string, string)
@@ -257,6 +258,8 @@ type jobPartMgr struct {
 
 	blobTags common.BlobTags
 
+	cpkInfo common.CpkInfo
+
 	cpkScopeInfo common.CpkScopeInfo
 
 	blobTypeOverride common.BlobType // User specified blob type
@@ -337,6 +340,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	jpm.putMd5 = dstData.PutMd5
 	jpm.blockBlobTier = dstData.BlockBlobTier
 	jpm.pageBlobTier = dstData.PageBlobTier
+	jpm.cpkInfo, _ = common.UnmarshalToCpkInfo(string(dstData.CpkInfo[:dstData.CpkInfoLength]))
 	jpm.cpkScopeInfo, _ = common.UnmarshalToCpkScopeInfo(string(dstData.CpkScopeInfo[:dstData.CpkScopeInfoLength]))
 
 	// For this job part, split the metadata string apart and create an common.Metadata out of it
@@ -584,9 +588,9 @@ func (jpm *jobPartMgr) AutoDecompress() bool {
 	return jpm.Plan().AutoDecompress
 }
 
-func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags, info common.CpkScopeInfo) {
+func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags, cpkInfo common.CpkInfo, cpkScopeInfo common.CpkScopeInfo) {
 	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType {
-		return jpm.httpHeaders, jpm.metadata, jpm.blobTags, jpm.cpkScopeInfo
+		return jpm.httpHeaders, jpm.metadata, jpm.blobTags, jpm.cpkInfo, jpm.cpkScopeInfo
 	}
 
 	return common.ResourceHTTPHeaders{
@@ -594,7 +598,7 @@ func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byt
 		ContentLanguage:    jpm.httpHeaders.ContentLanguage,
 		ContentDisposition: jpm.httpHeaders.ContentDisposition,
 		ContentEncoding:    jpm.httpHeaders.ContentEncoding,
-		CacheControl:       jpm.httpHeaders.CacheControl}, jpm.metadata, jpm.blobTags, jpm.cpkScopeInfo
+		CacheControl:       jpm.httpHeaders.CacheControl}, jpm.metadata, jpm.blobTags, jpm.cpkInfo, jpm.cpkScopeInfo
 }
 
 // TODO do we want these charset=utf-8?
@@ -642,6 +646,10 @@ func (jpm *jobPartMgr) BlobTypeOverride() common.BlobType {
 
 func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {
 	return jpm.blockBlobTier, jpm.pageBlobTier
+}
+
+func (jpm *jobPartMgr) CpkInfo() common.CpkInfo {
+	return jpm.cpkInfo
 }
 
 func (jpm *jobPartMgr) CpkScopeInfo() common.CpkScopeInfo {

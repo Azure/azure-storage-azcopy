@@ -122,7 +122,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 	}
 
 	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
-	encryptionScope := jptm.CpkScopeInfo().EncryptionScope
+	cpkOptions := common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
 
 	s := &pageBlobSenderBase{
 		jptm:                   jptm,
@@ -137,7 +137,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 		destBlobTier:           destBlobTier,
 		filePacer:              newNullAutoPacer(), // defer creation of real one to Prologue
 		destPageRangeOptimizer: destRangeOptimizer,
-		cpkOptions:             azblob.ClientProvidedKeyOptions{EncryptionScope: &encryptionScope},
+		cpkOptions:             cpkOptions,
 	}
 
 	if s.isInManagedDiskImportExportAccount() && jptm.ShouldPutMd5() {

@@ -51,7 +51,8 @@ type blobTraverser struct {
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
 
-	cpkInfo common.CpkScopeInfo
+	cpkInfo      common.CpkInfo
+	cpkScopeInfo common.CpkScopeInfo
 }
 
 func (t *blobTraverser) isDirectory(isSource bool) bool {
@@ -84,11 +85,8 @@ func (t *blobTraverser) getPropertiesIfSingleBlob() (props *azblob.BlobGetProper
 	// perform the check
 	blobURL := azblob.NewBlobURL(blobUrlParts.URL(), t.p)
 
-	encryptionScope := t.cpkInfo.EncryptionScope
-	cpkOption := azblob.ClientProvidedKeyOptions{
-		EncryptionScope: &encryptionScope,
-	}
-	props, err = blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, cpkOption)
+	cpkOptions := common.ToClientProvidedKeyOptions(t.cpkInfo, t.cpkScopeInfo)
+	props, err = blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, cpkOptions)
 
 	// if there was no problem getting the properties, it means that we are looking at a single blob
 	if err == nil {
@@ -308,10 +306,18 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 	return nil
 }
 
-func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool,
-	incrementEnumerationCounter enumerationCounterFunc, cpkInfo common.CpkScopeInfo) (t *blobTraverser) {
-	t = &blobTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, includeDirectoryStubs: includeDirectoryStubs,
-		incrementEnumerationCounter: incrementEnumerationCounter, parallelListing: true, cpkInfo: cpkInfo}
+func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, cpkInfo common.CpkInfo, cpkScopeInfo common.CpkScopeInfo) (t *blobTraverser) {
+	t = &blobTraverser{
+		rawURL:                      rawURL,
+		p:                           p,
+		ctx:                         ctx,
+		recursive:                   recursive,
+		includeDirectoryStubs:       includeDirectoryStubs,
+		incrementEnumerationCounter: incrementEnumerationCounter,
+		parallelListing:             true,
+		cpkInfo:                     cpkInfo,
+		cpkScopeInfo:                cpkScopeInfo,
+	}
 
 	if strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning())) == "true" {
 		// TODO log to frontend log that parallel listing was disabled, once the frontend log PR is merged

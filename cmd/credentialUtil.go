@@ -251,6 +251,24 @@ func getBlobFSCredentialType(ctx context.Context, blobResourceURL string, standa
 	}
 }
 
+// Default Encryption Algorithm Supported
+const EncryptionAlgorithmAES256 string = "AES256"
+
+func getCPKInfo() (common.CpkInfo, error) {
+	encryptionKey := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CPKEncryptionKey())
+	encryptionKeySha256 := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CPKEncryptionKeySha256())
+	encryptionAlgorithmAES256 := EncryptionAlgorithmAES256
+	if encryptionKey == "" || encryptionKeySha256 == "" {
+		return common.CpkInfo{}, errors.New("failed to fetch cpk encryption key or hash")
+	}
+	return common.CpkInfo{
+		EncryptionKey:       &encryptionKey,
+		EncryptionKeySha256: &encryptionKeySha256,
+		EncryptionAlgorithm: &encryptionAlgorithmAES256,
+	}, nil
+
+}
+
 var announceOAuthTokenOnce sync.Once
 
 func oAuthTokenExists() (oauthTokenExists bool) {

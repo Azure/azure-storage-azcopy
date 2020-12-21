@@ -145,7 +145,8 @@ type rawCopyCmdArgs struct {
 	// whether to include blobs that have metadata 'hdi_isfolder = true'
 	includeDirectoryStubs bool
 
-	clientProvidedKeyByName string
+	clientProvidedKeyByName  string
+	clientProvidedKeyByValue bool
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -500,8 +501,22 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 	cooked.includeDirectoryStubs = raw.includeDirectoryStubs
+
+	// Setting CPK-N
 	if raw.clientProvidedKeyByName != "" {
-		cooked.cpkScopeInfo = common.CpkScopeInfo{EncryptionScope: raw.clientProvidedKeyByName}
+		if raw.clientProvidedKeyByValue {
+			return cooked, errors.New("cannot use both cpk-by-name and cpk-by-value at the same time")
+		}
+		cooked.cpkScopeInfo = common.CpkScopeInfo{EncryptionScope: &raw.clientProvidedKeyByName}
+	}
+
+	// Setting CPK-V
+	if raw.clientProvidedKeyByValue {
+		//  CPK-V values taken in as environment variables because they are secrets
+		cooked.cpkInfo, err = getCPKInfo()
+		if err != nil {
+			return cooked, err
+		}
 	}
 
 	if cooked.fromTo.To() != common.ELocation.Blob() && raw.blobTags != "" {
@@ -999,6 +1014,7 @@ type cookedCopyCmdArgs struct {
 	// whether to include blobs that have metadata 'hdi_isfolder = true'
 	includeDirectoryStubs bool
 	cpkScopeInfo          common.CpkScopeInfo
+	cpkInfo               common.CpkInfo
 }
 
 func (cca *cookedCopyCmdArgs) isRedirection() bool {
@@ -1076,11 +1092,8 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	// step 3: start download
 	blobURL := azblob.NewBlobURL(*u, p)
-	encryptionScope := cca.cpkScopeInfo.EncryptionScope
-	cpkOption := azblob.ClientProvidedKeyOptions{
-		EncryptionScope: &encryptionScope,
-	}
-	blobStream, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, cpkOption)
+	cpkOptions := common.ToClientProvidedKeyOptions(cca.cpkInfo, cca.cpkScopeInfo)
+	blobStream, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, cpkOptions)
 	if err != nil {
 		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
 	}
@@ -1187,6 +1200,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			ContentLanguage:          cca.contentLanguage,
 			ContentDisposition:       cca.contentDisposition,
 			CacheControl:             cca.cacheControl,
+			CpkInfo:                  cca.cpkInfo,
 			CpkScopeInfo:             cca.cpkScopeInfo,
 			BlockBlobTier:            cca.blockBlobTier,
 			PageBlobTier:             cca.pageBlobTier,
@@ -1710,6 +1724,7 @@ func init() {
 	// Including the encryption key on the request provides granular control over encryption settings for Blob storage operations.
 	// Customer-provided keys can be stored in Azure Key Vault or in another key store.
 	cpCmd.PersistentFlags().StringVar(&raw.clientProvidedKeyByName, "cpk-by-name", "", "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data")
+	cpCmd.PersistentFlags().BoolVar(&raw.clientProvidedKeyByValue, "cpk-by-value", false, "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key and its hash will be fetched from environment variables")
 	// permanently hidden
 	// Hide the list-of-files flag since it is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().MarkHidden("list-of-files")

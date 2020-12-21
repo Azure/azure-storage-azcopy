@@ -79,7 +79,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 	}
 
 	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
-	encryptionScope := jptm.CpkScopeInfo().EncryptionScope
+	cpkOptions := common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
 
 	return &appendBlobSenderBase{
 		jptm:                   jptm,
@@ -90,7 +90,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 		headersToApply:         props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply:        props.SrcMetadata.ToAzBlobMetadata(),
 		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
-		cpkOptions:             azblob.ClientProvidedKeyOptions{EncryptionScope: &encryptionScope},
+		cpkOptions:             cpkOptions,
 		soleChunkFuncSemaphore: semaphore.NewWeighted(1)}, nil
 }
 

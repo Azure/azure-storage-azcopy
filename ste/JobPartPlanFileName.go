@@ -164,6 +164,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	//	}*/
 	//}
 
+	cpkInfoStr, _ := order.BlobAttributes.CpkInfo.Marshal()
 	cpkScopeInfoStr, _ := order.BlobAttributes.CpkScopeInfo.Marshal()
 
 	// Initialize the Job Part's Plan header
@@ -201,6 +202,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			MetadataLength:           uint16(len(order.BlobAttributes.Metadata)),
 			BlockSize:                blockSize,
 			BlobTagsLength:           uint16(len(order.BlobAttributes.BlobTagsString)),
+			CpkInfoLength:            uint16(len(cpkInfoStr)),
 			CpkScopeInfoLength:       uint16(len(cpkScopeInfoStr)),
 		},
 		DstLocalData: JobPartPlanDstLocal{
@@ -231,6 +233,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	copy(jpph.DstBlobData.CacheControl[:], order.BlobAttributes.CacheControl)
 	copy(jpph.DstBlobData.Metadata[:], order.BlobAttributes.Metadata)
 	copy(jpph.DstBlobData.BlobTags[:], order.BlobAttributes.BlobTagsString)
+	copy(jpph.DstBlobData.CpkInfo[:], cpkInfoStr)
 	copy(jpph.DstBlobData.CpkScopeInfo[:], cpkScopeInfoStr)
 
 	eof += writeValue(file, &jpph)

@@ -268,6 +268,9 @@ type JobPartPlanDstBlob struct {
 	// Specifies the cache control of the blob
 	CacheControl [CustomHeaderMaxBytes]byte
 
+	CpkInfo       [CustomHeaderMaxBytes]byte
+	CpkInfoLength uint16
+
 	CpkScopeInfo       [CustomHeaderMaxBytes]byte
 	CpkScopeInfoLength uint16
 
