@@ -270,7 +270,7 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, false, func(common.EntityType) {}, cca.listOfVersionIDs, common.CpkInfo{}, common.CpkScopeInfo{})
+	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, false, func(common.EntityType) {}, cca.listOfVersionIDs, cca.cpkInfo, cca.cpkScopeInfo)
 
 	if err != nil {
 		return false
