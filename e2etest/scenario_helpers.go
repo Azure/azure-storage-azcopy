@@ -374,7 +374,7 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 			if blobInfo.BlobTags != nil {
 				blobTagsMap := common.BlobTags{}
 				for _, blobTag := range blobInfo.BlobTags.BlobTagSet {
-					blobTagsMap[url.QueryEscape(blobTag.Key)] = url.QueryEscape(blobTag.Value)
+					blobTagsMap[blobTag.Key] = blobTag.Value
 				}
 				props.blobTags = blobTagsMap
 			}
