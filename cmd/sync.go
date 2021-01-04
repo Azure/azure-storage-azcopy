@@ -65,6 +65,8 @@ type rawSyncCmdArgs struct {
 	deleteDestination string
 
 	s2sPreserveAccessTier bool
+	// Opt-in flag to preserve the blob index tags during service to service transfer.
+	s2sPreserveBlobTags bool
 
 	forceIfReadOnly bool
 }
@@ -225,6 +227,16 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		cooked.preserveAccessTier = raw.s2sPreserveAccessTier
 	}
 
+	// Check if user has provided `s2s-preserve-blob-tags` flag.
+	// If yes, we have to ensure that both source and destination must be blob storages.
+	if raw.s2sPreserveBlobTags {
+		if cooked.fromTo.From() != common.ELocation.Blob() || cooked.fromTo.To() != common.ELocation.Blob() {
+			return cooked, fmt.Errorf("either source or destination is not a blob storage. blob index tags is a property of blobs only therefore both source and destination must be blob storage")
+		} else {
+			cooked.s2sPreserveBlobTags = raw.s2sPreserveBlobTags
+		}
+	}
+
 	return cooked, nil
 }
 
@@ -297,6 +309,8 @@ type cookedSyncCmdArgs struct {
 	deleteDestination common.DeleteDestination
 
 	preserveAccessTier bool
+	// To specify whether user wants to preserve the blob index tags during service to service transfer.
+	s2sPreserveBlobTags bool
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -637,6 +651,7 @@ func init() {
 	syncCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true, "Preserve access tier during service to service copy. "+
 		"Please refer to [Azure Blob storage: hot, cool, and archive access tiers](https://docs.microsoft.com/azure/storage/blobs/storage-blob-storage-tiers) to ensure destination storage account supports setting access tier. "+
 		"In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false to bypass copying access tier. (default true). ")
+	syncCmd.PersistentFlags().BoolVar(&raw.s2sPreserveBlobTags, "s2s-preserve-blob-tags", false, "Preserve index tags during service to service sync from one blob storage to another")
 
 	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
 	syncCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")

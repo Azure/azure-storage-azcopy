@@ -112,7 +112,7 @@ func (t *blobTraverser) getBlobTags(requestID *string, ifTags *string) (common.B
 	}
 
 	for _, blobTag := range blobGetTagsResp.BlobTagSet {
-		blobTagsMap[blobTag.Key] = blobTag.Value
+		blobTagsMap[url.QueryEscape(blobTag.Key)] = url.QueryEscape(blobTag.Value)
 	}
 	return blobTagsMap, nil
 }
@@ -236,7 +236,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 				if t.s2sPreserveSourceTags && blobInfo.BlobTags != nil {
 					blobTagsMap := common.BlobTags{}
 					for _, blobTag := range blobInfo.BlobTags.BlobTagSet {
-						blobTagsMap[blobTag.Key] = blobTag.Value
+						blobTagsMap[url.QueryEscape(blobTag.Key)] = url.QueryEscape(blobTag.Value)
 					}
 					storedObject.blobTags = blobTagsMap
 				}
@@ -307,7 +307,7 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 		// Passing tags = true in the list call will save additional GetTags call
 		// TODO optimize for the case where recursive is off
 		listBlob, err := containerURL.ListBlobsFlatSegment(t.ctx, marker,
-			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix + extraSearchPrefix, Details: azblob.BlobListingDetails{Metadata: true, Tags: true}})
+			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix + extraSearchPrefix, Details: azblob.BlobListingDetails{Metadata: true, Tags: t.s2sPreserveSourceTags}})
 		if err != nil {
 			return fmt.Errorf("cannot list blobs. Failed with error %s", err.Error())
 		}
@@ -331,7 +331,7 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 			if t.s2sPreserveSourceTags && blobInfo.BlobTags != nil {
 				blobTagsMap := common.BlobTags{}
 				for _, blobTag := range blobInfo.BlobTags.BlobTagSet {
-					blobTagsMap[blobTag.Key] = blobTag.Value
+					blobTagsMap[url.QueryEscape(blobTag.Key)] = url.QueryEscape(blobTag.Value)
 				}
 				storedObject.blobTags = blobTagsMap
 			}
