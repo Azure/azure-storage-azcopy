@@ -349,14 +349,8 @@ func (s *scenario) validateMetadata(expected, actual map[string]string) {
 func (s *scenario) validateBlobTags(expected, actual common.BlobTags) {
 	s.a.Assert(len(expected), equals(), len(actual), "Both should have same number of tags")
 	for k, v := range expected {
-		exKey, err := url.QueryUnescape(k)
-		if err != nil {
-			s.a.Failed()
-		}
-		exValue, err := url.QueryUnescape(v)
-		if err != nil {
-			s.a.Failed()
-		}
+		exKey := url.QueryEscape(k)
+		exValue := url.QueryEscape(v)
 
 		actualValue, ok := actual[exKey]
 		s.a.Assert(ok, equals(), true, fmt.Sprintf("expect key '%s' to be found in destination metadata", exKey))

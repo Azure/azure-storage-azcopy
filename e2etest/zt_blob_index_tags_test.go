@@ -47,7 +47,6 @@ func TestTags_SetTagsSingleBlob(t *testing.T) {
 }
 
 func TestTags_SetTagsSpecialCharactersSingleBlob(t *testing.T) {
-	blobTagsStr := "bla_bla=foo%2b-foo&bla%2fbla%2f2=bar"
 	RunScenarios(
 		t,
 		eOperation.Copy(),
@@ -55,14 +54,14 @@ func TestTags_SetTagsSpecialCharactersSingleBlob(t *testing.T) {
 		eValidate.AutoPlusContent(),
 		params{
 			recursive: true,
-			blobTags:  blobTagsStr,
+			blobTags:  "bla_bla=foo%2b-foo&bla%2fbla%2f2=bar",
 		},
 		nil,
 		testFiles{
 			defaultSize: "1M",
 			shouldTransfer: []interface{}{
 				//folder("", ),
-				f("file1.txt", with{blobTags: blobTagsStr}),
+				f("file1.txt", with{blobTags: "bla_bla=foo+-foo&bla/bla/2=bar"}),
 			},
 		})
 }
