@@ -51,7 +51,6 @@ type blobTraverser struct {
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
 
-	// When user pro
 	s2sPreserveSourceTags bool
 }
 
@@ -98,7 +97,7 @@ func (t *blobTraverser) getPropertiesIfSingleBlob() (props *azblob.BlobGetProper
 	return nil, false, false, err
 }
 
-func (t *blobTraverser) getBlobTags(requestID *string, snapshot *string, versionID *string, ifTags *string) (common.BlobTags, error) {
+func (t *blobTraverser) getBlobTags(requestID *string, ifTags *string) (common.BlobTags, error) {
 	// trim away the trailing slash before we check whether it's a single blob
 	// so that we can detect the directory stub in case there is one
 	blobUrlParts := azblob.NewBlobURLParts(*t.rawURL)
@@ -107,7 +106,7 @@ func (t *blobTraverser) getBlobTags(requestID *string, snapshot *string, version
 	// perform the check
 	blobURL := azblob.NewBlobURL(blobUrlParts.URL(), t.p)
 	blobTagsMap := make(common.BlobTags)
-	blobGetTagsResp, err := blobURL.GetTags(t.ctx, nil, requestID, snapshot, versionID, ifTags)
+	blobGetTagsResp, err := blobURL.GetTags(t.ctx, nil, requestID, nil, nil, ifTags)
 	if err != nil {
 		return blobTagsMap, err
 	}
@@ -158,9 +157,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		)
 
 		if t.s2sPreserveSourceTags {
-			blobTagsMap := common.BlobTags{}
-			versionId := blobProperties.VersionID()
-			blobTagsMap, err = t.getBlobTags(nil, nil, &versionId, nil)
+			blobTagsMap, err := t.getBlobTags(nil, nil)
 			if err != nil {
 				panic("Couldn't fetch blob tags due to error: " + err.Error())
 			}
@@ -215,7 +212,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 		currentDirPath := dir.(string)
 		for marker := (azblob.Marker{}); marker.NotDone(); {
 			lResp, err := containerURL.ListBlobsHierarchySegment(t.ctx, marker, "/", azblob.ListBlobsSegmentOptions{Prefix: currentDirPath,
-				Details: azblob.BlobListingDetails{Metadata: true, Tags: true}})
+				Details: azblob.BlobListingDetails{Metadata: true, Tags: t.s2sPreserveSourceTags}})
 			if err != nil {
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
