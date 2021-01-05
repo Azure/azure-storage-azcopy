@@ -25,6 +25,7 @@ import (
 	"testing"
 )
 
+// ================================  Copy: Setting Tags ========================================================
 func TestTags_SetTagsSingleBlob(t *testing.T) {
 	blobTagsStr := "foo=bar&blah=bazz"
 	RunScenarios(
@@ -89,8 +90,8 @@ func TestTags_SetTagsMultipleBlobs(t *testing.T) {
 		})
 }
 
+// ================================  Copy: Preserve Tags ========================================================
 func TestTags_PreserveTagsSingleBlob(t *testing.T) {
-	blobTagsStr := "foo/-foo=bar:bar&baz=blah&YeAr=2020"
 	RunScenarios(
 		t,
 		eOperation.Copy(),
@@ -105,7 +106,8 @@ func TestTags_PreserveTagsSingleBlob(t *testing.T) {
 			defaultSize: "1M",
 			shouldTransfer: []interface{}{
 				//folder("", ),
-				f("file1.txt", with{blobTags: blobTagsStr}),
+				f("file1.txt", with{blobTags: "foo/-foo=bar:bar&baz=blah&YeAr=2020"}),
+				f("file2.txt", with{blobTags: "very long string with 127 characters to check the maximum limit of key very long string with 127 characters to check the maxi=very long string with 250 characters to check the maximum limit of val very long string with 250 characters to check the maximum limit of val very long string with 250 characters to check the maximum limit of val very long string with 250 character"}),
 			},
 		})
 }
@@ -170,6 +172,33 @@ func TestTags_PreserveTagsSpecialCharactersMultipleBlobs(t *testing.T) {
 				folder("fdlr1"),
 				f("file1.txt", with{blobTags: "bla_bla=foo+-foo&bla/ :bla/2=bar"}),
 				f("fdlr1/file2.txt", with{blobTags: "foo/-foo=bar:bar&baz=blah&YeAr=2020"}),
+			},
+		})
+}
+
+// ================================  Sync: Preserve Tags ========================================================
+func TestTags_PreserveTagsSpecialCharactersDuringSync(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.BlobBlob()),
+		eValidate.AutoPlusContent(),
+		params{
+			recursive:           true,
+			s2sPreserveBlobTags: true,
+		},
+		nil,
+		testFiles{
+			defaultSize: "1M",
+			shouldTransfer: []interface{}{
+				folder(""),
+				folder("fdlr1"),
+				f("file1.txt", with{blobTags: "bla_bla=foo+-foo&bla/ :bla/2=bar"}),
+				f("fdlr1/file2.txt", with{blobTags: "very long string with 127 characters to check the maximum limit of key very long string with 127 characters to check the maxi=very long string with 250 characters to check the maximum limit of val very long string with 250 characters to check the maximum limit of val very long string with 250 characters to check the maximum limit of val very long string with 250 character"}),
+				folder("fdlr2"),
+				f("fdlr2/file2.cpp", with{blobTags: "123+234-345=321+432-543"}),
+				f("fdlr2/file2.exe", with{blobTags: "++--..//::=____"}),
+				f("fdlr2/file2.pdf", with{blobTags: "a=b&c=d&e=f&g=h&i=j&a1=b1&c1=d1&e1=f1&g1=h1&i1=j1"}),
 			},
 		})
 }
