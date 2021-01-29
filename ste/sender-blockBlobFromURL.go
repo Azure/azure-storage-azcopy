@@ -194,7 +194,7 @@ func (c *urlToBlockBlobCopier) generateStartCopyBlobFromURL(id common.ChunkID, b
 		}
 
 		_, err := c.destBlockBlobURL.CopyFromURL(ctxWithLatestServiceVersion, c.srcURL, c.metadataToApply,
-			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil)
+			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil, azblob.DefaultAccessTier, nil)
 
 		if err != nil {
 			c.jptm.FailActiveSend("Copy Blob from URL", err)
