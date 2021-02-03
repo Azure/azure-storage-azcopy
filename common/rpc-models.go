@@ -188,8 +188,9 @@ type BlobTransferAttributes struct {
 	PreserveLastModifiedTime bool                  // when downloading, tell engine to set file's timestamp to timestamp of blob
 	PutMd5                   bool                  // when uploading, should we create and PUT Content-MD5 hashes
 	MD5ValidationOption      HashValidationOption  // when downloading, how strictly should we validate MD5 hashes?
-	BlockSizeInBytes         uint32                // when uploading/downloading/copying, specify the size of each chunk
+	BlockSizeInBytes         int64                 // when uploading/downloading/copying, specify the size of each chunk
 	DeleteSnapshotsOption    DeleteSnapshotsOption // when deleting, specify what to do with the snapshots
+	BlobTagsString           string
 }
 
 type JobIDDetails struct {

@@ -4,13 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
+	"log"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -43,7 +45,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// On S2S transfers the following rules apply:
 	// If preserve properties is enabled, but get properties in backend is disabled, turn it on
 	// If source change validation is enabled on files to remote, turn it on (consider a separate flag entirely?)
-	getRemoteProperties := (cca.fromTo.From() == common.ELocation.File() && !cca.fromTo.To().IsRemote()) || // If download, we still need LMT and MD5 from files.
+	getRemoteProperties := cca.forceWrite == common.EOverwriteOption.IfSourceNewer() ||
+		(cca.fromTo.From() == common.ELocation.File() && !cca.fromTo.To().IsRemote()) || // If download, we still need LMT and MD5 from files.
 		(cca.fromTo.From() == common.ELocation.File() && cca.fromTo.To().IsRemote() && (cca.s2sSourceChangeValidation || cca.includeAfter != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise if we are using includeAfter, which requires LMTs.
 		(cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() && cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
 	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
@@ -51,7 +54,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.DestLengthValidation = cca.CheckLength
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
 
-	traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, cca.includeDirectoryStubs, func(common.EntityType) {})
+	traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, cca.includeDirectoryStubs, func(common.EntityType) {}, cca.listOfVersionIDs)
 
 	if err != nil {
 		return nil, err
@@ -65,7 +68,9 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// Check if the destination is a directory so we can correctly decide where our files land
 	isDestDir := cca.isDestDirectory(cca.destination, &ctx)
-
+	if cca.listOfVersionIDs != nil && (!(cca.fromTo == common.EFromTo.BlobLocal() || cca.fromTo == common.EFromTo.BlobTrash()) || isSourceDir || !isDestDir) {
+		log.Fatalf("Either source is not a blob or destination is not a local folder")
+	}
 	srcLevel, err := determineLocationLevel(cca.source.Value, cca.fromTo.From(), true)
 
 	if err != nil {
@@ -234,12 +239,12 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			cca.s2sPreserveAccessTier,
 			jobPartOrder.Fpo,
 		)
+		transfer.BlobTags = cca.blobTags
 
 		if shouldSendToSte {
 			return addTransfer(&jobPartOrder, transfer, cca)
-		} else {
-			return nil
 		}
+		return nil
 	}
 	finalizer := func() error {
 		return dispatchFinalPart(&jobPartOrder, cca)
@@ -262,7 +267,7 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, false, func(common.EntityType) {})
+	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, false, func(common.EntityType) {}, cca.listOfVersionIDs)
 
 	if err != nil {
 		return false
@@ -274,6 +279,10 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 // Initialize the modular filters outside of copy to increase readability.
 func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 	filters := make([]objectFilter, 0) // same as []objectFilter{} under the hood
+
+	if cca.includeBefore != nil {
+		filters = append(filters, &includeBeforeDateFilter{threshold: *cca.includeBefore})
+	}
 
 	if cca.includeAfter != nil {
 		filters = append(filters, &includeAfterDateFilter{threshold: *cca.includeAfter})
@@ -501,7 +510,11 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 				// Our source points to a specific file (and so has no relative path)
 				// but our dest does not point to a specific file, it just points to a directory,
 				// and so relativePath needs the _name_ of the source.
-				relativePath = "/" + object.name
+				processedVID := ""
+				if len(object.blobVersionID) > 0 {
+					processedVID = strings.ReplaceAll(object.blobVersionID, ":", "-") + "-"
+				}
+				relativePath += "/" + processedVID + object.name
 			} else {
 				relativePath = ""
 			}
@@ -527,14 +540,14 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 		rootDir := filepath.Base(cca.source.Value)
 
 		/* In windows, when a user tries to copy whole volume (eg. D:\),  the upload destination
-		will contains "//"" in the files/directories names because of rootDir = "\" prefix. 
+		will contains "//"" in the files/directories names because of rootDir = "\" prefix.
 		(e.g. D:\file.txt will end up as //file.txt).
 		Following code will get volume name from source and add volume name as prefix in rootDir
 		*/
 		if runtime.GOOS == "windows" && rootDir == `\` {
 			rootDir = filepath.VolumeName(common.ToShortPath(cca.source.Value))
 		}
-		
+
 		if cca.fromTo.From().IsRemote() {
 			ueRootDir, err := url.PathUnescape(rootDir)
 
@@ -542,7 +555,7 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 			if err == nil {
 				rootDir = ueRootDir
 			} else {
-				panic("unexpected un-escapeable rootDir name")
+				panic("unexpected inescapable rootDir name")
 			}
 		}
 
@@ -575,7 +588,7 @@ func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir b
 	isRemoveFromFolderAware := fromTo == common.EFromTo.FileTrash()
 	if bothFolderAware || isRemoveFromFolderAware {
 		if !recursive {
-			return common.EFolderPropertiesOption.NoFolders(), // does't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
+			return common.EFolderPropertiesOption.NoFolders(), // doesn't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
 				"Any empty folders will not be processed, because --recursive was not specified" +
 					getSuffix(false)
 		}
@@ -602,9 +615,8 @@ func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir b
 		message += getSuffix(true)
 		if stripTopDir {
 			return common.EFolderPropertiesOption.AllFoldersExceptRoot(), message
-		} else {
-			return common.EFolderPropertiesOption.AllFolders(), message
 		}
+		return common.EFolderPropertiesOption.AllFolders(), message
 	}
 
 	return common.EFolderPropertiesOption.NoFolders(),

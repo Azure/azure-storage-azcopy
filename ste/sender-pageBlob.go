@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -38,7 +39,7 @@ type pageBlobSenderBase struct {
 	jptm            IJobPartTransferMgr
 	destPageBlobURL azblob.PageBlobURL
 	srcSize         int64
-	chunkSize       uint32
+	chunkSize       int64
 	numChunks       uint32
 	pacer           pacer
 	// Headers and other info that we will apply to the destination
@@ -47,6 +48,7 @@ type pageBlobSenderBase struct {
 	// the properties of the local file
 	headersToApply  azblob.BlobHTTPHeaders
 	metadataToApply azblob.Metadata
+	blobTagsToApply azblob.BlobTagsMap
 	destBlobTier    azblob.AccessTierType
 	// filePacer is necessary because page blobs have per-blob throughput limits. The limits depend on
 	// what type of page blob it is (e.g. premium) and can be significantly lower than the blob account limit.
@@ -82,7 +84,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 	chunkSize := transferInfo.BlockSize
 	// If the given chunk Size for the Job is invalid for page blob or greater than maximum page size,
 	// then set chunkSize as maximum pageSize.
-	chunkSize = common.Iffuint32(
+	chunkSize = common.Iffint64(
 		chunkSize > common.DefaultPageBlobChunkSize || (chunkSize%azblob.PageBlobPageBytes != 0),
 		common.DefaultPageBlobChunkSize,
 		chunkSize)
@@ -127,6 +129,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 		pacer:                  pacer,
 		headersToApply:         props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply:        props.SrcMetadata.ToAzBlobMetadata(),
+		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
 		destBlobTier:           destBlobTier,
 		filePacer:              newNullAutoPacer(), // defer creation of real one to Prologue
 		destPageRangeOptimizer: destRangeOptimizer,
@@ -161,7 +164,7 @@ func (s *pageBlobSenderBase) SendableEntityType() common.EntityType {
 	return common.EEntityType.File()
 }
 
-func (s *pageBlobSenderBase) ChunkSize() uint32 {
+func (s *pageBlobSenderBase) ChunkSize() int64 {
 	return s.chunkSize
 }
 
@@ -172,6 +175,8 @@ func (s *pageBlobSenderBase) NumChunks() uint32 {
 func (s *pageBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
 	return remoteObjectExists(s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}))
 }
+
+var premiumPageBlobTierRegex = regexp.MustCompile(`P\d+`)
 
 func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
 
@@ -220,10 +225,21 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		destinationModified = true
 	}
 
-	if ps.CanInferContentType() {
+	if s.jptm.ShouldInferContentType() {
 		// sometimes, specifically when reading local files, we have more info
 		// about the file type at this time than what we had before
 		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
+	}
+
+	destBlobTier := azblob.PremiumPageBlobAccessTierType(s.destBlobTier)
+	if !ValidateTier(s.jptm, s.destBlobTier, s.destPageBlobURL.BlobURL, s.jptm.Context()) {
+		destBlobTier = azblob.DefaultPremiumBlobAccessTier
+	}
+
+	blobTags := s.blobTagsToApply
+	separateSetTagsRequired := separateSetTagsRequired(blobTags)
+	if separateSetTagsRequired || len(blobTags) == 0 {
+		blobTags = nil
 	}
 
 	if _, err := s.destPageBlobURL.Create(s.jptm.Context(),
@@ -231,31 +247,16 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		0,
 		s.headersToApply,
 		s.metadataToApply,
-		azblob.BlobAccessConditions{}); err != nil {
+		azblob.BlobAccessConditions{},
+		destBlobTier,
+		blobTags); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}
 
-	// Set tier, https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
-	if s.destBlobTier != azblob.AccessTierNone {
-		// Ensure destBlobTier is not block blob tier, i.e. not Hot, Cool and Archive.
-		// Note: When copying from page blob source, the inferred blob tier could be Hot.
-		var blockBlobTier common.BlockBlobTier
-		if err := blockBlobTier.Parse(string(s.destBlobTier)); err != nil { // i.e it's not block blob tier
-			// Set the latest service version from sdk as service version in the context.
-			ctxWithLatestServiceVersion := context.WithValue(s.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-			if _, err := s.destPageBlobURL.SetTier(ctxWithLatestServiceVersion, s.destBlobTier, azblob.LeaseAccessConditions{}); err != nil {
-				if s.jptm.Info().S2SSrcBlobTier != azblob.AccessTierNone {
-					s.jptm.LogTransferInfo(pipeline.LogError, s.jptm.Info().Source, s.jptm.Info().Destination, "Failed to replicate blob tier at destination. Try transferring with the flag --s2s-preserve-access-tier=false")
-					s2sAccessTierFailureLogStdout.Do(func() {
-						glcm := common.GetLifecycleMgr()
-						glcm.Error("One or more blobs have failed blob tier replication at the destination. Try transferring with the flag --s2s-preserve-access-tier=false")
-					})
-				}
-
-				s.jptm.FailActiveSendWithStatus("Setting PageBlob tier ", err, common.ETransferStatus.BlobTierFailure())
-				return
-			}
+	if separateSetTagsRequired {
+		if _, err := s.destPageBlobURL.SetTags(s.jptm.Context(), nil, nil, nil, nil, nil, nil, s.blobTagsToApply); err != nil {
+			s.jptm.Log(pipeline.LogWarning, err.Error())
 		}
 	}
 

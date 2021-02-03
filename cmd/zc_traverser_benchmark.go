@@ -28,17 +28,19 @@ import (
 type benchmarkTraverser struct {
 	fileCount                   uint
 	bytesPerFile                int64
+	numOfFolders                uint
 	incrementEnumerationCounter enumerationCounterFunc
 }
 
 func newBenchmarkTraverser(source string, incrementEnumerationCounter enumerationCounterFunc) (*benchmarkTraverser, error) {
-	fc, bpf, err := benchmarkSourceHelper{}.FromUrl(source)
+	fc, bpf, nf, err := benchmarkSourceHelper{}.FromUrl(source)
 	if err != nil {
 		return nil, err
 	}
 	return &benchmarkTraverser{
 			fileCount:                   fc,
 			bytesPerFile:                bpf,
+			numOfFolders:                nf,
 			incrementEnumerationCounter: incrementEnumerationCounter},
 		nil
 }
@@ -69,6 +71,11 @@ func (t *benchmarkTraverser) traverse(preprocessor objectMorpher, processor obje
 		name := t.toReversedString(i) // this gives an even distribution through the namespace (compare the starting characters, for 0 to 199, when reversed or not). This is useful for performance when High Throughput Block Blob pathway does not apply
 		relativePath := name
 
+		if t.numOfFolders > 0 {
+			assignedFolder := t.toReversedString(i % t.numOfFolders)
+			relativePath = assignedFolder + common.AZCOPY_PATH_SEPARATOR_STRING + relativePath
+		}
+
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
@@ -84,6 +91,7 @@ func (t *benchmarkTraverser) traverse(preprocessor objectMorpher, processor obje
 			noBlobProps,
 			noMetdata,
 			""), processor)
+		_, err = getProcessingError(err)
 		if err != nil {
 			return err
 		}

@@ -49,11 +49,26 @@ func fixSlashes(s string, loc common.Location) string {
 	return s
 }
 
+func (Validator) ValidateRemoveTransfer(c asserter, isSrcEncoded bool, isDstEncoded bool,
+	sourcePrefix string, destinationPrefix string, expectedTransfers []*testObject, actualTransfers []common.TransferDetail, statusToTest common.TransferStatus) {
+	// TODO: Think of how to validate files in case of remove
+}
 func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool, isDstEncoded bool,
 	sourcePrefix string, destinationPrefix string, expectedTransfers []*testObject, actualTransfers []common.TransferDetail, statusToTest common.TransferStatus) {
 
 	sourcePrefix = makeSlashesComparable(sourcePrefix)
 	destinationPrefix = makeSlashesComparable(destinationPrefix)
+	snapshotID := ""
+	if isSrcEncoded {
+		// i.e. source is a URL
+		srcPrefixURL, err := url.Parse(sourcePrefix)
+		if err == nil {
+			snapshotID = srcPrefixURL.Query().Get("sharesnapshot")
+			if snapshotID != "" {
+				sourcePrefix = strings.TrimSuffix(sourcePrefix, "?sharesnapshot="+snapshotID)
+			}
+		}
+	}
 
 	// validate that the right number of transfers were scheduled
 	c.Assert(len(actualTransfers), equals(), len(expectedTransfers),
@@ -74,6 +89,11 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 		}
 	})
 	for _, transfer := range actualTransfers {
+		if snapshotID != "" {
+			c.Assert(strings.Contains(transfer.Src, snapshotID), equals(), true)
+			transfer.Src = strings.TrimSuffix(transfer.Src, "?sharesnapshot="+snapshotID)
+		}
+
 		srcRelativeFilePath := strings.Trim(strings.TrimPrefix(makeSlashesComparable(transfer.Src), sourcePrefix), "/")
 		dstRelativeFilePath := strings.Trim(strings.TrimPrefix(makeSlashesComparable(transfer.Dst), destinationPrefix), "/")
 
@@ -83,7 +103,7 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 			if runtime.GOOS == "windows" {
 				// Decode unsafe dst characters on windows
 				pathParts := strings.Split(dstRelativeFilePath, "/")
-				invalidChars := `<>\/:"|?*` + string(0x00)
+				invalidChars := `<>\/:"|?*` + string(rune(0x00))
 
 				for _, c := range strings.Split(invalidChars, "") {
 					for k, p := range pathParts {

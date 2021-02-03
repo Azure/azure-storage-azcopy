@@ -16,6 +16,7 @@ from test_blobfs_upload_SAS import *
 from test_autodetect_blob_type import *
 from test_file_sync import *
 from test_file_copy import *
+from test_clfsload import *
 import glob, os
 import configparser
 import platform
@@ -81,9 +82,6 @@ def parse_config_file_set_env():
     os.environ['FILESYSTEM_URL'] = config['CREDENTIALS']['FILESYSTEM_URL']
     os.environ['FILESYSTEM_SAS_URL'] = config['CREDENTIALS']['FILESYSTEM_SAS_URL']
 
-    # set the env var OAuth token info
-    os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = config['CREDENTIALS']['AZCOPY_OAUTH_TOKEN_INFO']
-
     # set env var for service-2-service copy source blob account
     os.environ['S2S_SRC_BLOB_ACCOUNT_SAS_URL'] = config['CREDENTIALS']['S2S_SRC_BLOB_ACCOUNT_SAS_URL']
 
@@ -126,7 +124,6 @@ def init():
             check_env_not_exist('SHARE_SAS_URL') or check_env_not_exist('PREMIUM_CONTAINER_SAS_URL') or \
             check_env_not_exist('FILESYSTEM_URL') or check_env_not_exist('FILESYSTEM_SAS_URL') or \
             check_env_not_exist('ACCOUNT_NAME') or check_env_not_exist('ACCOUNT_KEY') or \
-            check_env_not_exist('AZCOPY_OAUTH_TOKEN_INFO') or \
             check_env_not_exist('S2S_SRC_BLOB_ACCOUNT_SAS_URL') or check_env_not_exist('S2S_DST_BLOB_ACCOUNT_SAS_URL') \
             or check_env_not_exist('S2S_SRC_FILE_ACCOUNT_SAS_URL') or check_env_not_exist('S2S_SRC_S3_SERVICE_URL'):
         parse_config_file_set_env()
@@ -179,7 +176,6 @@ def init():
 
     get_env_logged("OAUTH_AAD_ENDPOINT")
     # don't log, it will just get redacted by DevOps logging system: get_env_logged("OAUTH_TENANT_ID")
-    # do not log AZCOPY_OAUTH_TOKEN_INFO
 
     get_env_logged("S3_TESTS_OFF")
 
@@ -207,7 +203,8 @@ def main():
     print("Smoke tests starting...")
     init()
 
-    test_class_to_run = [BlobPipingTests,
+    test_class_to_run = [LoadUserScenario,
+                         BlobPipingTests,
                          File_Service_2_Service_Copy_User_Scenario,
                          Blob_Sync_User_Scenario,
                          File_Sync_User_Scenario,

@@ -74,9 +74,11 @@ type rawCopyCmdArgs struct {
 	excludePath           string
 	includeFileAttributes string
 	excludeFileAttributes string
+	includeBefore         string
 	includeAfter          string
 	legacyInclude         string // used only for warnings
 	legacyExclude         string // used only for warnings
+	listOfVersionIDs      string
 
 	// filters from flags
 	listOfFilesToCopy string
@@ -102,6 +104,8 @@ type rawCopyCmdArgs struct {
 	md5ValidationOption      string
 	CheckLength              bool
 	deleteSnapshotsOption    string
+
+	blobTags string
 	// defines the type of the blob at the destination in case of upload / account to account copy
 	blobType      string
 	blockBlobTier string
@@ -112,11 +116,11 @@ type rawCopyCmdArgs struct {
 	excludeBlobType string
 	// Opt-in flag to persist SMB ACLs to Azure Files.
 	preserveSMBPermissions bool
-	preserveOwner          bool // works in conjunction with perserveSmbPermissions
+	preserveOwner          bool // works in conjunction with preserveSmbPermissions
 	// Opt-in flag to persist additional SMB properties to Azure Files. Named ...info instead of ...properties
 	// because the latter was similar enough to preserveSMBPermissions to induce user error
 	preserveSMBInfo bool
-	// Flag to enable Window's special priviledges
+	// Flag to enable Window's special privileges
 	backupMode bool
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
 	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
@@ -162,13 +166,13 @@ func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []strin
 // to use fractions of a MiB. E.g.
 // 0.25 = 256 KiB
 // 0.015625 = 16 KiB
-func blockSizeInBytes(rawBlockSizeInMiB float64) (uint32, error) {
+func blockSizeInBytes(rawBlockSizeInMiB float64) (int64, error) {
 	if rawBlockSizeInMiB < 0 {
 		return 0, errors.New("negative block size not allowed")
 	}
 	rawSizeInBytes := rawBlockSizeInMiB * 1024 * 1024 // internally we use bytes, but users' convenience the command line uses MiB
-	if rawSizeInBytes > math.MaxUint32 {
-		return 0, errors.New("block size too big for uint32")
+	if rawSizeInBytes > math.MaxInt64 {
+		return 0, errors.New("block size too big for int64")
 	}
 	const epsilon = 0.001 // arbitrarily using a tolerance of 1000th of a byte
 	_, frac := math.Modf(rawSizeInBytes)
@@ -176,7 +180,7 @@ func blockSizeInBytes(rawBlockSizeInMiB float64) (uint32, error) {
 	if !isWholeNumber {
 		return 0, fmt.Errorf("while fractional numbers of MiB are allowed as the block size, the fraction must result to a whole number of bytes. %.12f MiB resolves to %.3f bytes", rawBlockSizeInMiB, rawSizeInBytes)
 	}
-	return uint32(math.Round(rawSizeInBytes)), nil
+	return int64(math.Round(rawSizeInBytes)), nil
 }
 
 // validates and transform raw input into cooked input
@@ -204,7 +208,7 @@ func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Lo
 			return
 		}
 
-		// Return immediately here because we know this'll be safe.
+		// Return immediately here because we know this will be safe.
 		return
 	}
 
@@ -241,7 +245,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	tempDest := raw.dst
 
 	if strings.EqualFold(tempDest, common.Dev_Null) && runtime.GOOS == "windows" {
-		tempDest = common.Dev_Null // map all capitalizations of "NUL"/"nul" to one because (on Windows) they all mean the same thing
+		tempDest = common.Dev_Null // map all capitalization of "NUL"/"nul" to one because (on Windows) they all mean the same thing
 	}
 
 	// Check if source has a trailing wildcard on a URL
@@ -426,6 +430,16 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		cooked.listOfFilesChannel = listChan
 	}
 
+	if raw.includeBefore != "" {
+		// must set chooseEarliest = false, so that if there's an ambiguous local date, the latest will be returned
+		// (since that's safest for includeBefore.  Better to choose the later time and do more work, than the earlier one and fail to pick up a changed file
+		parsedIncludeBefore, err := includeBeforeDateFilter{}.ParseISO8601(raw.includeBefore, false)
+		if err != nil {
+			return cooked, err
+		}
+		cooked.includeBefore = &parsedIncludeBefore
+	}
+
 	if raw.includeAfter != "" {
 		// must set chooseEarliest = true, so that if there's an ambiguous local date, the earliest will be returned
 		// (since that's safest for includeAfter.  Better to choose the earlier time and do more work, than the later one and fail to pick up a changed file
@@ -434,6 +448,45 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 			return cooked, err
 		}
 		cooked.includeAfter = &parsedIncludeAfter
+	}
+
+	versionsChan := make(chan string)
+	var filePtr *os.File
+	// Get file path from user which would contain list of all versionIDs
+	// Process the file line by line and then prepare a list of all version ids of the blob.
+	if raw.listOfVersionIDs != "" {
+		filePtr, err = os.Open(raw.listOfVersionIDs)
+		if err != nil {
+			return cooked, fmt.Errorf("cannot open %s file passed with the list-of-versions flag", raw.listOfVersionIDs)
+		}
+	}
+
+	go func() {
+		defer close(versionsChan)
+		addToChannel := func(v string) {
+			if len(v) > 0 {
+				versionsChan <- v
+			}
+		}
+
+		if filePtr != nil {
+			scanner := bufio.NewScanner(filePtr)
+			checkBOM := false
+			for scanner.Scan() {
+				v := scanner.Text()
+
+				if !checkBOM {
+					v = strings.TrimPrefix(v, utf8BOM)
+					checkBOM = true
+				}
+
+				addToChannel(v)
+			}
+		}
+	}()
+
+	if raw.listOfVersionIDs != "" {
+		cooked.listOfVersionIDs = versionsChan
 	}
 
 	cooked.metadata = raw.metadata
@@ -445,6 +498,16 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 	cooked.includeDirectoryStubs = raw.includeDirectoryStubs
+
+	if cooked.fromTo.To() != common.ELocation.Blob() && raw.blobTags != "" {
+		return cooked, errors.New("blob tags can only be set when transferring to blob storage")
+	}
+	blobTags := common.ToCommonBlobTagsMap(raw.blobTags)
+	err = validateBlobTagsKeyValue(blobTags)
+	if err != nil {
+		return cooked, err
+	}
+	cooked.blobTags = blobTags
 
 	// Make sure the given input is the one of the enums given by the blob SDK
 	err = cooked.deleteSnapshotsOption.Parse(raw.deleteSnapshotsOption)
@@ -608,11 +671,11 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		if cooked.blobType != common.EBlobType.Detect() && cooked.fromTo.To() != common.ELocation.Blob() {
 			return cooked, fmt.Errorf("blob-type is not supported for the scenario (%s)", cooked.fromTo.String())
 		}
-		// Disabling blob tier override, when copying block -> block blob or page -> page blob, blob tier will be kept,
-		// For s3 and file, only hot block blob tier is supported.
-		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
-			cooked.pageBlobTier != common.EPageBlobTier.None() {
-			return cooked, fmt.Errorf("blob-tier is not supported while copying from service to service")
+
+		// Setting blob tier is supported only when destination is a blob storage. Disabling it for all the other transfer scenarios.
+		if (cooked.blockBlobTier != common.EBlockBlobTier.None() || cooked.pageBlobTier != common.EPageBlobTier.None()) &&
+			cooked.fromTo.To() != common.ELocation.Blob() {
+			return cooked, fmt.Errorf("blob-tier is not supported for the scenario (%s)", cooked.fromTo.String())
 		}
 		if cooked.noGuessMimeType {
 			return cooked, fmt.Errorf("no-guess-mime-type is not supported while copying from service to service")
@@ -637,7 +700,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 
 	// If the user has provided some input with excludeBlobType flag, parse the input.
 	if len(raw.excludeBlobType) > 0 {
-		// Split the string using delimeter ';' and parse the individual blobType
+		// Split the string using delimiter ';' and parse the individual blobType
 		blobTypes := strings.Split(raw.excludeBlobType, ";")
 		for _, blobType := range blobTypes {
 			var eBlobType common.BlobType
@@ -755,6 +818,11 @@ func validateBackupMode(backupMode bool, fromTo common.FromTo) error {
 }
 
 func validatePutMd5(putMd5 bool, fromTo common.FromTo) error {
+	// In case of S2S transfers, log info message to inform the users that MD5 check doesn't work for S2S Transfers.
+	// This is because we cannot calculate MD5 hash of the data stored at a remote locations.
+	if putMd5 && fromTo.IsS2S() {
+		glcm.Info(" --put-md5 flag to check data consistency between source and destination is not applicable for S2S Transfers (i.e. When both the source and the destination are remote). AzCopy cannot compute MD5 hash of data stored at remote location.")
+	}
 	if putMd5 && !fromTo.IsUpload() {
 		return fmt.Errorf("put-md5 is set but the job is not an upload")
 	}
@@ -765,6 +833,53 @@ func validateMd5Option(option common.HashValidationOption, fromTo common.FromTo)
 	hasMd5Validation := option != common.DefaultHashValidationOption
 	if hasMd5Validation && !fromTo.IsDownload() {
 		return fmt.Errorf("check-md5 is set but the job is not a download")
+	}
+	return nil
+}
+
+// Valid tag key and value characters include:
+// 1. Lowercase and uppercase letters (a-z, A-Z)
+// 2. Digits (0-9)
+// 3. A space ( )
+// 4. Plus (+), minus (-), period (.), solidus (/), colon (:), equals (=), and underscore (_)
+func isValidBlobTagsKeyValue(keyVal string) bool {
+	for _, c := range keyVal {
+		if !((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == ' ' || c == '+' ||
+			c == '-' || c == '.' || c == '/' || c == ':' || c == '=' || c == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+// ValidateBlobTagsKeyValue
+// The tag set may contain at most 10 tags. Tag keys and values are case sensitive.
+// Tag keys must be between 1 and 128 characters, and tag values must be between 0 and 256 characters.
+func validateBlobTagsKeyValue(bt common.BlobTags) error {
+	if len(bt) > 10 {
+		return errors.New("at-most 10 tags can be associated with a blob")
+	}
+	for k, v := range bt {
+		key, err := url.QueryUnescape(k)
+		if err != nil {
+			return err
+		}
+		value, err := url.QueryUnescape(v)
+		if err != nil {
+			return err
+		}
+
+		if key == "" || len(key) > 128 || len(value) > 256 {
+			return errors.New("tag keys must be between 1 and 128 characters, and tag values must be between 0 and 256 characters")
+		}
+
+		if !isValidBlobTagsKeyValue(key) {
+			return errors.New("incorrect character set used in key: " + k)
+		}
+
+		if !isValidBlobTagsKeyValue(value) {
+			return errors.New("incorrect character set used in value: " + v)
+		}
 	}
 	return nil
 }
@@ -784,8 +899,11 @@ type cookedCopyCmdArgs struct {
 	excludePathPatterns   []string
 	includeFileAttributes []string
 	excludeFileAttributes []string
+	includeBefore         *time.Time
 	includeAfter          *time.Time
 
+	// list of version ids
+	listOfVersionIDs chan string
 	// filters from flags
 	listOfFilesChannel chan string // Channels are nullable.
 	recursive          bool
@@ -796,10 +914,13 @@ type cookedCopyCmdArgs struct {
 	autoDecompress     bool
 
 	// options from flags
-	blockSize uint32
+	blockSize int64
 	// list of blobTypes to exclude while enumerating the transfer
-	excludeBlobType          []azblob.BlobType
-	blobType                 common.BlobType
+	excludeBlobType []azblob.BlobType
+	blobType        common.BlobType
+	// Blob index tags categorize data in your storage account utilizing key-value tag attributes.
+	// These tags are automatically indexed and exposed as a queryable multi-dimensional index to easily find data.
+	blobTags                 common.BlobTags
 	blockBlobTier            common.BlockBlobTier
 	pageBlobTier             common.PageBlobTier
 	metadata                 string
@@ -840,7 +961,7 @@ type cookedCopyCmdArgs struct {
 
 	// Whether the user wants to preserve the SMB ACLs assigned to their files when moving between resources that are SMB ACL aware.
 	preserveSMBPermissions common.PreservePermissionsOption
-	// Whether the user wants to perserve the SMB properties ...
+	// Whether the user wants to preserve the SMB properties ...
 	preserveSMBInfo bool
 
 	// Whether to enable Windows special privileges
@@ -926,8 +1047,17 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 		return fmt.Errorf("fatal: cannot write to Stdout due to error: %s", err.Error())
 	}
 
+	// The isPublic flag is useful in S2S transfers but doesn't much matter for download. Fortunately, no S2S happens here.
+	// This means that if there's auth, there's auth. We're happy and can move on.
+	// getCredentialInfoForLocation also populates oauth token fields... so, it's very easy.
+	credInfo, _, err := getCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, true)
+
+	if err != nil {
+		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
+	}
+
 	// step 1: initialize pipeline
-	p, err := createBlobPipeline(ctx, common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+	p, err := createBlobPipeline(ctx, credInfo)
 	if err != nil {
 		return err
 	}
@@ -957,7 +1087,7 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	return nil
 }
 
-func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.ResourceString, blockSize uint32) error {
+func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.ResourceString, blockSize int64) error {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// if no block size is set, then use default value
@@ -965,8 +1095,15 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 		blockSize = pipingDefaultBlockSize
 	}
 
+	// getCredentialInfoForLocation populates oauth token fields... so, it's very easy.
+	credInfo, _, err := getCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, false)
+
+	if err != nil {
+		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
+	}
+
 	// step 0: initialize pipeline
-	p, err := createBlobPipeline(ctx, common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+	p, err := createBlobPipeline(ctx, credInfo)
 	if err != nil {
 		return err
 	}
@@ -1048,6 +1185,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			PutMd5:                   cca.putMd5,
 			MD5ValidationOption:      cca.md5ValidationOption,
 			DeleteSnapshotsOption:    cca.deleteSnapshotsOption,
+			BlobTagsString:           cca.blobTags.ToString(),
 		},
 		CommandString:  cca.commandString,
 		CredentialInfo: cca.credentialInfo,
@@ -1398,7 +1536,7 @@ func getPerfDisplayText(perfDiagnosticStrings []string, constraint common.PerfCo
 		perfString = "[States: " + strings.Join(perfDiagnosticStrings, ", ") + "], "
 	}
 
-	haveBeenRunningLongEnoughToStabilize := durationOfJob.Seconds() > 30                                    // this duration is an arbitrary guestimate
+	haveBeenRunningLongEnoughToStabilize := durationOfJob.Seconds() > 30                                    // this duration is an arbitrary guesstimate
 	if constraint != common.EPerfConstraint.Unknown() && haveBeenRunningLongEnoughToStabilize && !isBench { // don't display when benchmarking, because we got some spurious slow "disk" constraint reports there - which would be confusing given there is no disk in release 1 of benchmarking
 		diskString = fmt.Sprintf(" (%s may be limiting speed)", constraint)
 	} else {
@@ -1421,7 +1559,7 @@ func isStdinPipeIn() (bool, error) {
 	// if the stdin is a named pipe, then we assume there will be data on the stdin
 	// the reason for this assumption is that we do not know when will the data come in
 	// it could come in right away, or come in 10 minutes later
-	return info.Mode()&os.ModeNamedPipe != 0, nil
+	return info.Mode()&(os.ModeNamedPipe|os.ModeSocket) != 0, nil
 }
 
 // TODO check file size, max is 4.75TB
@@ -1438,16 +1576,28 @@ func init() {
 		Example:    copyCmdExample,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 { // redirection
-				if stdinPipeIn, err := isStdinPipeIn(); stdinPipeIn == true {
+				// Enforce the usage of from-to flag when pipes are involved
+				if raw.fromTo == "" {
+					return fmt.Errorf("fatal: from-to argument required, PipeBlob (upload) or BlobPipe (download) is acceptable")
+				}
+				var userFromTo common.FromTo
+				err := userFromTo.Parse(raw.fromTo)
+				if err != nil || (userFromTo != common.EFromTo.PipeBlob() && userFromTo != common.EFromTo.BlobPipe()) {
+					return fmt.Errorf("fatal: invalid from-to argument passed: %s", raw.fromTo)
+				}
+
+				if userFromTo == common.EFromTo.PipeBlob() {
+					// Case 1: PipeBlob. Check for the std input pipe
+					stdinPipeIn, err := isStdinPipeIn()
+					if stdinPipeIn == false || err != nil {
+						return fmt.Errorf("fatal: failed to read from Stdin due to error: %s", err)
+					}
 					raw.src = pipeLocation
 					raw.dst = args[0]
 				} else {
-					if err != nil {
-						return fmt.Errorf("fatal: failed to read from Stdin due to error: %s", err)
-					} else {
-						raw.src = args[0]
-						raw.dst = pipeLocation
-					}
+					// Case 2: BlobPipe. In this case if pipe is missing, content will be echoed on the terminal
+					raw.src = args[0]
+					raw.dst = pipeLocation
 				}
 			} else if len(args) == 2 { // normal copy
 				raw.src = args[0]
@@ -1484,7 +1634,8 @@ func init() {
 
 	// filters change which files get transferred
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "Follow symbolic links when uploading from local file system.")
-	cpCmd.PersistentFlags().StringVar(&raw.includeAfter, common.IncludeAfterFlagName, "", "Include only those files modified on or after the given date/time. The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. As at AzCopy 10.5, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
+	cpCmd.PersistentFlags().StringVar(&raw.includeBefore, common.IncludeBeforeFlagName, "", "Include only those files modified before or on the given date/time. The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. As of AzCopy 10.7, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
+	cpCmd.PersistentFlags().StringVar(&raw.includeAfter, common.IncludeAfterFlagName, "", "Include only those files modified on or after the given date/time. The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. As of AzCopy 10.5, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
 	cpCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only these files when copying. "+
 		"This option supports wildcard characters (*). Separate files by using a ';'.")
 	cpCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "Include only these paths when copying. "+
@@ -1497,14 +1648,14 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.forceWrite, "overwrite", "true", "Overwrite the conflicting files and blobs at the destination if this flag is set to true. (default 'true') Possible values include 'true', 'false', 'prompt', and 'ifSourceNewer'. For destinations that support folders, conflicting folder-level properties will be overwritten this flag is 'true' or if a positive response is provided to the prompt.")
 	cpCmd.PersistentFlags().BoolVar(&raw.autoDecompress, "decompress", false, "Automatically decompress files when downloading, if their content-encoding indicates that they are compressed. The supported content-encoding values are 'gzip' and 'deflate'. File extensions of '.gz'/'.gzip' or '.zz' aren't necessary, but will be removed if present.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Look into sub-directories recursively when uploading from local file system.")
-	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS.")
+	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS. Piping: BlobPipe, PipeBlob")
 	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "", "Optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from the container "+
 		"or the account. Use of this flag is not applicable for copying data from non azure-service to service. More than one blob should be separated by ';'. ")
 	// options change how the transfers are performed
 	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage, and downloading from Azure Storage. The default value is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "Define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default 'INFO').")
 	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "Defines the type of blob at the destination. This is used for uploading blobs and when copying between accounts (default 'Detect'). Valid values include 'Detect', 'BlockBlob', 'PageBlob', and 'AppendBlob'. "+
-		"When copying between accounts, a value of 'Detect' causes AzCopy to use the type of source blob to determine the type of the destination blob. When uploading a file, 'Detect' determines if the file is a VHD or a VHDX file based on the file extension. If the file is ether a VHD or VHDX file, AzCopy treats the file as a page blob.")
+		"When copying between accounts, a value of 'Detect' causes AzCopy to use the type of source blob to determine the type of the destination blob. When uploading a file, 'Detect' determines if the file is a VHD or a VHDX file based on the file extension. If the file is either a VHD or VHDX file, AzCopy treats the file as a page blob.")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "Upload page blob to Azure Storage using this blob tier. (default 'None').")
 	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Upload to Azure Storage with these key-value pairs as metadata.")
@@ -1532,7 +1683,8 @@ func init() {
 		"In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false to bypass copying access tier. (default true). ")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sSourceChangeValidation, "s2s-detect-source-changed", false, "Detect if the source file/blob changes while it is being read. (This parameter only applies to service to service copies, because the corresponding check is permanently enabled for uploads and downloads.)")
 	cpCmd.PersistentFlags().StringVar(&raw.s2sInvalidMetadataHandleOption, "s2s-handle-invalid-metadata", common.DefaultInvalidMetadataHandleOption.String(), "Specifies how invalid metadata keys are handled. Available options: ExcludeIfInvalid, FailIfInvalid, RenameIfInvalid. (default 'ExcludeIfInvalid').")
-
+	cpCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-versions", "", "Specifies a file where each version id is listed on a separate line. Ensure that the source must point to a single blob and all the version ids specified in the file using this flag must belong to the source blob only. AzCopy will download the specified versions in the destination folder provided.")
+	cpCmd.PersistentFlags().StringVar(&raw.blobTags, "blob-tags", "", "Set tags on blobs to categorize data in your storage account")
 	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
 	// right before transferring in ste(backend).
 	// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),

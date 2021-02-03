@@ -197,7 +197,7 @@ func getMainPoolSize(numOfCPUs int, requestAutoTune bool) (initial int, max *Con
 	if requestAutoTune {
 		initialValue = 4 // deliberately start with a small initial value if we are auto-tuning.  If it's not small enough, then the auto tuning becomes
 		// sluggish since, every time it needs to tune downwards, it needs to let a lot of data (num connections * block size) get transmitted,
-		// and that is slow over very small links, e.g. 10 Mbps, and produces noticable time lag when downsizing the connection count.
+		// and that is slow over very small links, e.g. 10 Mbps, and produces noticeable time lag when downsizing the connection count.
 		// So we start small. (The alternatives, of using small chunk sizes or small file sizes just for the first 200 MB or so, were too hard to orchestrate within the existing app architecture)
 	} else if numOfCPUs <= 4 {
 		// fix the concurrency value for smaller machines

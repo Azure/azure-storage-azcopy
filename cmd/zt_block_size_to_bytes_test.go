@@ -32,7 +32,7 @@ func (s *genericFilterSuite) TestConversions(c *chk.C) {
 
 	testData := []struct {
 		floatMiB         float64
-		expectedBytes    uint32
+		expectedBytes    int64
 		expectedErrorMsg string
 	}{
 		{100, 100 * 1024 * 1024, ""},

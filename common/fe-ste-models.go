@@ -617,14 +617,15 @@ func (TransferStatus) NotStarted() TransferStatus { return TransferStatus(0) }
 
 // TODO confirm whether this is actually needed
 //   Outdated:
-//     Transfer started & at least 1 chunk has successfully been transfered.
+//     Transfer started & at least 1 chunk has successfully been transferred.
 //     Used to resume a transfer that started to avoid transferring all chunks thereby improving performance
+// Update(Jul 2020): This represents the state of transfer as soon as the file is scheduled.
 func (TransferStatus) Started() TransferStatus { return TransferStatus(1) }
 
 // Transfer successfully completed
 func (TransferStatus) Success() TransferStatus { return TransferStatus(2) }
 
-// Transfer failed due to some error. This status does represent the state when transfer is cancelled
+// Transfer failed due to some error.
 func (TransferStatus) Failed() TransferStatus { return TransferStatus(-1) }
 
 // Transfer failed due to failure while Setting blob tier.
@@ -633,6 +634,10 @@ func (TransferStatus) BlobTierFailure() TransferStatus { return TransferStatus(-
 func (TransferStatus) SkippedEntityAlreadyExists() TransferStatus { return TransferStatus(-3) }
 
 func (TransferStatus) SkippedBlobHasSnapshots() TransferStatus { return TransferStatus(-4) }
+
+func (TransferStatus) TierAvailabilityCheckFailure() TransferStatus { return TransferStatus(-5) }
+
+func (TransferStatus) Cancelled() TransferStatus { return TransferStatus(-6) }
 
 func (ts TransferStatus) ShouldTransfer() bool {
 	return ts == ETransferStatus.NotStarted() || ts == ETransferStatus.Started()
@@ -680,9 +685,8 @@ type BlockBlobTier uint8
 
 func (BlockBlobTier) None() BlockBlobTier    { return BlockBlobTier(0) }
 func (BlockBlobTier) Hot() BlockBlobTier     { return BlockBlobTier(1) }
-func (BlockBlobTier) Cold() BlockBlobTier    { return BlockBlobTier(2) } // TODO: not sure why cold is here.
-func (BlockBlobTier) Cool() BlockBlobTier    { return BlockBlobTier(3) }
-func (BlockBlobTier) Archive() BlockBlobTier { return BlockBlobTier(4) }
+func (BlockBlobTier) Cool() BlockBlobTier    { return BlockBlobTier(2) }
+func (BlockBlobTier) Archive() BlockBlobTier { return BlockBlobTier(3) }
 
 func (bbt BlockBlobTier) String() string {
 	return enum.StringInt(bbt, reflect.TypeOf(bbt))
@@ -880,12 +884,14 @@ func (i *InvalidMetadataHandleOption) UnmarshalJSON(b []byte) error {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const (
-	DefaultBlockBlobBlockSize = 8 * 1024 * 1024
-	MaxBlockBlobBlockSize     = 100 * 1024 * 1024
-	MaxAppendBlobBlockSize    = 4 * 1024 * 1024
-	DefaultPageBlobChunkSize  = 4 * 1024 * 1024
-	DefaultAzureFileChunkSize = 4 * 1024 * 1024
-	MaxNumberOfBlocksPerBlob  = 50000
+	DefaultBlockBlobBlockSize      = 8 * 1024 * 1024
+	MaxBlockBlobBlockSize          = 4000 * 1024 * 1024
+	MaxAppendBlobBlockSize         = 4 * 1024 * 1024
+	DefaultPageBlobChunkSize       = 4 * 1024 * 1024
+	DefaultAzureFileChunkSize      = 4 * 1024 * 1024
+	MaxNumberOfBlocksPerBlob       = 50000
+	BlockSizeThreshold             = 256 * 1024 * 1024
+	MinParallelChunkCountThreshold = 4 /* minimum number of chunks in parallel for AzCopy to be performant. */
 )
 
 // This struct represent a single transfer entry with source and destination details
@@ -907,8 +913,11 @@ type CopyTransfer struct {
 	Metadata           Metadata
 
 	// Properties for S2S blob copy
-	BlobType azblob.BlobType
-	BlobTier azblob.AccessTierType
+	BlobType      azblob.BlobType
+	BlobTier      azblob.AccessTierType
+	BlobVersionID string
+	// Blob index tags categorize data in your storage account utilizing key-value tag attributes
+	BlobTags BlobTags
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -961,7 +970,7 @@ func UnMarshalToCommonMetadata(metadataString string) (Metadata, error) {
 
 // isValidMetadataKey checks if the given string is a valid metadata key for Azure.
 // For Azure, metadata key must adhere to the naming rules for C# identifiers.
-// As testing, reserved keyworkds for C# identifiers are also valid metadata key. (e.g. this, int)
+// As testing, reserved keywords for C# identifiers are also valid metadata key. (e.g. this, int)
 // TODO: consider to use "[A-Za-z_]\w*" to replace this implementation, after ensuring the complexity is O(N).
 func isValidMetadataKey(key string) bool {
 	for i := 0; i < len(key); i++ {
@@ -1008,6 +1017,40 @@ func (m Metadata) ExcludeInvalidKey() (retainedMetadata Metadata, excludedMetada
 	}
 
 	return
+}
+
+// BlobTags is a map of key-value pair
+type BlobTags map[string]string
+
+// ToAzBlobTagsMap converts BlobTagsMap to azblob's BlobTagsMap
+func (bt BlobTags) ToAzBlobTagsMap() azblob.BlobTagsMap {
+	return azblob.BlobTagsMap(bt)
+}
+
+// FromAzBlobTagsMapToCommonBlobTags converts azblob's BlobTagsMap to common BlobTags
+func FromAzBlobTagsMapToCommonBlobTags(azbt azblob.BlobTagsMap) BlobTags {
+	return BlobTags(azbt)
+}
+
+func (bt BlobTags) ToString() string {
+	lst := make([]string, 0)
+	for k, v := range bt {
+		lst = append(lst, k+"="+v)
+	}
+	return strings.Join(lst, "&")
+}
+
+func ToCommonBlobTagsMap(blobTagsString string) BlobTags {
+	if blobTagsString == "" {
+		return nil
+	}
+
+	blobTagsMap := BlobTags{}
+	for _, keyAndValue := range strings.Split(blobTagsString, "&") { // key/value pairs are separated by '&'
+		kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+		blobTagsMap[kv[0]] = kv[1]
+	}
+	return blobTagsMap
 }
 
 const metadataRenamedKeyPrefix = "rename_"

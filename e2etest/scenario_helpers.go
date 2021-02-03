@@ -24,6 +24,7 @@ package e2etest
 
 import (
 	"context"
+	"crypto/md5"
 	"fmt"
 	"io/ioutil"
 	"net/url"
@@ -110,9 +111,19 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, dirPath string, f
 			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
 			//			//   by local files. E.g. not contentHeaders or metadata).
 		} else {
-			_, err = s.generateLocalFile(
+			sourceData, err := s.generateLocalFile(
 				filepath.Join(dirPath, file.name),
 				file.creationProperties.sizeBytes(c, defaultSize))
+			contentMD5 := md5.Sum(sourceData)
+			if file.creationProperties.contentHeaders == nil {
+				file.creationProperties.contentHeaders = &contentHeaders{}
+			}
+			file.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+
+			//if file.verificationProperties.contentHeaders == nil {
+			//	file.verificationProperties.contentHeaders = &contentHeaders{}
+			//}
+			//file.verificationProperties.contentHeaders.contentMD5 = contentMD5[:]
 			c.AssertNoErr(err)
 			//TODO: nakulkar-msft you'll need to set up things like attributes, and other relevant things from
 			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
@@ -135,21 +146,14 @@ func (s scenarioHelper) enumerateLocalProperties(a asserter, dirpath string) map
 		size := info.Size()
 		lastWriteTime := info.ModTime()
 		var pCreationTime *time.Time
-		var pSmbAttributes *string
+		var pSmbAttributes *uint32
 		var pSmbPermissionsSddl *string
 		if runtime.GOOS == "windows" {
 			var creationTime time.Time
 			lastWriteTime, creationTime = osScenarioHelper{}.getFileDates(a, fullpath)
 			pCreationTime = &creationTime
-			// TODO: nakulkar-msft the osScenarioHelper methods here will need to be implemented before
-			//   attribute preservation can be tested. The easiest way to implement them will be to rely on existing AzCopy code
-			//   similar to what getFileDates does (see a few lines above)
-			/*
-				smbAttributes := osScenarioHelper{}.getSmbAttributes(a, fullpath)
-				pSmbAttributes = &smbAttributes
-				smbPermissionsSddl := osScenarioHelper{}.getSmbSddl(a, fullPath)
-				pSmbPermissionsSddl = &smbPermissionsSddl
-			*/
+			pSmbAttributes = osScenarioHelper{}.getFileAttrs(a, fullpath)
+			pSmbPermissionsSddl = osScenarioHelper{}.getFileSDDLString(a, fullpath)
 		}
 		props := objectProperties{
 			isFolder:           info.IsDir(),
@@ -311,11 +315,24 @@ func (scenarioHelper) generateBlobsFromList(c asserter, containerURL azblob.Cont
 		}
 		ad := blobResourceAdapter{b}
 		blob := containerURL.NewBlockBlobURL(b.name)
+		reader, sourceData := getRandomDataAndReader(b.creationProperties.sizeBytes(c, defaultSize))
+		contentMD5 := md5.Sum(sourceData)
+		if b.creationProperties.contentHeaders == nil {
+			b.creationProperties.contentHeaders = &contentHeaders{}
+		}
+		b.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+
+		//if b.verificationProperties.contentHeaders == nil {
+		//	b.verificationProperties.contentHeaders = &contentHeaders{}
+		//}
+		//b.verificationProperties.contentHeaders.contentMD5 = contentMD5[:]
+		headers := ad.toHeaders()
+		headers.ContentMD5 = contentMD5[:]
 		cResp, err := blob.Upload(ctx,
-			common.NewRandomDataGenerator(int64(b.creationProperties.sizeBytes(c, defaultSize))),
-			ad.toHeaders(),
+			reader,
+			headers,
 			ad.toMetadata(),
-			azblob.BlobAccessConditions{})
+			azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil)
 		c.AssertNoErr(err)
 		c.Assert(cResp.StatusCode(), equals(), 201)
 	}
@@ -367,6 +384,32 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 	return result
 }
 
+func (s scenarioHelper) downloadBlobContent(a asserter, containerURL azblob.ContainerURL, resourceRelPath string) []byte {
+	blobURL := containerURL.NewBlobURL(resourceRelPath)
+	downloadResp, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
+	a.AssertNoErr(err)
+
+	retryReader := downloadResp.Body(azblob.RetryReaderOptions{})
+	defer retryReader.Close()
+
+	destData, err := ioutil.ReadAll(retryReader)
+	a.AssertNoErr(err)
+	return destData[:]
+
+	//for marker := (azblob.Marker{}); marker.NotDone(); {
+	//	listBlob, err := containerURL.ListBlobsFlatSegment(context.TO DO(), marker, azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true, Versions: true}})
+	//	a.AssertNoErr(err)
+	//
+	//	for _, blobInfo := range listBlob.Segment.BlobItems {
+	//		if relativePath == blobInfo.Name {
+	//
+	//		}
+	//	}
+	//}
+	//a.Error("Could not find the blob while listing blobs in container")
+	//return nil
+}
+
 func (scenarioHelper) generatePageBlobsFromList(c asserter, containerURL azblob.ContainerURL, blobList []string, data string) {
 	for _, blobName := range blobList {
 		//Create the blob (PUT blob)
@@ -379,6 +422,8 @@ func (scenarioHelper) generatePageBlobsFromList(c asserter, containerURL azblob.
 			},
 			azblob.Metadata{},
 			azblob.BlobAccessConditions{},
+			azblob.DefaultPremiumBlobAccessTier,
+			nil,
 		)
 		c.AssertNoErr(err)
 		c.Assert(cResp.StatusCode(), equals(), 201)
@@ -408,6 +453,7 @@ func (scenarioHelper) generateAppendBlobsFromList(c asserter, containerURL azblo
 			},
 			azblob.Metadata{},
 			azblob.BlobAccessConditions{},
+			nil,
 		)
 		c.AssertNoErr(err)
 		c.Assert(cResp.StatusCode(), equals(), 201)
@@ -428,12 +474,9 @@ func (scenarioHelper) generateAppendBlobsFromList(c asserter, containerURL azblo
 func (scenarioHelper) generateBlockBlobWithAccessTier(c asserter, containerURL azblob.ContainerURL, blobName string, accessTier azblob.AccessTierType) {
 	blob := containerURL.NewBlockBlobURL(blobName)
 	cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
-		nil, azblob.BlobAccessConditions{})
+		nil, azblob.BlobAccessConditions{}, accessTier, nil)
 	c.AssertNoErr(err)
 	c.Assert(cResp.StatusCode(), equals(), 201)
-
-	_, err = blob.SetTier(ctx, accessTier, azblob.LeaseAccessConditions{})
-	c.AssertNoErr(err)
 }
 
 // create the demanded objects
@@ -528,9 +571,28 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, shareURL azfile.Sha
 			generateParentsForAzureFile(c, file)
 
 			// create the file itself
-			cResp, err := file.Create(ctx, int64(f.creationProperties.sizeBytes(c, defaultSize)), ad.toHeaders(), ad.toMetadata())
+			fileSize := int64(f.creationProperties.sizeBytes(c, defaultSize))
+			contentR, contentD := getRandomDataAndReader(int(fileSize))
+			contentMD5 := md5.Sum(contentD)
+			if f.creationProperties.contentHeaders == nil {
+				f.creationProperties.contentHeaders = &contentHeaders{}
+			}
+			f.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+
+			//if f.verificationProperties.contentHeaders == nil {
+			//	f.verificationProperties.contentHeaders = &contentHeaders{}
+			//}
+			//f.verificationProperties.contentHeaders.contentMD5 = contentMD5[:]
+			headers := ad.toHeaders()
+			headers.ContentMD5 = contentMD5[:]
+			cResp, err := file.Create(ctx, fileSize, headers, ad.toMetadata())
 			c.AssertNoErr(err)
 			c.Assert(cResp.StatusCode(), equals(), 201)
+
+			_, err = file.UploadRange(context.Background(), 0, contentR, nil)
+			if err == nil {
+				c.Failed()
+			}
 
 			// TODO: do we want to put some random content into it?
 		}
@@ -541,11 +603,99 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, shareURL azfile.Sha
 }
 
 func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile.ShareURL) map[string]*objectProperties {
+	var dirQ []azfile.DirectoryURL
+	result := make(map[string]*objectProperties)
 
-	//root := shareURL.NewRootDirectoryURL()
-	// TODO use root.ListFilesAndDirectoriesSegment()
-	// TODO: nakulkar-msft ?
-	return nil
+	root := shareURL.NewRootDirectoryURL()
+	dirQ = append(dirQ, root)
+	for i := 0; i < len(dirQ); i++ {
+		currentDirURL := dirQ[i]
+		for marker := (azfile.Marker{}); marker.NotDone(); {
+			lResp, err := currentDirURL.ListFilesAndDirectoriesSegment(context.TODO(), marker, azfile.ListFilesAndDirectoriesOptions{})
+			a.AssertNoErr(err)
+
+			// Process the files and folders we listed
+			for _, fileInfo := range lResp.FileItems {
+				fileURL := currentDirURL.NewFileURL(fileInfo.Name)
+				fProps, err := fileURL.GetProperties(context.TODO())
+				a.AssertNoErr(err)
+
+				// Construct the properties object
+				fileSize := fProps.ContentLength()
+				creationTime, err := time.Parse(azfile.ISO8601, fProps.FileCreationTime())
+				a.AssertNoErr(err)
+				lastWriteTime, err := time.Parse(azfile.ISO8601, fProps.FileLastWriteTime())
+				a.AssertNoErr(err)
+				contentHeader := fProps.NewHTTPHeaders()
+				h := contentHeaders{
+					cacheControl:       &contentHeader.CacheControl,
+					contentDisposition: &contentHeader.ContentDisposition,
+					contentEncoding:    &contentHeader.ContentEncoding,
+					contentLanguage:    &contentHeader.ContentLanguage,
+					contentType:        &contentHeader.ContentType,
+					contentMD5:         contentHeader.ContentMD5,
+				}
+				fileAttrs := uint32(azfile.ParseFileAttributeFlagsString(fProps.FileAttributes()))
+				filePermissions := fProps.FilePermissionKey()
+
+				props := objectProperties{
+					isFolder:           false, // no folders in Blob
+					size:               &fileSize,
+					nameValueMetadata:  fProps.NewMetadata(),
+					contentHeaders:     &h,
+					creationTime:       &creationTime,
+					lastWriteTime:      &lastWriteTime,
+					smbAttributes:      &fileAttrs,
+					smbPermissionsSddl: &filePermissions,
+				}
+
+				relativePath := lResp.DirectoryPath + "/"
+				if relativePath == "/" {
+					relativePath = ""
+				}
+				result[relativePath+fileInfo.Name] = &props
+			}
+
+			for _, dirInfo := range lResp.DirectoryItems {
+				dirURL := currentDirURL.NewDirectoryURL(dirInfo.Name)
+				dProps, err := dirURL.GetProperties(context.TODO())
+				a.AssertNoErr(err)
+
+				// Construct the properties object
+				creationTime, err := time.Parse(azfile.ISO8601, dProps.FileCreationTime())
+				a.AssertNoErr(err)
+				lastWriteTime, err := time.Parse(azfile.ISO8601, dProps.FileLastWriteTime())
+				a.AssertNoErr(err)
+
+				props := objectProperties{
+					isFolder:          true,
+					nameValueMetadata: dProps.NewMetadata(),
+					creationTime:      &creationTime,
+					lastWriteTime:     &lastWriteTime,
+				}
+
+				result[dirInfo.Name] = &props
+				dirQ = append(dirQ, dirURL)
+			}
+
+			marker = lResp.NextMarker
+		}
+	}
+
+	return result
+}
+
+func (s scenarioHelper) downloadFileContent(a asserter, shareURL azfile.ShareURL, resourceRelPath string) []byte {
+	fileURL := shareURL.NewRootDirectoryURL().NewFileURL(resourceRelPath)
+	downloadResp, err := fileURL.Download(ctx, 0, azfile.CountToEnd, false)
+	a.AssertNoErr(err)
+
+	retryReader := downloadResp.Body(azfile.RetryReaderOptions{})
+	defer retryReader.Close() // The client must close the response body when finished with it
+
+	destData, err := ioutil.ReadAll(retryReader)
+	downloadResp.Body(azfile.RetryReaderOptions{})
+	return destData
 }
 
 func (scenarioHelper) generateBFSPathsFromList(c asserter, filesystemURL azbfs.FileSystemURL, fileList []string) {

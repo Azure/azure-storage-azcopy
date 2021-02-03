@@ -86,7 +86,7 @@ func MainSTE(concurrency ConcurrencySettings, targetRateInMegaBitsPerSec float64
 		func(writer http.ResponseWriter, request *http.Request) {
 			//var payload common.ListRequest
 			//deserialize(request, &payload)
-			serialize(ListJobs( /*payload*/ ), writer)
+			serialize(ListJobs(common.EJobStatus.All()), writer)
 		})
 	http.HandleFunc(common.ERpcCmd.ListJobSummary().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
@@ -333,6 +333,9 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 	// Resume all the failed / In Progress Transfers.
 	case common.EJobStatus.InProgress(),
 		common.EJobStatus.Completed(),
+		common.EJobStatus.CompletedWithErrors(),
+		common.EJobStatus.CompletedWithSkipped(),
+		common.EJobStatus.CompletedWithErrorsAndSkipped(),
 		common.EJobStatus.Cancelled(),
 		common.EJobStatus.Paused():
 		//go func() {
@@ -451,6 +454,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 				js.TotalBytesTransferred += uint64(jppt.SourceSize)
 				js.TotalBytesExpected += uint64(jppt.SourceSize)
 			case common.ETransferStatus.Failed(),
+				common.ETransferStatus.TierAvailabilityCheckFailure(),
 				common.ETransferStatus.BlobTierFailure():
 				js.TransfersFailed++
 				// getting the source and destination for failed transfer at position - index
@@ -520,16 +524,12 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	}
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed
 	// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
-	if (js.CompleteJobOrdered) && (part0PlanStatus == common.EJobStatus.Completed()) {
+	if (js.CompleteJobOrdered) && (part0PlanStatus.IsJobDone()) {
 		js.JobStatus = part0PlanStatus
 	}
 
-	if js.JobStatus == common.EJobStatus.Completed() {
-		js.JobStatus = js.JobStatus.EnhanceJobStatusInfo(js.TransfersSkipped > 0, js.TransfersFailed > 0,
-			js.TransfersCompleted > 0)
-
+	if js.JobStatus.IsJobDone() {
 		js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped, part0.Plan().FromTo)
-
 	}
 
 	return js
@@ -606,7 +606,7 @@ func GetJobLCMWrapper(jobID common.JobID) common.LifecycleMgr {
 }
 
 // ListJobs returns the jobId of all the jobs existing in the current instance of azcopy
-func ListJobs() common.ListJobsResponse {
+func ListJobs(givenStatus common.JobStatus) common.ListJobsResponse {
 	// Resurrect all the Jobs from the existing JobPart Plan files
 	JobsAdmin.ResurrectJobParts()
 	// building the ListJobsResponse for sending response back to front-end
@@ -624,9 +624,11 @@ func ListJobs() common.ListJobsResponse {
 		if !found {
 			continue
 		}
-		listJobResponse.JobIDDetails = append(listJobResponse.JobIDDetails,
-			common.JobIDDetails{JobId: jobId, CommandString: jpm.Plan().CommandString(),
-				StartTime: jpm.Plan().StartTime, JobStatus: jpm.Plan().JobStatus()})
+		if givenStatus == common.EJobStatus.All() || givenStatus == jpm.Plan().JobStatus() {
+			listJobResponse.JobIDDetails = append(listJobResponse.JobIDDetails,
+				common.JobIDDetails{JobId: jobId, CommandString: jpm.Plan().CommandString(),
+					StartTime: jpm.Plan().StartTime, JobStatus: jpm.Plan().JobStatus()})
+		}
 
 		// Close the job part managers and the log.
 		jm.(*jobMgr).jobPartMgrs.Iterate(false, func(k common.PartNumber, v IJobPartMgr) {
@@ -651,7 +653,7 @@ func GetJobFromTo(r common.GetJobFromToRequest) common.GetJobFromToResponse {
 		jm, _ = JobsAdmin.JobMgr(r.JobID)
 	}
 
-	// Get zero'th part of the job part plan.
+	// Get zeroth part of the job part plan.
 	jp0, ok := jm.JobPartMgr(0)
 	if !ok {
 		return common.GetJobFromToResponse{

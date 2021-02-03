@@ -51,7 +51,7 @@ type S3BucketNameToAzureResourcesResolver struct {
 	// Considering this limitation and the REST API to get bucket info is in unsegmented pattern, we assume AzCopy can always get all the bucket name with one request easily.
 	bucketNameResolvingMap map[string]string
 
-	// collisionDetectionMap is acutally used as a set to save resolved new keys, to avoid new key collisions.
+	// collisionDetectionMap is actually used as a set to save resolved new keys, to avoid new key collisions.
 	collisionDetectionMap map[string]struct{}
 }
 
@@ -132,7 +132,7 @@ func (s3Resolver *S3BucketNameToAzureResourcesResolver) resolveNewBucketNameInte
 
 			// Found byte that doesn't indicate '-'
 			if consecutiveHyphenCount == 0 {
-				// current char is non '-', and no preceeding '-', directly write the char to buffer.
+				// current char is non '-', and no preceding '-', directly write the char to buffer.
 				buffer.WriteByte(charAtI)
 			} else if consecutiveHyphenCount == 1 {
 				buffer.WriteString("-")
@@ -167,7 +167,7 @@ func (s3Resolver *S3BucketNameToAzureResourcesResolver) resolveNewBucketNameInte
 	s3Resolver.collisionDetectionMap[resolvedName] = struct{}{}
 }
 
-// hasCollision checkes if the given name will cause collision to existing bucket names.
+// hasCollision checks if the given name will cause collision to existing bucket names.
 func (s3Resolver *S3BucketNameToAzureResourcesResolver) hasCollision(name string) bool {
 	_, hasCollisionToOrgNames := s3Resolver.bucketNameResolvingMap[name]
 	_, hasCollisionToNewNames := s3Resolver.collisionDetectionMap[name]

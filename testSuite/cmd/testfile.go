@@ -329,8 +329,10 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 	} else {
 		expectedContentType = http.DetectContentType(mmap)
 	}
+	expectedContentType = strings.Split(expectedContentType, ";")[0]
 	if !validateString(expectedContentType, get.ContentType()) {
-		fmt.Println("mismatch content type between actual and user given file content type")
+		str1 := fmt.Sprintf(" %s    %s", expectedContentType, get.ContentType())
+		fmt.Println(str1 + "mismatch content type between actual and user given file content type")
 		os.Exit(1)
 	}
 
@@ -367,7 +369,7 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 			fmt.Println("error getting the range list ", err.Error())
 			os.Exit(1)
 		}
-		if numberOfPages != (len(resp.Items)) {
+		if numberOfPages != (len(resp.Ranges)) {
 			fmt.Println("number of ranges uploaded is different from the number of expected to be uploaded")
 			os.Exit(1)
 		}

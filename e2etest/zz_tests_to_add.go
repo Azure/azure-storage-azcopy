@@ -23,13 +23,17 @@ package e2etest
 //     Need to hook it into build
 //     Need to gradually remove python tests, but only remove those that are covered by the new suite.
 //     Also need to remove the "unit" tests in cmd that actually hit the service. Probably they can all be covered by the new suite.
+//     What do we want to do about the recursive flag?  Just leave it how it is now, set to a specific value for each test?
+//        Or, do we want to have a feature where we can tell the framework to also run additional non-recursive scenarios?  We shouldn't have to write any more
+//        test code, because the framework could just automatically know "Oh, I'm doing the non-recursive case. Anything in "shouldTransfer" which
+//        is not at root level should be treated as if its in "shouldIgnore".
 //
 //  Framework gaps
 //		IMPORTANT Creating remote files more quickly (or at least in parallel). Right now, it takes too long to do the setup for tests with non-trivial file sizes
 //      Putting content in all our remote test files (done for blob, but not for others, and for some tests content is needed)
 //      Content preservation verification. Content preservation tests. Will need a way, in resourceManager, to ask it for some proof of what the content of a specific file is.
 //          Maybe a getSha256Hash method? (I'm suggesting that hashing type, since MD5 can misleading. Just downloading the MD5 from storage doesn't
-//          prove that the file has that content.  Using Sha256 makes it very clear that we need to download the blob and hash it oursleves)
+//          prove that the file has that content.  Using Sha256 makes it very clear that we need to download the blob and hash it ourselves)
 //  Less important framework gaps:
 //      Verifying the failure messages, from shouldFail are actually present in the log
 //      Responding to prompts, for testing overwrite.  Part of the implementation could come from chToStdin that is supported by the method that runs AzCopy.
@@ -49,7 +53,7 @@ package e2etest
 //          Whole-account-to-whole account (e.g. copy all containers, or all S3 buckets)
 //			Different auth types
 //		These suites:
-//  	  Overwrite  (how will we process the prompts? Just through t.execDebuggableWithOutput's afterstart parameter? Requires us to assume what the prompt will be, and that there will be only 1 prompt - so can only test teh "all" answers with this mechansim. But may be able to extend it.
+//  	  Overwrite  (how will we process the prompts? Just through t.execDebuggableWithOutput's afterstart parameter? Requires us to assume what the prompt will be, and that there will be only 1 prompt - so can only test the "all" answers with this mechanism. But may be able to extend it.
 //        Sync (special stuff that's unique to sync)
 //        Preserve names (special chars, escaping etc)
 //        Managed disks (our special case logic or uploading managed disks)
@@ -86,7 +90,7 @@ package e2etest
 /// 1. Make our own suite approach like testify does (where tests are methods rather than func) This is easy to implement, but because GoLand doesn't know about it, it becomes impossible to
 ///    invoke individual tests from the IDE.
 /// 2. Use normal "testing" style funcs but somehow group them automatically. Can't group automatiecally, because even tho we can get their names in a TestMain method (via
-///    a little relfection on the M parameter, we can't tell which file each one is defined it. We just get their name and their func object.  And we have no (easy) way
+///    a little reflection on the M parameter, we can't tell which file each one is defined it. We just get their name and their func object.  And we have no (easy) way
 ///    of doing symbol table lookups or similar to get the file for the func.
 ///
 /// SO we are just adopting the convention of including a prefix in the name, so that they sort sensible.  So we'll just have a two-level structure,

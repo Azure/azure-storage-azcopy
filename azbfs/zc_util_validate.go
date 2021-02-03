@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	// CountToEnd indiciates a flag for count parameter. It means the count of bytes
+	// CountToEnd indicates a flag for count parameter. It means the count of bytes
 	// from start offset to the end of file.
 	CountToEnd = 0
 )

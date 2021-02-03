@@ -6,6 +6,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -26,7 +27,7 @@ type IJobPartMgr interface {
 	Plan() *JobPartPlanHeader
 	ScheduleTransfers(jobCtx context.Context)
 	StartJobXfer(jptm IJobPartTransferMgr)
-	ReportTransferDone() uint32
+	ReportTransferDone(status common.TransferStatus) uint32
 	GetOverwriteOption() common.OverwriteOption
 	GetForceIfReadOnly() bool
 	AutoDecompress() bool
@@ -215,6 +216,13 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Holds the status of transfers in this jptm
+type jobPartProgressInfo struct {
+	transfersCompleted int
+	transfersSkipped   int
+	transfersFailed    int
+}
+
 // jobPartMgr represents the runtime information for a Job's Part
 type jobPartMgr struct {
 	// These fields represent the part's existence
@@ -246,6 +254,8 @@ type jobPartMgr struct {
 
 	metadata common.Metadata
 
+	blobTags common.BlobTags
+
 	blobTypeOverride common.BlobType // User specified blob type
 
 	preserveLastModifiedTime bool
@@ -272,7 +282,10 @@ type jobPartMgr struct {
 	// numberOfTransfersDone_doNotUse represents the number of transfer of JobPartOrder
 	// which are either completed or failed
 	// numberOfTransfersDone_doNotUse determines the final cancellation of JobPartOrder
-	atomicTransfersDone uint32
+	atomicTransfersDone      uint32
+	atomicTransfersCompleted uint32
+	atomicTransfersFailed    uint32
+	atomicTransfersSkipped   uint32
 }
 
 func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {
@@ -303,6 +316,10 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 	// get the list of include / exclude transfers
 	includeTransfer, excludeTransfer := jpm.jobMgr.IncludeExclude()
+	if len(includeTransfer) > 0 || len(excludeTransfer) > 0 {
+		panic("List of transfers is obsolete.")
+	}
+
 	// *** Open the job part: process any job part plan-setting used by all transfers ***
 	dstData := plan.DstBlobData
 
@@ -327,6 +344,16 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			jpm.metadata[kv[0]] = kv[1]
 		}
 	}
+	blobTagsStr := string(dstData.BlobTags[:dstData.BlobTagsLength])
+	jpm.blobTags = common.BlobTags{}
+	if len(blobTagsStr) > 0 {
+		for _, keyAndValue := range strings.Split(blobTagsStr, "&") { // key/value pairs are separated by '&'
+			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+			key, _ := url.QueryUnescape(kv[0])
+			value, _ := url.QueryUnescape(kv[1])
+			jpm.blobTags[key] = value
+		}
+	}
 
 	jpm.preserveLastModifiedTime = plan.DstLocalData.PreserveLastModifiedTime
 
@@ -342,36 +369,8 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		jppt := plan.Transfer(t)
 		ts := jppt.TransferStatus()
 		if ts == common.ETransferStatus.Success() {
-			jpm.ReportTransferDone() // Don't schedule an already-completed/failed transfer
+			jpm.ReportTransferDone(ts) // Don't schedule an already-completed/failed transfer
 			continue
-		}
-
-		// If the list of transfer to be included is passed
-		// then check current transfer exists in the list of included transfer
-		// If it doesn't exists, skip the transfer
-		if len(includeTransfer) > 0 {
-			// Get the source string from the part plan header
-			src, _, _ := plan.TransferSrcDstStrings(t)
-			// If source doesn't exists, skip the transfer
-			_, ok := includeTransfer[src]
-			if !ok {
-				jpm.ReportTransferDone() // Don't schedule transfer which is not mentioned to be included
-				continue
-			}
-		}
-		// If the list of transfer to be excluded is passed
-		// then check the current transfer in the list of excluded transfer
-		// If it exists, then skip the transfer
-		if len(excludeTransfer) > 0 {
-			// Get the source string from the part plan header
-			src, _, _ := plan.TransferSrcDstStrings(t)
-			// If the source exists in the list of excluded transfer
-			// skip the transfer
-			_, ok := excludeTransfer[src]
-			if ok {
-				jpm.ReportTransferDone() // Don't schedule transfer which is mentioned to be excluded
-				continue
-			}
 		}
 
 		// If the transfer was failed, then while rescheduling the transfer marking it Started.
@@ -449,7 +448,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 		RetryDelay:    UploadRetryDelay,
 		MaxRetryDelay: UploadMaxRetryDelay}
 
-	var statsAccForSip *pipelineNetworkStats = nil // we don'nt accumulate stats on the source info provider
+	var statsAccForSip *pipelineNetworkStats = nil // we don't accumulate stats on the source info provider
 
 	// Create source info provider's pipeline for S2S copy.
 	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() {
@@ -581,20 +580,25 @@ func (jpm *jobPartMgr) AutoDecompress() bool {
 	return jpm.Plan().AutoDecompress
 }
 
-func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata) {
-	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
-		return jpm.httpHeaders, jpm.metadata
+func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags) {
+	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType {
+		return jpm.httpHeaders, jpm.metadata, jpm.blobTags
 	}
 
-	return common.ResourceHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer), ContentLanguage: jpm.httpHeaders.ContentLanguage, ContentDisposition: jpm.httpHeaders.ContentDisposition, ContentEncoding: jpm.httpHeaders.ContentEncoding, CacheControl: jpm.httpHeaders.CacheControl}, jpm.metadata
+	return common.ResourceHTTPHeaders{
+		ContentType:        jpm.inferContentType(fullFilePath, dataFileToXfer),
+		ContentLanguage:    jpm.httpHeaders.ContentLanguage,
+		ContentDisposition: jpm.httpHeaders.ContentDisposition,
+		ContentEncoding:    jpm.httpHeaders.ContentEncoding,
+		CacheControl:       jpm.httpHeaders.CacheControl}, jpm.metadata, jpm.blobTags
 }
 
 // TODO do we want these charset=utf-8?
 var builtinTypes = map[string]string{
-	".css":  "text/css;",
+	".css":  "text/css",
 	".gif":  "image/gif",
-	".htm":  "text/html;",
-	".html": "text/html;",
+	".htm":  "text/html",
+	".html": "text/html",
 	".jpeg": "image/jpeg",
 	".jpg":  "image/jpeg",
 	".js":   "application/javascript",
@@ -604,7 +608,7 @@ var builtinTypes = map[string]string{
 	".svg":  "image/svg+xml",
 	".wasm": "application/wasm",
 	".webp": "image/webp",
-	".xml":  "text/xml;",
+	".xml":  "text/xml",
 }
 
 func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []byte) string {
@@ -616,11 +620,16 @@ func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []by
 		return override
 	}
 
+	/*
+	 * Below functions return utf-8 as default charset for text files. Discard
+	 * charset if it exists, safer to omit charset instead of defaulting to
+	 * a wrong one.
+	 */
 	if guessedType := mime.TypeByExtension(fileExtension); guessedType != "" {
-		return guessedType
+		return strings.Split(guessedType, ";")[0]
 	}
 
-	return http.DetectContentType(dataFileToXfer)
+	return strings.Split(http.DetectContentType(dataFileToXfer), ";")[0]
 }
 
 func (jpm *jobPartMgr) BlobTypeOverride() common.BlobType {
@@ -663,15 +672,38 @@ func (jpm *jobPartMgr) deleteSnapshotsOption() common.DeleteSnapshotsOption {
 	return jpm.Plan().DeleteSnapshotsOption
 }
 
+func (jpm *jobPartMgr) updateJobPartProgress(status common.TransferStatus) {
+	switch status {
+	case common.ETransferStatus.Success():
+		atomic.AddUint32(&jpm.atomicTransfersCompleted, 1)
+	case common.ETransferStatus.Failed(), common.ETransferStatus.BlobTierFailure():
+		atomic.AddUint32(&jpm.atomicTransfersFailed, 1)
+	case common.ETransferStatus.SkippedEntityAlreadyExists(), common.ETransferStatus.SkippedBlobHasSnapshots():
+		atomic.AddUint32(&jpm.atomicTransfersSkipped, 1)
+	case common.ETransferStatus.Cancelled():
+	default:
+		jpm.Log(pipeline.LogError, fmt.Sprintf("Unexpected status: %v", status.String()))
+	}
+}
+
 // Call Done when a transfer has completed its epilog; this method returns the number of transfers completed so far
-func (jpm *jobPartMgr) ReportTransferDone() (transfersDone uint32) {
+func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfersDone uint32) {
 	transfersDone = atomic.AddUint32(&jpm.atomicTransfersDone, 1)
+	jpm.updateJobPartProgress(status)
+
+	//Add a safety count-check
+
 	if jpm.ShouldLog(pipeline.LogInfo) {
 		plan := jpm.Plan()
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d", plan.JobID, plan.PartNum, transfersDone, plan.NumTransfers))
 	}
 	if transfersDone == jpm.planMMF.Plan().NumTransfers {
-		jpm.jobMgr.ReportJobPartDone()
+		jppi := jobPartProgressInfo{
+			transfersCompleted: int(atomic.LoadUint32(&jpm.atomicTransfersCompleted)),
+			transfersSkipped:   int(atomic.LoadUint32(&jpm.atomicTransfersSkipped)),
+			transfersFailed:    int(atomic.LoadUint32(&jpm.atomicTransfersFailed)),
+		}
+		jpm.jobMgr.ReportJobPartDone(jppi)
 	}
 	return transfersDone
 }

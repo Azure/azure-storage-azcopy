@@ -26,7 +26,7 @@ type perByteReader struct {
 	doInjectTimes          int
 	injectedError          error
 
-	// sleepDuraion and closeChannel are only use in "forced cancellation" tests
+	// sleepDuration and closeChannel are only use in "forced cancellation" tests
 	sleepDuration time.Duration
 	closeChannel  chan struct{}
 }
@@ -154,6 +154,76 @@ func (r *aztestsSuite) TestRetryReaderReadWithRetry(c *chk.C) {
 	}
 }
 
+// Test normal retry succeed, note initial response not provided.
+// Tests both with and without notification of failures
+func (r *aztestsSuite) TestRetryReaderReadWithRetryIoUnexpectedEOF(c *chk.C) {
+	// Test twice, the second time using the optional "logging"/notification callback for failed tries
+	// We must test both with and without the callback, since be testing without
+	// we are testing that it is, indeed, optional to provide the callback
+	for _, logThisRun := range []bool{false, true} {
+
+		// Extra setup for testing notification of failures (i.e. of unsuccessful tries)
+		failureMethodNumCalls := 0
+		failureWillRetryCount := 0
+		failureLastReportedFailureCount := -1
+		var failureLastReportedError error = nil
+		failureMethod := func(failureCount int, lastError error, offset int64, count int64, willRetry bool) {
+			failureMethodNumCalls++
+			if willRetry {
+				failureWillRetryCount++
+			}
+			failureLastReportedFailureCount = failureCount
+			failureLastReportedError = lastError
+		}
+
+		// Main test setup
+		byteCount := 1
+		body := newPerByteReader(byteCount)
+		body.doInjectError = true
+		body.doInjectErrorByteIndex = 0
+		body.doInjectTimes = 1
+		body.injectedError = io.ErrUnexpectedEOF
+
+		getter := func(ctx context.Context, info azbfs.HTTPGetterInfo) (*http.Response, error) {
+			r := http.Response{}
+			body.currentByteIndex = int(info.Offset)
+			r.Body = body
+
+			return &r, nil
+		}
+
+		httpGetterInfo := azbfs.HTTPGetterInfo{Offset: 0, Count: int64(byteCount)}
+		initResponse, err := getter(context.Background(), httpGetterInfo)
+		c.Assert(err, chk.IsNil)
+
+		rrOptions := azbfs.RetryReaderOptions{MaxRetryRequests: 1}
+		if logThisRun {
+			rrOptions.NotifyFailedRead = failureMethod
+		}
+		retryReader := azbfs.NewRetryReader(context.Background(), initResponse, httpGetterInfo, rrOptions, getter)
+
+		// should fail and succeed through retry
+		can := make([]byte, 1)
+		n, err := retryReader.Read(can)
+		c.Assert(n, chk.Equals, 1)
+		c.Assert(err, chk.IsNil)
+
+		// check "logging", if it was enabled
+		if logThisRun {
+			// We only expect one failed try in this test
+			// And the notification method is not called for successes
+			c.Assert(failureMethodNumCalls, chk.Equals, 1)           // this is the number of calls we counted
+			c.Assert(failureWillRetryCount, chk.Equals, 1)           // the sole failure was retried
+			c.Assert(failureLastReportedFailureCount, chk.Equals, 1) // this is the number of failures reported by the notification method
+			c.Assert(failureLastReportedError, chk.NotNil)
+		}
+		// should return EOF
+		n, err = retryReader.Read(can)
+		c.Assert(n, chk.Equals, 0)
+		c.Assert(err, chk.Equals, io.EOF)
+	}
+}
+
 // Test normal retry fail as retry Count not enough.
 func (r *aztestsSuite) TestRetryReaderReadNegativeNormalFail(c *chk.C) {
 	// Extra setup for testing notification of failures (i.e. of unsuccessful tries)
@@ -200,7 +270,7 @@ func (r *aztestsSuite) TestRetryReaderReadNegativeNormalFail(c *chk.C) {
 	c.Assert(n, chk.Equals, 0)
 	c.Assert(err, chk.Equals, body.injectedError)
 
-	// Check that we recieved the right notification callbacks
+	// Check that we received the right notification callbacks
 	// We only expect two failed tries in this test, but only one
 	// of the would have had willRetry = true
 	c.Assert(failureMethodNumCalls, chk.Equals, 2)           // this is the number of calls we counted

@@ -772,3 +772,55 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		}
 	}
 }
+
+// validate traversing a virtual directory containing the same objects
+// compare that the serial and parallel blob traversers get consistent results
+func (s *genericTraverserSuite) TestSerialAndParallelBlobTraverser(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	// set up the container with numerous blobs
+	virDirName := "virdir"
+	scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, virDirName+"/")
+	c.Assert(containerURL, chk.NotNil)
+
+	// test two scenarios, either recursive or not
+	for _, isRecursiveOn := range []bool{true, false} {
+		// construct a parallel blob traverser
+		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
+		rawVirDirURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, virDirName)
+		parallelBlobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {})
+
+		// construct a serial blob traverser
+		serialBlobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {})
+		serialBlobTraverser.parallelListing = false
+
+		// invoke the parallel traversal with a dummy processor
+		parallelDummyProcessor := dummyProcessor{}
+		err := parallelBlobTraverser.traverse(noPreProccessor, parallelDummyProcessor.process, nil)
+		c.Assert(err, chk.IsNil)
+
+		// invoke the serial traversal with a dummy processor
+		serialDummyProcessor := dummyProcessor{}
+		err = parallelBlobTraverser.traverse(noPreProccessor, serialDummyProcessor.process, nil)
+		c.Assert(err, chk.IsNil)
+
+		// make sure the results are as expected
+		c.Assert(len(parallelDummyProcessor.record), chk.Equals, len(serialDummyProcessor.record))
+
+		// compare the entries one by one
+		lookupMap := make(map[string]storedObject)
+		for _, entry := range parallelDummyProcessor.record {
+			lookupMap[entry.relativePath] = entry
+		}
+
+		for _, storedObject := range serialDummyProcessor.record {
+			correspondingFile, present := lookupMap[storedObject.relativePath]
+			c.Assert(present, chk.Equals, true)
+			c.Assert(storedObject.lastModifiedTime, chk.DeepEquals, correspondingFile.lastModifiedTime)
+			c.Assert(storedObject.md5, chk.DeepEquals, correspondingFile.md5)
+		}
+	}
+}

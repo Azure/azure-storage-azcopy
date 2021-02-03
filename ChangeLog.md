@@ -1,21 +1,110 @@
 
 # Change Log
 
-## Version 10.5
+## Version 10.8.0
+
+### New features
+1. Added option to [disable parallel blob listing](https://github.com/Azure/azure-storage-azcopy/pull/1263)
+1. Added support for uploading [large files](https://github.com/Azure/azure-storage-azcopy/pull/1254/files) upto 4TiB. Please refer the [public documentation](https://docs.microsoft.com/en-us/rest/api/storageservices/create-file) for more information
+1. Added support for `include-before`flag. Refer [this](https://github.com/Azure/azure-storage-azcopy/issues/1075) for more information
+
+### Bug fixes
+
+1. Fixed issue [#1246](https://github.com/Azure/azure-storage-azcopy/issues/1246) of security vulnerability in x/text package
+1. Fixed issue [share snapshot->share copy](https://github.com/Azure/azure-storage-azcopy/pull/1258) with smb permissions
+
+## Version 10.7.0
+
+### New features
+1. Added support for auto-login when performing data commands(copy/sync/list/make/remove). Please refer to our documentation for more info.
+1. Added ``blob-tags`` flag for setting [blob index tags](https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-index-how-to?tabs=azure-portal) when performing copy command. Please note that we support setting blob tags only when tags are explicitly specified. Refer to the [public documentations](https://docs.microsoft.com/en-us/rest/api/storageservices/put-blob#remarks) to know more.
+
+### Bug fixes
+
+1. Fixed issue [#1139](https://github.com/Azure/azure-storage-azcopy/issues/1139) to preserve content-type in service-to-service transfer.
+1. Fixed issue to allow snapshot restoring.
+1. Fixed issue with setting content-type of an empty file when performing copy command.
+
+### Improvements
+1. Added support for setting tier directly at the time of [upload](https://docs.microsoft.com/en-us/rest/api/storageservices/put-blob#remarks) API call instead of performing a separate [set tier](https://docs.microsoft.com/en-us/rest/api/storageservices/set-blob-tier) API call.
+
+## Version 10.6.1
+
+### Bug fixes
+
+1. Fix issue [#971](https://github.com/Azure/azure-storage-azcopy/issues/971) with scanning directories on a public container
+1. Fix issue with piping where source and destinations were reversed
+1. Allow piping to use OAuth login
+1. Fix issue where transfers with ``overwrite`` flag set to ``IfSourceNewer`` would work incorrectly
+1. Fix issue [#1139](https://github.com/Azure/azure-storage-azcopy/issues/1139), incorrect content type in BlobStorage
+1. Issue [#1192](https://github.com/Azure/azure-storage-azcopy/issues/1192), intermittent panic when AzCopy job is abort
+1. Fix issue with auto-detected content types for 0 length files
+
+## Version 10.6.0
 
 ### New features
 
+1. ``azcopy sync`` now supports the persistence of ACLs between supported resources (Azure Files) using the ``--preserve-smb-permissions`` flag.
+1. ``azcopy sync`` now supports the persistence of SMB property info between supported resources (Azure Files) using the ``--preserve-smb-info`` flag. The information that can be preserved is Created Time, Last Write Time and Attributes (e.g. Read Only).
+1. Added support for [higher block & blob size](https://docs.microsoft.com/en-us/rest/api/storageservices/put-block#remarks) 
+    - For service version ``2019-12-12`` or higher, the block size can now be less than or equal to ``4000 MiB``. The maximum size of a block blob therefore can be ``190.7 TiB (4000 MiB X 50,000 blocks)``
+1. Added support for [Blob Versioning](https://docs.microsoft.com/en-us/azure/storage/blobs/versioning-overview)
+    - Added ``list-of-versions`` flag (specifies a file where each version id is listed on a separate line) to download/delete versions of a blob from Azure Storage.
+    - Download/Delete a version of blob by directly specifying its version id in the source blob URL. 
+
+### Bug fixes
+
+1. Logging input command at ERROR level.
+
+## Version 10.5.1
+
+### New features
+
+- Allow more accurate values for job status in `jobs` commands, e.g. completed with failed or skipped transfers.
+
+### Bug fixes
+
+- Fixed issue with removing blobs with hdi_isfolder=true metadata when the list-of-files flag is used.
+- Manually unfurl symbolic links to fix long file path issue on UNC locations.
+
+
+## Version 10.5.0
+
+### New features
+
+1. Improved scanning performance for most cases by adding support for parallel local and Blob enumeration.
+1. Added download support for the benchmark command.
 1. A new way to quickly copy only files changed after a certain date/time. The `copy` command now accepts
 the parameter `--include-after`. It takes an ISO 8601-formatted date, and will copy only those files that were 
 changed on or after the given date/time. When processing large numbers of files, this is faster than `sync` or 
 `--overwrite=IfSourceNewer`.  But it does require the user to specify the date to be used.  E.g. `2020-08-19T15:04:00Z` 
 for a UTC time, `2020-08-19T15:04` for a time in the local timezone of the machine running Azcopy, 
 or `2020-08-19` for midnight (00:00), also in the local timezone. 
+1. When detecting content type for common static website files, use the commonly correct values instead of looking them up in the registry.
+1. Allow the remove command to delete blob directory stubs which have metadata hdi_isfolder=true.
+1. The S3 to Blob feature now has GA support. 
+1. Added support for load command on Linux based on Microsoft Avere's CLFSLoad extension.
 1. Each job now logs its start time precisely in the log file, using ISO 8601 format.  This is useful if you want to 
 use that start date as the `--include-after` parameter to a later job on the same directory. Look for "ISO 8601 START TIME" 
-in the log. 
- 
+in the log.
+1. Stop treating zero-item job as failure, to improve the user experience. 
+1. Improved the naming of files being generated in benchmark command, by reversing the digits. 
+Doing so allows the names to not be an alphabetic series, which used to negatively impact the performance on the service side.
+1. Azcopy can now detect when setting a blob tier would be impossible. If azcopy cannot check the destination account type, a new transfer failure status will be set: `TierAvailabilityCheckFailure`
 
+### Bug fixes
+
+1. Fixed the persistence of last-write-time (as part of SMB info when uploading) for Azure Files. It was using the creation time erroneously.
+1. Fixed the SAS timestamp parsing issue.
+1. Transfers to the File Service with a read-only SAS were failing because we try listing properties for the parent directories.
+The user experience is improved by ignoring this benign error and try creating parent directories directly.
+1. Fixed issue with mixed SAS and AD authentication in the sync command.
+1. Fixed file creation error on Linux when decompression is turned on.
+1. Fixed issue on Windows for files with extended charset such as [%00 - %19, %0A-%0F, %1A-%1F].
+1. Enabled recovering from unexpectedEOF error.
+1. Fixed issue in which attribute filters does not work if source path contains an asterisk in it.
+1. Fixed issue of unexpected upload destination when uploading a whole drive in Windows (e.g. "D:\").
+ 
 
 ## Version 10.4.3
 

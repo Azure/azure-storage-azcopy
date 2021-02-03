@@ -377,7 +377,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 		}
 
 		if !testBlobCmd.NoGuessMimeType {
-			expectedContentType = http.DetectContentType(mmap)
+			expectedContentType = strings.Split(http.DetectContentType(mmap), ";")[0]
 		}
 
 		mmap.Unmap()
@@ -571,7 +571,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 	if testBlobCmd.NoGuessMimeType {
 		expectedContentType = testBlobCmd.ContentType
 	} else {
-		expectedContentType = http.DetectContentType(mmap)
+		expectedContentType = strings.Split(http.DetectContentType(mmap), ";")[0]
 	}
 	if testBlobCmd.CheckContentType && !validateString(expectedContentType, get.ContentType()) {
 		fmt.Printf(
@@ -611,7 +611,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 			fmt.Println("error getting the block blob list")
 			os.Exit(1)
 		}
-		// todo only commited blocks
+		// todo only committed blocks
 		if numberOfBlocks != (len(resp.CommittedBlocks)) {
 			fmt.Println("number of blocks to be uploaded is different from the number of expected to be uploaded")
 			os.Exit(1)
@@ -723,7 +723,7 @@ func verifySingleAppendBlob(testBlobCmd TestBlobCommand) {
 		}
 
 		if !testBlobCmd.NoGuessMimeType {
-			expectedContentType = http.DetectContentType(mmap)
+			expectedContentType = strings.Split(http.DetectContentType(mmap), ";")[0]
 		}
 
 		mmap.Unmap()

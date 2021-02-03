@@ -25,11 +25,13 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
-// anyToRemote_folder handles all kinds of sender operations for FOLDERs - both uploads from local files, and S2S copies
+// anyToRemote_folder handles all kinds of sender operations for FOLDERS - both uploads from local files, and S2S copies
 func anyToRemote_folder(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 
 	// step 1. perform initial checks
 	if jptm.WasCanceled() {
+		/* This is earliest we detect that jptm has been cancelled before we reach destination */
+		jptm.SetStatus(common.ETransferStatus.Cancelled())
 		jptm.ReportTransferDone()
 		return
 	}

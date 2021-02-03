@@ -31,6 +31,7 @@ import (
 	chk "gopkg.in/check.v1"
 	"io/ioutil"
 	"math/rand"
+	"mime"
 	"net/url"
 	"os"
 	"strings"
@@ -221,7 +222,7 @@ func createNewBlockBlob(c asserter, container azblob.ContainerURL, prefix string
 	blob, name = getBlockBlobURL(c, container, prefix)
 
 	cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
-		nil, azblob.BlobAccessConditions{})
+		nil, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil)
 
 	c.AssertNoErr(err)
 	c.Assert(cResp.StatusCode(), equals(), 201)
@@ -265,7 +266,7 @@ func generateParentsForAzureFile(c asserter, fileURL azfile.FileURL) {
 func createNewAppendBlob(c asserter, container azblob.ContainerURL, prefix string) (blob azblob.AppendBlobURL, name string) {
 	blob, name = getAppendBlobURL(c, container, prefix)
 
-	resp, err := blob.Create(ctx, azblob.BlobHTTPHeaders{}, nil, azblob.BlobAccessConditions{})
+	resp, err := blob.Create(ctx, azblob.BlobHTTPHeaders{}, nil, azblob.BlobAccessConditions{}, nil)
 
 	c.AssertNoErr(err)
 	c.Assert(resp.StatusCode(), equals(), 201)
@@ -275,7 +276,7 @@ func createNewAppendBlob(c asserter, container azblob.ContainerURL, prefix strin
 func createNewPageBlob(c asserter, container azblob.ContainerURL, prefix string) (blob azblob.PageBlobURL, name string) {
 	blob, name = getPageBlobURL(c, container, prefix)
 
-	resp, err := blob.Create(ctx, azblob.PageBlobPageBytes*10, 0, azblob.BlobHTTPHeaders{}, nil, azblob.BlobAccessConditions{})
+	resp, err := blob.Create(ctx, azblob.PageBlobPageBytes*10, 0, azblob.BlobHTTPHeaders{}, nil, azblob.BlobAccessConditions{}, azblob.DefaultPremiumBlobAccessTier, nil)
 
 	c.AssertNoErr(err)
 	c.Assert(resp.StatusCode(), equals(), 201)
@@ -656,4 +657,15 @@ func (checker *stringContainsChecker) Check(params []interface{}, names []string
 	return false, fmt.Sprintf("Failed to find substring in source string:\n\n"+
 		"SOURCE: %s\n"+
 		"EXPECTED: %s\n", aStr, bStr)
+}
+
+func GetContentTypeMap(fileExtensions []string) map[string]string {
+
+	extensionsMap := make(map[string]string, 0)
+	for _, ext := range fileExtensions {
+		if guessedType := mime.TypeByExtension(ext); guessedType != "" {
+			extensionsMap[ext] = strings.Split(guessedType, ";")[0]
+		}
+	}
+	return extensionsMap
 }

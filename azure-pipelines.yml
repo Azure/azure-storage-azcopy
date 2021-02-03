@@ -73,31 +73,46 @@ jobs:
       - script: |
           # run unit test and build executable
           # the set -e line is needed so that the unit tests failure would cause the job to fail properly
-          # -timeout 25m as our tests typically run between 10-15m and I'd rather have some headroom.
           # "-check.v" (must be after package list) outputs timings
           set -e
-          go test -timeout 25m -race -short -cover ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v"
+          go test -timeout 35m -race -short -cover ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v"
           GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
         name: 'Run_unit_tests'
         env:
           ACCOUNT_NAME: $(ACCOUNT_NAME)
           ACCOUNT_KEY: $(ACCOUNT_KEY)
+          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
           AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
           AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      - script: |
+          set -e
+          GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
+          export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
+          go test -timeout 20m -race -short -cover ./e2etest         
+        name: 'Run_e2e_tests'
+        env:
+          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
       - script: |
           go build -o test-validator ./testSuite/
           mkdir test-temp
           export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
           export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
           export TEST_DIRECTORY_PATH=$(pwd)/test-temp
-          python ./testSuite/scripts/run.py
+
+          # install the CLFSLoad extension
+          pip3 install clfsload
+
+          keyctl session test python ./testSuite/scripts/run.py
         name: 'Run_smoke_tests'
         env:
           ACCOUNT_NAME: $(ACCOUNT_NAME)
           ACCOUNT_KEY: $(ACCOUNT_KEY)
           AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
           AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-          AZCOPY_OAUTH_TOKEN_INFO: $(AZCOPY_OAUTH_TOKEN_INFO)
+          ACTIVE_DIRECTORY_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
+          AZCOPY_SPA_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
           CONTAINER_OAUTH_URL: $(CONTAINER_OAUTH_URL)
           CONTAINER_OAUTH_VALIDATE_SAS_URL: $(CONTAINER_OAUTH_VALIDATE_SAS_URL)
           CONTAINER_SAS_URL: $(CONTAINER_SAS_URL)
@@ -111,7 +126,11 @@ jobs:
           S2S_SRC_FILE_ACCOUNT_SAS_URL: $(S2S_SRC_FILE_ACCOUNT_SAS_URL)
           S2S_SRC_S3_SERVICE_URL: $(S2S_SRC_S3_SERVICE_URL)
           SHARE_SAS_URL: $(SHARE_SAS_URL)
-      - script: python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"
+      - script: |
+          pip install azure-storage-blob==12.0.0b3
+          # the recent release 1.0.0b4 has a breaking change
+          pip install azure-core==1.0.0b3
+          python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"
         name: 'Release_the_distributed_mutex'
         # this runs even if the job was canceled (only if the mutex was acquired by this job)
         condition: and(always(), eq(variables['isMutexSet'], 'true'))

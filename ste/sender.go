@@ -35,7 +35,7 @@ import (
 /////////////////////////////////////////////////////////////////////////////////////////////////
 type sender interface {
 	// ChunkSize returns the chunk size that should be used
-	ChunkSize() uint32
+	ChunkSize() int64
 
 	// NumChunks returns the number of chunks that will be required for the target file
 	NumChunks() uint32
@@ -131,10 +131,10 @@ var errNoHash = errors.New("no hash computed")
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-func getNumChunks(fileSize int64, chunkSize uint32) uint32 {
+func getNumChunks(fileSize int64, chunkSize int64) uint32 {
 	numChunks := uint32(1) // we always map zero-size source files to ONE (empty) chunk
 	if fileSize > 0 {
-		chunkSizeI := int64(chunkSize)
+		chunkSizeI := chunkSize
 		numChunks = common.Iffuint32(
 			fileSize%chunkSizeI == 0,
 			uint32(fileSize/chunkSizeI),
@@ -201,5 +201,21 @@ func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pi
 		return newAppendBlobUploader(jptm, destination, p, pacer, sip)
 	default:
 		return newBlockBlobUploader(jptm, destination, p, pacer, sip) // If no blob type was inferred, assume block blob.
+	}
+}
+
+const TagsHeaderMaxLength = 2000
+
+// If length of tags <= 2kb, pass it in the header x-ms-tags. Else do a separate SetTags call
+func separateSetTagsRequired(tagsMap azblob.BlobTagsMap) bool {
+	tagsLength := 0
+	for k, v := range tagsMap {
+		tagsLength += len(k) + len(v) + 2
+	}
+
+	if tagsLength > TagsHeaderMaxLength {
+		return true
+	} else {
+		return false
 	}
 }

@@ -35,10 +35,12 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
+var lowMemoryLimitAdvice sync.Once
+
 type blockBlobSenderBase struct {
 	jptm             IJobPartTransferMgr
 	destBlockBlobURL azblob.BlockBlobURL
-	chunkSize        uint32
+	chunkSize        int64
 	numChunks        uint32
 	pacer            pacer
 	blockIDs         []string
@@ -50,20 +52,58 @@ type blockBlobSenderBase struct {
 	// the properties of the local file
 	headersToApply  azblob.BlobHTTPHeaders
 	metadataToApply azblob.Metadata
+	blobTagsToApply azblob.BlobTagsMap
 
 	atomicPutListIndicator int32
 	muBlockIDs             *sync.Mutex
 }
 
-func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType azblob.AccessTierType) (*blockBlobSenderBase, error) {
-	transferInfo := jptm.Info()
-
-	// compute chunk count
-	chunkSize := transferInfo.BlockSize
+func getVerifiedChunkParams(transferInfo TransferInfo, memLimit int64) (chunkSize int64, numChunks uint32, err error) {
+	chunkSize = transferInfo.BlockSize
 	srcSize := transferInfo.SourceSize
-	numChunks := getNumChunks(srcSize, chunkSize)
+	numChunks = getNumChunks(srcSize, chunkSize)
+
+	toGiB := func(bytes int64) float64 {
+		return float64(bytes) / float64(1024*1024*1024)
+	}
+
+	if common.MinParallelChunkCountThreshold >= memLimit/chunkSize {
+		glcm := common.GetLifecycleMgr()
+		msg := fmt.Sprintf("Using a blocksize of %.2fGiB for file %s. AzCopy is limited to use %.2fGiB of memory."+
+			"Consider providing at least %.2fGiB to AzCopy, using environment variable %s.",
+			toGiB(chunkSize), transferInfo.Source, toGiB(memLimit),
+			toGiB(common.MinParallelChunkCountThreshold*chunkSize),
+			common.EEnvironmentVariable.BufferGB().Name)
+
+		lowMemoryLimitAdvice.Do(func() { glcm.Info(msg) })
+	}
+
+	if chunkSize >= memLimit {
+		err = fmt.Errorf("Cannot use a block size of %.2fGiB. AzCopy is limited to use only %.2fGiB of memory",
+			toGiB(chunkSize), toGiB(memLimit))
+		return
+	}
+
+	if chunkSize > common.MaxBlockBlobBlockSize {
+		// mercy, please
+		err = fmt.Errorf("block size of %.2fGiB for file %s of size %.2fGiB exceeds maxmimum allowed block size for a BlockBlob",
+			toGiB(chunkSize), transferInfo.Source, toGiB(transferInfo.SourceSize))
+		return
+	}
+
 	if numChunks > common.MaxNumberOfBlocksPerBlob {
-		return nil, fmt.Errorf("BlockSize %d for source of size %d is not correct. Number of blocks will exceed the limit", chunkSize, srcSize)
+		err = fmt.Errorf("Block size %d for source of size %d is not correct. Number of blocks will exceed the limit", chunkSize, srcSize)
+		return
+	}
+
+	return
+}
+
+func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType azblob.AccessTierType) (*blockBlobSenderBase, error) {
+	// compute chunk count
+	chunkSize, numChunks, err := getVerifiedChunkParams(jptm.Info(), jptm.CacheLimiter().Limit())
+	if err != nil {
+		return nil, err
 	}
 
 	destURL, err := url.Parse(destination)
@@ -95,6 +135,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		blockIDs:         make([]string, numChunks),
 		headersToApply:   props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply:  props.SrcMetadata.ToAzBlobMetadata(),
+		blobTagsToApply:  props.SrcBlobTags.ToAzBlobTagsMap(),
 		destBlobTier:     destBlobTier,
 		muBlockIDs:       &sync.Mutex{}}, nil
 }
@@ -103,7 +144,7 @@ func (s *blockBlobSenderBase) SendableEntityType() common.EntityType {
 	return common.EEntityType.File()
 }
 
-func (s *blockBlobSenderBase) ChunkSize() uint32 {
+func (s *blockBlobSenderBase) ChunkSize() int64 {
 	return s.chunkSize
 }
 
@@ -116,9 +157,7 @@ func (s *blockBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
 }
 
 func (s *blockBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
-	if ps.CanInferContentType() {
-		// sometimes, specifically when reading local files, we have more info
-		// about the file type at this time than what we had before
+	if s.jptm.ShouldInferContentType() {
 		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
 	}
 	return false
@@ -142,30 +181,25 @@ func (s *blockBlobSenderBase) Epilogue() {
 		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", blockIDs))
 
 		// commit the blocks.
-		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}); err != nil {
+		if !ValidateTier(jptm, s.destBlobTier, s.destBlockBlobURL.BlobURL, s.jptm.Context()) {
+			s.destBlobTier = azblob.DefaultAccessTier
+		}
+
+		blobTags := s.blobTagsToApply
+		separateSetTagsRequired := separateSetTagsRequired(blobTags)
+		if separateSetTagsRequired || len(blobTags) == 0 {
+			blobTags = nil
+		}
+
+		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, s.destBlobTier, blobTags); err != nil {
 			jptm.FailActiveSend("Committing block list", err)
 			return
 		}
-	}
 
-	// Set tier
-	// GPv2 or Blob Storage is supported, GPv1 is not supported, can only set to blob without snapshot in active status.
-	// https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
-	if jptm.IsLive() && s.destBlobTier != azblob.AccessTierNone {
-		// Set the latest service version from sdk as service version in the context.
-		ctxWithLatestServiceVersion := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-		_, err := s.destBlockBlobURL.SetTier(ctxWithLatestServiceVersion, s.destBlobTier, azblob.LeaseAccessConditions{})
-		if err != nil {
-			if s.jptm.Info().S2SSrcBlobTier != azblob.AccessTierNone {
-				s.jptm.LogTransferInfo(pipeline.LogError, s.jptm.Info().Source, s.jptm.Info().Destination, "Failed to replicate blob tier at destination. Try transferring with the flag --s2s-preserve-access-tier=false")
-				s2sAccessTierFailureLogStdout.Do(func() {
-					glcm := common.GetLifecycleMgr()
-					glcm.Error("One or more blobs have failed blob tier replication at the destination. Try transferring with the flag --s2s-preserve-access-tier=false")
-				})
+		if separateSetTagsRequired {
+			if _, err := s.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, nil, nil, nil, s.blobTagsToApply); err != nil {
+				s.jptm.Log(pipeline.LogWarning, err.Error())
 			}
-
-			jptm.FailActiveSendWithStatus("Setting BlockBlob tier", err, common.ETransferStatus.BlobTierFailure())
-			return
 		}
 	}
 }

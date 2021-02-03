@@ -53,12 +53,14 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 
 	// step 2: get the source, destination info for the transfer.
 	fileSize := int64(info.SourceSize)
-	downloadChunkSize := int64(info.BlockSize)
+	downloadChunkSize := info.BlockSize
 
 	// step 3: Perform initial checks
 	// If the transfer was cancelled, then report transfer as done
 	// TODO Question: the above comment had this following text too: "and increasing the bytestransferred by the size of the source." what does it mean?
 	if jptm.WasCanceled() {
+		/* This is the earliest we detect that jptm has been cancelled before we schedule chunks */
+		jptm.SetStatus(common.ETransferStatus.Cancelled())
 		jptm.ReportTransferDone()
 		return
 	}
@@ -159,7 +161,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		dstFile = devNullWriter{}
 	} else {
 		// Normal scenario, create the destination file as expected
-		// Use pseudo chunk id to alow our usual state tracking mechanism to keep count of how many
+		// Use pseudo chunk id to allow our usual state tracking mechanism to keep count of how many
 		// file creations are running at any given instant, for perf diagnostics
 		pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.CreateLocalFile())
@@ -299,6 +301,12 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.Epilogue())
 	defer jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
+
+	if jptm.WasCanceled() {
+		// This is where we first realize that the transfer is cancelled. Further statements are no-op and
+		// do not set any transfer status because they all of them verify that jptm is live.
+		jptm.SetStatus(common.ETransferStatus.Cancelled())
+	}
 
 	haveNonEmptyFile := activeDstFile != nil
 	if haveNonEmptyFile {

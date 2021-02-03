@@ -36,6 +36,12 @@ type ListResponse struct {
 }
 
 func init() {
+	type JobsListReq struct {
+		withStatus string
+	}
+
+	commandLineInput := JobsListReq{}
+
 	// lsCmd represents the listJob command
 	lsCmd := &cobra.Command{
 		Use:     "list",
@@ -52,7 +58,13 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			err := HandleListJobsCommand()
+			withStatus := common.EJobStatus
+			err := withStatus.Parse(commandLineInput.withStatus)
+			if err != nil {
+				glcm.Error(fmt.Sprintf("Failed to parse --with-status due to error: %s.", err))
+			}
+
+			err = HandleListJobsCommand(withStatus)
 			if err == nil {
 				glcm.Exit(nil, common.EExitCode.Success())
 			} else {
@@ -62,13 +74,17 @@ func init() {
 	}
 
 	jobsCmd.AddCommand(lsCmd)
+
+	lsCmd.PersistentFlags().StringVar(&commandLineInput.withStatus, "with-status", "All",
+		"List the jobs with given status, available values: All, Cancelled, Failed, InProgress, Completed,"+
+			" CompletedWithErrors, CompletedWithFailures, CompletedWithErrorsAndSkipped")
 }
 
 // HandleListJobsCommand sends the ListJobs request to transfer engine
 // Print the Jobs in the history of Azcopy
-func HandleListJobsCommand() error {
+func HandleListJobsCommand(jobStatus common.JobStatus) error {
 	resp := common.ListJobsResponse{}
-	Rpc(common.ERpcCmd.ListJobs(), nil, &resp)
+	Rpc(common.ERpcCmd.ListJobs(), jobStatus, &resp)
 	return PrintExistingJobIds(resp)
 }
 

@@ -3,6 +3,8 @@ package azbfs_test
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io"
 	"time"
 
 	//"crypto/md5"
@@ -11,7 +13,6 @@ import (
 	//"net/http"
 	"net/url"
 	//"strings"
-	//"time"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	chk "gopkg.in/check.v1" // go get gopkg.in/check.v1
@@ -165,6 +166,50 @@ func (s *FileURLSuite) TestFileGetProperties(c *chk.C) {
 //	c.Assert(err, chk.IsNil)
 //	c.Assert(download, chk.DeepEquals, contentD[:1024])
 //}
+
+func (s *FileURLSuite) TestUnexpectedEOFRecovery(c *chk.C) {
+	fsu := getBfsServiceURL()
+	fileSystemURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fileSystemURL)
+
+	fileURL, _ := createNewFileFromFileSystem(c, fileSystemURL)
+	defer delFile(c, fileURL)
+
+	contentR, contentD := getRandomDataAndReader(2048)
+
+	resp, err := fileURL.AppendData(context.Background(), 0, contentR)
+	c.Assert(err, chk.IsNil)
+	c.Assert(resp.StatusCode(), chk.Equals, http.StatusAccepted)
+	c.Assert(resp.XMsRequestID(), chk.Not(chk.Equals), "")
+	c.Assert(resp.XMsVersion(), chk.Not(chk.Equals), "")
+	c.Assert(resp.Date(), chk.Not(chk.Equals), "")
+
+	resp, err = fileURL.FlushData(context.Background(), 2048, nil, azbfs.BlobFSHTTPHeaders{}, false, true)
+	c.Assert(err, chk.IsNil)
+	c.Assert(resp.StatusCode(), chk.Equals, http.StatusOK)
+	c.Assert(resp.ETag(), chk.Not(chk.Equals), "")
+	c.Assert(resp.LastModified(), chk.Not(chk.Equals), "")
+	c.Assert(resp.XMsRequestID(), chk.Not(chk.Equals), "")
+	c.Assert(resp.XMsVersion(), chk.Not(chk.Equals), "")
+	c.Assert(resp.Date(), chk.Not(chk.Equals), "")
+
+	dResp, err := fileURL.Download(context.Background(), 0, 2048)
+	c.Assert(err, chk.IsNil)
+
+	// Verify that we can inject errors first.
+	reader := dResp.Body(azbfs.InjectErrorInRetryReaderOptions(errors.New("unrecoverable error")))
+
+	_, err = ioutil.ReadAll(reader)
+	c.Assert(err, chk.NotNil)
+	c.Assert(err.Error(), chk.Equals, "unrecoverable error")
+
+	// Then inject the retryable error.
+	reader = dResp.Body(azbfs.InjectErrorInRetryReaderOptions(io.ErrUnexpectedEOF))
+
+	buf, err := ioutil.ReadAll(reader)
+	c.Assert(err, chk.IsNil)
+	c.Assert(buf, chk.DeepEquals, contentD)
+}
 
 func (s *FileURLSuite) TestUploadDownloadRoundTrip(c *chk.C) {
 	fsu := getBfsServiceURL()

@@ -109,7 +109,9 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
 
-		return processIfPassedFilters(filters, storedObject, processor)
+		err := processIfPassedFilters(filters, storedObject, processor)
+		_, err = getProcessingError(err)
+		return err
 	}
 
 	// else, its not just one file
@@ -139,6 +141,7 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 			t.incrementEnumerationCounter(common.EEntityType.Folder())
 		}
 		err = processIfPassedFilters(filters, storedObject, processor)
+		_, err = getProcessingError(err)
 		if err != nil {
 			return err
 		}
@@ -194,6 +197,7 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 			}
 
 			err := processIfPassedFilters(filters, storedObject, processor)
+			_, err = getProcessingError(err)
 			if err != nil {
 				return err
 			}

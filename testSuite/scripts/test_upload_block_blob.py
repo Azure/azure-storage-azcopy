@@ -8,6 +8,13 @@ from stat import *
 import utility as util
 
 class Block_Upload_User_Scenarios(unittest.TestCase):
+    def setUp(self):
+        cmd = util.Command("login").add_arguments("--service-principal").add_flags("application-id", os.environ['ACTIVE_DIRECTORY_APPLICATION_ID'])
+        cmd.execute_azcopy_copy_command()
+
+    def tearDown(self):
+        cmd = util.Command("logout")
+        cmd.execute_azcopy_copy_command()
 
     def util_test_1kb_blob_upload(self, use_oauth_session=False):
         # Creating a single File Of size 1 KB
@@ -406,6 +413,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         self.assertEquals(x.TransfersSkipped, "20")
         self.assertEquals(x.TransfersCompleted, "0")
 
+        time.sleep(10)
         # refresh the lmts of the source files so that they appear newer
         for filename in os.listdir(dir_n_files_path):
             # update the lmts of the files to the latest
@@ -439,7 +447,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # download the directory with force flag set to ifSourceNewer.
         # target an empty folder, so the download should succeed normally
         # sleep a bit so that the lmts of the source blobs are in the past
-        time.sleep(2)
+        time.sleep(10)
         source = util.get_resource_sas(dir_name)
         destination = os.path.join(util.test_directory_path, "dir_overwrite_flag_set_download")
         os.mkdir(destination)

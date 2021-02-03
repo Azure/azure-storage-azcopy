@@ -44,6 +44,7 @@ type rawBenchmarkCmdArgs struct {
 	sizePerFile    string
 	fileCount      uint
 	deleteTestData bool
+	numOfFolders   uint
 
 	// options from flags
 	blockSizeMB  float64
@@ -137,7 +138,7 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		c.src = raw.target
 	} else { // Upload
 		// src must be string, but needs to indicate that its for benchmark and encode what we want
-		c.src = benchmarkSourceHelper{}.ToUrl(raw.fileCount, bytesPerFile)
+		c.src = benchmarkSourceHelper{}.ToUrl(raw.fileCount, bytesPerFile, raw.numOfFolders)
 		c.dst, err = raw.appendVirtualDir(raw.target, virtualDir)
 		if err != nil {
 			return dummyCooked, err
@@ -253,35 +254,41 @@ type benchmarkSourceHelper struct{}
 // you want a URL that can't possibly be a real one, so we'll use that
 const benchmarkSourceHost = "benchmark.invalid"
 
-func (h benchmarkSourceHelper) ToUrl(fileCount uint, bytesPerFile int64) string {
-	return fmt.Sprintf("https://%s?fc=%d&bpf=%d", benchmarkSourceHost, fileCount, bytesPerFile)
+func (h benchmarkSourceHelper) ToUrl(fileCount uint, bytesPerFile int64, numOfFolders uint) string {
+	return fmt.Sprintf("https://%s?fc=%d&bpf=%d&nf=%d", benchmarkSourceHost, fileCount, bytesPerFile, numOfFolders)
 }
 
-func (h benchmarkSourceHelper) FromUrl(s string) (fileCount uint, bytesPerFile int64, err error) {
+func (h benchmarkSourceHelper) FromUrl(s string) (fileCount uint, bytesPerFile int64, numOfFolders uint, err error) {
 	// TODO: consider replace with regex?
 
 	expectedPrefix := "https://" + benchmarkSourceHost + "?"
 	if !strings.HasPrefix(s, expectedPrefix) {
-		return 0, 0, errors.New("invalid benchmark source string")
+		return 0, 0, 0, errors.New("invalid benchmark source string")
 	}
 	s = strings.TrimPrefix(s, expectedPrefix)
 	pieces := strings.Split(s, "&")
-	if len(pieces) != 2 ||
+	if len(pieces) != 3 ||
 		!strings.HasPrefix(pieces[0], "fc=") ||
-		!strings.HasPrefix(pieces[1], "bpf=") {
-		return 0, 0, errors.New("invalid benchmark source string")
+		!strings.HasPrefix(pieces[1], "bpf=") ||
+		!strings.HasPrefix(pieces[2], "nf=") {
+		return 0, 0, 0, errors.New("invalid benchmark source string")
 	}
 	pieces[0] = strings.Split(pieces[0], "=")[1]
 	pieces[1] = strings.Split(pieces[1], "=")[1]
+	pieces[2] = strings.Split(pieces[2], "=")[1]
 	fc, err := strconv.ParseUint(pieces[0], 10, 64)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	bpf, err := strconv.ParseInt(pieces[1], 10, 64)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
-	return uint(fc), bpf, nil
+	nf, err := strconv.ParseUint(pieces[2], 10, 64)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	return uint(fc), bpf, uint(nf), nil
 }
 
 var benchCmd *cobra.Command
@@ -330,6 +337,7 @@ func init() {
 
 	benchCmd.PersistentFlags().StringVar(&raw.sizePerFile, common.SizePerFileParam, "250M", "size of each auto-generated data file. Must be "+sizeStringDescription)
 	benchCmd.PersistentFlags().UintVar(&raw.fileCount, common.FileCountParam, common.FileCountDefault, "number of auto-generated data files to use")
+	benchCmd.PersistentFlags().UintVar(&raw.numOfFolders, "number-of-folders", 0, "If larger than 0, create folders to divide up the data.")
 	benchCmd.PersistentFlags().BoolVar(&raw.deleteTestData, "delete-test-data", true, "if true, the benchmark data will be deleted at the end of the benchmark run.  Set it to false if you want to keep the data at the destination - e.g. to use it for manual tests outside benchmark mode")
 
 	benchCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB). Default is automatically calculated based on file size. Decimal fractions are allowed - e.g. 0.25. Identical to the same-named parameter in the copy command")

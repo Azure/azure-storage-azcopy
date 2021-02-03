@@ -50,7 +50,7 @@ type URLHolder interface {
 type azureFileSenderBase struct {
 	jptm         IJobPartTransferMgr
 	fileOrDirURL URLHolder
-	chunkSize    uint32
+	chunkSize    int64
 	numChunks    uint32
 	pipeline     pipeline.Pipeline
 	pacer        pacer
@@ -127,7 +127,7 @@ func (u *azureFileSenderBase) dirURL() azfile.DirectoryURL {
 	return u.fileOrDirURL.(azfile.DirectoryURL)
 }
 
-func (u *azureFileSenderBase) ChunkSize() uint32 {
+func (u *azureFileSenderBase) ChunkSize() int64 {
 	return u.chunkSize
 }
 
@@ -152,7 +152,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		return
 	}
 
-	if state.CanInferContentType() {
+	if jptm.ShouldInferContentType() {
 		// sometimes, specifically when reading local files, we have more info
 		// about the file type at this time than what we had before
 		u.headersToApply.ContentType = state.GetInferredContentType(u.jptm)
@@ -396,7 +396,7 @@ func (AzureFileParentDirCreator) getParentDirectoryURL(uh URLHolder, p pipeline.
 
 // verifyAndHandleCreateErrors handles create errors, StatusConflict is ignored, as specific level directory could be existing.
 // Report http.StatusForbidden, as user should at least have read and write permission of the destination,
-// and there is no permission on directory level, i.e. create directory is a general permission for each level diretories for Azure file.
+// and there is no permission on directory level, i.e. create directory is a general permission for each level directories for Azure file.
 func (AzureFileParentDirCreator) verifyAndHandleCreateErrors(err error) error {
 	if err != nil {
 		sErr, sErrOk := err.(azfile.StorageError)

@@ -122,6 +122,172 @@ func TestFilter_IncludeAfter(t *testing.T) {
 		})
 }
 
+func TestFilter_IncludePattern(t *testing.T) {
+
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.AllSourcesToOneDest(),
+		eValidate.Auto(),
+		params{
+			recursive:      true,
+			includePattern: "*.txt;2020*;*mid*;file8", //*pre*in*post*",
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldIgnore: []interface{}{
+				"A2020log",
+				"A2020log.txte",
+			},
+			shouldTransfer: []interface{}{
+				folder("subdir"),
+				"2020_file1",
+				"file2.txt",
+				"file3_mid_txt",
+				"subdir/2020_file5", //because recursive=true and patterns are matched in subdirectories as well.
+				"subdir/file6.txt",
+				"subdir/file7_A_mid_B",
+				"file8", //Exact match
+			},
+		})
+}
+
+func TestFilter_RemoveFile(t *testing.T) {
+
+	RunScenarios(
+		t,
+		eOperation.Remove(),
+		eTestFromTo.AllRemove(),
+		eValidate.Auto(),
+		params{
+			relativeSourcePath: "file2.txt",
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				"file1.txt",
+			},
+			shouldIgnore: []interface{}{
+				"file2.txt",
+			},
+		})
+}
+
+func TestFilter_RemoveFolder(t *testing.T) {
+
+	RunScenarios(
+		t,
+		eOperation.Remove(),
+		eTestFromTo.AllRemove(),
+		eValidate.Auto(),
+		params{
+			recursive:          true,
+			relativeSourcePath: "folder2/",
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				"file1.txt",
+				"folder1/file11.txt",
+				"folder1/file12.txt",
+			},
+			shouldIgnore: []interface{}{
+				"folder2/file21.txt",
+				"folder2/file22.txt",
+			},
+		})
+}
+
+func TestFilter_RemoveContainer(t *testing.T) {
+
+	RunScenarios(
+		t,
+		eOperation.Remove(),
+		eTestFromTo.AllRemove(),
+		eValidate.Auto(),
+		params{
+			recursive:          true,
+			relativeSourcePath: "",
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				"file1.txt",
+				"folder1/file11.txt",
+				"folder1/file12.txt",
+			},
+		})
+}
+
+func TestFilter_ExcludePath(t *testing.T) {
+
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.AllSourcesToOneDest(),
+		eValidate.Auto(),
+		params{
+			recursive:   true,
+			excludePath: "subL1/subL2;excludeFile",
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldIgnore: []interface{}{
+				"excludeFile",
+				folder("subL1/subL2"),
+				"subL1/subL2/file1",
+			},
+			shouldTransfer: []interface{}{
+				folder(""),
+				folder("subL1"),
+				folder("sub"),
+				folder("subL1/sub"),
+				folder("sub/subL1"),
+				folder("subL1/sub/subL2"),
+				folder("sub/subL1/subL2"),
+				"sub/excludeFile",       // exclude path starts at root
+				"subL1/sub/subL2/fileA", //exclude path should be contiguous
+				"sub/subL1/subL2/fileB",
+			},
+		})
+}
+
+func TestFilter_ExcludePattern(t *testing.T) {
+
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.AllSourcesToOneDest(),
+		eValidate.Auto(),
+		params{
+			recursive:      true,
+			excludePattern: "*.log;2020*;*mid*;excludeFile",
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldIgnore: []interface{}{
+				"A2020.log",
+				"2020log.txt",
+				"A2020_mid_file",
+				"excludeFile",
+				"subdir/A2020.log", //We'll match patterns as sub-directories if recursive=true
+				"subdir/2020log.txt",
+				"subdir/A2020_mid_file",
+			},
+			shouldTransfer: []interface{}{
+				folder("subdir"),
+				"sample.txt",
+				"subdir/sample.txt",
+			},
+		})
+}
+
 // Generally, each filter test should target one filter.  We did once have a bug though, where combining
 // include-path with other filters didn't work properly. This test should give us some protection against that.
 // In particular, this tests asserts how the various path and pattern related filters should combine with each other.

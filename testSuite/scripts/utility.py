@@ -33,7 +33,10 @@ class Command(object):
             if len(self.args) == 1:
                 self.add_flags("put-md5", "true")  # this is an upload
             else:
-                self.add_flags("check-md5", "FailIfDifferentOrMissing")
+                if "s3" in self.args[0]:
+                    self.add_flags("check-md5", "FailIfDifferent")
+                else:
+                    self.add_flags("check-md5", "FailIfDifferentOrMissing")
         if ct == "create":
             if len(self.args) == 1:
                 self.add_flags("generate-md5", "true") # We want to generate an MD5 on the way up.
@@ -227,7 +230,7 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
     test_directory_path = new_dir_path
     test_bfs_account_url = filesystem_url
     test_bfs_sas_account_url = filesystem_sas_url
-    if not (test_bfs_account_url.endswith("/") and test_bfs_account_url.endwith("\\")):
+    if not (test_bfs_account_url.endswith("/") and test_bfs_account_url.endswith("\\")):
         test_bfs_account_url = test_bfs_account_url + "/"
     test_container_url = container_sas
     test_oauth_container_url = container_oauth
@@ -515,7 +518,7 @@ def execute_azcopy_command(command):
     cmnd = azspath + " " + command
 
     try:
-        # executing the command with timeout to set 3 minutes / 180 sec.
+        # executing the command with timeout to set 3 minutes / 360 sec.
         subprocess.check_output(
             cmnd, stderr=subprocess.STDOUT, shell=True, timeout=360,
             universal_newlines=True)
@@ -553,9 +556,9 @@ def execute_azcopy_command_get_output(command):
     cmnd = azspath + " " + command
     output = ""
     try:
-        # executing the command with timeout set to 4 minutes / 240 sec.
+        # executing the command with timeout set to 6 minutes / 360 sec.
         output = subprocess.check_output(
-            cmnd, stderr=subprocess.STDOUT, shell=True, timeout=240,
+            cmnd, stderr=subprocess.STDOUT, shell=True, timeout=360,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
         # print("command failed with error code ", exec.returncode, " and message " + exec.output)
@@ -571,9 +574,9 @@ def verify_operation(command):
     test_suite_path = os.path.join(test_directory_path, test_suite_executable_name)
     command = test_suite_path + " " + command
     try:
-        # executing the command with timeout set to 4 minutes / 240 sec.
+        # executing the command with timeout set to 6 minutes / 360 sec.
         subprocess.check_output(
-            command, stderr=subprocess.STDOUT, shell=True, timeout=240,
+            command, stderr=subprocess.STDOUT, shell=True, timeout=360,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
         # print("command failed with error code ", exec.returncode, " and message " + exec.output)
@@ -587,7 +590,7 @@ def verify_operation_get_output(command):
     test_suite_path = os.path.join(test_directory_path, test_suite_executable_name)
     command = test_suite_path + " " + command
     try:
-        # executing the command with timeout set to 3 minutes / 180 sec.
+        # executing the command with timeout set to 10 minutes / 600 sec.
         output = subprocess.check_output(
             command, stderr=subprocess.STDOUT, shell=True, timeout=600,
             universal_newlines=True)

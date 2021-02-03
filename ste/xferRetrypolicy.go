@@ -175,7 +175,7 @@ func NewBFSXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 					time.Sleep(delay) // Delay with some jitter before trying secondary
 				}
 
-				// Clone the original request to ensure that each try starts with the original (unmutated) request.
+				// Clone the original request to ensure that each try starts with the original (un-mutated) request.
 				requestCopy := request.Copy()
 
 				// For each try, seek to the beginning of the body stream. We do this even for the 1st try because
@@ -251,6 +251,8 @@ func NewBFSXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 						}
 					} else if _, ok := err.(net.Error); ok {
 						action = "Retry: net.Error and Temporary() or Timeout()"
+					} else if err == io.ErrUnexpectedEOF {
+						action = "Retry: io.UnexpectedEOF"
 					} else {
 						action = "NoRetry: unrecognized error"
 					}
@@ -421,6 +423,8 @@ func NewBlobXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 						}
 					} else if _, ok := err.(net.Error); ok {
 						action = "Retry: net.Error"
+					} else if err == io.ErrUnexpectedEOF {
+						action = "Retry: io.UnexpectedEOF"
 					} else {
 						action = "NoRetry: unrecognized error"
 					}

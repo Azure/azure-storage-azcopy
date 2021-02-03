@@ -35,7 +35,7 @@ import (
 type blobFSSenderBase struct {
 	jptm                IJobPartTransferMgr
 	fileOrDirURL        URLHolder
-	chunkSize           uint32
+	chunkSize           int64
 	numChunks           uint32
 	pipeline            pipeline.Pipeline
 	pacer               pacer
@@ -77,7 +77,7 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p pipelin
 		pipeline:            p,
 		pacer:               pacer,
 		creationTimeHeaders: &headers,
-		flushThreshold:      int64(chunkSize) * int64(ADLSFlushThreshold),
+		flushThreshold:      chunkSize * int64(ADLSFlushThreshold),
 	}, nil
 }
 
@@ -97,7 +97,7 @@ func (u *blobFSSenderBase) SendableEntityType() common.EntityType {
 	}
 }
 
-func (u *blobFSSenderBase) ChunkSize() uint32 {
+func (u *blobFSSenderBase) ChunkSize() int64 {
 	return u.chunkSize
 }
 

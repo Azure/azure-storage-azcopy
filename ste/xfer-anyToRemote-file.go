@@ -21,22 +21,128 @@
 package ste
 
 import (
+	"context"
 	"crypto/md5"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"hash"
 	"net/http"
 	"net/url"
 	"runtime"
 	"strings"
 	"sync"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
+// This code for blob tier safety is _not_ safe for multiple jobs at once.
+// That's alright, but it's good to know on the off chance.
 // This sync.Once is present to ensure we output information about a S2S access tier preservation failure to stdout once
-var s2sAccessTierFailureLogStdout sync.Once
+var tierNotAllowedFailure sync.Once
 var checkLengthFailureOnReadOnlyDst sync.Once
+
+// This sync.Once and string pair ensures that we only get a user's destination account kind once when handling set-tier
+// Premium block blob doesn't support tiering, and page blobs only support P1-80.
+// There are also size restrictions on tiering.
+var destAccountSKU string
+
+var destAccountKind string
+var tierSetPossibleFail bool
+var getDestAccountInfo sync.Once
+var getDestAccountInfoError error
+
+func prepareDestAccountInfo(bURL azblob.BlobURL, jptm IJobPartTransferMgr, ctx context.Context, mustGet bool) {
+	getDestAccountInfo.Do(func() {
+		infoResp, err := bURL.GetAccountInfo(ctx)
+		if err != nil {
+			// If GetAccountInfo fails, this transfer should fail because we lack at least one available permission
+			// UNLESS the user is using OAuth. In which case, the account owner can still get the info.
+			// If we fail to get the info under OAuth, don't fail the transfer.
+			// (https://docs.microsoft.com/en-us/rest/api/storageservices/get-account-information#authorization)
+			if mustGet {
+				getDestAccountInfoError = err
+			} else {
+				tierSetPossibleFail = true
+				destAccountSKU = "failget"
+				destAccountKind = "failget"
+			}
+		} else {
+			destAccountSKU = string(infoResp.SkuName())
+			destAccountKind = string(infoResp.AccountKind())
+		}
+	})
+
+	if getDestAccountInfoError != nil {
+		jptm.FailActiveSendWithStatus("Checking destination tier availability (Set blob tier) ", getDestAccountInfoError, common.ETransferStatus.TierAvailabilityCheckFailure())
+	}
+}
+
+//// TODO: Infer availability based upon blob size as well, for premium page blobs.
+func BlobTierAllowed(destTier azblob.AccessTierType) bool {
+	// If we failed to get the account info, just return true.
+	// This is because we can't infer whether it's possible or not, and the setTier operation could possibly succeed (or fail)
+	if tierSetPossibleFail {
+		return true
+	}
+
+	// If the account is premium, Storage/StorageV2 only supports page blobs (Tiers P1-80). Block blob does not support tiering whatsoever.
+	if strings.Contains(destAccountSKU, "Premium") {
+		// storage V1/V2
+		if destAccountKind == "StorageV2" {
+			// P1-80 possible.
+			return premiumPageBlobTierRegex.MatchString(string(destTier))
+		}
+
+		if destAccountKind == "Storage" {
+			// No tier setting is allowed.
+			return false
+		}
+
+		if strings.Contains(destAccountKind, "Block") {
+			// No tier setting is allowed.
+			return false
+		}
+
+		// Any other storage type would have to be file storage, and we can't set tier there.
+		panic("Cannot set tier on azure files.")
+	} else {
+		// Standard storage account. If it's Hot, Cool, or Archive, we're A-OK.
+		// Page blobs, however, don't have an access tier on Standard accounts.
+		// However, this is also OK, because the pageblob sender code prevents us from using a standard access tier type.
+		return destTier == azblob.AccessTierArchive || destTier == azblob.AccessTierCool || destTier == azblob.AccessTierHot
+	}
+}
+
+func ValidateTier(jptm IJobPartTransferMgr, blobTier azblob.AccessTierType, blobURL azblob.BlobURL, ctx context.Context) (isValid bool) {
+
+	if jptm.IsLive() && blobTier != azblob.AccessTierNone {
+		// Set the latest service version from sdk as service version in the context.
+		ctxWithLatestServiceVersion := context.WithValue(ctx, ServiceAPIVersionOverride, azblob.ServiceVersion)
+
+		// Let's check if we can confirm we'll be able to check the destination blob's account info.
+		// A SAS token, even with write-only permissions is enough. OR, OAuth with the account owner.
+		// We can't guess that last information, so we'll take a gamble and try to get account info anyway.
+		destParts := azblob.NewBlobURLParts(blobURL.URL())
+		mustGet := destParts.SAS.Encode() != ""
+
+		prepareDestAccountInfo(blobURL, jptm, ctxWithLatestServiceVersion, mustGet)
+		tierAvailable := BlobTierAllowed(blobTier)
+
+		if tierAvailable {
+			return true
+		} else {
+			tierNotAllowedFailure.Do(func() {
+				glcm := common.GetLifecycleMgr()
+				glcm.Info("Destination could not accommodate the tier " + string(blobTier) + ". Going ahead with the default tier. In case of service to service transfer, consider setting the flag --s2s-preserve-access-tier=false.")
+			})
+			return false
+		}
+	} else {
+		return false
+	}
+}
 
 // xfer.go requires just a single xfer function for the whole job.
 // This routine serves that role for uploads and S2S copies, and redirects for each transfer to a file or folder implementation
@@ -54,10 +160,20 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 
 		if srcURL.Hostname() == dstURL.Hostname() &&
 			srcURL.EscapedPath() == dstURL.EscapedPath() {
-			jptm.LogSendError(info.Source, info.Destination, "Transfer source and destination are the same, which would cause data loss. Aborting transfer.", 0)
-			jptm.SetStatus(common.ETransferStatus.Failed())
-			jptm.ReportTransferDone()
-			return
+
+			// src and dst point to the same object
+			// if src does not have snapshot/versionId, then error out as we cannot copy into the object itself
+			// if dst has snapshot or versionId specified, do not error and let the service fail the request with clear message
+			srcRQ := srcURL.Query()
+			dstRQ := dstURL.Query()
+
+			// note that query is now all lower case at this point
+			if len(srcRQ["snapshot"]) == 0 && len(srcRQ["versionid"]) == 0 && len(dstRQ["snapshot"]) == 0 && len(dstRQ["versionid"]) == 0 {
+				jptm.LogSendError(info.Source, info.Destination, "Transfer source and destination are the same, which would cause data loss. Aborting transfer.", 0)
+				jptm.SetStatus(common.ETransferStatus.Failed())
+				jptm.ReportTransferDone()
+				return
+			}
 		}
 	}
 
@@ -79,6 +195,8 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 
 	// step 1. perform initial checks
 	if jptm.WasCanceled() {
+		/* This is the earliest we detect jptm has been cancelled before scheduling chunks */
+		jptm.SetStatus(common.ETransferStatus.Cancelled())
 		jptm.ReportTransferDone()
 		return
 	}
@@ -289,6 +407,11 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 					// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
 					prefetchErr = chunkReader.BlockingPrefetch(srcFile, false)
 					if prefetchErr == nil {
+						// *** NOTE: the hasher hashes the buffer as it is right now.  IF the chunk upload fails, then
+						//     the chunkReader will repeat the read from disk. So there is an essential dependency
+						//     between the hashing and our change detection logic.
+						common.DocumentationForDependencyOnChangeDetection() // <-- read the documentation here ***
+
 						chunkReader.WriteBufferTo(md5Hasher)
 						ps = chunkReader.GetPrologueState()
 					} else {
@@ -373,6 +496,11 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.Epilogue())
 	defer jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 
+	if jptm.WasCanceled() {
+		// This is where we detect that transfer has been cancelled. Further statments do not act on
+		// dead jptm. We set the status here.
+		jptm.SetStatus(common.ETransferStatus.Cancelled())
+	}
 	if jptm.IsLive() {
 		if _, isS2SCopier := s.(s2sCopier); sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation) {
 			// Check the source to see if it was changed during transfer. If it was, mark the transfer as failed.
@@ -380,7 +508,12 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 			if err != nil {
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", err)
 			}
+
 			if !lmt.Equal(jptm.LastModifiedTime()) {
+				// **** Note that this check is ESSENTIAL and not just for the obvious reason of not wanting to upload
+				//      corrupt or inconsistent data. It's also essential to the integrity of our MD5 hashes.
+				common.DocumentationForDependencyOnChangeDetection() // <-- read the documentation here ***
+
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("source modified during transfer"))
 			}
 		}

@@ -21,7 +21,7 @@
 package common
 
 type cutdownJptm interface {
-	ResourceDstData(dataFileToXfer []byte) (headers ResourceHTTPHeaders, metadata Metadata)
+	ResourceDstData(dataFileToXfer []byte) (headers ResourceHTTPHeaders, metadata Metadata, blobTags BlobTags)
 }
 
 // PrologueState contains info necessary for different sending operations' prologue.
@@ -32,11 +32,7 @@ type PrologueState struct {
 	LeadingBytes []byte
 }
 
-func (ps PrologueState) CanInferContentType() bool {
-	return len(ps.LeadingBytes) > 0 // we can have a go, if we have some leading bytes
-}
-
 func (ps PrologueState) GetInferredContentType(jptm cutdownJptm) string {
-	headers, _ := jptm.ResourceDstData(ps.LeadingBytes)
+	headers, _, _ := jptm.ResourceDstData(ps.LeadingBytes)
 	return headers.ContentType
 }

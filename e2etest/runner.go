@@ -73,11 +73,16 @@ func (t *TestRunner) SetAllFlags(p params) {
 	set("include-pattern", p.includePattern, "")
 	set("exclude-pattern", p.excludePattern, "")
 	set("include-after", p.includeAfter, "")
+	set("include-pattern", p.includePattern, "")
+	set("exclude-path", p.excludePath, "")
+	set("exclude-pattern", p.excludePattern, "")
 	set("cap-mbps", p.capMbps, float32(0))
 	set("block-size-mb", p.blockSizeMB, float32(0))
 	set("s2s-detect-source-changed", p.s2sSourceChangeValidation, false)
 	set("metadata", p.metadata, "")
 	set("cancel-from-stdin", p.cancelFromStdin, false)
+	set("preserve-smb-info", p.preserveSMBInfo, false)
+	set("preserve-smb-permissions", p.preserveSMBPermissions, false)
 }
 
 func (t *TestRunner) SetAwaitOpenFlag() {
@@ -158,7 +163,7 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string, afterS
 	return stdout.Bytes(), runErr
 }
 
-func (t *TestRunner) ExecuteCopyOrSyncCommand(operation Operation, src, dst string, afterStart func() string, chToStdin <-chan string) (CopyOrSyncCommandResult, bool, error) {
+func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, afterStart func() string, chToStdin <-chan string) (CopyOrSyncCommandResult, bool, error) {
 	capLen := func(b []byte) []byte {
 		if len(b) < 1024 {
 			return b
@@ -173,11 +178,17 @@ func (t *TestRunner) ExecuteCopyOrSyncCommand(operation Operation, src, dst stri
 		verb = "copy"
 	case eOperation.Sync():
 		verb = "sync"
+	case eOperation.Remove():
+		verb = "remove"
 	default:
 		panic("unsupported operation type")
 	}
 
-	args := append([]string{verb, src, dst}, t.computeArgs()...)
+	args := []string{verb, src, dst}
+	if operation == eOperation.Remove() {
+		args = args[:2]
+	}
+	args = append(args, t.computeArgs()...)
 	out, err := t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args, afterStart, chToStdin)
 
 	wasClean := true
