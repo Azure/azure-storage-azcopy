@@ -278,7 +278,7 @@ func (EnvironmentVariable) AWSSecretAccessKey() EnvironmentVariable {
 	}
 }
 
-// AwsSessionToken is temporaily internally reserved, and not exposed to users.
+// AwsSessionToken is temporarily internally reserved, and not exposed to users.
 func (EnvironmentVariable) AwsSessionToken() EnvironmentVariable {
 	return EnvironmentVariable{Name: "AWS_SESSION_TOKEN"}
 }

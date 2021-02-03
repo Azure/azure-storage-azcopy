@@ -21,10 +21,10 @@
 package cmd
 
 import (
-	"path/filepath"
-	"syscall"
-	"strings"
 	chk "gopkg.in/check.v1"
+	"path/filepath"
+	"strings"
+	"syscall"
 )
 
 // set file attributes to test file
@@ -34,17 +34,17 @@ func (scenarioHelper) setAttributesForLocalFile(filePath string, attrList []stri
 		return err
 	}
 
-	fileAttributeMap := map[string]uint32 {
-		"R" : 1,
-		"A" : 32,
-		"S" : 4,
-		"H" : 2,
-		"C" : 2048,
-		"N" : 128,
-		"E" : 16384,
-		"T" : 256,
-		"O" : 4096,
-		"I" : 8192,
+	fileAttributeMap := map[string]uint32{
+		"R": 1,
+		"A": 32,
+		"S": 4,
+		"H": 2,
+		"C": 2048,
+		"N": 128,
+		"E": 16384,
+		"T": 256,
+		"O": 4096,
+		"I": 8192,
 	}
 	var attrs uint32
 	for _, attribute := range attrList {

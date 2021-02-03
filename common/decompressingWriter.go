@@ -33,7 +33,7 @@ type decompressingWriter struct {
 	workerError chan error
 }
 
-const decompressingWriterCopyBufferSize = 256 * 1024 // 1/4 the size that we usually write to disk with (elsewhere in codebase). 1/4 to try to keep mem usage a bit lower, without going so small as to compromize perf
+const decompressingWriterCopyBufferSize = 256 * 1024 // 1/4 the size that we usually write to disk with (elsewhere in codebase). 1/4 to try to keep mem usage a bit lower, without going so small as to compromise perf
 var decompressingWriterBufferPool = NewMultiSizeSlicePool(decompressingWriterCopyBufferSize)
 
 // NewDecompressingWriter returns a WriteCloser which decompresses the data
