@@ -108,7 +108,7 @@ Specify number of concurrent operations | `/NC:<number-of-concurrent>` | Modify 
 Specify source/destination type | `/SourceType:<option>` `/DestType:<option>` Options: blob, file | `--from-to=[enums]` <br> (typically not used)
 Upload contents recursively | `/S` | `--recursive`
 Match a specific pattern | `/Pattern:<pattern>` | `--include-pattern string` <br> `--exclude-pattern string` <br> `--include-path string` <br> `--exclude-path string`
-Create an MD5 hash when downloading data | Always does this | `--put-md5`
+Create an MD5 hash when uploading data | Always does this | `--put-md5`
 Check the MD5 hash when downloading data | `/CheckMD5` | `--check-md5=[option]` <br> Options: NoCheck, LogOnly, FailIfDifferent (default), FailIfDifferentOrMissing
 Retrieve listing | `/L` | `azcopy list`
 Set modified time to be same as the source blobs | `/MT` | `--preserve-last-modified-time`
