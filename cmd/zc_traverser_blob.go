@@ -83,7 +83,7 @@ func (t *blobTraverser) getPropertiesIfSingleBlob() (props *azblob.BlobGetProper
 
 	// perform the check
 	blobURL := azblob.NewBlobURL(blobUrlParts.URL(), t.p)
-	props, err = blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{})
+	props, err = blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 
 	// if there was no problem getting the properties, it means that we are looking at a single blob
 	if err == nil {
@@ -97,16 +97,14 @@ func (t *blobTraverser) getPropertiesIfSingleBlob() (props *azblob.BlobGetProper
 	return nil, false, false, err
 }
 
-func (t *blobTraverser) getBlobTags(requestID *string, ifTags *string) (common.BlobTags, error) {
-	// trim away the trailing slash before we check whether it's a single blob
-	// so that we can detect the directory stub in case there is one
+func (t *blobTraverser) getBlobTags() (common.BlobTags, error) {
 	blobUrlParts := azblob.NewBlobURLParts(*t.rawURL)
 	blobUrlParts.BlobName = strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 	// perform the check
 	blobURL := azblob.NewBlobURL(blobUrlParts.URL(), t.p)
 	blobTagsMap := make(common.BlobTags)
-	blobGetTagsResp, err := blobURL.GetTags(t.ctx, nil, requestID, nil, nil, ifTags)
+	blobGetTagsResp, err := blobURL.GetTags(t.ctx, nil)
 	if err != nil {
 		return blobTagsMap, err
 	}
@@ -157,7 +155,7 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		)
 
 		if t.s2sPreserveSourceTags {
-			blobTagsMap, err := t.getBlobTags(nil, nil)
+			blobTagsMap, err := t.getBlobTags()
 			if err != nil {
 				panic("Couldn't fetch blob tags due to error: " + err.Error())
 			}

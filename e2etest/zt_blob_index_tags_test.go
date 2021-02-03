@@ -41,7 +41,6 @@ func TestTags_SetTagsSingleBlob(t *testing.T) {
 		testFiles{
 			defaultSize: "1M",
 			shouldTransfer: []interface{}{
-				//folder("", ),
 				f("file1.txt", with{blobTags: blobTagsStr}),
 			},
 		})

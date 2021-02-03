@@ -60,7 +60,7 @@ func (t *blobVersionsTraverser) getBlobProperties(versionID string) (props *azbl
 	}
 
 	blobURL := azblob.NewBlobURL(blobURLParts.URL(), t.p)
-	props, err = blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{})
+	props, err = blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 	return props, err
 }
 

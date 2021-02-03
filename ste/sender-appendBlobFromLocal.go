@@ -52,7 +52,7 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 		_, err := u.destAppendBlobURL.AppendBlock(u.jptm.Context(), body,
 			azblob.AppendBlobAccessConditions{
 				AppendPositionAccessConditions: azblob.AppendPositionAccessConditions{IfAppendPositionEqual: id.OffsetInFile()},
-			}, nil)
+			}, nil, azblob.ClientProvidedKeyOptions{})
 		if err != nil {
 			u.jptm.FailActiveUpload("Appending block", err)
 			return
@@ -79,7 +79,7 @@ func (u *appendBlobUploader) Epilogue() {
 }
 
 func (u *appendBlobUploader) GetDestinationLength() (int64, error) {
-	prop, err := u.destAppendBlobURL.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{})
+	prop, err := u.destAppendBlobURL.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 
 	if err != nil {
 		return -1, err
