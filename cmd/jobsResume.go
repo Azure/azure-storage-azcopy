@@ -105,20 +105,19 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 				jsonOutput, err := json.Marshal(summary)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
-			} else {
-				return fmt.Sprintf(
-					"\n\nJob %s summary\nElapsed Time (Minutes): %v\nNumber of File Transfers: %v\nNumber of Folder Property Transfers: %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nTotalBytesTransferred: %v\nFinal Job Status: %v\n",
-					summary.JobID.String(),
-					ste.ToFixed(duration.Minutes(), 4),
-					summary.FileTransfers,
-					summary.FolderPropertyTransfers,
-					summary.TotalTransfers,
-					summary.TransfersCompleted,
-					summary.TransfersFailed,
-					summary.TransfersSkipped,
-					summary.TotalBytesTransferred,
-					summary.JobStatus)
 			}
+			return fmt.Sprintf(
+				"\n\nJob %s summary\nElapsed Time (Minutes): %v\nNumber of File Transfers: %v\nNumber of Folder Property Transfers: %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nTotalBytesTransferred: %v\nFinal Job Status: %v\n",
+				summary.JobID.String(),
+				ste.ToFixed(duration.Minutes(), 4),
+				summary.FileTransfers,
+				summary.FolderPropertyTransfers,
+				summary.TotalTransfers,
+				summary.TransfersCompleted,
+				summary.TransfersFailed,
+				summary.TransfersSkipped,
+				summary.TotalBytesTransferred,
+				summary.JobStatus)
 		}, exitCode)
 	}
 
@@ -139,31 +138,30 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 			jsonOutput, err := json.Marshal(summary)
 			common.PanicIfErr(err)
 			return string(jsonOutput)
-		} else {
-			// if json is not needed, then we generate a message that goes nicely on the same line
-			// display a scanning keyword if the job is not completely ordered
-			var scanningString = " (scanning...)"
-			if summary.CompleteJobOrdered {
-				scanningString = ""
-			}
-
-			throughput := computeThroughput()
-			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", ste.ToFixed(throughput, 4))
-			if throughput == 0 {
-				// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
-				throughputString = ""
-			}
-
-			// indicate whether constrained by disk or not
-			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, false)
-
-			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
-				summary.PercentComplete,
-				summary.TransfersCompleted,
-				summary.TransfersFailed,
-				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
-				summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
 		}
+		// if json is not needed, then we generate a message that goes nicely on the same line
+		// display a scanning keyword if the job is not completely ordered
+		var scanningString = " (scanning...)"
+		if summary.CompleteJobOrdered {
+			scanningString = ""
+		}
+
+		throughput := computeThroughput()
+		throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", ste.ToFixed(throughput, 4))
+		if throughput == 0 {
+			// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
+			throughputString = ""
+		}
+
+		// indicate whether constrained by disk or not
+		perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, false)
+
+		return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
+			summary.PercentComplete,
+			summary.TransfersCompleted,
+			summary.TransfersFailed,
+			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
+			summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
 	})
 	return
 }
@@ -291,9 +289,8 @@ func (rca resumeCmdArgs) process() error {
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
-		} else {
-			credentialInfo.OAuthTokenInfo = *tokenInfo
 		}
+		credentialInfo.OAuthTokenInfo = *tokenInfo
 	}
 
 	// Send resume job request.

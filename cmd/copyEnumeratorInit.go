@@ -243,9 +243,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 		if shouldSendToSte {
 			return addTransfer(&jobPartOrder, transfer, cca)
-		} else {
-			return nil
 		}
+		return nil
 	}
 	finalizer := func() error {
 		return dispatchFinalPart(&jobPartOrder, cca)
@@ -616,9 +615,8 @@ func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir b
 		message += getSuffix(true)
 		if stripTopDir {
 			return common.EFolderPropertiesOption.AllFoldersExceptRoot(), message
-		} else {
-			return common.EFolderPropertiesOption.AllFolders(), message
 		}
+		return common.EFolderPropertiesOption.AllFolders(), message
 	}
 
 	return common.EFolderPropertiesOption.NoFolders(),
