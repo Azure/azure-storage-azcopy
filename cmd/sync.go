@@ -101,11 +101,22 @@ func (raw *rawSyncCmdArgs) validateURLIsNotServiceLevel(url string, location com
 func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked := cookedSyncCmdArgs{}
 
+	err := cooked.logVerbosity.Parse(raw.logVerbosity)
+	if err != nil {
+		return cooked, err
+	}
+
+	// set up the front end scanning logger
+	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, cooked.logVerbosity, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger.OpenLog()
+	glcm.RegisterCloseFunc(func() {
+		azcopyScanningLogger.CloseLog()
+	})
+
 	// this if statement ladder remains instead of being separated to help determine valid combinations for sync
 	// consider making a map of valid source/dest combos and consolidating this to generic source/dest setups, akin to the lower if statement
 	// TODO: if expand the set of source/dest combos supported by sync, update this method the declarative test framework: // TODO: add support for account-to-account operations (for those from-tos that support that)
 	cooked.fromTo = inferFromTo(raw.src, raw.dst)
-	var err error
 	if cooked.fromTo == common.EFromTo.Unknown() {
 		return cooked, fmt.Errorf("Unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
 	} else if cooked.fromTo == common.EFromTo.LocalBlob() {
@@ -146,8 +157,8 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		}
 	}
 
-	// generate a new job ID
-	cooked.jobID = common.NewJobID()
+	// use the globally generated JobID
+	cooked.jobID = azcopyCurrentJobID
 
 	cooked.blockSize, err = blockSizeInBytes(raw.blockSizeMB)
 	if err != nil {
@@ -188,11 +199,6 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	// parse the attribute filter patterns
 	cooked.includeFileAttributes = raw.parsePatterns(raw.includeFileAttributes)
 	cooked.excludeFileAttributes = raw.parsePatterns(raw.excludeFileAttributes)
-
-	err = cooked.logVerbosity.Parse(raw.logVerbosity)
-	if err != nil {
-		return cooked, err
-	}
 
 	if err = validatePreserveSMBPropertyOption(raw.preserveSMBPermissions, cooked.fromTo, nil, "preserve-smb-permissions"); err != nil {
 		return cooked, err

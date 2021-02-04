@@ -109,6 +109,7 @@ func (m *mockedLifecycleManager) Error(msg string) {
 	}
 }
 func (*mockedLifecycleManager) SurrenderControl()                               {}
+func (*mockedLifecycleManager) RegisterCloseFunc(func())                        {}
 func (mockedLifecycleManager) AllowReinitiateProgressReporting()                {}
 func (*mockedLifecycleManager) InitiateProgressReporting(common.WorkController) {}
 func (*mockedLifecycleManager) ClearEnvironmentVariable(env common.EnvironmentVariable) {
