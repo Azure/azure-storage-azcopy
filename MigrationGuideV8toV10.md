@@ -109,14 +109,14 @@ Specify source/destination type | `/SourceType:<option>` `/DestType:<option>` Op
 Upload contents recursively | `/S` | `--recursive`
 Match a specific pattern | `/Pattern:<pattern>` | `--include-pattern string` <br> `--exclude-pattern string` <br> `--include-path string` <br> `--exclude-path string`
 Create an MD5 hash when uploading data | Always does this | `--put-md5`
-Check the MD5 hash when downloading data | `/CheckMD5` | `--check-md5=[option]` <br> Options: NoCheck, LogOnly, FailIfDifferent (default), FailIfDifferentOrMissing
+Check the MD5 hash when downloading data | `/CheckMD5` | `--check-md5=[option]` <br> Options: NoCheck, LogOnly, FailIfDifferent (default, if MD5 hash exists, it will be checked), FailIfDifferentOrMissing
 Retrieve listing | `/L` | `azcopy list`
 Set modified time to be same as the source blobs | `/MT` | `--preserve-last-modified-time`
 Exclude newer source | `/XN` | Not yet supported
 Exclude older source | `/XO` | Use the sync command
 Upload archive files/blobs | `/A` | See row below
 Set attributes | `/IA:[RASHCNETOI]` <br> `/XA:[RASHCNETOI]` | `--include-attributes string` <br> `--exclude-attributes string`
-Copy blobs or files synchronously among two Azure Storage endpoints | `/SyncCopy` | V10 is always synchronous from source to destination, unlike v8 which downloads then re-uploads
+Copy blobs or files synchronously among two Azure Storage endpoints | `/SyncCopy` | V10 is always synchronous from source to destination (See "Common Questions" below) `/	azcopy copy 'https://<source-storage-account-name>.blob.core.windows.net/<container-name>/<blob-path><SAS-token>' 'https://<destination-storage-account-name>.blob.core.windows.net/<container-name>/<blob-path>'`.
 Set content type | `/SetContentType:[content-type]` | `--content-type string`
 Set blob type at destination | `/BlobType:<option>` Options: page, block, append | `--blob-type string`
 Use specified block size | `/BlockSizeInMb:<block-size-in-mb>` | `--block-size-mb float`
@@ -138,6 +138,7 @@ The latest version that supports queues is AzCopy 8.1.
 ### What is different between the job management (how to resume jobs in both use examples)?
 In v8, you can rerun the same command from before and answer the prompt.
 In v10, you can have a job sub group where you can resume with job id.
+For more information, please visit [this](https://docs.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-jobs-resume) page
 
 ### How can I figure out which files failed?
 
