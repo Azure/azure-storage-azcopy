@@ -294,7 +294,11 @@ type enumerationCounterFunc func(entityType common.EntityType)
 // ctx, pipeline are only required for remote resources.
 // followSymlinks is only required for local resources (defaults to false)
 // errorOnDirWOutRecursive is used by copy.
-func initResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string, s2sPreserveBlobTags bool) (resourceTraverser, error) {
+
+func initResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context,
+	credential *common.CredentialInfo, followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties,
+	includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string,
+	s2sPreserveBlobTags bool, logLevel pipeline.LogLevel) (resourceTraverser, error) {
 	var output resourceTraverser
 	var p *pipeline.Pipeline
 
@@ -305,7 +309,7 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 
 	// Initialize the pipeline if creds and ctx is provided
 	if ctx != nil && credential != nil {
-		tmppipe, err := initPipeline(*ctx, location, *credential)
+		tmppipe, err := initPipeline(*ctx, location, *credential, logLevel)
 
 		if err != nil {
 			return nil, err
@@ -331,7 +335,7 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 			}
 		}
 
-		output = newListTraverser(resource, location, credential, ctx, recursive, toFollow, getProperties, listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags)
+		output = newListTraverser(resource, location, credential, ctx, recursive, toFollow, getProperties, listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel)
 		return output, nil
 	}
 
@@ -358,7 +362,8 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 			}()
 
 			baseResource := resource.CloneWithValue(cleanLocalPath(basePath))
-			output = newListTraverser(baseResource, location, nil, nil, recursive, toFollow, getProperties, globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags)
+			output = newListTraverser(baseResource, location, nil, nil, recursive, toFollow, getProperties,
+				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel)
 		} else {
 			output = newLocalTraverser(resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter)
 		}

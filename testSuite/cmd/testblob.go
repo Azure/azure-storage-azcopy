@@ -611,7 +611,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 			fmt.Println("error getting the block blob list")
 			os.Exit(1)
 		}
-		// todo only commited blocks
+		// todo only committed blocks
 		if numberOfBlocks != (len(resp.CommittedBlocks)) {
 			fmt.Println("number of blocks to be uploaded is different from the number of expected to be uploaded")
 			os.Exit(1)

@@ -55,7 +55,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
 	jobPartOrder.S2SPreserveBlobTags = cca.s2sPreserveBlobTags
 
-	traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, cca.includeDirectoryStubs, func(common.EntityType) {}, cca.listOfVersionIDs, cca.s2sPreserveBlobTags)
+	traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties,
+		cca.includeDirectoryStubs, func(common.EntityType) {}, cca.listOfVersionIDs, cca.s2sPreserveBlobTags, cca.logVerbosity.ToPipelineLogLevel())
 
 	if err != nil {
 		return nil, err
@@ -122,7 +123,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		// only create the destination container in S2S scenarios
 		if cca.fromTo.From().IsRemote() && dstContainerName != "" { // if the destination has a explicit container name
 			// Attempt to create the container. If we fail, fail silently.
-			err = cca.createDstContainer(dstContainerName, cca.destination, ctx, existingContainers)
+			err = cca.createDstContainer(dstContainerName, cca.destination, ctx, existingContainers, cca.logVerbosity)
 
 			// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 			if _, ok := seenFailedContainers[dstContainerName]; err != nil && ste.JobsAdmin != nil && !ok {
@@ -152,7 +153,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						continue
 					}
 
-					err = cca.createDstContainer(bucketName, cca.destination, ctx, existingContainers)
+					err = cca.createDstContainer(bucketName, cca.destination, ctx, existingContainers, cca.logVerbosity)
 
 					// if JobsAdmin is nil, we're probably in testing mode.
 					// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
@@ -176,7 +177,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				resName, err := containerResolver.ResolveName(cName)
 
 				if err == nil {
-					err = cca.createDstContainer(resName, cca.destination, ctx, existingContainers)
+					err = cca.createDstContainer(resName, cca.destination, ctx, existingContainers, cca.logVerbosity)
 
 					if _, ok := seenFailedContainers[dstContainerName]; err != nil && ste.JobsAdmin != nil && !ok {
 						logDstContainerCreateFailureOnce.Do(func() {
@@ -246,9 +247,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 		if shouldSendToSte {
 			return addTransfer(&jobPartOrder, transfer, cca)
-		} else {
-			return nil
 		}
+		return nil
 	}
 	finalizer := func() error {
 		return dispatchFinalPart(&jobPartOrder, cca)
@@ -271,7 +271,8 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, false, func(common.EntityType) {}, cca.listOfVersionIDs, false)
+	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false,
+		false, false, func(common.EntityType) {}, cca.listOfVersionIDs, false, pipeline.LogNone)
 
 	if err != nil {
 		return false
@@ -339,7 +340,7 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 	return filters
 }
 
-func (cca *cookedCopyCmdArgs) createDstContainer(containerName string, dstWithSAS common.ResourceString, ctx context.Context, existingContainers map[string]bool) (err error) {
+func (cca *cookedCopyCmdArgs) createDstContainer(containerName string, dstWithSAS common.ResourceString, ctx context.Context, existingContainers map[string]bool, logLevel common.LogLevel) (err error) {
 	if _, ok := existingContainers[containerName]; ok {
 		return
 	}
@@ -351,7 +352,7 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		return err
 	}
 
-	dstPipeline, err := initPipeline(ctx, cca.fromTo.To(), dstCredInfo)
+	dstPipeline, err := initPipeline(ctx, cca.fromTo.To(), dstCredInfo, logLevel.ToPipelineLogLevel())
 	if err != nil {
 		return
 	}
@@ -619,9 +620,8 @@ func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir b
 		message += getSuffix(true)
 		if stripTopDir {
 			return common.EFolderPropertiesOption.AllFoldersExceptRoot(), message
-		} else {
-			return common.EFolderPropertiesOption.AllFolders(), message
 		}
+		return common.EFolderPropertiesOption.AllFolders(), message
 	}
 
 	return common.EFolderPropertiesOption.NoFolders(),

@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"net/url"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -87,7 +88,10 @@ func (l *listTraverser) traverse(preprocessor objectMorpher, processor objectPro
 	return nil
 }
 
-func newListTraverser(parent common.ResourceString, parentType common.Location, credential *common.CredentialInfo, ctx *context.Context, recursive bool, followSymlinks bool, getProperties bool, listChan chan string, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveBlobTags bool) resourceTraverser {
+
+func newListTraverser(parent common.ResourceString, parentType common.Location, credential *common.CredentialInfo,
+	ctx *context.Context, recursive, followSymlinks, getProperties bool, listChan chan string, includeDirectoryStubs bool,
+	incrementEnumerationCounter enumerationCounterFunc, s2sPreserveBlobTags bool, logLevel pipeline.LogLevel) resourceTraverser {
 	var traverserGenerator childTraverserGenerator
 
 	traverserGenerator = func(relativeChildPath string) (resourceTraverser, error) {
@@ -103,7 +107,8 @@ func newListTraverser(parent common.ResourceString, parentType common.Location, 
 		}
 
 		// Construct a traverser that goes through the child
-		traverser, err := initResourceTraverser(source, parentType, ctx, credential, &followSymlinks, nil, recursive, getProperties, includeDirectoryStubs, incrementEnumerationCounter, nil, s2sPreserveBlobTags)
+		traverser, err := initResourceTraverser(source, parentType, ctx, credential, &followSymlinks, nil,
+			recursive, getProperties, includeDirectoryStubs, incrementEnumerationCounter, nil, s2sPreserveBlobTags, logLevel)
 		if err != nil {
 			return nil, err
 		}

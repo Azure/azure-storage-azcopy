@@ -127,7 +127,7 @@ func (s *folderDeletionManagerSuite) TestFolderDeletion_WithMultipleDeletionCall
 	c.Assert(deletionCallCount, chk.Equals, 2) // deletion was called again, when count again dropped to zero
 
 	// Now find and process even more children.
-	// This time, here should be no deletion, because the deletion func _suceeded_ last time.
+	// This time, here should be no deletion, because the deletion func _succeeded_ last time.
 	// We don't expect ever to find another child after successful deletion, but may as well test it
 	f.RecordChildExists(s.u("foo/bar/c"))
 	f.RecordChildDeleted(s.u("foo/bar/c"))

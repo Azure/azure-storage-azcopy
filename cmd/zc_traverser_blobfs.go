@@ -92,6 +92,10 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 
 	pathProperties, isFile, _ := t.getPropertiesIfSingleFile()
 	if isFile {
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(pipeline.LogDebug, "Detected the root as a file.")
+		}
+
 		storedObject := newStoredObject(
 			preprocessor,
 			getObjectNameOnly(bfsURLParts.DirectoryOrFilePath),
@@ -202,6 +206,31 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 				return err
 			}
 
+		}
+
+		// if debug mode is on, note down the result, this is not going to be fast
+		if azcopyScanningLogger != nil && azcopyScanningLogger.ShouldLog(pipeline.LogDebug) {
+			tokenValue := "NONE"
+			if marker != "" {
+				tokenValue = marker
+			}
+
+			var dirListBuilder strings.Builder
+			var fileListBuilder strings.Builder
+
+			for _, v := range dlr.Paths {
+				if v.IsDirectory == nil || *v.IsDirectory == false {
+					// it's a file
+					fmt.Fprintf(&fileListBuilder, " %s,", *v.Name)
+				} else {
+					// it's a directory
+					fmt.Fprintf(&dirListBuilder, " %s,", *v.Name)
+				}
+			}
+
+			msg := fmt.Sprintf("Enumerating with token %s. Sub-dirs:%s Files:%s",
+				tokenValue, dirListBuilder.String(), fileListBuilder.String())
+			azcopyScanningLogger.Log(pipeline.LogDebug, msg)
 		}
 
 		marker = dlr.XMsContinuation()

@@ -141,6 +141,10 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			panic("isBlob should never be set if getting properties is an error")
 		}
 
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(pipeline.LogDebug, "Detected the root as a blob.")
+		}
+
 		storedObject := newStoredObject(
 			preprocessor,
 			getObjectNameOnly(strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
@@ -208,6 +212,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 	// This func must be thread safe/goroutine safe
 	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
 		currentDirPath := dir.(string)
+
 		for marker := (azblob.Marker{}); marker.NotDone(); {
 			lResp, err := containerURL.ListBlobsHierarchySegment(t.ctx, marker, "/", azblob.ListBlobsSegmentOptions{Prefix: currentDirPath,
 				Details: azblob.BlobListingDetails{Metadata: true, Tags: t.s2sPreserveSourceTags}})
@@ -240,6 +245,26 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 				}
 
 				enqueueOutput(storedObject, nil)
+			}
+
+			// if debug mode is on, note down the result, this is not going to be fast
+			if azcopyScanningLogger != nil && azcopyScanningLogger.ShouldLog(pipeline.LogDebug) {
+				tokenValue := "NONE"
+				if marker.Val != nil {
+					tokenValue = *marker.Val
+				}
+
+				var vdirListBuilder strings.Builder
+				for _, virtualDir := range lResp.Segment.BlobPrefixes {
+					fmt.Fprintf(&vdirListBuilder, " %s,", virtualDir.Name)
+				}
+				var fileListBuilder strings.Builder
+				for _, blobInfo := range lResp.Segment.BlobItems {
+					fmt.Fprintf(&fileListBuilder, " %s,", blobInfo.Name)
+				}
+				msg := fmt.Sprintf("Enumerating %s with token %s. Sub-dirs:%s Files:%s", currentDirPath,
+					tokenValue, vdirListBuilder.String(), fileListBuilder.String())
+				azcopyScanningLogger.Log(pipeline.LogDebug, msg)
 			}
 
 			marker = lResp.NextMarker

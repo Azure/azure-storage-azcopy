@@ -191,12 +191,11 @@ func (l *localFileDeleter) deleteFile(object storedObject) error {
 	if object.entityType == common.EEntityType.File() {
 		glcm.Info("Deleting extra file: " + object.relativePath)
 		return os.Remove(common.GenerateFullPath(l.rootPath, object.relativePath))
-	} else {
-		if shouldSyncRemoveFolders() {
-			panic("folder deletion enabled but not implemented")
-		}
-		return nil
 	}
+	if shouldSyncRemoveFolders() {
+		panic("folder deletion enabled but not implemented")
+	}
+	return nil
 }
 
 func newSyncDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor, error) {
@@ -207,7 +206,7 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	p, err := initPipeline(ctx, cca.fromTo.To(), cca.credentialInfo)
+	p, err := initPipeline(ctx, cca.fromTo.To(), cca.credentialInfo, cca.logVerbosity.ToPipelineLogLevel())
 	if err != nil {
 		return nil, err
 	}
