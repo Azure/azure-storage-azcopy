@@ -137,7 +137,7 @@ func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, u
 		}
 	}
 
-	return isDir, nil
+	return isDir, err
 }
 
 func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *url.URL, p pipeline.Pipeline) (bool, error) {
@@ -154,10 +154,10 @@ func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *ur
 			ste.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err), pipeline.LogWarning)
 		}
 
-		return false, nil
+		return false, err
 	}
 
-	return true, nil
+	return true, err
 }
 
 // append a file name to the container path to generate a blob path
