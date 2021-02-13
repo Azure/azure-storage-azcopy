@@ -48,8 +48,8 @@ type s3ServiceTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func (t *s3ServiceTraverser) isDirectory(isSource bool) bool {
-	return true // Returns true as account traversal is inherently folder-oriented and recursive.
+func (t *s3ServiceTraverser) isDirectory(isSource bool) (bool, error) {
+	return true, nil // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
 func (t *s3ServiceTraverser) listContainers() ([]string, error) {

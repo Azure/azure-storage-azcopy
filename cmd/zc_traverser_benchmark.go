@@ -45,8 +45,8 @@ func newBenchmarkTraverser(source string, incrementEnumerationCounter enumeratio
 		nil
 }
 
-func (t *benchmarkTraverser) isDirectory(bool) bool {
-	return true
+func (t *benchmarkTraverser) isDirectory(bool) (bool, error) {
+	return true, nil
 }
 
 func (_ *benchmarkTraverser) toReversedString(i uint) string {

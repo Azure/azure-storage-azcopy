@@ -122,10 +122,10 @@ func (util copyHandlerUtil) ConstructCommandStringFromArgs() string {
 	return s.String()
 }
 
-func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, url *url.URL, p pipeline.Pipeline) bool {
+func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, url *url.URL, p pipeline.Pipeline) (bool, error) {
 	if util.urlIsContainerOrVirtualDirectory(url) {
 
-		return true
+		return true, nil
 	}
 	// Need to get the resource properties and verify if it is a file or directory
 	dirURL := azbfs.NewDirectoryURL(*url, p)
@@ -137,13 +137,13 @@ func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, u
 		}
 	}
 
-	return isDir
+	return isDir, nil
 }
 
-func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *url.URL, p pipeline.Pipeline) bool {
+func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *url.URL, p pipeline.Pipeline) (bool, error) {
 	// Azure file share case
 	if util.urlIsContainerOrVirtualDirectory(url) {
-		return true
+		return true, nil
 	}
 
 	// Need make request to ensure if it's directory
@@ -154,10 +154,10 @@ func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *ur
 			ste.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err), pipeline.LogWarning)
 		}
 
-		return false
+		return false, nil
 	}
 
-	return true
+	return true, nil
 }
 
 // append a file name to the container path to generate a blob path

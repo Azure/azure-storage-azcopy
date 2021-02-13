@@ -40,17 +40,17 @@ type blobVersionsTraverser struct {
 	cpkOptions                  common.CpkOptions
 }
 
-func (t *blobVersionsTraverser) isDirectory(isSource bool) bool {
+func (t *blobVersionsTraverser) isDirectory(isSource bool) (bool, error) {
 	isDirDirect := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(t.rawURL)
 
 	// Skip the single blob check if we're checking a destination.
 	// This is an individual exception for blob because blob supports virtual directories and blobs sharing the same name.
 	if isDirDirect || !isSource {
-		return isDirDirect
+		return isDirDirect, nil
 	}
 
 	// The base blob may not exist in some cases.
-	return false
+	return false, nil
 }
 
 func (t *blobVersionsTraverser) getBlobProperties(versionID string) (props *azblob.BlobGetPropertiesResponse, err error) {

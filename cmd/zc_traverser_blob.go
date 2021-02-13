@@ -56,25 +56,27 @@ type blobTraverser struct {
 	cpkOptions common.CpkOptions
 }
 
-func (t *blobTraverser) isDirectory(isSource bool) bool {
+func (t *blobTraverser) isDirectory(isSource bool) (bool, error) {
 	isDirDirect := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(t.rawURL)
 
 	// Skip the single blob check if we're checking a destination.
 	// This is an individual exception for blob because blob supports virtual directories and blobs sharing the same name.
 	if isDirDirect || !isSource {
-		return isDirDirect
+		return isDirDirect, nil
 	}
 
 	_, isSingleBlob, _, err := t.getPropertiesIfSingleBlob()
-
 	if stgErr, ok := err.(azblob.StorageError); ok {
 		// We know for sure this is a single blob still, let it walk on through to the traverser.
 		if stgErr.ServiceCode() == common.CPK_ERROR_SERVICE_CODE {
-			return false
+			return false, nil
 		}
 	}
+	if err != nil {
+		return false, err
+	}
 
-	return !isSingleBlob
+	return !isSingleBlob, nil
 }
 
 func (t *blobTraverser) getPropertiesIfSingleBlob() (props *azblob.BlobGetPropertiesResponse, isBlob bool, isDirStub bool, err error) {

@@ -40,8 +40,8 @@ type listTraverser struct {
 type childTraverserGenerator func(childPath string) (resourceTraverser, error)
 
 // There is no impact to a list traverser returning false because a list traverser points directly to relative paths.
-func (l *listTraverser) isDirectory(bool) bool {
-	return false
+func (l *listTraverser) isDirectory(bool) (bool, error) {
+	return false, nil
 }
 
 // To kill the traverser, close() the channel under it.
@@ -61,7 +61,12 @@ func (l *listTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		}
 
 		// listTraverser will only ever execute on the source
-		if childTraverser.isDirectory(true) && !l.recursive {
+		isDir, err := childTraverser.isDirectory(true) 
+		if err != nil {
+			glcm.Info(fmt.Sprintf("Skipping %s. Could not identify it is directory or blob due to error %s", childPath, err))
+			continue
+		}
+		if isDir && !l.recursive {
 			continue // skip over directories
 		}
 

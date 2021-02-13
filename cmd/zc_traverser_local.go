@@ -41,18 +41,18 @@ type localTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func (t *localTraverser) isDirectory(bool) bool {
+func (t *localTraverser) isDirectory(bool) (bool, error) {
 	if strings.HasSuffix(t.fullPath, "/") {
-		return true
+		return true, nil
 	}
 
 	props, err := common.OSStat(t.fullPath)
 
 	if err != nil {
-		return false
+		return false, err
 	}
 
-	return props.IsDir()
+	return props.IsDir(), nil
 }
 
 func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {

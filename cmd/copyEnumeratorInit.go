@@ -76,7 +76,10 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	// Ensure we're only copying from a directory with a trailing wildcard or recursive.
-	isSourceDir := traverser.isDirectory(true)
+	isSourceDir, err := traverser.isDirectory(true)
+	if err != nil {
+		return nil, err
+	}
 	if isSourceDir && !cca.recursive && !cca.stripTopDir {
 		return nil, errors.New("cannot use directory as source without --recursive or a trailing wildcard (/*)")
 	}
@@ -299,7 +302,12 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	return rt.isDirectory(false)
+	isDir, err := rt.isDirectory(false)
+	if err != nil {
+		return false
+	}
+
+	return isDir
 }
 
 // Initialize the modular filters outside of copy to increase readability.

@@ -42,8 +42,8 @@ type fileAccountTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func (t *fileAccountTraverser) isDirectory(isSource bool) bool {
-	return true // Returns true as account traversal is inherently folder-oriented and recursive.
+func (t *fileAccountTraverser) isDirectory(isSource bool) (bool, error) {
+	return true, nil // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
 func (t *fileAccountTraverser) listContainers() ([]string, error) {

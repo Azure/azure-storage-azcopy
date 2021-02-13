@@ -46,7 +46,7 @@ type fileTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func (t *fileTraverser) isDirectory(bool) bool {
+func (t *fileTraverser) isDirectory(bool) (bool, error) {
 	return copyHandlerUtil{}.urlIsAzureFileDirectory(t.ctx, t.rawURL, t.p) // This handles all of the fanciness for us.
 }
 
