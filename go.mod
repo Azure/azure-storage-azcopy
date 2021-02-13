@@ -5,8 +5,6 @@ require (
 	github.com/Azure/azure-pipeline-go v0.2.3
 	github.com/Azure/azure-storage-blob-go v0.10.1-0.20201022074806-8d8fc11be726
 	github.com/Azure/azure-storage-file-go v0.6.1-0.20201111053559-3c1754dc00a5
-	github.com/Azure/go-autorest v14.2.0+incompatible
-	github.com/Azure/go-autorest/autorest v0.9.0 // indirect
 	github.com/Azure/go-autorest/autorest/adal v0.9.2
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
 	github.com/cpuguy83/go-md2man v1.0.10 // indirect
@@ -16,11 +14,9 @@ require (
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/jiacfan/keychain v0.0.0-20180920053336-f2c902a3d807
 	github.com/jiacfan/keyctl v0.3.1
-	github.com/kr/pty v1.1.5 // indirect
 	github.com/mattn/go-ieproxy v0.0.1
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
-	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/smartystreets/goconvey v0.0.0-20190330032615-68dc04aab96a // indirect
 	github.com/spf13/cobra v0.0.3
@@ -33,7 +29,6 @@ require (
 	google.golang.org/api v0.24.0
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f
 	gopkg.in/ini.v1 v1.42.0 // indirect
-	gopkg.in/yaml.v2 v2.2.2 // indirect
 )
 
 go 1.13

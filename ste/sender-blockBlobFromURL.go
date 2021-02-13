@@ -181,10 +181,6 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 func (c *urlToBlockBlobCopier) generateStartCopyBlobFromURL(id common.ChunkID, blockIndex int32, adjustedChunkSize int64) chunkFunc {
 	return createSendToRemoteChunkFunc(c.jptm, id, func() {
 
-		encodedBlockID := c.generateEncodedBlockID()
-
-		c.setBlockID(blockIndex, encodedBlockID)
-
 		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 
 		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)

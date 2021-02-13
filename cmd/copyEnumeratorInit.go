@@ -21,12 +21,17 @@ import (
 	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
-type RemoteResourceToAzureResourcesResolver interface {
+type BucketToContainerNameResolver interface {
 	ResolveName(bucketName string) (string, error)
 }
 
 func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) (*copyEnumerator, error) {
 	var traverser resourceTraverser
+
+	// Warn about GCP -> Blob being in preview. Also, we do not support GCP as destination.
+	if cca.fromTo.From() == common.ELocation.GCP() {
+		glcm.Info("Google Cloud Storage to Azure Blob copy is currently in preview. Validate the copy operation carefully before removing your data at source.")
+	}
 
 	srcCredInfo := common.CredentialInfo{}
 	var isPublic bool
@@ -108,7 +113,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// Create a Remote resource resolver
 	// Giving it nothing to work with as new names will be added as we traverse.
-	var containerResolver RemoteResourceToAzureResourcesResolver
+	var containerResolver BucketToContainerNameResolver
 	containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
 	if cca.fromTo == common.EFromTo.GCPBlob() {
 		containerResolver = NewGCPBucketNameToAzureResourcesResolver(nil)
@@ -183,9 +188,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					// this will probably never be reached
 					return nil, fmt.Errorf("failed to get container name from source (is it formatted correctly?)")
 				}
-				var resName string
-
-				resName, err = containerResolver.ResolveName(cName)
+				resName, err := containerResolver.ResolveName(cName)
 
 				if err == nil {
 					err = cca.createDstContainer(resName, cca.destination, ctx, existingContainers)
