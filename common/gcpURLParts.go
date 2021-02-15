@@ -12,7 +12,6 @@ import (
 type GCPURLParts struct {
 	Scheme         string
 	Host           string
-	Endpoint       string
 	BucketName     string
 	ObjectKey      string
 	UnparsedParams string
@@ -24,7 +23,7 @@ const gcpEssentialHostPart = "google.com"
 
 var gcpHostRegex = regexp.MustCompile(gcpHostPattern)
 
-//Used to validate whether a given URL is a valid GCP Object/Service/Bucket URL
+//IsGCPURL validates whether a given URL is a valid GCP Object/Service/Bucket URL
 func IsGCPURL(u url.URL) bool {
 	if _, isGCPURL := findGCPURLMatches(strings.ToLower(u.Host)); isGCPURL {
 		return true

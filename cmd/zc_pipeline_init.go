@@ -22,9 +22,8 @@ func initPipeline(ctx context.Context, location common.Location, credential comm
 	case common.ELocation.BlobFS():
 		p, err = createBlobFSPipeline(ctx, credential)
 	case common.ELocation.S3():
-		// Gracefully return because pipelines aren't used for S3
-		return nil, nil
 	case common.ELocation.GCP():
+		// Gracefully return because pipelines aren't used for S3 or GCP
 		return nil, nil
 	default:
 		err = fmt.Errorf("can't produce new pipeline for location %s", location)
