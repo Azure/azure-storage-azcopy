@@ -446,7 +446,7 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, dirURL a
 					// Must do it here, in the routine that is shared by both the folder and the file code,
 					// because due to the parallelism of AzCopy, we don't know which will get here first, file code, or folder code.
 					dirUrl := curDirURL.URL()
-					dirUrlStr := strings.Replace(dirUrl.String(), segments[i], url.QueryEscape(segments[i]), -1)
+					dirUrlStr := strings.Replace(dirUrl.String(), ";", url.QueryEscape(";"), -1)
 					t.RecordCreation(dirUrlStr)
 				}
 				if verifiedErr := d.verifyAndHandleCreateErrors(err); verifiedErr != nil {
