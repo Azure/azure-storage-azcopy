@@ -6,80 +6,60 @@ import filecmp
 class Google_Cloud_Storage_Copy_User_Scenario(unittest.TestCase):
 
     def setUp(self):
+        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
+            self.skipTest('GCS testing is disabled for this smoke test run')
         self.bucket_name = util.get_resource_name('s2scopybucket' + 'gcpblob')
     
     def test_copy_single_1kb_file_from_gcp_to_blob(self):
-        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCS testing is disabled for this smoke test run')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_gcp_service_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(src_bucket_url, "GCP", dst_container_url, "Blob", 1)
 
     def test_copy_single_0kb_file_from_gcp_to_blob(self):
-        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCS TESTING is disable for this smoke test run')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_gcp_service_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(src_bucket_url, "GCP", dst_container_url, "Blob", 0)
     
     def test_copy_single_63mb_file_from_gcp_to_blob(self):
-        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCS testing is disabled for this smoke test run')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_gcp_service_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(src_bucket_url, "GCP", dst_container_url, "Blob", 63 * 1024)
 
     def test_copy_10_files_from_gcp_bucket_to_blob_container(self):
-        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCS testing is disabled for this smoke test run')
         src_bucket_url =  util.get_object_without_sas(util.test_s2s_src_gcp_service_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_n_files_from_x_bucket_to_x_bucket(src_bucket_url, "GCP", dst_container_url, "Blob")
     
     def test_copy_10_files_from_gcp_bucket_to_blob_account(self):
-        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCS testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_gcp_service_url, self.bucket_name)
         self.util_test_copy_n_files_from_gcp_bucket_to_blob_account(src_bucket_url, util.test_s2s_dst_blob_account_url)
     
     def test_copy_file_from_gcp_bucket_to_blob_container_strip_top_dir_recursive(self):
-        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCS testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_gcp_service_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_file_from_x_bucket_to_x_bucket_strip_top_dir(src_bucket_url, "GCP", dst_container_url, "Blob", True)
 
     def test_copy_file_from_gcp_bucket_to_blob_container_strip_top_dir_non_recursive(self):
-        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCS testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_gcp_service_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_file_from_x_bucket_to_x_bucket_strip_top_dir(src_bucket_url, "GCP", dst_container_url, "Blob", False)
 
     def test_copy_n_files_from_gcp_dir_to_blob_dir(self):
-        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCP testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_gcp_service_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_n_files_from_x_dir_to_x_dir(src_bucket_url, "GCP", dst_container_url, "Blob")
 
     def test_copy_n_files_from_gcp_dir_to_blob_dir_strip_top_dir_recursive(self):
-        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCS testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_gcp_service_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_n_files_from_x_dir_to_x_dir_strip_top_dir(src_bucket_url, "GCP", dst_container_url, "Blob", True)
     
     def test_copy_n_files_from_gcp_dir_to_blob_dir_strip_top_dir_non_recursive(self):
-        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCS testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_gcp_service_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_n_files_from_x_dir_to_x_dir_strip_top_dir(src_bucket_url, "GCP", dst_container_url, "Blob", False)
     
     def test_copy_files_from_gcp_service_to_blob_account(self):
-        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCS testing is disabled for this smoke test run.')
         self.util_test_copy_files_from_x_account_to_x_account(
             util.test_s2s_src_gcp_service_url, 
             "GCP", 
@@ -88,8 +68,6 @@ class Google_Cloud_Storage_Copy_User_Scenario(unittest.TestCase):
             self.bucket_name)
     
     def test_copy_single_file_from_gcp_to_blob_propertyandmetadata(self):
-        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCS testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_gcp_service_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x_propertyandmetadata(
@@ -99,8 +77,6 @@ class Google_Cloud_Storage_Copy_User_Scenario(unittest.TestCase):
             "Blob")
 
     def test_copy_single_file_from_gcp_to_blob_no_preserve_propertyandmetadata(self):
-        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCP testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_gcp_service_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x_propertyandmetadata(
@@ -111,8 +87,6 @@ class Google_Cloud_Storage_Copy_User_Scenario(unittest.TestCase):
             False)
     
     def test_copy_file_from_gcp_bucket_to_blob_container_propertyandmetadata(self):
-        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCP testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_gcp_service_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadata(
@@ -122,8 +96,6 @@ class Google_Cloud_Storage_Copy_User_Scenario(unittest.TestCase):
             "Blob")
     
     def test_copy_file_from_gcp_bucket_to_blob_container_no_preserve_propertyandmetadata(self):
-        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCP testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_gcp_service_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadata(
@@ -134,8 +106,6 @@ class Google_Cloud_Storage_Copy_User_Scenario(unittest.TestCase):
             False)
     
     def test_overwrite_copy_single_file_from_gcp_to_blob(self):
-        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCS testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_gcp_service_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_overwrite_copy_single_file_from_x_to_x(
@@ -147,8 +117,6 @@ class Google_Cloud_Storage_Copy_User_Scenario(unittest.TestCase):
             True)
     
     def test_non_overwrite_copy_single_file_from_gcp_to_blob(self):
-        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCS testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_gcp_service_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_overwrite_copy_single_file_from_x_to_x(
@@ -160,8 +128,6 @@ class Google_Cloud_Storage_Copy_User_Scenario(unittest.TestCase):
             False)
 
     def test_copy_single_file_from_gcp_to_blob_with_url_encoded_slash_as_filename(self):
-        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCS testing is disabled for this smoke test run.')
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_gcp_service_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(
@@ -174,8 +140,6 @@ class Google_Cloud_Storage_Copy_User_Scenario(unittest.TestCase):
             "%252F")
 
     def test_copy_single_file_from_gcp_to_blob_excludeinvalidmetadata(self):
-        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCS testing is disabled for this smoke test run.')
         self.util_test_copy_single_file_from_gcp_to_blob_handleinvalidmetadata(
             "",
             "1abc=mcdhee;$%^=width;description=test file",
@@ -183,8 +147,6 @@ class Google_Cloud_Storage_Copy_User_Scenario(unittest.TestCase):
         )
     
     def test_copy_single_file_from_gcp_to_blob_renameinvalidmetadata(self):
-        if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCS testing is disabled for this smoke test run.')
         self.util_test_copy_single_file_from_gcp_to_blob_handleinvalidmetadata(
             "RenameIfInvalid",
             "1abc=mcdhee;$%^=width;description=test file",
@@ -746,8 +708,6 @@ class Google_Cloud_Storage_Copy_User_Scenario(unittest.TestCase):
         invalidMetadataHandleOption,
         srcGCPMetadata, 
         expectResolvedMetadata):
-        if 'GCS_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
-            self.skipTest('GCS testing is disabled for this smoke test run.')
         srcBucketURL = util.get_object_without_sas(util.test_s2s_src_gcp_service_url, self.bucket_name)
         dstBucketURL = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         srcType = "GCP"

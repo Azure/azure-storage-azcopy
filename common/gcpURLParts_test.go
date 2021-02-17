@@ -8,6 +8,7 @@ import (
 
 type gcpURLPartsTestSuite struct{}
 
+// This testsuite does not reach GCP service, and runs even with GCP_TESTS=FALSE
 var _ = chk.Suite(&gcpURLPartsTestSuite{})
 
 func (s *gcpURLPartsTestSuite) TestGCPURLParse(c *chk.C) {

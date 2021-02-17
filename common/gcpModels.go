@@ -1,12 +1,12 @@
 package common
 
 import (
-	"cloud.google.com/go/storage"
+	gcpUtils "cloud.google.com/go/storage"
 	"strings"
 )
 
 type GCPObjectInfoExtension struct {
-	ObjectInfo storage.ObjectAttrs
+	ObjectInfo gcpUtils.ObjectAttrs
 }
 
 func (gie *GCPObjectInfoExtension) ContentType() string {

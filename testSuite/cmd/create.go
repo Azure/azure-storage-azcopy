@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"bytes"
-	"cloud.google.com/go/storage"
+	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"crypto/md5"
 	"fmt"
@@ -151,7 +151,7 @@ func init() {
 				case EResourceType.Bucket():
 					createGCPBucket(resourceURL)
 				case EResourceType.SingleFile():
-					createGCPObject(resourceURL, blobSize, storage.ObjectAttrsToUpdate{
+					createGCPObject(resourceURL, blobSize, gcpUtils.ObjectAttrsToUpdate{
 						ContentType:        contentType,
 						ContentDisposition: contentDisposition,
 						ContentEncoding:    contentEncoding,
@@ -404,7 +404,7 @@ func createGCPBucket(bucketURLStr string) {
 		fmt.Println("Failed to create GCS Client: ", err)
 	}
 	bkt := gcpClient.Bucket(gcpURLParts.BucketName)
-	err = bkt.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &storage.BucketAttrs{})
+	err = bkt.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
 	if err != nil {
 		bkt := gcpClient.Bucket(gcpURLParts.BucketName)
 		_, err := bkt.Attrs(context.Background())
@@ -445,7 +445,7 @@ func createObject(objectURLStr string, objectSize uint32, o minio.PutObjectOptio
 	}
 }
 
-func createGCPObject(objectURLStr string, objectSize uint32, o storage.ObjectAttrsToUpdate) {
+func createGCPObject(objectURLStr string, objectSize uint32, o gcpUtils.ObjectAttrsToUpdate) {
 	u, err := url.Parse(objectURLStr)
 	if err != nil {
 		fmt.Println("fail to parse the object URL, ", err)

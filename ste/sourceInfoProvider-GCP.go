@@ -1,7 +1,7 @@
 package ste
 
 import (
-	"cloud.google.com/go/storage"
+	gcpUtils "cloud.google.com/go/storage"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -17,7 +17,7 @@ type gcpSourceInfoProvider struct {
 
 	rawSourceURL *url.URL
 
-	gcpClient   *storage.Client
+	gcpClient   *gcpUtils.Client
 	gcpURLParts common.GCPURLParts
 }
 
@@ -65,14 +65,14 @@ func (p *gcpSourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Could not get config from json key. Error: %v", err)
 	}
-	opts := &storage.SignedURLOptions{
-		Scheme:         storage.SigningSchemeV4,
+	opts := &gcpUtils.SignedURLOptions{
+		Scheme:         gcpUtils.SigningSchemeV4,
 		Method:         "GET",
 		GoogleAccessID: conf.Email,
 		PrivateKey:     conf.PrivateKey,
 		Expires:        time.Now().Add(defaultPresignExpires),
 	}
-	u, err := storage.SignedURL(p.gcpURLParts.BucketName, p.gcpURLParts.ObjectKey, opts)
+	u, err := gcpUtils.SignedURL(p.gcpURLParts.BucketName, p.gcpURLParts.ObjectKey, opts)
 
 	if err != nil {
 		return nil, fmt.Errorf("Unable to Generate Signed URL for given GCP Object: %v", err)

@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"cloud.google.com/go/storage"
+	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"fmt"
 	"google.golang.org/api/iterator"
@@ -534,10 +534,10 @@ func cleanGCPAccount(resourceURL string) {
 	}
 }
 
-func deleteGCPBucket(client *storage.Client, bucketName string) {
+func deleteGCPBucket(client *gcpUtils.Client, bucketName string) {
 	bucket := client.Bucket(bucketName)
 	ctx := context.Background()
-	it := bucket.Objects(ctx, &storage.Query{Prefix: ""})
+	it := bucket.Objects(ctx, &gcpUtils.Query{Prefix: ""})
 	for {
 		attrs, err := it.Next()
 		if err == iterator.Done {

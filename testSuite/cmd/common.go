@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"cloud.google.com/go/storage"
+	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"fmt"
 	"net/http"
@@ -44,7 +44,7 @@ func createS3ClientWithMinio(o createS3ResOptions) *minio.Client {
 	return s3Client
 }
 
-func createGCPClientWithGCSSDK() (*storage.Client, error) {
+func createGCPClientWithGCSSDK() (*gcpUtils.Client, error) {
 	jsonKey := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
 	if jsonKey == "" {
 		return nil, fmt.Errorf("GOOGLE_APPLICATION_CREDENTIALS should be set before creating the GCP Client")
@@ -54,7 +54,7 @@ func createGCPClientWithGCSSDK() (*storage.Client, error) {
 		return nil, fmt.Errorf("GOOGLE_CLOUD_PROJECT should be set before creating GCP Client for testing")
 	}
 	ctx := context.Background()
-	gcpClient, err := storage.NewClient(ctx)
+	gcpClient, err := gcpUtils.NewClient(ctx)
 	if err != nil {
 		return nil, err
 	}

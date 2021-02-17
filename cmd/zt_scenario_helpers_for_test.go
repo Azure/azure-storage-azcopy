@@ -21,7 +21,7 @@
 package cmd
 
 import (
-	"cloud.google.com/go/storage"
+	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"fmt"
 	"io"
@@ -282,10 +282,10 @@ func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c *chk.C, s3Client 
 	}
 }
 
-func (s scenarioHelper) generateGCPBucketsAndObjectsFromLists(c *chk.C, client *storage.Client, bucketList []string, objectList []string) {
+func (s scenarioHelper) generateGCPBucketsAndObjectsFromLists(c *chk.C, client *gcpUtils.Client, bucketList []string, objectList []string) {
 	for _, bucketName := range bucketList {
 		bkt := client.Bucket(bucketName)
-		err := bkt.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &storage.BucketAttrs{})
+		err := bkt.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
 		c.Assert(err, chk.IsNil)
 		s.generateGCPObjects(c, client, bucketName, objectList)
 	}
@@ -384,7 +384,7 @@ func (scenarioHelper) generateObjects(c *chk.C, client *minio.Client, bucketName
 	}
 }
 
-func (scenarioHelper) generateGCPObjects(c *chk.C, client *storage.Client, bucketName string, objectList []string) {
+func (scenarioHelper) generateGCPObjects(c *chk.C, client *gcpUtils.Client, bucketName string, objectList []string) {
 	size := int64(len(objectDefaultData))
 	for _, objectName := range objectList {
 		wc := client.Bucket(bucketName).Object(objectName).NewWriter(context.Background())
@@ -446,7 +446,7 @@ func (scenarioHelper) generateCommonRemoteScenarioForS3(c *chk.C, client *minio.
 	return
 }
 
-func (scenarioHelper) generateCommonRemoteScenarioForGCP(c *chk.C, client *storage.Client, bucketName string, prefix string, returnObjectListWithBucketName bool) []string {
+func (scenarioHelper) generateCommonRemoteScenarioForGCP(c *chk.C, client *gcpUtils.Client, bucketName string, prefix string, returnObjectListWithBucketName bool) []string {
 	objectList := make([]string, 50)
 	for i := 0; i < 10; i++ {
 		objectName1 := createNewGCPObject(c, client, bucketName, prefix+"top")

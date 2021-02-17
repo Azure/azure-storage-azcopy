@@ -89,18 +89,27 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 	bsu := getBSU()
 	fsu := getFSU()
 	testS3 := false // Only test S3 if credentials are present.
+	testGCP := false
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	gcpClient, err2 := createGCPClientWithGCSSDK()
 	// disable S3 testing
-	if err == nil && !isS3Disabled() && err2 == nil {
+	if err == nil && !isS3Disabled() {
 		testS3 = true
 	} else {
-		c.Log("WARNING: Service level traverser is NOT testing S3 and GCP")
+		c.Log("WARNING: Service level traverser is NOT testing S3")
+	}
+
+	gcpClient, err := createGCPClientWithGCSSDK()
+	if err == nil && !gcpTestsDisabled() {
+		testGCP = true
+	} else {
+		c.Log("WARNING: Service level traverser is NOT testing GCP")
 	}
 
 	// Clean the accounts to ensure that only the containers we create exist
 	if testS3 {
 		cleanS3Account(c, s3Client)
+	}
+	if testGCP {
 		cleanGCPAccount(c, gcpClient)
 	}
 	// BlobFS is tested on the same account, therefore this is safe to clean up this way
@@ -134,6 +143,8 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 	scenarioHelper{}.generateFileSharesAndFilesFromLists(c, fsu, containerList, objectList, objectData)
 	if testS3 {
 		scenarioHelper{}.generateS3BucketsAndObjectsFromLists(c, s3Client, containerList, objectList, objectData)
+	}
+	if testGCP {
 		scenarioHelper{}.generateGCPBucketsAndObjectsFromLists(c, gcpClient, containerList, objectList)
 	}
 
@@ -147,6 +158,8 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 			// Ignore errors from cleanup.
 			if testS3 {
 				_ = s3Client.RemoveBucket(v)
+			}
+			if testGCP {
 				deleteGCPBucket(c, gcpClient, v, true)
 			}
 			_, _ = blobContainer.Delete(ctx, azblob.ContainerAccessConditions{})
@@ -198,6 +211,9 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 		s3DummyProcessor = dummyProcessor{}
 		err = s3ServiceTraverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
+	}
+
+	if testGCP {
 
 		gcpAccountURL := scenarioHelper{}.getRawGCPAccountURL(c)
 		gcpServiceTraverser, err := newGCPServiceTraverser(&gcpAccountURL, ctx, false, func(entityType common.EntityType) {})
@@ -222,7 +238,8 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 	if testS3 {
 		c.Assert(len(s3DummyProcessor.record), chk.Equals, localFileOnlyCount*len(containerList))
 		records = append(records, s3DummyProcessor.record...)
-
+	}
+	if testGCP {
 		c.Assert(len(gcpDummyProcessor.record), chk.Equals, localFileOnlyCount*len(containerList))
 		records = append(records, gcpDummyProcessor.record...)
 	}
@@ -242,17 +259,27 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	fsu := getFSU()
 	bfssu := GetBFSSU()
 	testS3 := false // Only test S3 if credentials are present.
+	testGCP := false
+
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	gcpClient, err2 := createGCPClientWithGCSSDK()
-	if err == nil && !isS3Disabled() && err2 == nil {
+	if !isS3Disabled() && err == nil {
 		testS3 = true
 	} else {
 		c.Log("WARNING: Service level traverser is NOT testing S3")
 	}
 
+	gcpClient, err := createGCPClientWithGCSSDK()
+	if !gcpTestsDisabled() && err == nil {
+		testGCP = true
+	} else {
+		c.Log("WARNING: Service level traverser is NOT testing GCP")
+	}
+
 	// Clean the accounts to ensure that only the containers we create exist
 	if testS3 {
 		cleanS3Account(c, s3Client)
+	}
+	if testGCP {
 		cleanGCPAccount(c, gcpClient)
 	}
 	cleanBlobAccount(c, bsu)
@@ -300,6 +327,8 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	scenarioHelper{}.generateFilesystemsAndFilesFromLists(c, bfssu, bfsContainerList, objectList, objectData)
 	if testS3 {
 		scenarioHelper{}.generateS3BucketsAndObjectsFromLists(c, s3Client, containerList, objectList, objectData)
+	}
+	if testGCP {
 		scenarioHelper{}.generateGCPBucketsAndObjectsFromLists(c, gcpClient, containerList, objectList)
 	}
 
@@ -313,6 +342,8 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 			// Ignore errors from cleanup.
 			if testS3 {
 				_ = s3Client.RemoveBucket(v)
+			}
+			if testGCP {
 				deleteGCPBucket(c, gcpClient, v, true)
 			}
 			_, _ = blobContainer.Delete(ctx, azblob.ContainerAccessConditions{})
@@ -380,7 +411,8 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 		s3DummyProcessor = dummyProcessor{}
 		err = s3ServiceTraverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
-
+	}
+	if testGCP{
 		gcpAccountURL, err := common.NewGCPURLParts(scenarioHelper{}.getRawGCPAccountURL(c))
 		c.Assert(err, chk.IsNil)
 		gcpAccountURL.BucketName = "objectmatch*"
@@ -409,6 +441,8 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	if testS3 {
 		c.Assert(len(s3DummyProcessor.record), chk.Equals, localFileOnlyCount*2)
 		records = append(records, s3DummyProcessor.record...)
+	}
+	if testGCP {
 		c.Assert(len(gcpDummyProcessor.record), chk.Equals, localFileOnlyCount*2)
 		records = append(records, gcpDummyProcessor.record...)
 	}

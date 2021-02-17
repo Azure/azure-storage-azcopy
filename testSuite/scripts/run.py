@@ -18,6 +18,7 @@ from test_autodetect_blob_type import *
 from test_file_sync import *
 from test_file_copy import *
 from test_clfsload import *
+from test_google_cloud_storage_copy import *
 import glob, os
 import configparser
 import platform
@@ -185,6 +186,8 @@ def init():
 
     get_env_logged("S3_TESTS_OFF")
 
+    get_env_logged("GCP_TESTS_OFF")
+
 
     # deleting the log files.
     cleanup()
@@ -227,7 +230,8 @@ def main():
                          BlobFs_Upload_ShareKey_User_Scenarios,
                          BlobFs_Download_SharedKey_User_Scenarios,
                          Service_2_Service_Copy_User_Scenario,
-                         Autodetect_Blob_Type_Scenario]
+                         Autodetect_Blob_Type_Scenario,
+                         Google_Cloud_Storage_Copy_User_Scenario]
     suites_list = []
 
     loader = unittest.TestLoader()

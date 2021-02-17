@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"cloud.google.com/go/storage"
+	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"fmt"
 	"google.golang.org/api/iterator"
@@ -18,7 +18,7 @@ type gcpTraverser struct {
 	getProperties bool
 
 	gcpURLParts common.GCPURLParts
-	gcpClient   *storage.Client
+	gcpClient   *gcpUtils.Client
 
 	incrementEnumerationCounter enumerationCounterFunc
 }
@@ -33,7 +33,7 @@ func (t *gcpTraverser) isDirectory(isSource bool) bool {
 	obj := bkt.Object(t.gcpURLParts.ObjectKey)
 	//Directories do not have attributes and hence throw error
 	_, err := obj.Attrs(t.ctx)
-	if err == storage.ErrObjectNotExist {
+	if err == gcpUtils.ErrObjectNotExist {
 		return true
 	}
 	return false
@@ -76,7 +76,7 @@ func (t *gcpTraverser) traverse(preprocessor objectMorpher, processor objectProc
 	searchPrefix := t.gcpURLParts.ObjectKey
 
 	bkt := t.gcpClient.Bucket(t.gcpURLParts.BucketName)
-	query := &storage.Query{Prefix: searchPrefix}
+	query := &gcpUtils.Query{Prefix: searchPrefix}
 	if !t.recursive {
 		query.Delimiter = "/"
 	}
@@ -98,7 +98,7 @@ func (t *gcpTraverser) traverse(preprocessor objectMorpher, processor objectProc
 
 			relativePath := strings.TrimPrefix(attrs.Name, searchPrefix)
 
-			oie := common.GCPObjectInfoExtension{ObjectInfo: storage.ObjectAttrs{}}
+			oie := common.GCPObjectInfoExtension{ObjectInfo: gcpUtils.ObjectAttrs{}}
 
 			if t.getProperties {
 				oi, err := t.gcpClient.Bucket(t.gcpURLParts.BucketName).Object(attrs.Name).Attrs(t.ctx)

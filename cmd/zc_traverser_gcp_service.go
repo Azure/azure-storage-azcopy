@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"cloud.google.com/go/storage"
+	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -17,7 +17,7 @@ type gcpServiceTraverser struct {
 	getProperties bool
 
 	gcpURL    common.GCPURLParts
-	gcpClient *storage.Client
+	gcpClient *gcpUtils.Client
 
 	incrementEnumerationCounter enumerationCounterFunc
 }

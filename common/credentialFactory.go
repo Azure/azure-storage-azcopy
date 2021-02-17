@@ -21,7 +21,7 @@
 package common
 
 import (
-	"cloud.google.com/go/storage"
+	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"errors"
 	"fmt"
@@ -289,23 +289,23 @@ func (f *S3ClientFactory) GetS3Client(ctx context.Context, credInfo CredentialIn
 // ====================================================================
 // GCP credential factory related methods
 // ====================================================================
-func CreateGCPClient(ctx context.Context) (*storage.Client, error) {
-	client, err := storage.NewClient(ctx)
+func CreateGCPClient(ctx context.Context) (*gcpUtils.Client, error) {
+	client, err := gcpUtils.NewClient(ctx)
 	return client, err
 }
 
 type GCPClientFactory struct {
-	gcpClients map[CredentialInfo]*storage.Client
+	gcpClients map[CredentialInfo]*gcpUtils.Client
 	lock       sync.RWMutex
 }
 
 func NewGCPClientFactory() GCPClientFactory {
 	return GCPClientFactory{
-		gcpClients: make(map[CredentialInfo]*storage.Client),
+		gcpClients: make(map[CredentialInfo]*gcpUtils.Client),
 	}
 }
 
-func (f *GCPClientFactory) GetGCPClient(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions) (*storage.Client, error) {
+func (f *GCPClientFactory) GetGCPClient(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions) (*gcpUtils.Client, error) {
 	f.lock.RLock()
 	gcpClient, ok := f.gcpClients[credInfo]
 	f.lock.RUnlock()

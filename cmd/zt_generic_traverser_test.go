@@ -21,7 +21,7 @@
 package cmd
 
 import (
-	"cloud.google.com/go/storage"
+	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"io"
 	"io/ioutil"
@@ -173,7 +173,7 @@ func (s *genericTraverserSuite) TestS3GetProperties(c *chk.C) {
 }
 
 func (s *genericTraverserSuite) TestGCPGetProperties(c *chk.C) {
-	skipIfS3Disabled(c)
+	skipIfGCPDisabled(c)
 	client, err := createGCPClientWithGCSSDK()
 
 	if err != nil {
@@ -181,7 +181,7 @@ func (s *genericTraverserSuite) TestGCPGetProperties(c *chk.C) {
 		return
 	}
 
-	headers := storage.ObjectAttrsToUpdate{
+	headers := gcpUtils.ObjectAttrsToUpdate{
 		ContentType:        "text/html",
 		ContentEncoding:    "gzip",
 		ContentLanguage:    "en",
@@ -192,7 +192,7 @@ func (s *genericTraverserSuite) TestGCPGetProperties(c *chk.C) {
 	bucketName := generateBucketName()
 	objectName := generateObjectName()
 	bkt := client.Bucket(bucketName)
-	err = bkt.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &storage.BucketAttrs{})
+	err = bkt.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
 	defer deleteGCPBucket(c, client, bucketName, false)
 	c.Assert(err, chk.IsNil)
 
@@ -459,14 +459,16 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 	defer deleteFilesystem(c, filesystemURL)
 
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	gcpClient, err2 := createGCPClientWithGCSSDK()
-	s3Enabled := err == nil && !isS3Disabled() && err2 == nil
+	s3Enabled := err == nil && !isS3Disabled()
+	gcpClient, err := createGCPClientWithGCSSDK()
+	gcpEnabled := err == nil && gcpTestsDisabled()
 	var bucketName string
 	var bucketNameGCP string
 	if s3Enabled {
 		bucketName = createNewBucket(c, s3Client, createS3ResOptions{})
 		defer deleteBucket(c, s3Client, bucketName, true)
-
+	}
+	if gcpEnabled {
 		bucketNameGCP = createNewGCPBucket(c, gcpClient)
 		defer deleteGCPBucket(c, gcpClient, bucketNameGCP, true)
 	}
@@ -568,7 +570,8 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 
 			c.Assert(localDummyProcessor.record[0].relativePath, chk.Equals, s3DummyProcessor.record[0].relativePath)
 			c.Assert(localDummyProcessor.record[0].name, chk.Equals, s3DummyProcessor.record[0].name)
-
+		}
+		if gcpEnabled {
 			gcpList := []string{storedObjectName}
 			scenarioHelper{}.generateGCPObjects(c, gcpClient, bucketNameGCP, gcpList)
 
@@ -603,14 +606,16 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 	defer deleteFilesystem(c, filesystemURL)
 
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	gcpClient, err2 := createGCPClientWithGCSSDK()
-	s3Enabled := err == nil && !isS3Disabled() && err2 == nil // are creds supplied, and is S3 enabled
+	s3Enabled := err == nil && !isS3Disabled()// are creds supplied, and is S3 enabled
+	gcpClient, err := createGCPClientWithGCSSDK()
+	gcpEnabled := err == nil && !gcpTestsDisabled()
 	var bucketName string
 	var bucketNameGCP string
 	if s3Enabled {
 		bucketName = createNewBucket(c, s3Client, createS3ResOptions{})
 		defer deleteBucket(c, s3Client, bucketName, true)
-
+	}
+	if gcpEnabled {
 		bucketNameGCP = createNewGCPBucket(c, gcpClient)
 		defer deleteGCPBucket(c, gcpClient, bucketNameGCP, true)
 	}
@@ -628,6 +633,8 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 	if s3Enabled {
 		// set up a bucket with the same files
 		scenarioHelper{}.generateObjects(c, s3Client, bucketName, fileList)
+	}
+	if gcpEnabled {
 		scenarioHelper{}.generateGCPObjects(c, gcpClient, bucketNameGCP, fileList)
 	}
 
@@ -687,7 +694,8 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 			c.Assert(err, chk.IsNil)
 			err = S3Traverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
 			c.Assert(err, chk.IsNil)
-
+		}
+		if gcpEnabled {
 			rawGCPURL := scenarioHelper{}.getRawGCPBucketURL(c, bucketNameGCP)
 			GCPTraverser, err := newGCPTraverser(&rawGCPURL, ctx, isRecursiveOn, false, func(entityType common.EntityType) {})
 			c.Assert(err, chk.IsNil)
@@ -718,6 +726,8 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 
 		if s3Enabled {
 			c.Assert(len(s3DummyProcessor.record), chk.Equals, localFileOnlyCount)
+		}
+		if gcpEnabled {
 			c.Assert(len(gcpDummyProcessor.record), chk.Equals, localFileOnlyCount)
 		}
 
@@ -753,13 +763,15 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 	defer deleteFilesystem(c, filesystemURL)
 
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	gcpClient, err2 := createGCPClientWithGCSSDK()
-	s3Enabled := err == nil && !isS3Disabled() && err2 == nil
+	s3Enabled := err == nil && !isS3Disabled()
+	gcpClient, err := createGCPClientWithGCSSDK()
+	gcpEnabled := err == nil && !gcpTestsDisabled()
 	var bucketName, bucketNameGCP string
 	if s3Enabled {
 		bucketName = createNewBucket(c, s3Client, createS3ResOptions{})
 		defer deleteBucket(c, s3Client, bucketName, true)
-
+	}
+	if gcpEnabled {
 		bucketNameGCP = createNewGCPBucket(c, gcpClient)
 		defer deleteGCPBucket(c, gcpClient, bucketNameGCP, true)
 	}
@@ -778,7 +790,8 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 	if s3Enabled {
 		// Set up the bucket with the same files
 		scenarioHelper{}.generateObjects(c, s3Client, bucketName, fileList)
-
+	}
+	if gcpEnabled {
 		scenarioHelper{}.generateGCPObjects(c, gcpClient, bucketNameGCP, fileList)
 	}
 
@@ -852,7 +865,8 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 
 			// check that the results are the same length
 			c.Assert(len(s3DummyProcessor.record), chk.Equals, localFileOnlyCount)
-
+		}
+		if gcpEnabled {
 			rawGCPURL := scenarioHelper{}.getRawGCPObjectURL(c, bucketNameGCP, virDirName+"/")
 			GCPTraverser, err := newGCPTraverser(&rawGCPURL, ctx, isRecursiveOn, false, func(common.EntityType) {})
 			c.Assert(err, chk.IsNil)
