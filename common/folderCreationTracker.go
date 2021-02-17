@@ -65,8 +65,13 @@ type simpleFolderTracker struct {
 func (f *simpleFolderTracker) RecordCreation(folder string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	decodedFolderName, err := url.QueryUnescape(folder)
+	if err == nil {
+		f.contents[decodedFolderName] = struct{}{}
+	} else {
+		f.contents[folder] = struct{}{}
+	}
 
-	f.contents[folder] = struct{}{}
 }
 
 func (f *simpleFolderTracker) ShouldSetProperties(folder string, overwrite OverwriteOption, prompter prompter) bool {
@@ -81,6 +86,12 @@ func (f *simpleFolderTracker) ShouldSetProperties(folder string, overwrite Overw
 		defer f.mu.Unlock()
 
 		_, exists := f.contents[folder] // should only set properties if this job created the folder (i.e. it's in the map)
+		if !exists {
+			decodedFolderName, err := url.QueryUnescape(folder)
+			if err == nil {
+				_, exists = f.contents[decodedFolderName]
+			}
+		}
 
 		// prompt only if we didn't create this folder
 		if overwrite == EOverwriteOption.Prompt() && !exists {
@@ -111,7 +122,10 @@ func (f *simpleFolderTracker) ShouldSetProperties(folder string, overwrite Overw
 func (f *simpleFolderTracker) StopTracking(folder string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-
+	decodedFolderName, err := url.QueryUnescape(folder)
+	if err == nil {
+		delete(f.contents, decodedFolderName)
+	}
 	delete(f.contents, folder)
 }
 
