@@ -15,12 +15,12 @@ class File_Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         remote_src_file_path = util.get_resource_sas_from_share(content_file_name_src)
         remote_dst_file_path = util.get_resource_sas_from_share(content_file_name_dst)
         result = util.Command("cp").add_arguments(content_file_path_src).add_arguments(remote_src_file_path). \
-            add_flags("log-level", "info").execute_azcopy_copy_command()
+            add_flags("log-level", "debug").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # perform the single file copy using azcopy.
         result = util.Command("copy").add_arguments(remote_src_file_path).add_arguments(remote_dst_file_path). \
-            add_flags("log-level", "info").execute_azcopy_copy_command()
+            add_flags("log-level", "debug").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # verifying the copy worked, both remote source and destination should be identical to the local source
@@ -42,14 +42,14 @@ class File_Service_2_Service_Copy_User_Scenario(unittest.TestCase):
 
         # upload to the source
         result = util.Command("copy").add_arguments(content_dir_path_src).add_arguments(util.test_share_url). \
-            add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
+            add_flags("recursive", "true").add_flags("log-level", "debug").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # copy to destination
         remote_src_dir_path = util.get_resource_sas_from_share(content_dir_name_src)
         remote_dst_dir_path = util.get_resource_sas_from_share(content_dir_name_dst)
         result = util.Command("copy").add_arguments(util.get_resource_sas_from_share(content_dir_name_src+"/*"))\
-            .add_arguments(remote_dst_dir_path).add_flags("log-level", "info").add_flags("recursive", "true")\
+            .add_arguments(remote_dst_dir_path).add_flags("log-level", "debug").add_flags("recursive", "true")\
             .execute_azcopy_copy_command()
         self.assertTrue(result)
 
