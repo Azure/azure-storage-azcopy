@@ -28,7 +28,7 @@ import (
 // Upload, Download, S2S transfer of folders/files with special characters. Required for avoiding regression.
 func TestNaming_ShareFileFoldersSpecialChar(t *testing.T) {
 	files := []string{"file1.txt", "fi,le2.pdf", "fil%e3.mp3", "file 4.jpg", "file;a5.csv", "file_a6.cpp", "file+a7.mp4"}
-	folders := []string{";", ";;", "%", "_", "+", "test%folder1", "test+folder2", "test%folder3", "test folder4", "test_folder5"}
+	folders := []string{";", ";;", "%", "_", "+", "test%folder1", "test+folder2", "test,folder3", "test folder4", "test_folder5", "test;folder6"}
 	transfers := make([]interface{}, 0)
 	transfers = append(transfers, folder(""))
 	for i := 0; i < len(folders); i++ {

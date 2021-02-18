@@ -384,7 +384,7 @@ func (u *azureFileSenderBase) SetFolderProperties() error {
 }
 
 func (u *azureFileSenderBase) DirUrlToString() string {
-	dirUrl := (common.FileURLPartsExtension{FileURLParts: azfile.NewFileURLParts(u.dirURL().URL())}).URL()
+	dirUrl := azfile.NewFileURLParts(u.dirURL().URL()).URL()
 	return dirUrl.String()
 }
 
