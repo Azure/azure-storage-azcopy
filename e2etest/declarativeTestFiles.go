@@ -71,6 +71,7 @@ type objectProperties struct {
 	size               *int64
 	contentHeaders     *contentHeaders
 	nameValueMetadata  map[string]string
+	blobTags           common.BlobTags
 	creationTime       *time.Time
 	lastWriteTime      *time.Time
 	smbAttributes      *uint32

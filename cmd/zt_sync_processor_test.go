@@ -74,7 +74,7 @@ func (s *syncProcessorSuite) TestBlobDeleter(c *chk.C) {
 
 	// validate that the blob exists
 	blobURL := containerURL.NewBlobURL(blobName)
-	_, err := blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+	_, err := blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 	c.Assert(err, chk.IsNil)
 
 	// construct the cooked input to simulate user input
@@ -95,7 +95,7 @@ func (s *syncProcessorSuite) TestBlobDeleter(c *chk.C) {
 	c.Assert(err, chk.IsNil)
 
 	// validate that the blob was deleted
-	_, err = blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+	_, err = blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 	c.Assert(err, chk.NotNil)
 }
 

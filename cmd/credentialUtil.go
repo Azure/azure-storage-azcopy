@@ -184,7 +184,7 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 		if !isContainer {
 			// Scenario 3: When resourceURL points to a blob
 			blobURL := azblob.NewBlobURL(*resourceURL, p)
-			if _, err := blobURL.GetProperties(ctx, azblob.BlobAccessConditions{}); err == nil {
+			if _, err := blobURL.GetProperties(ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{}); err == nil {
 				return true
 			}
 		}
