@@ -1,6 +1,17 @@
 
 # Change Log
 
+## Version 10.9.0
+
+### New features
+1. Added preview support for importing from GCP Storage to Azure Block Blobs.
+1. Added scanning logs which have low output by default but can become verbose if desired to help in debugging.
+1. Support preservation of tags when copying blobs.
+1. Added last modified time info to the list command.
+
+### Bug fixes
+1. Removed unexpected conflict prompt for file share folders with special characters in the name, such as ";".
+   
 ## Version 10.8.0
 
 ### New features
