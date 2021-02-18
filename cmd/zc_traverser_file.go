@@ -70,6 +70,10 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		// check if the url points to a single file
 		fileProperties, isFile := t.getPropertiesIfSingleFile()
 		if isFile {
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(pipeline.LogDebug, "Detected the root as a file.")
+			}
+
 			storedObject := newStoredObject(
 				preprocessor,
 				getObjectNameOnly(targetURLParts.DirectoryOrFilePath),
@@ -188,6 +192,29 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 					enqueueDir(currentDirURL.NewDirectoryURL(dirInfo.Name))
 				}
 			}
+
+			// if debug mode is on, note down the result, this is not going to be fast
+			if azcopyScanningLogger != nil && azcopyScanningLogger.ShouldLog(pipeline.LogDebug) {
+				tokenValue := "NONE"
+				if marker.Val != nil {
+					tokenValue = *marker.Val
+				}
+
+				var dirListBuilder strings.Builder
+				for _, dir := range lResp.DirectoryItems {
+					fmt.Fprintf(&dirListBuilder, " %s,", dir.Name)
+				}
+				var fileListBuilder strings.Builder
+				for _, fileInfo := range lResp.FileItems {
+					fmt.Fprintf(&fileListBuilder, " %s,", fileInfo.Name)
+				}
+
+				dirName := azfile.NewFileURLParts(currentDirURL.URL()).DirectoryOrFilePath
+				msg := fmt.Sprintf("Enumerating %s with token %s. Sub-dirs:%s Files:%s", dirName,
+					tokenValue, dirListBuilder.String(), fileListBuilder.String())
+				azcopyScanningLogger.Log(pipeline.LogDebug, msg)
+			}
+
 			marker = lResp.NextMarker
 		}
 		return nil

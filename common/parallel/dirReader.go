@@ -57,10 +57,9 @@ func NewDirReader(totalAvailableParallelisim int, parallelStat bool) (DirReader,
 		}
 
 		return r, remainingParallelism
-	} else {
-		// we're not reading file properties in parallel
-		return &defaultDirReader{}, totalAvailableParallelisim
 	}
+	// we're not reading file properties in parallel
+	return &defaultDirReader{}, totalAvailableParallelisim
 }
 
 ////////////////////////

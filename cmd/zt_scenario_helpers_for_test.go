@@ -296,7 +296,7 @@ func (scenarioHelper) generateBlobsFromList(c *chk.C, containerURL azblob.Contai
 	for _, blobName := range blobList {
 		blob := containerURL.NewBlockBlobURL(blobName)
 		cResp, err := blob.Upload(ctx, strings.NewReader(data), azblob.BlobHTTPHeaders{},
-			nil, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil)
+			nil, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{})
 		c.Assert(err, chk.IsNil)
 		c.Assert(cResp.StatusCode(), chk.Equals, 201)
 	}
@@ -319,6 +319,7 @@ func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.Co
 			azblob.BlobAccessConditions{},
 			azblob.DefaultPremiumBlobAccessTier,
 			nil,
+			azblob.ClientProvidedKeyOptions{},
 		)
 		c.Assert(err, chk.IsNil)
 		c.Assert(cResp.StatusCode(), chk.Equals, 201)
@@ -329,6 +330,7 @@ func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.Co
 			strings.NewReader(data),
 			azblob.PageBlobAccessConditions{},
 			nil,
+			azblob.ClientProvidedKeyOptions{},
 		)
 		c.Assert(err, chk.IsNil)
 		c.Assert(uResp.StatusCode(), chk.Equals, 201)
@@ -349,6 +351,7 @@ func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.
 			azblob.Metadata{},
 			azblob.BlobAccessConditions{},
 			nil,
+			azblob.ClientProvidedKeyOptions{},
 		)
 		c.Assert(err, chk.IsNil)
 		c.Assert(cResp.StatusCode(), chk.Equals, 201)
@@ -357,7 +360,8 @@ func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.
 		uResp, err := blob.AppendBlock(ctx,
 			strings.NewReader(data),
 			azblob.AppendBlobAccessConditions{},
-			nil)
+			nil,
+			azblob.ClientProvidedKeyOptions{})
 		c.Assert(err, chk.IsNil)
 		c.Assert(uResp.StatusCode(), chk.Equals, 201)
 	}
@@ -369,7 +373,7 @@ func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.
 func (scenarioHelper) generateBlockBlobWithAccessTier(c *chk.C, containerURL azblob.ContainerURL, blobName string, accessTier azblob.AccessTierType) {
 	blob := containerURL.NewBlockBlobURL(blobName)
 	cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
-		nil, azblob.BlobAccessConditions{}, accessTier, nil)
+		nil, azblob.BlobAccessConditions{}, accessTier, nil, azblob.ClientProvidedKeyOptions{})
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
 }
@@ -698,7 +702,7 @@ func (scenarioHelper) getRawShareURLWithSAS(c *chk.C, shareName string) url.URL 
 }
 
 func (scenarioHelper) blobExists(blobURL azblob.BlobURL) bool {
-	_, err := blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+	_, err := blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 	if err == nil {
 		return true
 	}

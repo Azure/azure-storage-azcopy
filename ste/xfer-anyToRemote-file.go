@@ -407,6 +407,11 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 					// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
 					prefetchErr = chunkReader.BlockingPrefetch(srcFile, false)
 					if prefetchErr == nil {
+						// *** NOTE: the hasher hashes the buffer as it is right now.  IF the chunk upload fails, then
+						//     the chunkReader will repeat the read from disk. So there is an essential dependency
+						//     between the hashing and our change detection logic.
+						common.DocumentationForDependencyOnChangeDetection() // <-- read the documentation here ***
+
 						chunkReader.WriteBufferTo(md5Hasher)
 						ps = chunkReader.GetPrologueState()
 					} else {
@@ -503,7 +508,12 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 			if err != nil {
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", err)
 			}
+
 			if !lmt.Equal(jptm.LastModifiedTime()) {
+				// **** Note that this check is ESSENTIAL and not just for the obvious reason of not wanting to upload
+				//      corrupt or inconsistent data. It's also essential to the integrity of our MD5 hashes.
+				common.DocumentationForDependencyOnChangeDetection() // <-- read the documentation here ***
+
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("source modified during transfer"))
 			}
 		}

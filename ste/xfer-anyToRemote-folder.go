@@ -73,8 +73,8 @@ func anyToRemote_folder(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.
 	} else {
 
 		t := jptm.GetFolderCreationTracker()
-		defer t.StopTracking(info.Destination) // don't need it after this routine
-		shouldSetProps := t.ShouldSetProperties(info.Destination, jptm.GetOverwriteOption(), jptm.GetOverwritePrompter())
+		defer t.StopTracking(s.DirUrlToString()) // don't need it after this routine
+		shouldSetProps := t.ShouldSetProperties(s.DirUrlToString(), jptm.GetOverwriteOption(), jptm.GetOverwritePrompter())
 		if !shouldSetProps {
 			jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "Folder already exists, so due to the --overwrite option, its properties won't be set")
 			jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists()) // using same status for both files and folders, for simplicity

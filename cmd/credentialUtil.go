@@ -133,7 +133,7 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 // 3. If there is cached OAuth token, indicating using token credential.
 // 4. If there is OAuth token info passed from env var, indicating using token credential. (Note: this is only for testing)
 // 5. Otherwise use anonymous credential.
-// The implementaion logic follows above rule, and adjusts sequence to save web request(for verifying public resource).
+// The implementation logic follows above rule, and adjusts sequence to save web request(for verifying public resource).
 func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePublic bool, standaloneSAS bool) (common.CredentialType, bool, error) {
 	resourceURL, err := url.Parse(blobResourceURL)
 
@@ -184,7 +184,7 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 		if !isContainer {
 			// Scenario 3: When resourceURL points to a blob
 			blobURL := azblob.NewBlobURL(*resourceURL, p)
-			if _, err := blobURL.GetProperties(ctx, azblob.BlobAccessConditions{}); err == nil {
+			if _, err := blobURL.GetProperties(ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{}); err == nil {
 				return true
 			}
 		}
@@ -574,11 +574,19 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo) (credType common.
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
-func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo) (pipeline.Pipeline, error) {
+func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
 	credential := common.CreateBlobCredential(ctx, credInfo, common.CredentialOpOptions{
 		//LogInfo:  glcm.Info, //Comment out for debugging
 		LogError: glcm.Info,
 	})
+
+	logOption := pipeline.LogOptions{}
+	if azcopyScanningLogger != nil {
+		logOption = pipeline.LogOptions{
+			Log:       azcopyScanningLogger.Log,
+			ShouldLog: func(level pipeline.LogLevel) bool { return level <= logLevel },
+		}
+	}
 
 	return ste.NewBlobPipeline(
 		credential,
@@ -586,6 +594,7 @@ func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo) (pi
 			Telemetry: azblob.TelemetryOptions{
 				Value: glcm.AddUserAgentPrefix(common.UserAgent),
 			},
+			Log: logOption,
 		},
 		ste.XferRetryOptions{
 			Policy:        0,
@@ -602,42 +611,68 @@ func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo) (pi
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost
 
-func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo) (pipeline.Pipeline, error) {
+func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
 	credential := common.CreateBlobFSCredential(ctx, credInfo, common.CredentialOpOptions{
 		//LogInfo:  glcm.Info, //Comment out for debugging
 		LogError: glcm.Info,
 	})
 
-	return azbfs.NewPipeline(
+	logOption := pipeline.LogOptions{}
+	if azcopyScanningLogger != nil {
+		logOption = pipeline.LogOptions{
+			Log:       azcopyScanningLogger.Log,
+			ShouldLog: func(level pipeline.LogLevel) bool { return level <= logLevel },
+		}
+	}
+
+	return ste.NewBlobFSPipeline(
 		credential,
 		azbfs.PipelineOptions{
-			Retry: azbfs.RetryOptions{
-				Policy:        azbfs.RetryPolicyExponential,
-				MaxTries:      ste.UploadMaxTries,
-				TryTimeout:    ste.UploadTryTimeout,
-				RetryDelay:    ste.UploadRetryDelay,
-				MaxRetryDelay: ste.UploadMaxRetryDelay,
-			},
 			Telemetry: azbfs.TelemetryOptions{
 				Value: glcm.AddUserAgentPrefix(common.UserAgent),
 			},
-		}), nil
+			Log: logOption,
+		},
+		ste.XferRetryOptions{
+			Policy:        0,
+			MaxTries:      ste.UploadMaxTries,
+			TryTimeout:    ste.UploadTryTimeout,
+			RetryDelay:    ste.UploadRetryDelay,
+			MaxRetryDelay: ste.UploadMaxRetryDelay,
+		},
+		nil,
+		ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost),
+		nil, // we don't gather network stats on the credential pipeline
+	), nil
 }
 
 // TODO note: ctx and credInfo are ignored at the moment because we only support SAS for Azure File
-func createFilePipeline(ctx context.Context, credInfo common.CredentialInfo) (pipeline.Pipeline, error) {
-	return azfile.NewPipeline(
+func createFilePipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
+	logOption := pipeline.LogOptions{}
+	if azcopyScanningLogger != nil {
+		logOption = pipeline.LogOptions{
+			Log:       azcopyScanningLogger.Log,
+			ShouldLog: func(level pipeline.LogLevel) bool { return level <= logLevel },
+		}
+	}
+
+	return ste.NewFilePipeline(
 		azfile.NewAnonymousCredential(),
 		azfile.PipelineOptions{
-			Retry: azfile.RetryOptions{
-				Policy:        azfile.RetryPolicyExponential,
-				MaxTries:      ste.UploadMaxTries,
-				TryTimeout:    ste.UploadTryTimeout,
-				RetryDelay:    ste.UploadRetryDelay,
-				MaxRetryDelay: ste.UploadMaxRetryDelay,
-			},
 			Telemetry: azfile.TelemetryOptions{
 				Value: glcm.AddUserAgentPrefix(common.UserAgent),
 			},
-		}), nil
+			Log: logOption,
+		},
+		azfile.RetryOptions{
+			Policy:        azfile.RetryPolicyExponential,
+			MaxTries:      ste.UploadMaxTries,
+			TryTimeout:    ste.UploadTryTimeout,
+			RetryDelay:    ste.UploadRetryDelay,
+			MaxRetryDelay: ste.UploadMaxRetryDelay,
+		},
+		nil,
+		ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost),
+		nil, // we don't gather network stats on the credential pipeline
+	), nil
 }

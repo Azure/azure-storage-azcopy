@@ -168,6 +168,10 @@ Copy a subset of buckets by using a wildcard symbol (*) in the bucket name. Like
 
   - azcopy cp "https://s3.amazonaws.com/[bucket*name]/" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
 
+Copy blobs from one blob storage to another and preserve the tags from source. To preserve tags, use the following syntax :
+  	
+  - azcopy cp "https://[account].blob.core.windows.net/[source_container]/[path/to/directory]?[SAS]" "https://[account].blob.core.windows.net/[destination_container]/[path/to/directory]?[SAS]" --s2s-preserve-blob-tags=true
+
 Transfer files and directories to Azure Storage account and set the given query-string encoded tags on the blob. 
 
 	- To set tags {key = "bla bla", val = "foo"} and {key = "bla bla 2", val = "bar"}, use the following syntax :

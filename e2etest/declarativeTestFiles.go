@@ -71,6 +71,7 @@ type objectProperties struct {
 	size               *int64
 	contentHeaders     *contentHeaders
 	nameValueMetadata  map[string]string
+	blobTags           common.BlobTags
 	creationTime       *time.Time
 	lastWriteTime      *time.Time
 	smbAttributes      *uint32
@@ -266,10 +267,9 @@ func (tf *testFiles) allObjects(isSource bool) []*testObject {
 		result = append(result, tf.toTestObjects(tf.shouldSkip, false)...)   // these must be present at the source. Overwrite processing is expected to skip them
 		result = append(result, tf.toTestObjects(tf.shouldFail, true)...)    // these must also be present at the source. Their transferring is expected to fail
 		return result
-	} else {
-		// destination only needs the things that overwrite will skip
-		return tf.toTestObjects(tf.shouldSkip, false)
 	}
+	// destination only needs the things that overwrite will skip
+	return tf.toTestObjects(tf.shouldSkip, false)
 }
 
 func (tf *testFiles) getForStatus(status common.TransferStatus, expectFolders bool, expectRootFolder bool) []*testObject {
@@ -281,9 +281,8 @@ func (tf *testFiles) getForStatus(status common.TransferStatus, expectFolders bo
 		if expectFolders {
 			if f.isRootFolder() {
 				return expectRootFolder
-			} else {
-				return true
 			}
+			return true
 		}
 		return false
 	}

@@ -64,6 +64,13 @@ func (a blobResourceAdapter) toMetadata() azblob.Metadata {
 	return a.obj.creationProperties.nameValueMetadata
 }
 
+func (a blobResourceAdapter) toBlobTags() azblob.BlobTagsMap {
+	if a.obj.creationProperties.blobTags == nil {
+		return azblob.BlobTagsMap{}
+	}
+	return azblob.BlobTagsMap(a.obj.creationProperties.blobTags)
+}
+
 ////
 
 type filesResourceAdapter struct {

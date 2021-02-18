@@ -21,6 +21,7 @@
 package cmd
 
 import (
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"os"
 	"path"
 	"path/filepath"
@@ -162,7 +163,7 @@ func (s *cmdIntegrationSuite) TestInferredStripTopDirDownload(c *chk.C) {
 func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
 	bsu := getBSU()
 	rawBSU := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
-	p, err := initPipeline(ctx, common.ELocation.Blob(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+	p, err := initPipeline(ctx, common.ELocation.Blob(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, pipeline.LogNone)
 	c.Assert(err, chk.IsNil)
 
 	// Just in case there are no existing containers...
@@ -171,7 +172,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, false, func(common.EntityType) {})
+	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, false, func(common.EntityType) {}, false)
 	processor := func(object storedObject) error {
 		// Append the container name to the relative path
 		relPath := "/" + object.containerName + "/" + object.relativePath
@@ -204,7 +205,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
 func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
 	bsu := getBSU()
 	rawBSU := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
-	p, err := initPipeline(ctx, common.ELocation.Blob(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+	p, err := initPipeline(ctx, common.ELocation.Blob(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, pipeline.LogNone)
 	c.Assert(err, chk.IsNil)
 
 	// Create a unique container to be targeted.
@@ -219,7 +220,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, false, func(common.EntityType) {})
+	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, false, func(common.EntityType) {}, false)
 	processor := func(object storedObject) error {
 		// Append the container name to the relative path
 		relPath := "/" + object.containerName + "/" + object.relativePath

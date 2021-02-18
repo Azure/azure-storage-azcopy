@@ -173,7 +173,7 @@ func (s *pageBlobSenderBase) NumChunks() uint32 {
 }
 
 func (s *pageBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
-	return remoteObjectExists(s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}))
+	return remoteObjectExists(s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{}))
 }
 
 var premiumPageBlobTierRegex = regexp.MustCompile(`P\d+`)
@@ -204,7 +204,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		// FileSize                : 1073742336  (equals our s.srcSize, i.e. the size of the disk file)
 		// Size                    : 1073741824
 
-		p, err := s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{})
+		p, err := s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 		if err != nil {
 			s.jptm.FailActiveSend("Checking size of managed disk blob", err)
 			return
@@ -249,13 +249,15 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		s.metadataToApply,
 		azblob.BlobAccessConditions{},
 		destBlobTier,
-		blobTags); err != nil {
+		blobTags,
+		azblob.ClientProvidedKeyOptions{},
+	); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}
 
 	if separateSetTagsRequired {
-		if _, err := s.destPageBlobURL.SetTags(s.jptm.Context(), nil, nil, nil, nil, nil, nil, s.blobTagsToApply); err != nil {
+		if _, err := s.destPageBlobURL.SetTags(s.jptm.Context(), nil, nil, nil, s.blobTagsToApply); err != nil {
 			s.jptm.Log(pipeline.LogWarning, err.Error())
 		}
 	}

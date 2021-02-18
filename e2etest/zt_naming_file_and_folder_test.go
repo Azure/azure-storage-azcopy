@@ -18,45 +18,36 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package e2etest
 
 import (
-	chk "gopkg.in/check.v1"
-	"path/filepath"
-	"strings"
-	"syscall"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"testing"
 )
 
-// set file attributes to test file
-func (scenarioHelper) setAttributesForLocalFile(filePath string, attrList []string) error {
-	lpFilePath, err := syscall.UTF16PtrFromString(filePath)
-	if err != nil {
-		return err
+// Upload, Download, S2S transfer of folders/files with special characters. Required for avoiding regression.
+func TestNaming_ShareFileFoldersSpecialChar(t *testing.T) {
+	files := []string{"file1.txt", "fi,le2.pdf", "fil%e3.mp3", "file 4.jpg", "file;a5.csv", "file_a6.cpp", "file+a7.mp4"}
+	folders := []string{";", ";;", "%", "_", "+", "test%folder1", "test+folder2", "test,folder3", "test folder4", "test_folder5", "test;folder6"}
+	transfers := make([]interface{}, 0)
+	transfers = append(transfers, folder(""))
+	for i := 0; i < len(folders); i++ {
+		transfers = append(transfers, folder(folders[i]))
+		for j := 0; j < len(files); j++ {
+			transfers = append(transfers, f(folders[i]+"/"+files[j]))
+		}
 	}
-
-	fileAttributeMap := map[string]uint32{
-		"R": 1,
-		"A": 32,
-		"S": 4,
-		"H": 2,
-		"C": 2048,
-		"N": 128,
-		"E": 16384,
-		"T": 256,
-		"O": 4096,
-		"I": 8192,
-	}
-	var attrs uint32
-	for _, attribute := range attrList {
-		attrs |= fileAttributeMap[strings.ToUpper(attribute)]
-	}
-	err = syscall.SetFileAttributes(lpFilePath, attrs)
-	return err
-}
-
-func (s scenarioHelper) setAttributesForLocalFiles(c *chk.C, dirPath string, fileList []string, attrList []string) {
-	for _, fileName := range fileList {
-		err := s.setAttributesForLocalFile(filepath.Join(dirPath, fileName), attrList)
-		c.Assert(err, chk.IsNil)
-	}
+	RunScenarios(
+		t,
+		eOperation.CopyAndSync(),
+		eTestFromTo.Other(common.EFromTo.FileFile(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile()),
+		eValidate.Auto(),
+		params{
+			recursive: true,
+		},
+		nil,
+		testFiles{
+			defaultSize:    "1K",
+			shouldTransfer: transfers,
+		})
 }

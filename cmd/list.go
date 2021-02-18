@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	pipeline2 "github.com/Azure/azure-pipeline-go/pipeline"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -119,7 +120,8 @@ func HandleListContainerCommand(unparsedSource string, location common.Location)
 		}
 	}
 
-	traverser, err := initResourceTraverser(source, location, &ctx, &credentialInfo, nil, nil, true, false, false, func(common.EntityType) {}, nil)
+	traverser, err := initResourceTraverser(source, location, &ctx, &credentialInfo, nil, nil, true, false,
+		false, func(common.EntityType) {}, nil, false, pipeline2.LogNone)
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())
@@ -133,7 +135,7 @@ func HandleListContainerCommand(unparsedSource string, location common.Location)
 		if object.entityType == common.EEntityType.Folder() {
 			path += "/" // TODO: reviewer: same questions as for jobs status: OK to hard code direction of slash? OK to use trailing slash to distinguish dirs from files?
 		}
-		objectSummary := path + "; Content Length: "
+		objectSummary := path + "; Date: " + object.lastModifiedTime.String() + "; Content Length: "
 
 		if level == level.Service() {
 			objectSummary = object.containerName + "/" + objectSummary

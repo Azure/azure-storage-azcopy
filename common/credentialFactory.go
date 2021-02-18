@@ -48,7 +48,7 @@ type CredentialOpOptions struct {
 	Panic    func(error)
 	CallerID string
 
-	// Used to cancel operations, if fatal error happend during operation.
+	// Used to cancel operations, if fatal error happened during operation.
 	Cancel context.CancelFunc
 }
 

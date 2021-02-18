@@ -65,6 +65,8 @@ type rawSyncCmdArgs struct {
 	deleteDestination string
 
 	s2sPreserveAccessTier bool
+	// Opt-in flag to preserve the blob index tags during service to service transfer.
+	s2sPreserveBlobTags bool
 
 	forceIfReadOnly bool
 }
@@ -101,11 +103,22 @@ func (raw *rawSyncCmdArgs) validateURLIsNotServiceLevel(url string, location com
 func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked := cookedSyncCmdArgs{}
 
+	err := cooked.logVerbosity.Parse(raw.logVerbosity)
+	if err != nil {
+		return cooked, err
+	}
+
+	// set up the front end scanning logger
+	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, cooked.logVerbosity, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger.OpenLog()
+	glcm.RegisterCloseFunc(func() {
+		azcopyScanningLogger.CloseLog()
+	})
+
 	// this if statement ladder remains instead of being separated to help determine valid combinations for sync
 	// consider making a map of valid source/dest combos and consolidating this to generic source/dest setups, akin to the lower if statement
 	// TODO: if expand the set of source/dest combos supported by sync, update this method the declarative test framework: // TODO: add support for account-to-account operations (for those from-tos that support that)
 	cooked.fromTo = inferFromTo(raw.src, raw.dst)
-	var err error
 	if cooked.fromTo == common.EFromTo.Unknown() {
 		return cooked, fmt.Errorf("Unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
 	} else if cooked.fromTo == common.EFromTo.LocalBlob() {
@@ -146,8 +159,8 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		}
 	}
 
-	// generate a new job ID
-	cooked.jobID = common.NewJobID()
+	// use the globally generated JobID
+	cooked.jobID = azcopyCurrentJobID
 
 	cooked.blockSize, err = blockSizeInBytes(raw.blockSizeMB)
 	if err != nil {
@@ -189,11 +202,6 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.includeFileAttributes = raw.parsePatterns(raw.includeFileAttributes)
 	cooked.excludeFileAttributes = raw.parsePatterns(raw.excludeFileAttributes)
 
-	err = cooked.logVerbosity.Parse(raw.logVerbosity)
-	if err != nil {
-		return cooked, err
-	}
-
 	if err = validatePreserveSMBPropertyOption(raw.preserveSMBPermissions, cooked.fromTo, nil, "preserve-smb-permissions"); err != nil {
 		return cooked, err
 	}
@@ -223,6 +231,16 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	if cooked.fromTo.IsS2S() {
 		cooked.preserveAccessTier = raw.s2sPreserveAccessTier
+	}
+
+	// Check if user has provided `s2s-preserve-blob-tags` flag.
+	// If yes, we have to ensure that both source and destination must be blob storages.
+	if raw.s2sPreserveBlobTags {
+		if cooked.fromTo.From() != common.ELocation.Blob() || cooked.fromTo.To() != common.ELocation.Blob() {
+			return cooked, fmt.Errorf("either source or destination is not a blob storage. blob index tags is a property of blobs only therefore both source and destination must be blob storage")
+		} else {
+			cooked.s2sPreserveBlobTags = raw.s2sPreserveBlobTags
+		}
 	}
 
 	return cooked, nil
@@ -297,6 +315,8 @@ type cookedSyncCmdArgs struct {
 	deleteDestination common.DeleteDestination
 
 	preserveAccessTier bool
+	// To specify whether user wants to preserve the blob index tags during service to service transfer.
+	s2sPreserveBlobTags bool
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -637,6 +657,7 @@ func init() {
 	syncCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true, "Preserve access tier during service to service copy. "+
 		"Please refer to [Azure Blob storage: hot, cool, and archive access tiers](https://docs.microsoft.com/azure/storage/blobs/storage-blob-storage-tiers) to ensure destination storage account supports setting access tier. "+
 		"In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false to bypass copying access tier. (default true). ")
+	syncCmd.PersistentFlags().BoolVar(&raw.s2sPreserveBlobTags, "s2s-preserve-blob-tags", false, "Preserve index tags during service to service sync from one blob storage to another")
 
 	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
 	syncCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")

@@ -137,6 +137,7 @@ type CopyJobPartOrderRequest struct {
 	S2SSourceChangeValidation      bool
 	DestLengthValidation           bool
 	S2SInvalidMetadataHandleOption InvalidMetadataHandleOption
+	S2SPreserveBlobTags            bool
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,
@@ -195,7 +196,7 @@ type BlobTransferAttributes struct {
 	MD5ValidationOption      HashValidationOption  // when downloading, how strictly should we validate MD5 hashes?
 	BlockSizeInBytes         int64                 // when uploading/downloading/copying, specify the size of each chunk
 	DeleteSnapshotsOption    DeleteSnapshotsOption // when deleting, specify what to do with the snapshots
-	BlobTagsString           string
+	BlobTagsString           string                // when user explicitly provides blob tags
 }
 
 type JobIDDetails struct {
