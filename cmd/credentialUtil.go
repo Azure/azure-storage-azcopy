@@ -409,7 +409,20 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 			return fmt.Errorf(
 				"s3 authentication to %s is not currently suported in AzCopy", host)
 		}
+	case common.ECredentialType.GoogleAppCredentials():
+		if resourceType != common.ELocation.GCP() {
+			return fmt.Errorf("Google Application Credentials to %s is not valid", resourceType.String())
+		}
 
+		host := "<unparseable url>"
+		u, err := url.Parse(resource)
+		if err == nil {
+			host = u.Host
+			_, err := common.NewGCPURLParts(*u)
+			if err != nil {
+				return fmt.Errorf("GCP authentication to %s is not currently supported", host)
+			}
+		}
 	default:
 		panic("unknown credential type")
 	}
@@ -453,7 +466,7 @@ func getCredentialTypeForLocation(ctx context.Context, location common.Location,
 func doGetCredentialTypeForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool, getForcedCredType func() common.CredentialType) (credType common.CredentialType, isPublic bool, err error) {
 	if resourceSAS != "" {
 		credType = common.ECredentialType.Anonymous()
-	} else if credType = getForcedCredType(); credType == common.ECredentialType.Unknown() || location == common.ELocation.S3() {
+	} else if credType = getForcedCredType(); credType == common.ECredentialType.Unknown() || location == common.ELocation.S3() || location == common.ELocation.GCP() {
 		switch location {
 		case common.ELocation.Local(), common.ELocation.Benchmark():
 			credType = common.ECredentialType.Anonymous()
@@ -492,6 +505,12 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 				return common.ECredentialType.Unknown(), false, errors.New("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables must be set before creating the S3 AccessKey credential")
 			}
 			credType = common.ECredentialType.S3AccessKey()
+		case common.ELocation.GCP():
+			googleAppCredentials := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleAppCredentials())
+			if googleAppCredentials == "" {
+				return common.ECredentialType.Unknown(), false, errors.New("GOOGLE_APPLICATION_CREDENTIALS environment variable must be set before using GCP transfer feature")
+			}
+			credType = common.ECredentialType.GoogleAppCredentials()
 		}
 	}
 

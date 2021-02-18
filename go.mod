@@ -1,6 +1,7 @@
 module github.com/Azure/azure-storage-azcopy
 
 require (
+	cloud.google.com/go/storage v1.8.0
 	github.com/Azure/azure-pipeline-go v0.2.3
 	github.com/Azure/azure-storage-blob-go v0.10.1-0.20210205091829-70af83555b62
 	github.com/Azure/azure-storage-file-go v0.6.1-0.20201111053559-3c1754dc00a5
@@ -9,7 +10,7 @@ require (
 	github.com/cpuguy83/go-md2man v1.0.10 // indirect
 	github.com/danieljoos/wincred v1.0.1
 	github.com/go-ini/ini v1.41.0 // indirect
-	github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9
+	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/jiacfan/keychain v0.0.0-20180920053336-f2c902a3d807
 	github.com/jiacfan/keyctl v0.3.1
@@ -21,14 +22,13 @@ require (
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/pflag v1.0.2 // indirect
 	github.com/stretchr/objx v0.1.1 // indirect
-	github.com/stretchr/testify v1.3.0 // indirect
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
-	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
+	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
+	golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a
 	golang.org/x/sys v0.0.0-20200828194041-157a740278f4
-	golang.org/x/text v0.3.4 // indirect
+	google.golang.org/api v0.24.0
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f
 	gopkg.in/ini.v1 v1.42.0 // indirect
-	gopkg.in/yaml.v2 v2.2.2 // indirect
 )
 
 go 1.15

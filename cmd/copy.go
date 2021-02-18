@@ -676,7 +676,8 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		common.EFromTo.S3Blob(),
 		common.EFromTo.BlobBlob(),
 		common.EFromTo.FileBlob(),
-		common.EFromTo.FileFile():
+		common.EFromTo.FileFile(),
+		common.EFromTo.GCPBlob():
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while copying from service to service")
 		}
@@ -1244,6 +1245,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		common.EFromTo.FileFile(),
 		common.EFromTo.BlobFile(),
 		common.EFromTo.S3Blob(),
+		common.EFromTo.GCPBlob(),
 		common.EFromTo.BenchmarkBlob(),
 		common.EFromTo.BenchmarkBlobFS(),
 		common.EFromTo.BenchmarkFile():

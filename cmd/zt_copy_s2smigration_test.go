@@ -50,20 +50,23 @@ var defaultS2SInvalideMetadataHandleOption = common.DefaultInvalidMetadataHandle
 
 func (s *cmdIntegrationSuite) SetUpSuite(c *chk.C) {
 	// skip cleaning up the S3 account when not necessary
-	if isS3Disabled() {
+	if isS3Disabled() && gcpTestsDisabled() {
 		return
 	}
 
-	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-
-	// If S3 credentials aren't supplied, we're probably only trying to run Azure tests.
-	// As such, gracefully return here instead of cancelling every test because we couldn't clean up S3.
-	if err != nil {
-		return
+	if s3Client, err := createS3ClientWithMinio(createS3ResOptions{}); err == nil {
+		cleanS3Account(c, s3Client)
+	} else {
+		// If S3 credentials aren't supplied, we're probably only trying to run Azure tests.
+		// As such, gracefully return here instead of cancelling every test because we couldn't clean up S3.
+		c.Log("S3 client could not be successfully initialised")
 	}
 
-	// Cleanup the source S3 account
-	cleanS3Account(c, s3Client)
+	if gcpClient, err := createGCPClientWithGCSSDK(); err == nil {
+		cleanGCPAccount(c, gcpClient)
+	} else {
+		c.Log("GCP client could not be successfully initialised")
+	}
 }
 
 func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
@@ -550,6 +553,238 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ObjectToBlobContainer(c *chk.C) {
 	rawSrcS3ObjectURL = scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, "sub/file2") // Use default region
 	rawDstContainerURLWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcS3ObjectURL.String(), rawDstContainerURLWithSAS.String())
+
+	// bucket should be resolved, and objects should be scheduled for transfer
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+	})
+}
+
+func (s *cmdIntegrationSuite) TestS2SCopyFromGCPToBlobWithBucketNameNeedBeResolved(c *chk.C) {
+	skipIfGCPDisabled(c)
+
+	gcpClient, err := createGCPClientWithGCSSDK()
+
+	if err != nil {
+		c.Skip("GCP credentials not supplied")
+	}
+
+	invalidPrefix := "invalid---bucket_name_for-azure"
+	resolvedPrefix := "invalid-3-bucket-name-for-azure"
+
+	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
+	createNewGCPBucketWithName(c, gcpClient, bucketName)
+	defer deleteGCPBucket(c, gcpClient, bucketName, true)
+
+	objectList := scenarioHelper{}.generateCommonRemoteScenarioForGCP(c, gcpClient, bucketName, "", false)
+	c.Assert(len(objectList), chk.Not(chk.Equals), 0)
+
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	rawSrcGCPBucketURL := scenarioHelper{}.getRawGCPBucketURL(c, bucketName)
+	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
+
+	raw := getDefaultRawCopyInput(rawSrcGCPBucketURL.String(), rawDstBlobServiceURLWithSAS.String())
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(objectList))
+
+		// Check container with resolved name has been created
+		resolvedBucketName := strings.Replace(bucketName, invalidPrefix, resolvedPrefix, 1)
+		blobServiceURL := scenarioHelper{}.getBlobServiceURL(c)
+		containerURL := blobServiceURL.NewContainerURL(resolvedBucketName)
+		c.Assert(scenarioHelper{}.containerExists(containerURL), chk.Equals, true)
+		defer deleteContainer(c, containerURL)
+
+		// Check correct entry are scheduled.
+		// Example:
+		// sourceURL pass to azcopy:  https://storage.cloud.google.om/invalid---bucket__name_for---azures2scopyfroms3toblobwithbucketna
+		// destURL pass to azcopy:  https://jiacstgcanary01.blob.core.windows.net
+		// transfer.Source by design be scheduled:  /tops3objects2scopyfroms3toblobwithbucketnameneedberesolved4243293354900
+		// transfer.Destination by design be scheduled:  /invalid-3-bucketname-for-3-azures2scopyfroms3toblobwithbucketna/tops3objects2scopyfroms3toblobwithbucketnameneedberesolved4243293354900
+		// Nothing should be replaced during matching for source, and resolved bucket name should be replaced for destination.
+		validateS2STransfersAreScheduled(c, "", common.AZCOPY_PATH_SEPARATOR_STRING+resolvedBucketName, objectList, mockedRPC)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestS2SCopyFromGCPToBlobWithWildcardInSrcAndBucketNameNeedBeResolved(c *chk.C) {
+	skipIfGCPDisabled(c)
+	gcpClient, err := createGCPClientWithGCSSDK()
+	if err != nil {
+		c.Skip("GCP Credentials not Supplied")
+	}
+	invalidPrefix := "invalid----bucketname_for-azure"
+	resolvedPrefix := "invalid-4-bucketname-for-azure"
+
+	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
+	createNewGCPBucketWithName(c, gcpClient, bucketName)
+	defer deleteGCPBucket(c, gcpClient, bucketName, true)
+
+	objectList := scenarioHelper{}.generateCommonRemoteScenarioForGCP(c, gcpClient, bucketName, "", false)
+	c.Assert(len(objectList), chk.Not(chk.Equals), 0)
+
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	rawSrcGCPBucketURL := scenarioHelper{}.getRawGCPBucketURL(c, bucketName)
+	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
+	rawSrcGCPBucketStrWithWildcard := strings.Replace(rawSrcGCPBucketURL.String(), invalidPrefix, "invalid----*", 1)
+	raw := getDefaultRawCopyInput(rawSrcGCPBucketStrWithWildcard, rawDstBlobServiceURLWithSAS.String())
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(objectList))
+
+		// Check container with resolved name has been created
+		resolvedBucketName := strings.Replace(bucketName, invalidPrefix, resolvedPrefix, 1)
+		blobServiceURL := scenarioHelper{}.getBlobServiceURL(c)
+		containerURL := blobServiceURL.NewContainerURL(resolvedBucketName)
+		c.Assert(scenarioHelper{}.containerExists(containerURL), chk.Equals, true)
+		defer deleteContainer(c, containerURL)
+
+		validateS2STransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING+bucketName, common.AZCOPY_PATH_SEPARATOR_STRING+resolvedBucketName, objectList, mockedRPC)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestS2SCopyFromGCPToBlobWithBucketNameNeedBeResolvedNegative(c *chk.C) {
+	skipIfGCPDisabled(c)
+	gcpClient, err := createGCPClientWithGCSSDK()
+	if err != nil {
+		c.Skip("GCP client credentials not supplied")
+	}
+
+	invalidPrefix := "invalid_bucketname--for_azure"
+	// resolvedPrefix := "invalid-bucketname-2-for-azure"
+
+	// Generate source bucket
+	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
+	createNewGCPBucketWithName(c, gcpClient, bucketName)
+	defer deleteGCPBucket(c, gcpClient, bucketName, true)
+
+	objectList := scenarioHelper{}.generateCommonRemoteScenarioForGCP(c, gcpClient, bucketName, "", false)
+	c.Assert(len(objectList), chk.Not(chk.Equals), 0)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawSrcGCPBucketURL := scenarioHelper{}.getRawGCPBucketURL(c, bucketName)
+	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
+	raw := getDefaultRawCopyInput(rawSrcGCPBucketURL.String(), rawDstBlobServiceURLWithSAS.String())
+
+	// bucket should not be resolved, and objects should not be scheduled for transfer
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.NotNil)
+
+		loggedError := false
+		log := glcm.(*mockedLifecycleManager).infoLog
+		count := len(log)
+		for count > 0 {
+			x := <-log
+			if strings.Contains(x, "invalid name") {
+				loggedError = true
+			}
+			count = len(log)
+		}
+
+		c.Assert(loggedError, chk.Equals, true)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestS2SCopyFromGCPToBlobWithObjectUsingSlashAsSuffix(c *chk.C) {
+	skipIfGCPDisabled(c)
+	gcpClient, err := createGCPClientWithGCSSDK()
+	if err != nil {
+		c.Skip("GCP client credentials not supplied")
+	}
+
+	// Generate source bucket
+	bucketName := generateBucketName()
+	createNewGCPBucketWithName(c, gcpClient, bucketName)
+	defer deleteGCPBucket(c, gcpClient, bucketName, true)
+
+	dstContainerName := generateContainerName()
+
+	objectList := []string{"fileConsiderdAsDirectory/", "file", "sub1/file"}
+	scenarioHelper{}.generateGCPObjects(c, gcpClient, bucketName, objectList)
+
+	validateObjectList := []string{"/file", "/sub1/file"} // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawSrcGCPBucketURL := scenarioHelper{}.getRawGCPBucketURL(c, bucketName) // Use default region
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultRawCopyInput(rawSrcGCPBucketURL.String(), rawDstContainerURLWithSAS.String())
+
+	// bucket should be resolved, and objects should be scheduled for transfer
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(validateObjectList))
+
+		validateS2STransfersAreScheduled(c, "", "/"+bucketName, validateObjectList, mockedRPC)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestS2SCopyFromGCPObjectToBlobContainer(c *chk.C) {
+	skipIfGCPDisabled(c)
+	gcpClient, err := createGCPClientWithGCSSDK()
+	if err != nil {
+		c.Skip("GCP client credentials not supplied")
+	}
+
+	bucketName := generateBucketName()
+	createNewGCPBucketWithName(c, gcpClient, bucketName)
+	defer deleteGCPBucket(c, gcpClient, bucketName, true)
+
+	dstContainerName := generateContainerName()
+
+	objectList := []string{"file", "sub/file2"}
+	scenarioHelper{}.generateGCPObjects(c, gcpClient, bucketName, objectList)
+
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	rawSrcGCPObjectURL := scenarioHelper{}.getRawGCPObjectURL(c, bucketName, "file") // Use default region
+
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultRawCopyInput(rawSrcGCPObjectURL.String(), rawDstContainerURLWithSAS.String())
+
+	// bucket should be resolved, and objects should be scheduled for transfer
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+	})
+
+	mockedRPC.reset()
+
+	rawSrcGCPObjectURL = scenarioHelper{}.getRawGCPObjectURL(c, bucketName, "sub/file2") // Use default region
+	rawDstContainerURLWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw = getDefaultRawCopyInput(rawSrcGCPObjectURL.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(c, raw, func(err error) {

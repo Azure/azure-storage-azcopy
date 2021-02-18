@@ -146,6 +146,11 @@ type CredentialInfo struct {
 	CredentialType   CredentialType
 	OAuthTokenInfo   OAuthTokenInfo
 	S3CredentialInfo S3CredentialInfo
+	GCPCredentialInfo GCPCredentialInfo
+}
+
+type GCPCredentialInfo struct {
+
 }
 
 // S3CredentialInfo contains essential credential info which need to build up S3 client.

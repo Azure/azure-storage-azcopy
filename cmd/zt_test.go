@@ -22,10 +22,13 @@ package cmd
 
 import (
 	"bytes"
+	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"google.golang.org/api/iterator"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"net/url"
@@ -82,6 +85,17 @@ func isS3Disabled() bool {
 func skipIfS3Disabled(c *chk.C) {
 	if isS3Disabled() {
 		c.Skip("S3 testing is disabled for this unit test suite run.")
+	}
+}
+
+// If TEST_GCP == True, we'll run GCP testcases
+func gcpTestsDisabled() bool {
+	return strings.ToLower(os.Getenv("GCP_TESTS_OFF")) != ""
+}
+
+func skipIfGCPDisabled(c *chk.C) {
+	if gcpTestsDisabled() {
+		c.Skip("GCP testing is disabled for this run")
 	}
 }
 
@@ -434,6 +448,23 @@ func createS3ClientWithMinio(o createS3ResOptions) (*minio.Client, error) {
 	return s3Client, nil
 }
 
+func createGCPClientWithGCSSDK() (*gcpUtils.Client, error) {
+	jsonKey := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	if jsonKey == "" {
+		return nil, fmt.Errorf("GOOGLE_APPLICATION_CREDENTIALS should be set before creating the GCP Client")
+	}
+	projectID := os.Getenv("GOOGLE_CLOUD_PROJECT")
+	if projectID == "" {
+		return nil, fmt.Errorf("GOOGLE_CLOUD_PROJECT should be set before creating GCP Client for testing")
+	}
+	ctx := context.Background()
+	gcpClient, err := gcpUtils.NewClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return gcpClient, nil
+}
+
 func createNewBucket(c *chk.C, client *minio.Client, o createS3ResOptions) string {
 	bucketName := generateBucketName()
 	err := client.MakeBucket(bucketName, o.Location)
@@ -442,8 +473,23 @@ func createNewBucket(c *chk.C, client *minio.Client, o createS3ResOptions) strin
 	return bucketName
 }
 
+func createNewGCPBucket(c *chk.C, client *gcpUtils.Client) string {
+	bucketName := generateBucketName()
+	bkt := client.Bucket(bucketName)
+	err := bkt.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
+	c.Assert(err, chk.IsNil)
+
+	return bucketName
+}
+
 func createNewBucketWithName(c *chk.C, client *minio.Client, bucketName string, o createS3ResOptions) {
 	err := client.MakeBucket(bucketName, o.Location)
+	c.Assert(err, chk.IsNil)
+}
+
+func createNewGCPBucketWithName(c *chk.C, client *gcpUtils.Client, bucketName string) {
+	bucket := client.Bucket(bucketName)
+	err := bucket.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
 	c.Assert(err, chk.IsNil)
 }
 
@@ -457,6 +503,21 @@ func createNewObject(c *chk.C, client *minio.Client, bucketName string, prefix s
 	c.Assert(n, chk.Equals, size)
 
 	return
+}
+
+func createNewGCPObject(c *chk.C, client *gcpUtils.Client, bucketName string, prefix string) (objectKey string) {
+	objectKey = prefix + generateObjectName()
+
+	size := int64(len(objectDefaultData))
+	wc := client.Bucket(bucketName).Object(objectKey).NewWriter(context.Background())
+	reader := strings.NewReader(objectDefaultData)
+	written, err := io.Copy(wc, reader)
+	c.Assert(err, chk.IsNil)
+	c.Assert(written, chk.Equals, size)
+	err = wc.Close()
+	c.Assert(err, chk.IsNil)
+	return objectKey
+
 }
 
 func deleteBucket(c *chk.C, client *minio.Client, bucketName string, waitQuarterMinute bool) {
@@ -503,6 +564,33 @@ func deleteBucket(c *chk.C, client *minio.Client, bucketName string, waitQuarter
 	}
 }
 
+func deleteGCPBucket(c *chk.C, client *gcpUtils.Client, bucketName string, waitQuarterMinute bool) {
+	bucket := client.Bucket(bucketName)
+	ctx := context.Background()
+	it := bucket.Objects(ctx, &gcpUtils.Query{Prefix: ""})
+	for {
+		attrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err == nil {
+			err = bucket.Object(attrs.Name).Delete(nil)
+			if err != nil {
+				c.Log("Could not clear GCS Buckets.")
+				return
+			}
+		}
+	}
+	err := bucket.Delete(context.Background())
+	if err != nil {
+		c.Log(fmt.Sprintf("Failed to Delete GCS Bucket %v", bucketName))
+	}
+
+	if waitQuarterMinute {
+		time.Sleep(time.Second * 15)
+	}
+}
+
 func cleanS3Account(c *chk.C, client *minio.Client) {
 	buckets, err := client.ListBuckets()
 	if err != nil {
@@ -517,6 +605,23 @@ func cleanS3Account(c *chk.C, client *minio.Client) {
 	}
 
 	time.Sleep(time.Minute)
+}
+
+func cleanGCPAccount(c *chk.C, client *gcpUtils.Client) {
+	projectID := os.Getenv("GOOGLE_CLOUD_PROJECT")
+	if projectID == "" {
+		c.Log("GOOGLE_CLOUD_PROJECT env variable not set. GCP tests will not run")
+		return
+	}
+	ctx := context.Background()
+	it := client.Buckets(ctx, projectID)
+	for {
+		battrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		deleteGCPBucket(c, client, battrs.Name, false)
+	}
 }
 
 func cleanBlobAccount(c *chk.C, serviceURL azblob.ServiceURL) {

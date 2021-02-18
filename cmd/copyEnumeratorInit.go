@@ -21,8 +21,17 @@ import (
 	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
+type BucketToContainerNameResolver interface {
+	ResolveName(bucketName string) (string, error)
+}
+
 func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) (*copyEnumerator, error) {
 	var traverser resourceTraverser
+
+	// Warn about GCP -> Blob being in preview. Also, we do not support GCP as destination.
+	if cca.fromTo.From() == common.ELocation.GCP() {
+		glcm.Info("Google Cloud Storage to Azure Blob copy is currently in preview. Validate the copy operation carefully before removing your data at source.")
+	}
 
 	srcCredInfo := common.CredentialInfo{}
 	var isPublic bool
@@ -49,7 +58,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		(cca.fromTo.From() == common.ELocation.File() && !cca.fromTo.To().IsRemote()) || // If download, we still need LMT and MD5 from files.
 		(cca.fromTo.From() == common.ELocation.File() && cca.fromTo.To().IsRemote() && (cca.s2sSourceChangeValidation || cca.includeAfter != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise if we are using includeAfter, which requires LMTs.
 		(cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() && cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
-	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
+	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && !getRemoteProperties && cca.s2sGetPropertiesInBackend     // Infer GetProperties if GetPropertiesInBackend is enabled.
 	jobPartOrder.S2SSourceChangeValidation = cca.s2sSourceChangeValidation
 	jobPartOrder.DestLengthValidation = cca.CheckLength
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
@@ -104,9 +113,13 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		cca.stripTopDir = true
 	}
 
-	// Create a S3 bucket resolver
+	// Create a Remote resource resolver
 	// Giving it nothing to work with as new names will be added as we traverse.
-	var containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
+	var containerResolver BucketToContainerNameResolver
+	containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
+	if cca.fromTo == common.EFromTo.GCPBlob() {
+		containerResolver = NewGCPBucketNameToAzureResourcesResolver(nil)
+	}
 	existingContainers := make(map[string]bool)
 	var logDstContainerCreateFailureOnce sync.Once
 	seenFailedContainers := make(map[string]bool) // Create map of already failed container conversions so we don't log a million items just for one container.
@@ -143,7 +156,11 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 				// Resolve all container names up front.
 				// If we were to resolve on-the-fly, then name order would affect the results inconsistently.
-				containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
+				if cca.fromTo == common.EFromTo.S3Blob() {
+					containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
+				} else if cca.fromTo == common.EFromTo.GCPBlob() {
+					containerResolver = NewGCPBucketNameToAzureResourcesResolver(containers)
+				}
 
 				for _, v := range containers {
 					bucketName, err := containerResolver.ResolveName(v)
@@ -173,7 +190,6 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					// this will probably never be reached
 					return nil, fmt.Errorf("failed to get container name from source (is it formatted correctly?)")
 				}
-
 				resName, err := containerResolver.ResolveName(cName)
 
 				if err == nil {
