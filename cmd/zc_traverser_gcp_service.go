@@ -24,8 +24,8 @@ type gcpServiceTraverser struct {
 
 var projectID = ""
 
-func (t *gcpServiceTraverser) isDirectory(isSource bool) bool {
-	return true //Account traversals are inherently folder based
+func (t *gcpServiceTraverser) isDirectory(isSource bool) (bool, error) {
+	return true, nil //Account traversals are inherently folder based
 }
 
 func (t *gcpServiceTraverser) listContainers() ([]string, error) {

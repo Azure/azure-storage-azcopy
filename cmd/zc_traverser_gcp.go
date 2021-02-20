@@ -23,20 +23,33 @@ type gcpTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func (t *gcpTraverser) isDirectory(isSource bool) bool {
+func (t *gcpTraverser) isDirectory(isSource bool) (bool, error) {
 	//Identify whether directory or not syntactically
-	isDirDirect := !t.gcpURLParts.IsObjectSyntactically() && (t.gcpURLParts.IsDirectorySyntactically() || t.gcpURLParts.IsBucketSyntactically())
+	isDir := !t.gcpURLParts.IsObjectSyntactically() && (t.gcpURLParts.IsDirectorySyntactically() || t.gcpURLParts.IsBucketSyntactically())
 	if !isSource {
-		return isDirDirect
+		return isDir, nil
 	}
 	bkt := t.gcpClient.Bucket(t.gcpURLParts.BucketName)
 	obj := bkt.Object(t.gcpURLParts.ObjectKey)
 	//Directories do not have attributes and hence throw error
 	_, err := obj.Attrs(t.ctx)
-	if err == gcpUtils.ErrObjectNotExist {
-		return true
+	if err == nil {
+		// Object exists
+		return false, nil
 	}
-	return false
+	//Directories do not have attributes and throw ErrObjectNotExist. We'll list with this prefix
+	// to determine if this is a virtual-directory and has object/other dirs inside.
+	if err == gcpUtils.ErrObjectNotExist {
+		query := &gcpUtils.Query{Prefix: t.gcpURLParts.ObjectKey, Delimiter: "/"}
+		it := bkt.Objects(t.ctx, query)
+		if _, err := it.Next(); err == nil {
+			// we either have sub-dirs or blobs with this prefix. This path is indeed a virtual directory
+			return true, nil
+		}
+		//This is not a blob, not a directory - return original error
+		return false, err
+	}
+	return false, err
 }
 
 func (t *gcpTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) error {
