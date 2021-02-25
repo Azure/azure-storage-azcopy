@@ -104,15 +104,6 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	if len(order.BlobAttributes.BlobTagsString) > len(JobPartPlanDstBlob{}.BlobTags) {
 		panic(fmt.Errorf("blob tags string is too large: %q", order.BlobAttributes.BlobTagsString))
 	}
-	/*
-	*	TODO: Remove this comment
-	*	Since I've already verified that at most 10 blob tags can be set and put a restriction on key and value,
-	*	there is no need to check the length. size of JobPartPlanDstBlob{}.BlobTags = 4kb
-	*	key(128) + value(256) + separator('=', 1) = 385
-	*	10 tags * 385 = 3850
-	*	+ 10 * characters('&', 1) for delimiter
-	*   = 3860 characters at max
-	 */
 
 	// This nested function writes a structure value to an io.Writer & returns the number of bytes written
 	writeValue := func(writer io.Writer, v interface{}) int64 {
@@ -379,6 +370,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}
+		// For S2S copy, write the source tags in job part plan transfer
 		if len(order.Transfers[t].BlobTags) != 0 {
 			blobTagsStr := order.Transfers[t].BlobTags.ToString()
 			bytesWritten, err = file.WriteString(blobTagsStr)

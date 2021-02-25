@@ -217,3 +217,10 @@ func (u *blobFSSenderBase) SetFolderProperties() error {
 	// we don't currently preserve any properties for BlobFS folders
 	return nil
 }
+
+func (u *blobFSSenderBase) DirUrlToString() string {
+	dirUrl := u.dirURL().URL()
+	// To avoid encoding/decoding
+	dirUrl.RawPath = ""
+	return u.dirURL().String()
+}

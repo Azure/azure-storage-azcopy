@@ -44,6 +44,7 @@ type with struct {
 	contentMD5         []byte
 
 	nameValueMetadata  map[string]string
+	blobTags           string
 	lastWriteTime      time.Time
 	creationTime       time.Time
 	smbAttributes      uint32
@@ -113,6 +114,11 @@ func (w with) createObjectProperties() *objectProperties {
 	if w.nameValueMetadata != nil {
 		populated = true
 		result.nameValueMetadata = w.nameValueMetadata
+	}
+
+	if w.blobTags != "" {
+		populated = true
+		result.blobTags = common.ToCommonBlobTagsMap(w.blobTags)
 	}
 	if w.lastWriteTime != (time.Time{}) {
 		populated = true

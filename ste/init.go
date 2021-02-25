@@ -293,7 +293,8 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		switch jpm.Plan().FromTo {
 		case common.EFromTo.LocalBlob(),
 			common.EFromTo.LocalFile(),
-			common.EFromTo.S3Blob():
+			common.EFromTo.S3Blob(),
+			common.EFromTo.GCPBlob():
 			if len(req.DestinationSAS) == 0 {
 				errorMsg = "The destination-sas switch must be provided to resume the job"
 			}

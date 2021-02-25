@@ -46,8 +46,8 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &cca.credentialInfo, nil,
-		cca.listOfFilesChannel, cca.recursive, false, cca.includeDirectoryStubs, func(common.EntityType) {}, cca.listOfVersionIDs)
+	sourceTraverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &cca.credentialInfo, nil, cca.listOfFilesChannel, cca.recursive, false,
+		cca.includeDirectoryStubs, func(common.EntityType) {}, cca.listOfVersionIDs, false, cca.logVerbosity.ToPipelineLogLevel())
 
 	// report failure to create traverser
 	if err != nil {
@@ -117,7 +117,7 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
 	}
 
 	// create bfs pipeline
-	p, err := createBlobFSPipeline(ctx, cca.credentialInfo)
+	p, err := createBlobFSPipeline(ctx, cca.credentialInfo, cca.logVerbosity.ToPipelineLogLevel())
 	if err != nil {
 		return err
 	}

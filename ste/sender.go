@@ -72,6 +72,7 @@ type sender interface {
 type folderSender interface {
 	EnsureFolderExists() error
 	SetFolderProperties() error
+	DirUrlToString() string
 }
 
 type senderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error)

@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -49,6 +51,11 @@ func init() {
 			}
 			uploader.srcPath = args[0]
 			destURL, err := url.Parse(args[1])
+			if strings.Contains(destURL.Host, "amazon") {
+				serviceType = EServiceType.S3()
+			} else if strings.Contains(destURL.Host, "google") {
+				serviceType = EServiceType.GCP()
+			}
 			if err != nil {
 				return errors.New("invalid destination, should be a valid URL")
 			}
@@ -65,6 +72,9 @@ func init() {
 			case EServiceType.S3():
 				uploader.recursive = recursive
 				uploader.uploadToS3()
+			case EServiceType.GCP():
+				uploader.recursive = recursive
+				uploader.uploadToGCP()
 			default:
 				panic(fmt.Errorf("illegal serviceType %q", serviceType))
 			}
@@ -111,6 +121,44 @@ func (u *testUploader) uploadToS3() {
 
 	if err := u.enumerateLocalDir(uf); err != nil {
 		fmt.Println("fail to upload to S3, ", err)
+		os.Exit(1)
+	}
+}
+
+func (u *testUploader) uploadToGCP() {
+	_, err := common.NewGCPURLParts(u.destURL)
+	if err != nil {
+		fmt.Println("fail to upload to GCP, ", err)
+		os.Exit(1)
+	}
+
+	gcpClient, _ := createGCPClientWithGCSSDK()
+
+	uf := func(t testUploadTransfer) error {
+		f, err := os.Open(t.source)
+		if err != nil {
+			return err
+		}
+
+		gcpURLPartsForFile, err := common.NewGCPURLParts(t.destURL)
+		if err != nil {
+			return err
+		}
+		obj := gcpClient.Bucket(gcpURLPartsForFile.BucketName).Object(gcpURLPartsForFile.ObjectKey)
+		wc := obj.NewWriter(context.Background())
+		_, err = io.Copy(wc, f)
+		err = wc.Close()
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("%q uploaded to %q successfully\n", t.source, t.destURL.String())
+
+		return nil
+	}
+
+	if err := u.enumerateLocalDir(uf); err != nil {
+		fmt.Println("fail to upload to GCP, ", err)
 		os.Exit(1)
 	}
 }

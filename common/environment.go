@@ -44,6 +44,9 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.DisableHierarchicalScanning(),
 	EEnvironmentVariable.ParallelStatFiles(),
 	EEnvironmentVariable.BufferGB(),
+	EEnvironmentVariable.AWSAccessKeyID(),
+	EEnvironmentVariable.AWSSecretAccessKey(),
+	EEnvironmentVariable.GoogleAppCredentials(),
 	EEnvironmentVariable.ShowPerfStates(),
 	EEnvironmentVariable.PacePageBlobs(),
 	EEnvironmentVariable.AutoTuneToCpu(),
@@ -278,9 +281,23 @@ func (EnvironmentVariable) AWSSecretAccessKey() EnvironmentVariable {
 	}
 }
 
-// AwsSessionToken is temporaily internally reserved, and not exposed to users.
+// AwsSessionToken is temporarily internally reserved, and not exposed to users.
 func (EnvironmentVariable) AwsSessionToken() EnvironmentVariable {
 	return EnvironmentVariable{Name: "AWS_SESSION_TOKEN"}
+}
+
+func (EnvironmentVariable) GoogleAppCredentials() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "GOOGLE_APPLICATION_CREDENTIALS",
+		Description: "The application credentials required to access GCP resources for service to service copy.",
+	}
+}
+
+func (EnvironmentVariable) GoogleCloudProject() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "GOOGLE_CLOUD_PROJECT",
+		Description: "Project ID required for service level traversals in Google Cloud Storage",
+	}
 }
 
 // OAuthTokenInfo is only used for internal integration.

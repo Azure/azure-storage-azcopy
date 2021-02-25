@@ -93,7 +93,7 @@ func NewFolderDeletionManager(ctx context.Context, fpo FolderPropertyOption, log
 }
 
 // Note: the current implementation assumes that names are either case sensitive, or at least
-// consistently capitalized.  If it receives inconsistently captialized things, it will think they are
+// consistently capitalized.  If it receives inconsistently capitalized things, it will think they are
 // distinct, and so may try deletion prematurely and fail
 type standardFolderDeletionManager struct {
 	mu       *sync.Mutex                     // mutex is simpler than RWMutex because folderDeletionState has multiple mutable elements

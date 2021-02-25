@@ -155,6 +155,8 @@ type params struct {
 	preserveSMBPermissions    bool
 	preserveSMBInfo           bool
 	relativeSourcePath        string
+	blobTags                  string
+	s2sPreserveBlobTags       bool
 }
 
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level

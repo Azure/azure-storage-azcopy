@@ -17,13 +17,13 @@ jobs:
     steps:
       - task: GoTool@0
         inputs:
-          version: '1.13'
+          version: '1.15'
       - script: |
           GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
           GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
           GOARCH=amd64 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
           GOARCH=386 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
-          cp ThirdPartyNotice.txt $(Build.ArtifactStagingDirectory)
+          cp NOTICE.txt $(Build.ArtifactStagingDirectory)
         displayName: 'Generate builds'
 
       - task: PublishBuildArtifacts@1
@@ -36,7 +36,7 @@ jobs:
     steps:
       - task: GoTool@0
         inputs:
-          version: '1.13'
+          version: '1.15'
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
         displayName: 'Generate builds'
@@ -60,7 +60,12 @@ jobs:
       - task: GoTool@0
         name: 'Set_up_Golang'
         inputs:
-          version: '1.13'
+          version: '1.15'
+      - task: DownloadSecureFile@1
+        name: ciGCSServiceAccountKey
+        displayName: 'Download GCS Service Account Key'
+        inputs:
+          secureFile: 'ci-gcs-dev.json'
       - script: |
           pip install azure-storage-blob==12.0.0b3
           # the recent release 1.0.0b4 has a breaking change
@@ -75,7 +80,7 @@ jobs:
           # the set -e line is needed so that the unit tests failure would cause the job to fail properly
           # "-check.v" (must be after package list) outputs timings
           set -e
-          go test -timeout 35m -race -short -cover ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v"
+          go test -timeout 45m -race -short -cover ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v"
           GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
         name: 'Run_unit_tests'
         env:
@@ -85,6 +90,8 @@ jobs:
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
           AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
           AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+          GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
+          GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
       - script: |
           set -e
           GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
@@ -111,6 +118,8 @@ jobs:
           ACCOUNT_KEY: $(ACCOUNT_KEY)
           AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
           AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+          GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+          GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
           ACTIVE_DIRECTORY_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
           AZCOPY_SPA_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
           CONTAINER_OAUTH_URL: $(CONTAINER_OAUTH_URL)
@@ -125,6 +134,7 @@ jobs:
           S2S_SRC_BLOB_ACCOUNT_SAS_URL: $(S2S_SRC_BLOB_ACCOUNT_SAS_URL)
           S2S_SRC_FILE_ACCOUNT_SAS_URL: $(S2S_SRC_FILE_ACCOUNT_SAS_URL)
           S2S_SRC_S3_SERVICE_URL: $(S2S_SRC_S3_SERVICE_URL)
+          S2S_SRC_GCP_SERVICE_URL: $(S2S_SRC_GCP_SERVICE_URL)
           SHARE_SAS_URL: $(SHARE_SAS_URL)
       - script: |
           pip install azure-storage-blob==12.0.0b3

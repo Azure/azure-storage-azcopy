@@ -69,6 +69,21 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 		return c.generateCreateEmptyBlob(id)
 	}
 
+	if c.NumChunks() == 1 && adjustedChunkSize <= int64(azblob.BlockBlobMaxUploadBlobBytes) &&
+		c.blockBlobSenderBase.jptm.FromTo() == common.EFromTo.GCPBlob() {
+		/*
+		 * nakulkar: It is wrong to do this specifically for GCP sources. Why?
+		 * Because our sender is supposed to be source-agnostic, and should not
+		 * change its behaviour for individual sources, as long as the source satisfy sip
+		 * interface.
+		 * That said, GCP returns an invalid error with PutBlockFromURL which service cannot
+		 * handle. And.. this is the easisy way to fix this. For satisfaction, we'll add a TODO :P
+		 * TODO: Find a better logic.
+		 */
+		setPutListNeed(&c.atomicPutListIndicator, putListNotNeeded)
+		return c.generateStartCopyBlobFromURL(id, blockIndex, adjustedChunkSize)
+
+	}
 	setPutListNeed(&c.atomicPutListIndicator, putListNeeded)
 	return c.generatePutBlockFromURL(id, blockIndex, adjustedChunkSize)
 }
@@ -105,13 +120,13 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 		if separateSetTagsRequired || len(blobTags) == 0 {
 			blobTags = nil
 		}
-		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.headersToApply, c.metadataToApply, azblob.BlobAccessConditions{}, c.destBlobTier, blobTags); err != nil {
+		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.headersToApply, c.metadataToApply, azblob.BlobAccessConditions{}, c.destBlobTier, blobTags, azblob.ClientProvidedKeyOptions{}); err != nil {
 			jptm.FailActiveSend("Creating empty blob", err)
 			return
 		}
 
 		if separateSetTagsRequired {
-			if _, err := c.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, nil, nil, nil, c.blobTagsToApply); err != nil {
+			if _, err := c.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, c.blobTagsToApply); err != nil {
 				c.jptm.Log(pipeline.LogWarning, err.Error())
 			}
 		}
@@ -155,7 +170,7 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
 		_, err := c.destBlockBlobURL.StageBlockFromURL(ctxWithLatestServiceVersion, encodedBlockID, c.srcURL,
-			id.OffsetInFile(), adjustedChunkSize, azblob.LeaseAccessConditions{}, azblob.ModifiedAccessConditions{})
+			id.OffsetInFile(), adjustedChunkSize, azblob.LeaseAccessConditions{}, azblob.ModifiedAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 		if err != nil {
 			c.jptm.FailActiveSend("Staging block from URL", err)
 			return
@@ -163,10 +178,32 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 	})
 }
 
+func (c *urlToBlockBlobCopier) generateStartCopyBlobFromURL(id common.ChunkID, blockIndex int32, adjustedChunkSize int64) chunkFunc {
+	return createSendToRemoteChunkFunc(c.jptm, id, func() {
+
+		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
+
+		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+
+		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
+			c.jptm.FailActiveUpload("Pacing block", err)
+		}
+
+		_, err := c.destBlockBlobURL.CopyFromURL(ctxWithLatestServiceVersion, c.srcURL, c.metadataToApply,
+			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil, azblob.DefaultAccessTier, nil)
+
+		if err != nil {
+			c.jptm.FailActiveSend("Copy Blob from URL", err)
+			return
+		}
+
+	})
+}
+
 // GetDestinationLength gets the destination length.
 func (c *urlToBlockBlobCopier) GetDestinationLength() (int64, error) {
 	ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-	properties, err := c.destBlockBlobURL.GetProperties(ctxWithLatestServiceVersion, azblob.BlobAccessConditions{})
+	properties, err := c.destBlockBlobURL.GetProperties(ctxWithLatestServiceVersion, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 	if err != nil {
 		return -1, err
 	}

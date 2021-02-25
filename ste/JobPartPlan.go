@@ -20,7 +20,6 @@ const (
 	CustomHeaderMaxBytes = 256
 	MetadataMaxBytes     = 1000 // If > 65536, then jobPartPlanBlobData's MetadataLength field's type must change
 	BlobTagsMaxByte      = 4000
-	BlobTierMaxBytes     = 10
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

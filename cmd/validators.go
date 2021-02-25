@@ -106,6 +106,8 @@ func inferFromTo(src, dst string) common.FromTo {
 		return common.EFromTo.BenchmarkFile()
 	case srcLocation == common.ELocation.Benchmark() && dstLocation == common.ELocation.BlobFS():
 		return common.EFromTo.BenchmarkBlobFS()
+	case srcLocation == common.ELocation.GCP() && dstLocation == common.ELocation.Blob():
+		return common.EFromTo.GCPBlob()
 	}
 
 	glcm.Info("The parameters you supplied were " +
@@ -147,6 +149,10 @@ func inferArgumentLocation(arg string) common.Location {
 
 			if common.IsS3URL(*u) {
 				return common.ELocation.S3()
+			}
+
+			if common.IsGCPURL(*u) {
+				return common.ELocation.GCP()
 			}
 		}
 	}

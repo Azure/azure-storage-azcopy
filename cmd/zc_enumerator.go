@@ -81,6 +81,7 @@ type storedObject struct {
 	// metadata, included in S2S transfers
 	Metadata      common.Metadata
 	blobVersionID string
+	blobTags      common.BlobTags
 }
 
 const (
@@ -166,7 +167,7 @@ func (s *storedObject) ToNewCopyTransfer(
 		Metadata:           s.Metadata,
 		BlobType:           s.blobType,
 		BlobVersionID:      s.blobVersionID,
-		// set this below, conditionally: BlobTier
+		BlobTags:           s.blobTags,
 	}
 
 	if preserveBlobTier {
@@ -293,8 +294,11 @@ type enumerationCounterFunc func(entityType common.EntityType)
 // ctx, pipeline are only required for remote resources.
 // followSymlinks is only required for local resources (defaults to false)
 // errorOnDirWOutRecursive is used by copy.
-func initResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo,
-	followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string) (resourceTraverser, error) {
+
+func initResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context,
+	credential *common.CredentialInfo, followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties,
+	includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string,
+	s2sPreserveBlobTags bool, logLevel pipeline.LogLevel) (resourceTraverser, error) {
 	var output resourceTraverser
 	var p *pipeline.Pipeline
 
@@ -305,7 +309,7 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 
 	// Initialize the pipeline if creds and ctx is provided
 	if ctx != nil && credential != nil {
-		tmppipe, err := initPipeline(*ctx, location, *credential)
+		tmppipe, err := initPipeline(*ctx, location, *credential, logLevel)
 
 		if err != nil {
 			return nil, err
@@ -331,7 +335,7 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 			}
 		}
 
-		output = newListTraverser(resource, location, credential, ctx, recursive, toFollow, getProperties, listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter)
+		output = newListTraverser(resource, location, credential, ctx, recursive, toFollow, getProperties, listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel)
 		return output, nil
 	}
 
@@ -358,7 +362,8 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 			}()
 
 			baseResource := resource.CloneWithValue(cleanLocalPath(basePath))
-			output = newListTraverser(baseResource, location, nil, nil, recursive, toFollow, getProperties, globChan, includeDirectoryStubs, incrementEnumerationCounter)
+			output = newListTraverser(baseResource, location, nil, nil, recursive, toFollow, getProperties,
+				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel)
 		} else {
 			output = newLocalTraverser(resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter)
 		}
@@ -389,11 +394,11 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output = newBlobAccountTraverser(resourceURL, *p, *ctx, includeDirectoryStubs, incrementEnumerationCounter)
+			output = newBlobAccountTraverser(resourceURL, *p, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags)
 		} else if listOfVersionIds != nil {
 			output = newBlobVersionsTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds)
 		} else {
-			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter)
+			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags)
 		}
 	case common.ELocation.File():
 		resourceURL, err := resource.FullURL()
@@ -481,6 +486,39 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 				return nil, err
 			}
 		}
+	case common.ELocation.GCP():
+		resourceURL, err := resource.FullURL()
+		if err != nil {
+			return nil, err
+		}
+
+		recommendHttpsIfNecessary(*resourceURL)
+
+		gcpURLParts, err := common.NewGCPURLParts(*resourceURL)
+		if err != nil {
+			return nil, err
+		}
+
+		if ctx == nil {
+			return nil, errors.New("a valid context must be supplied to create a GCP traverser")
+		}
+
+		if gcpURLParts.BucketName == "" || strings.Contains(gcpURLParts.BucketName, "*") {
+			if !recursive {
+				return nil, errors.New(accountTraversalInherentlyRecursiveError)
+			}
+
+			output, err = newGCPServiceTraverser(resourceURL, *ctx, getProperties, incrementEnumerationCounter)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			output, err = newGCPTraverser(resourceURL, *ctx, recursive, getProperties, incrementEnumerationCounter)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 	default:
 		return nil, errors.New("could not choose a traverser from currently available traversers")
 	}
