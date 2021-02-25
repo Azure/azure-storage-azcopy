@@ -6709,7 +6709,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 **********
 
-
 spf13/pflag, Copyright (c) 2012 Alex Ogier. All rights reserved. Copyright (c) 2012 The Go Authors. All rights reserved.
 
 BSD 3-Clause "New" or "Revised" License
