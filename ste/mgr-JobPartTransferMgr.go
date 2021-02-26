@@ -90,6 +90,7 @@ type IJobPartTransferMgr interface {
 }
 
 type TransferInfo struct {
+	JobID 				   common.JobID
 	BlockSize              int64
 	Source                 string
 	SourceSize             int64
@@ -326,6 +327,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	}
 
 	jptm.transferInfo = &TransferInfo{
+		JobID: 							plan.JobID,
 		BlockSize:                      blockSize,
 		Source:                         src,
 		SourceSize:                     sourceSize,

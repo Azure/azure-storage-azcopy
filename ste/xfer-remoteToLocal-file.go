@@ -25,11 +25,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
+
+const azcopyTempDownloadPrefix string = ".azDownload-%s-"
 
 // xfer.go requires just a single xfer function for the whole job.
 // This routine serves that role for downloads and redirects for each transfer to a file or folder implementation
@@ -163,9 +166,13 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		// Normal scenario, create the destination file as expected
 		// Use pseudo chunk id to allow our usual state tracking mechanism to keep count of how many
 		// file creations are running at any given instant, for perf diagnostics
+		// 
+		// We create the file to a temporary location with name .azcopy-<jobID>-<actualName> and then move it
+		// to correct name.
 		pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
+		filename := getTempDownloadPath(info.JobID.String(), info.Destination)
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.CreateLocalFile())
-		dstFile, err = createDestinationFile(jptm, info.Destination, fileSize, writeThrough)
+		dstFile, err = createDestinationFile(jptm, filename, fileSize, writeThrough)
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 		if err != nil {
 			failFileCreation(err)
@@ -333,6 +340,14 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 			if err != nil {
 				jptm.FailActiveDownload("Checking MD5 hash", err)
 			}
+
+			if !strings.EqualFold(info.Destination, common.Dev_Null) {
+				err := os.Rename(getTempDownloadPath(info.JobID.String(), info.Destination), info.Destination)
+				if  err != nil {
+					jptm.FailActiveDownload("RenamingFile", err)
+					jptm.LogAtLevelForCurrentTransfer(pipeline.LogInfo, "Error renaming file: "+err.Error())
+				}
+			}
 		}
 	}
 
@@ -444,11 +459,19 @@ func tryDeleteFile(info TransferInfo, jptm IJobPartTransferMgr) {
 		return
 	}
 
-	err := deleteFile(info.Destination)
+	err := deleteFile(getTempDownloadPath(info.JobID.String(), info.Destination))
 	if err != nil {
 		// If there was an error deleting the file, log the error
 		jptm.LogError(info.Destination, "Delete File Error ", err)
 	}
+}
+
+//Returns the path of temp file to be downloaded. The paths is in format
+// /actual/parent/path/.azDownload-<jobID>-<actualFileName>
+func getTempDownloadPath(jobID string, destinationPath string) string {
+	parent, fileName := filepath.Split(destinationPath)
+	fileName = fmt.Sprintf(azcopyTempDownloadPrefix, jobID) + fileName
+	return filepath.Join(parent, fileName)
 }
 
 // conforms to io.Writer and io.Closer
