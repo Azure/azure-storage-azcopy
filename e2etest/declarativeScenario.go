@@ -23,6 +23,7 @@ package e2etest
 import (
 	"crypto/md5"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -297,6 +298,7 @@ func (s *scenario) validateProperties() {
 
 		// validate all the different things
 		s.validateMetadata(expected.nameValueMetadata, actual.nameValueMetadata)
+		s.validateBlobTags(expected.blobTags, actual.blobTags)
 		s.validateContentHeaders(expected.contentHeaders, actual.contentHeaders)
 		s.validateCreateTime(expected.creationTime, actual.creationTime)
 		s.validateLastWriteTime(expected.lastWriteTime, actual.lastWriteTime)
@@ -339,6 +341,21 @@ func (s *scenario) validateMetadata(expected, actual map[string]string) {
 		s.a.Assert(ok, equals(), true, fmt.Sprintf("expect key '%s' to be found in destination metadata", key))
 		if ok {
 			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("Expect value for key '%s' to be '%s' but found '%s'", key, exValue, actualValue))
+		}
+	}
+}
+
+// Validate blob tags
+func (s *scenario) validateBlobTags(expected, actual common.BlobTags) {
+	s.a.Assert(len(expected), equals(), len(actual), "Both should have same number of tags")
+	for k, v := range expected {
+		exKey := url.QueryEscape(k)
+		exValue := url.QueryEscape(v)
+
+		actualValue, ok := actual[exKey]
+		s.a.Assert(ok, equals(), true, fmt.Sprintf("expect key '%s' to be found in destination metadata", exKey))
+		if ok {
+			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("Expect value for key '%s' to be '%s' but found '%s'", exKey, exValue, actualValue))
 		}
 	}
 }

@@ -149,7 +149,7 @@ func (s *fileSystemCrawlerSuite) doTestParallelEnumerationGetsTheRightFileInfo(p
 				// anything useful, we don't use them.
 				// But a discrepancy on a file (not a directory) would be bad.
 				//
-				// Note that the directory discrepancies are reproducable from PowerShell on Win 10, so it's not a Go thing.
+				// Note that the directory discrepancies are reproducible from PowerShell on Win 10, so it's not a Go thing.
 				// Looking at the directory C:\Program Files\Microsoft SQL Server\90
 				// PS C:\Program Files\Microsoft SQL Server> (get-item 90).LastWriteTime
 				// Tuesday, August 27, 2019 5:29:08 AM

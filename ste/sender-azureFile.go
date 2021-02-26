@@ -383,6 +383,11 @@ func (u *azureFileSenderBase) SetFolderProperties() error {
 	return err
 }
 
+func (u *azureFileSenderBase) DirUrlToString() string {
+	dirUrl := azfile.NewFileURLParts(u.dirURL().URL()).URL()
+	return dirUrl.String()
+}
+
 // namespace for functions related to creating parent directories in Azure File
 // to avoid free floating global funcs
 type AzureFileParentDirCreator struct{}

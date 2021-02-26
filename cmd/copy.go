@@ -120,6 +120,8 @@ type rawCopyCmdArgs struct {
 	// Opt-in flag to persist additional SMB properties to Azure Files. Named ...info instead of ...properties
 	// because the latter was similar enough to preserveSMBPermissions to induce user error
 	preserveSMBInfo bool
+	// Opt-in flag to preserve the blob index tags during service to service transfer.
+	s2sPreserveBlobTags bool
 	// Flag to enable Window's special privileges
 	backupMode bool
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
@@ -183,12 +185,6 @@ func blockSizeInBytes(rawBlockSizeInMiB float64) (int64, error) {
 	return int64(math.Round(rawSizeInBytes)), nil
 }
 
-// validates and transform raw input into cooked input
-func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
-	// generate a unique job ID
-	return raw.cookWithId(common.NewJobID())
-}
-
 // returns result of stripping and if striptopdir is enabled
 // if nothing happens, the original source is returned
 func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Location) (result string, stripTopDir bool, err error) {
@@ -230,11 +226,22 @@ func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Lo
 	return
 }
 
-func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, error) {
-
+func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked := cookedCopyCmdArgs{
-		jobID: jobId,
+		jobID: azcopyCurrentJobID,
 	}
+
+	err := cooked.logVerbosity.Parse(raw.logVerbosity)
+	if err != nil {
+		return cooked, err
+	}
+
+	// set up the front end scanning logger
+	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, cooked.logVerbosity, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger.OpenLog()
+	glcm.RegisterCloseFunc(func() {
+		azcopyScanningLogger.CloseLog()
+	})
 
 	fromTo, err := validateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
 	if err != nil {
@@ -323,10 +330,6 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		return cooked, err
 	}
 	err = cooked.pageBlobTier.Parse(raw.pageBlobTier)
-	if err != nil {
-		return cooked, err
-	}
-	err = cooked.logVerbosity.Parse(raw.logVerbosity)
 	if err != nil {
 		return cooked, err
 	}
@@ -509,6 +512,19 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	}
 	cooked.blobTags = blobTags
 
+	// Check if user has provided `s2s-preserve-blob-tags` flag. If yes, we have to ensure that
+	// 1. Both source and destination must be blob storages.
+	// 2. `blob-tags` is not present as they create conflicting scenario of whether to preserve blob tags from the source or set user defined tags on the destination
+	if raw.s2sPreserveBlobTags {
+		if cooked.fromTo.From() != common.ELocation.Blob() || cooked.fromTo.To() != common.ELocation.Blob() {
+			return cooked, errors.New("either source or destination is not a blob storage. blob index tags is a property of blobs only therefore both source and destination must be blob storage")
+		} else if raw.blobTags != "" {
+			return cooked, errors.New("both s2s-preserve-blob-tags and blob-tags flags cannot be used in conjunction")
+		} else {
+			cooked.s2sPreserveBlobTags = raw.s2sPreserveBlobTags
+		}
+	}
+
 	// Make sure the given input is the one of the enums given by the blob SDK
 	err = cooked.deleteSnapshotsOption.Parse(raw.deleteSnapshotsOption)
 	if err != nil {
@@ -660,7 +676,8 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		common.EFromTo.S3Blob(),
 		common.EFromTo.BlobBlob(),
 		common.EFromTo.FileBlob(),
-		common.EFromTo.FileFile():
+		common.EFromTo.FileFile(),
+		common.EFromTo.GCPBlob():
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while copying from service to service")
 		}
@@ -981,6 +998,8 @@ type cookedCopyCmdArgs struct {
 	// whether user wants to check if source has changed after enumerating, the default value is true.
 	// For S2S copy, as source is a remote resource, validating whether source has changed need additional request costs.
 	s2sSourceChangeValidation bool
+	// To specify whether user wants to preserve the blob index tags during service to service transfer.
+	s2sPreserveBlobTags bool
 	// specify how user wants to handle invalid metadata.
 	s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption
 
@@ -1057,7 +1076,7 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 1: initialize pipeline
-	p, err := createBlobPipeline(ctx, credInfo)
+	p, err := createBlobPipeline(ctx, credInfo, pipeline.LogNone)
 	if err != nil {
 		return err
 	}
@@ -1070,7 +1089,7 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	// step 3: start download
 	blobURL := azblob.NewBlobURL(*u, p)
-	blobStream, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
+	blobStream, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
 	if err != nil {
 		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
 	}
@@ -1103,7 +1122,7 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 0: initialize pipeline
-	p, err := createBlobPipeline(ctx, credInfo)
+	p, err := createBlobPipeline(ctx, credInfo, pipeline.LogNone)
 	if err != nil {
 		return err
 	}
@@ -1185,7 +1204,8 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			PutMd5:                   cca.putMd5,
 			MD5ValidationOption:      cca.md5ValidationOption,
 			DeleteSnapshotsOption:    cca.deleteSnapshotsOption,
-			BlobTagsString:           cca.blobTags.ToString(),
+			// Setting tags when tags explicitly provided by the user through blob-tags flag
+			BlobTagsString: cca.blobTags.ToString(),
 		},
 		CommandString:  cca.commandString,
 		CredentialInfo: cca.credentialInfo,
@@ -1225,6 +1245,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		common.EFromTo.FileFile(),
 		common.EFromTo.BlobFile(),
 		common.EFromTo.S3Blob(),
+		common.EFromTo.GCPBlob(),
 		common.EFromTo.BenchmarkBlob(),
 		common.EFromTo.BenchmarkBlobFS(),
 		common.EFromTo.BenchmarkFile():
@@ -1685,6 +1706,7 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.s2sInvalidMetadataHandleOption, "s2s-handle-invalid-metadata", common.DefaultInvalidMetadataHandleOption.String(), "Specifies how invalid metadata keys are handled. Available options: ExcludeIfInvalid, FailIfInvalid, RenameIfInvalid. (default 'ExcludeIfInvalid').")
 	cpCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-versions", "", "Specifies a file where each version id is listed on a separate line. Ensure that the source must point to a single blob and all the version ids specified in the file using this flag must belong to the source blob only. AzCopy will download the specified versions in the destination folder provided.")
 	cpCmd.PersistentFlags().StringVar(&raw.blobTags, "blob-tags", "", "Set tags on blobs to categorize data in your storage account")
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveBlobTags, "s2s-preserve-blob-tags", false, "Preserve index tags during service to service transfer from one blob storage to another")
 	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
 	// right before transferring in ste(backend).
 	// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),

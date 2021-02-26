@@ -21,8 +21,17 @@ import (
 	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
+type BucketToContainerNameResolver interface {
+	ResolveName(bucketName string) (string, error)
+}
+
 func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) (*copyEnumerator, error) {
 	var traverser resourceTraverser
+
+	// Warn about GCP -> Blob being in preview. Also, we do not support GCP as destination.
+	if cca.fromTo.From() == common.ELocation.GCP() {
+		glcm.Info("Google Cloud Storage to Azure Blob copy is currently in preview. Validate the copy operation carefully before removing your data at source.")
+	}
 
 	srcCredInfo := common.CredentialInfo{}
 	var isPublic bool
@@ -49,12 +58,14 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		(cca.fromTo.From() == common.ELocation.File() && !cca.fromTo.To().IsRemote()) || // If download, we still need LMT and MD5 from files.
 		(cca.fromTo.From() == common.ELocation.File() && cca.fromTo.To().IsRemote() && (cca.s2sSourceChangeValidation || cca.includeAfter != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise if we are using includeAfter, which requires LMTs.
 		(cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() && cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
-	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
+	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && !getRemoteProperties && cca.s2sGetPropertiesInBackend     // Infer GetProperties if GetPropertiesInBackend is enabled.
 	jobPartOrder.S2SSourceChangeValidation = cca.s2sSourceChangeValidation
 	jobPartOrder.DestLengthValidation = cca.CheckLength
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
+	jobPartOrder.S2SPreserveBlobTags = cca.s2sPreserveBlobTags
 
-	traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, cca.includeDirectoryStubs, func(common.EntityType) {}, cca.listOfVersionIDs)
+	traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties,
+		cca.includeDirectoryStubs, func(common.EntityType) {}, cca.listOfVersionIDs, cca.s2sPreserveBlobTags, cca.logVerbosity.ToPipelineLogLevel())
 
 	if err != nil {
 		return nil, err
@@ -102,9 +113,13 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		cca.stripTopDir = true
 	}
 
-	// Create a S3 bucket resolver
+	// Create a Remote resource resolver
 	// Giving it nothing to work with as new names will be added as we traverse.
-	var containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
+	var containerResolver BucketToContainerNameResolver
+	containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
+	if cca.fromTo == common.EFromTo.GCPBlob() {
+		containerResolver = NewGCPBucketNameToAzureResourcesResolver(nil)
+	}
 	existingContainers := make(map[string]bool)
 	var logDstContainerCreateFailureOnce sync.Once
 	seenFailedContainers := make(map[string]bool) // Create map of already failed container conversions so we don't log a million items just for one container.
@@ -121,7 +136,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		// only create the destination container in S2S scenarios
 		if cca.fromTo.From().IsRemote() && dstContainerName != "" { // if the destination has a explicit container name
 			// Attempt to create the container. If we fail, fail silently.
-			err = cca.createDstContainer(dstContainerName, cca.destination, ctx, existingContainers)
+			err = cca.createDstContainer(dstContainerName, cca.destination, ctx, existingContainers, cca.logVerbosity)
 
 			// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 			if _, ok := seenFailedContainers[dstContainerName]; err != nil && ste.JobsAdmin != nil && !ok {
@@ -141,7 +156,11 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 				// Resolve all container names up front.
 				// If we were to resolve on-the-fly, then name order would affect the results inconsistently.
-				containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
+				if cca.fromTo == common.EFromTo.S3Blob() {
+					containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
+				} else if cca.fromTo == common.EFromTo.GCPBlob() {
+					containerResolver = NewGCPBucketNameToAzureResourcesResolver(containers)
+				}
 
 				for _, v := range containers {
 					bucketName, err := containerResolver.ResolveName(v)
@@ -151,7 +170,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						continue
 					}
 
-					err = cca.createDstContainer(bucketName, cca.destination, ctx, existingContainers)
+					err = cca.createDstContainer(bucketName, cca.destination, ctx, existingContainers, cca.logVerbosity)
 
 					// if JobsAdmin is nil, we're probably in testing mode.
 					// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
@@ -171,11 +190,10 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					// this will probably never be reached
 					return nil, fmt.Errorf("failed to get container name from source (is it formatted correctly?)")
 				}
-
 				resName, err := containerResolver.ResolveName(cName)
 
 				if err == nil {
-					err = cca.createDstContainer(resName, cca.destination, ctx, existingContainers)
+					err = cca.createDstContainer(resName, cca.destination, ctx, existingContainers, cca.logVerbosity)
 
 					if _, ok := seenFailedContainers[dstContainerName]; err != nil && ste.JobsAdmin != nil && !ok {
 						logDstContainerCreateFailureOnce.Do(func() {
@@ -239,13 +257,14 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			cca.s2sPreserveAccessTier,
 			jobPartOrder.Fpo,
 		)
-		transfer.BlobTags = cca.blobTags
+		if !cca.s2sPreserveBlobTags {
+			transfer.BlobTags = cca.blobTags
+		}
 
 		if shouldSendToSte {
 			return addTransfer(&jobPartOrder, transfer, cca)
-		} else {
-			return nil
 		}
+		return nil
 	}
 	finalizer := func() error {
 		return dispatchFinalPart(&jobPartOrder, cca)
@@ -268,7 +287,8 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, false, func(common.EntityType) {}, cca.listOfVersionIDs)
+	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false,
+		false, false, func(common.EntityType) {}, cca.listOfVersionIDs, false, pipeline.LogNone)
 
 	if err != nil {
 		return false
@@ -336,7 +356,7 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 	return filters
 }
 
-func (cca *cookedCopyCmdArgs) createDstContainer(containerName string, dstWithSAS common.ResourceString, ctx context.Context, existingContainers map[string]bool) (err error) {
+func (cca *cookedCopyCmdArgs) createDstContainer(containerName string, dstWithSAS common.ResourceString, ctx context.Context, existingContainers map[string]bool, logLevel common.LogLevel) (err error) {
 	if _, ok := existingContainers[containerName]; ok {
 		return
 	}
@@ -348,7 +368,7 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		return err
 	}
 
-	dstPipeline, err := initPipeline(ctx, cca.fromTo.To(), dstCredInfo)
+	dstPipeline, err := initPipeline(ctx, cca.fromTo.To(), dstCredInfo, logLevel.ToPipelineLogLevel())
 	if err != nil {
 		return
 	}
@@ -616,9 +636,8 @@ func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir b
 		message += getSuffix(true)
 		if stripTopDir {
 			return common.EFolderPropertiesOption.AllFoldersExceptRoot(), message
-		} else {
-			return common.EFolderPropertiesOption.AllFolders(), message
 		}
+		return common.EFolderPropertiesOption.AllFolders(), message
 	}
 
 	return common.EFolderPropertiesOption.NoFolders(),

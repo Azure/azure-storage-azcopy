@@ -120,10 +120,6 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, dirPath string, f
 			}
 			file.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
 
-			//if file.verificationProperties.contentHeaders == nil {
-			//	file.verificationProperties.contentHeaders = &contentHeaders{}
-			//}
-			//file.verificationProperties.contentHeaders.contentMD5 = contentMD5[:]
 			c.AssertNoErr(err)
 			//TODO: nakulkar-msft you'll need to set up things like attributes, and other relevant things from
 			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
@@ -316,23 +312,23 @@ func (scenarioHelper) generateBlobsFromList(c asserter, containerURL azblob.Cont
 		ad := blobResourceAdapter{b}
 		blob := containerURL.NewBlockBlobURL(b.name)
 		reader, sourceData := getRandomDataAndReader(b.creationProperties.sizeBytes(c, defaultSize))
+
+		// Setting content MD5
 		contentMD5 := md5.Sum(sourceData)
-		if b.creationProperties.contentHeaders == nil {
+		if ad.obj.creationProperties.contentHeaders == nil {
 			b.creationProperties.contentHeaders = &contentHeaders{}
 		}
-		b.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+		ad.obj.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
 
-		//if b.verificationProperties.contentHeaders == nil {
-		//	b.verificationProperties.contentHeaders = &contentHeaders{}
-		//}
-		//b.verificationProperties.contentHeaders.contentMD5 = contentMD5[:]
 		headers := ad.toHeaders()
 		headers.ContentMD5 = contentMD5[:]
 		cResp, err := blob.Upload(ctx,
 			reader,
 			headers,
 			ad.toMetadata(),
-			azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil)
+			azblob.BlobAccessConditions{},
+			azblob.DefaultAccessTier,
+			ad.toBlobTags(), azblob.ClientProvidedKeyOptions{})
 		c.AssertNoErr(err)
 		c.Assert(cResp.StatusCode(), equals(), 201)
 	}
@@ -347,7 +343,7 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 
-		listBlob, err := containerURL.ListBlobsFlatSegment(context.TODO(), marker, azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true}})
+		listBlob, err := containerURL.ListBlobsFlatSegment(context.TODO(), marker, azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true, Tags: true}})
 		a.AssertNoErr(err)
 
 		for _, blobInfo := range listBlob.Segment.BlobItems {
@@ -375,6 +371,14 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 				// smbAttributes and smbPermissions don't exist in blob
 			}
 
+			if blobInfo.BlobTags != nil {
+				blobTagsMap := common.BlobTags{}
+				for _, blobTag := range blobInfo.BlobTags.BlobTagSet {
+					blobTagsMap[url.QueryEscape(blobTag.Key)] = url.QueryEscape(blobTag.Value)
+				}
+				props.blobTags = blobTagsMap
+			}
+
 			result[relativePath] = &props
 		}
 
@@ -386,7 +390,7 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 
 func (s scenarioHelper) downloadBlobContent(a asserter, containerURL azblob.ContainerURL, resourceRelPath string) []byte {
 	blobURL := containerURL.NewBlobURL(resourceRelPath)
-	downloadResp, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
+	downloadResp, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
 	a.AssertNoErr(err)
 
 	retryReader := downloadResp.Body(azblob.RetryReaderOptions{})
@@ -424,6 +428,7 @@ func (scenarioHelper) generatePageBlobsFromList(c asserter, containerURL azblob.
 			azblob.BlobAccessConditions{},
 			azblob.DefaultPremiumBlobAccessTier,
 			nil,
+			azblob.ClientProvidedKeyOptions{},
 		)
 		c.AssertNoErr(err)
 		c.Assert(cResp.StatusCode(), equals(), 201)
@@ -434,6 +439,7 @@ func (scenarioHelper) generatePageBlobsFromList(c asserter, containerURL azblob.
 			strings.NewReader(data),
 			azblob.PageBlobAccessConditions{},
 			nil,
+			azblob.ClientProvidedKeyOptions{},
 		)
 		c.AssertNoErr(err)
 		c.Assert(uResp.StatusCode(), equals(), 201)
@@ -454,6 +460,7 @@ func (scenarioHelper) generateAppendBlobsFromList(c asserter, containerURL azblo
 			azblob.Metadata{},
 			azblob.BlobAccessConditions{},
 			nil,
+			azblob.ClientProvidedKeyOptions{},
 		)
 		c.AssertNoErr(err)
 		c.Assert(cResp.StatusCode(), equals(), 201)
@@ -462,7 +469,7 @@ func (scenarioHelper) generateAppendBlobsFromList(c asserter, containerURL azblo
 		uResp, err := blob.AppendBlock(ctx,
 			strings.NewReader(data),
 			azblob.AppendBlobAccessConditions{},
-			nil)
+			nil, azblob.ClientProvidedKeyOptions{})
 		c.AssertNoErr(err)
 		c.Assert(uResp.StatusCode(), equals(), 201)
 	}
@@ -474,7 +481,7 @@ func (scenarioHelper) generateAppendBlobsFromList(c asserter, containerURL azblo
 func (scenarioHelper) generateBlockBlobWithAccessTier(c asserter, containerURL azblob.ContainerURL, blobName string, accessTier azblob.AccessTierType) {
 	blob := containerURL.NewBlockBlobURL(blobName)
 	cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
-		nil, azblob.BlobAccessConditions{}, accessTier, nil)
+		nil, azblob.BlobAccessConditions{}, accessTier, nil, azblob.ClientProvidedKeyOptions{})
 	c.AssertNoErr(err)
 	c.Assert(cResp.StatusCode(), equals(), 201)
 }
@@ -849,7 +856,7 @@ func (scenarioHelper) getRawShareURLWithSAS(c asserter, shareName string) url.UR
 }
 
 func (scenarioHelper) blobExists(blobURL azblob.BlobURL) bool {
-	_, err := blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+	_, err := blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 	if err == nil {
 		return true
 	}

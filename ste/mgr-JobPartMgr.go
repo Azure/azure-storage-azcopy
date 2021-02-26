@@ -428,7 +428,9 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	userAgent := common.UserAgent
 	if fromTo.From() == common.ELocation.S3() {
 		userAgent = common.S3ImportUserAgent
-	} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
+	}else if fromTo.From() == common.ELocation.GCP(){
+		userAgent = common.GCPImportUserAgent
+	}else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
 		userAgent = common.BenchmarkUserAgent
 	}
 	userAgent = common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
@@ -490,7 +492,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	// Create pipeline for data transfer.
 	switch fromTo {
 	case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(), common.EFromTo.BenchmarkBlob(),
-		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob():
+		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob(), common.EFromTo.GCPBlob():
 		credential := common.CreateBlobCredential(ctx, credInfo, credOption)
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 		jpm.pipeline = NewBlobPipeline(

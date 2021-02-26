@@ -104,7 +104,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 			// sending from remote = doing an S2S copy
 			switch fromTo.To() {
 			case common.ELocation.Blob(),
-				common.ELocation.S3():
+				common.ELocation.S3(), common.ELocation.GCP():
 				return newURLToBlobCopier
 			case common.ELocation.File():
 				return newURLToAzureFileCopier
@@ -142,6 +142,8 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 			panic(blobFSNotS2S)
 		case common.ELocation.S3():
 			return newS3SourceInfoProvider
+		case common.ELocation.GCP():
+			return newGCPSourceInfoProvider
 		default:
 			panic("unexpected source type")
 		}

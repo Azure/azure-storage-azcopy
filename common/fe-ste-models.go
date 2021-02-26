@@ -415,6 +415,7 @@ func (Location) File() Location      { return Location(4) }
 func (Location) BlobFS() Location    { return Location(5) }
 func (Location) S3() Location        { return Location(6) }
 func (Location) Benchmark() Location { return Location(7) }
+func (Location) GCP() Location       { return Location(8) }
 
 func (l Location) String() string {
 	return enum.StringInt(l, reflect.TypeOf(l))
@@ -441,7 +442,7 @@ func fromToValue(from Location, to Location) FromTo {
 
 func (l Location) IsRemote() bool {
 	switch l {
-	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3():
+	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3(), ELocation.GCP():
 		return true
 	case ELocation.Local(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
 		return false
@@ -464,7 +465,7 @@ func (l Location) IsFolderAware() bool {
 	switch l {
 	case ELocation.BlobFS(), ELocation.File(), ELocation.Local():
 		return true
-	case ELocation.Blob(), ELocation.S3(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
+	case ELocation.Blob(), ELocation.S3(), ELocation.GCP(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
 		return false
 	default:
 		panic("unexpected location, please specify if it is folder-aware")
@@ -501,6 +502,7 @@ func (FromTo) FileBlob() FromTo    { return FromTo(fromToValue(ELocation.File(),
 func (FromTo) BlobFile() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.File())) }
 func (FromTo) FileFile() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.File())) }
 func (FromTo) S3Blob() FromTo      { return FromTo(fromToValue(ELocation.S3(), ELocation.Blob())) }
+func (FromTo) GCPBlob() FromTo     { return FromTo(fromToValue(ELocation.GCP(), ELocation.Blob())) }
 
 // todo: to we really want these?  Starts to look like a bit of a combinatorial explosion
 func (FromTo) BenchmarkBlob() FromTo {
@@ -617,7 +619,7 @@ func (TransferStatus) NotStarted() TransferStatus { return TransferStatus(0) }
 
 // TODO confirm whether this is actually needed
 //   Outdated:
-//     Transfer started & at least 1 chunk has successfully been transfered.
+//     Transfer started & at least 1 chunk has successfully been transferred.
 //     Used to resume a transfer that started to avoid transferring all chunks thereby improving performance
 // Update(Jul 2020): This represents the state of transfer as soon as the file is scheduled.
 func (TransferStatus) Started() TransferStatus { return TransferStatus(1) }
@@ -769,11 +771,12 @@ var ECredentialType = CredentialType(0)
 // CredentialType defines the different types of credentials
 type CredentialType uint8
 
-func (CredentialType) Unknown() CredentialType     { return CredentialType(0) }
-func (CredentialType) OAuthToken() CredentialType  { return CredentialType(1) } // For Azure, OAuth
-func (CredentialType) Anonymous() CredentialType   { return CredentialType(2) } // For Azure, SAS or public.
-func (CredentialType) SharedKey() CredentialType   { return CredentialType(3) } // For Azure, SharedKey
-func (CredentialType) S3AccessKey() CredentialType { return CredentialType(4) } // For S3, AccessKeyID and SecretAccessKey
+func (CredentialType) Unknown() CredentialType              { return CredentialType(0) }
+func (CredentialType) OAuthToken() CredentialType           { return CredentialType(1) } // For Azure, OAuth
+func (CredentialType) Anonymous() CredentialType            { return CredentialType(2) } // For Azure, SAS or public.
+func (CredentialType) SharedKey() CredentialType            { return CredentialType(3) } // For Azure, SharedKey
+func (CredentialType) S3AccessKey() CredentialType          { return CredentialType(4) } // For S3, AccessKeyID and SecretAccessKey
+func (CredentialType) GoogleAppCredentials() CredentialType { return CredentialType(5) }
 
 func (ct CredentialType) String() string {
 	return enum.StringInt(ct, reflect.TypeOf(ct))

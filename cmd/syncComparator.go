@@ -94,11 +94,9 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject storedObject) err
 		// if destination is stale, schedule source for transfer
 		if sourceObject.isMoreRecentThan(destinationObjectInMap) {
 			return f.copyTransferScheduler(sourceObject)
-
-		} else {
-			// skip if source is more recent
-			return nil
 		}
+		// skip if source is more recent
+		return nil
 	}
 
 	// if source does not exist at the destination, then schedule it for transfer

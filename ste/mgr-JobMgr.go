@@ -85,13 +85,13 @@ type IJobMgr interface {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel, commandString string, logFileFolder string) IJobMgr {
+func newJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel, commandString string, logFileFolder string) IJobMgr {
 	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
 	enableChunkLogOutput := level.ToPipelineLogLevel() == pipeline.LogDebug
 	jobPartProgressCh := make(chan jobPartProgressInfo)
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
 		httpClient:                    NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
-		logger:                        common.NewJobLogger(jobID, level, appLogger, logFileFolder),
+		logger:                        common.NewJobLogger(jobID, level, logFileFolder, ""),
 		chunkStatusLogger:             common.NewChunkStatusLogger(jobID, cpuMon, logFileFolder, enableChunkLogOutput),
 		concurrency:                   concurrency,
 		overwritePrompter:             newOverwritePrompter(),

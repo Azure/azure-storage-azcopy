@@ -21,8 +21,10 @@
 package cmd
 
 import (
+	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -280,12 +282,21 @@ func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c *chk.C, s3Client 
 	}
 }
 
+func (s scenarioHelper) generateGCPBucketsAndObjectsFromLists(c *chk.C, client *gcpUtils.Client, bucketList []string, objectList []string) {
+	for _, bucketName := range bucketList {
+		bkt := client.Bucket(bucketName)
+		err := bkt.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
+		c.Assert(err, chk.IsNil)
+		s.generateGCPObjects(c, client, bucketName, objectList)
+	}
+}
+
 // create the demanded blobs
 func (scenarioHelper) generateBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string) {
 	for _, blobName := range blobList {
 		blob := containerURL.NewBlockBlobURL(blobName)
 		cResp, err := blob.Upload(ctx, strings.NewReader(data), azblob.BlobHTTPHeaders{},
-			nil, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil)
+			nil, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{})
 		c.Assert(err, chk.IsNil)
 		c.Assert(cResp.StatusCode(), chk.Equals, 201)
 	}
@@ -308,6 +319,7 @@ func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.Co
 			azblob.BlobAccessConditions{},
 			azblob.DefaultPremiumBlobAccessTier,
 			nil,
+			azblob.ClientProvidedKeyOptions{},
 		)
 		c.Assert(err, chk.IsNil)
 		c.Assert(cResp.StatusCode(), chk.Equals, 201)
@@ -318,6 +330,7 @@ func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.Co
 			strings.NewReader(data),
 			azblob.PageBlobAccessConditions{},
 			nil,
+			azblob.ClientProvidedKeyOptions{},
 		)
 		c.Assert(err, chk.IsNil)
 		c.Assert(uResp.StatusCode(), chk.Equals, 201)
@@ -338,6 +351,7 @@ func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.
 			azblob.Metadata{},
 			azblob.BlobAccessConditions{},
 			nil,
+			azblob.ClientProvidedKeyOptions{},
 		)
 		c.Assert(err, chk.IsNil)
 		c.Assert(cResp.StatusCode(), chk.Equals, 201)
@@ -346,7 +360,8 @@ func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.
 		uResp, err := blob.AppendBlock(ctx,
 			strings.NewReader(data),
 			azblob.AppendBlobAccessConditions{},
-			nil)
+			nil,
+			azblob.ClientProvidedKeyOptions{})
 		c.Assert(err, chk.IsNil)
 		c.Assert(uResp.StatusCode(), chk.Equals, 201)
 	}
@@ -358,7 +373,7 @@ func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.
 func (scenarioHelper) generateBlockBlobWithAccessTier(c *chk.C, containerURL azblob.ContainerURL, blobName string, accessTier azblob.AccessTierType) {
 	blob := containerURL.NewBlockBlobURL(blobName)
 	cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
-		nil, azblob.BlobAccessConditions{}, accessTier, nil)
+		nil, azblob.BlobAccessConditions{}, accessTier, nil, azblob.ClientProvidedKeyOptions{})
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
 }
@@ -370,6 +385,19 @@ func (scenarioHelper) generateObjects(c *chk.C, client *minio.Client, bucketName
 		n, err := client.PutObjectWithContext(ctx, bucketName, objectName, strings.NewReader(objectDefaultData), size, minio.PutObjectOptions{})
 		c.Assert(err, chk.IsNil)
 		c.Assert(n, chk.Equals, size)
+	}
+}
+
+func (scenarioHelper) generateGCPObjects(c *chk.C, client *gcpUtils.Client, bucketName string, objectList []string) {
+	size := int64(len(objectDefaultData))
+	for _, objectName := range objectList {
+		wc := client.Bucket(bucketName).Object(objectName).NewWriter(context.Background())
+		reader := strings.NewReader(objectDefaultData)
+		written, err := io.Copy(wc, reader)
+		c.Assert(err, chk.IsNil)
+		c.Assert(written, chk.Equals, size)
+		err = wc.Close()
+		c.Assert(err, chk.IsNil)
 	}
 }
 
@@ -420,6 +448,36 @@ func (scenarioHelper) generateCommonRemoteScenarioForS3(c *chk.C, client *minio.
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
 	time.Sleep(time.Millisecond * 1050)
 	return
+}
+
+func (scenarioHelper) generateCommonRemoteScenarioForGCP(c *chk.C, client *gcpUtils.Client, bucketName string, prefix string, returnObjectListWithBucketName bool) []string {
+	objectList := make([]string, 50)
+	for i := 0; i < 10; i++ {
+		objectName1 := createNewGCPObject(c, client, bucketName, prefix+"top")
+		objectName2 := createNewGCPObject(c, client, bucketName, prefix+"sub1/")
+		objectName3 := createNewGCPObject(c, client, bucketName, prefix+"sub2/")
+		objectName4 := createNewGCPObject(c, client, bucketName, prefix+"sub1/sub3/sub5/")
+		objectName5 := createNewGCPObject(c, client, bucketName, prefix+specialNames[i])
+
+		// Note: common.AZCOPY_PATH_SEPARATOR_STRING is added before bucket or objectName, as in the change minimize JobPartPlan file size,
+		// transfer.Source & transfer.Destination(after trimed the SourceRoot and DestinationRoot) are with AZCOPY_PATH_SEPARATOR_STRING suffix,
+		// when user provided source & destination are without / suffix, which is the case for scenarioHelper generated URL.
+
+		bucketPath := ""
+		if returnObjectListWithBucketName {
+			bucketPath = common.AZCOPY_PATH_SEPARATOR_STRING + bucketName
+		}
+
+		objectList[5*i] = bucketPath + common.AZCOPY_PATH_SEPARATOR_STRING + objectName1
+		objectList[5*i+1] = bucketPath + common.AZCOPY_PATH_SEPARATOR_STRING + objectName2
+		objectList[5*i+2] = bucketPath + common.AZCOPY_PATH_SEPARATOR_STRING + objectName3
+		objectList[5*i+3] = bucketPath + common.AZCOPY_PATH_SEPARATOR_STRING + objectName4
+		objectList[5*i+4] = bucketPath + common.AZCOPY_PATH_SEPARATOR_STRING + objectName5
+	}
+
+	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
+	time.Sleep(time.Millisecond * 1050)
+	return objectList
 }
 
 // create the demanded azure files
@@ -586,6 +644,13 @@ func (scenarioHelper) getRawS3AccountURL(c *chk.C, region string) url.URL {
 	return *fullURL
 }
 
+func (scenarioHelper) getRawGCPAccountURL(c *chk.C) url.URL {
+	rawURL := "https://storage.cloud.google.com/"
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
+	return *fullURL
+}
+
 // TODO: Possibly add virtual-hosted-style and dual stack support. Currently use path style for testing.
 func (scenarioHelper) getRawS3BucketURL(c *chk.C, region string, bucketName string) url.URL {
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s", common.IffString(region == "", "", "-"+region), bucketName)
@@ -596,12 +661,27 @@ func (scenarioHelper) getRawS3BucketURL(c *chk.C, region string, bucketName stri
 	return *fullURL
 }
 
+func (scenarioHelper) getRawGCPBucketURL(c *chk.C, bucketName string) url.URL {
+	rawURL := fmt.Sprintf("https://storage.cloud.google.com/%s", bucketName)
+	fmt.Println(rawURL)
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
+	return *fullURL
+}
+
 func (scenarioHelper) getRawS3ObjectURL(c *chk.C, region string, bucketName string, objectName string) url.URL {
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s/%s", common.IffString(region == "", "", "-"+region), bucketName, objectName)
 
 	fullURL, err := url.Parse(rawURL)
 	c.Assert(err, chk.IsNil)
 
+	return *fullURL
+}
+
+func (scenarioHelper) getRawGCPObjectURL(c *chk.C, bucketName string, objectName string) url.URL {
+	rawURL := fmt.Sprintf("https://storage.cloud.google.com/%s/%s", bucketName, objectName)
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
 	return *fullURL
 }
 
@@ -622,7 +702,7 @@ func (scenarioHelper) getRawShareURLWithSAS(c *chk.C, shareName string) url.URL 
 }
 
 func (scenarioHelper) blobExists(blobURL azblob.BlobURL) bool {
-	_, err := blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+	_, err := blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 	if err == nil {
 		return true
 	}

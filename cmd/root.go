@@ -48,6 +48,8 @@ var azcopyOutputFormat common.OutputFormat
 var cmdLineCapMegaBitsPerSecond float64
 var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
+var azcopyScanningLogger common.ILoggerResetable
+var azcopyCurrentJobID common.JobID
 
 // It's not pretty that this one is read directly by credential util.
 // But doing otherwise required us passing it around in many places, even though really
@@ -137,6 +139,7 @@ func Execute(azsAppPathFolder, logPathFolder string, jobPlanFolder string, maxFi
 	azcopyLogPathFolder = logPathFolder
 	azcopyJobPlanFolder = jobPlanFolder
 	azcopyMaxFileAndSocketHandles = maxFileAndSocketHandles
+	azcopyCurrentJobID = common.NewJobID()
 
 	if err := rootCmd.Execute(); err != nil {
 		glcm.Error(err.Error())
@@ -195,7 +198,7 @@ func beginDetectNewVersion() chan struct{} {
 		}
 
 		// step 1: initialize pipeline
-		p, err := createBlobPipeline(context.TODO(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+		p, err := createBlobPipeline(context.TODO(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, pipeline.LogNone)
 		if err != nil {
 			return
 		}
@@ -208,7 +211,7 @@ func beginDetectNewVersion() chan struct{} {
 
 		// step 3: start download
 		blobURL := azblob.NewBlobURL(*u, p)
-		blobStream, err := blobURL.Download(context.TODO(), 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
+		blobStream, err := blobURL.Download(context.TODO(), 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
 		if err != nil {
 			return
 		}
