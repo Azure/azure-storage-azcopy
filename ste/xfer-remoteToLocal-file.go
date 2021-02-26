@@ -170,9 +170,8 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		// We create the file to a temporary location with name .azcopy-<jobID>-<actualName> and then move it
 		// to correct name.
 		pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
-		filename := getTempDownloadPath(info.JobID.String(), info.Destination)
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.CreateLocalFile())
-		dstFile, err = createDestinationFile(jptm, filename, fileSize, writeThrough)
+		dstFile, err = createDestinationFile(jptm, info.getTempDownloadPath(), fileSize, writeThrough)
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 		if err != nil {
 			failFileCreation(err)
@@ -341,11 +340,25 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 				jptm.FailActiveDownload("Checking MD5 hash", err)
 			}
 
+			// check length if enabled (except for dev null and decompression case, where that's impossible)
+			if info.DestLengthValidation && info.Destination != common.Dev_Null && !jptm.ShouldDecompress() {
+				fi, err := common.OSStat(info.getTempDownloadPath())
+
+				if err != nil {
+					jptm.FailActiveDownload("Download length check", err)
+				} else if fi.Size() != info.SourceSize {
+					jptm.FailActiveDownload("Download length check", errors.New("destination length did not match source length"))
+				}
+			}
+
+			//Rename back to original name. At this point, we're sure the file is completely
+			//downloaded and not corrupt. Infact, post this point we should log errors and
+			//fail the transfer.
 			if !strings.EqualFold(info.Destination, common.Dev_Null) {
-				err := os.Rename(getTempDownloadPath(info.JobID.String(), info.Destination), info.Destination)
+				err := os.Rename(info.getTempDownloadPath(), info.Destination)
 				if  err != nil {
-					jptm.FailActiveDownload("RenamingFile", err)
-					jptm.LogAtLevelForCurrentTransfer(pipeline.LogInfo, "Error renaming file: "+err.Error())
+					jptm.LogError(info.Destination, fmt.Sprintf(
+								  "Failed to rename. File at %s", info.getTempDownloadPath()), err)
 				}
 			}
 		}
@@ -355,17 +368,6 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 		// TODO: should we refactor to force this to accept jptm isLive as a parameter, to encourage it to be checked?
 		//  or should we redefine epilogue to be success-path only, and only call it in that case?
 		dl.Epilogue() // it can release resources here
-
-		// check length if enabled (except for dev null and decompression case, where that's impossible)
-		if jptm.IsLive() && info.DestLengthValidation && info.Destination != common.Dev_Null && !jptm.ShouldDecompress() {
-			fi, err := common.OSStat(info.Destination)
-
-			if err != nil {
-				jptm.FailActiveDownload("Download length check", err)
-			} else if fi.Size() != info.SourceSize {
-				jptm.FailActiveDownload("Download length check", errors.New("destination length did not match source length"))
-			}
-		}
 	}
 
 	// Preserve modified time
@@ -459,7 +461,7 @@ func tryDeleteFile(info TransferInfo, jptm IJobPartTransferMgr) {
 		return
 	}
 
-	err := deleteFile(getTempDownloadPath(info.JobID.String(), info.Destination))
+	err := deleteFile(info.getTempDownloadPath())
 	if err != nil {
 		// If there was an error deleting the file, log the error
 		jptm.LogError(info.Destination, "Delete File Error ", err)
@@ -468,9 +470,9 @@ func tryDeleteFile(info TransferInfo, jptm IJobPartTransferMgr) {
 
 //Returns the path of temp file to be downloaded. The paths is in format
 // /actual/parent/path/.azDownload-<jobID>-<actualFileName>
-func getTempDownloadPath(jobID string, destinationPath string) string {
-	parent, fileName := filepath.Split(destinationPath)
-	fileName = fmt.Sprintf(azcopyTempDownloadPrefix, jobID) + fileName
+func (info *TransferInfo) getTempDownloadPath() string {
+	parent, fileName := filepath.Split(info.Destination)
+	fileName = fmt.Sprintf(azcopyTempDownloadPrefix, info.JobID.String()) + fileName
 	return filepath.Join(parent, fileName)
 }
 
