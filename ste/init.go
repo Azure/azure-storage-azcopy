@@ -416,7 +416,63 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		jm, _ = JobsAdmin.JobMgr(jobID)
 	}
 
-	return jm.ListJobSummary()
+	js := jm.ListJobSummary()
+	part0, ok := jm.JobPartMgr(0)
+	if !ok {
+		return js
+	}
+	part0PlanStatus := part0.Plan().JobStatus()
+
+	// Add on byte count from files in flight, to get a more accurate running total
+	js.TotalBytesTransferred += JobsAdmin.SuccessfulBytesInActiveFiles()
+	if js.TotalBytesExpected == 0 {
+		// if no bytes expected, and we should avoid dividing by 0 (which results in NaN)
+		js.PercentComplete = 100
+	} else {
+		js.PercentComplete = 100 * float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected)
+	}
+
+	// This is added to let FE to continue fetching the Job Progress Summary
+	// in case of resume. In case of resume, the Job is already completely
+	// ordered so the progress summary should be fetched until all job parts
+	// are iterated and have been scheduled
+	js.CompleteJobOrdered = js.CompleteJobOrdered || jm.AllTransfersScheduled()
+
+	js.BytesOverWire = uint64(JobsAdmin.BytesOverWire())
+
+	// Get the number of active go routines performing the transfer or executing the chunk Func
+	// TODO: added for debugging purpose. remove later (is covered by GetPerfInfo now anyway)
+	js.ActiveConnections = jm.ActiveConnections()
+
+	js.PerfStrings, js.PerfConstraint = jm.GetPerfInfo()
+
+	pipeStats := jm.PipelineNetworkStats()
+	if pipeStats != nil {
+		js.AverageIOPS = pipeStats.OperationsPerSecond()
+		js.AverageE2EMilliseconds = pipeStats.AverageE2EMilliseconds()
+		js.NetworkErrorPercentage = pipeStats.NetworkErrorPercentage()
+		js.ServerBusyPercentage = pipeStats.TotalServerBusyPercentage()
+	}
+
+	// If the status is cancelled, then no need to check for completerJobOrdered
+	// since user must have provided the consent to cancel an incompleteJob if that
+	// is the case.
+	if part0PlanStatus == common.EJobStatus.Cancelled() {
+		js.JobStatus = part0PlanStatus
+		js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped, part0.Plan().FromTo)
+	} else {
+		// Job is completed if Job order is complete AND ALL transfers are completed/failed
+		// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
+		if (js.CompleteJobOrdered) && (part0PlanStatus.IsJobDone()) {
+			js.JobStatus = part0PlanStatus
+		}
+
+		if js.JobStatus.IsJobDone() {
+			js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped, part0.Plan().FromTo)
+		}
+	}
+
+	return js
 }
 
 func resurrectJobSummary(jm IJobMgr) common.ListJobSummaryResponse {
