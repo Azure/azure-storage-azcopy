@@ -44,6 +44,22 @@ type contentHeaders struct {
 	contentMD5         []byte
 }
 
+func (h *contentHeaders) DeepCopy() *contentHeaders {
+	if h == nil {
+		return nil
+	}
+	ret := contentHeaders{}
+	ret.cacheControl = h.cacheControl
+	ret.contentDisposition = h.contentDisposition
+	ret.contentEncoding = h.contentEncoding
+	ret.contentLanguage = h.contentLanguage
+	ret.contentType = h.contentType
+	ret.contentMD5 = make([]byte, len(h.contentMD5))
+	copy(ret.contentMD5, h.contentMD5)
+
+	return &ret
+}
+
 func (h *contentHeaders) String() string {
 	var ret string
 	if h == nil {
@@ -97,6 +113,51 @@ func (op objectProperties) sizeBytes(a asserter, defaultSize string) int {
 	return 0
 }
 
+func (op objectProperties) DeepCopy() objectProperties {
+	ret := objectProperties{}
+	ret.isFolder = op.isFolder
+
+	if op.size != nil {
+		val := *&op.size
+		ret.size = val
+	}
+
+	if op.contentHeaders != nil {
+		ret.contentHeaders = op.contentHeaders.DeepCopy()
+	}
+	
+	ret.nameValueMetadata = make(map[string]string)
+	for k, v := range op.nameValueMetadata {
+		ret.nameValueMetadata[k] = v
+	}
+
+	ret.blobTags = make(map[string]string)
+	for k, v := range op.blobTags {
+		ret.blobTags[k] = v
+	}
+
+	if op.creationTime != nil {
+		time := *op.creationTime
+		ret.creationTime = &time
+	}
+
+	if op.lastWriteTime != nil {
+		time := *op.lastWriteTime
+		ret.lastWriteTime = &time
+	}
+
+	if op.smbAttributes != nil {
+		val := *op.smbAttributes
+		ret.smbAttributes = &val
+	}
+
+	if op.smbPermissionsSddl != nil {
+		ret.smbPermissionsSddl = op.smbPermissionsSddl
+	}
+
+	return ret
+}
+
 // a file or folder. Create these with the f() and folder() functions
 type testObject struct {
 	name                   string
@@ -107,6 +168,20 @@ type testObject struct {
 	creationProperties objectProperties
 	// info to be used at verification time. Will be nil if there is no validation (of properties) to be done
 	verificationProperties *objectProperties
+}
+
+func (t *testObject) DeepCopy() *testObject {
+	ret := testObject{}
+	ret.name = t.name
+	ret.expectedFailureMessage = t.expectedFailureMessage
+	ret.creationProperties = t.creationProperties.DeepCopy()
+
+	if t.verificationProperties != nil {
+		vp := (*t.verificationProperties).DeepCopy()
+		ret.verificationProperties = &vp
+	}
+
+	return &ret
 }
 
 func (t *testObject) isFolder() bool {
@@ -228,21 +303,40 @@ type testFiles struct {
 }
 
 func (tf testFiles) cloneShouldTransfers() testFiles {
-	return testFiles{
-		defaultSize:    tf.defaultSize,
-		shouldTransfer: tf.shouldTransfer,
-	}
+	ret := testFiles{}
+	ret.defaultSize = tf.defaultSize
+
+	ret.cloneList(ret.shouldTransfer, tf.shouldTransfer)
+	return ret
 }
 
 func (tf testFiles) cloneAll() testFiles {
-	clone := tf
-	return clone
+	ret := testFiles{}
+	ret.defaultSize = tf.defaultSize
+
+	ret.cloneList(ret.shouldTransfer, tf.shouldTransfer)
+	ret.cloneList(ret.shouldIgnore, tf.shouldIgnore)
+	ret.cloneList(ret.shouldFail, tf.shouldFail)
+	ret.cloneList(ret.shouldSkip, tf.shouldSkip)
+	return ret
+}
+
+func (*testFiles) cloneList(dst, src []interface{}) {
+	for _, r := range src {
+		if aTestObj, ok := r.(*testObject); ok {
+			dst = append(dst, aTestObj.DeepCopy())
+		} else if asString, ok := r.(string); ok {
+			dst = append(dst, asString)
+		} else {
+			panic("testFiles lists may contain only strings and testObjects. Create your test objects with the f() and folder() functions")
+		}
+	}
 }
 
 // takes a mixed list of (potentially) strings and testObjects, and returns them all as test objects
 // TODO: do we want to continue supporting plain strings in the expectation file lists (for convenience of test coders)
 //   or force them to use f() for every file?
-func (_ *testFiles) toTestObjects(rawList []interface{}, isFail bool) []*testObject {
+func (*testFiles) toTestObjects(rawList []interface{}, isFail bool) []*testObject {
 	result := make([]*testObject, 0, len(rawList))
 	for _, r := range rawList {
 		if asTestObject, ok := r.(*testObject); ok {
