@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"runtime"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -64,6 +65,8 @@ type LifecycleMgr interface {
 	E2EAwaitAllowOpenFiles()                                     // used by E2E tests
 	E2EEnableAwaitAllowOpenFiles(enable bool)                    // used by E2E tests
 	RegisterCloseFunc(func())
+	SetForceLogging()
+	IsForceLoggingEnabled() bool
 }
 
 func GetLifecycleMgr() LifecycleMgr {
@@ -86,6 +89,7 @@ type lifecycleMgr struct {
 	e2eAllowAwaitContinue bool           // allow the user to send 'continue' from stdin to start the current job
 	e2eAllowAwaitOpen     bool           // allow the user to send 'open' from stdin to allow the opening of the first file
 	closeFunc             func()         // used to close logs before exiting
+	enableSyslog          bool
 }
 
 type userInput struct {
@@ -556,6 +560,18 @@ func (lcm *lifecycleMgr) E2EEnableAwaitAllowOpenFiles(enable bool) {
 	} else {
 		close(lcm.e2eAllowOpenChannel) // so that E2EAwaitAllowOpenFiles will instantly return every time
 	}
+}
+
+func (lcm *lifecycleMgr) SetForceLogging() {
+	enableSyslog, err := strconv.ParseBool(lcm.GetEnvironmentVariable(EEnvironmentVariable.EnableSyslog()))
+	if err != nil {
+		enableSyslog = true
+	}
+	lcm.enableSyslog = enableSyslog
+}
+
+func (lcm *lifecycleMgr) IsForceLoggingEnabled() bool {
+	return lcm.enableSyslog
 }
 
 // captures the common logic of exiting if there's an expected error

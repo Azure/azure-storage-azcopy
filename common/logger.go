@@ -219,3 +219,7 @@ func NewReadLogFunc(logger ILogger, fullUrl *url.URL) func(int, error, int64, in
 			redactedUrl))
 	}
 }
+
+func IsForceLoggingEnabled() bool {
+	return GetLifecycleMgr().IsForceLoggingEnabled()
+}

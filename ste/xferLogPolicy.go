@@ -28,6 +28,9 @@ type RequestLogOptions struct {
 	// LogWarningIfTryOverThreshold logs a warning if a tried operation takes longer than the specified
 	// duration (-1=no logging; 0=default threshold).
 	LogWarningIfTryOverThreshold time.Duration
+	// ForceLog is a boolean flag which enables logging on Syslog/WindowsEventLog
+	// By default ForceLog is true unless specified by the user specifically.
+	ForceLog bool
 }
 
 func (o RequestLogOptions) defaults() RequestLogOptions {
@@ -87,13 +90,13 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 			// If the response took too long, we'll upgrade to warning.
 			if o.LogWarningIfTryOverThreshold > 0 && tryDuration > o.LogWarningIfTryOverThreshold {
 				// Log a warning if the try duration exceeded the specified threshold
-				logLevel, forceLog = pipeline.LogWarning, true
+				logLevel, forceLog = pipeline.LogWarning, o.ForceLog
 			}
 
 			if err == nil { // We got a response from the service
 				sc := response.Response().StatusCode
 				if ((sc >= 400 && sc <= 499) && sc != http.StatusNotFound && sc != http.StatusConflict && sc != http.StatusPreconditionFailed && sc != http.StatusRequestedRangeNotSatisfiable) || (sc >= 500 && sc <= 599) {
-					logLevel, forceLog, httpError = pipeline.LogError, true, true // Promote to Error any 4xx (except those listed is an error) or any 5xx
+					logLevel, forceLog, httpError = pipeline.LogError, o.ForceLog, true // Promote to Error any 4xx (except those listed is an error) or any 5xx
 				} else if sc == http.StatusNotFound || sc == http.StatusConflict || sc == http.StatusPreconditionFailed || sc == http.StatusRequestedRangeNotSatisfiable {
 					httpError = true
 				}
@@ -105,7 +108,7 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 				logLevel, forceLog = pipeline.LogDebug, false
 			} else {
 				// This error did not get an HTTP response from the service; upgrade the severity to Error
-				logLevel, forceLog = pipeline.LogError, true
+				logLevel, forceLog = pipeline.LogError, o.ForceLog
 			}
 
 			logBody := false
