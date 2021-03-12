@@ -26,6 +26,7 @@ import (
 	"fmt"
 	pipeline2 "github.com/Azure/azure-pipeline-go/pipeline"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -33,8 +34,72 @@ import (
 	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
+type rawListCmdArgs struct {
+	// obtained from argument
+	sourcePath string
+
+	Properties      string
+	MachineReadable bool
+	RunningTally    bool
+	MegaUnits       bool
+}
+
+var validProperties = []string{
+	"LastModifiedTime", "VersionId", "BlobType", "BlobAccessTier", "ContentType", "ContentEncoding",
+}
+
+func (raw *rawListCmdArgs) parseProperties(rawProperties string) []string {
+	parsedProperties := make([]string, 0)
+	listProperties := strings.Split(rawProperties, ";")
+	for _, property := range listProperties {
+		property = strings.TrimSpace(property)
+		for _, validProperty := range validProperties {
+			if len(property) != 0 && validProperty == property {
+				parsedProperties = append(parsedProperties, property)
+				break
+			}
+		}
+	}
+	return parsedProperties
+}
+
+func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
+	cooked = cookedListCmdArgs{}
+	// the expected argument in input is the container sas / or path of virtual directory in the container.
+	// verifying the location type
+	location := inferArgumentLocation(raw.sourcePath)
+	// Only support listing for Azure locations
+	if location != location.Blob() && location != location.File() && location != location.BlobFS() {
+		return cooked, errors.New("invalid path passed for listing. given source is of type " + location.String() + " while expect is container / container path ")
+	}
+	cooked.sourcePath = raw.sourcePath
+	cooked.MachineReadable = raw.MachineReadable
+	cooked.RunningTally = raw.RunningTally
+	cooked.MegaUnits = raw.MegaUnits
+	cooked.location = location
+
+	if raw.Properties != "" {
+		cooked.properties = raw.parseProperties(raw.Properties)
+	}
+
+	return cooked, nil
+}
+
+type cookedListCmdArgs struct {
+	sourcePath string
+	location   common.Location
+
+	properties      []string
+	MachineReadable bool
+	RunningTally    bool
+	MegaUnits       bool
+}
+
+var raw rawListCmdArgs
+var cooked cookedListCmdArgs
+
 func init() {
-	var sourcePath = ""
+	raw = rawListCmdArgs{}
 	// listContainerCmd represents the list container command
 	// listContainer list the blobs inside the container or virtual directory inside the container
 	listContainerCmd := &cobra.Command{
@@ -51,65 +116,75 @@ func init() {
 			if len(args) == 0 || len(args) > 2 {
 				return errors.New("this command only requires container destination")
 			}
-			sourcePath = args[0]
+			raw.sourcePath = args[0]
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			// the expected argument in input is the container sas / or path of virtual directory in the container.
-			// verifying the location type
-			location := inferArgumentLocation(sourcePath)
-			// Only support listing for Azure locations
-			if location != location.Blob() && location != location.File() && location != location.BlobFS() {
-				glcm.Error("invalid path passed for listing. given source is of type " + location.String() + " while expect is container / container path ")
+			cooked, err := raw.cook()
+			if err != nil {
+				glcm.Error("failed to parse user input due to error: " + err.Error())
+				return
 			}
-
-			err := HandleListContainerCommand(sourcePath, location)
+			err = cooked.HandleListContainerCommand()
 			if err == nil {
 				glcm.Exit(nil, common.EExitCode.Success())
 			} else {
 				glcm.Error(err.Error())
 			}
-
 		},
 	}
 
-	listContainerCmd.PersistentFlags().BoolVar(&parameters.MachineReadable, "machine-readable", false, "Lists file sizes in bytes.")
-	listContainerCmd.PersistentFlags().BoolVar(&parameters.RunningTally, "running-tally", false, "Counts the total number of files and their sizes.")
-	listContainerCmd.PersistentFlags().BoolVar(&parameters.MegaUnits, "mega-units", false, "Displays units in orders of 1000, not 1024.")
+	listContainerCmd.PersistentFlags().BoolVar(&raw.MachineReadable, "machine-readable", false, "Lists file sizes in bytes.")
+	listContainerCmd.PersistentFlags().BoolVar(&raw.RunningTally, "running-tally", false, "Counts the total number of files and their sizes.")
+	listContainerCmd.PersistentFlags().BoolVar(&raw.MegaUnits, "mega-units", false, "Displays units in orders of 1000, not 1024.")
+	listContainerCmd.PersistentFlags().StringVar(&raw.Properties, "properties", "", "delimiter (;) separated values of properties required in list output.")
 
 	rootCmd.AddCommand(listContainerCmd)
 }
 
-type ListParameters struct {
-	MachineReadable bool
-	RunningTally    bool
-	MegaUnits       bool
+func (cooked cookedListCmdArgs) processProperties(object storedObject) string {
+	builder := strings.Builder{}
+	for _, property := range cooked.properties {
+		switch property {
+		case "LastModifiedTime":
+			builder.WriteString(property + ": " + object.lastModifiedTime.String() + "; ")
+		case "VersionId":
+			builder.WriteString(property + ": " + object.blobVersionID + "; ")
+		case "BlobType":
+			builder.WriteString(property + ": " + string(object.blobType) + "; ")
+		case "BlobAccessTier":
+			builder.WriteString(property + ": " + string(object.blobAccessTier) + "; ")
+		case "ContentType":
+			builder.WriteString(property + ": " + object.contentType + "; ")
+		case "ContentEncoding":
+			builder.WriteString(property + ": " + object.contentEncoding + "; ")
+		}
+	}
+	return builder.String()
 }
 
-var parameters = ListParameters{}
-
 // HandleListContainerCommand handles the list container command
-func HandleListContainerCommand(unparsedSource string, location common.Location) (err error) {
+func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	// TODO: Temporarily use context.TODO(), this should be replaced with a root context from main.
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	credentialInfo := common.CredentialInfo{}
 
-	source, err := SplitResourceString(unparsedSource, location)
+	source, err := SplitResourceString(cooked.sourcePath, cooked.location)
 	if err != nil {
 		return err
 	}
 
-	level, err := determineLocationLevel(source.Value, location, true)
+	level, err := determineLocationLevel(source.Value, cooked.location, true)
 
 	if err != nil {
 		return err
 	}
 
 	// Treat our check as a destination because the isSource flag was designed for S2S transfers.
-	if credentialInfo, _, err = getCredentialInfoForLocation(ctx, location, source.Value, source.SAS, false); err != nil {
+	if credentialInfo, _, err = getCredentialInfoForLocation(ctx, cooked.location, source.Value, source.SAS, false); err != nil {
 		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
-	} else if location == location.File() && source.SAS == "" {
+	} else if cooked.location == cooked.location.File() && source.SAS == "" {
 		return errors.New("azure files requires a SAS token for authentication")
 	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
 		uotm := GetUserOAuthTokenManagerInstance()
@@ -120,7 +195,7 @@ func HandleListContainerCommand(unparsedSource string, location common.Location)
 		}
 	}
 
-	traverser, err := initResourceTraverser(source, location, &ctx, &credentialInfo, nil, nil, true, false,
+	traverser, err := initResourceTraverser(source, cooked.location, &ctx, &credentialInfo, nil, nil, true, false,
 		false, func(common.EntityType) {}, nil, false, pipeline2.LogNone)
 
 	if err != nil {
@@ -135,19 +210,21 @@ func HandleListContainerCommand(unparsedSource string, location common.Location)
 		if object.entityType == common.EEntityType.Folder() {
 			path += "/" // TODO: reviewer: same questions as for jobs status: OK to hard code direction of slash? OK to use trailing slash to distinguish dirs from files?
 		}
-		objectSummary := path + "; Date: " + object.lastModifiedTime.String() + "; Content Length: "
+
+		properties := "; " + cooked.processProperties(object)
+		objectSummary := path + properties + " Content Length: "
 
 		if level == level.Service() {
 			objectSummary = object.containerName + "/" + objectSummary
 		}
 
-		if parameters.MachineReadable {
+		if cooked.MachineReadable {
 			objectSummary += strconv.Itoa(int(object.size))
 		} else {
 			objectSummary += byteSizeToString(object.size)
 		}
 
-		if parameters.RunningTally {
+		if cooked.RunningTally {
 			fileCount++
 			sizeCount += object.size
 		}
@@ -164,11 +241,11 @@ func HandleListContainerCommand(unparsedSource string, location common.Location)
 		return fmt.Errorf("failed to traverse container: %s", err.Error())
 	}
 
-	if parameters.RunningTally {
+	if cooked.RunningTally {
 		glcm.Info("")
 		glcm.Info("File count: " + strconv.Itoa(int(fileCount)))
 
-		if parameters.MachineReadable {
+		if cooked.MachineReadable {
 			glcm.Info("Total file size: " + strconv.Itoa(int(sizeCount)))
 		} else {
 			glcm.Info("Total file size: " + byteSizeToString(sizeCount))
@@ -178,17 +255,17 @@ func HandleListContainerCommand(unparsedSource string, location common.Location)
 	return nil
 }
 
-// printListContainerResponse prints the list container response
-func printListContainerResponse(lsResponse *common.ListContainerResponse) {
-	if len(lsResponse.Blobs) == 0 {
-		return
-	}
-	// TODO determine what's the best way to display the blobs in JSON
-	// TODO no partner team needs this functionality right now so the blobs are just outputted as info
-	for index := 0; index < len(lsResponse.Blobs); index++ {
-		glcm.Info(lsResponse.Blobs[index])
-	}
-}
+//// printListContainerResponse prints the list container response
+//func printListContainerResponse(lsResponse *common.ListContainerResponse) {
+//	if len(lsResponse.Blobs) == 0 {
+//		return
+//	}
+//	// TODO determine what's the best way to display the blobs in JSON
+//	// TODO no partner team needs this functionality right now so the blobs are just outputted as info
+//	for index := 0; index < len(lsResponse.Blobs); index++ {
+//		glcm.Info(lsResponse.Blobs[index])
+//	}
+//}
 
 var megaSize = []string{
 	"B",
@@ -214,7 +291,7 @@ func byteSizeToString(size int64) string {
 	floatSize := float64(size)
 	gigSize := 1024
 
-	if parameters.MegaUnits {
+	if cooked.MegaUnits {
 		gigSize = 1000
 		units = megaSize
 	}
