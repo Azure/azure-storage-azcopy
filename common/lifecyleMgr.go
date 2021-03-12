@@ -89,7 +89,7 @@ type lifecycleMgr struct {
 	e2eAllowAwaitContinue bool           // allow the user to send 'continue' from stdin to start the current job
 	e2eAllowAwaitOpen     bool           // allow the user to send 'open' from stdin to allow the opening of the first file
 	closeFunc             func()         // used to close logs before exiting
-	enableSyslog          bool
+	disableSyslog         bool
 }
 
 type userInput struct {
@@ -563,15 +563,16 @@ func (lcm *lifecycleMgr) E2EEnableAwaitAllowOpenFiles(enable bool) {
 }
 
 func (lcm *lifecycleMgr) SetForceLogging() {
-	enableSyslog, err := strconv.ParseBool(lcm.GetEnvironmentVariable(EEnvironmentVariable.EnableSyslog()))
+	disableSyslog, err := strconv.ParseBool(lcm.GetEnvironmentVariable(EEnvironmentVariable.DisableSyslog()))
 	if err != nil {
-		enableSyslog = true
+		// By default, we'll retain the current behaviour. i.e. To log in Syslog/WindowsEventLog if not specified by the user
+		disableSyslog = false
 	}
-	lcm.enableSyslog = enableSyslog
+	lcm.disableSyslog = disableSyslog
 }
 
 func (lcm *lifecycleMgr) IsForceLoggingEnabled() bool {
-	return lcm.enableSyslog
+	return lcm.disableSyslog == false
 }
 
 // captures the common logic of exiting if there's an expected error

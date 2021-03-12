@@ -65,7 +65,7 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ManagedIdentityClientID(),
 	EEnvironmentVariable.ManagedIdentityObjectID(),
 	EEnvironmentVariable.ManagedIdentityResourceString(),
-	EEnvironmentVariable.EnableSyslog(),
+	EEnvironmentVariable.DisableSyslog(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
@@ -326,10 +326,10 @@ func (EnvironmentVariable) UserAgentPrefix() EnvironmentVariable {
 	}
 }
 
-func (EnvironmentVariable) EnableSyslog() EnvironmentVariable {
+func (EnvironmentVariable) DisableSyslog() EnvironmentVariable {
 	return EnvironmentVariable{
-		Name:         "AZCOPY_ENABLE_SYSLOG",
+		Name:         "AZCOPY_DISABLE_SYSLOG",
 		DefaultValue: "true",
-		Description:  "Enables logging in Syslog or Windows Event Logger. By default we log to these channels. However. to reduce the noise in syslog, consider setting this environment variable to false.",
+		Description:  "Disables logging in Syslog or Windows Event Logger. By default we log to these channels. However, to reduce the noise in Syslog/Windows Event Log, consider setting this environment variable to true.",
 	}
 }
