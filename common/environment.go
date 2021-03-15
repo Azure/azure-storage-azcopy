@@ -65,6 +65,8 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ManagedIdentityClientID(),
 	EEnvironmentVariable.ManagedIdentityObjectID(),
 	EEnvironmentVariable.ManagedIdentityResourceString(),
+	EEnvironmentVariable.CPKEncryptionKey(),
+	EEnvironmentVariable.CPKEncryptionKeySHA256(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
@@ -323,4 +325,12 @@ func (EnvironmentVariable) UserAgentPrefix() EnvironmentVariable {
 		Name:        "AZCOPY_USER_AGENT_PREFIX",
 		Description: "Add a prefix to the default AzCopy User Agent, which is used for telemetry purposes. A space is automatically inserted.",
 	}
+}
+
+func (EnvironmentVariable) CPKEncryptionKey() EnvironmentVariable {
+	return EnvironmentVariable{Name: "CPK_ENCRYPTION_KEY", Hidden: true}
+}
+
+func (EnvironmentVariable) CPKEncryptionKeySHA256() EnvironmentVariable {
+	return EnvironmentVariable{Name: "CPK_ENCRYPTION_KEY_SHA256", Hidden: false}
 }

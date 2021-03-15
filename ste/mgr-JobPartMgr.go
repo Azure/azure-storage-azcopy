@@ -54,6 +54,9 @@ type IJobPartMgr interface {
 	getFolderCreationTracker() common.FolderCreationTracker
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 	FolderDeletionManager() common.FolderDeletionManager
+	CpkInfo() common.CpkInfo
+	CpkScopeInfo() common.CpkScopeInfo
+	IsSourceEncrypted() bool
 }
 
 type serviceAPIVersionOverride struct{}
@@ -286,6 +289,8 @@ type jobPartMgr struct {
 	atomicTransfersCompleted uint32
 	atomicTransfersFailed    uint32
 	atomicTransfersSkipped   uint32
+
+	cpkOptions common.CpkOptions
 }
 
 func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {
@@ -353,6 +358,12 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			value, _ := url.QueryUnescape(kv[1])
 			jpm.blobTags[key] = value
 		}
+	}
+
+	jpm.cpkOptions = common.CpkOptions{
+		CpkInfo:           dstData.CpkInfo,
+		CpkScopeInfo:      string(dstData.CpkScopeInfo[:dstData.CpkScopeInfoLength]),
+		IsSourceEncrypted: dstData.IsSourceEncrypted,
 	}
 
 	jpm.preserveLastModifiedTime = plan.DstLocalData.PreserveLastModifiedTime
@@ -428,9 +439,9 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	userAgent := common.UserAgent
 	if fromTo.From() == common.ELocation.S3() {
 		userAgent = common.S3ImportUserAgent
-	}else if fromTo.From() == common.ELocation.GCP(){
+	} else if fromTo.From() == common.ELocation.GCP() {
 		userAgent = common.GCPImportUserAgent
-	}else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
+	} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
 		userAgent = common.BenchmarkUserAgent
 	}
 	userAgent = common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
@@ -582,9 +593,10 @@ func (jpm *jobPartMgr) AutoDecompress() bool {
 	return jpm.Plan().AutoDecompress
 }
 
-func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags) {
+func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byte) (headers common.ResourceHTTPHeaders,
+	metadata common.Metadata, blobTags common.BlobTags, cpkOptions common.CpkOptions) {
 	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType {
-		return jpm.httpHeaders, jpm.metadata, jpm.blobTags
+		return jpm.httpHeaders, jpm.metadata, jpm.blobTags, jpm.cpkOptions
 	}
 
 	return common.ResourceHTTPHeaders{
@@ -592,7 +604,8 @@ func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byt
 		ContentLanguage:    jpm.httpHeaders.ContentLanguage,
 		ContentDisposition: jpm.httpHeaders.ContentDisposition,
 		ContentEncoding:    jpm.httpHeaders.ContentEncoding,
-		CacheControl:       jpm.httpHeaders.CacheControl}, jpm.metadata, jpm.blobTags
+		CacheControl:       jpm.httpHeaders.CacheControl,
+	}, jpm.metadata, jpm.blobTags, jpm.cpkOptions
 }
 
 // TODO do we want these charset=utf-8?
@@ -640,6 +653,18 @@ func (jpm *jobPartMgr) BlobTypeOverride() common.BlobType {
 
 func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {
 	return jpm.blockBlobTier, jpm.pageBlobTier
+}
+
+func (jpm *jobPartMgr) CpkInfo() common.CpkInfo {
+	return common.GetCpkInfo(jpm.cpkOptions.CpkInfo)
+}
+
+func (jpm *jobPartMgr) CpkScopeInfo() common.CpkScopeInfo {
+	return common.GetCpkScopeInfo(jpm.cpkOptions.CpkScopeInfo)
+}
+
+func (jpm *jobPartMgr) IsSourceEncrypted() bool {
+	return jpm.cpkOptions.IsSourceEncrypted
 }
 
 func (jpm *jobPartMgr) ShouldPutMd5() bool {

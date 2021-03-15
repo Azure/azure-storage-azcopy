@@ -37,6 +37,7 @@ type blobVersionsTraverser struct {
 	includeDirectoryStubs       bool
 	incrementEnumerationCounter enumerationCounterFunc
 	listOfVersionIds            chan string
+	cpkOptions                  common.CpkOptions
 }
 
 func (t *blobVersionsTraverser) isDirectory(isSource bool) bool {
@@ -60,7 +61,11 @@ func (t *blobVersionsTraverser) getBlobProperties(versionID string) (props *azbl
 	}
 
 	blobURL := azblob.NewBlobURL(blobURLParts.URL(), t.p)
-	props, err = blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
+	if t.cpkOptions.IsSourceEncrypted {
+		clientProvidedKey = common.GetClientProvidedKey(t.cpkOptions)
+	}
+	props, err = blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, clientProvidedKey)
 	return props, err
 }
 
@@ -105,8 +110,10 @@ func (t *blobVersionsTraverser) traverse(preprocessor objectMorpher, processor o
 	return nil
 }
 
-func newBlobVersionsTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool,
-	incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string) (t *blobVersionsTraverser) {
+func newBlobVersionsTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
+	recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc,
+	listOfVersionIds chan string, cpkOptions common.CpkOptions) (t *blobVersionsTraverser) {
+
 	return &blobVersionsTraverser{
 		rawURL:                      rawURL,
 		p:                           p,
@@ -114,5 +121,6 @@ func newBlobVersionsTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.
 		includeDirectoryStubs:       includeDirectoryStubs,
 		incrementEnumerationCounter: incrementEnumerationCounter,
 		listOfVersionIds:            listOfVersionIds,
+		cpkOptions:                  cpkOptions,
 	}
 }

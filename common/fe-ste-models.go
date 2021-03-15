@@ -1030,10 +1030,10 @@ func (bt BlobTags) ToAzBlobTagsMap() azblob.BlobTagsMap {
 	return azblob.BlobTagsMap(bt)
 }
 
-// FromAzBlobTagsMapToCommonBlobTags converts azblob's BlobTagsMap to common BlobTags
-func FromAzBlobTagsMapToCommonBlobTags(azbt azblob.BlobTagsMap) BlobTags {
-	return BlobTags(azbt)
-}
+//// FromAzBlobTagsMapToCommonBlobTags converts azblob's BlobTagsMap to common BlobTags
+//func FromAzBlobTagsMapToCommonBlobTags(azbt azblob.BlobTagsMap) BlobTags {
+//	return BlobTags(azbt)
+//}
 
 func (bt BlobTags) ToString() string {
 	lst := make([]string, 0)
@@ -1367,4 +1367,95 @@ func (p PreservePermissionsOption) IsTruthy() bool {
 	default:
 		panic("unknown permissions option")
 	}
+}
+
+// CpkScopeInfo specifies the name of the encryption scope to use to encrypt the data provided in the request.
+// If not specified, encryption is performed with the default account encryption scope.
+// For more information, see Encryption at Rest for Azure Storage Services.
+type CpkScopeInfo struct {
+	EncryptionScope *string
+}
+
+func (csi CpkScopeInfo) Marshal() (string, error) {
+	result, err := json.Marshal(csi)
+	if err != nil {
+		return "", err
+	}
+	return string(result), nil
+}
+
+//func UnmarshalToCpkScopeInfo(cpkScopeInfoStr string) (CpkScopeInfo, error) {
+//	var result CpkScopeInfo
+//	if cpkScopeInfoStr != "" {
+//		err := json.Unmarshal([]byte(cpkScopeInfoStr), &result)
+//		if err != nil {
+//			return result, err
+//		}
+//	}
+//
+//	return result, nil
+//}
+
+type CpkInfo struct {
+	// The algorithm used to produce the encryption key hash.
+	// Currently, the only accepted value is "AES256".
+	// Must be provided if the x-ms-encryption-key header is provided.
+	EncryptionAlgorithm *string
+
+	// Optional. Specifies the encryption key to use to encrypt the data provided in the request.
+	// If not specified, encryption is performed with the root account encryption key.
+	EncryptionKey *string
+
+	// The SHA-256 hash of the provided encryption key.
+	// Must be provided if the x-ms-encryption-key header is provided.
+	EncryptionKeySha256 *string
+}
+
+func (csi CpkInfo) Marshal() (string, error) {
+	result, err := json.Marshal(csi)
+	if err != nil {
+		return "", err
+	}
+	return string(result), nil
+}
+
+//func UnmarshalToCpkInfo(cpkInfoStr string) (CpkInfo, error) {
+//	var result CpkInfo
+//	if cpkInfoStr != "" {
+//		err := json.Unmarshal([]byte(cpkInfoStr), &result)
+//		if err != nil {
+//			return result, err
+//		}
+//	}
+//
+//	return result, nil
+//}
+
+func ToClientProvidedKeyOptions(cpkInfo CpkInfo, cpkScopeInfo CpkScopeInfo) azblob.ClientProvidedKeyOptions {
+	return azblob.ClientProvidedKeyOptions{
+		EncryptionKey:       cpkInfo.EncryptionKey,
+		EncryptionAlgorithm: azblob.EncryptionAlgorithmAES256,
+		EncryptionKeySha256: cpkInfo.EncryptionKeySha256,
+		EncryptionScope:     cpkScopeInfo.EncryptionScope,
+	}
+}
+
+type CpkOptions struct {
+	// Optional flag to encrypt user data with user provided key.
+	// Key is provide in the REST request itself
+	// Provided key (EncryptionKey and EncryptionKeySHA256) and its hash will be fetched from environment variables
+	// Set EncryptionAlgorithm = "AES256" by default.
+	CpkInfo bool
+	// Key is present in AzureKeyVault and Azure KeyVault is linked with storage account.
+	// Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data
+	CpkScopeInfo string
+	// flag to check if the source is encrypted by user provided key or not.
+	// True only if user wishes to download source encrypted by user provided key
+	IsSourceEncrypted bool
+}
+
+func GetClientProvidedKey(options CpkOptions) azblob.ClientProvidedKeyOptions {
+	_cpkInfo := GetCpkInfo(options.CpkInfo)
+	_cpkScopeInfo := GetCpkScopeInfo(options.CpkScopeInfo)
+	return ToClientProvidedKeyOptions(_cpkInfo, _cpkScopeInfo)
 }

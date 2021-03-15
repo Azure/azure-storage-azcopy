@@ -35,7 +35,7 @@ import (
 
 func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *syncEnumerator, err error) {
 
-	srcCredInfo, srcIsPublic, err := getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true)
+	srcCredInfo, srcIsPublic, err := getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true, cca.cpkOptions)
 
 	if err != nil {
 		return nil, err
@@ -58,18 +58,20 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
-	sourceTraverser, err := initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, nil, nil, cca.recursive, true, false, func(entityType common.EntityType) {
-		if entityType == common.EEntityType.File() {
-			atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
-		}
-	}, nil, cca.s2sPreserveBlobTags, cca.logVerbosity.ToPipelineLogLevel())
+	sourceTraverser, err := initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, nil,
+		nil, cca.recursive, true, false, func(entityType common.EntityType) {
+			if entityType == common.EEntityType.File() {
+				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
+			}
+		}, nil, cca.s2sPreserveBlobTags, cca.logVerbosity.ToPipelineLogLevel(), cca.cpkOptions)
 
 	if err != nil {
 		return nil, err
 	}
 
 	// Because we can't trust cca.credinfo, given that it's for the overall job, not the individual traversers, we get cred info again here.
-	dstCredInfo, _, err := getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false)
+	dstCredInfo, _, err := getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value,
+		cca.destination.SAS, false, cca.cpkOptions)
 
 	if err != nil {
 		return nil, err
@@ -82,7 +84,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 		}
-	}, nil, cca.s2sPreserveBlobTags, cca.logVerbosity.ToPipelineLogLevel())
+	}, nil, cca.s2sPreserveBlobTags, cca.logVerbosity.ToPipelineLogLevel(), cca.cpkOptions)
 	if err != nil {
 		return nil, err
 	}

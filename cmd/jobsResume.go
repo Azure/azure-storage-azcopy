@@ -284,7 +284,7 @@ func (rca resumeCmdArgs) process() error {
 		destination:    getJobFromToResponse.Destination,
 		sourceSAS:      rca.SourceSAS,
 		destinationSAS: rca.DestinationSAS,
-	}); err != nil {
+	}, common.CpkOptions{}); err != nil {
 		return err
 	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
 		uotm := GetUserOAuthTokenManagerInstance()
