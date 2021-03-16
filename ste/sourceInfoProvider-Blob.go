@@ -56,8 +56,12 @@ func (p *blobSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, erro
 	}
 
 	blobURL := azblob.NewBlobURL(*presignedURL, p.jptm.SourceProviderPipeline())
-	cpkOptions := common.ToClientProvidedKeyOptions(p.jptm.CpkInfo(), p.jptm.CpkScopeInfo())
-	properties, err := blobURL.GetProperties(p.jptm.Context(), azblob.BlobAccessConditions{}, cpkOptions)
+	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
+	if p.jptm.IsSourceEncrypted() {
+		clientProvidedKey = common.ToClientProvidedKeyOptions(p.jptm.CpkInfo(), p.jptm.CpkScopeInfo())
+	}
+
+	properties, err := blobURL.GetProperties(p.jptm.Context(), azblob.BlobAccessConditions{}, clientProvidedKey)
 	if err != nil {
 		return time.Time{}, err
 	}

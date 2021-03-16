@@ -1122,7 +1122,10 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	// step 3: start download
 	blobURL := azblob.NewBlobURL(*u, p)
-	clientProvidedKey := common.GetClientProvidedKey(cca.cpkOptions)
+	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
+	if cca.cpkOptions.IsSourceEncrypted {
+		clientProvidedKey = common.GetClientProvidedKey(cca.cpkOptions)
+	}
 	blobStream, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, clientProvidedKey)
 	if err != nil {
 		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())

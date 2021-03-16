@@ -47,6 +47,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource")
 	}
 
+	jobPartOrder.CpkOptions = cca.cpkOptions
 	jobPartOrder.PreserveSMBPermissions = cca.preserveSMBPermissions
 	jobPartOrder.PreserveSMBInfo = cca.preserveSMBInfo
 
