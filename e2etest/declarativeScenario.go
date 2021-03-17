@@ -390,10 +390,7 @@ func (s *scenario) validateContentHeaders(expected, actual *contentHeaders) {
 			fmt.Sprintf("Content type mismatch: Expected %v, obtained %v", *expected.contentType, *actual.contentType))
 	}
 
-	if expected.contentMD5 != nil {
-		s.a.Assert(expected.contentMD5, equals(), actual.contentMD5,
-			fmt.Sprintf("Content MD5 mismatch: Expected %v, obtained %v", expected.contentMD5, actual.contentMD5))
-	}
+	// content md5 is verified at a different place when validation method is eValidate.AutoPlusContent()
 }
 
 func (s *scenario) validateCreateTime(expected, actual *time.Time) {
