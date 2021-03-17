@@ -303,34 +303,35 @@ type testFiles struct {
 }
 
 func (tf testFiles) cloneShouldTransfers() testFiles {
+	return testFiles{
+		defaultSize:    tf.defaultSize,
+		shouldTransfer: tf.shouldTransfer,
+	}
+}
+
+func (tf testFiles) DeepCopy() testFiles {
 	ret := testFiles{}
 	ret.defaultSize = tf.defaultSize
 
-	ret.cloneList(ret.shouldTransfer, tf.shouldTransfer)
+	ret.shouldTransfer = tf.copyList(tf.shouldTransfer)
+	ret.shouldIgnore = tf.copyList(tf.shouldIgnore)
+	ret.shouldFail = tf.copyList(tf.shouldFail)
+	ret.shouldSkip = tf.copyList(tf.shouldSkip)
 	return ret
 }
 
-func (tf testFiles) cloneAll() testFiles {
-	ret := testFiles{}
-	ret.defaultSize = tf.defaultSize
-
-	ret.cloneList(ret.shouldTransfer, tf.shouldTransfer)
-	ret.cloneList(ret.shouldIgnore, tf.shouldIgnore)
-	ret.cloneList(ret.shouldFail, tf.shouldFail)
-	ret.cloneList(ret.shouldSkip, tf.shouldSkip)
-	return ret
-}
-
-func (*testFiles) cloneList(dst, src []interface{}) {
+func (*testFiles) copyList(src []interface{})  ([]interface{}) {
+	var ret []interface{}
 	for _, r := range src {
 		if aTestObj, ok := r.(*testObject); ok {
-			dst = append(dst, aTestObj.DeepCopy())
+			ret = append(ret, aTestObj.DeepCopy())
 		} else if asString, ok := r.(string); ok {
-			dst = append(dst, asString)
+			ret = append(ret, asString)
 		} else {
 			panic("testFiles lists may contain only strings and testObjects. Create your test objects with the f() and folder() functions")
 		}
 	}
+	return ret
 }
 
 // takes a mixed list of (potentially) strings and testObjects, and returns them all as test objects
