@@ -45,7 +45,15 @@ type rawListCmdArgs struct {
 }
 
 var validProperties = []string{
-	"LastModifiedTime", "VersionId", "BlobType", "BlobAccessTier", "ContentType", "ContentEncoding",
+	"LastModifiedTime",
+	"VersionId",
+	"BlobType",
+	"BlobAccessTier",
+	"ContentType",
+	"ContentEncoding",
+	"LeaseState",
+	"LeaseDuration",
+	"LeaseStatus",
 }
 
 func (raw *rawListCmdArgs) parseProperties(rawProperties string) []string {
@@ -158,6 +166,12 @@ func (cooked cookedListCmdArgs) processProperties(object storedObject) string {
 			builder.WriteString(property + ": " + object.contentType + "; ")
 		case "ContentEncoding":
 			builder.WriteString(property + ": " + object.contentEncoding + "; ")
+		case "LeaseState":
+			builder.WriteString(property + ": " + string(object.leaseState) + "; ")
+		case "LeaseStatus":
+			builder.WriteString(property + ": " + string(object.leaseStatus) + "; ")
+		case "LeaseDuration":
+			builder.WriteString(property + ": " + string(object.leaseDuration) + "; ")
 		}
 	}
 	return builder.String()
@@ -255,18 +269,6 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	return nil
 }
 
-//// printListContainerResponse prints the list container response
-//func printListContainerResponse(lsResponse *common.ListContainerResponse) {
-//	if len(lsResponse.Blobs) == 0 {
-//		return
-//	}
-//	// TODO determine what's the best way to display the blobs in JSON
-//	// TODO no partner team needs this functionality right now so the blobs are just outputted as info
-//	for index := 0; index < len(lsResponse.Blobs); index++ {
-//		glcm.Info(lsResponse.Blobs[index])
-//	}
-//}
-
 var megaSize = []string{
 	"B",
 	"KB",
@@ -285,7 +287,7 @@ func byteSizeToString(size int64) string {
 		"GiB",
 		"TiB",
 		"PiB",
-		"EiB", // Let's face it, a file, account, or container probably won't be more than 1000 exabytes in YEARS. (and int64 literally isn't large enough to handle too many exbibytes. 128 bit processors when)
+		"EiB", // Let's face it, a file, account, or container probably won't be more than 1000 exabytes in YEARS. (and int64 literally isn't large enough to handle too many exabytes. 128 bit processors when)
 	}
 	unit := 0
 	floatSize := float64(size)
