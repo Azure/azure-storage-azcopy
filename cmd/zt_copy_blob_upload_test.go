@@ -21,7 +21,7 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
 	"net/url"
 	"os"
@@ -491,7 +491,6 @@ func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeBefore(
 			common.AZCOPY_PATH_SEPARATOR_STRING+filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING, expectedTransfers, mockedRPC)
 	})
 }
-
 
 func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeAfter_UTC(c *chk.C) {
 	s.doTestUploadDirectoryToContainerWithIncludeAfter(true, c)

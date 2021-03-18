@@ -21,7 +21,7 @@
 package ste
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"time"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"

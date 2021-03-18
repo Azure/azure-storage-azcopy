@@ -23,7 +23,7 @@ package ste
 import (
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type jobPartCreatedMsg struct {

@@ -14,7 +14,7 @@ import (
 	"net/url"
 	//"strings"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	chk "gopkg.in/check.v1" // go get gopkg.in/check.v1
 	"io/ioutil"
 	"net/http"
