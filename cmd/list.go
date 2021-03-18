@@ -44,26 +44,34 @@ type rawListCmdArgs struct {
 	MegaUnits       bool
 }
 
-var validProperties = []string{
-	"LastModifiedTime",
-	"VersionId",
-	"BlobType",
-	"BlobAccessTier",
-	"ContentType",
-	"ContentEncoding",
-	"LeaseState",
-	"LeaseDuration",
-	"LeaseStatus",
+type validProperty string
+
+const (
+	lastModifiedTime validProperty = "LastModifiedTime"
+	versionId        validProperty = "VersionId"
+	blobType         validProperty = "BlobType"
+	blobAccessTier   validProperty = "BlobAccessTier"
+	contentType      validProperty = "ContentType"
+	contentEncoding  validProperty = "ContentEncoding"
+	leaseState       validProperty = "LeaseState"
+	leaseDuration    validProperty = "LeaseDuration"
+	leaseStatus      validProperty = "LeaseStatus"
+)
+
+// validProperties returns an array of possible values for the validProperty const type.
+func validProperties() []validProperty {
+	return []validProperty{lastModifiedTime, versionId, blobType, blobAccessTier,
+		contentType, contentEncoding, leaseState, leaseDuration, leaseStatus}
 }
 
-func (raw *rawListCmdArgs) parseProperties(rawProperties string) []string {
-	parsedProperties := make([]string, 0)
+func (raw *rawListCmdArgs) parseProperties(rawProperties string) []validProperty {
+	parsedProperties := make([]validProperty, 0)
 	listProperties := strings.Split(rawProperties, ";")
-	for _, property := range listProperties {
-		property = strings.TrimSpace(property)
-		for _, validProperty := range validProperties {
-			if len(property) != 0 && validProperty == property {
-				parsedProperties = append(parsedProperties, property)
+	for _, p := range listProperties {
+		for _, vp := range validProperties() {
+			// check for empty string and also ignore the case
+			if len(p) != 0 && strings.EqualFold(string(vp), p) {
+				parsedProperties = append(parsedProperties, vp)
 				break
 			}
 		}
@@ -97,7 +105,7 @@ type cookedListCmdArgs struct {
 	sourcePath string
 	location   common.Location
 
-	properties      []string
+	properties      []validProperty
 	MachineReadable bool
 	RunningTally    bool
 	MegaUnits       bool
@@ -153,25 +161,26 @@ func init() {
 func (cooked cookedListCmdArgs) processProperties(object storedObject) string {
 	builder := strings.Builder{}
 	for _, property := range cooked.properties {
+		propertyStr := string(property)
 		switch property {
-		case "LastModifiedTime":
-			builder.WriteString(property + ": " + object.lastModifiedTime.String() + "; ")
-		case "VersionId":
-			builder.WriteString(property + ": " + object.blobVersionID + "; ")
-		case "BlobType":
-			builder.WriteString(property + ": " + string(object.blobType) + "; ")
-		case "BlobAccessTier":
-			builder.WriteString(property + ": " + string(object.blobAccessTier) + "; ")
-		case "ContentType":
-			builder.WriteString(property + ": " + object.contentType + "; ")
-		case "ContentEncoding":
-			builder.WriteString(property + ": " + object.contentEncoding + "; ")
-		case "LeaseState":
-			builder.WriteString(property + ": " + string(object.leaseState) + "; ")
-		case "LeaseStatus":
-			builder.WriteString(property + ": " + string(object.leaseStatus) + "; ")
-		case "LeaseDuration":
-			builder.WriteString(property + ": " + string(object.leaseDuration) + "; ")
+		case lastModifiedTime:
+			builder.WriteString(propertyStr + ": " + object.lastModifiedTime.String() + "; ")
+		case versionId:
+			builder.WriteString(propertyStr + ": " + object.blobVersionID + "; ")
+		case blobType:
+			builder.WriteString(propertyStr + ": " + string(object.blobType) + "; ")
+		case blobAccessTier:
+			builder.WriteString(propertyStr + ": " + string(object.blobAccessTier) + "; ")
+		case contentType:
+			builder.WriteString(propertyStr + ": " + object.contentType + "; ")
+		case contentEncoding:
+			builder.WriteString(propertyStr + ": " + object.contentEncoding + "; ")
+		case leaseState:
+			builder.WriteString(propertyStr + ": " + string(object.leaseState) + "; ")
+		case leaseStatus:
+			builder.WriteString(propertyStr + ": " + string(object.leaseStatus) + "; ")
+		case leaseDuration:
+			builder.WriteString(propertyStr + ": " + string(object.leaseDuration) + "; ")
 		}
 	}
 	return builder.String()
