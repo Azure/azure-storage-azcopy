@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
@@ -360,7 +361,7 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 	return filters
 }
 
-func (cca *cookedCopyCmdArgs) createDstContainer(containerName string, dstWithSAS common.ResourceString, ctx context.Context, existingContainers map[string]bool, logLevel common.LogLevel) (err error) {
+func (cca *cookedCopyCmdArgs) createDstContainer(containerName string, dstWithSAS common.ResourceString, parentCtx context.Context, existingContainers map[string]bool, logLevel common.LogLevel) (err error) {
 	if _, ok := existingContainers[containerName]; ok {
 		return
 	}
@@ -368,6 +369,8 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 
 	dstCredInfo := common.CredentialInfo{}
 
+	// 3minutes is enough time to list properties of a container, and create new if it does not exist.
+	ctx, _ := context.WithTimeout(parentCtx, time.Minute * 3)
 	if dstCredInfo, _, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false, cca.cpkOptions); err != nil {
 		return err
 	}
