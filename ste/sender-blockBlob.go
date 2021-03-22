@@ -195,7 +195,12 @@ func (s *blockBlobSenderBase) Epilogue() {
 			blobTags = nil
 		}
 
-		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, s.destBlobTier, blobTags, s.cpkToApply); err != nil {
+		destBlobTier := s.destBlobTier
+		if s.cpkToApply.EncryptionScope != nil || (s.cpkToApply.EncryptionKey != nil && s.cpkToApply.EncryptionKeySha256 != nil) {
+			destBlobTier = azblob.AccessTierNone
+		}
+
+		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, destBlobTier, blobTags, s.cpkToApply); err != nil {
 			jptm.FailActiveSend("Committing block list", err)
 			return
 		}

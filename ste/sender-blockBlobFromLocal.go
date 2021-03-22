@@ -101,8 +101,13 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 			blobTags = nil
 		}
 
+		destBlobTier := u.destBlobTier
+		if u.cpkToApply.EncryptionScope != nil || (u.cpkToApply.EncryptionKey != nil && u.cpkToApply.EncryptionKeySha256 != nil) {
+			destBlobTier = azblob.AccessTierNone
+		}
+
 		if jptm.Info().SourceSize == 0 {
-			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{}, u.destBlobTier, blobTags, u.cpkToApply)
+			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{}, destBlobTier, blobTags, u.cpkToApply)
 		} else {
 			// File with content
 
@@ -116,7 +121,8 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 
 			// Upload the file
 			body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
-			_, err = u.destBlockBlobURL.Upload(jptm.Context(), body, u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{}, u.destBlobTier, blobTags, u.cpkToApply)
+			_, err = u.destBlockBlobURL.Upload(jptm.Context(), body, u.headersToApply, u.metadataToApply,
+				azblob.BlobAccessConditions{}, u.destBlobTier, blobTags, u.cpkToApply)
 		}
 
 		// if the put blob is a failure, update the transfer status to failed

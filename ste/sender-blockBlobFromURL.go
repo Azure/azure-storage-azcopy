@@ -88,21 +88,6 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 	return c.generatePutBlockFromURL(id, blockIndex, adjustedChunkSize)
 }
 
-// Version with Sync CopyBlob
-// TODO: Consider to use sync version of copy blob from URL later.
-// func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
-// 	if chunkIsWholeFile {
-// 		if blockIndex > 0 {
-// 			panic("chunk cannot be whole file where there is more than one chunk")
-// 		}
-// 		setPutListNeed(&c.atomicPutListIndicator, putListNotNeeded)
-// 		return c.generateSyncCopyBlob(id, adjustedChunkSize)
-// 	} else {
-// 		setPutListNeed(&c.atomicPutListIndicator, putListNeeded)
-// 		return c.generatePutBlockFromURL(id, blockIndex, adjustedChunkSize)
-// 	}
-// }
-
 // generateCreateEmptyBlob generates a func to create empty blob in destination.
 // This could be replaced by sync version of copy blob from URL.
 func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkFunc {
@@ -120,7 +105,13 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 		if separateSetTagsRequired || len(blobTags) == 0 {
 			blobTags = nil
 		}
-		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.headersToApply, c.metadataToApply, azblob.BlobAccessConditions{}, c.destBlobTier, blobTags, c.cpkToApply); err != nil {
+
+		destBlobTier := c.destBlobTier
+		if c.cpkToApply.EncryptionScope != nil || (c.cpkToApply.EncryptionKey != nil && c.cpkToApply.EncryptionKeySha256 != nil) {
+			destBlobTier = azblob.AccessTierNone
+		}
+
+		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.headersToApply, c.metadataToApply, azblob.BlobAccessConditions{}, destBlobTier, blobTags, c.cpkToApply); err != nil {
 			jptm.FailActiveSend("Creating empty blob", err)
 			return
 		}
@@ -132,24 +123,6 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 		}
 	})
 }
-
-// generateSyncCopyBlob generates a func to sync copy entire blob to destination.
-// func (c *urlToBlockBlobCopier) generateSyncCopyBlob(id common.ChunkID, adjustedChunkSize int64) chunkFunc {
-// 	return createSendToRemoteChunkFunc(c.jptm, id, func() {
-// 		jptm := c.jptm
-
-// 		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
-// 		s2sPacer := newS2SPacer(c.pacer)
-
-// 		// Set the latest service version from sdk as service version in the context, to use SyncCopyFromURL API
-// 		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-// 		if _, err := c.destBlockBlobURL.SyncCopyFromURL(ctxWithLatestServiceVersion, c.srcURL, c.metadataToApply, azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}); err != nil {
-// 			jptm.FailActiveSend("Sync copy entire blob", err)
-// 			return
-// 		}
-// 		s2sPacer.Done(adjustedChunkSize)
-// 	})
-// }
 
 // generatePutBlockFromURL generates a func to copy the block of src data from given startIndex till the given chunkSize.
 func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockIndex int32, adjustedChunkSize int64) chunkFunc {

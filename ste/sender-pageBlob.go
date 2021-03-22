@@ -249,6 +249,10 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		blobTags = nil
 	}
 
+	if s.cpkToApply.EncryptionScope != nil || (s.cpkToApply.EncryptionKey != nil && s.cpkToApply.EncryptionKeySha256 != nil) {
+		destBlobTier = azblob.PremiumPageBlobAccessTierNone
+	}
+
 	if _, err := s.destPageBlobURL.Create(s.jptm.Context(),
 		s.srcSize,
 		0,
