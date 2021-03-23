@@ -106,6 +106,7 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 			blobTags = nil
 		}
 
+		// TODO: Remove this snippet once service starts supporting CPK with blob tier
 		destBlobTier := c.destBlobTier
 		if c.cpkToApply.EncryptionScope != nil || (c.cpkToApply.EncryptionKey != nil && c.cpkToApply.EncryptionKeySha256 != nil) {
 			destBlobTier = azblob.AccessTierNone

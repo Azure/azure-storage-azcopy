@@ -61,6 +61,7 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 		DestLengthValidation:           true,
 		S2SGetPropertiesInBackend:      true,
 		S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
+		CpkOptions:                     cca.cpkOptions,
 	}
 
 	reportFirstPart := func(jobStarted bool) { cca.setFirstPartOrdered() } // for compatibility with the way sync has always worked, we don't check jobStarted here

@@ -536,6 +536,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 
 	// Setting CPK-N
 	cpkOptions := common.CpkOptions{}
+	// Setting CPK-N
 	if raw.cpkScopeInfo != "" {
 		if raw.cpkInfo {
 			return cooked, errors.New("cannot use both cpk-by-name and cpk-by-value at the same time")
@@ -547,11 +548,20 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// Get the key (EncryptionKey and EncryptionKeySHA256) value from environment variables when required.
 	cpkOptions.CpkInfo = raw.cpkInfo
 
-	// We only support transfer from source encrypted by user key when user wishes to download.
-	// Due to service limitation, S2S transfer is not supported for source encrypted by user key.
-	if cooked.fromTo.IsDownload() && (cpkOptions.CpkScopeInfo != "" || cpkOptions.CpkInfo) {
-		glcm.Info("Client Provided Key for encryption/decryption is provided for download scenario. Assuming source is encrypted.")
-		cpkOptions.IsSourceEncrypted = true
+	if cpkOptions.CpkScopeInfo != "" || cpkOptions.CpkInfo {
+		// We only support transfer from source encrypted by user key when user wishes to download.
+		// Due to service limitation, S2S transfer is not supported for source encrypted by user key.
+		if cooked.fromTo.IsDownload() {
+			glcm.Info("Client Provided Key (CPK) for encryption/decryption is provided for download scenario. " +
+				"Assuming source is encrypted.")
+			cpkOptions.IsSourceEncrypted = true
+		}
+
+		// TODO: Remove these warnings once service starts supporting it after Cobalt
+		if cooked.blockBlobTier != common.EBlockBlobTier.None() || cooked.pageBlobTier != common.EPageBlobTier.None() {
+			glcm.Info("Tier is provided by user explicitly. Ignoring it because Azure Service currently does" +
+				" not support setting tier when client provided keys are involved.")
+		}
 	}
 
 	cooked.cpkOptions = cpkOptions

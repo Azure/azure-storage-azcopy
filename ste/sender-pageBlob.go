@@ -249,6 +249,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		blobTags = nil
 	}
 
+	// TODO: Remove this snippet once service starts supporting CPK with blob tier
 	if s.cpkToApply.EncryptionScope != nil || (s.cpkToApply.EncryptionKey != nil && s.cpkToApply.EncryptionKeySha256 != nil) {
 		destBlobTier = azblob.PremiumPageBlobAccessTierNone
 	}

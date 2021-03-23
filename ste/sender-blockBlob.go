@@ -195,6 +195,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 			blobTags = nil
 		}
 
+		// TODO: Remove this snippet once service starts supporting CPK with blob tier
 		destBlobTier := s.destBlobTier
 		if s.cpkToApply.EncryptionScope != nil || (s.cpkToApply.EncryptionKey != nil && s.cpkToApply.EncryptionKeySha256 != nil) {
 			destBlobTier = azblob.AccessTierNone

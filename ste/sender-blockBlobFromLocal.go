@@ -101,6 +101,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 			blobTags = nil
 		}
 
+		// TODO: Remove this snippet once service starts supporting CPK with blob tier
 		destBlobTier := u.destBlobTier
 		if u.cpkToApply.EncryptionScope != nil || (u.cpkToApply.EncryptionKey != nil && u.cpkToApply.EncryptionKeySha256 != nil) {
 			destBlobTier = azblob.AccessTierNone

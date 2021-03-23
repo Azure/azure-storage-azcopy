@@ -254,6 +254,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	// Setting CPK-N
 	cpkOptions := common.CpkOptions{}
+	// Setting CPK-N
 	if raw.cpkScopeInfo != "" {
 		if raw.cpkInfo {
 			return cooked, fmt.Errorf("cannot use both cpk-by-name and cpk-by-value at the same time")
@@ -268,7 +269,8 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	// We only support transfer from source encrypted by user key when user wishes to download.
 	// Due to service limitation, S2S transfer is not supported for source encrypted by user key.
 	if cooked.fromTo.IsDownload() && (cpkOptions.CpkScopeInfo != "" || cpkOptions.CpkInfo) {
-		glcm.Info("Client Provided Key for encryption/decryption is provided for download scenario. Assuming source is encrypted.")
+		glcm.Info("Client Provided Key for encryption/decryption is provided for download scenario. " +
+			"Assuming source is encrypted.")
 		cpkOptions.IsSourceEncrypted = true
 	}
 
