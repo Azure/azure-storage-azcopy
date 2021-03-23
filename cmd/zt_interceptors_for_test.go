@@ -130,8 +130,8 @@ func (*mockedLifecycleManager) AddUserAgentPrefix(userAgent string) string {
 
 func (*mockedLifecycleManager) SetForceLogging() {}
 
-func (*mockedLifecycleManager) IsForceLoggingEnabled() bool {
-	return true
+func (*mockedLifecycleManager) IsForceLoggingDisabled() bool {
+	return false
 }
 
 func (*mockedLifecycleManager) E2EAwaitContinue() {

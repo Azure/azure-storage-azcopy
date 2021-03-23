@@ -159,6 +159,9 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 					RetryDelay:    ste.UploadRetryDelay,
 					MaxRetryDelay: ste.UploadMaxRetryDelay,
 				},
+				RequestLog: azblob.RequestLogOptions{
+					SyslogDisabled: common.IsForceLoggingDisabled(),
+				},
 			})
 
 		isContainer := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(resourceURL)

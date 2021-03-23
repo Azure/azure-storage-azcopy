@@ -66,7 +66,7 @@ type LifecycleMgr interface {
 	E2EEnableAwaitAllowOpenFiles(enable bool)                    // used by E2E tests
 	RegisterCloseFunc(func())
 	SetForceLogging()
-	IsForceLoggingEnabled() bool
+	IsForceLoggingDisabled() bool
 }
 
 func GetLifecycleMgr() LifecycleMgr {
@@ -562,6 +562,8 @@ func (lcm *lifecycleMgr) E2EEnableAwaitAllowOpenFiles(enable bool) {
 	}
 }
 
+// Fetching `AZCOPY_DISABLE_SYSLOG` from the environment variables and
+// setting `disableSyslog` flag in LifeCycleManager to avoid Env Vars Lookup redundantly
 func (lcm *lifecycleMgr) SetForceLogging() {
 	disableSyslog, err := strconv.ParseBool(lcm.GetEnvironmentVariable(EEnvironmentVariable.DisableSyslog()))
 	if err != nil {
@@ -571,8 +573,8 @@ func (lcm *lifecycleMgr) SetForceLogging() {
 	lcm.disableSyslog = disableSyslog
 }
 
-func (lcm *lifecycleMgr) IsForceLoggingEnabled() bool {
-	return lcm.disableSyslog == false
+func (lcm *lifecycleMgr) IsForceLoggingDisabled() bool {
+	return lcm.disableSyslog
 }
 
 // captures the common logic of exiting if there's an expected error

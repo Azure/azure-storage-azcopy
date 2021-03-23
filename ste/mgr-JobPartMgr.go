@@ -166,7 +166,7 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 		NewVersionPolicyFactory(),
 		NewRequestLogPolicyFactory(RequestLogOptions{
 			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
-			ForceLog:                     common.IsForceLoggingEnabled(),
+			SyslogDisabled:               common.IsForceLoggingDisabled(),
 		}),
 		newXferStatsPolicyFactory(statsAcc),
 	}
@@ -193,7 +193,7 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		NewRequestLogPolicyFactory(RequestLogOptions{
 			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
-			ForceLog:                     common.IsForceLoggingEnabled(),
+			SyslogDisabled:               common.IsForceLoggingDisabled(),
 		}),
 		newXferStatsPolicyFactory(statsAcc))
 
@@ -216,7 +216,7 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 		NewVersionPolicyFactory(),
 		NewRequestLogPolicyFactory(RequestLogOptions{
 			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
-			ForceLog:                     common.IsForceLoggingEnabled(),
+			SyslogDisabled:               common.IsForceLoggingDisabled(),
 		}),
 		newXferStatsPolicyFactory(statsAcc),
 	}

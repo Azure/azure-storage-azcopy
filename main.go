@@ -38,7 +38,7 @@ import (
 var glcm = common.GetLifecycleMgr()
 
 func main() {
-	pipeline.SetLogSanitizer(common.NewAzCopyLogSanitizer()) // make sure ForceLog logs get secrets redacted
+	pipeline.SetLogSanitizer(common.NewAzCopyLogSanitizer()) // make sure SyslogDisabled logs get secrets redacted
 
 	rand.Seed(time.Now().UnixNano()) // make sure our random numbers actually are random (but remember, use crypto/rand for anything where strong/reliable randomness is required
 
