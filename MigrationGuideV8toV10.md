@@ -89,10 +89,10 @@ azcopy
 **v10**
 
 ```azcopy
-azcopy copy
-  'https://myaccount.blob.core.windows.net/mycontainer?SAS'
-  'C:\MyFolder'
-  --recursive
+azcopy copy 
+'https://<source-storage-account-name>.blob.core.windows.net/<container-name>?<SAS-token>'
+'C:\myDirectory\' 
+--recursive
 ```
 
 ## Parameters Table
@@ -101,9 +101,9 @@ Task | v8 | v10
 ------------ | ------------- | -------------
 Authenticate | `/SourceKey:<Key>` <br> `/DestKey:<Key>` <br> `/SourceSAS:<SAS>` <br> `/DestSAS:<SAS>` | Append the SAS token to the source and/or destination URI. <br> `'blob URI' + '?' + 'SAS'`
 Check log verbosity | `/V:[verbose-log-file]` | `--log-level`
-Specify journal file folder | `/Z:[journal-file-folder]` | Modify environment variable: <br> `AZCOPY_JOB_PLAN_LOCATION`
+Specify journal file folder (Note: a v10 plan file is similar to a v8 journal file but is not used in the same way) | `/Z:[journal-file-folder]` | Modify environment variable: <br> `AZCOPY_JOB_PLAN_LOCATION`
 Specify parameter file | `/@:<parameter-file>` | Run commands in command line
-Suppress confirmation prompts | `/Y` | Suppressed by default. To enable, specify parameter: INSERT HERE
+Suppress confirmation prompts | `/Y` | Suppressed by default. To enable, specify parameter: overwrite
 Specify number of concurrent operations | `/NC:<number-of-concurrent>` | Modify environment variable: <br> `AZCOPY_CONCURRENCY_VALUE`
 Specify source/destination type | `/SourceType:<option>` `/DestType:<option>` Options: blob, file | `--from-to=[enums]` <br> (typically not used)
 Upload contents recursively | `/S` | `--recursive`
