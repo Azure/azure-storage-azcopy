@@ -240,8 +240,6 @@ func (jm *jobMgr) Progress() (uint64, uint64) {
 
 //func (jm *jobMgr) Throughput() XferThroughput { return jm.throughput }
 
-var udamSetupOnce = &sync.Once{}
-
 func (jm *jobMgr) setupUserDelegationAuthManager(src string) {
 	// If the OAuth token is empty, this will fail anyway.
 	// Set an empty UDAM instance that does nothing.
@@ -256,9 +254,9 @@ func (jm *jobMgr) setupUserDelegationAuthManager(src string) {
 	common.PanicIfErr(err)
 
 	// Check if the source is pointing at Azure. We shouldn't send the OAuth token anywhere else.
-	// format is account.[blob.core.windows.net], [] is the selection
-	if srcURL.Host[strings.Index(srcURL.Host, ".")+1:] != "blob.core.windows.net" {
+	if common.CheckAuthSafeForTarget(common.ECredentialType.OAuthToken(), src, common.CmdLineExtraSuffixesAAD, common.ELocation.Blob()) != nil {
 		jm.initState.userDelegationAuthenticationManager = &userDelegationAuthenticationManager{}
+		return
 	}
 
 	// get a service-level URL
