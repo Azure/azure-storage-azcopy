@@ -45,9 +45,9 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		if cca.fromTo.From() != common.ELocation.S3() {
 			// Adding files here seems like an odd case, but since files can't be public
 			// the second half of this if statement does not hurt.
-			if cca.fromTo.From() != cca.fromTo.To() {
-				panic(fmt.Sprintf("The semantics of authorization for an S2S transfer (within sync) is unknown for %s->%s transfers", cca.fromTo.From(), cca.fromTo.To()))
-			}
+			//if cca.fromTo.From() != cca.fromTo.To() {
+			//	panic(fmt.Sprintf("The semantics of authorization for an S2S transfer (within sync) is unknown for %s->%s transfers", cca.fromTo.From(), cca.fromTo.To()))
+			//}
 
 			if srcCredInfo.CredentialType != common.ECredentialType.Anonymous() && !srcIsPublic {
 				return nil, fmt.Errorf("the source of a %s->%s sync must either be public, or authorized with a SAS token", cca.fromTo.From(), cca.fromTo.To())
@@ -89,7 +89,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 
 	// verify that the traversers are targeting the same type of resources
 	if sourceTraverser.isDirectory(true) != destinationTraverser.isDirectory(true) {
-		return nil, errors.New("sync must happen between source and destination of the same type, e.g. either file <-> file, or directory/container <-> directory/container")
+		return nil, errors.New("sync must happen between source and destination of the same type," +
+			" e.g. either file <-> file, or directory/container <-> directory/container")
 	}
 
 	// set up the filters in the right order
@@ -130,11 +131,10 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	var finalize func() error
 
 	switch cca.fromTo {
-	case common.EFromTo.LocalBlob():
-		// upload implies transferring from a local disk to a remote resource
-		// in this scenario, the local disk (source) is scanned/indexed first
-		// then the destination is scanned and filtered based on what the destination contains
-		// we do the local one first because it is assumed that local file systems will be faster to enumerate than remote resources
+	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile():
+		// Upload implies transferring from a local disk to a remote resource.
+		// In this scenario, the local disk (source) is scanned/indexed first because it is assumed that local file systems will be faster to enumerate than remote resources
+		// Then the destination is scanned and filtered based on what the destination contains
 		destinationCleaner, err := newSyncDeleteProcessor(cca)
 		if err != nil {
 			return nil, fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())

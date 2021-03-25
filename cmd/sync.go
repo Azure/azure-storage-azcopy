@@ -117,22 +117,24 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	// this if statement ladder remains instead of being separated to help determine valid combinations for sync
 	// consider making a map of valid source/dest combos and consolidating this to generic source/dest setups, akin to the lower if statement
-	// TODO: if expand the set of source/dest combos supported by sync, update this method the declarative test framework: // TODO: add support for account-to-account operations (for those from-tos that support that)
+	// TODO: if expand the set of source/dest combos supported by sync, update this method the declarative test framework:
+	// TODO: add support for account-to-account operations (for those from-tos that support that)
 	cooked.fromTo = inferFromTo(raw.src, raw.dst)
-	if cooked.fromTo == common.EFromTo.Unknown() {
+	switch cooked.fromTo {
+	case common.EFromTo.Unknown():
 		return cooked, fmt.Errorf("Unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
-	} else if cooked.fromTo == common.EFromTo.LocalBlob() {
+	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile():
 		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
-	} else if cooked.fromTo == common.EFromTo.BlobLocal() {
+	case common.EFromTo.BlobLocal(), common.EFromTo.FileLocal():
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
-	} else if cooked.fromTo == common.EFromTo.BlobBlob() || cooked.fromTo == common.EFromTo.FileFile() {
+	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.BlobFile(), common.EFromTo.FileBlob():
 		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
-	} else {
+	default:
 		return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, cooked.fromTo)
 	}
 
@@ -237,7 +239,8 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	// If yes, we have to ensure that both source and destination must be blob storages.
 	if raw.s2sPreserveBlobTags {
 		if cooked.fromTo.From() != common.ELocation.Blob() || cooked.fromTo.To() != common.ELocation.Blob() {
-			return cooked, fmt.Errorf("either source or destination is not a blob storage. blob index tags is a property of blobs only therefore both source and destination must be blob storage")
+			return cooked, fmt.Errorf("either source or destination is not a blob storage. " +
+				"blob index tags is a property of blobs only therefore both source and destination must be blob storage")
 		} else {
 			cooked.s2sPreserveBlobTags = raw.s2sPreserveBlobTags
 		}
@@ -553,7 +556,8 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return err
 	}
 
-	srcCredInfo, _, err := getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true)
+	srcCredInfo, _, err := getCredentialInfoForLocation(ctx, cca.fromTo.From(),
+		cca.source.Value, cca.source.SAS, true)
 
 	if err != nil {
 		return err
