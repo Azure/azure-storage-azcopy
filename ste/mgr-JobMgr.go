@@ -24,13 +24,16 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -80,6 +83,7 @@ type IJobMgr interface {
 	HttpClient() *http.Client
 	PipelineNetworkStats() *pipelineNetworkStats
 	getOverwritePrompter() *overwritePrompter
+	GetUserDelegationAuthenticationManager() *userDelegationAuthenticationManager
 	common.ILoggerCloser
 }
 
@@ -104,6 +108,10 @@ func newJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	jm.logJobsAdminMessages()
 	go jm.reportJobPartDoneHandler()
 	return &jm
+}
+
+func (jm *jobMgr) GetUserDelegationAuthenticationManager() *userDelegationAuthenticationManager {
+	return jm.initState.userDelegationAuthenticationManager
 }
 
 func (jm *jobMgr) getOverwritePrompter() *overwritePrompter {
@@ -165,9 +173,10 @@ func (jm *jobMgr) logConcurrencyParameters() {
 
 // jobMgrInitState holds one-time init structures (such as SIPM), that initialize when the first part is added.
 type jobMgrInitState struct {
-	securityInfoPersistenceManager *securityInfoPersistenceManager
-	folderCreationTracker          common.FolderCreationTracker
-	folderDeletionManager          common.FolderDeletionManager
+	userDelegationAuthenticationManager *userDelegationAuthenticationManager
+	securityInfoPersistenceManager      *securityInfoPersistenceManager
+	folderCreationTracker               common.FolderCreationTracker
+	folderDeletionManager               common.FolderDeletionManager
 }
 
 // jobMgr represents the runtime information for a Job
@@ -230,6 +239,107 @@ func (jm *jobMgr) Progress() (uint64, uint64) {
 }
 
 //func (jm *jobMgr) Throughput() XferThroughput { return jm.throughput }
+
+var udamSetupOnce = &sync.Once{}
+
+func (jm *jobMgr) setupUserDelegationAuthManager(src string) {
+	// If the OAuth token is empty, this will fail anyway.
+	// Set an empty UDAM instance that does nothing.
+	if jm.getInMemoryTransitJobState().credentialInfo.OAuthTokenInfo == (common.OAuthTokenInfo{}) {
+		jm.initState.userDelegationAuthenticationManager = &userDelegationAuthenticationManager{}
+		return
+	}
+
+	srcURL, err := url.Parse(src)
+
+	// no reason for this to fail, ever.
+	common.PanicIfErr(err)
+
+	// Check if the source is pointing at Azure. We shouldn't send the OAuth token anywhere else.
+	// format is account.[blob.core.windows.net], [] is the selection
+	if srcURL.Host[strings.Index(srcURL.Host, ".")+1:] != "blob.core.windows.net" {
+		jm.initState.userDelegationAuthenticationManager = &userDelegationAuthenticationManager{}
+	}
+
+	// get a service-level URL
+	srcBlobURLParts := azblob.NewBlobURLParts(*srcURL)
+	srcBlobURLParts.BlobName = ""
+	srcBlobURLParts.ContainerName = ""
+
+	// create credentials, xfer options
+	credOption := common.CredentialOpOptions{
+		LogInfo:  func(str string) { jm.Log(pipeline.LogInfo, str) },
+		LogError: func(str string) { jm.Log(pipeline.LogError, str) },
+		Panic:    jm.Panic,
+		CallerID: "userDelegationAuthenticationManager",
+		Cancel:   jm.Cancel,
+	}
+
+	// Why craft our own credential info here?
+	// the frontend's may be impure, in the case that we're doing OAuth -> SAS
+	// This means that we'll get the OAuthTokenInfo but the credentialType will be anonymous.
+	// TODO: Find a better way to get an OAuth token within STE instead of relying on cmd to deliver it.
+	credInfo := common.CredentialInfo{CredentialType: common.ECredentialType.OAuthToken()}
+	credInfo.OAuthTokenInfo = jm.getInMemoryTransitJobState().credentialInfo.OAuthTokenInfo
+	blobCredential := common.CreateBlobCredential(jm.ctx, credInfo, credOption)
+
+	// spawn a blob pipeline
+	p := NewBlobPipeline(
+		blobCredential,
+		azblob.PipelineOptions{
+			Log: jm.PipelineLogInfo(),
+			Telemetry: azblob.TelemetryOptions{
+				Value: common.UserAgent,
+			},
+		},
+		XferRetryOptions{
+			Policy:        0,
+			MaxTries:      UploadMaxTries, // TODO: Consider to unify options.
+			TryTimeout:    UploadTryTimeout,
+			RetryDelay:    UploadRetryDelay,
+			MaxRetryDelay: UploadMaxRetryDelay},
+		JobsAdmin.(*jobsAdmin).pacer,
+		jm.HttpClient(),
+		nil)
+
+	// finally, we have a service URL.
+	bsu := azblob.NewServiceURL(srcBlobURLParts.URL(), p)
+
+	var expiryTime time.Duration
+	var refreshTime time.Duration
+
+	lcm := common.GetLifecycleMgr()
+
+	// Set up refresh speed
+	if secs, err := strconv.ParseInt(lcm.GetEnvironmentVariable(common.EEnvironmentVariable.UDAMRefreshSpeed()), 10, 64); err == nil {
+		// We're casting to duration for the sake of multiplying. They're both int64 under the hood.
+		refreshTime = time.Second * time.Duration(secs)
+	} else {
+		// 6.5 days default
+		lcm.Info("Failed to pares refresh time env var; defaulting to 6.5 days")
+		refreshTime = ((6 * 24) + 12) * time.Hour
+	}
+
+	// Set up expiry time
+	if secs, err := strconv.ParseInt(lcm.GetEnvironmentVariable(common.EEnvironmentVariable.UDAMExpiryTime()), 10, 64); err == nil {
+		// We're casting to duration for the sake of multiplying. They're both int64 under the hood.
+		expiryTime = time.Second * time.Duration(secs)
+	} else {
+		// 7 days default
+		lcm.Info("Failed to pares expiry time env var; defaulting to 7 days")
+		expiryTime = 7 * 24 * time.Hour
+	}
+
+	udam, err := newUserDelegationAuthenticationManager(bsu, expiryTime, refreshTime)
+
+	if err != nil {
+		common.GetLifecycleMgr().Info("Could not generate user delegation SAS tokens for the blob source. Empty tokens will be used instead. Transfers may still succeed if the source is public.")
+		jm.Log(pipeline.LogError, "Could not generate user delegation SAS tokens for the blob source. Empty tokens will be used instead. Transfers may still succeed if the source is public.")
+	}
+
+	// Even if we fail, udam should not be nil.
+	jm.initState.userDelegationAuthenticationManager = &udam
+}
 
 // JobID returns the JobID that this jobMgr managers
 func (jm *jobMgr) JobID() common.JobID { return jm.jobID }
@@ -358,9 +468,14 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, e
 	if jm.initState == nil {
 		var logger common.ILogger = jm
 		jm.initState = &jobMgrInitState{
-			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
-			folderCreationTracker:          common.NewFolderCreationTracker(jpm.Plan().Fpo),
-			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
+			securityInfoPersistenceManager:      newSecurityInfoPersistenceManager(jm.ctx),
+			userDelegationAuthenticationManager: &userDelegationAuthenticationManager{},
+			folderCreationTracker:               common.NewFolderCreationTracker(jpm.Plan().Fpo),
+			folderDeletionManager:               common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
+		}
+
+		if jpm.Plan().FromTo.IsS2S() && jpm.Plan().FromTo.From() == common.ELocation.Blob() && !jpm.Plan().SourcePublic {
+			jm.setupUserDelegationAuthManager(string(jpm.Plan().SourceRoot[:jpm.Plan().SourceRootLength]))
 		}
 	}
 	jpm.jobMgrInitState = jm.initState // so jpm can use it as much as desired without locking (since the only mutation is the init in jobManager. As far as jobPartManager is concerned, the init state is read-only

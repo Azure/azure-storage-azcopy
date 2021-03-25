@@ -44,6 +44,7 @@ type JobPartPlanHeader struct {
 	PartNum                common.PartNumber // Job Part's part number (0+)
 	SourceRootLength       uint16            // The length of the source root path
 	SourceRoot             [1000]byte        // The root directory of the source
+	SourcePublic           bool
 	SourceExtraQueryLength uint16
 	SourceExtraQuery       [1000]byte // Extra query params applicable to the source
 	DestinationRootLength  uint16     // The length of the destination root path

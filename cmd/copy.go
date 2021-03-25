@@ -1165,9 +1165,15 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		return err
 	}
 
+	srcCredType, srcPublic, err := getCredentialTypeForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true)
+
+	if err != nil {
+		return err
+	}
+
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
-	if cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+	if cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() || srcCredType == common.ECredentialType.OAuthToken() {
 		uotm := GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
@@ -1209,6 +1215,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		},
 		CommandString:  cca.commandString,
 		CredentialInfo: cca.credentialInfo,
+		SourcePublic: srcPublic,
 	}
 
 	from := cca.fromTo.From()

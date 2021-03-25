@@ -123,6 +123,7 @@ type CopyJobPartOrderRequest struct {
 	ExcludeBlobType []azblob.BlobType
 
 	SourceRoot      ResourceString
+	SourcePublic    bool
 	DestinationRoot ResourceString
 
 	Transfers      []CopyTransfer

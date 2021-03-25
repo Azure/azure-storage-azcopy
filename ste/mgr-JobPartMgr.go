@@ -54,6 +54,7 @@ type IJobPartMgr interface {
 	getFolderCreationTracker() common.FolderCreationTracker
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 	FolderDeletionManager() common.FolderDeletionManager
+	GetUserDelegationAuthenticationManager() *userDelegationAuthenticationManager
 }
 
 type serviceAPIVersionOverride struct{}
@@ -286,6 +287,15 @@ type jobPartMgr struct {
 	atomicTransfersCompleted uint32
 	atomicTransfersFailed    uint32
 	atomicTransfersSkipped   uint32
+}
+
+func (jpm *jobPartMgr) GetUserDelegationAuthenticationManager() *userDelegationAuthenticationManager {
+	// Panic if udam isn't created-- this occurs before a transfer is scheduled!
+	if jpm.jobMgrInitState == nil || jpm.jobMgrInitState.userDelegationAuthenticationManager == nil {
+		panic("UDAM should be initialized already (Even as a dummy!)")
+	}
+
+	return jpm.jobMgrInitState.userDelegationAuthenticationManager
 }
 
 func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {

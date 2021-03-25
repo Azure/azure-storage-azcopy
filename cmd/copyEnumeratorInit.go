@@ -41,11 +41,12 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	if srcCredInfo, isPublic, err = getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true); err != nil {
 		return nil, err
 		// If S2S and source takes OAuthToken as its cred type (OR) source takes anonymous as its cred type, but it's not public and there's no SAS
-	} else if cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() &&
-		(srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() ||
-			(srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && !isPublic && cca.source.SAS == "")) {
-		// TODO: Generate a SAS token if it's blob -> *
-		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource")
+	} else if cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() {
+		if cca.fromTo.From() == common.ELocation.Blob() && srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() {
+			glcm.Info("A SAS token may be required for this transfer. However, an OAuth token was found.")
+		} else if srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() || (srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && !isPublic && cca.source.SAS == "") {
+			return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource (or you have appropriate permissions to create user delegation keys on a blob source)")
+		}
 	}
 
 	jobPartOrder.PreserveSMBPermissions = cca.preserveSMBPermissions

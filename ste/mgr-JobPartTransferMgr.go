@@ -87,6 +87,7 @@ type IJobPartTransferMgr interface {
 	FolderDeletionManager() common.FolderDeletionManager
 	GetDestinationRoot() string
 	ShouldInferContentType() bool
+	GetUserDelegationAuthenticationManager() *userDelegationAuthenticationManager
 }
 
 type TransferInfo struct {
@@ -193,6 +194,10 @@ type jobPartTransferMgr struct {
 		@Parteek removed 3/23 morning, as jeff ad equivalent
 		// transfer chunks are put into this channel and execution engine takes chunk out of this channel.
 		chunkChannel chan<- ChunkMsg*/
+}
+
+func (jptm *jobPartTransferMgr) GetUserDelegationAuthenticationManager() *userDelegationAuthenticationManager {
+	return jptm.jobPartMgr.GetUserDelegationAuthenticationManager()
 }
 
 func (jptm *jobPartTransferMgr) GetOverwritePrompter() *overwritePrompter {

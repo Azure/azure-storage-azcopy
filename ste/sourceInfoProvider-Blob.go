@@ -21,14 +21,17 @@
 package ste
 
 import (
+	"net/url"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // Source info provider for Azure blob
 type blobSourceInfoProvider struct {
 	defaultRemoteSourceInfoProvider
+	needsSAS bool
 }
 
 func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
@@ -37,7 +40,20 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 		return nil, err
 	}
 
-	return &blobSourceInfoProvider{defaultRemoteSourceInfoProvider: *base}, nil
+	fromTo := jptm.FromTo()
+
+	result, err := base.PreSignedSourceURL()
+
+	if err != nil {
+		return nil, err
+	}
+
+	bURLParts := azblob.NewBlobURLParts(*result)
+
+	return &blobSourceInfoProvider{
+		defaultRemoteSourceInfoProvider: *base,
+		needsSAS:                        fromTo.IsS2S() && fromTo.From() == common.ELocation.Blob() && bURLParts.SAS.Encode() == "",
+	}, nil
 }
 
 func (p *blobSourceInfoProvider) BlobTier() azblob.AccessTierType {
@@ -61,4 +77,24 @@ func (p *blobSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, erro
 	}
 
 	return properties.LastModified(), nil
+}
+
+func (p *blobSourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
+	udamInstance := p.jptm.GetUserDelegationAuthenticationManager()
+
+	// result needs to dereference so we don't modify the actual URL. This enables proper refreshing.
+	result, err := p.defaultRemoteSourceInfoProvider.PreSignedSourceURL()
+
+	if err != nil {
+		return result, err
+	}
+
+	// needsSAS is only set if it's a blob-* s2s transfer, and no SAS is present on the source.
+	// As a result, we generate one.
+	if p.needsSAS {
+		bURLParts := azblob.NewBlobURLParts(*result)
+		result.RawQuery, err = udamInstance.GetUserDelegationSASForURL(bURLParts)
+	}
+
+	return result, err
 }

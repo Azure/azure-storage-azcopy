@@ -22,7 +22,6 @@ package ste
 
 import (
 	"context"
-	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -32,7 +31,7 @@ import (
 type urlToAppendBlobCopier struct {
 	appendBlobSenderBase
 
-	srcURL url.URL
+	sip IRemoteSourceInfoProvider
 }
 
 func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
@@ -41,14 +40,10 @@ func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, p pi
 		return nil, err
 	}
 
-	srcURL, err := srcInfoProvider.PreSignedSourceURL()
-	if err != nil {
-		return nil, err
-	}
-
 	return &urlToAppendBlobCopier{
 		appendBlobSenderBase: *senderBase,
-		srcURL:               *srcURL}, nil
+		sip: srcInfoProvider,
+	}, nil
 }
 
 // Returns a chunk-func for blob copies
@@ -62,7 +57,8 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
-		_, err := c.destAppendBlobURL.AppendBlockFromURL(ctxWithLatestServiceVersion, c.srcURL, id.OffsetInFile(), adjustedChunkSize,
+		srcURL, err := c.sip.PreSignedSourceURL()
+		_, err = c.destAppendBlobURL.AppendBlockFromURL(ctxWithLatestServiceVersion, *srcURL, id.OffsetInFile(), adjustedChunkSize,
 			azblob.AppendBlobAccessConditions{
 				AppendPositionAccessConditions: azblob.AppendPositionAccessConditions{IfAppendPositionEqual: id.OffsetInFile()},
 			}, azblob.ModifiedAccessConditions{}, nil, azblob.ClientProvidedKeyOptions{})

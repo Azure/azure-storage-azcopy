@@ -53,8 +53,12 @@ func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipelin
 		// See comments in uploader-pageBlob for the reasons, since the same reasons apply are are explained there
 		bd.filePacer = newPageBlobAutoPacer(pageBlobInitialBytesPerSecond, jptm.Info().BlockSize, false, jptm.(common.ILogger))
 
-		u, _ := url.Parse(jptm.Info().Source)
-		bd.pageRangeOptimizer = newPageRangeOptimizer(azblob.NewPageBlobURL(*u, srcPipeline),
+		sip, err := newBlobSourceInfoProvider(jptm)
+		if err != nil {
+			jptm.FailActiveDownload("Prologue", err)
+		}
+
+		bd.pageRangeOptimizer = newPageRangeOptimizer(sip.(IRemoteSourceInfoProvider), srcPipeline, // cast to IRemoteSourceInfoProvider because we know it is
 			context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion))
 		bd.pageRangeOptimizer.fetchPages()
 	}

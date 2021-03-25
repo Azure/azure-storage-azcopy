@@ -22,6 +22,7 @@ package common
 
 import (
 	"runtime"
+	"strconv"
 )
 
 type EnvironmentVariable struct {
@@ -315,6 +316,32 @@ func (EnvironmentVariable) DefaultServiceApiVersion() EnvironmentVariable {
 		Name:         "AZCOPY_DEFAULT_SERVICE_API_VERSION",
 		DefaultValue: "2019-12-12",
 		Description:  "Overrides the service API version so that AzCopy could accommodate custom environments such as Azure Stack.",
+	}
+}
+
+// UDAMRefreshSpeed is only used for internal integration.
+// It is when the user delegation key refreshes, not necessarily when it expires.
+// It is measured in seconds.
+func (EnvironmentVariable) UDAMRefreshSpeed() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name: "AZCOPY_UDAM_REFRESH_TIMER",
+		DefaultValue: strconv.Itoa(
+			((6 * 24) + 12) * // 6.5 days
+				(60 * 60), // Hours -> Minutes (*60), Minutes -> Seconds (*60)
+		),
+	}
+}
+
+// UDAMExpiryTime is only used for internal integration.
+// It is when the user delegation key expires, not necessarily it refreshes.
+// It is measured in seconds.
+func (EnvironmentVariable) UDAMExpiryTime() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name: "AZCOPY_UDAM_EXPIRY_TIMER",
+		DefaultValue: strconv.Itoa(
+			(7 * 24) * // 7 days
+				(60 * 60), // Hours -> Minutes (*60), Minutes -> Seconds (*60)
+		),
 	}
 }
 

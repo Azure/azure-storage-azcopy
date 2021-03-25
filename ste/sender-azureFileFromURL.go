@@ -21,31 +21,25 @@
 package ste
 
 import (
-	"net/url"
-
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type urlToAzureFileCopier struct {
 	azureFileSenderBase
-	srcURL url.URL
+	sip IRemoteSourceInfoProvider
 }
 
 func newURLToAzureFileCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	srcInfoProvider := sip.(IRemoteSourceInfoProvider) // "downcast" to the type we know it really has
-
 	senderBase, err := newAzureFileSenderBase(jptm, destination, p, pacer, sip)
 	if err != nil {
 		return nil, err
 	}
 
-	srcURL, err := srcInfoProvider.PreSignedSourceURL()
-	if err != nil {
-		return nil, err
-	}
-
-	return &urlToAzureFileCopier{azureFileSenderBase: *senderBase, srcURL: *srcURL}, nil
+	return &urlToAzureFileCopier{
+		azureFileSenderBase: *senderBase,
+		sip: sip.(IRemoteSourceInfoProvider), // "downcast" to the type we know it really has
+	}, nil
 }
 
 func (u *urlToAzureFileCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
@@ -64,8 +58,14 @@ func (u *urlToAzureFileCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 		if err := u.pacer.RequestTrafficAllocation(u.jptm.Context(), adjustedChunkSize); err != nil {
 			u.jptm.FailActiveUpload("Pacing block (global level)", err)
 		}
-		_, err := u.fileURL().UploadRangeFromURL(
-			u.ctx, u.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize)
+
+		srcURL, err := u.sip.PreSignedSourceURL()
+		if err != nil {
+			u.jptm.FailActiveSend("Get latest SAS token", err)
+		}
+
+		_, err = u.fileURL().UploadRangeFromURL(
+			u.ctx, *srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize)
 		if err != nil {
 			u.jptm.FailActiveS2SCopy("Uploading range from URL", err)
 			return

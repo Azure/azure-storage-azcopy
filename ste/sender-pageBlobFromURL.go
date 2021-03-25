@@ -34,16 +34,11 @@ import (
 type urlToPageBlobCopier struct {
 	pageBlobSenderBase
 
-	srcURL                   url.URL
+	sip                      IRemoteSourceInfoProvider
 	sourcePageRangeOptimizer *pageRangeOptimizer // nil if src is not a page blob
 }
 
 func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
-	srcURL, err := srcInfoProvider.PreSignedSourceURL()
-	if err != nil {
-		return nil, err
-	}
-
 	destBlobTier := azblob.AccessTierNone
 	var pageRangeOptimizer *pageRangeOptimizer
 	if blobSrcInfoProvider, ok := srcInfoProvider.(IBlobSourceInfoProvider); ok {
@@ -52,7 +47,7 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipe
 			destBlobTier = blobSrcInfoProvider.BlobTier()
 
 			// capture the necessary info so that we can perform optimizations later
-			pageRangeOptimizer = newPageRangeOptimizer(azblob.NewPageBlobURL(*srcURL, p),
+			pageRangeOptimizer = newPageRangeOptimizer(srcInfoProvider, p,
 				context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion))
 		}
 	}
@@ -64,7 +59,7 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipe
 
 	return &urlToPageBlobCopier{
 		pageBlobSenderBase:       *senderBase,
-		srcURL:                   *srcURL,
+		sip:                      srcInfoProvider,
 		sourcePageRangeOptimizer: pageRangeOptimizer}, nil
 }
 
@@ -121,8 +116,14 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block (global level)", err)
 		}
-		_, err := c.destPageBlobURL.UploadPagesFromURL(
-			enrichedContext, c.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize, nil,
+
+		srcURL, err := c.sip.PreSignedSourceURL()
+		if err != nil {
+			c.jptm.FailActiveSend("Get latest SAS token", err)
+		}
+
+		_, err = c.destPageBlobURL.UploadPagesFromURL(
+			enrichedContext, *srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize, nil,
 			azblob.PageBlobAccessConditions{}, azblob.ModifiedAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 		if err != nil {
 			c.jptm.FailActiveS2SCopy("Uploading page from URL", err)
@@ -146,13 +147,19 @@ func (c *urlToPageBlobCopier) GetDestinationLength() (int64, error) {
 //	1. capture the necessary info to do so, so that fetchPages can be invoked anywhere
 //  2. open to extending the logic, which could be re-used for both download and s2s scenarios
 type pageRangeOptimizer struct {
-	srcPageBlobURL azblob.PageBlobURL
+	overrideURL    *url.URL
+	sip            IRemoteSourceInfoProvider
+	pipeline       pipeline.Pipeline
 	ctx            context.Context
 	srcPageList    *azblob.PageList // nil if src is not a page blob, or it was not possible to get a response
 }
 
-func newPageRangeOptimizer(srcPageBlobURL azblob.PageBlobURL, ctx context.Context) *pageRangeOptimizer {
-	return &pageRangeOptimizer{srcPageBlobURL: srcPageBlobURL, ctx: ctx}
+func newPageRangeOptimizer(srcInfo IRemoteSourceInfoProvider, p pipeline.Pipeline, ctx context.Context) *pageRangeOptimizer {
+	return &pageRangeOptimizer{sip: srcInfo, pipeline: p, ctx: ctx}
+}
+
+func newPageRangeOptimizerFromURL(uri *url.URL, p pipeline.Pipeline, ctx context.Context) *pageRangeOptimizer {
+	return &pageRangeOptimizer{overrideURL: uri, pipeline: p, ctx: ctx}
 }
 
 func (p *pageRangeOptimizer) fetchPages() {
@@ -163,6 +170,18 @@ func (p *pageRangeOptimizer) fetchPages() {
 		return
 	}
 
+	var srcURL = p.overrideURL
+	var err error
+	if srcURL == nil {
+
+		srcURL, err = p.sip.PreSignedSourceURL()
+		if err != nil {
+			return
+		}
+	}
+
+	srcPageBlobURL := azblob.NewPageBlobURL(*srcURL, p.pipeline)
+
 	// according to the REST API documentation:
 	// in a highly fragmented page blob with a large number of writes,
 	// a Get Page Ranges request can fail due to an internal server timeout.
@@ -170,7 +189,7 @@ func (p *pageRangeOptimizer) fetchPages() {
 	// TODO follow up with the service folks to confirm the scale at which the timeouts occur
 	// TODO perhaps we need to add more logic here to optimize for more cases
 	limitedContext := withNoRetryForBlob(p.ctx) // we don't want retries here. If it doesn't work the first time, we don't want to chew up (lots) time retrying
-	pageList, err := p.srcPageBlobURL.GetPageRanges(limitedContext, 0, 0, azblob.BlobAccessConditions{})
+	pageList, err := srcPageBlobURL.GetPageRanges(limitedContext, 0, 0, azblob.BlobAccessConditions{})
 	if err == nil {
 		p.srcPageList = pageList
 	}

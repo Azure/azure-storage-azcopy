@@ -40,7 +40,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 1,
-                                                    oAuth=True, credTypeOverride="OAuthToken")
+                                                    dstOAuth=True, credTypeOverride="OAuthToken")
 
     def test_copy_single_512b_file_from_page_to_block_blob(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
@@ -126,6 +126,26 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             "Blob",
             self.bucket_name)
 
+    def test_copy_files_from_blob_account_to_blob_account_src_oauth(self):
+        self.util_test_copy_files_from_x_account_to_x_account(util.test_s2s_src_blob_account_url, "Blob",
+                                                              util.test_s2s_dst_blob_account_url, "Blob",
+                                                              self.bucket_name, srcOAuth=True)
+
+    def test_copy_files_from_blob_account_to_blob_account_src_oauth_ensure_refresh(self):
+        # Set the refresh environment variables to rather speedy rates
+        # By default, the key refreshes every 6.5 days and expires every 7. That provides a healthy amount of
+        #    buffer time for keys that are still in use. In my testing, with refreshes every minute, I (Adele)
+        #    didn't encounter any failures, but on the off-chance the dev machine takes too long,
+        #    I bumped up the expiry time to an hour.
+        os.environ["AZCOPY_UDAM_REFRESH_TIMER"] = "30"  # Refresh every 30 seconds
+        os.environ["AZCOPY_UDAM_EXPIRY_TIMER"] = "3600"  # The key expires every 60 minutes
+        self.util_test_copy_files_from_x_account_to_x_account(util.test_s2s_src_blob_account_url, "Blob",
+                                                              util.test_s2s_dst_blob_account_url, "Blob",
+                                                              self.bucket_name, srcOAuth=True)
+        # Clear the refresh environment variables
+        os.environ["AZCOPY_UDAM_REFRESH_TIMER"] = ""
+        os.environ["AZCOPY_UDAM_EXPIRY_TIMER"] = ""
+
     def test_copy_single_file_from_blob_to_blob_propertyandmetadata(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
@@ -174,6 +194,14 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         # be the main OAuth one, to simplify OAuth setup
         dst_container_url = util.get_object_without_sas(util.test_oauth_container_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 17 * 1024 * 1024, True)
+
+    def test_copy_single_file_from_blob_to_blob_full_oauth(self):
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
+        # URL on the next line was test_s2s_dst_blob_account_url, but for now its changed to
+        # be the main OAuth one, to simplify OAuth setup
+        dst_container_url = util.get_object_without_sas(util.test_oauth_container_url, self.bucket_name)
+        self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob",
+                                                    50 * 1024 * 1024, srcOAuth=True, dstOAuth=True)
 
     ##################################
     # Test from blob to file copy
@@ -690,7 +718,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         dstBucketURL,
         dstType,
         sizeInKB=1,
-        oAuth=False,
+        dstOAuth=False,
+        srcOAuth=False,
         customizedFileName="",
         srcBlobType="",
         dstBlobType="",
@@ -711,7 +740,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         else:
             srcFileURL = util.get_object_sas(srcBucketURL, filename)
 
-        if oAuth:
+        if dstOAuth:
             dstFileURL = util.get_object_without_sas(dstBucketURL, filename)
         else:
             dstFileURL = util.get_object_sas(dstBucketURL, filename)
@@ -721,6 +750,9 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
 
         if credTypeOverride != "":
             os.environ["AZCOPY_CRED_TYPE"] = credTypeOverride
+
+        if srcOAuth:
+            srcFileURL = util.get_object_without_sas(srcBucketURL, filename)
 
         # Copy file using azcopy from srcURL to destURL
         result = util.Command("copy").add_arguments(srcFileURL).add_arguments(dstFileURL). \
@@ -976,7 +1008,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         srcType,
         dstAccountURL,
         dstType,
-        bucketNamePrefix):
+        bucketNamePrefix,
+        srcOAuth=False):
         # More enumerating scenarios could be covered with integration testing.
         bucketName1 = bucketNamePrefix + "1"
         bucketName2 = bucketNamePrefix + "2"
@@ -1006,8 +1039,13 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         self.util_upload_to_src(src_dir_path1, srcType, src_bucket_url1, True)
         self.util_upload_to_src(src_dir_path2, srcType, src_bucket_url2, True)
 
+        if srcOAuth or srcType == "S3":
+            txSrc = util.get_object_without_sas(srcAccountURL, "")
+        else:
+            txSrc = util.get_object_sas(srcAccountURL, "")
+
         # Copy files using azcopy from srcURL to destURL
-        result = util.Command("copy").add_arguments(srcAccountURL).add_arguments(dstAccountURL). \
+        result = util.Command("copy").add_arguments(txSrc).add_arguments(dstAccountURL). \
             add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
         self.assertTrue(result)
 

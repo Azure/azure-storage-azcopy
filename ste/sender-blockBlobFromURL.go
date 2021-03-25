@@ -23,7 +23,6 @@ package ste
 import (
 	"bytes"
 	"context"
-	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -34,7 +33,7 @@ import (
 type urlToBlockBlobCopier struct {
 	blockBlobSenderBase
 
-	srcURL url.URL
+	sip IRemoteSourceInfoProvider
 }
 
 func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
@@ -52,14 +51,7 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pip
 		return nil, err
 	}
 
-	srcURL, err := srcInfoProvider.PreSignedSourceURL()
-	if err != nil {
-		return nil, err
-	}
-
-	return &urlToBlockBlobCopier{
-		blockBlobSenderBase: *senderBase,
-		srcURL:              *srcURL}, nil
+	return &urlToBlockBlobCopier{blockBlobSenderBase: *senderBase, sip: srcInfoProvider}, nil
 }
 
 // Returns a chunk-func for blob copies
@@ -169,7 +161,13 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
-		_, err := c.destBlockBlobURL.StageBlockFromURL(ctxWithLatestServiceVersion, encodedBlockID, c.srcURL,
+
+		srcURL, err := c.sip.PreSignedSourceURL()
+		if err != nil {
+			c.jptm.FailActiveSend("Get latest SAS token", err)
+		}
+
+		_, err = c.destBlockBlobURL.StageBlockFromURL(ctxWithLatestServiceVersion, encodedBlockID, *srcURL,
 			id.OffsetInFile(), adjustedChunkSize, azblob.LeaseAccessConditions{}, azblob.ModifiedAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 		if err != nil {
 			c.jptm.FailActiveSend("Staging block from URL", err)
@@ -189,7 +187,13 @@ func (c *urlToBlockBlobCopier) generateStartCopyBlobFromURL(id common.ChunkID, b
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
 
-		_, err := c.destBlockBlobURL.CopyFromURL(ctxWithLatestServiceVersion, c.srcURL, c.metadataToApply,
+		srcURL, err := c.sip.PreSignedSourceURL()
+		if err != nil {
+			c.jptm.FailActiveSend("Get latest SAS token", err)
+			return
+		}
+
+		_, err = c.destBlockBlobURL.CopyFromURL(ctxWithLatestServiceVersion, *srcURL, c.metadataToApply,
 			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil, azblob.DefaultAccessTier, nil)
 
 		if err != nil {
