@@ -369,7 +369,7 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 			fmt.Println("error getting the range list ", err.Error())
 			os.Exit(1)
 		}
-		if numberOfPages != (len(resp.Ranges)) {
+		if numberOfPages != (len(resp.Items)) {
 			fmt.Println("number of ranges uploaded is different from the number of expected to be uploaded")
 			os.Exit(1)
 		}
