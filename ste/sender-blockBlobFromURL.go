@@ -74,15 +74,6 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 		 * siminsavani: FYI: For GCP, if the blob is the entirety of the file, GCP still returns
 		 * invalid error from service due to PutBlockFromUrl.
 		 */
-		/*
-		 * nakulkar: It is wrong to do this specifically for GCP sources. Why?
-		 * Because our sender is supposed to be source-agnostic, and should not
-		 * change its behaviour for individual sources, as long as the source satisfy sip
-		 * interface.
-		 * That said, GCP returns an invalid error with PutBlockFromURL which service cannot
-		 * handle. And.. this is the easisy way to fix this. For satisfaction, we'll add a TODO :P
-		 * TODO: Find a better logic.
-		 */
 		setPutListNeed(&c.atomicPutListIndicator, putListNotNeeded)
 		return c.generateStartPutBlobFromURL(id, blockIndex, adjustedChunkSize)
 
