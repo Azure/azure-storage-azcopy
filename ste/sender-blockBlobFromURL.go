@@ -70,15 +70,6 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 	}
 	// Small blobs from all sources will be copied over to destination using PutBlobFromUrl
 	if c.NumChunks() == 1 && adjustedChunkSize <= int64(azblob.BlockBlobMaxUploadBlobBytes) {
-		/*
-		 * nakulkar: It is wrong to do this specifically for GCP sources. Why?
-		 * Because our sender is supposed to be source-agnostic, and should not
-		 * change its behaviour for individual sources, as long as the source satisfy sip
-		 * interface.
-		 * That said, GCP returns an invalid error with PutBlockFromURL which service cannot
-		 * handle. And.. this is the easisy way to fix this. For satisfaction, we'll add a TODO :P
-		 * TODO: Find a better logic.
-		 */
 		setPutListNeed(&c.atomicPutListIndicator, putListNotNeeded)
 		return c.generateStartPutBlobFromURL(id, blockIndex, adjustedChunkSize)
 
