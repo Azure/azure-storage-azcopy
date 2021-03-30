@@ -68,9 +68,8 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 		setPutListNeed(&c.atomicPutListIndicator, putListNotNeeded)
 		return c.generateCreateEmptyBlob(id)
 	}
-
-	if c.NumChunks() == 1 && adjustedChunkSize <= int64(azblob.BlockBlobMaxUploadBlobBytes) &&
-		c.blockBlobSenderBase.jptm.FromTo() == common.EFromTo.GCPBlob() {
+	// Small blobs from all sources will be copied over to destination using PutBlobFromUrl
+	if c.NumChunks() == 1 && adjustedChunkSize <= int64(azblob.BlockBlobMaxUploadBlobBytes) {
 		/*
 		 * nakulkar: It is wrong to do this specifically for GCP sources. Why?
 		 * Because our sender is supposed to be source-agnostic, and should not
