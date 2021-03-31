@@ -97,6 +97,7 @@ type TransferInfo struct {
 	EntityType             common.EntityType
 	PreserveSMBPermissions common.PreservePermissionsOption
 	PreserveSMBInfo        bool
+	FailureReason          string
 
 	// Transfer info for S2S copy
 	SrcProperties
@@ -241,7 +242,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	src, dst, _ := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
 
-	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType, versionID, blobTags :=
+	failureReason, srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType, versionID, blobTags :=
 		plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
 	// If the length of destination SAS is greater than 0
@@ -330,6 +331,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		Source:                         src,
 		SourceSize:                     sourceSize,
 		Destination:                    dst,
+		FailureReason:                  failureReason,
 		EntityType:                     entityType,
 		PreserveSMBPermissions:         plan.PreserveSMBPermissions,
 		PreserveSMBInfo:                plan.PreserveSMBInfo,

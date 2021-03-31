@@ -125,6 +125,53 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	var logDstContainerCreateFailureOnce sync.Once
 	seenFailedContainers := make(map[string]bool) // Create map of already failed container conversions so we don't log a million items just for one container.
 
+	// This is used when a container name simply cannot be translated.
+	// It throws a expected failure transfer to cause a job failure status.
+	// This is because there were one or more files under it that just couldn't be transferred.
+	createContainerFailureTransfer := func(dstContainerName, failureReason string) error {
+		if cca.internalDisableContainerFailureTransfer {
+			return nil // Don't create failure tx-- CI has requested to not do so.
+		}
+
+		// Don't spam logs on failed containers
+		if _, ok := seenFailedContainers[dstContainerName]; !ok {
+			// Schedule a intentionally failing transfer at the container level with a empty dummy object
+			dummyObj := newForcedErrorStoredObject(
+				failureReason,
+				"", "",
+				dstContainerName)
+
+			dummyTransfer, shouldSendToSTE := dummyObj.ToNewCopyTransfer(
+				cca.autoDecompress && cca.fromTo.IsDownload(),
+				"", dstContainerName,
+				cca.s2sPreserveAccessTier,
+				jobPartOrder.Fpo)
+
+			seenFailedContainers[dstContainerName] = true
+
+			if shouldSendToSTE {
+				return addTransfer(&jobPartOrder, dummyTransfer, cca)
+			} else {
+				return nil
+			}
+		}
+
+		return nil
+	}
+
+	// This is used in the event of destination container creation failure.
+	// It provides a lesser level of logging, because we don't know whether the container already existed, or something else of that nature.
+	// Therefore, the transfer could still succeed.
+	logContainerCreationFailure := func(containerName string, err error) {
+		logDstContainerCreateFailureOnce.Do(func() {
+			glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
+		})
+
+		if ste.JobsAdmin != nil {
+			ste.JobsAdmin.LogToJobLog(fmt.Sprintf(`Failed to initialize the destination container %s. Your transfers to this container may still succeed if the container already exists. => (%s)`, containerName, err), pipeline.LogWarning)
+		}
+	}
+
 	dstContainerName := ""
 	// Extract the existing destination container name
 	if cca.fromTo.To().IsRemote() {
@@ -141,10 +188,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 			// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 			if _, ok := seenFailedContainers[dstContainerName]; err != nil && ste.JobsAdmin != nil && !ok {
-				logDstContainerCreateFailureOnce.Do(func() {
-					glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
-				})
-				ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err), pipeline.LogWarning)
+				logContainerCreationFailure(dstContainerName, err)
 				seenFailedContainers[dstContainerName] = true
 			}
 		} else if cca.fromTo.From().IsRemote() { // if the destination has implicit container names
@@ -177,10 +221,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
 					// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 					if _, ok := seenFailedContainers[bucketName]; err != nil && ste.JobsAdmin != nil && !ok {
-						logDstContainerCreateFailureOnce.Do(func() {
-							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
-						})
-						ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", bucketName, err), pipeline.LogWarning)
+						logContainerCreationFailure(bucketName, err)
 						seenFailedContainers[bucketName] = true
 					}
 				}
@@ -197,10 +238,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					err = cca.createDstContainer(resName, cca.destination, ctx, existingContainers, cca.logVerbosity)
 
 					if _, ok := seenFailedContainers[dstContainerName]; err != nil && ste.JobsAdmin != nil && !ok {
-						logDstContainerCreateFailureOnce.Do(func() {
-							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
-						})
-						ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err), pipeline.LogWarning)
+						logContainerCreationFailure(dstContainerName, err)
 						seenFailedContainers[dstContainerName] = true
 					}
 				}
@@ -228,11 +266,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				cName, err = containerResolver.ResolveName(object.containerName)
 
 				if err != nil {
-					if _, ok := seenFailedContainers[object.containerName]; !ok {
-						WarnStdoutAndJobLog(fmt.Sprintf("failed to add transfers from container %s as it has an invalid name. Please manually transfer from this container to one with a valid name.", object.containerName))
-						seenFailedContainers[object.containerName] = true
-					}
-					return nil
+					return createContainerFailureTransfer(object.containerName,
+						fmt.Sprintf("failed to add transfers from container %s as it has an invalid name. Please manually transfer from this container to one with a valid name.", object.containerName))
 				}
 
 				object.dstContainerName = cName

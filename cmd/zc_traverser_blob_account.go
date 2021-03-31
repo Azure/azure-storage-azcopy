@@ -104,7 +104,13 @@ func (t *blobAccountTraverser) traverse(preprocessor objectMorpher, processor ob
 		err = containerTraverser.traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
-			WarnStdoutAndJobLog(fmt.Sprintf("failed to list blobs in container %s: %s", v, err))
+			err = processor(newForcedErrorStoredObject(
+				fmt.Sprintf("failed to list blobs in container %s: %s", v, err),
+				"", "", v))
+			if err != nil {
+				return err
+			}
+
 			continue
 		}
 	}

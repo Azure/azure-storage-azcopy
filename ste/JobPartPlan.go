@@ -14,7 +14,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 16
+const DataSchemaVersion common.Version = 17
 
 const (
 	CustomHeaderMaxBytes = 256
@@ -161,7 +161,7 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
 
 // TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder
 // TODO: Refactor return type to an object
-func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType, blobTier azblob.AccessTierType,
+func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (failureReason string, h common.ResourceHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType, blobTier azblob.AccessTierType,
 	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType, blobVersionID string, blobTags common.BlobTags) {
 	var err error
 	t := jpph.Transfer(transferIndex)
@@ -175,6 +175,10 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 
 	entityType = t.EntityType
 
+	if t.FailureReasonLength != 0 {
+		failureReason = jpph.getString(offset, t.FailureReasonLength)
+		offset += int64(t.FailureReasonLength)
+	}
 	if t.SrcContentTypeLength != 0 {
 		h.ContentType = jpph.getString(offset, t.SrcContentTypeLength)
 		offset += int64(t.SrcContentTypeLength)
@@ -309,6 +313,8 @@ type JobPartPlanTransfer struct {
 	SrcLength int16
 	// DstLength represents the actual length of destination string for specific transfer
 	DstLength int16
+	// FailureReason specifies why a transfer is supposed to fail-- denoted by the entity type TransferFailure
+	FailureReasonLength int16
 	// ChunkCount represents the num of chunks a transfer is split into
 	//ChunkCount uint16	// TODO: Remove this, we need to determine it at runtime
 	// EntityType indicates whether this is a file or a folder

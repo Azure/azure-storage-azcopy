@@ -87,6 +87,7 @@ func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
 		forceWrite:                     common.EOverwriteOption.True().String(),
 		preserveOwner:                  common.PreserveOwnerDefault,
+		internalDisableContainerFailureTransfer: true,
 	}
 }
 
@@ -280,23 +281,20 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 	rawSrcS3BucketURL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName) // Use default region
 	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
 	raw := getDefaultRawCopyInput(rawSrcS3BucketURL.String(), rawDstBlobServiceURLWithSAS.String())
+	raw.internalDisableContainerFailureTransfer = false
 
 	// bucket should not be resolved, and objects should not be scheduled for transfer
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.NotNil)
 
-		loggedError := false
-		log := glcm.(*mockedLifecycleManager).infoLog
-		count := len(log)
-		for count > 0 {
-			x := <-log
-			if strings.Contains(x, "invalid name") {
-				loggedError = true
+		foundInvalid := false
+		for _,v := range mockedRPC.transfers {
+			if v.EntityType == common.EEntityType.TransferFailure() && strings.Contains(v.FailureReason, "invalid name") {
+				foundInvalid = true
 			}
-			count = len(log)
 		}
 
-		c.Assert(loggedError, chk.Equals, true)
+		c.Assert(foundInvalid, chk.Equals, true)
 	})
 }
 

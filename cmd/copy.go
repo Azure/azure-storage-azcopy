@@ -146,6 +146,9 @@ type rawCopyCmdArgs struct {
 
 	// whether to include blobs that have metadata 'hdi_isfolder = true'
 	includeDirectoryStubs bool
+
+	// internal flag
+	internalDisableContainerFailureTransfer bool
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -1012,6 +1015,9 @@ type cookedCopyCmdArgs struct {
 
 	// whether to include blobs that have metadata 'hdi_isfolder = true'
 	includeDirectoryStubs bool
+
+	// disable the container transfer failures for tests
+	internalDisableContainerFailureTransfer bool
 }
 
 func (cca *cookedCopyCmdArgs) isRedirection() bool {

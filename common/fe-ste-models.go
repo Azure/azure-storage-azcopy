@@ -902,6 +902,7 @@ const (
 type CopyTransfer struct {
 	Source           string
 	Destination      string
+	FailureReason    string // embedded failure reason caused by EntityType TransferFailure
 	EntityType       EntityType
 	LastModifiedTime time.Time //represents the last modified time of source which ensures that source hasn't changed while transferring
 	SourceSize       int64     // size of the source entity in bytes.
@@ -1302,6 +1303,9 @@ type EntityType uint8
 
 func (EntityType) File() EntityType   { return EntityType(0) }
 func (EntityType) Folder() EntityType { return EntityType(1) }
+// TransferFailure is intended for pre-STE transfer failures that should still receive the proper "transfer failed" treatment (such as the inability to enumerate a container, the inability to resolve a container name, etc.)
+// this is NOT intended to be a replacement for transfer status. Do not use it as such. It is simply a registration of inability to transfer, from cmd to ste.
+func (EntityType) TransferFailure() EntityType { return EntityType(2) }
 
 func (e EntityType) String() string {
 	return enum.StringInt(e, reflect.TypeOf(e))

@@ -82,6 +82,8 @@ type storedObject struct {
 	Metadata      common.Metadata
 	blobVersionID string
 	blobTags      common.BlobTags
+	// injected error data
+	transferFailureReason string
 }
 
 const (
@@ -155,6 +157,7 @@ func (s *storedObject) ToNewCopyTransfer(
 	t := common.CopyTransfer{
 		Source:             Source,
 		Destination:        Destination,
+		FailureReason:      s.transferFailureReason,
 		EntityType:         s.entityType,
 		LastModifiedTime:   s.lastModifiedTime,
 		SourceSize:         s.size,
@@ -208,6 +211,25 @@ type contentPropsProvider interface {
 type blobPropsProvider interface {
 	BlobType() azblob.BlobType
 	AccessTier() azblob.AccessTierType
+}
+
+func newForcedErrorStoredObject(err, name, relativePath, containerName string) storedObject {
+	so := newStoredObject(
+		noPreProccessor, // No need for a morpher on a intended failure
+		name,
+		relativePath,
+		common.EEntityType.TransferFailure(),
+		time.Now(),
+		0,              // A intended failure has no size,
+		noContentProps, // and no content properties
+		noBlobProps,    // and no blob properties
+		noMetdata,
+		containerName,
+	)
+
+	so.transferFailureReason = err
+
+	return so
 }
 
 // a constructor is used so that in case the storedObject has to change, the callers would get a compilation error

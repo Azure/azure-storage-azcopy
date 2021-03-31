@@ -81,11 +81,20 @@ func (t *gcpServiceTraverser) traverse(preprocessor objectMorpher, processor obj
 		err = bucketTraverser.traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
+			var errStr string
 			if strings.Contains(err.Error(), "cannot list objects, The specified bucket does not exist") {
-				WarnStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q, as it does not exist.", v))
+				errStr = fmt.Sprintf("skip enumerating the bucket %q, as it's not in the region specified by source URL", v)
+			} else {
+				errStr = err.Error()
 			}
 
-			WarnStdoutAndJobLog(fmt.Sprintf("failed to list objects in bucket %s: %s", v, err))
+			dummyObj := newForcedErrorStoredObject(
+				fmt.Sprintf("failed to list objects in bucket %s: %s", v, errStr),
+				"", "", v)
+			err = processIfPassedFilters(filters, dummyObj, processor)
+			if err != nil {
+				return err
+			}
 			continue
 		}
 	}

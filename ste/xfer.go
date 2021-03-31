@@ -21,6 +21,8 @@
 package ste
 
 import (
+	"errors"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -63,6 +65,60 @@ type newJobXfer func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer
 // same as newJobXfer, but with an extra parameter
 type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer, df downloaderFactory)
 type newJobXferWithSenderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer, sf senderFactory, sipf sourceInfoProviderFactory)
+
+func expectFailureXferDecorator(targetFunction newJobXfer) newJobXfer {
+	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer) {
+		info := jptm.Info()
+
+		// Pre-emptively fail if requested
+		if info.EntityType == common.EEntityType.TransferFailure() {
+			// get fromto
+			fromTo := jptm.FromTo()
+
+			// Shorten our paths so the error isn't obnoxious in the case of ultra-long paths
+			shortenPath := func(loc string, locType common.Location) string {
+				// Ignore unknown locations, nothing to do.
+				if locType == common.ELocation.Unknown() {
+					return ""
+				}
+
+				// Trim the query. We're only interested in the path.
+				if locType.IsRemote() {
+					u, err := url.Parse(loc)
+					common.PanicIfErr(err)
+
+					loc = u.Path
+				}
+
+				loc = common.IffString(len(loc) > 100, "(path trimmed) ...", "") +
+					loc[common.Iffint32(len(loc) > 100, int32(len(loc)-100), 0):]
+
+				return loc
+			}
+
+			shortSrc := shortenPath(info.Source, fromTo.From())
+			shortDst := shortenPath(info.Destination, fromTo.To())
+
+			// Send the right type of error
+			if fromTo.IsDownload() {
+				jptm.LogDownloadError(shortSrc, shortDst, info.FailureReason, 0)
+			} else if fromTo.IsUpload() {
+				jptm.LogUploadError(shortSrc, shortDst, info.FailureReason, 0)
+			} else if fromTo.IsS2S() {
+				jptm.LogS2SCopyError(shortSrc, shortDst, info.FailureReason, 0)
+			} else if fromTo.To() == common.ELocation.Unknown() {
+				jptm.LogError(shortSrc, "DELETE ERROR", errors.New(info.FailureReason))
+			}
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
+
+			// do not perform the target function
+			return
+		}
+
+		targetFunction(jptm, pipeline, pacer)
+	}
+}
 
 // Takes a multi-purpose download function, and makes it ready to user with a specific type of downloader
 func parameterizeDownload(targetFunction newJobXferWithDownloaderFactory, df downloaderFactory) newJobXfer {

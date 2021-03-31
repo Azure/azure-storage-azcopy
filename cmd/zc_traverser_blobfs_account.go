@@ -112,7 +112,13 @@ func (t *BlobFSAccountTraverser) traverse(preprocessor objectMorpher, processor 
 		err = fileSystemTraverser.traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
-			WarnStdoutAndJobLog(fmt.Sprintf("failed to list files in filesystem %s: %s", v, err))
+			err = processor(newForcedErrorStoredObject(
+				fmt.Sprintf("failed to list files in filesystem %s: %s", v, err),
+				"", "", v))
+			if err != nil {
+				return err
+			}
+
 			continue
 		}
 	}

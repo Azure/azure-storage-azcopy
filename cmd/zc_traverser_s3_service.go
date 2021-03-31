@@ -104,17 +104,22 @@ func (t *s3ServiceTraverser) traverse(preprocessor objectMorpher, processor obje
 		err = bucketTraverser.traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
+			var errStr string
 			if strings.Contains(err.Error(), "301 response missing Location header") {
-				WarnStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q , as it's not in the region specified by source URL", v))
-				continue
+				errStr = fmt.Sprintf("skipping enumeration of bucket %s, as it is not in the region specified by the source URL", v)
+			} else if strings.Contains(err.Error(), "cannot list objects, The specified bucket does not exist") {
+				errStr = fmt.Sprintf("skipping enumeration of bucket %s, as it does not exist", v)
+			} else {
+				errStr = err.Error()
 			}
 
-			if strings.Contains(err.Error(), "cannot list objects, The specified bucket does not exist") {
-				WarnStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q, as it does not exist.", v))
-				continue
+			dummyObj := newForcedErrorStoredObject(
+				fmt.Sprintf("failed to list objects in bucket %s: %s", v, errStr),
+				"", "", v)
+			err = processIfPassedFilters(filters, dummyObj, processor)
+			if err != nil {
+				return err
 			}
-
-			WarnStdoutAndJobLog(fmt.Sprintf("failed to list objects in bucket %s: %s", v, err))
 			continue
 		}
 	}

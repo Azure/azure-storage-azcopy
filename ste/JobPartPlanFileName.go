@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -234,10 +235,34 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	// Initialize the offset for the 1st transfer's src/dst strings
 	currentSrcStringOffset := eof + int64(unsafe.Sizeof(JobPartPlanTransfer{}))*int64(jpph.NumTransfers)
 
+	// Determine the maximum destination length:
+	var maxDestLength uint16 = math.MaxUint16
+
+	switch order.FromTo.To() {
+	case common.ELocation.Blob():
+		// The maximum length is 1024 characters
+		maxDestLength = 1024
+	case common.ELocation.File():
+		// it's actually 255 per segment, for a total of 2048
+		maxDestLength = 2048
+	case common.ELocation.BlobFS():
+		maxDestLength = 1024
+		// Leave it as is if it's a default.
+	}
+
 	// Write each transfer to the Job Part Plan file (except for the src/dst strings; comes come later)
 	for t := range order.Transfers {
-		if len(order.Transfers[t].Source) > math.MaxInt16 || len(order.Transfers[t].Destination) > math.MaxInt16 {
-			panic(fmt.Sprintf("The file %s exceeds azcopy's current maximum path length on either the source or the destination.", order.Transfers[t].Source))
+		if uint16(len(order.Transfers[t].Source)) > uint16(math.MaxUint16) || uint16(len(order.Transfers[t].Destination)) > maxDestLength {
+			// If the order wasn't already going to fail, let's fail it.
+			if order.Transfers[t].EntityType != common.EEntityType.TransferFailure() {
+				order.Transfers[t].EntityType = common.EEntityType.TransferFailure()
+
+				// shorten the path name a bit so the log isn't so obnoxious
+				shortName := order.Transfers[t].Source
+				shortName = filepath.Base(shortName)
+
+				order.Transfers[t].FailureReason = fmt.Sprintf("The file (parent path trimmed) .../%s exceeds the maximum path length on either the source or the destination.", shortName)
+			}
 		}
 
 		// Prepare info for JobPartPlanTransfer
@@ -252,7 +277,11 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			srcMetadataLength = len(metadataStr)
 		}
 		if srcMetadataLength > math.MaxInt16 {
-			panic(fmt.Sprintf("The metadata on source file %s exceeds azcopy's current maximum metadata length, and cannot be processed.", order.Transfers[t].Source))
+			// If the order wasn't already going to fail, let's fail it.
+			if order.Transfers[t].EntityType != common.EEntityType.TransferFailure() {
+				order.Transfers[t].EntityType = common.EEntityType.TransferFailure()
+				order.Transfers[t].FailureReason = fmt.Sprintf("The metadata on source file %s exceeds azcopy's current maximum metadata length, and cannot be processed.", order.Transfers[t].Source)
+			}
 		}
 
 		srcBlobTagsLength := 0
@@ -268,6 +297,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			SrcOffset:      currentSrcStringOffset, // SrcOffset of the src string
 			SrcLength:      int16(len(order.Transfers[t].Source)),
 			DstLength:      int16(len(order.Transfers[t].Destination)),
+			FailureReasonLength: int16(len(order.Transfers[t].FailureReason)),
 			EntityType:     order.Transfers[t].EntityType,
 			ModifiedTime:   order.Transfers[t].LastModifiedTime.UnixNano(),
 			SourceSize:     order.Transfers[t].SourceSize,
@@ -293,7 +323,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		// The NEXT transfer's src/dst string come after THIS transfer's src/dst strings
 		srcDstStringsOffset[t] = currentSrcStringOffset
 
-		currentSrcStringOffset += int64(jppt.SrcLength + jppt.DstLength + jppt.SrcContentTypeLength +
+		currentSrcStringOffset += int64(jppt.SrcLength + jppt.DstLength + jppt.FailureReasonLength + jppt.SrcContentTypeLength +
 			jppt.SrcContentEncodingLength + jppt.SrcContentLanguageLength + jppt.SrcContentDispositionLength +
 			jppt.SrcCacheControlLength + jppt.SrcContentMD5Length + jppt.SrcMetadataLength +
 			jppt.SrcBlobTypeLength + jppt.SrcBlobTierLength + jppt.SrcBlobVersionIDLength + jppt.SrcBlobTagsLength)
@@ -315,6 +345,12 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		common.PanicIfErr(err)
 		eof += int64(bytesWritten)
 
+		// Write failure reason, if applicable
+		if len(order.Transfers[t].FailureReason) != 0 {
+			bytesWritten, err = file.WriteString(order.Transfers[t].FailureReason)
+			common.PanicIfErr(err)
+			eof += int64(bytesWritten)
+		}
 		// For S2S copy (and, in the case of Content-MD5, always), write the src properties
 		if len(order.Transfers[t].ContentType) != 0 {
 			bytesWritten, err = file.WriteString(order.Transfers[t].ContentType)
