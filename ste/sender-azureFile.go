@@ -265,7 +265,7 @@ func (u *azureFileSenderBase) addPermissionsToHeaders(info TransferInfo, destUrl
 		}
 	}
 
-	if len(*u.headersToApply.PermissionString) > filesServiceMaxSDDLSize {
+	if u.headersToApply.PermissionString != nil && len(*u.headersToApply.PermissionString) > filesServiceMaxSDDLSize {
 		fURLParts := azfile.NewFileURLParts(destUrl)
 		fURLParts.DirectoryOrFilePath = ""
 		shareURL := azfile.NewShareURL(fURLParts.URL(), u.pipeline)
