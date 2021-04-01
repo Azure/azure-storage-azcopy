@@ -65,6 +65,7 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ManagedIdentityClientID(),
 	EEnvironmentVariable.ManagedIdentityObjectID(),
 	EEnvironmentVariable.ManagedIdentityResourceString(),
+	EEnvironmentVariable.DisableSyslog(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
@@ -322,5 +323,14 @@ func (EnvironmentVariable) UserAgentPrefix() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_USER_AGENT_PREFIX",
 		Description: "Add a prefix to the default AzCopy User Agent, which is used for telemetry purposes. A space is automatically inserted.",
+	}
+}
+
+func (EnvironmentVariable) DisableSyslog() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_DISABLE_SYSLOG",
+		DefaultValue: "false",
+		Description: "Disables logging in Syslog or Windows Event Logger. By default we log to these channels. " +
+			"However, to reduce the noise in Syslog/Windows Event Log, consider setting this environment variable to true.",
 	}
 }
