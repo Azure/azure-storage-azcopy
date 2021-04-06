@@ -89,10 +89,10 @@ azcopy
 **v10**
 
 ```azcopy
-azcopy copy
-  'https://myaccount.blob.core.windows.net/mycontainer?SAS'
-  'C:\MyFolder'
-  --recursive
+azcopy copy 
+'https://<source-storage-account-name>.blob.core.windows.net/<container-name>?<SAS-token>'
+'C:\myDirectory\' 
+--recursive
 ```
 
 ## Parameters Table
@@ -101,22 +101,22 @@ Task | v8 | v10
 ------------ | ------------- | -------------
 Authenticate | `/SourceKey:<Key>` <br> `/DestKey:<Key>` <br> `/SourceSAS:<SAS>` <br> `/DestSAS:<SAS>` | Append the SAS token to the source and/or destination URI. <br> `'blob URI' + '?' + 'SAS'`
 Check log verbosity | `/V:[verbose-log-file]` | `--log-level`
-Specify journal file folder | `/Z:[journal-file-folder]` | Modify environment variable: <br> `AZCOPY_JOB_PLAN_LOCATION`
+Specify journal file folder (Note: a v10 plan file is similar to a v8 journal file but is not used in the same way) | `/Z:[journal-file-folder]` | Modify environment variable: <br> `AZCOPY_JOB_PLAN_LOCATION`
 Specify parameter file | `/@:<parameter-file>` | Run commands in command line
-Suppress confirmation prompts | `/Y` | Suppressed by default. To enable, specify parameter: INSERT HERE
+Suppress confirmation prompts | `/Y` | Suppressed by default. To enable, specify parameter: overwrite
 Specify number of concurrent operations | `/NC:<number-of-concurrent>` | Modify environment variable: <br> `AZCOPY_CONCURRENCY_VALUE`
 Specify source/destination type | `/SourceType:<option>` `/DestType:<option>` Options: blob, file | `--from-to=[enums]` <br> (typically not used)
 Upload contents recursively | `/S` | `--recursive`
 Match a specific pattern | `/Pattern:<pattern>` | `--include-pattern string` <br> `--exclude-pattern string` <br> `--include-path string` <br> `--exclude-path string`
-Create an MD5 hash when downloading data | Always does this | `--put-md5`
-Check the MD5 hash when downloading data | `/CheckMD5` | `--check-md5=[option]` <br> Options: NoCheck, LogOnly, FailIfDifferent (default), FailIfDifferentOrMissing
+Create an MD5 hash when uploading data | Always does this | `--put-md5`
+Check the MD5 hash when downloading data | `/CheckMD5` | `--check-md5=[option]` <br> Options: NoCheck, LogOnly, FailIfDifferent (default, if MD5 hash exists, it will be checked), FailIfDifferentOrMissing
 Retrieve listing | `/L` | `azcopy list`
 Set modified time to be same as the source blobs | `/MT` | `--preserve-last-modified-time`
 Exclude newer source | `/XN` | Not yet supported
 Exclude older source | `/XO` | Use the sync command
 Upload archive files/blobs | `/A` | See row below
 Set attributes | `/IA:[RASHCNETOI]` <br> `/XA:[RASHCNETOI]` | `--include-attributes string` <br> `--exclude-attributes string`
-Copy blobs or files synchronously among two Azure Storage endpoints | `/SyncCopy` | V10 is always synchronous from source to destination, unlike v8 which downloads then re-uploads
+Copy blobs or files synchronously among two Azure Storage endpoints | `/SyncCopy` | V10 is always synchronous from source to destination (See "Common Questions" below) `/	azcopy copy 'https://<source-storage-account-name>.blob.core.windows.net/<container-name>/<blob-path><SAS-token>' 'https://<destination-storage-account-name>.blob.core.windows.net/<container-name>/<blob-path>'`.
 Set content type | `/SetContentType:[content-type]` | `--content-type string`
 Set blob type at destination | `/BlobType:<option>` Options: page, block, append | `--blob-type string`
 Use specified block size | `/BlockSizeInMb:<block-size-in-mb>` | `--block-size-mb float`
@@ -138,6 +138,7 @@ The latest version that supports queues is AzCopy 8.1.
 ### What is different between the job management (how to resume jobs in both use examples)?
 In v8, you can rerun the same command from before and answer the prompt.
 In v10, you can have a job sub group where you can resume with job id.
+For more information, please visit [this](https://docs.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-jobs-resume) page
 
 ### How can I figure out which files failed?
 
