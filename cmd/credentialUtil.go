@@ -149,6 +149,9 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 	}
 
 	checkPublic := func() (isPublicResource bool) {
+		if !canBePublic { // Cannot possibly be public - like say a destination EP
+			return false
+		}
 		p := azblob.NewPipeline(
 			azblob.NewAnonymousCredential(),
 			azblob.PipelineOptions{
@@ -561,7 +564,9 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo) (credType common.
 		raw.fromTo == common.EFromTo.BlobFSTrash() ||
 		raw.fromTo == common.EFromTo.FileTrash():
 		// For to Trash direction, use source as resource URL
-		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, raw.sourceSAS, true)
+		// Also, by setting isSource=false we inform getCredentialTypeForLocation() that resource
+		// being deleted cannot be public.
+		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, raw.sourceSAS, false)
 	case raw.fromTo.From().IsRemote() && raw.fromTo.To().IsLocal():
 		// we authenticate to the source.
 		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, raw.sourceSAS, true)
