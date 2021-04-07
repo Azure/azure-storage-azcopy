@@ -65,6 +65,7 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ManagedIdentityClientID(),
 	EEnvironmentVariable.ManagedIdentityObjectID(),
 	EEnvironmentVariable.ManagedIdentityResourceString(),
+	EEnvironmentVariable.UploadTryTimeout(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
@@ -322,5 +323,12 @@ func (EnvironmentVariable) UserAgentPrefix() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_USER_AGENT_PREFIX",
 		Description: "Add a prefix to the default AzCopy User Agent, which is used for telemetry purposes. A space is automatically inserted.",
+	}
+}
+
+func (EnvironmentVariable) UploadTryTimeout() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_UPLOAD_TRY_TIMEOUT",
+		Description: "Set time (in minutes) for how long AzCopy should try to upload files before AzCopy times out.",
 	}
 }
