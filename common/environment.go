@@ -66,6 +66,7 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ManagedIdentityObjectID(),
 	EEnvironmentVariable.ManagedIdentityResourceString(),
 	EEnvironmentVariable.UploadTryTimeout(),
+	EEnvironmentVariable.DisableSyslog(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
@@ -330,5 +331,13 @@ func (EnvironmentVariable) UploadTryTimeout() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_UPLOAD_TRY_TIMEOUT",
 		Description: "Set time (in minutes) for how long AzCopy should try to upload files before AzCopy times out.",
+	}
+}
+func (EnvironmentVariable) DisableSyslog() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_DISABLE_SYSLOG",
+		DefaultValue: "false",
+		Description: "Disables logging in Syslog or Windows Event Logger. By default we log to these channels. " +
+			"However, to reduce the noise in Syslog/Windows Event Log, consider setting this environment variable to true.",
 	}
 }
