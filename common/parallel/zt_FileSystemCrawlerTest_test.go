@@ -88,11 +88,10 @@ func (s *fileSystemCrawlerSuite) TestParallelEnumerationFindsTheRightFiles(c *ch
 		}
 	}
 	// assert that everything has been removed now
-	// TODO something went wrong here but it's not us. Master branch also fails now.
-	//for key := range parallelResults {
-	//	c.Error("unexpected extra " + key)
-	//	c.Fail()
-	//}
+	for key := range parallelResults {
+		c.Error("unexpected extra " + key)
+		c.Fail()
+	}
 }
 
 func (s *fileSystemCrawlerSuite) TestParallelEnumerationGetsTheRightFileInfo_NormalStat(c *chk.C) {
