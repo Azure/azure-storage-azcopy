@@ -98,8 +98,8 @@ func newJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	jobPartProgressCh := make(chan jobPartProgressInfo)
 	jstm.respChan = make(chan common.ListJobSummaryResponse)
 	jstm.listReq = make(chan bool)
-	jstm.partCreated = make(chan jobPartCreatedMsg)
-	jstm.xferDone = make(chan xferDoneMsg)
+	jstm.partCreated = make(chan jobPartCreatedMsg, 100)
+	jstm.xferDone = make(chan xferDoneMsg, 1000)
 
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
 		httpClient:                    NewAzcopyHTTPClient(concurrency.MaxIdleConnections),

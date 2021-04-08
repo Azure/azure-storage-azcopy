@@ -417,6 +417,10 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	}
 
 	js := jm.ListJobSummary()
+	js.Timestamp = time.Now().UTC()
+	js.JobID = jm.JobID()
+	js.ErrorMsg = ""
+
 	part0, ok := jm.JobPartMgr(0)
 	if !ok {
 		return js
