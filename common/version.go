@@ -1,6 +1,6 @@
 package common
 
-const AzcopyVersion = "10.9.0"
+const AzcopyVersion = "10.10.0-preview-include-dir-stub"
 const UserAgent = "AzCopy/" + AzcopyVersion
 const S3ImportUserAgent = "S3Import " + UserAgent
 const GCPImportUserAgent = "GCPImport " + UserAgent
