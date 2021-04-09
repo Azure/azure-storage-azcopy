@@ -77,7 +77,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		return err
 	}
 
-	credentialInfo, _, err := getCredentialInfoForLocation(ctx, cookedArgs.resourceLocation, resourceStringParts.Value, resourceStringParts.SAS, false)
+	credentialInfo, _, err := getCredentialInfoForLocation(ctx, cookedArgs.resourceLocation, resourceStringParts.Value, resourceStringParts.SAS, false, common.CpkOptions{})
 	if err != nil {
 		return err
 	}

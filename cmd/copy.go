@@ -146,6 +146,15 @@ type rawCopyCmdArgs struct {
 
 	// whether to include blobs that have metadata 'hdi_isfolder = true'
 	includeDirectoryStubs bool
+
+	// Optional flag to encrypt user data with user provided key.
+	// Key is provide in the REST request itself
+	// Provided key (EncryptionKey and EncryptionKeySHA256) and its hash will be fetched from environment variables
+	// Set EncryptionAlgorithm = "AES256" by default.
+	cpkInfo bool
+	// Key is present in AzureKeyVault and Azure KeyVault is linked with storage account.
+	// Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data
+	cpkScopeInfo string
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -524,6 +533,38 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			cooked.s2sPreserveBlobTags = raw.s2sPreserveBlobTags
 		}
 	}
+
+	// Setting CPK-N
+	cpkOptions := common.CpkOptions{}
+	// Setting CPK-N
+	if raw.cpkScopeInfo != "" {
+		if raw.cpkInfo {
+			return cooked, errors.New("cannot use both cpk-by-name and cpk-by-value at the same time")
+		}
+		cpkOptions.CpkScopeInfo = raw.cpkScopeInfo
+	}
+
+	// Setting CPK-V
+	// Get the key (EncryptionKey and EncryptionKeySHA256) value from environment variables when required.
+	cpkOptions.CpkInfo = raw.cpkInfo
+
+	if cpkOptions.CpkScopeInfo != "" || cpkOptions.CpkInfo {
+		// We only support transfer from source encrypted by user key when user wishes to download.
+		// Due to service limitation, S2S transfer is not supported for source encrypted by user key.
+		if cooked.fromTo.IsDownload() {
+			glcm.Info("Client Provided Key (CPK) for encryption/decryption is provided for download scenario. " +
+				"Assuming source is encrypted.")
+			cpkOptions.IsSourceEncrypted = true
+		}
+
+		// TODO: Remove these warnings once service starts supporting it
+		if cooked.blockBlobTier != common.EBlockBlobTier.None() || cooked.pageBlobTier != common.EPageBlobTier.None() {
+			glcm.Info("Tier is provided by user explicitly. Ignoring it because Azure Service currently does" +
+				" not support setting tier when client provided keys are involved.")
+		}
+	}
+
+	cooked.cpkOptions = cpkOptions
 
 	// Make sure the given input is the one of the enums given by the blob SDK
 	err = cooked.deleteSnapshotsOption.Parse(raw.deleteSnapshotsOption)
@@ -1012,6 +1053,8 @@ type cookedCopyCmdArgs struct {
 
 	// whether to include blobs that have metadata 'hdi_isfolder = true'
 	includeDirectoryStubs bool
+
+	cpkOptions common.CpkOptions
 }
 
 func (cca *cookedCopyCmdArgs) isRedirection() bool {
@@ -1069,7 +1112,7 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	// The isPublic flag is useful in S2S transfers but doesn't much matter for download. Fortunately, no S2S happens here.
 	// This means that if there's auth, there's auth. We're happy and can move on.
 	// getCredentialInfoForLocation also populates oauth token fields... so, it's very easy.
-	credInfo, _, err := getCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, true)
+	credInfo, _, err := getCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, true, cca.cpkOptions)
 
 	if err != nil {
 		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
@@ -1089,7 +1132,11 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	// step 3: start download
 	blobURL := azblob.NewBlobURL(*u, p)
-	blobStream, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
+	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
+	if cca.cpkOptions.IsSourceEncrypted {
+		clientProvidedKey = common.GetClientProvidedKey(cca.cpkOptions)
+	}
+	blobStream, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, clientProvidedKey)
 	if err != nil {
 		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
 	}
@@ -1115,7 +1162,7 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// getCredentialInfoForLocation populates oauth token fields... so, it's very easy.
-	credInfo, _, err := getCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, false)
+	credInfo, _, err := getCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, false, cca.cpkOptions)
 
 	if err != nil {
 		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
@@ -1161,7 +1208,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		destination:    cca.destination.Value,
 		sourceSAS:      cca.source.SAS,
 		destinationSAS: cca.destination.SAS,
-	}); err != nil {
+	}, cca.cpkOptions); err != nil {
 		return err
 	}
 
@@ -1717,6 +1764,13 @@ func init() {
 	// so properties can be get in parallel, at same time no additional go routines are created for this specific job.
 	// The usage of this hidden flag is to provide fallback to traditional behavior, when service supports returning full properties during list.
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true, "get S3 objects' or Azure files' properties in backend, if properties need to be accessed. Properties need to be accessed if s2s-preserve-properties is true, and in certain other cases where we need the properties for modification time checks or MD5 checks")
+
+	// Public Documentation: https://docs.microsoft.com/en-us/azure/storage/blobs/encryption-customer-provided-keys
+	// Clients making requests against Azure Blob storage have the option to provide an encryption key on a per-request basis.
+	// Including the encryption key on the request provides granular control over encryption settings for Blob storage operations.
+	// Customer-provided keys can be stored in Azure Key Vault or in another key store linked to storage account.
+	cpCmd.PersistentFlags().StringVar(&raw.cpkScopeInfo, "cpk-by-name", "", "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data")
+	cpCmd.PersistentFlags().BoolVar(&raw.cpkInfo, "cpk-by-value", false, "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key and its hash will be fetched from environment variables")
 
 	// permanently hidden
 	// Hide the list-of-files flag since it is implemented only for Storage Explorer.

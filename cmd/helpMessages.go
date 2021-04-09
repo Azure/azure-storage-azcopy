@@ -253,7 +253,9 @@ const listCmdShortDescription = "List the entities in a given resource"
 
 const listCmdLongDescription = `List the entities in a given resource. Blob, Files, and ADLS Gen 2 containers, folders, and accounts are supported.`
 
-const listCmdExample = "azcopy list [containerURL]"
+const listCmdExample = "azcopy list [containerURL] --properties [semicolon(;) separated list of attributes " +
+	"(LastModifiedTime, VersionId, BlobType, BlobAccessTier, ContentType, ContentEncoding, LeaseState, LeaseDuration, LeaseStatus) " +
+	"enclosed in double quotes (\")]"
 
 // ===================================== LOGIN COMMAND ===================================== //
 const loginCmdShortDescription = "Log in to Azure Active Directory (AD) to access Azure Storage resources."

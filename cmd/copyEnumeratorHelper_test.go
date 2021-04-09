@@ -58,6 +58,6 @@ func (s *copyEnumeratorHelperTestSuite) TestAddTransferPathRootsTrimmed(c *chk.C
 
 	// assert
 	c.Assert(err, chk.IsNil)
-	c.Assert(request.Transfers[0].Source, chk.Equals, "c.txt")
-	c.Assert(request.Transfers[0].Destination, chk.Equals, "c.txt")
+	c.Assert(request.Transfers.List[0].Source, chk.Equals, "c.txt")
+	c.Assert(request.Transfers.List[0].Destination, chk.Equals, "c.txt")
 }
