@@ -37,7 +37,7 @@ func (i *interceptor) intercept(cmd common.RpcCmd, request interface{}, response
 	case common.ERpcCmd.CopyJobPartOrder():
 		// cache the transfers
 		copyRequest := *request.(*common.CopyJobPartOrderRequest)
-		i.transfers = append(i.transfers, copyRequest.Transfers...)
+		i.transfers = append(i.transfers, copyRequest.Transfers.List...)
 		i.lastRequest = request
 
 		// mock the result

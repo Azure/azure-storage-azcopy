@@ -66,6 +66,8 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ManagedIdentityObjectID(),
 	EEnvironmentVariable.ManagedIdentityResourceString(),
 	EEnvironmentVariable.UploadTryTimeout(),
+	EEnvironmentVariable.CPKEncryptionKey(),
+	EEnvironmentVariable.CPKEncryptionKeySHA256(),
 	EEnvironmentVariable.DisableSyslog(),
 }
 
@@ -333,6 +335,15 @@ func (EnvironmentVariable) UploadTryTimeout() EnvironmentVariable {
 		Description: "Set time (in minutes) for how long AzCopy should try to upload files for each request before AzCopy times out.",
 	}
 }
+
+func (EnvironmentVariable) CPKEncryptionKey() EnvironmentVariable {
+	return EnvironmentVariable{Name: "CPK_ENCRYPTION_KEY", Hidden: true}
+}
+
+func (EnvironmentVariable) CPKEncryptionKeySHA256() EnvironmentVariable {
+	return EnvironmentVariable{Name: "CPK_ENCRYPTION_KEY_SHA256", Hidden: false}
+}
+
 func (EnvironmentVariable) DisableSyslog() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:         "AZCOPY_DISABLE_SYSLOG",

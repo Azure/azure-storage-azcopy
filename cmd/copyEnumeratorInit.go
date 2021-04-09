@@ -38,7 +38,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	var isPublic bool
 	var err error
 
-	if srcCredInfo, isPublic, err = getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true); err != nil {
+	if srcCredInfo, isPublic, err = getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true, cca.cpkOptions); err != nil {
 		return nil, err
 		// If S2S and source takes OAuthToken as its cred type (OR) source takes anonymous as its cred type, but it's not public and there's no SAS
 	} else if cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() &&
@@ -48,6 +48,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource")
 	}
 
+	jobPartOrder.CpkOptions = cca.cpkOptions
 	jobPartOrder.PreserveSMBPermissions = cca.preserveSMBPermissions
 	jobPartOrder.PreserveSMBInfo = cca.preserveSMBInfo
 
@@ -59,14 +60,16 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		(cca.fromTo.From() == common.ELocation.File() && !cca.fromTo.To().IsRemote()) || // If download, we still need LMT and MD5 from files.
 		(cca.fromTo.From() == common.ELocation.File() && cca.fromTo.To().IsRemote() && (cca.s2sSourceChangeValidation || cca.includeAfter != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise if we are using includeAfter, which requires LMTs.
 		(cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() && cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
-	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && !getRemoteProperties && cca.s2sGetPropertiesInBackend     // Infer GetProperties if GetPropertiesInBackend is enabled.
+	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
 	jobPartOrder.S2SSourceChangeValidation = cca.s2sSourceChangeValidation
 	jobPartOrder.DestLengthValidation = cca.CheckLength
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
 	jobPartOrder.S2SPreserveBlobTags = cca.s2sPreserveBlobTags
 
-	traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties,
-		cca.includeDirectoryStubs, func(common.EntityType) {}, cca.listOfVersionIDs, cca.s2sPreserveBlobTags, cca.logVerbosity.ToPipelineLogLevel())
+	traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo,
+		&cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties,
+		cca.includeDirectoryStubs, func(common.EntityType) {}, cca.listOfVersionIDs,
+		cca.s2sPreserveBlobTags, cca.logVerbosity.ToPipelineLogLevel(), cca.cpkOptions)
 
 	if err != nil {
 		return nil, err
@@ -284,12 +287,13 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	if dstCredInfo, _, err = getCredentialInfoForLocation(*ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false); err != nil {
+	if dstCredInfo, _, err = getCredentialInfoForLocation(*ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false, cca.cpkOptions); err != nil {
 		return false
 	}
 
-	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false,
-		false, false, func(common.EntityType) {}, cca.listOfVersionIDs, false, pipeline.LogNone)
+	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil,
+		nil, false, false, false,
+		func(common.EntityType) {}, cca.listOfVersionIDs, false, pipeline.LogNone, cca.cpkOptions)
 
 	if err != nil {
 		return false
@@ -367,7 +371,7 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 
 	// 3minutes is enough time to list properties of a container, and create new if it does not exist.
 	ctx, _ := context.WithTimeout(parentCtx, time.Minute * 3)
-	if dstCredInfo, _, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false); err != nil {
+	if dstCredInfo, _, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false, cca.cpkOptions); err != nil {
 		return err
 	}
 

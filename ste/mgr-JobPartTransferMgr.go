@@ -20,7 +20,7 @@ import (
 type IJobPartTransferMgr interface {
 	FromTo() common.FromTo
 	Info() TransferInfo
-	ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags)
+	ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags, cpkOptions common.CpkOptions)
 	LastModifiedTime() time.Time
 	PreserveLastModifiedTime() (time.Time, bool)
 	ShouldPutMd5() bool
@@ -87,9 +87,13 @@ type IJobPartTransferMgr interface {
 	FolderDeletionManager() common.FolderDeletionManager
 	GetDestinationRoot() string
 	ShouldInferContentType() bool
+	CpkInfo() common.CpkInfo
+	CpkScopeInfo() common.CpkScopeInfo
+	IsSourceEncrypted() bool
 }
 
 type TransferInfo struct {
+	JobID 				   common.JobID
 	BlockSize              int64
 	Source                 string
 	SourceSize             int64
@@ -326,6 +330,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	}
 
 	jptm.transferInfo = &TransferInfo{
+		JobID: 							plan.JobID,
 		BlockSize:                      blockSize,
 		Source:                         src,
 		SourceSize:                     sourceSize,
@@ -441,7 +446,7 @@ func (jptm *jobPartTransferMgr) ScheduleChunks(chunkFunc chunkFunc) {
 	jptm.jobPartMgr.ScheduleChunks(chunkFunc)
 }
 
-func (jptm *jobPartTransferMgr) ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags) {
+func (jptm *jobPartTransferMgr) ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags, cpkOptions common.CpkOptions) {
 	return jptm.jobPartMgr.(*jobPartMgr).resourceDstData(jptm.Info().Source, dataFileToXfer)
 }
 
@@ -478,6 +483,18 @@ func (jptm *jobPartTransferMgr) BlobTypeOverride() common.BlobType {
 
 func (jptm *jobPartTransferMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {
 	return jptm.jobPartMgr.BlobTiers()
+}
+
+func (jptm *jobPartTransferMgr) CpkInfo() common.CpkInfo {
+	return jptm.jobPartMgr.CpkInfo()
+}
+
+func (jptm *jobPartTransferMgr) CpkScopeInfo() common.CpkScopeInfo {
+	return jptm.jobPartMgr.CpkScopeInfo()
+}
+
+func (jptm *jobPartTransferMgr) IsSourceEncrypted() bool {
+	return jptm.jobPartMgr.IsSourceEncrypted()
 }
 
 // JobHasLowFileCount returns an estimate of whether we only have a very small number of files in the overall job
@@ -862,6 +879,15 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 	if atomic.SwapUint32(&jptm.atomicCompletionIndicator, 1) != 0 {
 		panic("cannot report the same transfer done twice")
 	}
+
+	//Update Status Manager
+	jptm.jobPartMgr.SendXferDoneMsg(xferDoneMsg{Src: jptm.Info().Source,
+		Dst:                jptm.Info().Destination,
+		IsFolderProperties: jptm.Info().IsFolderPropertiesTransfer(),
+		TransferStatus:     jptm.jobPartPlanTransfer.TransferStatus(),
+		TransferSize:       uint64(jptm.Info().SourceSize),
+		ErrorCode:          jptm.ErrorCode(),
+	})
 
 	return jptm.jobPartMgr.ReportTransferDone(jptm.jobPartPlanTransfer.TransferStatus())
 }
