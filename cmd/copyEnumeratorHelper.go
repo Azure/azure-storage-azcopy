@@ -2,10 +2,11 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/ste"
 	"math/rand"
 	"strings"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/ste"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -22,8 +23,8 @@ func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer
 	// dispatch the transfers once the number reaches NumOfFilesPerDispatchJobPart
 	// we do this so that in the case of large transfer, the transfer engine can get started
 	// while the frontend is still gathering more transfers
-	if len(e.Transfers) == NumOfFilesPerDispatchJobPart {
-		shuffleTransfers(e.Transfers)
+	if len(e.Transfers.List) == NumOfFilesPerDispatchJobPart {
+		shuffleTransfers(e.Transfers.List)
 		resp := common.CopyJobPartOrderResponse{}
 
 		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
@@ -35,13 +36,22 @@ func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer
 		if e.PartNum == 0 {
 			cca.waitUntilJobCompletion(false)
 		}
-		e.Transfers = []common.CopyTransfer{}
+		e.Transfers = common.Transfers{}
 		e.PartNum++
 	}
 
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
-	e.Transfers = append(e.Transfers, transfer)
+	{
+		//Should this block be a function?
+		e.Transfers.List = append(e.Transfers.List, transfer)
+		e.Transfers.TotalSizeInBytes += uint64(transfer.SourceSize)
+		if transfer.EntityType == common.EEntityType.File() {
+			e.Transfers.FileTransferCount++
+		} else {
+			e.Transfers.FolderTransferCount++
+		}
+	}
 
 	return nil
 }
@@ -56,7 +66,7 @@ func shuffleTransfers(transfers []common.CopyTransfer) {
 // we need to send a last part with isFinalPart set to true, along with whatever transfers that still haven't been sent
 // dispatchFinalPart sends a last part with isFinalPart set to true, along with whatever transfers that still haven't been sent.
 func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *cookedCopyCmdArgs) error {
-	shuffleTransfers(e.Transfers)
+	shuffleTransfers(e.Transfers.List)
 	e.IsFinalPart = true
 	var resp common.CopyJobPartOrderResponse
 	Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)

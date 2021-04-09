@@ -57,6 +57,8 @@ type IJobPartMgr interface {
 	CpkInfo() common.CpkInfo
 	CpkScopeInfo() common.CpkScopeInfo
 	IsSourceEncrypted() bool
+  /* Status Manager Updates */
+	SendXferDoneMsg(msg xferDoneMsg)
 }
 
 type serviceAPIVersionOverride struct{}
@@ -778,6 +780,11 @@ func (jpm *jobPartMgr) ChunkStatusLogger() common.ChunkStatusLogger {
 
 func (jpm *jobPartMgr) SourceProviderPipeline() pipeline.Pipeline {
 	return jpm.sourceProviderPipeline
+}
+
+/* Status update messages should not fail */
+func (jpm *jobPartMgr) SendXferDoneMsg(msg xferDoneMsg) {
+	jpm.jobMgr.SendXferDoneMsg(msg)
 }
 
 // TODO: Can we delete this method?
