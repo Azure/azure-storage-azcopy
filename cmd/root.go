@@ -82,6 +82,8 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
+		glcm.SetForceLogging()
+
 		// warn Windows users re quoting (since our docs all use single quotes, but CMD needs double)
 		// Single ones just come through as part of the args, in CMD.
 		// Ideally, for usability, we'd ideally have this info come back in the result of url.Parse. But that's hard to

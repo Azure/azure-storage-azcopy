@@ -22,9 +22,8 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-
 	"github.com/Azure/azure-storage-azcopy/common"
+	"os"
 )
 
 // the interceptor gathers/saves the job part orders for validation
@@ -127,6 +126,12 @@ func (*mockedLifecycleManager) EnableInputWatcher()                 {}
 func (*mockedLifecycleManager) EnableCancelFromStdIn()              {}
 func (*mockedLifecycleManager) AddUserAgentPrefix(userAgent string) string {
 	return userAgent
+}
+
+func (*mockedLifecycleManager) SetForceLogging() {}
+
+func (*mockedLifecycleManager) IsForceLoggingDisabled() bool {
+	return false
 }
 
 func (*mockedLifecycleManager) E2EAwaitContinue() {
