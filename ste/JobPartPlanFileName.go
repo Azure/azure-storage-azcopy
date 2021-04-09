@@ -189,6 +189,9 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			MetadataLength:           uint16(len(order.BlobAttributes.Metadata)),
 			BlockSize:                blockSize,
 			BlobTagsLength:           uint16(len(order.BlobAttributes.BlobTagsString)),
+			CpkInfo:                  order.CpkOptions.CpkInfo,
+			CpkScopeInfoLength:       uint16(len(order.CpkOptions.CpkScopeInfo)),
+			IsSourceEncrypted:        order.CpkOptions.IsSourceEncrypted,
 		},
 		DstLocalData: JobPartPlanDstLocal{
 			PreserveLastModifiedTime: order.BlobAttributes.PreserveLastModifiedTime,
@@ -218,6 +221,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	copy(jpph.DstBlobData.CacheControl[:], order.BlobAttributes.CacheControl)
 	copy(jpph.DstBlobData.Metadata[:], order.BlobAttributes.Metadata)
 	copy(jpph.DstBlobData.BlobTags[:], order.BlobAttributes.BlobTagsString)
+	copy(jpph.DstBlobData.CpkScopeInfo[:], order.CpkOptions.CpkScopeInfo)
 
 	eof += writeValue(file, &jpph)
 
