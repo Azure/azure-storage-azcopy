@@ -329,6 +329,6 @@ func (EnvironmentVariable) UserAgentPrefix() EnvironmentVariable {
 func (EnvironmentVariable) UploadTryTimeout() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_UPLOAD_TRY_TIMEOUT",
-		Description: "Set time (in minutes) for how long AzCopy should try to upload files before AzCopy times out.",
+		Description: "Set time (in minutes) for how long AzCopy should try to upload files for each request before AzCopy times out.",
 	}
 }

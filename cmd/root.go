@@ -63,7 +63,12 @@ var rootCmd = &cobra.Command{
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		ste.UploadTryTimeout, _ = time.ParseDuration(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.UploadTryTimeout()) + "m")
+		if glcm.GetEnvironmentVariable(common.EEnvironmentVariable.UploadTryTimeout()) != "" {
+			timeout, err := time.ParseDuration(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.UploadTryTimeout()) + "m")
+			if err == nil {
+				ste.UploadTryTimeout = timeout
+			}
+		}
 		glcm.E2EEnableAwaitAllowOpenFiles(azcopyAwaitAllowOpenFiles)
 		if azcopyAwaitContinue {
 			glcm.E2EAwaitContinue()
