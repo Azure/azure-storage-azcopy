@@ -134,7 +134,7 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 // 4. If there is OAuth token info passed from env var, indicating using token credential. (Note: this is only for testing)
 // 5. Otherwise use anonymous credential.
 // The implementation logic follows above rule, and adjusts sequence to save web request(for verifying public resource).
-func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePublic bool, standaloneSAS bool) (common.CredentialType, bool, error) {
+func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePublic bool, standaloneSAS bool, cpkOptions common.CpkOptions) (common.CredentialType, bool, error) {
 	resourceURL, err := url.Parse(blobResourceURL)
 
 	if err != nil {
@@ -149,6 +149,9 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 	}
 
 	checkPublic := func() (isPublicResource bool) {
+		if !canBePublic { // Cannot possibly be public - like say a destination EP
+			return false
+		}
 		p := azblob.NewPipeline(
 			azblob.NewAnonymousCredential(),
 			azblob.PipelineOptions{
@@ -185,9 +188,13 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 		}
 
 		if !isContainer {
+			clientProvidedKey := azblob.ClientProvidedKeyOptions{}
+			if cpkOptions.IsSourceEncrypted {
+				clientProvidedKey = common.GetClientProvidedKey(cpkOptions)
+			}
 			// Scenario 3: When resourceURL points to a blob
 			blobURL := azblob.NewBlobURL(*resourceURL, p)
-			if _, err := blobURL.GetProperties(ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{}); err == nil {
+			if _, err := blobURL.GetProperties(ctx, azblob.BlobAccessConditions{}, clientProvidedKey); err == nil {
 				return true
 			}
 		}
@@ -462,11 +469,11 @@ func logAuthType(ct common.CredentialType, location common.Location, isSource bo
 
 var authMessagesAlreadyLogged = &sync.Map{}
 
-func getCredentialTypeForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool) (credType common.CredentialType, isPublic bool, err error) {
-	return doGetCredentialTypeForLocation(ctx, location, resource, resourceSAS, isSource, GetCredTypeFromEnvVar)
+func getCredentialTypeForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool, cpkOptions common.CpkOptions) (credType common.CredentialType, isPublic bool, err error) {
+	return doGetCredentialTypeForLocation(ctx, location, resource, resourceSAS, isSource, GetCredTypeFromEnvVar, cpkOptions)
 }
 
-func doGetCredentialTypeForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool, getForcedCredType func() common.CredentialType) (credType common.CredentialType, isPublic bool, err error) {
+func doGetCredentialTypeForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool, getForcedCredType func() common.CredentialType, cpkOptions common.CpkOptions) (credType common.CredentialType, isPublic bool, err error) {
 	if resourceSAS != "" {
 		credType = common.ECredentialType.Anonymous()
 	} else if credType = getForcedCredType(); credType == common.ECredentialType.Unknown() || location == common.ELocation.S3() || location == common.ELocation.GCP() {
@@ -474,7 +481,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		case common.ELocation.Local(), common.ELocation.Benchmark():
 			credType = common.ECredentialType.Anonymous()
 		case common.ELocation.Blob():
-			credType, isPublic, err = getBlobCredentialType(ctx, resource, isSource, resourceSAS != "")
+			credType, isPublic, err = getBlobCredentialType(ctx, resource, isSource, resourceSAS != "", cpkOptions)
 			if azErr, ok := err.(common.AzError); ok && azErr.Equals(common.EAzError.LoginCredMissing()) {
 				_, autoLoginErr := GetOAuthTokenManagerInstance()
 				if autoLoginErr == nil {
@@ -525,10 +532,10 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	return
 }
 
-func getCredentialInfoForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool) (credInfo common.CredentialInfo, isPublic bool, err error) {
+func getCredentialInfoForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool, cpkOptions common.CpkOptions) (credInfo common.CredentialInfo, isPublic bool, err error) {
 
 	// get the type
-	credInfo.CredentialType, isPublic, err = getCredentialTypeForLocation(ctx, location, resource, resourceSAS, isSource)
+	credInfo.CredentialType, isPublic, err = getCredentialTypeForLocation(ctx, location, resource, resourceSAS, isSource, cpkOptions)
 
 	// flesh out the rest of the fields, for those types that require it
 	if credInfo.CredentialType == common.ECredentialType.OAuthToken() {
@@ -551,20 +558,22 @@ func getCredentialInfoForLocation(ctx context.Context, location common.Location,
 // for current command.
 // TODO: consider replace with calls to getCredentialInfoForLocation
 // (right now, we have tweaked this to be a wrapper for that function, but really should remove this one totally)
-func getCredentialType(ctx context.Context, raw rawFromToInfo) (credType common.CredentialType, err error) {
+func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common.CpkOptions) (credType common.CredentialType, err error) {
 
 	switch {
 	case raw.fromTo.To().IsRemote():
 		// we authenticate to the destination. Source is assumed to be SAS, or public, or a local resource
-		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.To(), raw.destination, raw.destinationSAS, false)
+		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.To(), raw.destination, raw.destinationSAS, false, common.CpkOptions{})
 	case raw.fromTo == common.EFromTo.BlobTrash() ||
 		raw.fromTo == common.EFromTo.BlobFSTrash() ||
 		raw.fromTo == common.EFromTo.FileTrash():
 		// For to Trash direction, use source as resource URL
-		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, raw.sourceSAS, true)
+		// Also, by setting isSource=false we inform getCredentialTypeForLocation() that resource
+		// being deleted cannot be public.
+		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, raw.sourceSAS, true, cpkOptions)
 	case raw.fromTo.From().IsRemote() && raw.fromTo.To().IsLocal():
 		// we authenticate to the source.
-		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, raw.sourceSAS, true)
+		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, raw.sourceSAS, true, cpkOptions)
 	default:
 		credType = common.ECredentialType.Anonymous()
 		// Log the FromTo types which getCredentialType hasn't solved, in case of miss-use.
