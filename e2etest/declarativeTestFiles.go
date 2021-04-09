@@ -125,7 +125,7 @@ func (op objectProperties) DeepCopy() objectProperties {
 	if op.contentHeaders != nil {
 		ret.contentHeaders = op.contentHeaders.DeepCopy()
 	}
-	
+
 	ret.nameValueMetadata = make(map[string]string)
 	for k, v := range op.nameValueMetadata {
 		ret.nameValueMetadata[k] = v
@@ -320,7 +320,7 @@ func (tf testFiles) DeepCopy() testFiles {
 	return ret
 }
 
-func (*testFiles) copyList(src []interface{})  ([]interface{}) {
+func (*testFiles) copyList(src []interface{}) []interface{} {
 	var ret []interface{}
 	for _, r := range src {
 		if aTestObj, ok := r.(*testObject); ok {

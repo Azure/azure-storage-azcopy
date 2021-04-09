@@ -205,7 +205,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	}
 
 	// Treat our check as a destination because the isSource flag was designed for S2S transfers.
-	if credentialInfo, _, err = getCredentialInfoForLocation(ctx, cooked.location, source.Value, source.SAS, false); err != nil {
+	if credentialInfo, _, err = getCredentialInfoForLocation(ctx, cooked.location, source.Value, source.SAS, false, common.CpkOptions{}); err != nil {
 		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
 	} else if cooked.location == cooked.location.File() && source.SAS == "" {
 		return errors.New("azure files requires a SAS token for authentication")
@@ -218,8 +218,9 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		}
 	}
 
-	traverser, err := initResourceTraverser(source, cooked.location, &ctx, &credentialInfo, nil, nil, true, false,
-		false, func(common.EntityType) {}, nil, false, pipeline2.LogNone)
+	traverser, err := initResourceTraverser(source, cooked.location, &ctx, &credentialInfo, nil, nil,
+		true, false, false, func(common.EntityType) {},
+		nil, false, pipeline2.LogNone, common.CpkOptions{})
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())
