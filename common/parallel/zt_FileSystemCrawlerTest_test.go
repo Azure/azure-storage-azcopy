@@ -53,7 +53,7 @@ func (s *fileSystemCrawlerSuite) TestParallelEnumerationFindsTheRightFiles(c *ch
 	_ = filepath.Walk(dir, func(path string, _ os.FileInfo, fileErr error) error {
 		if fileErr == nil {
 			stdResults[path] = struct{}{}
-		} else if strings.Contains(fileErr.Error(), "Access is denied") {
+		} else if strings.Contains(fileErr.Error(), "denied") {
 			stdAccessDenied[path] = struct{}{} // for a directory that cannot have _it's contents_ enumerated, filepath.Walk treats the directory as an error, whereas parallel.Walk returns a valid entry for the directory PLUS a separate error for trying to enumerate it
 		}
 		return nil

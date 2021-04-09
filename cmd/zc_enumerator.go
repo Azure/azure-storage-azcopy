@@ -82,6 +82,11 @@ type storedObject struct {
 	Metadata      common.Metadata
 	blobVersionID string
 	blobTags      common.BlobTags
+
+	// Lease information
+	leaseState    azblob.LeaseStateType
+	leaseStatus   azblob.LeaseStatusType
+	leaseDuration azblob.LeaseDurationType
 }
 
 func (s *storedObject) isMoreRecentThan(storedObject2 storedObject) bool {
@@ -204,6 +209,9 @@ type contentPropsProvider interface {
 type blobPropsProvider interface {
 	BlobType() azblob.BlobType
 	AccessTier() azblob.AccessTierType
+	LeaseStatus() azblob.LeaseStatusType
+	LeaseDuration() azblob.LeaseDurationType
+	LeaseState() azblob.LeaseStateType
 }
 
 // a constructor is used so that in case the storedObject has to change, the callers would get a compilation error
@@ -225,6 +233,10 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, en
 		blobAccessTier:     blobProps.AccessTier(),
 		Metadata:           meta,
 		containerName:      containerName,
+		// Additional lease properties. To be used in listing
+		leaseStatus:   blobProps.LeaseStatus(),
+		leaseState:    blobProps.LeaseState(),
+		leaseDuration: blobProps.LeaseDuration(),
 	}
 
 	// Folders don't have size, and root ones shouldn't have names in the storedObject. Ensure those rules are consistently followed

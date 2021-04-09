@@ -149,6 +149,9 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 	}
 
 	checkPublic := func() (isPublicResource bool) {
+		if !canBePublic { // Cannot possibly be public - like say a destination EP
+			return false
+		}
 		p := azblob.NewPipeline(
 			azblob.NewAnonymousCredential(),
 			azblob.PipelineOptions{
@@ -158,6 +161,9 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 					TryTimeout:    ste.UploadTryTimeout,
 					RetryDelay:    ste.UploadRetryDelay,
 					MaxRetryDelay: ste.UploadMaxRetryDelay,
+				},
+				RequestLog: azblob.RequestLogOptions{
+					SyslogDisabled: common.IsForceLoggingDisabled(),
 				},
 			})
 
@@ -323,7 +329,7 @@ type rawFromToInfo struct {
 }
 
 const trustedSuffixesNameAAD = "trusted-microsoft-suffixes"
-const trustedSuffixesAAD = "*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net"
+const trustedSuffixesAAD = "*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net;*.storage.azure.net"
 
 // checkAuthSafeForTarget checks our "implicit" auth types (those that pick up creds from the environment
 // or a prior login) to make sure they are only being used in places where we know those auth types are safe.
@@ -562,6 +568,8 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 		raw.fromTo == common.EFromTo.BlobFSTrash() ||
 		raw.fromTo == common.EFromTo.FileTrash():
 		// For to Trash direction, use source as resource URL
+		// Also, by setting isSource=false we inform getCredentialTypeForLocation() that resource
+		// being deleted cannot be public.
 		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, raw.sourceSAS, true, cpkOptions)
 	case raw.fromTo.From().IsRemote() && raw.fromTo.To().IsLocal():
 		// we authenticate to the source.
