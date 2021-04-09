@@ -557,7 +557,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			cpkOptions.IsSourceEncrypted = true
 		}
 
-		// TODO: Remove these warnings once service starts supporting it after Cobalt
+		// TODO: Remove these warnings once service starts supporting it
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() || cooked.pageBlobTier != common.EPageBlobTier.None() {
 			glcm.Info("Tier is provided by user explicitly. Ignoring it because Azure Service currently does" +
 				" not support setting tier when client provided keys are involved.")
