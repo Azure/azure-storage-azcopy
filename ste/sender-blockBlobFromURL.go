@@ -81,7 +81,7 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 		 * TODO: Find a better logic.
 		 */
 		setPutListNeed(&c.atomicPutListIndicator, putListNotNeeded)
-		return c.generateStartCopyBlobFromURL(id, blockIndex, adjustedChunkSize)
+		return c.generateStartPutBlobFromURL(id, blockIndex, adjustedChunkSize)
 
 	}
 	setPutListNeed(&c.atomicPutListIndicator, putListNeeded)
@@ -178,7 +178,7 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 	})
 }
 
-func (c *urlToBlockBlobCopier) generateStartCopyBlobFromURL(id common.ChunkID, blockIndex int32, adjustedChunkSize int64) chunkFunc {
+func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, blockIndex int32, adjustedChunkSize int64) chunkFunc {
 	return createSendToRemoteChunkFunc(c.jptm, id, func() {
 
 		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
@@ -189,11 +189,12 @@ func (c *urlToBlockBlobCopier) generateStartCopyBlobFromURL(id common.ChunkID, b
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
 
-		_, err := c.destBlockBlobURL.CopyFromURL(ctxWithLatestServiceVersion, c.srcURL, c.metadataToApply,
-			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil, azblob.DefaultAccessTier, nil)
+		_, err := c.destBlockBlobURL.PutBlobFromURL(ctxWithLatestServiceVersion, azblob.BlobHTTPHeaders{}, c.srcURL, c.metadataToApply,
+			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil, nil, azblob.DefaultAccessTier, nil,
+			azblob.ClientProvidedKeyOptions{})
 
 		if err != nil {
-			c.jptm.FailActiveSend("Copy Blob from URL", err)
+			c.jptm.FailActiveSend("Put Blob from URL", err)
 			return
 		}
 
