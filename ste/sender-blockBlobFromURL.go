@@ -184,6 +184,11 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 			return
 		}
 
+		if separateSetTagsRequired {
+			if _, err := c.destBlockBlobURL.SetTags(c.jptm.Context(), nil, nil, nil, c.blobTagsToApply); err != nil {
+				c.jptm.Log(pipeline.LogWarning, err.Error())
+			}
+		}
 	})
 }
 
