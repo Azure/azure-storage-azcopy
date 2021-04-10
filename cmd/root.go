@@ -50,6 +50,7 @@ var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
 var azcopyScanningLogger common.ILoggerResetable
 var azcopyCurrentJobID common.JobID
+
 // It's not pretty that this one is read directly by credential util.
 // But doing otherwise required us passing it around in many places, even though really
 // it can be thought of as an "ambient" property. That's the (weak?) justification for implementing
@@ -63,8 +64,8 @@ var rootCmd = &cobra.Command{
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if glcm.GetEnvironmentVariable(common.EEnvironmentVariable.UploadTryTimeout()) != "" {
-			timeout, err := time.ParseDuration(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.UploadTryTimeout()) + "m")
+		if glcm.GetEnvironmentVariable(common.EEnvironmentVariable.RequestTryTimeout()) != "" {
+			timeout, err := time.ParseDuration(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.RequestTryTimeout()) + "m")
 			if err == nil {
 				ste.UploadTryTimeout = timeout
 			}

@@ -65,7 +65,7 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ManagedIdentityClientID(),
 	EEnvironmentVariable.ManagedIdentityObjectID(),
 	EEnvironmentVariable.ManagedIdentityResourceString(),
-	EEnvironmentVariable.UploadTryTimeout(),
+	EEnvironmentVariable.RequestTryTimeout(),
 	EEnvironmentVariable.CPKEncryptionKey(),
 	EEnvironmentVariable.CPKEncryptionKeySHA256(),
 	EEnvironmentVariable.DisableSyslog(),
@@ -329,9 +329,9 @@ func (EnvironmentVariable) UserAgentPrefix() EnvironmentVariable {
 	}
 }
 
-func (EnvironmentVariable) UploadTryTimeout() EnvironmentVariable {
+func (EnvironmentVariable) RequestTryTimeout() EnvironmentVariable {
 	return EnvironmentVariable{
-		Name:        "AZCOPY_UPLOAD_TRY_TIMEOUT",
+		Name:        "AZCOPY_REQUEST_TRY_TIMEOUT",
 		Description: "Set time (in minutes) for how long AzCopy should try to upload files for each request before AzCopy times out.",
 	}
 }
