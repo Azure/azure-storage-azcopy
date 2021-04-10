@@ -149,13 +149,30 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 
 		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
 
+		// Create blob and finish.
+		if !ValidateTier(c.jptm, c.destBlobTier, c.destBlockBlobURL.BlobURL, c.jptm.Context()) {
+			c.destBlobTier = azblob.DefaultAccessTier
+		}
+
+		blobTags := c.blobTagsToApply
+		separateSetTagsRequired := separateSetTagsRequired(blobTags)
+		if separateSetTagsRequired || len(blobTags) == 0 {
+			blobTags = nil
+		}
+
+		// TODO: Remove this snippet once service starts supporting CPK with blob tier
+		destBlobTier := c.destBlobTier
+		if c.cpkToApply.EncryptionScope != nil || (c.cpkToApply.EncryptionKey != nil && c.cpkToApply.EncryptionKeySha256 != nil) {
+			destBlobTier = azblob.AccessTierNone
+		}
+
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
 
-		_, err := c.destBlockBlobURL.PutBlobFromURL(ctxWithLatestServiceVersion, azblob.BlobHTTPHeaders{}, c.srcURL, c.metadataToApply,
-			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil, nil, azblob.DefaultAccessTier, nil,
-			azblob.ClientProvidedKeyOptions{})
+		_, err := c.destBlockBlobURL.PutBlobFromURL(ctxWithLatestServiceVersion, c.headersToApply, c.srcURL, c.metadataToApply,
+			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil, nil, destBlobTier, blobTags,
+			c.cpkToApply)
 
 		if err != nil {
 			c.jptm.FailActiveSend("Put Blob from URL", err)
