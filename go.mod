@@ -1,4 +1,4 @@
-module github.com/Azure/azure-storage-azcopy
+module github.com/Azure/azure-storage-azcopy/v10
 
 require (
 	cloud.google.com/go/storage v1.8.0

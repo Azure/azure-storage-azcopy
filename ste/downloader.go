@@ -22,7 +22,7 @@ package ste
 
 import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // Abstraction of the methods needed to download files/blobs from a remote location

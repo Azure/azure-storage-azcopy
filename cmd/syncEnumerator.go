@@ -27,8 +27,8 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"sync/atomic"
 
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\

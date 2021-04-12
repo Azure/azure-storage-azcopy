@@ -23,7 +23,7 @@ package cmd
 import (
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 
 	chk "gopkg.in/check.v1"
 )
