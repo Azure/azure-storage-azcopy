@@ -1,6 +1,24 @@
 
 # Change Log
 
+## Version 10.10.0
+
+### New features
+1. Support sync for Local/Blob <-> Azure File.
+1. Download to temporary file path (.azDownload-[jobID]-[name]) before renaming to the original path.
+1. Support CPK by name and CPK by value.
+1. Offer knob to disable application logging (Syslog/Windows Event Log).
+1. Trust zonal DNS suffix for OAuth by default.
+1. Added include-directory-stub flag for the copy command, to allow copying of blobs with metadata of `hdi_isfolder:true`.
+1. Display more fields for the list command, please refer to the help message for example.
+1. Provide environment variable to set request try timeout, to allow faster retries.
+
+### Bug fixes
+1. Improve job progress updating mechanism to improve scalability for larger jobs.
+1. Time limit the container creation step, to avoid hanging and improve UX.
+1. Set SMB info/permission again after file upload and copy, to fully preserve the integrity of the permission string and last-write-time.
+1. Fixed module import problem for V10.
+
 ## Version 10.9.0
 
 ### New features
