@@ -1432,6 +1432,10 @@ func (csi CpkInfo) Marshal() (string, error) {
 //}
 
 func ToClientProvidedKeyOptions(cpkInfo CpkInfo, cpkScopeInfo CpkScopeInfo) azblob.ClientProvidedKeyOptions {
+	if (cpkInfo.EncryptionKey == nil || cpkInfo.EncryptionKeySha256 == nil) && cpkScopeInfo.EncryptionScope == nil {
+		return azblob.ClientProvidedKeyOptions{}
+	}
+
 	return azblob.ClientProvidedKeyOptions{
 		EncryptionKey:       cpkInfo.EncryptionKey,
 		EncryptionAlgorithm: azblob.EncryptionAlgorithmAES256,
