@@ -352,11 +352,11 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 			}
 
 			//Rename back to original name. At this point, we're sure the file is completely
-			//downloaded and not corrupt. Infact, post this point we should log errors and
-			//fail the transfer.
-			if !strings.EqualFold(info.Destination, common.Dev_Null) {
-				err := os.Rename(info.getTempDownloadPath(), info.Destination)
-				if  err != nil {
+			//downloaded and not corrupt. Infact, post this point we should only log errors and
+			//not fail the transfer.
+			if err == nil && !strings.EqualFold(info.Destination, common.Dev_Null) {
+				renameErr := os.Rename(info.getTempDownloadPath(), info.Destination)
+				if  renameErr != nil {
 					jptm.LogError(info.Destination, fmt.Sprintf(
 								  "Failed to rename. File at %s", info.getTempDownloadPath()), err)
 				}
