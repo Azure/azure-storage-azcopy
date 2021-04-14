@@ -32,8 +32,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
 )
@@ -64,7 +64,12 @@ var rootCmd = &cobra.Command{
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-
+		if glcm.GetEnvironmentVariable(common.EEnvironmentVariable.RequestTryTimeout()) != "" {
+			timeout, err := time.ParseDuration(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.RequestTryTimeout()) + "m")
+			if err == nil {
+				ste.UploadTryTimeout = timeout
+			}
+		}
 		glcm.E2EEnableAwaitAllowOpenFiles(azcopyAwaitAllowOpenFiles)
 		if azcopyAwaitContinue {
 			glcm.E2EAwaitContinue()
@@ -77,6 +82,8 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
+		glcm.SetForceLogging()
 
 		// warn Windows users re quoting (since our docs all use single quotes, but CMD needs double)
 		// Single ones just come through as part of the args, in CMD.

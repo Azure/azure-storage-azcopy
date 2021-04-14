@@ -25,11 +25,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
+
+const azcopyTempDownloadPrefix string = ".azDownload-%s-"
 
 // xfer.go requires just a single xfer function for the whole job.
 // This routine serves that role for downloads and redirects for each transfer to a file or folder implementation
@@ -163,9 +166,12 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		// Normal scenario, create the destination file as expected
 		// Use pseudo chunk id to allow our usual state tracking mechanism to keep count of how many
 		// file creations are running at any given instant, for perf diagnostics
+		// 
+		// We create the file to a temporary location with name .azcopy-<jobID>-<actualName> and then move it
+		// to correct name.
 		pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.CreateLocalFile())
-		dstFile, err = createDestinationFile(jptm, info.Destination, fileSize, writeThrough)
+		dstFile, err = createDestinationFile(jptm, info.getTempDownloadPath(), fileSize, writeThrough)
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 		if err != nil {
 			failFileCreation(err)
@@ -333,6 +339,28 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 			if err != nil {
 				jptm.FailActiveDownload("Checking MD5 hash", err)
 			}
+
+			// check length if enabled (except for dev null and decompression case, where that's impossible)
+			if info.DestLengthValidation && info.Destination != common.Dev_Null && !jptm.ShouldDecompress() {
+				fi, err := common.OSStat(info.getTempDownloadPath())
+
+				if err != nil {
+					jptm.FailActiveDownload("Download length check", err)
+				} else if fi.Size() != info.SourceSize {
+					jptm.FailActiveDownload("Download length check", errors.New("destination length did not match source length"))
+				}
+			}
+
+			//Rename back to original name. At this point, we're sure the file is completely
+			//downloaded and not corrupt. Infact, post this point we should only log errors and
+			//not fail the transfer.
+			if err == nil && !strings.EqualFold(info.Destination, common.Dev_Null) {
+				renameErr := os.Rename(info.getTempDownloadPath(), info.Destination)
+				if  renameErr != nil {
+					jptm.LogError(info.Destination, fmt.Sprintf(
+								  "Failed to rename. File at %s", info.getTempDownloadPath()), err)
+				}
+			}
 		}
 	}
 
@@ -340,17 +368,6 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 		// TODO: should we refactor to force this to accept jptm isLive as a parameter, to encourage it to be checked?
 		//  or should we redefine epilogue to be success-path only, and only call it in that case?
 		dl.Epilogue() // it can release resources here
-
-		// check length if enabled (except for dev null and decompression case, where that's impossible)
-		if jptm.IsLive() && info.DestLengthValidation && info.Destination != common.Dev_Null && !jptm.ShouldDecompress() {
-			fi, err := common.OSStat(info.Destination)
-
-			if err != nil {
-				jptm.FailActiveDownload("Download length check", err)
-			} else if fi.Size() != info.SourceSize {
-				jptm.FailActiveDownload("Download length check", errors.New("destination length did not match source length"))
-			}
-		}
 	}
 
 	// Preserve modified time
@@ -444,11 +461,19 @@ func tryDeleteFile(info TransferInfo, jptm IJobPartTransferMgr) {
 		return
 	}
 
-	err := deleteFile(info.Destination)
+	err := deleteFile(info.getTempDownloadPath())
 	if err != nil {
 		// If there was an error deleting the file, log the error
 		jptm.LogError(info.Destination, "Delete File Error ", err)
 	}
+}
+
+//Returns the path of temp file to be downloaded. The paths is in format
+// /actual/parent/path/.azDownload-<jobID>-<actualFileName>
+func (info *TransferInfo) getTempDownloadPath() string {
+	parent, fileName := filepath.Split(info.Destination)
+	fileName = fmt.Sprintf(azcopyTempDownloadPrefix, info.JobID.String()) + fileName
+	return filepath.Join(parent, fileName)
 }
 
 // conforms to io.Writer and io.Closer

@@ -30,7 +30,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/minio/minio-go"
@@ -324,5 +324,41 @@ func (f *GCPClientFactory) GetGCPClient(ctx context.Context, credInfo Credential
 		return newGCPClient, nil
 	} else {
 		return gcpClient, nil
+	}
+}
+
+// Default Encryption Algorithm Supported
+const EncryptionAlgorithmAES256 string = "AES256"
+
+func GetCpkInfo(cpkInfo bool) CpkInfo {
+	if !cpkInfo {
+		return CpkInfo{}
+	}
+
+	// fetch EncryptionKey and EncryptionKeySHA256 from the environment variables
+	glcm := GetLifecycleMgr()
+	encryptionKey := glcm.GetEnvironmentVariable(EEnvironmentVariable.CPKEncryptionKey())
+	encryptionKeySHA256 := glcm.GetEnvironmentVariable(EEnvironmentVariable.CPKEncryptionKeySHA256())
+	encryptionAlgorithmAES256 := EncryptionAlgorithmAES256
+
+	if encryptionKey == "" || encryptionKeySHA256 == "" {
+		glcm.Error("fatal: failed to fetch cpk encryption key (" + EEnvironmentVariable.CPKEncryptionKey().Name +
+			") or hash (" + EEnvironmentVariable.CPKEncryptionKeySHA256().Name + ") from environment variables")
+	}
+
+	return CpkInfo{
+		EncryptionKey:       &encryptionKey,
+		EncryptionKeySha256: &encryptionKeySHA256,
+		EncryptionAlgorithm: &encryptionAlgorithmAES256,
+	}
+}
+
+func GetCpkScopeInfo(cpkScopeInfo string) CpkScopeInfo {
+	if cpkScopeInfo == "" {
+		return CpkScopeInfo{}
+	} else {
+		return CpkScopeInfo{
+			EncryptionScope: &cpkScopeInfo,
+		}
 	}
 }

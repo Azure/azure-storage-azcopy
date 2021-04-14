@@ -27,8 +27,8 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
 // Global singleton for sending RPC requests from the frontend to the STE

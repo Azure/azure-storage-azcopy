@@ -31,7 +31,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 var steCtx = context.Background()
@@ -143,7 +143,7 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 	jppfn.Create(order)                                                                   // Convert the order to a plan file
 	jpm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString) // Get a this job part's job manager (create it if it doesn't exist)
 
-	if len(order.Transfers) == 0 && order.IsFinalPart {
+	if len(order.Transfers.List) == 0 && order.IsFinalPart {
 		/*
 		 * We set the status of this jobPart to Completed()
 		 * immediately after it is scheduled, and wind down
@@ -158,6 +158,14 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 		})
 	// Supply no plan MMF because we don't have one, and AddJobPart will create one on its own.
 	jpm.AddJobPart(order.PartNum, jppfn, nil, order.SourceRoot.SAS, order.DestinationRoot.SAS, true) // Add this part to the Job and schedule its transfers
+
+	// Update jobPart Status with the status Manager
+	jpm.SendJobPartCreatedMsg(jobPartCreatedMsg{totalTransfers: uint32(len(order.Transfers.List)),
+		isFinalPart:          order.IsFinalPart,
+		totalBytesEnumerated: order.Transfers.TotalSizeInBytes,
+		fileTransfers:        order.Transfers.FileTransferCount,
+		folderTransfer:       order.Transfers.FolderTransferCount})
+
 	return common.CopyJobPartOrderResponse{JobStarted: true}
 }
 
@@ -408,9 +416,73 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		jm, _ = JobsAdmin.JobMgr(jobID)
 	}
 
+	js := jm.ListJobSummary()
+	js.Timestamp = time.Now().UTC()
+	js.JobID = jm.JobID()
+	js.ErrorMsg = ""
+
+	part0, ok := jm.JobPartMgr(0)
+	if !ok {
+		return js
+	}
+	part0PlanStatus := part0.Plan().JobStatus()
+
+	// Add on byte count from files in flight, to get a more accurate running total
+	js.TotalBytesTransferred += JobsAdmin.SuccessfulBytesInActiveFiles()
+	if js.TotalBytesExpected == 0 {
+		// if no bytes expected, and we should avoid dividing by 0 (which results in NaN)
+		js.PercentComplete = 100
+	} else {
+		js.PercentComplete = 100 * float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected)
+	}
+
+	// This is added to let FE to continue fetching the Job Progress Summary
+	// in case of resume. In case of resume, the Job is already completely
+	// ordered so the progress summary should be fetched until all job parts
+	// are iterated and have been scheduled
+	js.CompleteJobOrdered = js.CompleteJobOrdered || jm.AllTransfersScheduled()
+
+	js.BytesOverWire = uint64(JobsAdmin.BytesOverWire())
+
+	// Get the number of active go routines performing the transfer or executing the chunk Func
+	// TODO: added for debugging purpose. remove later (is covered by GetPerfInfo now anyway)
+	js.ActiveConnections = jm.ActiveConnections()
+
+	js.PerfStrings, js.PerfConstraint = jm.GetPerfInfo()
+
+	pipeStats := jm.PipelineNetworkStats()
+	if pipeStats != nil {
+		js.AverageIOPS = pipeStats.OperationsPerSecond()
+		js.AverageE2EMilliseconds = pipeStats.AverageE2EMilliseconds()
+		js.NetworkErrorPercentage = pipeStats.NetworkErrorPercentage()
+		js.ServerBusyPercentage = pipeStats.TotalServerBusyPercentage()
+	}
+
+	// If the status is cancelled, then no need to check for completerJobOrdered
+	// since user must have provided the consent to cancel an incompleteJob if that
+	// is the case.
+	if part0PlanStatus == common.EJobStatus.Cancelled() {
+		js.JobStatus = part0PlanStatus
+		js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped, part0.Plan().FromTo)
+	} else {
+		// Job is completed if Job order is complete AND ALL transfers are completed/failed
+		// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
+		if (js.CompleteJobOrdered) && (part0PlanStatus.IsJobDone()) {
+			js.JobStatus = part0PlanStatus
+		}
+
+		if js.JobStatus.IsJobDone() {
+			js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped, part0.Plan().FromTo)
+		}
+	}
+
+	return js
+}
+
+func resurrectJobSummary(jm IJobMgr) common.ListJobSummaryResponse {
 	js := common.ListJobSummaryResponse{
 		Timestamp:          time.Now().UTC(),
-		JobID:              jobID,
+		JobID:              jm.JobID(),
 		ErrorMsg:           "",
 		JobStatus:          common.EJobStatus.InProgress(), // Default
 		CompleteJobOrdered: false,                          // default to false; returns true if ALL job parts have been ordered
@@ -423,7 +495,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	// Better to check overall status first, and see it as uncompleted on this call (and completed on the next call).
 	part0, ok := jm.JobPartMgr(0)
 	if !ok {
-		panic(fmt.Errorf("error getting the 0th part of Job %s", jobID))
+		panic(fmt.Errorf("error getting the 0th part of Job %s", jm.JobID()))
 	}
 	part0PlanStatus := part0.Plan().JobStatus()
 

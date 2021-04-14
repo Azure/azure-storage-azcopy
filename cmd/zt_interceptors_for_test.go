@@ -24,7 +24,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // the interceptor gathers/saves the job part orders for validation
@@ -38,7 +38,7 @@ func (i *interceptor) intercept(cmd common.RpcCmd, request interface{}, response
 	case common.ERpcCmd.CopyJobPartOrder():
 		// cache the transfers
 		copyRequest := *request.(*common.CopyJobPartOrderRequest)
-		i.transfers = append(i.transfers, copyRequest.Transfers...)
+		i.transfers = append(i.transfers, copyRequest.Transfers.List...)
 		i.lastRequest = request
 
 		// mock the result
@@ -127,6 +127,12 @@ func (*mockedLifecycleManager) EnableInputWatcher()                 {}
 func (*mockedLifecycleManager) EnableCancelFromStdIn()              {}
 func (*mockedLifecycleManager) AddUserAgentPrefix(userAgent string) string {
 	return userAgent
+}
+
+func (*mockedLifecycleManager) SetForceLogging() {}
+
+func (*mockedLifecycleManager) IsForceLoggingDisabled() bool {
+	return false
 }
 
 func (*mockedLifecycleManager) E2EAwaitContinue() {
