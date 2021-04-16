@@ -37,17 +37,10 @@ func TestNaming_ShareFileFoldersSpecialChar(t *testing.T) {
 			transfers = append(transfers, f(folders[i]+"/"+files[j]))
 		}
 	}
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.Other(common.EFromTo.FileFile(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile()),
-		eValidate.Auto(),
-		params{
-			recursive: true,
-		},
-		nil,
-		testFiles{
-			defaultSize:    "1K",
-			shouldTransfer: transfers,
-		})
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile()), eValidate.Auto(), allCredentialTypes, params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize:    "1K",
+		shouldTransfer: transfers,
+	})
 }

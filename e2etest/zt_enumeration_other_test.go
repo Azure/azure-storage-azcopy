@@ -28,24 +28,17 @@ import (
 // Purpose: Other tests for enumeration of sources, NOT including filtering
 
 func TestEnumeration_DirectoryStubsAreNotDownloaded(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.Other(common.EFromTo.BlobLocal()), // TODO: does this apply to any additional cases?
-		eValidate.Auto(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.BlobLocal()), eValidate.Auto(), allCredentialTypes, params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldIgnore: []interface{}{
+			f("dir", withDirStubMetadata{}),
 		},
-		nil,
-		testFiles{
-			defaultSize: "1K",
-			shouldIgnore: []interface{}{
-				f("dir", withDirStubMetadata{}),
-			},
-			shouldTransfer: []interface{}{
-				"filea",
-				folder("dir"),
-				"dir/fileb",
-			},
-		})
+		shouldTransfer: []interface{}{
+			"filea",
+			folder("dir"),
+			"dir/fileb",
+		},
+	})
 }

@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"os"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // This declarative test runner adds a layer on top of e2etest/base. The added layer allows us to test in a declarative style,
@@ -31,19 +33,70 @@ import (
 // In particular, it lets one test cover a range of different source/dest types, and even cover both sync and copy.
 // See first test in zt_enumeration for an annotated example.
 
+var validCredTypesPerLocation = map[common.Location][]common.CredentialType {
+	common.ELocation.Unknown(): {common.ECredentialType.Unknown()},
+	common.ELocation.File(): {common.ECredentialType.Anonymous()},
+	common.ELocation.Blob(): {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
+	common.ELocation.BlobFS(): {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()}, // todo: currently, account key auth isn't even supported in e2e tests.
+	common.ELocation.Local(): {common.ECredentialType.Anonymous()},
+	common.ELocation.Pipe(): {common.ECredentialType.Anonymous()},
+	common.ELocation.S3(): {common.ECredentialType.S3AccessKey()},
+	common.ELocation.GCP(): {common.ECredentialType.GoogleAppCredentials()},
+}
+
+var allCredentialTypes []common.CredentialType = nil
+
+func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredentialTypes []common.CredentialType) [][2]common.CredentialType {
+	output := make([][2]common.CredentialType, 0)
+
+	credIsRequested := func(cType common.CredentialType) bool {
+		if requestedCredentialTypes == nil {
+			return true
+		}
+
+		for _,v  := range requestedCredentialTypes {
+			if v == cType {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	// determine source types
+	var sourceTypes []common.CredentialType
+	if fromTo.IsS2S() {
+		// source must always be anonymous-- no exceptions until UDK is introduced.
+		sourceTypes = []common.CredentialType{common.ECredentialType.Anonymous()}
+	} else {
+		sourceTypes = validCredTypesPerLocation[fromTo.From()]
+	}
+
+	for _, srcCredType := range sourceTypes {
+		for _, dstCredType := range validCredTypesPerLocation[fromTo.To()] {
+			// make sure the user asked for this.
+			if !(credIsRequested(srcCredType) && credIsRequested(dstCredType)) {
+				continue
+			}
+
+			output = append(output, [2]common.CredentialType{srcCredType, dstCredType})
+		}
+	}
+
+	return output
+}
+
 // RunScenarios is the key entry point for declarative testing.
 // It constructs and executes scenarios (subtest in Go-speak), according to its parameters, and checks their results
-func RunScenarios(
-	t *testing.T,
+func RunScenarios(t *testing.T,
 	operations Operation,
 	testFromTo TestFromTo,
 	validate Validate, // TODO: do we really want the test author to have to nominate which validation should happen?  Pros: better perf of tests. Cons: they have to tell us, and if they tell us wrong test may not test what they think it tests
-	/*_ interface{}, // TODO if we want it??, blockBLobsOnly or specifc/all blob types
-	_ interface{}, // TODO if we want it??, default auth type only, or specific/all auth types*/
+	//_ interface{}, // TODO if we want it??, blockBLobsOnly or specifc/all blob types
+	requestedCredentialTypes []common.CredentialType,
 	p params,
 	hs *hooks,
 	fs testFiles,
-	// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
 ) {
 	// enable this if we want parents in parallel: t.Parallel()
 
@@ -57,31 +110,38 @@ func RunScenarios(
 	scenarios := make([]scenario, 0, 16)
 	for _, op := range operations.getValues() {
 		for _, fromTo := range testFromTo.getValues(op) {
-			// Create unique name for generating container names
-			compactScenarioName := fmt.Sprintf("%.4s-%s-%c-%c%c", suiteName, testName, op.String()[0], fromTo.From().String()[0], fromTo.To().String()[0])
-			fullScenarioName := fmt.Sprintf("%s.%s.%s-%s", suiteName, testName, op.String(), fromTo.String())
-			// Sub-test name is not globally unique (it doesn't need to be) but it is more human-readable
-			subtestName := fmt.Sprintf("%s-%s", op, fromTo)
+			credentialTypes := getValidCredCombinationsForFromTo(fromTo, requestedCredentialTypes)
 
-			hsToUse := hooks{}
-			if hs != nil {
-				hsToUse = *hs
+			for _, credTypes := range credentialTypes {
+				credNames := fmt.Sprintf("%s-%s", credTypes[0].String(), credTypes[1].String())
+
+				// Create unique name for generating container names
+				compactScenarioName := fmt.Sprintf("%.4s-%s-%c-%c%c", suiteName, testName, op.String()[0], fromTo.From().String()[0], fromTo.To().String()[0])
+				fullScenarioName := fmt.Sprintf("%s.%s.%s-%s", suiteName, testName, op.String(), fromTo.String())
+				// Sub-test name is not globally unique (it doesn't need to be) but it is more human-readable
+				subtestName := fmt.Sprintf("%s-%s-%s", op, fromTo, credNames)
+
+				hsToUse := hooks{}
+				if hs != nil {
+					hsToUse = *hs
+				}
+
+				s := scenario{
+					subtestName:         subtestName,
+					compactScenarioName: compactScenarioName,
+					fullScenarioName:    fullScenarioName,
+					operation:           op,
+					fromTo:              fromTo,
+					credTypes:           credTypes,
+					validate:            validate,
+					p:                   p, // copies them, because they are a struct. This is what we need, since they may be morphed while running
+					hs:                  hsToUse,
+					fs:                  fs.DeepCopy(),
+					stripTopDir:         false, // TODO: how will we set this?
+				}
+
+				scenarios = append(scenarios, s)
 			}
-
-			s := scenario{
-				subtestName:         subtestName,
-				compactScenarioName: compactScenarioName,
-				fullScenarioName:    fullScenarioName,
-				operation:           op,
-				fromTo:              fromTo,
-				validate:            validate,
-				p:                   p, // copies them, because they are a struct. This is what we need, since they may be morphed while running
-				hs:                  hsToUse,
-				fs:                  fs.DeepCopy(),
-				stripTopDir:         false, // TODO: how will we set this?
-			}
-
-			scenarios = append(scenarios, s)
 		}
 	}
 

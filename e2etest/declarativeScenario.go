@@ -43,6 +43,7 @@ type scenario struct {
 	operation           Operation
 	validate            Validate
 	fromTo              common.FromTo
+	credTypes           [2]common.CredentialType
 	p                   params
 	hs                  hooks
 	fs                  testFiles
@@ -170,19 +171,29 @@ func (s *scenario) runAzCopy() {
 	}
 
 	// run AzCopy
-	const useSas = true // TODO: support other auth options (see params of RunTest)
 	result, wasClean, err := r.ExecuteAzCopyCommand(
 		s.operation,
-		s.state.source.getParam(s.stripTopDir, useSas),
-		s.state.dest.getParam(false, useSas),
+		s.state.source.getParam(s.stripTopDir, s.credTypes[0] == common.ECredentialType.Anonymous()),
+		s.state.dest.getParam(false, s.credTypes[1] == common.ECredentialType.Anonymous()),
+		s.credTypes[0] == common.ECredentialType.OAuthToken() || s.credTypes[1] == common.ECredentialType.OAuthToken(), // needsOAuth
 		afterStart, s.chToStdin)
 
 	if !wasClean {
 		s.a.AssertNoErr(err, "running AzCopy")
 	}
 
+	// // Generally, a cancellation is done when auth fails.
+	// if result.finalStatus.JobStatus == common.EJobStatus.Cancelled() {
+	// 	for _,v := range result.finalStatus.FailedTransfers {
+	// 		if v.ErrorCode == 403 {
+	// 			s.a.Error("authorization failed, perhaps SPN auth or the SAS token is bad?")
+	// 		}
+	// 	}
+	// }
+
 	s.state.result = &result
 }
+
 func (s *scenario) validateRemove() {
 	removedFiles := s.fs.toTestObjects(s.fs.shouldTransfer, false)
 	props := s.state.source.getAllProperties(s.a)
