@@ -514,38 +514,41 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 		isCancelling := jobStatus == common.EJobStatus.Cancelling()
 		shouldComplete := allKnownPartsDone && (haveFinalPart || isCancelling)
 		if shouldComplete {
-			break
+			jobPart0Mgr, _ := jm.jobPartMgrs.Get(0)
+			part0Plan := jobPart0Mgr.Plan() // status of part 0 is status of job as whole.
+
+			partDescription := "all parts of entire Job"
+			if !haveFinalPart {
+				partDescription = "known parts of incomplete Job"
+			}
+			if shouldLog {
+				jm.Log(pipeline.LogInfo, fmt.Sprintf("%s %s successfully completed, cancelled or paused", partDescription, jm.jobID.String()))
+			}
+
+			switch part0Plan.JobStatus() {
+			case common.EJobStatus.Cancelling():
+				part0Plan.SetJobStatus(common.EJobStatus.Cancelled())
+				if shouldLog {
+					jm.Log(pipeline.LogInfo, fmt.Sprintf("%s %v successfully cancelled", partDescription, jm.jobID))
+				}
+			case common.EJobStatus.InProgress():
+				part0Plan.SetJobStatus((common.EJobStatus).EnhanceJobStatusInfo(jobProgressInfo.transfersSkipped > 0,
+					jobProgressInfo.transfersFailed > 0,
+					jobProgressInfo.transfersCompleted > 0))
+			}
+
+			// reset counters
+			atomic.StoreUint32(&jm.partsDone, 0)
+			jobProgressInfo = jobPartProgressInfo{}
+
+			// flush logs
+			jm.chunkStatusLogger.FlushLog() // TODO: remove once we sort out what will be calling CloseLog (currently nothing)
 		} //Else log and wait for next part to complete
 
 		if shouldLog {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("is part of Job which %d total number of parts done ", partsDone))
 		}
 	}
-
-	jobPart0Mgr, _ := jm.jobPartMgrs.Get(0)
-	part0Plan := jobPart0Mgr.Plan() // status of part 0 is status of job as whole.
-
-	partDescription := "all parts of entire Job"
-	if !haveFinalPart {
-		partDescription = "known parts of incomplete Job"
-	}
-	if shouldLog {
-		jm.Log(pipeline.LogInfo, fmt.Sprintf("%s %s successfully completed, cancelled or paused", partDescription, jm.jobID.String()))
-	}
-
-	switch part0Plan.JobStatus() {
-	case common.EJobStatus.Cancelling():
-		part0Plan.SetJobStatus(common.EJobStatus.Cancelled())
-		if shouldLog {
-			jm.Log(pipeline.LogInfo, fmt.Sprintf("%s %v successfully cancelled", partDescription, jm.jobID))
-		}
-	case common.EJobStatus.InProgress():
-		part0Plan.SetJobStatus((common.EJobStatus).EnhanceJobStatusInfo(jobProgressInfo.transfersSkipped > 0,
-			jobProgressInfo.transfersFailed > 0,
-			jobProgressInfo.transfersCompleted > 0))
-	}
-
-	jm.chunkStatusLogger.FlushLog() // TODO: remove once we sort out what will be calling CloseLog (currently nothing)
 }
 
 func (jm *jobMgr) getInMemoryTransitJobState() InMemoryTransitJobState {
