@@ -37,6 +37,7 @@ func TestChange_DetectFileChangedDuringTransfer(t *testing.T) {
 		eTestFromTo.AllPairs(),
 		eValidate.Auto(),
 		allCredentialTypes,
+		allCredentialTypes,
 		params{
 			recursive: true,
 		},
@@ -77,6 +78,7 @@ func TestChange_DefaultToNoDetectionForCopyS2S(t *testing.T) {
 		eOperation.Copy(), // this test only applies to Copy, because Sync does always set s2sSourceChangeValidation = true
 		eTestFromTo.AllS2S(),
 		eValidate.Auto(),
+		allCredentialTypes,
 		allCredentialTypes,
 		params{
 			recursive: true,

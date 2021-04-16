@@ -28,7 +28,7 @@ import (
 //   and those specified on the command line
 
 func TestProperties_NameValueMetadataIsPreservedS2S(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.Auto(), allCredentialTypes, params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.Auto(), allCredentialTypes, allCredentialTypes, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1K",
@@ -42,7 +42,7 @@ func TestProperties_NameValueMetadataIsPreservedS2S(t *testing.T) {
 func TestProperties_NameValueMetadataCanBeUploaded(t *testing.T) {
 	expectedMap := map[string]string{"foo": "abc", "bar": "def"}
 
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllUploads(), eValidate.Auto(), allCredentialTypes, params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllUploads(), eValidate.Auto(), allCredentialTypes, allCredentialTypes, params{
 		recursive: true,
 		metadata:  "foo=abc;bar=def",
 	}, nil, testFiles{

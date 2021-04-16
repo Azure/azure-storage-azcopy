@@ -34,6 +34,7 @@ func TestTags_SetTagsSingleBlob(t *testing.T) {
 		eTestFromTo.Other(common.EFromTo.LocalBlob()),
 		eValidate.AutoPlusContent(),
 		allCredentialTypes,
+		allCredentialTypes,
 		params{
 			recursive: true,
 			blobTags:  blobTagsStr,
@@ -53,6 +54,7 @@ func TestTags_SetTagsSpecialCharactersSingleBlob(t *testing.T) {
 		eOperation.Copy(),
 		eTestFromTo.Other(common.EFromTo.LocalBlob()),
 		eValidate.AutoPlusContent(),
+		allCredentialTypes,
 		allCredentialTypes,
 		params{
 			recursive: true,
@@ -75,6 +77,7 @@ func TestTags_SetTagsMultipleBlobs(t *testing.T) {
 		eOperation.Copy(),
 		eTestFromTo.Other(common.EFromTo.LocalBlob()),
 		eValidate.AutoPlusContent(),
+		allCredentialTypes,
 		allCredentialTypes,
 		params{
 			recursive: true,
@@ -100,6 +103,7 @@ func TestTags_PreserveTagsSingleBlob(t *testing.T) {
 		eTestFromTo.Other(common.EFromTo.BlobBlob()),
 		eValidate.AutoPlusContent(),
 		allCredentialTypes,
+		allCredentialTypes,
 		params{
 			recursive:           true,
 			s2sPreserveBlobTags: true,
@@ -122,6 +126,7 @@ func TestTags_PreserveTagsSpecialCharactersSingleBlob(t *testing.T) {
 		eTestFromTo.Other(common.EFromTo.BlobBlob()),
 		eValidate.AutoPlusContent(),
 		allCredentialTypes,
+		allCredentialTypes,
 		params{
 			recursive:           true,
 			s2sPreserveBlobTags: true,
@@ -142,6 +147,7 @@ func TestTags_PreserveTagsMultipleBlobs(t *testing.T) {
 		eOperation.Copy(),
 		eTestFromTo.Other(common.EFromTo.BlobBlob()),
 		eValidate.AutoPlusContent(),
+		allCredentialTypes,
 		allCredentialTypes,
 		params{
 			recursive:           true,
@@ -166,6 +172,7 @@ func TestTags_PreserveTagsSpecialCharactersMultipleBlobs(t *testing.T) {
 		eTestFromTo.Other(common.EFromTo.BlobBlob()),
 		eValidate.AutoPlusContent(),
 		allCredentialTypes,
+		allCredentialTypes,
 		params{
 			recursive:           true,
 			s2sPreserveBlobTags: true,
@@ -189,6 +196,7 @@ func TestTags_PreserveTagsSpecialCharactersDuringSync(t *testing.T) {
 		eOperation.Sync(),
 		eTestFromTo.Other(common.EFromTo.BlobBlob()),
 		eValidate.AutoPlusContent(),
+		allCredentialTypes,
 		allCredentialTypes,
 		params{
 			recursive:           true,

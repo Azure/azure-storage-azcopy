@@ -46,15 +46,20 @@ var validCredTypesPerLocation = map[common.Location][]common.CredentialType {
 
 var allCredentialTypes []common.CredentialType = nil
 
-func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredentialTypes []common.CredentialType) [][2]common.CredentialType {
+func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredentialTypesSrc, requestedCredentialTypesDst []common.CredentialType) [][2]common.CredentialType {
 	output := make([][2]common.CredentialType, 0)
 
-	credIsRequested := func(cType common.CredentialType) bool {
-		if requestedCredentialTypes == nil {
+	credIsRequested := func(cType common.CredentialType, dst bool) bool {
+		if (dst && requestedCredentialTypesDst == nil) || (!dst && requestedCredentialTypesSrc == nil) {
 			return true
 		}
 
-		for _,v  := range requestedCredentialTypes {
+		toSearch := requestedCredentialTypesSrc
+		if dst {
+			toSearch = requestedCredentialTypesDst
+		}
+
+		for _,v  := range toSearch {
 			if v == cType {
 				return true
 			}
@@ -75,7 +80,7 @@ func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredential
 	for _, srcCredType := range sourceTypes {
 		for _, dstCredType := range validCredTypesPerLocation[fromTo.To()] {
 			// make sure the user asked for this.
-			if !(credIsRequested(srcCredType) && credIsRequested(dstCredType)) {
+			if !(credIsRequested(srcCredType, false) && credIsRequested(dstCredType, true)) {
 				continue
 			}
 
@@ -98,7 +103,8 @@ func RunScenarios(t *testing.T,
 	// In addition to the fact that not every credential type is sensible.
 	// Thus, the E2E framework takes in a requested set of credential types, and applies them where sensible.
 	// This allows you to make tests use OAuth only, SAS only, etc.
-	requestedCredentialTypes []common.CredentialType,
+	requestedCredentialTypesSrc []common.CredentialType,
+	requestedCredentialTypesDst []common.CredentialType,
 	p params,
 	hs *hooks,
 	fs testFiles,
@@ -112,19 +118,19 @@ func RunScenarios(t *testing.T,
 	}
 
 	// construct all the scenarios
-	scenarios := make([]scenario, 0, 16)
+	scenarios := make([][]scenario, 0, 16)
 	for _, op := range operations.getValues() {
 		for _, fromTo := range testFromTo.getValues(op) {
-			credentialTypes := getValidCredCombinationsForFromTo(fromTo, requestedCredentialTypes)
+			credentialTypes := getValidCredCombinationsForFromTo(fromTo, requestedCredentialTypesSrc, requestedCredentialTypesDst)
+
+			scenarioList := make([]scenario, 0)
 
 			for _, credTypes := range credentialTypes {
-				credNames := fmt.Sprintf("%s-%s", credTypes[0].String(), credTypes[1].String())
-
 				// Create unique name for generating container names
 				compactScenarioName := fmt.Sprintf("%.4s-%s-%c-%c%c", suiteName, testName, op.String()[0], fromTo.From().String()[0], fromTo.To().String()[0])
 				fullScenarioName := fmt.Sprintf("%s.%s.%s-%s", suiteName, testName, op.String(), fromTo.String())
 				// Sub-test name is not globally unique (it doesn't need to be) but it is more human-readable
-				subtestName := fmt.Sprintf("%s-%s-%s", op, fromTo, credNames)
+				subtestName := fmt.Sprintf("%s-%s", op, fromTo)
 
 				hsToUse := hooks{}
 				if hs != nil {
@@ -145,8 +151,10 @@ func RunScenarios(t *testing.T,
 					stripTopDir:         false, // TODO: how will we set this?
 				}
 
-				scenarios = append(scenarios, s)
+				scenarioList = append(scenarioList, s)
 			}
+
+			scenarios = append(scenarios, scenarioList)
 		}
 	}
 
@@ -158,19 +166,25 @@ func RunScenarios(t *testing.T,
 	// run them in parallel if not debugging, but sequentially (for easier debugging) if a debugger is attached
 	parallel := !isLaunchedByDebugger // this only works if gops.exe is on your path. See azcopyDebugHelper.go for instructions.
 	for _, s := range scenarios {
-		sen := s // capture to separate var inside the loop, for the parallel case
 		// use t.Run to get proper sub-test support
-		t.Run(s.subtestName, func(t *testing.T) {
-			if parallel {
-				t.Parallel() // tell testing that it can run stuff in parallel with us
+		t.Run(s[0].subtestName, func(t *testing.T) {
+			for _,s := range s {
+				sen := s // capture to separate var inside the loop, for the parallel case
+				credNames := fmt.Sprintf("%s-%s", s.credTypes[0].String(), s.credTypes[1].String())
+				
+				t.Run(credNames, func(t *testing.T) {
+					if parallel {
+						t.Parallel() // tell testing that it can run stuff in parallel with us
+					}
+					// set asserter now (and only now), since before this point we don't have the right "t"
+					sen.a = &testingAsserter{
+						t:                   t,
+						fullScenarioName:    sen.fullScenarioName,
+						compactScenarioName: sen.compactScenarioName,
+					}
+					sen.Run()
+				})
 			}
-			// set asserter now (and only now), since before this point we don't have the right "t"
-			sen.a = &testingAsserter{
-				t:                   t,
-				fullScenarioName:    sen.fullScenarioName,
-				compactScenarioName: sen.compactScenarioName,
-			}
-			sen.Run()
 		})
 	}
 }

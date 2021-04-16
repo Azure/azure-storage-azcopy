@@ -6,7 +6,7 @@ import (
 )
 
 func TestSMB_FromShareSnapshot(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), allCredentialTypes, params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), allCredentialTypes, allCredentialTypes, params{
 		recursive:              true,
 		preserveSMBInfo:        true,
 		preserveSMBPermissions: true,
