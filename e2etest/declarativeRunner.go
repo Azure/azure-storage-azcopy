@@ -93,6 +93,11 @@ func RunScenarios(t *testing.T,
 	testFromTo TestFromTo,
 	validate Validate, // TODO: do we really want the test author to have to nominate which validation should happen?  Pros: better perf of tests. Cons: they have to tell us, and if they tell us wrong test may not test what they think it tests
 	//_ interface{}, // TODO if we want it??, blockBLobsOnly or specifc/all blob types
+
+	// It would be a pain to list out every combo by hand,
+	// In addition to the fact that not every credential type is sensible.
+	// Thus, the E2E framework takes in a requested set of credential types, and applies them where sensible.
+	// This allows you to make tests use OAuth only, SAS only, etc.
 	requestedCredentialTypes []common.CredentialType,
 	p params,
 	hs *hooks,
