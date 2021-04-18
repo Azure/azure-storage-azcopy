@@ -42,6 +42,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         result = util.Command("copy").add_arguments(src).add_arguments(dst).add_flags("log-level", "info")
 
     # test_download_1kb_blob verifies the download of 1Kb blob using azcopy.
+    @unittest.skip("Covered by E2E tests")
     def test_download_1kb_blob(self):
         # create file of size 1KB.
         filename = "test_1kb_blob_upload.txt"
@@ -189,6 +190,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         self.assertTrue(result)
 
     # test_download_1kb_blob verifies the download of 1Kb blob using azcopy.
+    @unittest.skip("Covered by E2E tests")
     def test_download_1kb_blob_with_oauth(self):
         self.util_test_download_1kb_blob_with_oauth()
 

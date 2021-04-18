@@ -42,10 +42,12 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
 
     # test_1kb_blob_upload verifies the 1KB blob upload by azcopy.
     def test_1kb_blob_upload_with_sas(self):
+        self.skipTest("Covered by E2E tests")
         #Test the case with SAS
         self.util_test_1kb_blob_upload()
 
     def test_1kb_blob_upload_with_oauth(self):
+        self.skipTest("Covered by E2E tests")
         #Test the case with OAuth
         self.util_test_1kb_blob_upload(True)
 
@@ -93,10 +95,12 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
 
     # test_10_1kb_blob_upload_with_sas verifies the upload of 10 1kb blob to the container with SAS.
     def test_10_1kb_blob_upload_with_sas(self):
+        self.skipTest("Covered by E2E tests")
         self.util_test_n_1kb_blob_upload(10)
 
     # test_10_1kb_blob_upload_with_sas verifies the upload of 10 1kb blob to the container with OAuth.
     def test_10_1kb_blob_upload_with_oauth(self):
+        self.skipTest("Covered by E2E tests")
         self.util_test_n_1kb_blob_upload(10, True)
 
     # test_metaData_content_encoding_content_type verifies the meta data, content type,
@@ -155,8 +159,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         self.util_test_1GB_blob_upload()
 
     # test_1GB_blob_upload_with_oauth verifies the azcopy upload of 1Gb blob upload in blocks of 100 Mb with OAuth
-    @unittest.skip("single file authentication for oauth covered by small file")
     def test_1GB_blob_upload_with_oauth(self):
+        self.skipTest("Takes same code path as with SAS auth")
         self.util_test_1GB_blob_upload(True)
 
     # test_block_size verifies azcopy upload of blob in blocks of given block-size
@@ -505,6 +509,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
 
     # test_upload_block_blob_include_flag tests the include flag in the upload scenario
     def test_upload_block_blob_include_flag(self):
+        self.skipTest("Covered by E2E tests")
         dir_name = "dir_include_flag_set_upload"
         # create 10 files inside the directory
         dir_n_files_path = util.create_test_n_files(1024, 10, dir_name)
@@ -548,6 +553,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
 
     # test_upload_block_blob_exclude_flag tests the exclude flag in the upload scenario
     def test_upload_block_blob_exclude_flag(self):
+        self.skipTest("Covered by E2E tests")
         dir_name = "dir_exclude_flag_set_upload"
         # create 10 files inside the directory
         dir_n_files_path = util.create_test_n_files(1024, 10, dir_name)
@@ -595,6 +601,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         self.assertEquals(x.TransfersFailed, "0")
 
     def test_download_blob_include_flag(self):
+        self.skipTest("Covered by E2E tests")
         # create dir and 10 files of size 1024 inside it
         dir_name = "dir_include_flag_set_download"
         dir_n_files_path = util.create_test_n_files(1024, 10, dir_name)
@@ -649,6 +656,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         self.assertEquals(x.TransfersFailed, "0")
 
     def test_download_blob_exclude_flag(self):
+        self.skipTest("Covered by E2E tests")
         # create dir and 10 files of size 1024 inside it
         dir_name = "dir_exclude_flag_set_download"
         dir_n_files_path = util.create_test_n_files(1024, 10, dir_name)
@@ -705,6 +713,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         self.assertEquals(x.TransfersCompleted, "10")
         self.assertEquals(x.TransfersFailed, "0")
 
+    @unittest.skip("Covered by E2E tests")
     def test_0KB_blob_upload(self):
         # Creating a single File Of size 0 KB
         filename = "test0KB.txt"
@@ -724,6 +733,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         self.assertTrue(result)
 
     def test_upload_hidden_file(self):
+        self.skipTest("Covered by E2E tests")
         # Create directory for storing the hidden files
         dir_name = "dir_hidden_files"
         dir_path = os.path.join(util.test_directory_path, dir_name)
