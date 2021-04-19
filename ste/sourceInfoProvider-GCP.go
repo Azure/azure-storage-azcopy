@@ -107,6 +107,7 @@ func (p *gcpSourceInfoProvider) Properties() (*SrcProperties, error) {
 				ContentMD5:         oie.ContentMD5(),
 			},
 			SrcMetadata: oie.NewCommonMetadata(),
+			SrcBlobTags: p.transferInfo.SrcBlobTags,
 		}
 	}
 	resolvedMetadata, err := p.handleInvalidMetadataKeys(srcProperties.SrcMetadata)
