@@ -69,13 +69,9 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 	srcRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, true)
 	dstRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false)
 
-	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(
-		false, // sync has no --decompress option
-		srcRelativePath,
-		dstRelativePath,
-		s.preserveAccessTier,
-		s.folderPropertiesOption,
-	)
+	blobTags := common.ToCommonBlobTagsMap(s.copyJobTemplate.BlobAttributes.BlobTagsString)
+	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath,
+		dstRelativePath, s.preserveAccessTier, s.folderPropertiesOption, blobTags, false)
 
 	if !shouldSendToSte {
 		return nil // skip this one
