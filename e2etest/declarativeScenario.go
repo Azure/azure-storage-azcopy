@@ -292,7 +292,12 @@ func (s *scenario) validateProperties() {
 			// this shouldn't happen, because we only run if validateTransferStates passed, but check anyway
 			// TODO: JohnR: need to remove the strip top dir prefix from the map (and normalize the delimiters)
 			//    since currently uploads fail here
-			s.a.Error(fmt.Sprintf("could not find expected file %s", f.name))
+			var rawPaths []string
+			for rawPath, _ := range destProps {
+				rawPaths = append(rawPaths, rawPath)
+			}
+			s.a.Error(fmt.Sprintf("could not find expected file %s in keys %v", destName, rawPaths))
+
 			return
 		}
 

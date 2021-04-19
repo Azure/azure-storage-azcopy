@@ -142,7 +142,7 @@ func (s scenarioHelper) enumerateLocalProperties(a asserter, dirpath string) map
 	err := filepath.Walk(dirpath, func(fullpath string, info os.FileInfo, err error) error {
 		a.AssertNoErr(err) // we don't expect any errors walking the local file system
 		relPath := strings.Replace(fullpath, dirpath, "", 1)
-		//relPath = strings.TrimPrefix(relPath, "\\/")
+		relPath = strings.TrimPrefix(relPath, "\\/")
 		relPath = strings.TrimPrefix(relPath, "\\")
 
 		size := info.Size()

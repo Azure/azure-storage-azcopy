@@ -107,13 +107,9 @@ func TestClient_ProvidedScopeDownload(t *testing.T) {
 		nil,
 		testFiles{
 			defaultSize: "1K",
-			shouldIgnore: []interface{}{
-				f("dir", withDirStubMetadata{}),
-			},
 			shouldTransfer: []interface{}{
+				folder(""),
 				f("file1", verifyOnlyProps),
-				folder("dir"),
-				f("dir/file2", verifyOnlyProps),
 			},
 		})
 }
