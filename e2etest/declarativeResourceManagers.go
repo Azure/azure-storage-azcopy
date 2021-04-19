@@ -21,6 +21,7 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"net/url"
@@ -33,6 +34,22 @@ func assertNoStripTopDir(stripTopDir bool) {
 	}
 }
 
+type downloadContentOptions struct {
+	resourceRelPath string
+	downloadBlobContentOptions
+	downloadFileContentOptions
+}
+
+type downloadBlobContentOptions struct {
+	containerURL azblob.ContainerURL
+	cpkInfo      common.CpkInfo
+	cpkScopeInfo common.CpkScopeInfo
+}
+
+type downloadFileContentOptions struct {
+	shareURL azfile.ShareURL
+}
+
 // TODO: any better names for this?
 // a source or destination. We need one of these for each of Blob, Azure Files, BlobFS, S3, Local disk etc.
 type resourceManager interface {
@@ -43,14 +60,14 @@ type resourceManager interface {
 	// creates the test files in the location. Implementers can assume that createLocation has been called first.
 	// This method may be called multiple times, in which case it should overwrite any like-named files that are already there.
 	// (e.g. when test need to create files with later modification dates, they will trigger a second call to this)
-	createFiles(a asserter, fs testFiles, isSource bool)
+	createFiles(a asserter, s *scenario, isSource bool)
 
 	// Gets the names and properties of all files (and, if applicable, folders) that exist.
 	// Used for verification
 	getAllProperties(a asserter) map[string]*objectProperties
 
 	// Download
-	downloadContent(a asserter, resourceRelPath string) []byte
+	downloadContent(a asserter, options downloadContentOptions) []byte
 
 	// cleanup gets rid of everything that setup created
 	// (Takes no param, because the resourceManager is expected to track its own state. E.g. "what did I make")
@@ -82,8 +99,14 @@ func (r *resourceLocal) createLocation(a asserter, s *scenario) {
 	}
 }
 
-func (r *resourceLocal) createFiles(a asserter, fs testFiles, isSource bool) {
-	scenarioHelper{}.generateLocalFilesFromList(a, r.dirPath, fs.allObjects(isSource), fs.defaultSize)
+func (r *resourceLocal) createFiles(a asserter, s *scenario, isSource bool) {
+	scenarioHelper{}.generateLocalFilesFromList(a, &generateLocalFilesFromList{
+		dirPath: r.dirPath,
+		generateFromListOptions: generateFromListOptions{
+			fs:          s.fs.allObjects(isSource),
+			defaultSize: s.fs.defaultSize,
+		},
+	})
 }
 
 func (r *resourceLocal) cleanup(_ asserter) {
@@ -109,8 +132,7 @@ func (r *resourceLocal) getAllProperties(a asserter) map[string]*objectPropertie
 	return scenarioHelper{}.enumerateLocalProperties(a, r.dirPath)
 }
 
-func (r *resourceLocal) downloadContent(a asserter, resourceRelPath string) []byte {
-	//return scenarioHelper{}.enumerateLocalProperties(a, r.dirPath)
+func (r *resourceLocal) downloadContent(_ asserter, _ downloadContentOptions) []byte {
 	panic("Not Implemented")
 }
 
@@ -135,8 +157,19 @@ func (r *resourceBlobContainer) createLocation(a asserter, s *scenario) {
 	}
 }
 
-func (r *resourceBlobContainer) createFiles(a asserter, fs testFiles, isSource bool) {
-	scenarioHelper{}.generateBlobsFromList(a, *r.containerURL, fs.allObjects(isSource), fs.defaultSize)
+func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bool) {
+	options := &generateBlobFromListOptions{
+		containerURL: *r.containerURL,
+		generateFromListOptions: generateFromListOptions{
+			fs:          s.fs.allObjects(isSource),
+			defaultSize: s.fs.defaultSize,
+		},
+	}
+	if s.fromTo.IsDownload() {
+		options.cpkInfo = common.GetCpkInfo(s.p.cpkByValue)
+		options.cpkScopeInfo = common.GetCpkScopeInfo(s.p.cpkByName)
+	}
+	scenarioHelper{}.generateBlobsFromList(a, options)
 }
 
 func (r *resourceBlobContainer) cleanup(a asserter) {
@@ -168,8 +201,9 @@ func (r *resourceBlobContainer) getAllProperties(a asserter) map[string]*objectP
 	return scenarioHelper{}.enumerateContainerBlobProperties(a, *r.containerURL)
 }
 
-func (r *resourceBlobContainer) downloadContent(a asserter, resourceRelPath string) []byte {
-	return scenarioHelper{}.downloadBlobContent(a, *r.containerURL, resourceRelPath)
+func (r *resourceBlobContainer) downloadContent(a asserter, options downloadContentOptions) []byte {
+	options.containerURL = *r.containerURL
+	return scenarioHelper{}.downloadBlobContent(a, options)
 }
 
 func (r *resourceBlobContainer) createSourceSnapshot(a asserter) {
@@ -194,8 +228,12 @@ func (r *resourceAzureFileShare) createLocation(a asserter, s *scenario) {
 	}
 }
 
-func (r *resourceAzureFileShare) createFiles(a asserter, fs testFiles, isSource bool) {
-	scenarioHelper{}.generateAzureFilesFromList(a, *r.shareURL, fs.allObjects(isSource), fs.defaultSize)
+func (r *resourceAzureFileShare) createFiles(a asserter, s *scenario, isSource bool) {
+	scenarioHelper{}.generateAzureFilesFromList(a, &generateAzureFilesFromListOptions{
+		shareURL:    *r.shareURL,
+		fileList:    s.fs.allObjects(isSource),
+		defaultSize: s.fs.defaultSize,
+	})
 }
 
 func (r *resourceAzureFileShare) cleanup(a asserter) {
@@ -237,8 +275,13 @@ func (r *resourceAzureFileShare) getAllProperties(a asserter) map[string]*object
 	return scenarioHelper{}.enumerateShareFileProperties(a, *r.shareURL)
 }
 
-func (r *resourceAzureFileShare) downloadContent(a asserter, resourceRelPath string) []byte {
-	return scenarioHelper{}.downloadFileContent(a, *r.shareURL, resourceRelPath)
+func (r *resourceAzureFileShare) downloadContent(a asserter, options downloadContentOptions) []byte {
+	return scenarioHelper{}.downloadFileContent(a, downloadContentOptions{
+		resourceRelPath: options.resourceRelPath,
+		downloadFileContentOptions: downloadFileContentOptions{
+			shareURL: *r.shareURL,
+		},
+	})
 }
 
 func (r *resourceAzureFileShare) createSourceSnapshot(a asserter) {
@@ -253,7 +296,7 @@ func (r *resourceDummy) createLocation(a asserter, s *scenario) {
 
 }
 
-func (r *resourceDummy) createFiles(a asserter, fs testFiles, isSource bool) {
+func (r *resourceDummy) createFiles(a asserter, s *scenario, isSource bool) {
 
 }
 
@@ -273,7 +316,7 @@ func (r *resourceDummy) getAllProperties(a asserter) map[string]*objectPropertie
 	panic("not impelmented")
 }
 
-func (r *resourceDummy) downloadContent(a asserter, _ string) []byte {
+func (r *resourceDummy) downloadContent(a asserter, options downloadContentOptions) []byte {
 	return make([]byte, 0)
 }
 

@@ -70,8 +70,8 @@ func (s *scenario) Run() {
 	s.assignSourceAndDest() // what/where are they
 	s.state.source.createLocation(s.a, s)
 	s.state.dest.createLocation(s.a, s)
-	s.state.source.createFiles(s.a, s.fs, true)
-	s.state.dest.createFiles(s.a, s.fs, false)
+	s.state.source.createFiles(s.a, s, true)
+	s.state.dest.createFiles(s.a, s, false)
 	if s.a.Failed() {
 		return // setup failed. No point in running the test
 	}
@@ -302,6 +302,8 @@ func (s *scenario) validateProperties() {
 		s.validateContentHeaders(expected.contentHeaders, actual.contentHeaders)
 		s.validateCreateTime(expected.creationTime, actual.creationTime)
 		s.validateLastWriteTime(expected.lastWriteTime, actual.lastWriteTime)
+		s.validateCPKByScope(expected.cpkScopeInfo, actual.cpkScopeInfo)
+		s.validateCPKByValue(expected.cpkInfo, actual.cpkInfo)
 		if expected.smbPermissionsSddl != nil {
 			s.a.Error("validateProperties does not yet support the properties you are using")
 			// TODO: nakulkar-msft it will be necessary to validate all of these
@@ -321,7 +323,13 @@ func (s *scenario) validateContent() {
 		if !f.isFolder() {
 			expectedContentMD5 := f.creationProperties.contentHeaders.contentMD5
 			resourceRelPath := fixSlashes(path.Join(addedDirAtDest, f.name), s.fromTo.To())
-			actualContent := s.state.dest.downloadContent(s.a, resourceRelPath)
+			actualContent := s.state.dest.downloadContent(s.a, downloadContentOptions{
+				resourceRelPath: resourceRelPath,
+				downloadBlobContentOptions: downloadBlobContentOptions{
+					cpkInfo:      common.GetCpkInfo(s.p.cpkByValue),
+					cpkScopeInfo: common.GetCpkScopeInfo(s.p.cpkByName),
+				},
+			})
 			actualContentMD5 := md5.Sum(actualContent)
 			s.a.Assert(expectedContentMD5, equals(), actualContentMD5[:], "Content MD5 validation failed")
 
@@ -343,6 +351,31 @@ func (s *scenario) validateMetadata(expected, actual map[string]string) {
 			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("Expect value for key '%s' to be '%s' but found '%s'", key, exValue, actualValue))
 		}
 	}
+}
+
+func (s *scenario) validateCPKByScope(expected, actual *common.CpkScopeInfo) {
+	if expected == nil && actual == nil {
+		return
+	}
+	if expected == nil || actual == nil {
+		s.a.Failed()
+		return
+	}
+	s.a.Assert(expected.EncryptionScope, equals(), actual.EncryptionScope,
+		fmt.Sprintf("Expected encryption scope is: '%v' but found: '%v'", expected.EncryptionScope, actual.EncryptionScope))
+}
+
+func (s *scenario) validateCPKByValue(expected, actual *common.CpkInfo) {
+	if expected == nil && actual == nil {
+		return
+	}
+	if expected == nil || actual == nil {
+		s.a.Failed()
+		return
+	}
+
+	s.a.Assert(expected.EncryptionKeySha256, equals(), actual.EncryptionKeySha256,
+		fmt.Sprintf("Expected encryption scope is: '%v' but found: '%v'", expected.EncryptionKeySha256, actual.EncryptionKeySha256))
 }
 
 // Validate blob tags
@@ -453,10 +486,11 @@ func (s *scenario) GetTestFiles() testFiles {
 }
 
 func (s *scenario) CreateFiles(fs testFiles, atSource bool) {
+	s.fs = fs
 	if atSource {
-		s.state.source.createFiles(s.a, fs, true)
+		s.state.source.createFiles(s.a, s, true)
 	} else {
-		s.state.dest.createFiles(s.a, fs, false)
+		s.state.dest.createFiles(s.a, s, false)
 	}
 }
 

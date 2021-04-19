@@ -42,6 +42,7 @@ func fixSlashes(s string, loc common.Location) string {
 		// replace all slashes with the one that right for the local OS
 		s = strings.Replace(s, "/", common.OS_PATH_SEPARATOR, -1)
 		s = strings.Replace(s, "\\", common.OS_PATH_SEPARATOR, -1)
+		// relPath = strings.TrimPrefix(relPath, "\\/")
 	} else {
 		// replace all backslashes with web-style forward slash
 		s = strings.Replace(s, "\\", common.AZCOPY_PATH_SEPARATOR_STRING, -1)

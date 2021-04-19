@@ -92,6 +92,8 @@ type objectProperties struct {
 	lastWriteTime      *time.Time
 	smbAttributes      *uint32
 	smbPermissionsSddl *string
+	cpkInfo            *common.CpkInfo
+	cpkScopeInfo       *common.CpkScopeInfo
 }
 
 // returns op.size, if present, else defaultSize
@@ -153,6 +155,14 @@ func (op objectProperties) DeepCopy() objectProperties {
 
 	if op.smbPermissionsSddl != nil {
 		ret.smbPermissionsSddl = op.smbPermissionsSddl
+	}
+
+	if op.cpkInfo != nil {
+		ret.cpkInfo = op.cpkInfo
+	}
+
+	if op.cpkScopeInfo != nil {
+		ret.cpkScopeInfo = op.cpkScopeInfo
 	}
 
 	return ret

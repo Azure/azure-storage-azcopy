@@ -157,6 +157,8 @@ type params struct {
 	relativeSourcePath        string
 	blobTags                  string
 	s2sPreserveBlobTags       bool
+	cpkByName                 string
+	cpkByValue                bool
 }
 
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level
@@ -318,6 +320,23 @@ func (TestFromTo) AllRemove() TestFromTo {
 	}
 }
 
+func (TestFromTo) AllSync() TestFromTo {
+	return TestFromTo{
+		desc:      "AllSync",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(),
+			common.ELocation.File(),
+			common.ELocation.Local(),
+		},
+		tos: []common.Location{
+			common.ELocation.Blob(),
+			common.ELocation.File(),
+			common.ELocation.Local(),
+		},
+	}
+}
+
 // Other is for when you want to list one or more specific from-tos that the test should cover.
 // Generally avoid this method, because it does not automatically pick up new pairs as we add new supported
 // resource types to AzCopy.
@@ -460,7 +479,7 @@ type hookHelper interface {
 	// CancelAndResume tells the runner to cancel the running AzCopy job (with "cancel" to stdin) and the resume the job
 	CancelAndResume()
 
-	// Create a source snapshot to use it as the source
+	// CreateSourceSnapshot Create a source snapshot to use it as the source
 	CreateSourceSnapshot()
 }
 
