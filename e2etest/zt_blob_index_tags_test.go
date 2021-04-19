@@ -31,7 +31,7 @@ func TestTags_SetTagsSingleBlob(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Copy(),
-		eTestFromTo.Other(common.EFromTo.LocalBlob()),
+		eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.FileBlob()),
 		eValidate.AutoPlusContent(),
 		params{
 			recursive: true,
@@ -50,7 +50,7 @@ func TestTags_SetTagsSpecialCharactersSingleBlob(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Copy(),
-		eTestFromTo.Other(common.EFromTo.LocalBlob()),
+		eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.FileBlob()),
 		eValidate.AutoPlusContent(),
 		params{
 			recursive: true,
@@ -71,7 +71,7 @@ func TestTags_SetTagsMultipleBlobs(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Copy(),
-		eTestFromTo.Other(common.EFromTo.LocalBlob()),
+		eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.FileBlob()),
 		eValidate.AutoPlusContent(),
 		params{
 			recursive: true,
@@ -89,11 +89,11 @@ func TestTags_SetTagsMultipleBlobs(t *testing.T) {
 		})
 }
 
-// ================================  Copy: Preserve Tags ========================================================
+// ================================ Preserve Tags during copy or sync operation ========================================================
 func TestTags_PreserveTagsSingleBlob(t *testing.T) {
 	RunScenarios(
 		t,
-		eOperation.Copy(),
+		eOperation.CopyAndSync(),
 		eTestFromTo.Other(common.EFromTo.BlobBlob()),
 		eValidate.AutoPlusContent(),
 		params{
@@ -114,7 +114,7 @@ func TestTags_PreserveTagsSingleBlob(t *testing.T) {
 func TestTags_PreserveTagsSpecialCharactersSingleBlob(t *testing.T) {
 	RunScenarios(
 		t,
-		eOperation.Copy(),
+		eOperation.CopyAndSync(),
 		eTestFromTo.Other(common.EFromTo.BlobBlob()),
 		eValidate.AutoPlusContent(),
 		params{
@@ -134,7 +134,7 @@ func TestTags_PreserveTagsSpecialCharactersSingleBlob(t *testing.T) {
 func TestTags_PreserveTagsMultipleBlobs(t *testing.T) {
 	RunScenarios(
 		t,
-		eOperation.Copy(),
+		eOperation.CopyAndSync(),
 		eTestFromTo.Other(common.EFromTo.BlobBlob()),
 		eValidate.AutoPlusContent(),
 		params{
@@ -153,33 +153,10 @@ func TestTags_PreserveTagsMultipleBlobs(t *testing.T) {
 		})
 }
 
-func TestTags_PreserveTagsSpecialCharactersMultipleBlobs(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.Copy(),
-		eTestFromTo.Other(common.EFromTo.BlobBlob()),
-		eValidate.AutoPlusContent(),
-		params{
-			recursive:           true,
-			s2sPreserveBlobTags: true,
-		},
-		nil,
-		testFiles{
-			defaultSize: "1M",
-			shouldTransfer: []interface{}{
-				folder(""),
-				folder("fdlr1"),
-				f("file1.txt", with{blobTags: "bla_bla=foo+-foo&bla/ :bla/2=bar"}),
-				f("fdlr1/file2.txt", with{blobTags: "foo/-foo=bar:bar&baz=blah&YeAr=2020"}),
-			},
-		})
-}
-
-// ================================  Sync: Preserve Tags ========================================================
 func TestTags_PreserveTagsSpecialCharactersDuringSync(t *testing.T) {
 	RunScenarios(
 		t,
-		eOperation.Sync(),
+		eOperation.CopyAndSync(),
 		eTestFromTo.Other(common.EFromTo.BlobBlob()),
 		eValidate.AutoPlusContent(),
 		params{

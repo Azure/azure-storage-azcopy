@@ -47,8 +47,9 @@ type copyTransferProcessor struct {
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
-	source, destination common.ResourceString,
-	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool) *copyTransferProcessor {
+	source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(),
+	preserveAccessTier bool) *copyTransferProcessor {
+
 	return &copyTransferProcessor{
 		numOfTransfersPerPart:     numOfTransfersPerPart,
 		copyJobTemplate:           copyJobTemplate,

@@ -65,6 +65,8 @@ type rawSyncCmdArgs struct {
 	deleteDestination string
 
 	s2sPreserveAccessTier bool
+
+	blobTags string
 	// Opt-in flag to preserve the blob index tags during service to service transfer.
 	s2sPreserveBlobTags bool
 
@@ -244,12 +246,24 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		cooked.preserveAccessTier = raw.s2sPreserveAccessTier
 	}
 
+	if cooked.fromTo.To() != common.ELocation.Blob() && raw.blobTags != "" {
+		return cooked, fmt.Errorf("blob tags can only be set when transferring to blob storage")
+	}
+	blobTags := common.ToCommonBlobTagsMap(raw.blobTags)
+	err = validateBlobTagsKeyValue(blobTags)
+	if err != nil {
+		return cooked, err
+	}
+	cooked.blobTags = blobTags
+
 	// Check if user has provided `s2s-preserve-blob-tags` flag.
 	// If yes, we have to ensure that both source and destination must be blob storages.
 	if raw.s2sPreserveBlobTags {
 		if cooked.fromTo.From() != common.ELocation.Blob() || cooked.fromTo.To() != common.ELocation.Blob() {
 			return cooked, fmt.Errorf("either source or destination is not a blob storage. " +
 				"blob index tags is a property of blobs only therefore both source and destination must be blob storage")
+		} else if raw.blobTags != "" {
+			return cooked, fmt.Errorf("both s2s-preserve-blob-tags and blob-tags flags cannot be used in conjunction")
 		} else {
 			cooked.s2sPreserveBlobTags = raw.s2sPreserveBlobTags
 		}
@@ -351,6 +365,8 @@ type cookedSyncCmdArgs struct {
 	deleteDestination common.DeleteDestination
 
 	preserveAccessTier bool
+
+	blobTags common.BlobTags
 	// To specify whether user wants to preserve the blob index tags during service to service transfer.
 	s2sPreserveBlobTags bool
 
@@ -694,6 +710,7 @@ func init() {
 	syncCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true, "Preserve access tier during service to service copy. "+
 		"Please refer to [Azure Blob storage: hot, cool, and archive access tiers](https://docs.microsoft.com/azure/storage/blobs/storage-blob-storage-tiers) to ensure destination storage account supports setting access tier. "+
 		"In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false to bypass copying access tier. (default true). ")
+	syncCmd.PersistentFlags().StringVar(&raw.blobTags, "blob-tags", "", "Set tags on blobs to categorize data in your storage account")
 	syncCmd.PersistentFlags().BoolVar(&raw.s2sPreserveBlobTags, "s2s-preserve-blob-tags", false, "Preserve index tags during service to service sync from one blob storage to another")
 	// Public Documentation: https://docs.microsoft.com/en-us/azure/storage/blobs/encryption-customer-provided-keys
 	// Clients making requests against Azure Blob storage have the option to provide an encryption key on a per-request basis.

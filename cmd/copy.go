@@ -526,7 +526,8 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// 2. `blob-tags` is not present as they create conflicting scenario of whether to preserve blob tags from the source or set user defined tags on the destination
 	if raw.s2sPreserveBlobTags {
 		if cooked.fromTo.From() != common.ELocation.Blob() || cooked.fromTo.To() != common.ELocation.Blob() {
-			return cooked, errors.New("either source or destination is not a blob storage. blob index tags is a property of blobs only therefore both source and destination must be blob storage")
+			return cooked, errors.New("either source or destination is not a blob storage. " +
+				"blob index tags is a property of blobs only therefore both source and destination must be blob storage")
 		} else if raw.blobTags != "" {
 			return cooked, errors.New("both s2s-preserve-blob-tags and blob-tags flags cannot be used in conjunction")
 		} else {
