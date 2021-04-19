@@ -111,6 +111,7 @@ func (p *s3SourceInfoProvider) Properties() (*SrcProperties, error) {
 				ContentMD5:         oie.ContentMD5(),
 			},
 			SrcMetadata: oie.NewCommonMetadata(),
+			SrcBlobTags: p.transferInfo.SrcBlobTags,
 		}
 	}
 

@@ -157,6 +157,7 @@ func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 					ContentMD5:         fileProps.ContentMD5(),
 				},
 				SrcMetadata: common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata()),
+				SrcBlobTags: p.transferInfo.SrcBlobTags,
 			}
 		case common.EEntityType.Folder():
 			srcProperties = &SrcProperties{
