@@ -407,7 +407,11 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 				case common.EFromTo.BlobBlob(),
 					common.EFromTo.FileFile(),
 					common.EFromTo.LocalBlob(),
-					common.EFromTo.BlobLocal():
+					common.EFromTo.BlobLocal(),
+					common.EFromTo.BlobFile(),
+					common.EFromTo.LocalFile(),
+					common.EFromTo.FileLocal(),
+					common.EFromTo.FileBlob():
 					// do nothing, these are fine
 				default:
 					continue // not supported for sync
