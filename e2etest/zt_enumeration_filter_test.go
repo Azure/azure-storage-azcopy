@@ -43,7 +43,7 @@ func TestFilter_IncludePath(t *testing.T) {
 	// instead of just eOperation.Copy(), then for the first three listed above, RunTests would have run Sync as well, making
 	// it 8 scenarios in total. But include-path does not apply to Sync, so we did not specify that here)
 
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllSourcesToOneDest(), eValidate.Auto(), allCredentialTypes, allCredentialTypes, params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllSourcesToOneDest(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
 		recursive:   true,
 		includePath: "sub/subsub;wantedfile",
 	}, nil, testFiles{ // Source files specifies details of the files to test on
@@ -76,7 +76,7 @@ func TestFilter_IncludePath(t *testing.T) {
 
 // TestFilter_IncludeAfter test the include-after parameter
 func TestFilter_IncludeAfter(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllSourcesToOneDest(), eValidate.Auto(), allCredentialTypes, allCredentialTypes, params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllSourcesToOneDest(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, &hooks{
 		beforeRunJob: func(h hookHelper) {
@@ -109,7 +109,7 @@ func TestFilter_IncludeAfter(t *testing.T) {
 
 func TestFilter_IncludePattern(t *testing.T) {
 
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllSourcesToOneDest(), eValidate.Auto(), allCredentialTypes, allCredentialTypes, params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllSourcesToOneDest(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:      true,
 		includePattern: "*.txt;2020*;*mid*;file8", // *pre*in*post*",
 	}, nil, testFiles{
@@ -133,7 +133,7 @@ func TestFilter_IncludePattern(t *testing.T) {
 
 func TestFilter_RemoveFile(t *testing.T) {
 
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), allCredentialTypes, allCredentialTypes, params{
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		relativeSourcePath: "file2.txt",
 	}, nil, testFiles{
 		defaultSize: "1K",
@@ -148,7 +148,7 @@ func TestFilter_RemoveFile(t *testing.T) {
 
 func TestFilter_RemoveFolder(t *testing.T) {
 
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), allCredentialTypes, allCredentialTypes, params{
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:          true,
 		relativeSourcePath: "folder2/",
 	}, nil, testFiles{
@@ -167,7 +167,7 @@ func TestFilter_RemoveFolder(t *testing.T) {
 
 func TestFilter_RemoveContainer(t *testing.T) {
 
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), allCredentialTypes, allCredentialTypes, params{
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:          true,
 		relativeSourcePath: "",
 	}, nil, testFiles{
@@ -182,7 +182,7 @@ func TestFilter_RemoveContainer(t *testing.T) {
 
 func TestFilter_ExcludePath(t *testing.T) {
 
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllSourcesToOneDest(), eValidate.Auto(), allCredentialTypes, allCredentialTypes, params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllSourcesToOneDest(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:   true,
 		excludePath: "subL1/subL2;excludeFile",
 	}, nil, testFiles{
@@ -209,7 +209,7 @@ func TestFilter_ExcludePath(t *testing.T) {
 
 func TestFilter_ExcludePattern(t *testing.T) {
 
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllSourcesToOneDest(), eValidate.Auto(), allCredentialTypes, allCredentialTypes, params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllSourcesToOneDest(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:      true,
 		excludePattern: "*.log;2020*;*mid*;excludeFile",
 	}, nil, testFiles{
@@ -235,7 +235,7 @@ func TestFilter_ExcludePattern(t *testing.T) {
 // include-path with other filters didn't work properly. This test should give us some protection against that.
 // In particular, this tests asserts how the various path and pattern related filters should combine with each other.
 func TestFilter_CombineCommonFilters(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllSourcesToOneDest(), eValidate.Auto(), allCredentialTypes, allCredentialTypes, params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllSourcesToOneDest(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:      true,
 		includePath:    "dog;donkey/seal;ferret.txt;frog.txt;goat.txt", // mix of directories and files, all relative to the root
 		excludePath:    "dog/seal;donkey/seal/frog.txt",                // mix of directories and files, all relative to the root

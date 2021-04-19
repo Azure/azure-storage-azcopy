@@ -28,7 +28,7 @@ import (
 // Purpose: Other tests for enumeration of sources, NOT including filtering
 
 func TestEnumeration_DirectoryStubsAreNotDownloaded(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.BlobLocal()), eValidate.Auto(), allCredentialTypes, allCredentialTypes, params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.BlobLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1K",

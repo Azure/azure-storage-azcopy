@@ -45,6 +45,7 @@ var validCredTypesPerLocation = map[common.Location][]common.CredentialType {
 }
 
 var allCredentialTypes []common.CredentialType = nil
+var anonymousAuthOnly = []common.CredentialType{common.ECredentialType.Anonymous()}
 
 func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredentialTypesSrc, requestedCredentialTypesDst []common.CredentialType) [][2]common.CredentialType {
 	output := make([][2]common.CredentialType, 0)
@@ -171,7 +172,7 @@ func RunScenarios(t *testing.T,
 			for _,s := range s {
 				sen := s // capture to separate var inside the loop, for the parallel case
 				credNames := fmt.Sprintf("%s-%s", s.credTypes[0].String(), s.credTypes[1].String())
-				
+
 				t.Run(credNames, func(t *testing.T) {
 					if parallel {
 						t.Parallel() // tell testing that it can run stuff in parallel with us

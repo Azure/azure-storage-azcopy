@@ -32,7 +32,7 @@ import (
 
 func TestContent_AtBlobStorage(t *testing.T) {
 
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), allCredentialTypes, allCredentialTypes, params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "4M",
@@ -44,7 +44,7 @@ func TestContent_AtBlobStorage(t *testing.T) {
 }
 
 func TestContent_AtFileShare(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalFile()), eValidate.AutoPlusContent(), allCredentialTypes, allCredentialTypes, params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "4M",
@@ -57,7 +57,7 @@ func TestContent_AtFileShare(t *testing.T) {
 }
 
 func TestContent_BlobToBlob(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), allCredentialTypes, allCredentialTypes, params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "8M",
