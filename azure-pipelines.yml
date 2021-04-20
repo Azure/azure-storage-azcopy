@@ -3,7 +3,7 @@ schedules:
     displayName: Daily Midnight AzCopy Build
     branches:
       include:
-        - master
+        - dev
     always: true
 
 trigger:
