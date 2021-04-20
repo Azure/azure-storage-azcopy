@@ -31,7 +31,7 @@ jobs:
     variables:
       - groups: AzCopySecrets
       - name: isMutexSet
-          value: 'false'
+        value: 'false'
 
     steps:
       - task: GoTool@0
