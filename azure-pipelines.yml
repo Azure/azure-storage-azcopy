@@ -17,8 +17,10 @@ jobs:
       matrix:
         Ubuntu-20:
           imageName: 'ubuntu-20.04'
+          type: 'linux'
         Windows:
           imageName: 'windows-2019'
+          type: 'windows'
     pool:
       vmImage: $(imageName)
     steps:
@@ -28,14 +30,23 @@ jobs:
       - script: |
           GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
           GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
-          GOARCH=amd64 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
-          GOARCH=386 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
           cp NOTICE.txt $(Build.ArtifactStagingDirectory)
         displayName: 'Generate builds'
+        condition: eq(variables.type, 'linux')
 
-      - task: PublishBuildArtifacts@1
-        displayName: 'Publish Artifacts'
-        condition: succeededOrFailed()
+      - script: |
+          set GOARCH="amd64"
+          set GOOS="windows"
+          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
+          set GOARCH="386"
+          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
+          cp NOTICE.txt $(Build.ArtifactStagingDirectory)
+        displayName: 'Generate builds'
+        condition: eq(variables.type, 'windows')
+
+#      - task: PublishBuildArtifacts@1
+#        displayName: 'Publish Artifacts'
+#        condition: succeededOrFailed()
 
   - job: MacOS_Build
     pool:
@@ -48,9 +59,9 @@ jobs:
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
         displayName: 'Generate builds'
 
-      - task: PublishBuildArtifacts@1
-        displayName: 'Publish Artifacts'
-        condition: succeededOrFailed()
+#      - task: PublishBuildArtifacts@1
+#        displayName: 'Publish Artifacts'
+#        condition: succeededOrFailed()
 
   - job: Test_On_Ubuntu
     strategy:
