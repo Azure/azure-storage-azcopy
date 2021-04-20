@@ -12,7 +12,7 @@ trigger:
       - dev
 
 jobs:
-  - job: Linux_and_Windows_Builds
+  - job: Build
     strategy:
       matrix:
         Ubuntu-20:
@@ -28,17 +28,14 @@ jobs:
         inputs:
           version: '1.15'
       - script: |
-          GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
-          GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
+          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
+          go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
           cp NOTICE.txt $(Build.ArtifactStagingDirectory)
         displayName: 'Generate builds'
         condition: eq(variables.type, 'linux')
 
       - script: |
-          set GOARCH="amd64"
-          set GOOS="windows"
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
-          set GOARCH="386"
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
           cp NOTICE.txt $(Build.ArtifactStagingDirectory)
         displayName: 'Generate builds'
