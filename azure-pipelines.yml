@@ -13,12 +13,12 @@ trigger:
 
 jobs:
   - job: Linux_and_Windows_Builds
-      strategy:
-        matrix:
-          Ubuntu-20:
-            imageName: 'ubuntu-20.04'
-          Windows:
-            imageName: 'windows-2019'
+    strategy:
+      matrix:
+        Ubuntu-20:
+          imageName: 'ubuntu-20.04'
+        Windows:
+          imageName: 'windows-2019'
     pool:
       vmImage: $(imageName)
     steps:
@@ -59,8 +59,8 @@ jobs:
           imageName: 'ubuntu-20.04'
         Windows:
           imageName: 'windows-2019'
-      pool:
-        vmImage: $(imageName)
+    pool:
+      vmImage: $(imageName)
     variables:
       isMutexSet: 'false'
     # allow maximum build time, in case we have build congestion
