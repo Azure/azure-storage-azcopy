@@ -13,6 +13,8 @@ trigger:
 
 jobs:
   - job: Build
+    # allow maximum build time, in case we have build congestion
+    timeoutInMinutes: 360
     strategy:
       matrix:
         Ubuntu-20:
@@ -21,8 +23,16 @@ jobs:
         Windows:
           imageName: 'windows-2019'
           type: 'windows'
+        MacOS:
+          imageName: 'macOS-10.14'
+          type: 'mac-os'
     pool:
       vmImage: $(imageName)
+    variables:
+      - groups: AzCopySecrets
+      - name: isMutexSet
+          value: 'false'
+
     steps:
       - task: GoTool@0
         inputs:
@@ -31,49 +41,21 @@ jobs:
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
           go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
           cp NOTICE.txt $(Build.ArtifactStagingDirectory)
-        displayName: 'Generate builds'
+        displayName: 'Generate build linux'
         condition: eq(variables.type, 'linux')
 
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
           cp NOTICE.txt $(Build.ArtifactStagingDirectory)
-        displayName: 'Generate builds'
+        displayName: 'Generate build windows'
         condition: eq(variables.type, 'windows')
 
-#      - task: PublishBuildArtifacts@1
-#        displayName: 'Publish Artifacts'
-#        condition: succeededOrFailed()
-
-  - job: MacOS_Build
-    pool:
-      vmImage: 'macOS-10.14'
-    steps:
-      - task: GoTool@0
-        inputs:
-          version: '1.15'
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
-        displayName: 'Generate builds'
+        displayName: 'Generate build MacOS'
+        condition: eq(variables.type, 'mac-os')
 
-#      - task: PublishBuildArtifacts@1
-#        displayName: 'Publish Artifacts'
-#        condition: succeededOrFailed()
-
-  - job: Test_On_Ubuntu
-    strategy:
-      matrix:
-        Ubuntu-20:
-          imageName: 'ubuntu-20.04'
-        Windows:
-          imageName: 'windows-2019'
-    pool:
-      vmImage: $(imageName)
-    variables:
-      isMutexSet: 'false'
-    # allow maximum build time, in case we have build congestion
-    timeoutInMinutes: 360
-    steps:
       - task: UsePythonVersion@0
         name: 'Set_up_Python'
         inputs:
@@ -102,7 +84,7 @@ jobs:
           # "-check.v" (must be after package list) outputs timings
           set -e
           go test -timeout 45m -race -short -cover ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v"
-          GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
+          go build -o azcopy_linux_amd64
         name: 'Run_unit_tests'
         env:
           ACCOUNT_NAME: $(ACCOUNT_NAME)
@@ -115,7 +97,7 @@ jobs:
           GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
       - script: |
           set -e
-          GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
+          go build -o azcopy_linux_amd64
           export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
           go test -timeout 20m -race -short -cover ./e2etest
         name: 'Run_e2e_tests'
