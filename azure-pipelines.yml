@@ -1,19 +1,26 @@
+schedules:
+  - cron: "0 0 * * *"
+    displayName: Daily Midnight AzCopy Build
+    branches:
+      include:
+        - master
+    always: true
+
 trigger:
   branches:
     include:
       - dev
-      - master
-
-pr:
-  branches:
-    include:
-      - dev
-      - master
 
 jobs:
   - job: Linux_and_Windows_Builds
+      strategy:
+        matrix:
+          Ubuntu-20:
+            imageName: 'ubuntu-20.04'
+          Windows:
+            imageName: 'windows-2019'
     pool:
-      vmImage: 'ubuntu-16.04'
+      vmImage: $(imageName)
     steps:
       - task: GoTool@0
         inputs:
@@ -46,12 +53,18 @@ jobs:
         condition: succeededOrFailed()
 
   - job: Test_On_Ubuntu
+    strategy:
+      matrix:
+        Ubuntu-20:
+          imageName: 'ubuntu-20.04'
+        Windows:
+          imageName: 'windows-2019'
+      pool:
+        vmImage: $(imageName)
     variables:
       isMutexSet: 'false'
     # allow maximum build time, in case we have build congestion
     timeoutInMinutes: 360
-    pool:
-      vmImage: 'ubuntu-16.04'
     steps:
       - task: UsePythonVersion@0
         name: 'Set_up_Python'
@@ -96,11 +109,13 @@ jobs:
           set -e
           GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
           export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
-          go test -timeout 20m -race -short -cover ./e2etest         
+          go test -timeout 20m -race -short -cover ./e2etest
         name: 'Run_e2e_tests'
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+          CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
+          CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
       - script: |
           go build -o test-validator ./testSuite/
           mkdir test-temp
