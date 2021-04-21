@@ -62,10 +62,8 @@ jobs:
           echo 'Starting unit tests on MacOS'
           go test -timeout 45m -race -cover -v ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl
         env:
-          ACCOUNT_NAME: $(ACCOUNT_NAME)
-          ACCOUNT_KEY: $(ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+          ACCOUNT_NAME: $(ACCOUNT_NAME_MAC)
+          ACCOUNT_KEY: $(ACCOUNT_KEY_MAC)
         displayName: 'Unit Test MacOS'
         condition: eq(variables.type, 'mac-os')
 
@@ -77,10 +75,8 @@ jobs:
           echo 'Starting unit tests on Linux'
           go test -timeout 45m -race -cover -v ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl
         env:
-          ACCOUNT_NAME: $(ACCOUNT_NAME)
-          ACCOUNT_KEY: $(ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+          ACCOUNT_NAME: $(ACCOUNT_NAME_LIN)
+          ACCOUNT_KEY: $(ACCOUNT_KEY_LIN)
           AZCOPY_E2E_EXECUTABLE_PATH: $(Build.ArtifactStagingDirectory)/azcopy_linux_amd64
         displayName: 'Unit Test Linux'
         condition: eq(variables.type, 'linux')
@@ -94,8 +90,6 @@ jobs:
         env:
           ACCOUNT_NAME: $(ACCOUNT_NAME)
           ACCOUNT_KEY: $(ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
         displayName: 'Unit Test Windows'
         condition: eq(variables.type, 'windows')
 
