@@ -63,7 +63,7 @@ jobs:
           secureFile: 'ci-gcs-dev.json'
       - script: |
           go test -timeout 45m -race -short -cover ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v"
-        name: 'Unit Tests'
+        displayName: 'Unit Tests'
         env:
           ACCOUNT_NAME: $(ACCOUNT_NAME)
           ACCOUNT_KEY: $(ACCOUNT_KEY)
@@ -75,7 +75,6 @@ jobs:
           GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
       - script: |
           go test -timeout 30m -race -short -cover ./e2etest
-        name: 'E2E Tests'
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
@@ -86,7 +85,6 @@ jobs:
         condition: eq(variables.type, 'linux')
       - script: |
           go test -timeout 30m -race -short -cover ./e2etest
-          name: 'E2E Tests'
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
