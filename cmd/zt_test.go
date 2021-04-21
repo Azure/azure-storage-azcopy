@@ -27,7 +27,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	guuid "github.com/google/uuid"
 	"google.golang.org/api/iterator"
 	"io"
 	"io/ioutil"
@@ -107,22 +106,37 @@ func skipIfGCPDisabled(c *chk.C) {
 // Will truncate the end of the test name, if there is not enough room for it, followed by the time-based suffix,
 // with a non-zero maxLen.
 func generateName(prefix string, maxLen int) string {
-	nameWithHyphen := guuid.New()
-	name := strings.ToLower(prefix + runtime.GOOS + strings.Replace(nameWithHyphen.String(), "-", "", -1))
+	// The following lines step up the stack find the name of the test method
+	// Note: the way to do this changed in go 1.12, refer to release notes for more info
+	var pcs [10]uintptr
+	n := runtime.Callers(1, pcs[:])
+	frames := runtime.CallersFrames(pcs[:n])
+	name := runtime.GOOS // default stub "Foo" is used if anything goes wrong with this procedure
+	for {
+		frame, more := frames.Next()
+		if strings.Contains(frame.Func.Name(), "Suite") {
+			name = frame.Func.Name()
+			break
+		} else if !more {
+			break
+		}
+	}
+	funcNameStart := strings.Index(name, "Test")
+	name = name[funcNameStart+len("Test"):] // Just get the name of the test and not any of the garbage at the beginning
+	name = strings.ToLower(name)            // Ensure it is a valid resource name
 	textualPortion := fmt.Sprintf("%s%s", prefix, strings.ToLower(name))
-
 	currentTime := time.Now()
 	numericSuffix := fmt.Sprintf("%02d%02d%d", currentTime.Minute(), currentTime.Second(), currentTime.Nanosecond())
 	if maxLen > 0 {
 		maxTextLen := maxLen - len(numericSuffix)
-		if maxTextLen < 3 {
+		if maxTextLen < 1 {
 			panic("max len too short")
+		}
+		if len(textualPortion) > maxTextLen {
+			textualPortion = textualPortion[:maxTextLen]
 		}
 	}
 	name = textualPortion + numericSuffix
-	if len(name) > maxLen {
-		return name[:maxLen]
-	}
 	return name
 }
 
