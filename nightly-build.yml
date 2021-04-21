@@ -56,6 +56,16 @@ jobs:
         inputs:
           secureFile: 'ci-gcs-dev.json'
 
+      # Running Unit Tests on Windows/Mac/Linux
+      - script: |
+          go test -timeout 45m -race -cover -v ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl
+        displayName: 'Unit Tests'
+        env:
+          ACCOUNT_NAME: $(ACCOUNT_NAME)
+          ACCOUNT_KEY: $(ACCOUNT_KEY)
+          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+
       # Running E2E Tests on Linux
       - script: |
           go build -o azcopy_linux_amd64
@@ -99,13 +109,3 @@ jobs:
           AZCOPY_E2E_EXECUTABLE_PATH: $(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64
         displayName: 'E2E Test MacOs'
         condition: eq(variables.type, 'mac-os')
-
-      # Running Unit Tests on Windows/Mac/Linux
-      - script: |
-          go test -timeout 45m -race -cover -v ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl
-        displayName: 'Unit Tests'
-        env:
-          ACCOUNT_NAME: $(ACCOUNT_NAME)
-          ACCOUNT_KEY: $(ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
