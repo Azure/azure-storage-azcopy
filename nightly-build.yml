@@ -40,7 +40,7 @@ jobs:
 
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
-          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
+          go build -tags "windows_x86" -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
           cp NOTICE.txt $(Build.ArtifactStagingDirectory)
         displayName: 'Build Windows'
         condition: eq(variables.type, 'windows')
@@ -56,23 +56,12 @@ jobs:
         inputs:
           secureFile: 'ci-gcs-dev.json'
 
-      # Running Unit Tests on Windows/Mac/Linux
-      - script: |
-          go test -timeout 45m -race -short -cover ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v"
-        displayName: 'Unit Tests'
-        env:
-          ACCOUNT_NAME: $(ACCOUNT_NAME)
-          ACCOUNT_KEY: $(ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
-          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
-          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-          GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
-          GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
-
       # Running E2E Tests on Linux
       - script: |
-          go test -timeout 30m -race -short -cover ./e2etest
+          go build -o azcopy_linux_amd64
+          go build -tags "se_integration" -o azcopy_linux_se_amd64
+          echo 'starting E2E tests on linux'
+          go test -timeout 30m -race -cover -v ./e2etest
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
@@ -84,7 +73,10 @@ jobs:
 
       # Running E2E Tests on Windows
       - script: |
-          go test -timeout 30m -race -short -cover ./e2etest
+          go build -o azcopy_windows_amd64.exe
+          go build -o azcopy_windows_386.exe
+          echo 'starting E2E tests on windows'
+          go test -timeout 30m -race -cover -v ./e2etest
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
@@ -96,7 +88,9 @@ jobs:
 
       # Running E2E Tests on Mac
       - script: |
-          go test -timeout 30m -race -short -cover ./e2etest
+          go build -o azcopy_darwin_amd64
+          echo 'starting E2E tests on windows'
+          go test -timeout 30m -race -cover -v ./e2etest
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
@@ -105,3 +99,13 @@ jobs:
           AZCOPY_E2E_EXECUTABLE_PATH: $(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64
         displayName: 'E2E Test MacOs'
         condition: eq(variables.type, 'mac-os')
+
+      # Running Unit Tests on Windows/Mac/Linux
+      - script: |
+          go test -timeout 45m -race -cover -v ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl
+        displayName: 'Unit Tests'
+        env:
+          ACCOUNT_NAME: $(ACCOUNT_NAME)
+          ACCOUNT_KEY: $(ACCOUNT_KEY)
+          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
