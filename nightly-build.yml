@@ -59,7 +59,7 @@ jobs:
       # Running Unit Tests on MacOS
       - script: |
           go build -o azcopy_darwin_amd64
-          echo 'starting E2E tests on MacOS'
+          echo 'Starting unit tests on MacOS'
           go test -timeout 45m -race -cover -v ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl
         env:
           ACCOUNT_NAME: $(ACCOUNT_NAME)
@@ -74,21 +74,22 @@ jobs:
       - script: |
           go build -o azcopy_linux_amd64
           go build -tags "se_integration" -o azcopy_linux_se_amd64
-          echo 'starting E2E tests on MacOS'
+          echo 'Starting unit tests on Linux'
           go test -timeout 45m -race -cover -v ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl
         env:
           ACCOUNT_NAME: $(ACCOUNT_NAME)
           ACCOUNT_KEY: $(ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
-        displayName: 'E2E Test Windows'
+          AZCOPY_E2E_EXECUTABLE_PATH: $(Build.ArtifactStagingDirectory)/azcopy_linux_amd64
+        displayName: 'Unit Test Linux'
         condition: eq(variables.type, 'linux')
 
       # Running Unit Tests on Windows
       - script: |
           go build -o azcopy_windows_amd64.exe
           go build -tags "windows_x86" -o azcopy_windows_386.exe
-          echo 'starting E2E tests on windows'
+          echo 'Starting unit tests on windows'
           go test -timeout 45m -race -cover -v ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl
         env:
           ACCOUNT_NAME: $(ACCOUNT_NAME)
