@@ -71,6 +71,7 @@ jobs:
 
       # Running Unit Tests on Linux
       - script: |
+          set -e
           go build -o azcopy_linux_amd64
           go build -tags "se_integration" -o azcopy_linux_se_amd64
           echo 'Starting unit tests on Linux'
