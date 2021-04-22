@@ -480,7 +480,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SContainerAndEmptyVirtualDir(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
-	dstVirtualDirURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, dstContainerName, "emptydir")
+	dstVirtualDirURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, dstContainerName, "emptydir/")
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstVirtualDirURLWithSAS.String())
 
 	// verify that targeting a virtual directory works fine
