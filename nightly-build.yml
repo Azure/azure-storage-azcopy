@@ -13,15 +13,15 @@ jobs:
     # Creating strategies for GOOS: Windows Server 2019 /macOS X Mojave 10.14/Ubuntu 20.04
     strategy:
       matrix:
-#        Ubuntu-20:
-#          imageName: 'ubuntu-20.04'
-#          type: 'linux'
+        Ubuntu-20:
+          imageName: 'ubuntu-20.04'
+          type: 'linux'
         Windows:
           imageName: 'windows-2019'
           type: 'windows'
-#        MacOS:
-#          imageName: 'macOS-10.15'
-#          type: 'mac-os'
+        MacOS:
+          imageName: 'macOS-10.15'
+          type: 'mac-os'
     pool:
       vmImage: $(imageName)
     variables:
@@ -56,17 +56,17 @@ jobs:
         inputs:
           secureFile: 'ci-gcs-dev.json'
 
-      # Running Unit Tests on MacOS
-      - script: |
-          set -e
-          go build -o azcopy_darwin_amd64
-          echo 'Starting unit tests on MacOS'
-          go test -timeout 45m -race -cover -v ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl
-        env:
-          ACCOUNT_NAME: $(ACCOUNT_NAME_MAC)
-          ACCOUNT_KEY: $(ACCOUNT_KEY_MAC)
-        displayName: 'Unit Test MacOS'
-        condition: eq(variables.type, 'mac-os')
+#      # Running Unit Tests on MacOS
+#      - script: |
+#          set -e
+#          go build -o azcopy_darwin_amd64
+#          echo 'Starting unit tests on MacOS'
+#          go test -timeout 45m -race -cover -v ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl
+#        env:
+#          ACCOUNT_NAME: $(ACCOUNT_NAME)
+#          ACCOUNT_KEY: $(ACCOUNT_KEY)
+#        displayName: 'Unit Test MacOS'
+#        condition: eq(variables.type, 'mac-os')
 
 
       # Running Unit Tests on Linux
@@ -77,23 +77,23 @@ jobs:
           echo 'Starting unit tests on Linux'
           go test -timeout 45m -race -cover -v ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl
         env:
-          ACCOUNT_NAME: $(ACCOUNT_NAME_LIN)
-          ACCOUNT_KEY: $(ACCOUNT_KEY_LIN)
+          ACCOUNT_NAME: $(ACCOUNT_NAME)
+          ACCOUNT_KEY: $(ACCOUNT_KEY)
           AZCOPY_E2E_EXECUTABLE_PATH: $(Build.ArtifactStagingDirectory)/azcopy_linux_amd64
         displayName: 'Unit Test Linux'
         condition: eq(variables.type, 'linux')
 
-      # Running Unit Tests on Windows
-      - script: |
-          go build -o azcopy_windows_amd64.exe
-          go build -tags "windows_x86" -o azcopy_windows_386.exe
-          echo 'Starting unit tests on windows'
-          go test -timeout 45m -race -cover -v ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl
-        env:
-          ACCOUNT_NAME: $(ACCOUNT_NAME)
-          ACCOUNT_KEY: $(ACCOUNT_KEY)
-        displayName: 'Unit Test Windows'
-        condition: eq(variables.type, 'windows')
+#      # Running Unit Tests on Windows
+#      - script: |
+#          go build -o azcopy_windows_amd64.exe
+#          go build -tags "windows_x86" -o azcopy_windows_386.exe
+#          echo 'Starting unit tests on windows'
+#          go test -timeout 45m -race -cover -v ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl
+#        env:
+#          ACCOUNT_NAME: $(ACCOUNT_NAME)
+#          ACCOUNT_KEY: $(ACCOUNT_KEY)
+#        displayName: 'Unit Test Windows'
+#        condition: eq(variables.type, 'windows')
 
       # Running E2E Tests on Linux
       - script: |
