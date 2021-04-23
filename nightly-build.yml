@@ -68,20 +68,23 @@ jobs:
 #        displayName: 'Unit Test MacOS'
 #        condition: eq(variables.type, 'mac-os')
 
-
-      # Running Unit Tests on Linux
-      - script: |
-          set -e
-          go build -o azcopy_linux_amd64
-          go build -tags "se_integration" -o azcopy_linux_se_amd64
-          echo 'Starting unit tests on Linux'
-          go test -timeout 45m -race -cover -v ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl
-        env:
-          ACCOUNT_NAME: $(ACCOUNT_NAME)
-          ACCOUNT_KEY: $(ACCOUNT_KEY)
-          AZCOPY_E2E_EXECUTABLE_PATH: $(Build.ArtifactStagingDirectory)/azcopy_linux_amd64
-        displayName: 'Unit Test Linux'
-        condition: eq(variables.type, 'linux')
+#      # Running Unit Tests on Linux
+#      - script: |
+#          # run unit test and build executable
+#          # the set -e line is needed so that the unit tests failure would cause the job to fail properly
+#          # "-check.v" (must be after package list) outputs timings
+#          set -e
+#          time go build -o azcopy_linux_amd64
+#          time go build -tags "se_integration" -o azcopy_linux_se_amd64
+#          echo 'Starting unit tests on Linux'
+#          go test -timeout 45m -race -short -cover ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v"
+#          GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
+#        env:
+#          ACCOUNT_NAME: $(ACCOUNT_NAME)
+#          ACCOUNT_KEY: $(ACCOUNT_KEY)
+#          AZCOPY_E2E_EXECUTABLE_PATH: $(Build.ArtifactStagingDirectory)/azcopy_linux_amd64
+#        displayName: 'Unit Test Linux'
+#        condition: eq(variables.type, 'linux')
 
 #      # Running Unit Tests on Windows
 #      - script: |
