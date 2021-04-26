@@ -157,6 +157,7 @@ type params struct {
 	relativeSourcePath        string
 	blobTags                  string
 	s2sPreserveBlobTags       bool
+	isObjectDir               bool
 }
 
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level
@@ -388,7 +389,11 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 				case common.EFromTo.BlobBlob(),
 					common.EFromTo.FileFile(),
 					common.EFromTo.LocalBlob(),
-					common.EFromTo.BlobLocal():
+					common.EFromTo.BlobLocal(),
+					common.EFromTo.LocalFile(),
+					common.EFromTo.FileLocal(),
+					common.EFromTo.BlobFile(),
+					common.EFromTo.FileBlob():
 					// do nothing, these are fine
 				default:
 					continue // not supported for sync
