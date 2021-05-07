@@ -358,7 +358,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 				renameErr := os.Rename(info.getTempDownloadPath(), info.Destination)
 				if  renameErr != nil {
 					jptm.LogError(info.Destination, fmt.Sprintf(
-								  "Failed to rename. File at %s", info.getTempDownloadPath()), err)
+								  "Failed to rename. File at %s", info.getTempDownloadPath()), renameErr)
 				}
 			}
 		}
