@@ -36,7 +36,7 @@ func (s *syncComparatorSuite) TestSyncSourceComparator(c *chk.C) {
 
 	// set up the indexer as well as the source comparator
 	indexer := newObjectIndexer()
-	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process)
+	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process, false)
 
 	// create a sample destination object
 	sampleDestinationObject := storedObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now(), md5: destMD5}
@@ -89,7 +89,7 @@ func (s *syncComparatorSuite) TestSyncDestinationComparator(c *chk.C) {
 
 	// set up the indexer as well as the destination comparator
 	indexer := newObjectIndexer()
-	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process)
+	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, false)
 
 	// create a sample source object
 	sampleSourceObject := storedObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now(), md5: srcMD5}
