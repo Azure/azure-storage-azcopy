@@ -22,13 +22,14 @@ package cmd
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/pkg/errors"
 
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type copyTransferProcessor struct {
@@ -79,7 +80,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 		return nil // skip this one
 	}
 
-	if len(s.copyJobTemplate.Transfers) == s.numOfTransfersPerPart {
+	if len(s.copyJobTemplate.Transfers.List) == s.numOfTransfersPerPart {
 		resp := s.sendPartToSte()
 
 		// TODO: If we ever do launch errors outside of the final "no transfers" error, make them output nicer things here.
@@ -88,13 +89,13 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 		}
 
 		// reset the transfers buffer
-		s.copyJobTemplate.Transfers = []common.CopyTransfer{}
+		s.copyJobTemplate.Transfers = common.Transfers{}
 		s.copyJobTemplate.PartNum++
 	}
 
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
-	s.copyJobTemplate.Transfers = append(s.copyJobTemplate.Transfers, copyTransfer)
+	s.copyJobTemplate.Transfers.List = append(s.copyJobTemplate.Transfers.List, copyTransfer)
 
 	return nil
 }

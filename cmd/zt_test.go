@@ -26,7 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"google.golang.org/api/iterator"
 	"io"
 	"io/ioutil"
@@ -38,8 +38,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	minio "github.com/minio/minio-go"
 
 	chk "gopkg.in/check.v1"

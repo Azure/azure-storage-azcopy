@@ -77,7 +77,7 @@ func RunScenarios(
 				validate:            validate,
 				p:                   p, // copies them, because they are a struct. This is what we need, since they may be morphed while running
 				hs:                  hsToUse,
-				fs:                  fs,
+				fs:                  fs.DeepCopy(),
 				stripTopDir:         false, // TODO: how will we set this?
 			}
 

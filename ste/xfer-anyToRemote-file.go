@@ -34,7 +34,7 @@ import (
 	"sync"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // This code for blob tier safety is _not_ safe for multiple jobs at once.

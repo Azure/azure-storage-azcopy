@@ -32,7 +32,7 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-file-go/azfile"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type URLHolder interface {
@@ -265,7 +265,7 @@ func (u *azureFileSenderBase) addPermissionsToHeaders(info TransferInfo, destUrl
 		}
 	}
 
-	if len(*u.headersToApply.PermissionString) > filesServiceMaxSDDLSize {
+	if u.headersToApply.PermissionString != nil && len(*u.headersToApply.PermissionString) > filesServiceMaxSDDLSize {
 		fURLParts := azfile.NewFileURLParts(destUrl)
 		fURLParts.DirectoryOrFilePath = ""
 		shareURL := azfile.NewShareURL(fURLParts.URL(), u.pipeline)
@@ -309,16 +309,13 @@ func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info TransferInfo, destU
 }
 
 func (u *azureFileSenderBase) Epilogue() {
-	// when readonly=true we deliberately omit it a creation time, so must set it here
-	resendReadOnly := u.headersToApply.FileAttributes != nil &&
-		u.headersToApply.FileAttributes.Has(azfile.FileAttributeReadonly)
-
-	// when archive bit is false, it must be set in a separate call (like we do here). As at March 2020,
-	// the Service does not respect attempts to set it to false at time of creating the file.
-	resendArchive := u.headersToApply.FileAttributes != nil &&
-		u.headersToApply.FileAttributes.Has(azfile.FileAttributeArchive) == false
-
-	if u.jptm.IsLive() && (resendReadOnly || resendArchive) && u.jptm.Info().PreserveSMBInfo {
+	// always set the SMB info again after the file content has been uploaded, for the following reasons:
+	//   0. File attributes such as readOnly and archive need to be passed through another Set Properties call.
+	//   1. The syntax for SMB permissions are slightly different for create call vs update call.
+	//      This is not trivial but the Files Team has explicitly told us to perform this extra set call.
+	//   2. The service started updating the last-write-time in March 2021 when the file is modified.
+	//      So when we uploaded the ranges, we've unintentionally changed the last-write-time.
+	if u.jptm.IsLive() && u.jptm.Info().PreserveSMBInfo {
 		//This is an extra round trip, but we can live with that for these relatively rare cases
 		_, err := u.fileURL().SetHTTPHeaders(u.ctx, u.headersToApply)
 		if err != nil {

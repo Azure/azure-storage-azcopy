@@ -32,7 +32,7 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type pageBlobSenderBase struct {
@@ -42,6 +42,7 @@ type pageBlobSenderBase struct {
 	chunkSize       int64
 	numChunks       uint32
 	pacer           pacer
+
 	// Headers and other info that we will apply to the destination
 	// object. For S2S, these come from the source service.
 	// When sending local data, they are computed based on
@@ -49,7 +50,9 @@ type pageBlobSenderBase struct {
 	headersToApply  azblob.BlobHTTPHeaders
 	metadataToApply azblob.Metadata
 	blobTagsToApply azblob.BlobTagsMap
-	destBlobTier    azblob.AccessTierType
+	cpkToApply      azblob.ClientProvidedKeyOptions
+
+	destBlobTier azblob.AccessTierType
 	// filePacer is necessary because page blobs have per-blob throughput limits. The limits depend on
 	// what type of page blob it is (e.g. premium) and can be significantly lower than the blob account limit.
 	// Using a automatic pacer here lets us find the right rate for this particular page blob, at which
@@ -120,6 +123,9 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 		destBlobTier = pageBlobTierOverride.ToAccessTierType()
 	}
 
+	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
+	cpkToApply := common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
+
 	s := &pageBlobSenderBase{
 		jptm:                   jptm,
 		destPageBlobURL:        destPageBlobURL,
@@ -132,6 +138,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
 		destBlobTier:           destBlobTier,
 		filePacer:              newNullAutoPacer(), // defer creation of real one to Prologue
+		cpkToApply:             cpkToApply,
 		destPageRangeOptimizer: destRangeOptimizer,
 	}
 
@@ -173,7 +180,7 @@ func (s *pageBlobSenderBase) NumChunks() uint32 {
 }
 
 func (s *pageBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
-	return remoteObjectExists(s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{}))
+	return remoteObjectExists(s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkToApply))
 }
 
 var premiumPageBlobTierRegex = regexp.MustCompile(`P\d+`)
@@ -204,7 +211,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		// FileSize                : 1073742336  (equals our s.srcSize, i.e. the size of the disk file)
 		// Size                    : 1073741824
 
-		p, err := s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+		p, err := s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkToApply)
 		if err != nil {
 			s.jptm.FailActiveSend("Checking size of managed disk blob", err)
 			return
@@ -242,6 +249,11 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		blobTags = nil
 	}
 
+	// TODO: Remove this snippet once service starts supporting CPK with blob tier
+	if s.cpkToApply.EncryptionScope != nil || (s.cpkToApply.EncryptionKey != nil && s.cpkToApply.EncryptionKeySha256 != nil) {
+		destBlobTier = azblob.PremiumPageBlobAccessTierNone
+	}
+
 	if _, err := s.destPageBlobURL.Create(s.jptm.Context(),
 		s.srcSize,
 		0,
@@ -250,7 +262,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		azblob.BlobAccessConditions{},
 		destBlobTier,
 		blobTags,
-		azblob.ClientProvidedKeyOptions{},
+		s.cpkToApply,
 	); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return

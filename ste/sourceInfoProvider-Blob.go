@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/url"
 	"time"
 
@@ -71,7 +72,12 @@ func (p *blobSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, erro
 	}
 
 	blobURL := azblob.NewBlobURL(*presignedURL, p.jptm.SourceProviderPipeline())
-	properties, err := blobURL.GetProperties(p.jptm.Context(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
+	if p.jptm.IsSourceEncrypted() {
+		clientProvidedKey = common.ToClientProvidedKeyOptions(p.jptm.CpkInfo(), p.jptm.CpkScopeInfo())
+	}
+
+	properties, err := blobURL.GetProperties(p.jptm.Context(), azblob.BlobAccessConditions{}, clientProvidedKey)
 	if err != nil {
 		return time.Time{}, err
 	}

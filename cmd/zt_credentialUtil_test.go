@@ -22,7 +22,7 @@ package cmd
 
 import (
 	"context"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
 	"strings"
 )
@@ -88,8 +88,7 @@ func (s *credentialUtilSuite) TestCheckAuthSafeForTargetIsCalledWhenGettingAuthT
 	// Call our core cred type getter function, in a way that will fail the safety check, and assert
 	// that it really does fail.
 	// This checks that our safety check is hooked into the main logic
-	_, _, err := doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(),
-		"http://notblob.example.com", "", true, mockGetCredTypeFromEnvVar)
+	_, _, err := doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(), "http://notblob.example.com", "", true, mockGetCredTypeFromEnvVar, common.CpkOptions{})
 	c.Assert(err, chk.NotNil)
 	c.Assert(strings.Contains(err.Error(), "If this URL is in fact an Azure service, you can enable Azure authentication to notblob.example.com."),
 		chk.Equals, true)

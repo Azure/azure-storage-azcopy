@@ -21,7 +21,7 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
@@ -63,6 +63,18 @@ func (e emptyPropertiesAdapter) BlobType() azblob.BlobType {
 
 func (e emptyPropertiesAdapter) AccessTier() azblob.AccessTierType {
 	return azblob.AccessTierNone
+}
+
+func (e emptyPropertiesAdapter) LeaseDuration() azblob.LeaseDurationType {
+	return azblob.LeaseDurationNone
+}
+
+func (e emptyPropertiesAdapter) LeaseState() azblob.LeaseStateType {
+	return azblob.LeaseStateNone
+}
+
+func (e emptyPropertiesAdapter) LeaseStatus() azblob.LeaseStatusType {
+	return azblob.LeaseStatusNone
 }
 
 // md5OnlyAdapter is like emptyProperties adapter, except for the ContentMD5
@@ -121,4 +133,19 @@ func (a blobPropertiesAdapter) BlobType() azblob.BlobType {
 
 func (a blobPropertiesAdapter) AccessTier() azblob.AccessTierType {
 	return a.BlobProperties.AccessTier
+}
+
+// LeaseDuration returns the value for header x-ms-lease-duration.
+func (a blobPropertiesAdapter) LeaseDuration() azblob.LeaseDurationType {
+	return a.BlobProperties.LeaseDuration
+}
+
+// LeaseState returns the value for header x-ms-lease-state.
+func (a blobPropertiesAdapter) LeaseState() azblob.LeaseStateType {
+	return a.BlobProperties.LeaseState
+}
+
+// LeaseStatus returns the value for header x-ms-lease-status.
+func (a blobPropertiesAdapter) LeaseStatus() azblob.LeaseStatusType {
+	return a.BlobProperties.LeaseStatus
 }

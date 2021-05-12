@@ -29,8 +29,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"golang.org/x/sys/windows"
 )
 

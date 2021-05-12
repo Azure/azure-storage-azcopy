@@ -25,7 +25,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // asks questions to confirm overwrite, one routine at a time, i.e. only one active question at a time

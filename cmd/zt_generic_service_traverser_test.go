@@ -5,8 +5,8 @@ import (
 	"github.com/Azure/azure-storage-file-go/azfile"
 	chk "gopkg.in/check.v1"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // Separated the ADLS tests from others as ADLS can't safely be tested on the same storage account
@@ -182,7 +182,8 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 	// construct a blob account traverser
 	blobPipeline := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 	rawBSU := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
-	blobAccountTraverser := newBlobAccountTraverser(&rawBSU, blobPipeline, ctx, false, func(common.EntityType) {}, false)
+	blobAccountTraverser := newBlobAccountTraverser(&rawBSU, blobPipeline, ctx, false,
+		func(common.EntityType) {}, false, common.CpkOptions{})
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}
@@ -367,7 +368,8 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	blobPipeline := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 	rawBSU := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
 	rawBSU.Path = "/objectmatch*" // set the container name to contain a wildcard
-	blobAccountTraverser := newBlobAccountTraverser(&rawBSU, blobPipeline, ctx, false, func(common.EntityType) {}, false)
+	blobAccountTraverser := newBlobAccountTraverser(&rawBSU, blobPipeline, ctx, false,
+		func(common.EntityType) {}, false, common.CpkOptions{})
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}
@@ -412,7 +414,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 		err = s3ServiceTraverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
 	}
-	if testGCP{
+	if testGCP {
 		gcpAccountURL, err := common.NewGCPURLParts(scenarioHelper{}.getRawGCPAccountURL(c))
 		c.Assert(err, chk.IsNil)
 		gcpAccountURL.BucketName = "objectmatch*"

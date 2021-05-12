@@ -24,7 +24,7 @@ import (
 	"context"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
@@ -61,7 +61,7 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 		_, err = c.destAppendBlobURL.AppendBlockFromURL(ctxWithLatestServiceVersion, *srcURL, id.OffsetInFile(), adjustedChunkSize,
 			azblob.AppendBlobAccessConditions{
 				AppendPositionAccessConditions: azblob.AppendPositionAccessConditions{IfAppendPositionEqual: id.OffsetInFile()},
-			}, azblob.ModifiedAccessConditions{}, nil, azblob.ClientProvidedKeyOptions{})
+			}, azblob.ModifiedAccessConditions{}, nil, c.cpkToApply)
 		if err != nil {
 			c.jptm.FailActiveS2SCopy("Appending block from URL", err)
 			return
@@ -73,7 +73,7 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 
 // GetDestinationLength gets the destination length.
 func (c *urlToAppendBlobCopier) GetDestinationLength() (int64, error) {
-	properties, err := c.destAppendBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+	properties, err := c.destAppendBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{}, c.cpkToApply)
 	if err != nil {
 		return -1, err
 	}

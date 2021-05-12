@@ -28,8 +28,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/spf13/cobra"
 )
 
@@ -284,7 +284,7 @@ func (rca resumeCmdArgs) process() error {
 		destination:    getJobFromToResponse.Destination,
 		sourceSAS:      rca.SourceSAS,
 		destinationSAS: rca.DestinationSAS,
-	}); err != nil {
+	}, common.CpkOptions{}); err != nil {
 		return err
 	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
 		uotm := GetUserOAuthTokenManagerInstance()

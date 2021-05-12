@@ -29,15 +29,14 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // upload related
 const UploadMaxTries = 20
-const UploadTryTimeout = time.Minute * 15
 const UploadRetryDelay = time.Second * 1
 const UploadMaxRetryDelay = time.Second * 60
-
+var UploadTryTimeout = time.Minute * 15
 var ADLSFlushThreshold uint32 = 7500 // The # of blocks to flush at a time-- Implemented only for CI.
 
 // download related

@@ -23,7 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common/parallel"
+	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 	"net/url"
 	"strings"
 
@@ -31,7 +31,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/pkg/errors"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // allow us to iterate through a path pointing to the blob endpoint
@@ -52,6 +52,8 @@ type blobTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 
 	s2sPreserveSourceTags bool
+
+	cpkOptions common.CpkOptions
 }
 
 func (t *blobTraverser) isDirectory(isSource bool) bool {
@@ -83,7 +85,11 @@ func (t *blobTraverser) getPropertiesIfSingleBlob() (props *azblob.BlobGetProper
 
 	// perform the check
 	blobURL := azblob.NewBlobURL(blobUrlParts.URL(), t.p)
-	props, err = blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
+	if t.cpkOptions.IsSourceEncrypted {
+		clientProvidedKey = common.GetClientProvidedKey(t.cpkOptions)
+	}
+	props, err = blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, clientProvidedKey)
 
 	// if there was no problem getting the properties, it means that we are looking at a single blob
 	if err == nil {
@@ -376,9 +382,18 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 	return nil
 }
 
-func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool) (t *blobTraverser) {
-	t = &blobTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, includeDirectoryStubs: includeDirectoryStubs,
-		incrementEnumerationCounter: incrementEnumerationCounter, parallelListing: true, s2sPreserveSourceTags: s2sPreserveSourceTags}
+func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions) (t *blobTraverser) {
+	t = &blobTraverser{
+		rawURL:                      rawURL,
+		p:                           p,
+		ctx:                         ctx,
+		recursive:                   recursive,
+		includeDirectoryStubs:       includeDirectoryStubs,
+		incrementEnumerationCounter: incrementEnumerationCounter,
+		parallelListing:             true,
+		s2sPreserveSourceTags:       s2sPreserveSourceTags,
+		cpkOptions:                  cpkOptions,
+	}
 
 	if strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning())) == "true" {
 		// TODO log to frontend log that parallel listing was disabled, once the frontend log PR is merged

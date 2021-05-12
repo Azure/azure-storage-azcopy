@@ -30,8 +30,8 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
 	"github.com/spf13/cobra"
 )
@@ -69,6 +69,15 @@ type rawSyncCmdArgs struct {
 	s2sPreserveBlobTags bool
 
 	forceIfReadOnly bool
+
+	// Optional flag to encrypt user data with user provided key.
+	// Key is provide in the REST request itself
+	// Provided key (EncryptionKey and EncryptionKeySHA256) and its hash will be fetched from environment variables
+	// Set EncryptionAlgorithm = "AES256" by default.
+	cpkInfo bool
+	// Key is present in AzureKeyVault and Azure KeyVault is linked with storage account.
+	// Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data
+	cpkScopeInfo string
 }
 
 func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -117,22 +126,24 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	// this if statement ladder remains instead of being separated to help determine valid combinations for sync
 	// consider making a map of valid source/dest combos and consolidating this to generic source/dest setups, akin to the lower if statement
-	// TODO: if expand the set of source/dest combos supported by sync, update this method the declarative test framework: // TODO: add support for account-to-account operations (for those from-tos that support that)
+	// TODO: if expand the set of source/dest combos supported by sync, update this method the declarative test framework:
+	// TODO: add support for account-to-account operations (for those from-tos that support that)
 	cooked.fromTo = inferFromTo(raw.src, raw.dst)
-	if cooked.fromTo == common.EFromTo.Unknown() {
+	switch cooked.fromTo {
+	case common.EFromTo.Unknown():
 		return cooked, fmt.Errorf("Unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
-	} else if cooked.fromTo == common.EFromTo.LocalBlob() {
+	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile():
 		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
-	} else if cooked.fromTo == common.EFromTo.BlobLocal() {
+	case common.EFromTo.BlobLocal(), common.EFromTo.FileLocal():
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
-	} else if cooked.fromTo == common.EFromTo.BlobBlob() || cooked.fromTo == common.EFromTo.FileFile() {
+	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.BlobFile(), common.EFromTo.FileBlob():
 		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
-	} else {
+	default:
 		return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, cooked.fromTo)
 	}
 
@@ -237,11 +248,36 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	// If yes, we have to ensure that both source and destination must be blob storages.
 	if raw.s2sPreserveBlobTags {
 		if cooked.fromTo.From() != common.ELocation.Blob() || cooked.fromTo.To() != common.ELocation.Blob() {
-			return cooked, fmt.Errorf("either source or destination is not a blob storage. blob index tags is a property of blobs only therefore both source and destination must be blob storage")
+			return cooked, fmt.Errorf("either source or destination is not a blob storage. " +
+				"blob index tags is a property of blobs only therefore both source and destination must be blob storage")
 		} else {
 			cooked.s2sPreserveBlobTags = raw.s2sPreserveBlobTags
 		}
 	}
+
+	// Setting CPK-N
+	cpkOptions := common.CpkOptions{}
+	// Setting CPK-N
+	if raw.cpkScopeInfo != "" {
+		if raw.cpkInfo {
+			return cooked, fmt.Errorf("cannot use both cpk-by-name and cpk-by-value at the same time")
+		}
+		cpkOptions.CpkScopeInfo = raw.cpkScopeInfo
+	}
+
+	// Setting CPK-V
+	// Get the key (EncryptionKey and EncryptionKeySHA256) value from environment variables when required.
+	cpkOptions.CpkInfo = raw.cpkInfo
+
+	// We only support transfer from source encrypted by user key when user wishes to download.
+	// Due to service limitation, S2S transfer is not supported for source encrypted by user key.
+	if cooked.fromTo.IsDownload() && (cpkOptions.CpkScopeInfo != "" || cpkOptions.CpkInfo) {
+		glcm.Info("Client Provided Key for encryption/decryption is provided for download scenario. " +
+			"Assuming source is encrypted.")
+		cpkOptions.IsSourceEncrypted = true
+	}
+
+	cooked.cpkOptions = cpkOptions
 
 	return cooked, nil
 }
@@ -317,6 +353,8 @@ type cookedSyncCmdArgs struct {
 	preserveAccessTier bool
 	// To specify whether user wants to preserve the blob index tags during service to service transfer.
 	s2sPreserveBlobTags bool
+
+	cpkOptions common.CpkOptions
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -546,14 +584,13 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 
 	// Verifies credential type and initializes credential info.
 	// Note that this is for the destination.
-	cca.credentialInfo, _, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(),
-		cca.destination.Value, cca.destination.SAS, false)
+	cca.credentialInfo, _, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false, cca.cpkOptions)
 
 	if err != nil {
 		return err
 	}
 
-	srcCredInfo, _, err := getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true)
+	srcCredInfo, _, err := getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true, cca.cpkOptions)
 
 	if err != nil {
 		return err
@@ -658,6 +695,12 @@ func init() {
 		"Please refer to [Azure Blob storage: hot, cool, and archive access tiers](https://docs.microsoft.com/azure/storage/blobs/storage-blob-storage-tiers) to ensure destination storage account supports setting access tier. "+
 		"In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false to bypass copying access tier. (default true). ")
 	syncCmd.PersistentFlags().BoolVar(&raw.s2sPreserveBlobTags, "s2s-preserve-blob-tags", false, "Preserve index tags during service to service sync from one blob storage to another")
+	// Public Documentation: https://docs.microsoft.com/en-us/azure/storage/blobs/encryption-customer-provided-keys
+	// Clients making requests against Azure Blob storage have the option to provide an encryption key on a per-request basis.
+	// Including the encryption key on the request provides granular control over encryption settings for Blob storage operations.
+	// Customer-provided keys can be stored in Azure Key Vault or in another key store linked to storage account.
+	syncCmd.PersistentFlags().StringVar(&raw.cpkScopeInfo, "cpk-by-name", "", "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data")
+	syncCmd.PersistentFlags().BoolVar(&raw.cpkInfo, "cpk-by-value", false, "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key and its hash will be fetched from environment variables")
 
 	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
 	syncCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")
