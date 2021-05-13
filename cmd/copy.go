@@ -1182,9 +1182,17 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
 	blockBlobUrl := azblob.NewBlockBlobURL(*u, p)
+	metadata, err := common.UnMarshalToCommonMetadata(cca.metadata)
+	if err != nil {
+		return err
+	}
+	blobTags := cca.blobTags
 	_, err = azblob.UploadStreamToBlockBlob(ctx, os.Stdin, blockBlobUrl, azblob.UploadStreamToBlockBlobOptions{
-		BufferSize: int(blockSize),
-		MaxBuffers: pipingUploadParallelism,
+		BufferSize:               int(blockSize),
+		MaxBuffers:               pipingUploadParallelism,
+		Metadata:                 metadata.ToAzBlobMetadata(),
+		BlobTagsMap:              blobTags.ToAzBlobTagsMap(),
+		ClientProvidedKeyOptions: common.GetClientProvidedKey(cca.cpkOptions),
 	})
 
 	return err
