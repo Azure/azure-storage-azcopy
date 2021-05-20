@@ -547,3 +547,44 @@ func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeAfter(u
 			common.AZCOPY_PATH_SEPARATOR_STRING+filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING, expectedTransfers, mockedRPC)
 	})
 }
+
+func (s *cmdIntegrationSuite) TestDisableAutoDecoding(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	// Encoded file name since Windows won't create name with invalid chars
+	srcFileName := `%3C %3E %5C %2F %3A %22 %7C %3F %2A invalidcharsfile`
+
+	// set up the source as a single file
+	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirName)
+	_, err := scenarioHelper{}.generateLocalFile(filepath.Join(srcDirName, srcFileName), defaultFileSize)
+	c.Assert(err, chk.IsNil)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// clean the RPC for the next test
+	mockedRPC.reset()
+
+	// now target the destination container, the result should be the same
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultCopyRawInput(filepath.Join(srcDirName, srcFileName), rawContainerURLWithSAS.String())
+	raw.disableAutoDecoding = true
+
+	// the file was created after the blob, so no sync should happen
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// verify explicitly since the source and destination names will be different:
+		// the source is "" since the given URL points to the blob itself
+		// the destination should be the source file name, since decoding has been disabled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Source, chk.Equals, "")
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, common.AZCOPY_PATH_SEPARATOR_STRING+url.PathEscape(srcFileName))
+	})
+}
