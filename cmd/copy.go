@@ -1188,10 +1188,18 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 	blobTags := cca.blobTags
 	_, err = azblob.UploadStreamToBlockBlob(ctx, os.Stdin, blockBlobUrl, azblob.UploadStreamToBlockBlobOptions{
-		BufferSize:               int(blockSize),
-		MaxBuffers:               pipingUploadParallelism,
-		Metadata:                 metadata.ToAzBlobMetadata(),
-		BlobTagsMap:              blobTags.ToAzBlobTagsMap(),
+		BufferSize:  int(blockSize),
+		MaxBuffers:  pipingUploadParallelism,
+		Metadata:    metadata.ToAzBlobMetadata(),
+		BlobTagsMap: blobTags.ToAzBlobTagsMap(),
+		BlobHTTPHeaders: azblob.BlobHTTPHeaders{
+			ContentType:        cca.contentType,
+			ContentLanguage:    cca.contentLanguage,
+			ContentEncoding:    cca.contentEncoding,
+			ContentDisposition: cca.contentDisposition,
+			CacheControl:       cca.cacheControl,
+		},
+		BlobAccessTier:           azblob.AccessTierType(cca.blockBlobTier.String()),
 		ClientProvidedKeyOptions: common.GetClientProvidedKey(cca.cpkOptions),
 	})
 
