@@ -63,24 +63,28 @@ func TestBasic_CopyUploadEmptyBlob(t *testing.T) {
 		})
 }
 
-//func TestBasic_CopyUploadLargeBlob(t *testing.T) {
-//	RunScenarios(
-//		t,
-//		eOperation.CopyAndSync(),
-//		eTestFromTo.AllUploads(),
-//		eValidate.AutoPlusContent(),
-//		params{
-//			recursive: true,
-//		},
-//		nil,
-//		testFiles{
-//			defaultSize: "1G",
-//			shouldTransfer: []interface{}{
-//				folder(""),
-//				f("file1.txt"),
-//			},
-//		})
-//}
+func TestBasic_CopyUploadLargeBlob(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.CopyAndSync(),
+		eTestFromTo.AllUploads(),
+		eValidate.AutoPlusContent(),
+		params{
+			recursive: true,
+		},
+		&hooks{
+			beforeTestRun: func(h hookHelper) {
+				h.SkipTest()
+			},
+		},
+		testFiles{
+			defaultSize: "1G",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("file1.txt"),
+			},
+		})
+}
 
 func TestBasic_CopyDownloadSingleBlob(t *testing.T) {
 	RunScenarios(
@@ -120,24 +124,28 @@ func TestBasic_CopyDownloadEmptyBlob(t *testing.T) {
 		})
 }
 
-//func TestBasic_CopyDownloadLargeBlob(t *testing.T) {
-//	RunScenarios(
-//		t,
-//		eOperation.CopyAndSync(),
-//		eTestFromTo.AllDownloads(),
-//		eValidate.Auto(),
-//		params{
-//			recursive: true,
-//		},
-//		nil,
-//		testFiles{
-//			defaultSize: "1K",
-//			shouldTransfer: []interface{}{
-//				folder(""),
-//				f("file1.txt"),
-//			},
-//		})
-//}
+func TestBasic_CopyDownloadLargeBlob(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.CopyAndSync(),
+		eTestFromTo.AllDownloads(),
+		eValidate.Auto(),
+		params{
+			recursive: true,
+		},
+		&hooks{
+			beforeTestRun: func(h hookHelper) {
+				h.SkipTest()
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("file1.txt"),
+			},
+		})
+}
 
 func TestBasic_CopyS2SSingleBlob(t *testing.T) {
 	RunScenarios(
@@ -175,23 +183,27 @@ func TestBasic_CopyS2SEmptyBlob(t *testing.T) {
 		})
 }
 
-//func TestBasic_CopyS2SLargeBlob(t *testing.T) {
-//	RunScenarios(
-//		t,
-//		eOperation.CopyAndSync(),
-//		eTestFromTo.AllS2S(),
-//		eValidate.AutoPlusContent(),
-//		params{
-//			recursive: true,
-//		},
-//		nil,
-//		testFiles{
-//			defaultSize: "1G",
-//			shouldTransfer: []interface{}{
-//				f("file1.txt"),
-//			},
-//		})
-//}
+func TestBasic_CopyS2SLargeBlob(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.CopyAndSync(),
+		eTestFromTo.AllS2S(),
+		eValidate.AutoPlusContent(),
+		params{
+			recursive: true,
+		},
+		&hooks{
+			beforeTestRun: func(h hookHelper) {
+				h.SkipTest()
+			},
+		},
+		testFiles{
+			defaultSize: "1G",
+			shouldTransfer: []interface{}{
+				f("file1.txt"),
+			},
+		})
+}
 
 func TestBasic_CopyUploadDir(t *testing.T) {
 	RunScenarios(
@@ -291,27 +303,30 @@ func TestBasic_CopyRemoveFile(t *testing.T) {
 		})
 }
 
-//func TestBasic_CopyRemoveLargeFile(t *testing.T) {
-//
-//	RunScenarios(
-//		t,
-//		eOperation.Remove(),
-//		eTestFromTo.AllRemove(),
-//		eValidate.Auto(),
-//		params{
-//			relativeSourcePath: "file2.txt",
-//		},
-//		nil,
-//		testFiles{
-//			defaultSize: "1G",
-//			shouldTransfer: []interface{}{
-//				"file1.txt",
-//			},
-//			shouldIgnore: []interface{}{
-//				"file2.txt",
-//			},
-//		})
-//}
+func TestBasic_CopyRemoveLargeFile(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Remove(),
+		eTestFromTo.AllRemove(),
+		eValidate.Auto(),
+		params{
+			relativeSourcePath: "file2.txt",
+		},
+		&hooks{
+			beforeTestRun: func(h hookHelper) {
+				h.SkipTest()
+			},
+		},
+		testFiles{
+			defaultSize: "1G",
+			shouldTransfer: []interface{}{
+				"file1.txt",
+			},
+			shouldIgnore: []interface{}{
+				"file2.txt",
+			},
+		})
+}
 
 func TestBasic_CopyRemoveFolder(t *testing.T) {
 

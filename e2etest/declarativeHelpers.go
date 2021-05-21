@@ -467,6 +467,9 @@ type hookHelper interface {
 
 	// Create a source snapshot to use it as the source
 	CreateSourceSnapshot()
+
+	// SkipTest skips the test
+	SkipTest()
 }
 
 ///////
@@ -477,6 +480,9 @@ type hookFunc func(h hookHelper)
 // custom behaviour (for those func that are not nil).
 // NOTE: the funcs you provide here must be threadsafe, because RunScenarios works in parallel for all its scenarios
 type hooks struct {
+
+	// called before running a scenario
+	beforeTestRun hookFunc
 
 	// called after all the setup is done, and before AzCopy is actually invoked
 	beforeRunJob hookFunc

@@ -105,6 +105,9 @@ func RunScenarios(
 				fullScenarioName:    sen.fullScenarioName,
 				compactScenarioName: sen.compactScenarioName,
 			}
+			if hs != nil {
+				sen.runHook(hs.beforeTestRun)
+			}
 			sen.Run()
 		})
 	}
