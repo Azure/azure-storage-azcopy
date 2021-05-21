@@ -111,7 +111,7 @@ func generateName(prefix string, maxLen int) string {
 	var pcs [10]uintptr
 	n := runtime.Callers(1, pcs[:])
 	frames := runtime.CallersFrames(pcs[:n])
-	name := runtime.GOOS // default stub "Foo" is used if anything goes wrong with this procedure
+	name := "TestFoo" + runtime.GOOS
 	for {
 		frame, more := frames.Next()
 		if strings.Contains(frame.Func.Name(), "Suite") {
