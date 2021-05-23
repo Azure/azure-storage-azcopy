@@ -33,6 +33,8 @@ func TestTags_SetTagsSingleBlob(t *testing.T) {
 		eOperation.Copy(),
 		eTestFromTo.Other(common.EFromTo.LocalBlob()),
 		eValidate.AutoPlusContent(),
+		allCredentialTypes,
+		allCredentialTypes,
 		params{
 			recursive: true,
 			blobTags:  blobTagsStr,
@@ -52,6 +54,8 @@ func TestTags_SetTagsSpecialCharactersSingleBlob(t *testing.T) {
 		eOperation.Copy(),
 		eTestFromTo.Other(common.EFromTo.LocalBlob()),
 		eValidate.AutoPlusContent(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
 		params{
 			recursive: true,
 			blobTags:  "bla_bla=foo%2b-foo&bla%2fbla%2f2=bar",
@@ -73,6 +77,8 @@ func TestTags_SetTagsMultipleBlobs(t *testing.T) {
 		eOperation.Copy(),
 		eTestFromTo.Other(common.EFromTo.LocalBlob()),
 		eValidate.AutoPlusContent(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
 		params{
 			recursive: true,
 			blobTags:  blobTagsStr,
@@ -96,6 +102,8 @@ func TestTags_PreserveTagsSingleBlob(t *testing.T) {
 		eOperation.Copy(),
 		eTestFromTo.Other(common.EFromTo.BlobBlob()),
 		eValidate.AutoPlusContent(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
 		params{
 			recursive:           true,
 			s2sPreserveBlobTags: true,
@@ -117,6 +125,8 @@ func TestTags_PreserveTagsSpecialCharactersSingleBlob(t *testing.T) {
 		eOperation.Copy(),
 		eTestFromTo.Other(common.EFromTo.BlobBlob()),
 		eValidate.AutoPlusContent(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
 		params{
 			recursive:           true,
 			s2sPreserveBlobTags: true,
@@ -137,6 +147,8 @@ func TestTags_PreserveTagsMultipleBlobs(t *testing.T) {
 		eOperation.Copy(),
 		eTestFromTo.Other(common.EFromTo.BlobBlob()),
 		eValidate.AutoPlusContent(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
 		params{
 			recursive:           true,
 			s2sPreserveBlobTags: true,
@@ -159,6 +171,8 @@ func TestTags_PreserveTagsSpecialCharactersMultipleBlobs(t *testing.T) {
 		eOperation.Copy(),
 		eTestFromTo.Other(common.EFromTo.BlobBlob()),
 		eValidate.AutoPlusContent(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
 		params{
 			recursive:           true,
 			s2sPreserveBlobTags: true,
@@ -182,6 +196,8 @@ func TestTags_PreserveTagsSpecialCharactersDuringSync(t *testing.T) {
 		eOperation.Sync(),
 		eTestFromTo.Other(common.EFromTo.BlobBlob()),
 		eValidate.AutoPlusContent(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
 		params{
 			recursive:           true,
 			s2sPreserveBlobTags: true,
