@@ -1187,6 +1187,10 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 		return err
 	}
 	blobTags := cca.blobTags
+	bbAccessTier := azblob.DefaultAccessTier
+	if cca.blockBlobTier != common.EBlockBlobTier.None() {
+		bbAccessTier = azblob.AccessTierType(cca.blockBlobTier.String())
+	}
 	_, err = azblob.UploadStreamToBlockBlob(ctx, os.Stdin, blockBlobUrl, azblob.UploadStreamToBlockBlobOptions{
 		BufferSize:  int(blockSize),
 		MaxBuffers:  pipingUploadParallelism,
@@ -1199,7 +1203,7 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 			ContentDisposition: cca.contentDisposition,
 			CacheControl:       cca.cacheControl,
 		},
-		BlobAccessTier:           azblob.AccessTierType(cca.blockBlobTier.String()),
+		BlobAccessTier:           bbAccessTier,
 		ClientProvidedKeyOptions: common.GetClientProvidedKey(cca.cpkOptions),
 	})
 
