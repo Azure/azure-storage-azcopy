@@ -64,6 +64,9 @@ type rawSyncCmdArgs struct {
 	// otherwise the user is prompted to make a decision
 	deleteDestination string
 
+	// this flag is to disable comparator and overwrite files at destination irrespective
+	mirrorMode bool
+
 	s2sPreserveAccessTier bool
 
 	blobTags string
@@ -293,6 +296,8 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	cooked.cpkOptions = cpkOptions
 
+	cooked.mirrorMode = raw.mirrorMode
+
 	return cooked, nil
 }
 
@@ -371,6 +376,8 @@ type cookedSyncCmdArgs struct {
 	s2sPreserveBlobTags bool
 
 	cpkOptions common.CpkOptions
+
+	mirrorMode bool
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -718,6 +725,7 @@ func init() {
 	// Customer-provided keys can be stored in Azure Key Vault or in another key store linked to storage account.
 	syncCmd.PersistentFlags().StringVar(&raw.cpkScopeInfo, "cpk-by-name", "", "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data")
 	syncCmd.PersistentFlags().BoolVar(&raw.cpkInfo, "cpk-by-value", false, "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key and its hash will be fetched from environment variables")
+	syncCmd.PersistentFlags().BoolVar(&raw.mirrorMode, "mirror-mode", false, "Disable last-modified-time based comparison and overwrites the conflicting files and blobs at the destination if this flag is set to true. Default is false")
 
 	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
 	syncCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")
