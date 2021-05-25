@@ -68,8 +68,9 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 		setPutListNeed(&c.atomicPutListIndicator, putListNotNeeded)
 		return c.generateCreateEmptyBlob(id)
 	}
-	// Small blobs from all sources will be copied over to destination using PutBlobFromUrl
-	if c.NumChunks() == 1 && adjustedChunkSize <= int64(azblob.BlockBlobMaxUploadBlobBytes) {
+	// Small blobs from all sources will be copied over to destination using PutBlobFromUrl with the exception of files
+	fromTo := c.blockBlobSenderBase.jptm.FromTo()
+	if c.NumChunks() == 1 && adjustedChunkSize <= int64(azblob.BlockBlobMaxUploadBlobBytes) && fromTo.From() != common.ELocation.File() {
 		setPutListNeed(&c.atomicPutListIndicator, putListNotNeeded)
 		return c.generateStartPutBlobFromURL(id, blockIndex, adjustedChunkSize)
 
