@@ -37,7 +37,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
 // -------------------------------------- Component Definitions -------------------------------------- \\
@@ -665,10 +664,11 @@ func newCopyEnumerator(traverser resourceTraverser, filters []objectFilter, obje
 	}
 }
 
-func WarnStdoutAndJobLog(toLog string) {
+func WarnStdoutAndScanningLog(toLog string) {
 	glcm.Info(toLog)
-	if ste.JobsAdmin != nil {
-		ste.JobsAdmin.LogToJobLog(toLog, pipeline.LogWarning)
+	if azcopyScanningLogger != nil {
+		// ste.JobsAdmin.LogToJobLog(toLog, pipeline.LogWarning)
+		azcopyScanningLogger.Log(pipeline.LogWarning, toLog)
 	}
 }
 

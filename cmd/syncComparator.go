@@ -32,10 +32,12 @@ type syncDestinationComparator struct {
 
 	// storing the source objects
 	sourceIndex *objectIndexer
+
+	disableComparison bool
 }
 
-func newSyncDestinationComparator(i *objectIndexer, copyScheduler, cleaner objectProcessor) *syncDestinationComparator {
-	return &syncDestinationComparator{sourceIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner}
+func newSyncDestinationComparator(i *objectIndexer, copyScheduler, cleaner objectProcessor, disableComparison bool) *syncDestinationComparator {
+	return &syncDestinationComparator{sourceIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, disableComparison: disableComparison}
 }
 
 // it will only schedule transfers for destination objects that are present in the indexer but stale compared to the entry in the map
@@ -49,8 +51,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject storedO
 	// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
 	if present {
 		defer delete(f.sourceIndex.indexMap, destinationObject.relativePath)
-
-		if sourceObjectInMap.isMoreRecentThan(destinationObject) {
+		if f.disableComparison || sourceObjectInMap.isMoreRecentThan(destinationObject) {
 			err := f.copyTransferScheduler(sourceObjectInMap)
 			if err != nil {
 				return err
@@ -74,10 +75,12 @@ type syncSourceComparator struct {
 
 	// storing the destination objects
 	destinationIndex *objectIndexer
+
+	disableComparison bool
 }
 
-func newSyncSourceComparator(i *objectIndexer, copyScheduler objectProcessor) *syncSourceComparator {
-	return &syncSourceComparator{destinationIndex: i, copyTransferScheduler: copyScheduler}
+func newSyncSourceComparator(i *objectIndexer, copyScheduler objectProcessor, disableComparison bool) *syncSourceComparator {
+	return &syncSourceComparator{destinationIndex: i, copyTransferScheduler: copyScheduler, disableComparison: disableComparison}
 }
 
 // it will only transfer source items that are:
@@ -92,7 +95,7 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject storedObject) err
 		defer delete(f.destinationIndex.indexMap, sourceObject.relativePath)
 
 		// if destination is stale, schedule source for transfer
-		if sourceObject.isMoreRecentThan(destinationObjectInMap) {
+		if f.disableComparison || sourceObject.isMoreRecentThan(destinationObjectInMap) {
 			return f.copyTransferScheduler(sourceObject)
 		}
 		// skip if source is more recent

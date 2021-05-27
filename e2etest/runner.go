@@ -85,6 +85,8 @@ func (t *TestRunner) SetAllFlags(p params) {
 	set("preserve-smb-permissions", p.preserveSMBPermissions, false)
 	set("blob-tags", p.blobTags, "")
 	set("s2s-preserve-blob-tags", p.s2sPreserveBlobTags, false)
+	set("cpk-by-name", p.cpkByName, "")
+	set("cpk-by-value", p.cpkByValue, false)
 	set("is-object-dir", p.isObjectDir, false)
 }
 

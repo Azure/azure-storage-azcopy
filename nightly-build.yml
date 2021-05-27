@@ -1,0 +1,103 @@
+schedules:
+  - cron: "0 0 * * *"
+    displayName: Daily Midnight AzCopy Build
+    branches:
+      include:
+        - dev
+    always: true
+
+jobs:
+  - job: Nightly
+    # allow maximum build time, in case we have build congestion
+    timeoutInMinutes: 360
+    # Creating strategies for GOOS: Windows Server 2019 /macOS X Mojave 10.14/Ubuntu 20.04
+    strategy:
+      matrix:
+        Ubuntu-20:
+          imageName: 'ubuntu-20.04'
+          type: 'linux'
+        Windows:
+          imageName: 'windows-2019'
+          type: 'windows'
+        MacOS:
+          imageName: 'macOS-10.15'
+          type: 'mac-os'
+    pool:
+      vmImage: $(imageName)
+    variables:
+      - group: AzCopySecrets
+
+    steps:
+      - task: GoTool@0
+        inputs:
+          version: '1.15'
+      - script: |
+          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
+          go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
+          cp NOTICE.txt $(Build.ArtifactStagingDirectory)
+        displayName: 'Build linux'
+        condition: eq(variables.type, 'linux')
+
+      - script: |
+          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
+          go build -tags "windows_x86" -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
+          cp NOTICE.txt $(Build.ArtifactStagingDirectory)
+        displayName: 'Build Windows'
+        condition: eq(variables.type, 'windows')
+
+      - script: |
+          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
+        displayName: 'Build MacOS'
+        condition: eq(variables.type, 'mac-os')
+
+      - task: DownloadSecureFile@1
+        name: ciGCSServiceAccountKey
+        displayName: 'Download GCS Service Account Key'
+        inputs:
+          secureFile: 'ci-gcs-dev.json'
+
+      # Running E2E Tests on Linux
+      - script: |
+          set -e
+          go build -o azcopy_linux_amd64
+          go build -tags "se_integration" -o azcopy_linux_se_amd64
+          echo 'starting E2E tests on linux'
+          go test -timeout 30m -race -cover -v ./e2etest
+        env:
+          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+          CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
+          CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
+          AZCOPY_E2E_EXECUTABLE_PATH: $(Build.ArtifactStagingDirectory)/azcopy_linux_amd64
+        displayName: 'E2E Test Linux'
+        condition: eq(variables.type, 'linux')
+
+      # Running E2E Tests on Windows
+      - script: |
+          go build -o azcopy_windows_amd64.exe
+          go build -o azcopy_windows_386.exe
+          echo 'starting E2E tests on windows'
+          go test -timeout 30m -race -cover -v ./e2etest
+        env:
+          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+          CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
+          CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
+          AZCOPY_E2E_EXECUTABLE_PATH: $(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe
+        displayName: 'E2E Test Windows'
+        condition: eq(variables.type, 'windows')
+
+      # Running E2E Tests on Mac
+      - script: |
+          set -e
+          go build -o azcopy_darwin_amd64
+          echo 'starting E2E tests on mac-os'
+          go test -timeout 30m -race -cover -v ./e2etest
+        env:
+          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+          CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
+          CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
+          AZCOPY_E2E_EXECUTABLE_PATH: $(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64
+        displayName: 'E2E Test MacOs'
+        condition: eq(variables.type, 'mac-os')
