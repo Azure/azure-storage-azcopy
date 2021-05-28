@@ -1151,7 +1151,7 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 			cca.blockSize = pipingDefaultBlockSize
 		}
 
-		// Get conurrency value
+		// Extracted conurrency value from AZCOPY_CONCURRENCY_VALUE
 		concurrencyValue, err := strconv.Atoi(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()))
 		if err != nil {
 			concurrencyValue = pipingUploadParallelism
