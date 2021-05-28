@@ -46,6 +46,7 @@ import (
 )
 
 const pipingUploadParallelism = 5
+const pipingDownloadParallelism = 5
 const pipingDefaultBlockSize = 8 * 1024 * 1024
 
 // For networking throughput in Mbps, (and only for networking), we divide by 1000*1000 (not 1024 * 1024) because
@@ -1154,12 +1155,11 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 		// Extracted conurrency value from AZCOPY_CONCURRENCY_VALUE
 		concurrencyValue, err := strconv.Atoi(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()))
 		if err != nil {
-			concurrencyValue = pipingUploadParallelism
+			concurrencyValue = pipingDownloadParallelism
 		}
 
 		// Prepare and do parallel download.
 		err = azblob.DoBatchTransfer(ctx, azblob.BatchTransferOptions{
-			OperationName: "downloadBlobToWriterAt",
 			TransferSize:  blobSize,
 			ChunkSize:     cca.blockSize,
 			Parallelism:   uint16(concurrencyValue),
