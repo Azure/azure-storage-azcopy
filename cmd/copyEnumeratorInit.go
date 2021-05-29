@@ -370,7 +370,7 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	dstCredInfo := common.CredentialInfo{}
 
 	// 3minutes is enough time to list properties of a container, and create new if it does not exist.
-	ctx, _ := context.WithTimeout(parentCtx, time.Minute * 3)
+	ctx, _ := context.WithTimeout(parentCtx, time.Minute*3)
 	if dstCredInfo, _, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false, cca.cpkOptions); err != nil {
 		return err
 	}

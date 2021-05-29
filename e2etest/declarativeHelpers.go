@@ -159,6 +159,7 @@ type params struct {
 	s2sPreserveBlobTags       bool
 	cpkByName                 string
 	cpkByValue                bool
+	isObjectDir               bool
 }
 
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level
@@ -407,7 +408,11 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 				case common.EFromTo.BlobBlob(),
 					common.EFromTo.FileFile(),
 					common.EFromTo.LocalBlob(),
-					common.EFromTo.BlobLocal():
+					common.EFromTo.BlobLocal(),
+					common.EFromTo.LocalFile(),
+					common.EFromTo.FileLocal(),
+					common.EFromTo.BlobFile(),
+					common.EFromTo.FileBlob():
 					// do nothing, these are fine
 				default:
 					continue // not supported for sync
@@ -481,6 +486,9 @@ type hookHelper interface {
 
 	// CreateSourceSnapshot Create a source snapshot to use it as the source
 	CreateSourceSnapshot()
+
+	// SkipTest skips the test
+	SkipTest()
 }
 
 ///////
@@ -491,6 +499,9 @@ type hookFunc func(h hookHelper)
 // custom behaviour (for those func that are not nil).
 // NOTE: the funcs you provide here must be threadsafe, because RunScenarios works in parallel for all its scenarios
 type hooks struct {
+
+	// called before running a scenario
+	beforeTestRun hookFunc
 
 	// called after all the setup is done, and before AzCopy is actually invoked
 	beforeRunJob hookFunc
