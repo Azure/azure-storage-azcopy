@@ -38,6 +38,9 @@ var steCtx = context.Background()
 
 const EMPTY_SAS_STRING = ""
 
+type azCopyConfig struct {
+	MIMETypeMapping map[string]string
+}
 // round api rounds up the float number after the decimal point.
 func round(num float64) int {
 	return int(num + math.Copysign(0.5, num))
@@ -56,6 +59,23 @@ func MainSTE(concurrency ConcurrencySettings, targetRateInMegaBitsPerSec float64
 	// No need to read the existing JobPartPlan files since Azcopy is running in process
 	//JobsAdmin.ResurrectJobParts()
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
+
+	// if we've a custom mime map
+	if path := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.MimeMapping()); path != "" {
+		data, err := ioutil.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		var config azCopyConfig
+		err = json.Unmarshal(data, &config)
+		if err != nil {
+			return err
+		}
+
+		environmentMimeMap = config.MIMETypeMapping
+	}
+
 
 	deserialize := func(request *http.Request, v interface{}) {
 		// TODO: Check the HTTP verb here?
