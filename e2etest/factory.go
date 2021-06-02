@@ -247,7 +247,7 @@ func getTestName(t *testing.T) (pseudoSuite, test string) {
 // Will truncate the end of the test name, if there is not enough room for it, followed by the time-based suffix,
 // with a non-zero maxLen.
 func generateName(c asserter, prefix string, maxLen int) string {
-	name := c.CompactScenarioName() // don't want to just use test name here, because each test contains multiple scearios with the declarative runner
+	name := c.CompactScenarioName() // don't want to just use test name here, because each test contains multiple scenarios with the declarative runner
 
 	textualPortion := fmt.Sprintf("%s-%s", prefix, strings.ToLower(name))
 	currentTime := time.Now()

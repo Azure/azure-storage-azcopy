@@ -66,8 +66,8 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 
 	// Escape paths on destinations where the characters are invalid
 	// And re-encode them where the characters are valid.
-	srcRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, true)
-	dstRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false)
+	srcRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, true)
+	dstRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, false)
 
 	blobTags := common.ToCommonBlobTagsMap(s.copyJobTemplate.BlobAttributes.BlobTagsString)
 	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath,

@@ -167,8 +167,13 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 			srcRQ := srcURL.Query()
 			dstRQ := dstURL.Query()
 
-			// note that query is now all lower case at this point
-			if len(srcRQ["snapshot"]) == 0 && len(srcRQ["versionid"]) == 0 && len(dstRQ["snapshot"]) == 0 && len(dstRQ["versionid"]) == 0 {
+			// note that query is now all lower case at this point, extract strings from query
+			srcShareSnapshot := strings.Join(srcRQ["sharesnapshot"], "")
+			dstShareSnapshot := strings.Join(dstRQ["sharesnapshot"], "")
+			srcVID := strings.Join(srcRQ["versionid"], "")
+			dstVID := strings.Join(dstRQ["versionid"], "")
+
+			if srcShareSnapshot == dstShareSnapshot && srcVID == dstVID {
 				jptm.LogSendError(info.Source, info.Destination, "Transfer source and destination are the same, which would cause data loss. Aborting transfer.", 0)
 				jptm.SetStatus(common.ETransferStatus.Failed())
 				jptm.ReportTransferDone()
