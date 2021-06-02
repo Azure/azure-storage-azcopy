@@ -514,9 +514,6 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 		isCancelling := jobStatus == common.EJobStatus.Cancelling()
 		shouldComplete := allKnownPartsDone && (haveFinalPart || isCancelling)
 		if shouldComplete {
-			jobPart0Mgr, _ := jm.jobPartMgrs.Get(0)
-			part0Plan := jobPart0Mgr.Plan() // status of part 0 is status of job as whole.
-
 			partDescription := "all parts of entire Job"
 			if !haveFinalPart {
 				partDescription = "known parts of incomplete Job"
