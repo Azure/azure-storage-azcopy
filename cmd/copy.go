@@ -255,6 +255,20 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		azcopyScanningLogger.CloseLog()
 	})
 
+	/* We support DFS by using blob end-point of the account. We replace dfs by blob in src and dst */
+	if src,dst := inferArgumentLocation(raw.src), inferArgumentLocation(raw.dst);
+				src == common.ELocation.BlobFS() || dst == common.ELocation.BlobFS() {
+		if src == common.ELocation.BlobFS() && dst != common.ELocation.Local() {
+			raw.src = strings.Replace(raw.src, ".dfs", ".blob", 1)
+			glcm.Info("Switching to use blob endpoint on source account.")
+		}
+
+		if dst == common.ELocation.BlobFS() && src != common.ELocation.Local() {
+			raw.dst = strings.Replace(raw.dst, ".dfs", ".blob", 1)
+			glcm.Info("Switching to use blob endpoint on destination account.")
+		}
+	}
+
 	fromTo, err := validateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
 	if err != nil {
 		return cooked, err
