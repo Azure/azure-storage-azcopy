@@ -119,7 +119,9 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			var fullProperties azfilePropertiesAdapter
 			fullProperties, err = f.propertyGetter(t.ctx)
 			if err != nil {
-				return storedObject{}, err
+				return storedObject{
+					relativePath: relativePath,
+				}, err
 			}
 			lmt = fullProperties.LastModified()
 			if f.entityType == common.EEntityType.File() {
@@ -234,8 +236,15 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 	for x := range cTransformed {
 		item, workerError := x.Item()
 		if workerError != nil {
-			cancelWorkers()
-			return workerError
+			relativePath := ""
+			if item != nil {
+				relativePath = item.(storedObject).relativePath
+			}
+			glcm.Info("Failed to scan directory/file " + relativePath + ". Logging errors in scanning logs.")
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(pipeline.LogWarning, workerError.Error())
+			}
+			continue
 		}
 		processErr := processStoredObject(item.(storedObject))
 		if processErr != nil {
@@ -244,6 +253,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		}
 	}
 
+	cancelWorkers()
 	return
 }
 
