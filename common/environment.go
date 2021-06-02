@@ -69,6 +69,7 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.CPKEncryptionKey(),
 	EEnvironmentVariable.CPKEncryptionKeySHA256(),
 	EEnvironmentVariable.DisableSyslog(),
+	EEnvironmentVariable.MimeMapping(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
@@ -350,5 +351,13 @@ func (EnvironmentVariable) DisableSyslog() EnvironmentVariable {
 		DefaultValue: "false",
 		Description: "Disables logging in Syslog or Windows Event Logger. By default we log to these channels. " +
 			"However, to reduce the noise in Syslog/Windows Event Log, consider setting this environment variable to true.",
+	}
+}
+
+func (EnvironmentVariable) MimeMapping() EnvironmentVariable {
+	return EnvironmentVariable {
+		Name:     "AZCOPY_CONTENT_TYPE_MAP",
+		DefaultValue: "",
+		Description: "Location of the file to override default OS mime mapping",
 	}
 }
