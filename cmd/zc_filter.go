@@ -23,6 +23,7 @@ package cmd
 import (
 	"fmt"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 
@@ -229,6 +230,107 @@ func (fs filterSet) GetEnumerationPreFilter(recursive bool) string {
 }
 
 ////////
+
+// includeRegex includes files that follow the regex expression
+type includeRegex struct {
+	patterns []string
+}
+
+func (f *includeRegex) doesSupportThisOS() (msg string, supported bool) {
+	msg = ""
+	supported = true
+	return
+}
+
+func (f *includeRegex) appliesOnlyToFiles() bool {
+	return true
+}
+
+func (f *includeRegex) doesPass(storedObject storedObject) bool {
+	if len(f.patterns) == 0 {
+		return true
+	}
+	for _, pattern := range f.patterns {
+		matched := false
+		var err error
+
+		matched, err = regexp.MatchString(pattern, storedObject.name)
+
+		if err != nil {
+			return false
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
+}
+
+func buildIncludeRegexFilters(patterns []string) []objectFilter {
+	if len(patterns) == 0 {
+		return []objectFilter{}
+	}
+
+	validPatterns := make([]string, 0)
+	for _, pattern := range patterns {
+		if pattern != "" {
+			validPatterns = append(validPatterns, pattern)
+		}
+	}
+
+	return []objectFilter{&includeRegex{patterns: validPatterns}}
+}
+
+// excludeRegex does not include files that match with the regex expression
+type excludeRegex struct {
+	patterns []string
+}
+
+func (f *excludeRegex) doesSupportThisOS() (msg string, supported bool) {
+	msg = ""
+	supported = true
+	return
+}
+
+func (f *excludeRegex) appliesOnlyToFiles() bool {
+	return true
+}
+
+func (f *excludeRegex) doesPass(storedObject storedObject) bool {
+	if len(f.patterns) == 0{
+		return true
+	}
+
+	for _, pattern := range f.patterns {
+		matched := false
+		var err error
+
+		matched, err = regexp.MatchString(pattern, storedObject.name)
+
+		if err != nil {
+			return false
+		}
+		if matched {
+			return false
+		}
+	}
+	return true
+}
+
+func buildExcludeRegexFilters(patterns []string) []objectFilter {
+	if len(patterns) == 0 {
+		return []objectFilter{}
+	}
+
+	filters := make([]string, 0)
+	for _, pattern := range patterns {
+		if pattern != "" {
+			filters = append(filters, pattern)
+		}
+	}
+
+	return []objectFilter{&excludeRegex{patterns: filters}}
+}
 
 // includeAfterDateFilter includes files with Last Modified Times >= the specified threshold
 // Used for copy, but doesn't make conceptual sense for sync
