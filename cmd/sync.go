@@ -51,8 +51,8 @@ type rawSyncCmdArgs struct {
 	excludeFileAttributes string
 	legacyInclude         string // for warning messages only
 	legacyExclude         string // for warning messages only
-	includeRegex		  string
-	excludeRegex		  string
+	includeRegex          string
+	excludeRegex          string
 
 	preserveSMBPermissions bool
 	preserveOwner          bool
@@ -334,8 +334,8 @@ type cookedSyncCmdArgs struct {
 	excludePaths          []string
 	includeFileAttributes []string
 	excludeFileAttributes []string
-	includeRegex		  []string
-	excludeRegex		  []string
+	includeRegex          []string
+	excludeRegex          []string
 
 	// options
 	preserveSMBPermissions common.PreservePermissionsOption

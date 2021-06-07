@@ -23,6 +23,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"sort"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -713,6 +714,18 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeRegexFlag(c *chk.C) {
 	// verify that only the blobs specified by the include flag are synced
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
+		//comparing is names of files, since not in order need to sort each string and the compare them
+		actualTransfer := []string{}
+		for i := 0; i < len(mockedRPC.transfers); i++ {
+			actualTransfer = append(actualTransfer, mockedRPC.transfers[i].Source)
+		}
+		sort.Strings(actualTransfer)
+		sort.Strings(blobsToInclude)
+		for i := 0; i < len(mockedRPC.transfers); i++ {
+			c.Assert(strings.Trim(actualTransfer[i], "/"), chk.Equals, blobsToInclude[i])
+		}
 		validateS2SSyncTransfersAreScheduled(c, "", "", blobsToInclude, mockedRPC)
 	})
 }
@@ -748,6 +761,9 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithExcludeRegexFlag(c *chk.C) {
 	// make sure the list doesn't include the blobs specified by the exclude flag
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
+		// all blobs from the blobList are transferred
 		validateS2SSyncTransfersAreScheduled(c, "", "", blobList, mockedRPC)
 	})
 }
@@ -789,6 +805,18 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeAndExcludeRegexFlag(c *chk.C
 	// verify that only the blobs specified by the include flag are synced
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
+		//comparing is names of files, since not in order need to sort each string and the compare them
+		actualTransfer := []string{}
+		for i := 0; i < len(mockedRPC.transfers); i++ {
+			actualTransfer = append(actualTransfer, mockedRPC.transfers[i].Source)
+		}
+		sort.Strings(actualTransfer)
+		sort.Strings(blobsToInclude)
+		for i := 0; i < len(mockedRPC.transfers); i++ {
+			c.Assert(strings.Trim(actualTransfer[i], "/"), chk.Equals, blobsToInclude[i])
+		}
 		validateS2SSyncTransfersAreScheduled(c, "", "", blobsToInclude, mockedRPC)
 	})
 }

@@ -72,8 +72,8 @@ type rawCopyCmdArgs struct {
 	exclude               string
 	includePath           string // NOTE: This gets handled like list-of-files! It may LOOK like a bug, but it is not.
 	excludePath           string
-	includeRegex	   	  string
-	excludeRegex 		  string
+	includeRegex          string
+	excludeRegex          string
 	includeFileAttributes string
 	excludeFileAttributes string
 	includeBefore         string
@@ -984,8 +984,8 @@ type cookedCopyCmdArgs struct {
 	includeAfter          *time.Time
 
 	// include/exclude filters with regular expression (also for sync)
-	includeRegex		  []string
-	excludeRegex		  []string
+	includeRegex []string
+	excludeRegex []string
 
 	// list of version ids
 	listOfVersionIDs chan string

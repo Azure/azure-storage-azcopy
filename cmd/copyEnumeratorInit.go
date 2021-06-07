@@ -334,11 +334,11 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 	}
 
 	if len(cca.includeRegex) != 0 {
-		filters = append(filters, &includeRegex{patterns: cca.includeRegex})
+		filters = append(filters, &regexFilter{patterns: cca.includeRegex, matchResponse: true})
 	}
 
 	if len(cca.excludeRegex) != 0 {
-		filters = append(filters, &excludeRegex{patterns: cca.excludeRegex})
+		filters = append(filters, &regexFilter{patterns: cca.excludeRegex, matchResponse: false})
 	}
 
 	if len(cca.excludeBlobType) != 0 {

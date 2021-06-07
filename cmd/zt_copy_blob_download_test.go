@@ -25,6 +25,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -488,10 +489,14 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithRegexInclude(c *chk.C
 	raw.recursive = true
 	raw.includeRegex = "es{4,}"
 
- 	runCopyAndVerify(c, raw, func(err error) {
+	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
+		//comparing is names of files match
+		for i := 0; i < len(mockedRPC.transfers); i++ {
+			c.Assert(strings.Trim(mockedRPC.transfers[i].Source, "/"), chk.Equals, blobsToInclude[i])
+		}
 		// validate that the right transfers were sent
 		validateDownloadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING,
 			blobsToInclude, mockedRPC)
@@ -535,6 +540,18 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithMultRegexInclude(c *c
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
 		// validate that the right transfers were sent
+
+		//comparing is names of files, since not in order need to sort each string and the compare them
+		actualTransfer := []string{}
+		for i := 0; i < len(mockedRPC.transfers); i++ {
+			actualTransfer = append(actualTransfer, mockedRPC.transfers[i].Source)
+		}
+		sort.Strings(actualTransfer)
+		sort.Strings(blobsToInclude)
+		for i := 0; i < len(mockedRPC.transfers); i++ {
+			c.Assert(strings.Trim(actualTransfer[i], "/"), chk.Equals, blobsToInclude[i])
+		}
+
 		validateDownloadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING,
 			blobsToInclude, mockedRPC)
 	})
@@ -573,7 +590,8 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithEmptyRegex(c *chk.C) 
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers) , chk.Equals, len(blobsToInclude))
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
+		//do not need to check file names since all files for blobsToInclude are passed bc flags are empty
 		// validate that the right transfers were sent
 		validateDownloadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING,
 			blobsToInclude, mockedRPC)
@@ -615,7 +633,17 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithRegexExclude(c *chk.C
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		// validate that only blobsTo
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude) )
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
+		//comparing is names of files, since not in order need to sort each string and the compare them
+		actualTransfer := []string{}
+		for i := 0; i < len(mockedRPC.transfers); i++ {
+			actualTransfer = append(actualTransfer, mockedRPC.transfers[i].Destination)
+		}
+		sort.Strings(actualTransfer)
+		sort.Strings(blobsToInclude)
+		for i := 0; i < len(mockedRPC.transfers); i++ {
+			c.Assert(strings.Trim(actualTransfer[i], "/"), chk.Equals, blobsToInclude[i])
+		}
 		// validate that the right transfers were sent
 		validateDownloadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING,
 			blobsToInclude, mockedRPC)
@@ -657,7 +685,17 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithMultRegexExclude(c *c
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude) )
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
+		//comparing is names of files, since not in order need to sort each string and the compare them
+		actualTransfer := []string{}
+		for i := 0; i < len(mockedRPC.transfers); i++ {
+			actualTransfer = append(actualTransfer, mockedRPC.transfers[i].Destination)
+		}
+		sort.Strings(actualTransfer)
+		sort.Strings(blobsToInclude)
+		for i := 0; i < len(mockedRPC.transfers); i++ {
+			c.Assert(strings.Trim(actualTransfer[i], "/"), chk.Equals, blobsToInclude[i])
+		}
 		// validate that the right transfers were sent
 		validateDownloadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING,
 			blobsToInclude, mockedRPC)
