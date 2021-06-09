@@ -233,8 +233,8 @@ func (fs filterSet) GetEnumerationPreFilter(recursive bool) string {
 
 // includeRegex & excludeRegex
 type regexFilter struct {
-	patterns      []string
-	matchResponse bool
+	patterns   []string
+	isIncluded bool
 }
 
 func (f *regexFilter) doesSupportThisOS() (msg string, supported bool) {
@@ -244,7 +244,7 @@ func (f *regexFilter) doesSupportThisOS() (msg string, supported bool) {
 }
 
 func (f *regexFilter) appliesOnlyToFiles() bool {
-	return true
+	return false
 }
 
 func (f *regexFilter) doesPass(storedObject storedObject) bool {
@@ -255,19 +255,25 @@ func (f *regexFilter) doesPass(storedObject storedObject) bool {
 		matched := false
 		var err error
 
-		matched, err = regexp.MatchString(pattern, storedObject.name)
-
+		matched, err = regexp.MatchString(pattern, storedObject.relativePath)
+		// if pattern fails to match with an error, we assume the pattern is invalid
 		if err != nil {
-			return false
+			if f.isIncluded { //if include filter then we ignore it
+				continue
+			} else { //if exclude filter then we let it pass
+				return true
+			}
 		}
+		//check if pattern matched relative path
+		//if matched then return isIncluded which is a boolean expression to represent included and excluded
 		if matched {
-			return f.matchResponse
+			return f.isIncluded
 		}
 	}
-	return !f.matchResponse
+	return !f.isIncluded
 }
 
-func buildRegexFilters(patterns []string, matchResponse bool) []objectFilter {
+func buildRegexFilters(patterns []string, isIncluded bool) []objectFilter {
 	if len(patterns) == 0 {
 		return []objectFilter{}
 	}
@@ -279,7 +285,7 @@ func buildRegexFilters(patterns []string, matchResponse bool) []objectFilter {
 		}
 	}
 
-	return []objectFilter{&regexFilter{patterns: filters, matchResponse: matchResponse}}
+	return []objectFilter{&regexFilter{patterns: filters, isIncluded: isIncluded}}
 }
 
 // includeAfterDateFilter includes files with Last Modified Times >= the specified threshold

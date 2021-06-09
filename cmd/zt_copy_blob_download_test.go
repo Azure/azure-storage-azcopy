@@ -469,7 +469,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithRegexInclude(c *chk.C
 	c.Assert(len(blobsToIgnore), chk.Not(chk.Equals), 0)
 
 	// add blobs that we wish to include
-	blobsToInclude := []string{"tessssssssssssst.txt", "subOne/tetingessssss.jpeg", "subOne/subTwo/tessssst.pdf"}
+	blobsToInclude := []string{"tessssssssssssst.txt", "subOne/tetingessssss.jpeg", "subOne/tessssst/hi.pdf"}
 	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude, blockBlobDefaultData)
 
 	// set up the destination with an empty folder
