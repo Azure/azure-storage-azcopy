@@ -719,13 +719,12 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeRegexFlag(c *chk.C) {
 		//comparing is names of files, since not in order need to sort each string and the compare them
 		actualTransfer := []string{}
 		for i := 0; i < len(mockedRPC.transfers); i++ {
-			actualTransfer = append(actualTransfer, mockedRPC.transfers[i].Source)
+			actualTransfer = append(actualTransfer, strings.Trim(mockedRPC.transfers[i].Source, "/"))
 		}
 		sort.Strings(actualTransfer)
 		sort.Strings(blobsToInclude)
-		for i := 0; i < len(mockedRPC.transfers); i++ {
-			c.Assert(strings.Trim(actualTransfer[i], "/"), chk.Equals, blobsToInclude[i])
-		}
+		c.Assert(actualTransfer, chk.DeepEquals, blobsToInclude)
+
 		validateS2SSyncTransfersAreScheduled(c, "", "", blobsToInclude, mockedRPC)
 	})
 }
@@ -810,13 +809,12 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeAndExcludeRegexFlag(c *chk.C
 		//comparing is names of files, since not in order need to sort each string and the compare them
 		actualTransfer := []string{}
 		for i := 0; i < len(mockedRPC.transfers); i++ {
-			actualTransfer = append(actualTransfer, mockedRPC.transfers[i].Source)
+			actualTransfer = append(actualTransfer, strings.Trim(mockedRPC.transfers[i].Source, "/"))
 		}
 		sort.Strings(actualTransfer)
 		sort.Strings(blobsToInclude)
-		for i := 0; i < len(mockedRPC.transfers); i++ {
-			c.Assert(strings.Trim(actualTransfer[i], "/"), chk.Equals, blobsToInclude[i])
-		}
+		c.Assert(actualTransfer, chk.DeepEquals, blobsToInclude)
+
 		validateS2SSyncTransfersAreScheduled(c, "", "", blobsToInclude, mockedRPC)
 	})
 }
