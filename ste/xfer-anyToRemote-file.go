@@ -166,7 +166,7 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 			// if dst has snapshot or versionId specified, do not error and let the service fail the request with clear message
 			srcRQ := srcURL.Query()
 
-			if !(len(srcRQ["sharesnapshot"]) > 0 || len(srcRQ["snapshot"]) > 0 || len(srcRQ["versionid"]) > 0) {
+			if len(srcRQ["sharesnapshot"]) == 0 && len(srcRQ["snapshot"]) == 0 && len(srcRQ["versionid"]) == 0 {
 				jptm.LogSendError(info.Source, info.Destination, "Transfer source and destination are the same, which would cause data loss. Aborting transfer.", 0)
 				jptm.SetStatus(common.ETransferStatus.Failed())
 				jptm.ReportTransferDone()
