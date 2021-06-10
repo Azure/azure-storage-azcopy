@@ -1,6 +1,22 @@
 
 # Change Log
 
+## Version 10.11.0
+
+### New features & Improvements
+1. Added support for [Put Blob from URL](https://docs.microsoft.com/en-us/rest/api/storageservices/put-blob-from-url) for performance improvement of small blobs (with size less than `256Mib`)
+1. Add mirror mode support in sync operation via `mirror-mode` flag. Mirror-mode disables last-modified-time based comparison and overwrites the conflicting files and blobs at the destination if this flag is set to true
+1. Add flag `disable-auto-decoding` to disable automatic decoding of illegal chars on Windows
+1. Support custom mime type mapping via environment variable `AZCOPY_CONTENT_TYPE_MAP`
+1. Output message on the CLI when AzCopy detects proxy.
+1. Interpret DFS endpoints as blob endpoint.
+
+### Bug fixes
+1. Tolerate enumeration errors for Azure Files and not fail the entire job
+1. Make traverser skips log to the scanner logs
+1. Fixed pipe upload by adding missing fields such as Metadata, Blob Index Tags, Client Provided Key, Blob Access Tier, etc
+1. Fixed issue of clean up of benchmark command
+
 ## Version 10.10.0
 
 ### New features
