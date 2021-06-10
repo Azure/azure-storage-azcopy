@@ -49,9 +49,9 @@ func WrapFolder(fullpath string, stat os.FileInfo) (os.FileInfo, error) {
 		fi := (*ntdll.FileBasicInformationT)(unsafe.Pointer(&buf[0]))
 		// ntdll returns times that are incremented by 100-nanosecond "instants" past the beginning of 1601.
 		// time.Duration is a 64 bit integer, starting at nanoseconds.
-		// It cannot hold more than 290 years. You can't add a big.Int to time either.
+		// It cannot hold more than 290 years. You can't add any kind of arbitrary precision number of nanoseconds either.
 		// However, time.Time can handle such things on it's own.
-		//
+		// So, we just add our changetime 100x. It's a little cheesy, but it does work.
 		for i := 0; i < 100; i++ {
 			ntdllTime = ntdllTime.Add(time.Duration(fi.ChangeTime))
 		}
