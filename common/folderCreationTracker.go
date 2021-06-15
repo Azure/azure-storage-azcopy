@@ -32,11 +32,16 @@ import (
 // by the current job)
 type FolderCreationTracker interface {
 	RecordCreation(folder string)
-	ShouldSetProperties(folder string, overwrite OverwriteOption, prompter prompter) bool
+	ShouldSetProperties(folder string, overwrite OverwriteOption, prompter Prompter) bool
 	StopTracking(folder string)
 }
 
-type prompter interface {
+type JPPTCompatibleFolderCreationTracker interface {
+	FolderCreationTracker
+	RegisterPropertiesTransfer(folder string, transferIndex uint32)
+}
+
+type Prompter interface {
 	ShouldOverwrite(objectPath string, objectType EntityType) bool
 }
 
@@ -69,7 +74,7 @@ func (f *simpleFolderTracker) RecordCreation(folder string) {
 	f.contents[folder] = struct{}{}
 }
 
-func (f *simpleFolderTracker) ShouldSetProperties(folder string, overwrite OverwriteOption, prompter prompter) bool {
+func (f *simpleFolderTracker) ShouldSetProperties(folder string, overwrite OverwriteOption, prompter Prompter) bool {
 	switch overwrite {
 	case EOverwriteOption.True():
 		return true
@@ -121,7 +126,7 @@ func (f *nullFolderTracker) RecordCreation(folder string) {
 	// no-op (the null tracker doesn't track anything)
 }
 
-func (f *nullFolderTracker) ShouldSetProperties(folder string, overwrite OverwriteOption, prompter prompter) bool {
+func (f *nullFolderTracker) ShouldSetProperties(folder string, overwrite OverwriteOption, prompter Prompter) bool {
 	// There's no way this should ever be called, because we only create the nullTracker if we are
 	// NOT transferring folder info.
 	panic("wrong type of folder tracker has been instantiated. This type does not do any tracking")

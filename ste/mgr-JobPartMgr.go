@@ -400,6 +400,13 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			jppt.SetTransferStatus(common.ETransferStatus.Started(), true)
 		}
 
+		if _, dst, isFolder := plan.TransferSrcDstStrings(t); isFolder {
+			// register the folder!
+			if jpptFolderTracker, ok := jpm.getFolderCreationTracker().(common.JPPTCompatibleFolderCreationTracker); ok {
+				jpptFolderTracker.RegisterPropertiesTransfer(dst, t)
+			}
+		}
+
 		// Each transfer gets its own context (so any chunk can cancel the whole transfer) based off the job's context
 		transferCtx, transferCancel := context.WithCancel(jobCtx)
 		// Initialize a job part transfer manager

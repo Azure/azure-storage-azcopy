@@ -627,6 +627,10 @@ func (TransferStatus) Started() TransferStatus { return TransferStatus(1) }
 // Transfer successfully completed
 func (TransferStatus) Success() TransferStatus { return TransferStatus(2) }
 
+// Folder was created, but properties have not been persisted yet. Equivalent to Started, but never intended to be set on anything BUT folders.
+// Reviewers: Can you think of a better choice? Initially, the plan was to use a boolean in JobPartPlanTransfer instead, but there's no atomic form of a boolean in Go, so I thought piggybacking off status was a better plan.
+func (TransferStatus) FolderCreated() TransferStatus { return TransferStatus(3) }
+
 // Transfer failed due to some error.
 func (TransferStatus) Failed() TransferStatus { return TransferStatus(-1) }
 
@@ -642,7 +646,7 @@ func (TransferStatus) TierAvailabilityCheckFailure() TransferStatus { return Tra
 func (TransferStatus) Cancelled() TransferStatus { return TransferStatus(-6) }
 
 func (ts TransferStatus) ShouldTransfer() bool {
-	return ts == ETransferStatus.NotStarted() || ts == ETransferStatus.Started()
+	return ts == ETransferStatus.NotStarted() || ts == ETransferStatus.Started() || ts == ETransferStatus.FolderCreated()
 }
 
 // Transfer is any of the three possible state (InProgress, Completer or Failed)

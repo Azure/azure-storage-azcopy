@@ -540,6 +540,7 @@ func resurrectJobSummary(jm IJobMgr) common.ListJobSummaryResponse {
 			// check for all completed transfer to calculate the progress percentage at the end
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.NotStarted(),
+				common.ETransferStatus.FolderCreated(),
 				common.ETransferStatus.Started():
 				js.TotalBytesExpected += uint64(jppt.SourceSize)
 			case common.ETransferStatus.Success():

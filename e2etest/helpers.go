@@ -253,7 +253,7 @@ func createNewAzureFile(c asserter, share azfile.ShareURL, prefix string) (file 
 }
 
 func newNullFolderCreationTracker() common.FolderCreationTracker {
-	return common.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders())
+	return common.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
 }
 
 func generateParentsForAzureFile(c asserter, fileURL azfile.FileURL) {

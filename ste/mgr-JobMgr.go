@@ -372,7 +372,12 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, e
 		var logger common.ILogger = jm
 		jm.initState = &jobMgrInitState{
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
-			folderCreationTracker:          common.NewFolderCreationTracker(jpm.Plan().Fpo),
+			folderCreationTracker:  		&jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
+												plan:                   jpm.Plan(),
+												mu:                     &sync.Mutex{},
+												contents:               make(map[string]uint32),
+												unregisteredButCreated: make(map[string]struct{}),
+											},
 			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
 		}
 	}
