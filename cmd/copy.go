@@ -147,6 +147,9 @@ type rawCopyCmdArgs struct {
 	// whether to include blobs that have metadata 'hdi_isfolder = true'
 	includeDirectoryStubs bool
 
+	// whether to disable automatic decoding of illegal chars on Windows
+	disableAutoDecoding bool
+
 	// Optional flag to encrypt user data with user provided key.
 	// Key is provide in the REST request itself
 	// Provided key (EncryptionKey and EncryptionKeySHA256) and its hash will be fetched from environment variables
@@ -251,6 +254,20 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	glcm.RegisterCloseFunc(func() {
 		azcopyScanningLogger.CloseLog()
 	})
+
+	/* We support DFS by using blob end-point of the account. We replace dfs by blob in src and dst */
+	if src,dst := inferArgumentLocation(raw.src), inferArgumentLocation(raw.dst);
+				src == common.ELocation.BlobFS() || dst == common.ELocation.BlobFS() {
+		if src == common.ELocation.BlobFS() && dst != common.ELocation.Local() {
+			raw.src = strings.Replace(raw.src, ".dfs", ".blob", 1)
+			glcm.Info("Switching to use blob endpoint on source account.")
+		}
+
+		if dst == common.ELocation.BlobFS() && src != common.ELocation.Local() {
+			raw.dst = strings.Replace(raw.dst, ".dfs", ".blob", 1)
+			glcm.Info("Switching to use blob endpoint on destination account.")
+		}
+	}
 
 	fromTo, err := validateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
 	if err != nil {
@@ -510,6 +527,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 	cooked.includeDirectoryStubs = raw.includeDirectoryStubs
+	cooked.disableAutoDecoding = raw.disableAutoDecoding
 
 	if cooked.fromTo.To() != common.ELocation.Blob() && raw.blobTags != "" {
 		return cooked, errors.New("blob tags can only be set when transferring to blob storage")
@@ -1054,6 +1072,9 @@ type cookedCopyCmdArgs struct {
 	// whether to include blobs that have metadata 'hdi_isfolder = true'
 	includeDirectoryStubs bool
 
+	// whether to disable automatic decoding of illegal chars on Windows
+	disableAutoDecoding bool
+
 	cpkOptions common.CpkOptions
 }
 
@@ -1182,9 +1203,33 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
 	blockBlobUrl := azblob.NewBlockBlobURL(*u, p)
+	metadataString := cca.metadata
+	metadataMap := common.Metadata{}
+	if len(metadataString) > 0 {
+		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
+			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+			metadataMap[kv[0]] = kv[1]
+		}
+	}
+	blobTags := cca.blobTags
+	bbAccessTier := azblob.DefaultAccessTier
+	if cca.blockBlobTier != common.EBlockBlobTier.None() {
+		bbAccessTier = azblob.AccessTierType(cca.blockBlobTier.String())
+	}
 	_, err = azblob.UploadStreamToBlockBlob(ctx, os.Stdin, blockBlobUrl, azblob.UploadStreamToBlockBlobOptions{
-		BufferSize: int(blockSize),
-		MaxBuffers: pipingUploadParallelism,
+		BufferSize:  int(blockSize),
+		MaxBuffers:  pipingUploadParallelism,
+		Metadata:    metadataMap.ToAzBlobMetadata(),
+		BlobTagsMap: blobTags.ToAzBlobTagsMap(),
+		BlobHTTPHeaders: azblob.BlobHTTPHeaders{
+			ContentType:        cca.contentType,
+			ContentLanguage:    cca.contentLanguage,
+			ContentEncoding:    cca.contentEncoding,
+			ContentDisposition: cca.contentDisposition,
+			CacheControl:       cca.cacheControl,
+		},
+		BlobAccessTier:           bbAccessTier,
+		ClientProvidedKeyOptions: common.GetClientProvidedKey(cca.cpkOptions),
 	})
 
 	return err
@@ -1755,6 +1800,7 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.blobTags, "blob-tags", "", "Set tags on blobs to categorize data in your storage account")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveBlobTags, "s2s-preserve-blob-tags", false, "Preserve index tags during service to service transfer from one blob storage to another")
 	cpCmd.PersistentFlags().BoolVar(&raw.includeDirectoryStubs, "include-directory-stub", false, "False by default to ignore directory stubs. Directory stubs are blobs with metadata 'hdi_isfolder:true'. Setting value to true will preserve directory stubs during transfers.")
+	cpCmd.PersistentFlags().BoolVar(&raw.disableAutoDecoding, "disable-auto-decoding", false, "False by default to enable automatic decoding of illegal chars on Windows. Can be set to true to disable automatic decoding.")
 	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
 	// right before transferring in ste(backend).
 	// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),

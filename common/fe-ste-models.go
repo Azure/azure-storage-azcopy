@@ -1369,6 +1369,8 @@ func (p PreservePermissionsOption) IsTruthy() bool {
 	}
 }
 
+////////////////////////////////////////////////////////////////
+
 // CpkScopeInfo specifies the name of the encryption scope to use to encrypt the data provided in the request.
 // If not specified, encryption is performed with the default account encryption scope.
 // For more information, see Encryption at Rest for Azure Storage Services.
@@ -1383,18 +1385,6 @@ func (csi CpkScopeInfo) Marshal() (string, error) {
 	}
 	return string(result), nil
 }
-
-//func UnmarshalToCpkScopeInfo(cpkScopeInfoStr string) (CpkScopeInfo, error) {
-//	var result CpkScopeInfo
-//	if cpkScopeInfoStr != "" {
-//		err := json.Unmarshal([]byte(cpkScopeInfoStr), &result)
-//		if err != nil {
-//			return result, err
-//		}
-//	}
-//
-//	return result, nil
-//}
 
 type CpkInfo struct {
 	// The algorithm used to produce the encryption key hash.
@@ -1418,18 +1408,6 @@ func (csi CpkInfo) Marshal() (string, error) {
 	}
 	return string(result), nil
 }
-
-//func UnmarshalToCpkInfo(cpkInfoStr string) (CpkInfo, error) {
-//	var result CpkInfo
-//	if cpkInfoStr != "" {
-//		err := json.Unmarshal([]byte(cpkInfoStr), &result)
-//		if err != nil {
-//			return result, err
-//		}
-//	}
-//
-//	return result, nil
-//}
 
 func ToClientProvidedKeyOptions(cpkInfo CpkInfo, cpkScopeInfo CpkScopeInfo) azblob.ClientProvidedKeyOptions {
 	if (cpkInfo.EncryptionKey == nil || cpkInfo.EncryptionKeySha256 == nil) && cpkScopeInfo.EncryptionScope == nil {

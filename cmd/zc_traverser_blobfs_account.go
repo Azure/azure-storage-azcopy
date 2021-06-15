@@ -69,7 +69,7 @@ func (t *BlobFSAccountTraverser) listContainers() ([]string, error) {
 				} else {
 					// realistically this should never ever happen
 					// but on the off-chance that it does, should we panic?
-					WarnStdoutAndJobLog("filesystem listing returned nil filesystem name")
+					WarnStdoutAndScanningLog("filesystem listing returned nil filesystem name")
 					continue
 				}
 
@@ -112,7 +112,7 @@ func (t *BlobFSAccountTraverser) traverse(preprocessor objectMorpher, processor 
 		err = fileSystemTraverser.traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
-			WarnStdoutAndJobLog(fmt.Sprintf("failed to list files in filesystem %s: %s", v, err))
+			WarnStdoutAndScanningLog(fmt.Sprintf("failed to list files in filesystem %s: %s", v, err))
 			continue
 		}
 	}

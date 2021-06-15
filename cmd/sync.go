@@ -64,6 +64,9 @@ type rawSyncCmdArgs struct {
 	// otherwise the user is prompted to make a decision
 	deleteDestination string
 
+	// this flag is to disable comparator and overwrite files at destination irrespective
+	mirrorMode bool
+
 	s2sPreserveAccessTier bool
 	// Opt-in flag to preserve the blob index tags during service to service transfer.
 	s2sPreserveBlobTags bool
@@ -127,7 +130,18 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	// this if statement ladder remains instead of being separated to help determine valid combinations for sync
 	// consider making a map of valid source/dest combos and consolidating this to generic source/dest setups, akin to the lower if statement
 	// TODO: if expand the set of source/dest combos supported by sync, update this method the declarative test framework:
-	// TODO: add support for account-to-account operations (for those from-tos that support that)
+
+	/* We support DFS by using blob end-point of the account. We replace dfs by blob in src and dst */
+	if loc := inferArgumentLocation(raw.src); loc == common.ELocation.BlobFS() {
+		raw.src = strings.Replace(raw.src, ".dfs", ".blob", 1)
+		glcm.Info("Sync operates only on blob endpoint. Switching to use blob endpoint on source account.")
+	}
+
+	if loc := inferArgumentLocation(raw.dst); loc == common.ELocation.BlobFS() {
+		raw.dst = strings.Replace(raw.dst, ".dfs", ".blob", 1)
+		glcm.Info("Sync operates only on blob endpoint. Switching to use blob endpoint on destination account.")
+	}
+
 	cooked.fromTo = inferFromTo(raw.src, raw.dst)
 	switch cooked.fromTo {
 	case common.EFromTo.Unknown():
@@ -279,6 +293,8 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	cooked.cpkOptions = cpkOptions
 
+	cooked.mirrorMode = raw.mirrorMode
+
 	return cooked, nil
 }
 
@@ -355,6 +371,8 @@ type cookedSyncCmdArgs struct {
 	s2sPreserveBlobTags bool
 
 	cpkOptions common.CpkOptions
+
+	mirrorMode bool
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -701,6 +719,7 @@ func init() {
 	// Customer-provided keys can be stored in Azure Key Vault or in another key store linked to storage account.
 	syncCmd.PersistentFlags().StringVar(&raw.cpkScopeInfo, "cpk-by-name", "", "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data")
 	syncCmd.PersistentFlags().BoolVar(&raw.cpkInfo, "cpk-by-value", false, "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key and its hash will be fetched from environment variables")
+	syncCmd.PersistentFlags().BoolVar(&raw.mirrorMode, "mirror-mode", false, "Disable last-modified-time based comparison and overwrites the conflicting files and blobs at the destination if this flag is set to true. Default is false")
 
 	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
 	syncCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")

@@ -157,6 +157,9 @@ type params struct {
 	relativeSourcePath        string
 	blobTags                  string
 	s2sPreserveBlobTags       bool
+	cpkByName                 string
+	cpkByValue                bool
+	isObjectDir               bool
 }
 
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level
@@ -318,6 +321,23 @@ func (TestFromTo) AllRemove() TestFromTo {
 	}
 }
 
+func (TestFromTo) AllSync() TestFromTo {
+	return TestFromTo{
+		desc:      "AllSync",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(),
+			common.ELocation.File(),
+			common.ELocation.Local(),
+		},
+		tos: []common.Location{
+			common.ELocation.Blob(),
+			common.ELocation.File(),
+			common.ELocation.Local(),
+		},
+	}
+}
+
 // Other is for when you want to list one or more specific from-tos that the test should cover.
 // Generally avoid this method, because it does not automatically pick up new pairs as we add new supported
 // resource types to AzCopy.
@@ -388,7 +408,11 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 				case common.EFromTo.BlobBlob(),
 					common.EFromTo.FileFile(),
 					common.EFromTo.LocalBlob(),
-					common.EFromTo.BlobLocal():
+					common.EFromTo.BlobLocal(),
+					common.EFromTo.LocalFile(),
+					common.EFromTo.FileLocal(),
+					common.EFromTo.BlobFile(),
+					common.EFromTo.FileBlob():
 					// do nothing, these are fine
 				default:
 					continue // not supported for sync
@@ -460,8 +484,11 @@ type hookHelper interface {
 	// CancelAndResume tells the runner to cancel the running AzCopy job (with "cancel" to stdin) and the resume the job
 	CancelAndResume()
 
-	// Create a source snapshot to use it as the source
+	// CreateSourceSnapshot Create a source snapshot to use it as the source
 	CreateSourceSnapshot()
+
+	// SkipTest skips the test
+	SkipTest()
 }
 
 ///////
@@ -472,6 +499,9 @@ type hookFunc func(h hookHelper)
 // custom behaviour (for those func that are not nil).
 // NOTE: the funcs you provide here must be threadsafe, because RunScenarios works in parallel for all its scenarios
 type hooks struct {
+
+	// called before running a scenario
+	beforeTestRun hookFunc
 
 	// called after all the setup is done, and before AzCopy is actually invoked
 	beforeRunJob hookFunc

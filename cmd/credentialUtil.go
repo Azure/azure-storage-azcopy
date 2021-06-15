@@ -570,7 +570,7 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 		// For to Trash direction, use source as resource URL
 		// Also, by setting isSource=false we inform getCredentialTypeForLocation() that resource
 		// being deleted cannot be public.
-		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, raw.sourceSAS, true, cpkOptions)
+		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, raw.sourceSAS, false, cpkOptions)
 	case raw.fromTo.From().IsRemote() && raw.fromTo.To().IsLocal():
 		// we authenticate to the source.
 		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, raw.sourceSAS, true, cpkOptions)
