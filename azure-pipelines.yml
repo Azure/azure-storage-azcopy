@@ -166,17 +166,6 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
           GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
       - script: |
-          set -e
-          GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
-          export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
-          go test -timeout 20m -race -short -cover ./e2etest         
-        name: 'Run_e2e_tests'
-        env:
-          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
-          CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
-          CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
-      - script: |
           go build -o test-validator ./testSuite/
           mkdir test-temp
           export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
