@@ -2,13 +2,13 @@ trigger:
   branches:
     include:
       - dev
-      - master
+      - main
 
 pr:
   branches:
     include:
       - dev
-      - master
+      - main
 
 jobs:
   - job: Build
