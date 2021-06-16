@@ -61,70 +61,70 @@ jobs:
         condition: succeededOrFailed()
 
   - job: Running_E2E
-      timeoutInMinutes: 360
-      # Creating strategies for GOOS: Windows Server 2019 /macOS X Mojave 10.15/Ubuntu 20.04
-      strategy:
-        matrix:
-          Ubuntu-20:
-            imageName: 'ubuntu-20.04'
-            type: 'linux'
-          Windows:
-            imageName: 'windows-2019'
-            type: 'windows'
-          MacOS:
-            imageName: 'macOS-10.15'
-            type: 'mac-os'
-      pool:
-        vmImage: $(imageName)
+    timeoutInMinutes: 360
+    # Creating strategies for GOOS: Windows Server 2019 /macOS X Mojave 10.15/Ubuntu 20.04
+    strategy:
+      matrix:
+        Ubuntu-20:
+          imageName: 'ubuntu-20.04'
+          type: 'linux'
+        Windows:
+          imageName: 'windows-2019'
+          type: 'windows'
+        MacOS:
+          imageName: 'macOS-10.15'
+          type: 'mac-os'
+    pool:
+      vmImage: $(imageName)
 
-      steps:
-        - task: GoTool@0
-          inputs:
-            version: '1.15'
+    steps:
+      - task: GoTool@0
+        inputs:
+          version: '1.15'
 
-        # Running E2E Tests on Linux
-        - script: |
-            set -e
-            go build -o azcopy_linux_amd64
-            go build -tags "se_integration" -o azcopy_linux_se_amd64
-            echo 'starting E2E tests on linux'
-            go test -timeout 30m -race -cover -v ./e2etest
-          env:
-            AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
-            AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
-            CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
-            CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
-            AZCOPY_E2E_EXECUTABLE_PATH: $(Build.ArtifactStagingDirectory)/azcopy_linux_amd64
-          displayName: 'E2E Test Linux'
-          condition: eq(variables.type, 'linux')
-        # Running E2E Tests on Windows
-        - script: |
-            go build -o azcopy_windows_amd64.exe
-            go build -o azcopy_windows_386.exe
-            echo 'starting E2E tests on windows'
-            go test -timeout 30m -race -cover -v ./e2etest
-          env:
-            AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
-            AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
-            CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
-            CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
-            AZCOPY_E2E_EXECUTABLE_PATH: $(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe
-          displayName: 'E2E Test Windows'
-          condition: eq(variables.type, 'windows')
-        # Running E2E Tests on Mac
-        - script: |
-            set -e
-            go build -o azcopy_darwin_amd64
-            echo 'starting E2E tests on mac-os'
-            go test -timeout 30m -race -cover -v ./e2etest
-          env:
-            AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
-            AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
-            CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
-            CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
-            AZCOPY_E2E_EXECUTABLE_PATH: $(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64
-          displayName: 'E2E Test MacOs'
-          condition: eq(variables.type, 'mac-os')
+      # Running E2E Tests on Linux
+      - script: |
+          set -e
+          go build -o azcopy_linux_amd64
+          go build -tags "se_integration" -o azcopy_linux_se_amd64
+          echo 'starting E2E tests on linux'
+          go test -timeout 30m -race -cover -v ./e2etest
+        env:
+          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+          CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
+          CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
+          AZCOPY_E2E_EXECUTABLE_PATH: $(Build.ArtifactStagingDirectory)/azcopy_linux_amd64
+        displayName: 'E2E Test Linux'
+        condition: eq(variables.type, 'linux')
+      # Running E2E Tests on Windows
+      - script: |
+          go build -o azcopy_windows_amd64.exe
+          go build -o azcopy_windows_386.exe
+          echo 'starting E2E tests on windows'
+          go test -timeout 30m -race -cover -v ./e2etest
+        env:
+          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+          CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
+          CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
+          AZCOPY_E2E_EXECUTABLE_PATH: $(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe
+        displayName: 'E2E Test Windows'
+        condition: eq(variables.type, 'windows')
+      # Running E2E Tests on Mac
+      - script: |
+          set -e
+          go build -o azcopy_darwin_amd64
+          echo 'starting E2E tests on mac-os'
+          go test -timeout 30m -race -cover -v ./e2etest
+        env:
+          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+          CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
+          CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
+          AZCOPY_E2E_EXECUTABLE_PATH: $(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64
+        displayName: 'E2E Test MacOs'
+        condition: eq(variables.type, 'mac-os')
 
   - job: Test_On_Ubuntu
     variables:
