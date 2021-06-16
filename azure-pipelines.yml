@@ -18,9 +18,6 @@ jobs:
         Ubuntu-20:
           imageName: 'ubuntu-20.04'
           type: 'linux'
-        Windows:
-          imageName: 'windows-2019'
-          type: 'windows'
         MacOS:
           imageName: 'macOS-10.15'
           type: 'mac-os'
@@ -33,16 +30,11 @@ jobs:
       - script: |
           GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
           GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
-          cp NOTICE.txt $(Build.ArtifactStagingDirectory)
-        displayName: 'Generate Linux Build'
-        condition: eq(variables.type, 'linux')
-
-      - script: |
           GOARCH=amd64 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
           GOARCH=386 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
           cp NOTICE.txt $(Build.ArtifactStagingDirectory)
-        displayName: 'Generate Windows Build'
-        condition: eq(variables.type, 'windows')
+        displayName: 'Generate Linux And Windows Build'
+        condition: eq(variables.type, 'linux')
 
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
