@@ -29,21 +29,21 @@ jobs:
         condition: succeededOrFailed()
 
   - job: Windows_Build
-      pool:
-        vmImage: 'windows-2019'
-      steps:
-        - task: GoTool@0
-          inputs:
-            version: '1.15'
-        - script: |
-            GOARCH=amd64 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
-            GOARCH=386 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
-            cp NOTICE.txt $(Build.ArtifactStagingDirectory)
-          displayName: 'Generate Windows Build'
+    pool:
+      vmImage: 'windows-2019'
+    steps:
+      - task: GoTool@0
+        inputs:
+          version: '1.15'
+      - script: |
+          GOARCH=amd64 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
+          GOARCH=386 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
+          cp NOTICE.txt $(Build.ArtifactStagingDirectory)
+        displayName: 'Generate Windows Build'
 
-        - task: PublishBuildArtifacts@1
-          displayName: 'Publish Artifacts'
-          condition: succeededOrFailed()
+      - task: PublishBuildArtifacts@1
+        displayName: 'Publish Artifacts'
+        condition: succeededOrFailed()
 
   - job: MacOS_Build
     pool:
