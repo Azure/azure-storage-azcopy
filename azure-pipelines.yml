@@ -88,12 +88,12 @@ jobs:
           CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
         displayName: 'E2E Test Linux'
         condition: eq(variables.type, 'linux')
+
       # Running E2E Tests on Windows
       - script: |
           go build -o azcopy_windows_amd64.exe
           go build -o azcopy_windows_386.exe
           echo 'starting E2E tests on windows'
-          set AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_windows_amd64.exe
           go test -timeout 30m -race -cover -v ./e2etest
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
@@ -102,6 +102,7 @@ jobs:
           CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
         displayName: 'E2E Test Windows'
         condition: eq(variables.type, 'windows')
+
       # Running E2E Tests on Mac
       - script: |
           set -e
@@ -123,7 +124,7 @@ jobs:
     # allow maximum build time, in case we have build congestion
     timeoutInMinutes: 360
     pool:
-      vmImage: 'ubuntu-16.04'
+      vmImage: 'ubuntu-20.04'
     steps:
       - task: UsePythonVersion@0
         name: 'Set_up_Python'
