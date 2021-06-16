@@ -91,8 +91,8 @@ jobs:
 
       # Running E2E Tests on Windows
       - script: |
-          go build -o azcopy_windows_amd64.exe
-          go build -o azcopy_windows_386.exe
+          go build -o $(System.DefaultWorkingDirectory)/azcopy_windows_amd64.exe
+          go build -o $(System.DefaultWorkingDirectory)/azcopy_windows_386.exe
           echo 'starting E2E tests on windows'
           go test -timeout 30m -race -cover -v ./e2etest
         env:
@@ -100,6 +100,7 @@ jobs:
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
           CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
           CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
+          AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/azcopy_windows_amd64.exe
         displayName: 'E2E Test Windows'
         condition: eq(variables.type, 'windows')
 
