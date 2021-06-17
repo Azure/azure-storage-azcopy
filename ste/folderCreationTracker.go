@@ -8,6 +8,49 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
+type FolderCreationTracker common.FolderCreationTracker
+
+type JPPTCompatibleFolderCreationTracker interface {
+	FolderCreationTracker
+	RegisterPropertiesTransfer(folder string, transferIndex uint32)
+}
+
+func NewFolderCreationTracker(fpo common.FolderPropertyOption, plan *JobPartPlanHeader) FolderCreationTracker {
+	switch fpo {
+	case common.EFolderPropertiesOption.AllFolders(),
+		common.EFolderPropertiesOption.AllFoldersExceptRoot():
+		return &jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
+			plan:                   plan,
+			mu:                     &sync.Mutex{},
+			contents:               make(map[string]uint32),
+			unregisteredButCreated: make(map[string]struct{}),
+		}
+	case common.EFolderPropertiesOption.NoFolders():
+		// can't use simpleFolderTracker here, because when no folders are processed,
+		// then StopTracking will never be called, so we'll just use more and more memory for the map
+		return &nullFolderTracker{}
+	default:
+		panic("unknown folderPropertiesOption")
+	}
+}
+
+type nullFolderTracker struct{}
+
+func (f *nullFolderTracker) RecordCreation(folder string) {
+	// no-op (the null tracker doesn't track anything)
+}
+
+func (f *nullFolderTracker) ShouldSetProperties(folder string, overwrite common.OverwriteOption, prompter common.Prompter) bool {
+	// There's no way this should ever be called, because we only create the nullTracker if we are
+	// NOT transferring folder info.
+	panic("wrong type of folder tracker has been instantiated. This type does not do any tracking")
+}
+
+func (f *nullFolderTracker) StopTracking(folder string) {
+	// noop (because we don't track anything)
+}
+
+
 type jpptFolderTracker struct {
 	plan *JobPartPlanHeader
 	mu *sync.Mutex

@@ -179,7 +179,7 @@ func (jm *jobMgr) logConcurrencyParameters() {
 // jobMgrInitState holds one-time init structures (such as SIPM), that initialize when the first part is added.
 type jobMgrInitState struct {
 	securityInfoPersistenceManager *securityInfoPersistenceManager
-	folderCreationTracker          common.FolderCreationTracker
+	folderCreationTracker          FolderCreationTracker
 	folderDeletionManager          common.FolderDeletionManager
 }
 
@@ -227,7 +227,7 @@ type jobMgr struct {
 	overwritePrompter *overwritePrompter
 
 	// must have a single instance of this, for the whole job
-	folderCreationTracker common.FolderCreationTracker
+	folderCreationTracker FolderCreationTracker
 
 	initMu    *sync.Mutex
 	initState *jobMgrInitState
@@ -372,12 +372,7 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, e
 		var logger common.ILogger = jm
 		jm.initState = &jobMgrInitState{
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
-			folderCreationTracker:  		&jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
-												plan:                   jpm.Plan(),
-												mu:                     &sync.Mutex{},
-												contents:               make(map[string]uint32),
-												unregisteredButCreated: make(map[string]struct{}),
-											},
+			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, jpm.Plan()),
 			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
 		}
 	}

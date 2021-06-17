@@ -51,7 +51,7 @@ type IJobPartMgr interface {
 	common.ILogger
 	SourceProviderPipeline() pipeline.Pipeline
 	getOverwritePrompter() *overwritePrompter
-	getFolderCreationTracker() common.FolderCreationTracker
+	getFolderCreationTracker() FolderCreationTracker
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 	FolderDeletionManager() common.FolderDeletionManager
 	CpkInfo() common.CpkInfo
@@ -308,7 +308,7 @@ func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {
 	return jpm.jobMgr.getOverwritePrompter()
 }
 
-func (jpm *jobPartMgr) getFolderCreationTracker() common.FolderCreationTracker {
+func (jpm *jobPartMgr) getFolderCreationTracker() FolderCreationTracker {
 	if jpm.jobMgrInitState == nil || jpm.jobMgrInitState.folderCreationTracker == nil {
 		panic("folderCreationTracker should have been initialized already")
 	}
@@ -402,7 +402,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 		if _, dst, isFolder := plan.TransferSrcDstStrings(t); isFolder {
 			// register the folder!
-			if jpptFolderTracker, ok := jpm.getFolderCreationTracker().(common.JPPTCompatibleFolderCreationTracker); ok {
+			if jpptFolderTracker, ok := jpm.getFolderCreationTracker().(JPPTCompatibleFolderCreationTracker); ok {
 				jpptFolderTracker.RegisterPropertiesTransfer(dst, t)
 			}
 		}
