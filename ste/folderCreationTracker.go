@@ -103,7 +103,7 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 		} else {
 			// This should not happen, ever.
 			// Folder property jobs register with the tracker before they start getting processed.
-			panic("folder was not registered when properties persistence occurred")
+			panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("folder " + folder + " was not registered when properties persistence occurred"))
 		}
 
 		// prompt only if we didn't create this folder
@@ -136,6 +136,6 @@ func (f *jpptFolderTracker) StopTracking(folder string) {
 		delete(f.contents, folder)
 	} else {
 		// double should never be hit, but *just in case*.
-		panic("Folder shouldn't finish tracking until it's been recorded")
+		panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("Folder " + folder + " shouldn't finish tracking until it's been recorded"))
 	}
 }
