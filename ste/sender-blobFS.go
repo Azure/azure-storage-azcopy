@@ -224,5 +224,5 @@ func (u *blobFSSenderBase) DirUrlToString() string {
 	dirUrl.RawPath = ""
 	// To avoid SAS token
 	dirUrl.RawQuery = ""
-	return u.dirURL().String()
+	return dirUrl.String()
 }
