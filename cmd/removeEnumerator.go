@@ -68,7 +68,10 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	// (Must enumerate folders when deleting from a folder-aware location. Can't do folder deletion just based on file
 	// deletion, because that would not handle folders that were empty at the start of the job).
 	fpo, message := newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters, false, false)
-	glcm.Info(message)
+	// do not print Info message if in dry run mode
+	if !cca.dryrunMode {
+		glcm.Info(message)
+	}
 	if ste.JobsAdmin != nil {
 		ste.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
 	}
@@ -78,9 +81,11 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	finalize := func() error {
 		jobInitiated, err := transferScheduler.dispatchFinalPart()
 		if err != nil {
-			if err == NothingScheduledError {
+			if err == NothingScheduledError && !cca.dryrunMode {
 				// No log file needed. Logging begins as a part of awaiting job completion.
 				return NothingToRemoveError
+			} else if cca.dryrunMode {
+				return nil
 			}
 
 			return err

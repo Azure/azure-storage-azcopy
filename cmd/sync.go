@@ -81,6 +81,8 @@ type rawSyncCmdArgs struct {
 	// Key is present in AzureKeyVault and Azure KeyVault is linked with storage account.
 	// Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data
 	cpkScopeInfo string
+	// dry run mode bool
+	dryrun bool
 }
 
 func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -295,6 +297,8 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	cooked.mirrorMode = raw.mirrorMode
 
+	cooked.dryrunMode = raw.dryrun
+
 	return cooked, nil
 }
 
@@ -373,6 +377,8 @@ type cookedSyncCmdArgs struct {
 	cpkOptions common.CpkOptions
 
 	mirrorMode bool
+
+	dryrunMode bool
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {

@@ -21,6 +21,8 @@
 package cmd
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
 	"net/url"
@@ -473,5 +475,111 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubsWithListOfFiles(c
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.NotNil)
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestDryrunRemoveSingleBlob(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	// set up the container with a single blob
+	blobName := []string{"sub1/test/testing.txt"}
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobName, blockBlobDefaultData)
+	c.Assert(containerURL, chk.NotNil)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) //text format
+	glcm = &mockedLcm
+
+	// construct the raw input to simulate user input
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobName[0])
+	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
+	raw.dryrun = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		// validate that none where transferred
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+
+		msg := <-mockedLcm.dryrunLog
+		//comparing message printed for dry run
+		c.Check(strings.Compare(msg, fmt.Sprintf("DRYRUN: remove %v/%v/", containerURL, blobName[0])), chk.Equals, 0)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestDryrunRemoveBlobsUnderContainer(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	// set up the container with a single blob
+	bloblist := []string{"AzURE2021.jpeg", "sub1/dir2/HELLO-4.txt", "sub1/test/testing.txt"}
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, bloblist, blockBlobDefaultData)
+	c.Assert(containerURL, chk.NotNil)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) //text format
+	glcm = &mockedLcm
+
+	// construct the raw input to simulate user input
+	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
+	raw.dryrun = true
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		// validate that none where transferred
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+
+		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
+		for i := 0; i < len(bloblist); i++ {
+			c.Check(strings.Compare(msg[i], fmt.Sprintf("DRYRUN: remove %v/%v", containerURL, bloblist[i])), chk.Equals, 0)
+		}
+	})
+}
+
+func (s *cmdIntegrationSuite) TestDryrunRemoveBlobsUnderContainerJson(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	// set up the container with a single blob
+	blobName := []string{"tech.txt"}
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobName, blockBlobDefaultData)
+	c.Assert(containerURL, chk.NotNil)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Json()) //json format
+	glcm = &mockedLcm
+
+	// construct the raw input to simulate user input
+	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
+	raw.dryrun = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		// validate that none where transferred
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+
+		msg := <-mockedLcm.dryrunLog
+		deleteTransfer := common.CopyTransfer{}
+		errMarshal := json.Unmarshal([]byte(msg), &deleteTransfer)
+		c.Assert(errMarshal, chk.IsNil)
+		//comparing some values of deleteTransfer
+		c.Check(strings.Compare(deleteTransfer.Source, blobName[0]), chk.Equals, 0)
+		c.Check(strings.Compare(deleteTransfer.Destination, blobName[0]), chk.Equals, 0)
+		c.Check(strings.Compare(string(deleteTransfer.BlobType), "BlockBlob"), chk.Equals, 0)
 	})
 }

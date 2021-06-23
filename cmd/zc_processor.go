@@ -21,6 +21,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -44,11 +45,12 @@ type copyTransferProcessor struct {
 
 	preserveAccessTier     bool
 	folderPropertiesOption common.FolderPropertyOption
+	dryrunMode             bool
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
 	source, destination common.ResourceString,
-	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool) *copyTransferProcessor {
+	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool, dryrunMode bool) *copyTransferProcessor {
 	return &copyTransferProcessor{
 		numOfTransfersPerPart:     numOfTransfersPerPart,
 		copyJobTemplate:           copyJobTemplate,
@@ -58,6 +60,7 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 		reportFinalPartDispatched: reportFinalPartDispatched,
 		preserveAccessTier:        preserveAccessTier,
 		folderPropertiesOption:    copyJobTemplate.Fpo,
+		dryrunMode:                dryrunMode,
 	}
 }
 
@@ -78,6 +81,30 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 
 	if !shouldSendToSte {
 		return nil // skip this one
+	}
+
+	if s.dryrunMode {
+		glcm.Dryrun(func(format common.OutputFormat) string {
+			if format == common.EOutputFormat.Json() {
+				jsonOutput, err := json.Marshal(copyTransfer)
+				common.PanicIfErr(err)
+				return string(jsonOutput)
+			} else {
+				// if remove then To() will equal to common.ELocation.Unknown()
+				if s.copyJobTemplate.FromTo.To() == common.ELocation.Unknown() { //remove
+					return fmt.Sprintf("DRYRUN: remove %v/%v",
+						s.copyJobTemplate.SourceRoot.Value,
+						srcRelativePath)
+				} else { //copy
+					return fmt.Sprintf("DRYRUN: copy %v/%v to %v/%v",
+						s.copyJobTemplate.SourceRoot.Value,
+						srcRelativePath,
+						s.copyJobTemplate.DestinationRoot.Value,
+						dstRelativePath)
+				}
+			}
+		})
+		return nil
 	}
 
 	if len(s.copyJobTemplate.Transfers.List) == s.numOfTransfersPerPart {
