@@ -51,6 +51,8 @@ type rawSyncCmdArgs struct {
 	excludeFileAttributes string
 	legacyInclude         string // for warning messages only
 	legacyExclude         string // for warning messages only
+	includeRegex          string
+	excludeRegex          string
 
 	preserveSMBPermissions bool
 	preserveOwner          bool
@@ -130,7 +132,18 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	// this if statement ladder remains instead of being separated to help determine valid combinations for sync
 	// consider making a map of valid source/dest combos and consolidating this to generic source/dest setups, akin to the lower if statement
 	// TODO: if expand the set of source/dest combos supported by sync, update this method the declarative test framework:
-	// TODO: add support for account-to-account operations (for those from-tos that support that)
+
+	/* We support DFS by using blob end-point of the account. We replace dfs by blob in src and dst */
+	if loc := inferArgumentLocation(raw.src); loc == common.ELocation.BlobFS() {
+		raw.src = strings.Replace(raw.src, ".dfs", ".blob", 1)
+		glcm.Info("Sync operates only on blob endpoint. Switching to use blob endpoint on source account.")
+	}
+
+	if loc := inferArgumentLocation(raw.dst); loc == common.ELocation.BlobFS() {
+		raw.dst = strings.Replace(raw.dst, ".dfs", ".blob", 1)
+		glcm.Info("Sync operates only on blob endpoint. Switching to use blob endpoint on destination account.")
+	}
+
 	cooked.fromTo = inferFromTo(raw.src, raw.dst)
 	switch cooked.fromTo {
 	case common.EFromTo.Unknown():
@@ -284,6 +297,9 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	cooked.mirrorMode = raw.mirrorMode
 
+	cooked.includeRegex = raw.parsePatterns(raw.includeRegex)
+	cooked.excludeRegex = raw.parsePatterns(raw.excludeRegex)
+
 	return cooked, nil
 }
 
@@ -318,6 +334,8 @@ type cookedSyncCmdArgs struct {
 	excludePaths          []string
 	includeFileAttributes []string
 	excludeFileAttributes []string
+	includeRegex          []string
+	excludeRegex          []string
 
 	// options
 	preserveSMBPermissions common.PreservePermissionsOption
@@ -693,6 +711,8 @@ func init() {
 		"This option does not support wildcard characters (*). Checks relative path prefix(For example: myFolder;myFolder/subDirName/file.pdf).")
 	syncCmd.PersistentFlags().StringVar(&raw.includeFileAttributes, "include-attributes", "", "(Windows only) Include only files whose attributes match the attribute list. For example: A;S;R")
 	syncCmd.PersistentFlags().StringVar(&raw.excludeFileAttributes, "exclude-attributes", "", "(Windows only) Exclude files whose attributes match the attribute list. For example: A;S;R")
+	syncCmd.PersistentFlags().StringVar(&raw.includeRegex, "include-regex", "", "Include the relative path of the files that match with the regular expressions. Separate regular expressions with ';'.")
+	syncCmd.PersistentFlags().StringVar(&raw.excludeRegex, "exclude-regex", "", "Exclude the relative path of the files that match with the regular expressions. Separate regular expressions with ';'.")
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "Define the log verbosity for the log file, available levels: INFO(all requests and responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default INFO).")
 	syncCmd.PersistentFlags().StringVar(&raw.deleteDestination, "delete-destination", "false", "Defines whether to delete extra files from the destination that are not present at the source. Could be set to true, false, or prompt. "+
 		"If set to prompt, the user will be asked a question before scheduling files and blobs for deletion. (default 'false').")

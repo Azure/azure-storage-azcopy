@@ -333,6 +333,14 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 		}
 	}
 
+	if len(cca.includeRegex) != 0 {
+		filters = append(filters, &regexFilter{patterns: cca.includeRegex, isIncluded: true})
+	}
+
+	if len(cca.excludeRegex) != 0 {
+		filters = append(filters, &regexFilter{patterns: cca.excludeRegex, isIncluded: false})
+	}
+
 	if len(cca.excludeBlobType) != 0 {
 		excludeSet := map[azblob.BlobType]bool{}
 
@@ -370,7 +378,7 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	dstCredInfo := common.CredentialInfo{}
 
 	// 3minutes is enough time to list properties of a container, and create new if it does not exist.
-	ctx, _ := context.WithTimeout(parentCtx, time.Minute * 3)
+	ctx, _ := context.WithTimeout(parentCtx, time.Minute*3)
 	if dstCredInfo, _, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false, cca.cpkOptions); err != nil {
 		return err
 	}
