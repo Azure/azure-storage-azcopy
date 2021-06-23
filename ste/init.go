@@ -41,6 +41,7 @@ const EMPTY_SAS_STRING = ""
 type azCopyConfig struct {
 	MIMETypeMapping map[string]string
 }
+
 // round api rounds up the float number after the decimal point.
 func round(num float64) int {
 	return int(num + math.Copysign(0.5, num))
@@ -75,7 +76,6 @@ func MainSTE(concurrency ConcurrencySettings, targetRateInMegaBitsPerSec float64
 
 		environmentMimeMap = config.MIMETypeMapping
 	}
-
 
 	deserialize := func(request *http.Request, v interface{}) {
 		// TODO: Check the HTTP verb here?
