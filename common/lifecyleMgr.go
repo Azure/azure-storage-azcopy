@@ -50,6 +50,7 @@ type LifecycleMgr interface {
 	Progress(OutputBuilder)                                      // print on the same line over and over again, not allowed to float up
 	Exit(OutputBuilder, ExitCode)                                // indicates successful execution exit after printing, allow user to specify exit code
 	Info(string)                                                 // simple print, allowed to float up
+	Dryrun(OutputBuilder)                                        // print files for dry run mode
 	Error(string)                                                // indicates fatal error, exit after printing, exit code is always Failed (1)
 	Prompt(message string, details PromptDetails) ResponseOption // ask the user a question(after erasing the progress), then return the response
 	SurrenderControl()                                           // give up control, this should never return
@@ -264,6 +265,18 @@ func (lcm *lifecycleMgr) Prompt(message string, details PromptDetails) ResponseO
 	return EResponseOption.Default()
 }
 
+func (lcm *lifecycleMgr) Dryrun(o OutputBuilder) {
+	dryrunMessage := ""
+	if o != nil {
+		dryrunMessage = o(lcm.outputFormat)
+	}
+
+	lcm.msgQueue <- outputMessage{
+		msgContent: dryrunMessage,
+		msgType:    eOutputMessageType.Dryrun(),
+	}
+}
+
 // TODO minor: consider merging with Exit
 func (lcm *lifecycleMgr) Error(msg string) {
 
@@ -405,7 +418,7 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 
 		lcm.progressCache = msgToOutput.msgContent
 
-	case eOutputMessageType.Init(), eOutputMessageType.Info():
+	case eOutputMessageType.Init(), eOutputMessageType.Info(), eOutputMessageType.Dryrun():
 		if lcm.progressCache != "" { // a progress status is already on the last line
 			// print the info from the beginning on current line
 			fmt.Print("\r")

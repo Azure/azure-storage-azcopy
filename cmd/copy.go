@@ -106,6 +106,7 @@ type rawCopyCmdArgs struct {
 	md5ValidationOption      string
 	CheckLength              bool
 	deleteSnapshotsOption    string
+	dryrun                   bool
 
 	blobTags string
 	// defines the type of the blob at the destination in case of upload / account to account copy
@@ -808,6 +809,8 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.includeRegex = raw.parsePatterns(raw.includeRegex)
 	cooked.excludeRegex = raw.parsePatterns(raw.excludeRegex)
 
+	cooked.dryrunMode = raw.dryrun
+
 	return cooked, nil
 }
 
@@ -1082,6 +1085,9 @@ type cookedCopyCmdArgs struct {
 
 	// whether to disable automatic decoding of illegal chars on Windows
 	disableAutoDecoding bool
+
+	// specify if dry run mode on
+	dryrunMode bool
 
 	cpkOptions common.CpkOptions
 }
@@ -1393,13 +1399,16 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 // if blocking is specified to false, then another goroutine spawns and wait out the job
 func (cca *cookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
-	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(),
-		fmt.Sprintf("%s%s%s.log",
-			azcopyLogPathFolder,
-			common.OS_PATH_SEPARATOR,
-			cca.jobID),
-		cca.isCleanupJob,
-		cca.cleanupJobMessage))
+	// if on dry run mode do not want to print message since no  job is being done
+	if !cca.dryrunMode {
+		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(),
+			fmt.Sprintf("%s%s%s.log",
+				azcopyLogPathFolder,
+				common.OS_PATH_SEPARATOR,
+				cca.jobID),
+			cca.isCleanupJob,
+			cca.cleanupJobMessage))
+	}
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
