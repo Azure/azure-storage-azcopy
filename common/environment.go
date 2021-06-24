@@ -355,9 +355,9 @@ func (EnvironmentVariable) DisableSyslog() EnvironmentVariable {
 }
 
 func (EnvironmentVariable) MimeMapping() EnvironmentVariable {
-	return EnvironmentVariable {
-		Name:     "AZCOPY_CONTENT_TYPE_MAP",
+	return EnvironmentVariable{
+		Name:         "AZCOPY_CONTENT_TYPE_MAP",
 		DefaultValue: "",
-		Description: "Location of the file to override default OS mime mapping",
+		Description:  "Location of the file to override default OS mime mapping",
 	}
 }

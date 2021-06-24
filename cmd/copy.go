@@ -72,6 +72,8 @@ type rawCopyCmdArgs struct {
 	exclude               string
 	includePath           string // NOTE: This gets handled like list-of-files! It may LOOK like a bug, but it is not.
 	excludePath           string
+	includeRegex          string
+	excludeRegex          string
 	includeFileAttributes string
 	excludeFileAttributes string
 	includeBefore         string
@@ -804,6 +806,9 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.includeFileAttributes = raw.parsePatterns(raw.includeFileAttributes)
 	cooked.excludeFileAttributes = raw.parsePatterns(raw.excludeFileAttributes)
 
+	cooked.includeRegex = raw.parsePatterns(raw.includeRegex)
+	cooked.excludeRegex = raw.parsePatterns(raw.excludeRegex)
+
 	cooked.dryrunMode = raw.dryrun
 
 	return cooked, nil
@@ -979,6 +984,10 @@ type cookedCopyCmdArgs struct {
 	excludeFileAttributes []string
 	includeBefore         *time.Time
 	includeAfter          *time.Time
+
+	// include/exclude filters with regular expression (also for sync)
+	includeRegex []string
+	excludeRegex []string
 
 	// list of version ids
 	listOfVersionIDs chan string
@@ -1763,6 +1772,8 @@ func init() {
 		"This option does not support wildcard characters (*). Checks relative path prefix (For example: myFolder;myFolder/subDirName/file.pdf).")
 	cpCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "Exclude these paths when copying. "+ // Currently, only exclude-path is supported alongside account traversal.
 		"This option does not support wildcard characters (*). Checks relative path prefix(For example: myFolder;myFolder/subDirName/file.pdf). When used in combination with account traversal, paths do not include the container name.")
+	cpCmd.PersistentFlags().StringVar(&raw.includeRegex, "include-regex", "", "Include only the relative path of the files that align with regular expressions. Separate regular expressions with ';'.")
+	cpCmd.PersistentFlags().StringVar(&raw.excludeRegex, "exclude-regex", "", "Exclude all the relative path of the files that align with regular expressions. Separate regular expressions with ';'.")
 	// This flag is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "Defines the location of text file which has the list of only files to be copied.")
 	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude these files when copying. This option supports wildcard characters (*)")
