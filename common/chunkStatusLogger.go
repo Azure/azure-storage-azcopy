@@ -236,6 +236,11 @@ type ChunkStatusLogger interface {
 	IsWaitingOnFinalBodyReads() bool
 }
 
+type DownloadChunkStatusLogger struct{}
+
+func (DownloadChunkStatusLogger) LogChunkStatus(id ChunkID, reason WaitReason) {}
+func (DownloadChunkStatusLogger) IsWaitingOnFinalBodyReads() bool              { return true }
+
 type ChunkStatusLoggerCloser interface {
 	ChunkStatusLogger
 	GetCounts(td TransferDirection) []chunkStatusCount
