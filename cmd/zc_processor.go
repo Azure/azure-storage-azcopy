@@ -47,8 +47,9 @@ type copyTransferProcessor struct {
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
-	source, destination common.ResourceString,
-	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool) *copyTransferProcessor {
+	source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(),
+	preserveAccessTier bool) *copyTransferProcessor {
+
 	return &copyTransferProcessor{
 		numOfTransfersPerPart:     numOfTransfersPerPart,
 		copyJobTemplate:           copyJobTemplate,
@@ -68,13 +69,9 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 	srcRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, true)
 	dstRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, false)
 
-	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(
-		false, // sync has no --decompress option
-		srcRelativePath,
-		dstRelativePath,
-		s.preserveAccessTier,
-		s.folderPropertiesOption,
-	)
+	blobTags := common.ToCommonBlobTagsMap(s.copyJobTemplate.BlobAttributes.BlobTagsString)
+	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath,
+		dstRelativePath, s.preserveAccessTier, s.folderPropertiesOption, blobTags, false)
 
 	if !shouldSendToSte {
 		return nil // skip this one

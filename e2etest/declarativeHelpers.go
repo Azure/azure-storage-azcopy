@@ -409,9 +409,9 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 					common.EFromTo.FileFile(),
 					common.EFromTo.LocalBlob(),
 					common.EFromTo.BlobLocal(),
+					common.EFromTo.BlobFile(),
 					common.EFromTo.LocalFile(),
 					common.EFromTo.FileLocal(),
-					common.EFromTo.BlobFile(),
 					common.EFromTo.FileBlob():
 					// do nothing, these are fine
 				default:

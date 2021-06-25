@@ -1036,6 +1036,10 @@ func (bt BlobTags) ToAzBlobTagsMap() azblob.BlobTagsMap {
 //}
 
 func (bt BlobTags) ToString() string {
+	if len(bt) == 0 {
+		return ""
+	}
+
 	lst := make([]string, 0)
 	for k, v := range bt {
 		lst = append(lst, k+"="+v)

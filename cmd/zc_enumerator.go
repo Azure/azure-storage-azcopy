@@ -137,12 +137,9 @@ func newFpoAwareProcessor(fpo common.FolderPropertyOption, inner objectProcessor
 	}
 }
 
-func (s *storedObject) ToNewCopyTransfer(
-	steWillAutoDecompress bool,
-	Source string,
-	Destination string,
-	preserveBlobTier bool,
-	folderPropertiesOption common.FolderPropertyOption) (transfer common.CopyTransfer, shouldSendToSte bool) {
+func (s *storedObject) ToNewCopyTransfer(steWillAutoDecompress bool, Source string, Destination string, preserveBlobTier bool,
+	folderPropertiesOption common.FolderPropertyOption, blobTags common.BlobTags, s2sPreserveBlobTags bool) (
+	transfer common.CopyTransfer, shouldSendToSte bool) {
 
 	if !s.isCompatibleWithFpo(folderPropertiesOption) {
 		return common.CopyTransfer{}, false
@@ -172,6 +169,10 @@ func (s *storedObject) ToNewCopyTransfer(
 
 	if preserveBlobTier {
 		t.BlobTier = s.blobAccessTier
+	}
+
+	if !s2sPreserveBlobTags {
+		t.BlobTags = blobTags
 	}
 
 	return t, true
@@ -215,7 +216,8 @@ type blobPropsProvider interface {
 
 // a constructor is used so that in case the storedObject has to change, the callers would get a compilation error
 // and it forces all necessary properties to be always supplied and not forgotten
-func newStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time, size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) storedObject {
+func newStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time,
+	size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) storedObject {
 	obj := storedObject{
 		name:               name,
 		relativePath:       relativePath,
