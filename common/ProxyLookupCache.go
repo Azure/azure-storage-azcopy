@@ -22,6 +22,7 @@ package common
 
 import (
 	"errors"
+	"fmt"
 	"github.com/mattn/go-ieproxy"
 	"net/http"
 	"net/url"
@@ -134,6 +135,13 @@ func (c *proxyLookupCache) getProxy(req *http.Request) (*url.URL, error) {
 	if value, ok = c.mapLoad(key); !ok {
 		value = c.getProxyNoCache(req)
 		c.m.Store(key, value)
+
+		if value.err == nil && value.url != nil {
+			// print out a friendly message to let the cx know we've detected a proxy
+			// only do it when we first cached the result so that the message is not printed for every request
+			GetLifecycleMgr().Info(fmt.Sprintf("Proxy detected: %s -> %s", key.String(), value.url.String()))
+		}
+
 		go c.endlessTimedRefresh(key, req)
 	}
 
@@ -160,7 +168,21 @@ func (c *proxyLookupCache) endlessTimedRefresh(key url.URL, representativeFullRe
 
 	for {
 		time.Sleep(c.refreshInterval)
-		value := c.getProxyNoCache(representativeFullRequest)
-		c.m.Store(key, value)
+
+		// compare old value with new value
+		// old value must already exist for this routine to be running
+		oldValue, _ := c.mapLoad(key)
+
+		newValue := c.getProxyNoCache(representativeFullRequest)
+		c.m.Store(key, newValue)
+
+		if newValue.err == nil && newValue.url != nil {
+			// print out a friendly message to let the cx know we've detected a changed proxy if:
+			// 1. the old value had an error and new value doesn't
+			// 2. the proxy url has changed
+			if oldValue.err != nil || oldValue.url == nil || oldValue.url.String() != newValue.url.String() {
+				GetLifecycleMgr().Info(fmt.Sprintf("Proxy detected: %s -> %s", key.String(), newValue.url.String()))
+			}
+		}
 	}
 }

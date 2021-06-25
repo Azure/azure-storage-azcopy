@@ -333,6 +333,14 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 		}
 	}
 
+	if len(cca.includeRegex) != 0 {
+		filters = append(filters, &regexFilter{patterns: cca.includeRegex, isIncluded: true})
+	}
+
+	if len(cca.excludeRegex) != 0 {
+		filters = append(filters, &regexFilter{patterns: cca.excludeRegex, isIncluded: false})
+	}
+
 	if len(cca.excludeBlobType) != 0 {
 		excludeSet := map[azblob.BlobType]bool{}
 
@@ -370,7 +378,7 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	dstCredInfo := common.CredentialInfo{}
 
 	// 3minutes is enough time to list properties of a container, and create new if it does not exist.
-	ctx, _ := context.WithTimeout(parentCtx, time.Minute * 3)
+	ctx, _ := context.WithTimeout(parentCtx, time.Minute*3)
 	if dstCredInfo, _, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false, cca.cpkOptions); err != nil {
 		return err
 	}
@@ -481,7 +489,7 @@ var reverseEncodedChars = map[string]rune{
 	"%2A": '*',
 }
 
-func pathEncodeRules(path string, fromTo common.FromTo, source bool) string {
+func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool, source bool) string {
 	loc := common.ELocation.Unknown()
 
 	if source {
@@ -501,8 +509,8 @@ func pathEncodeRules(path string, fromTo common.FromTo, source bool) string {
 			}
 		}
 
-		// If uploading from Windows or downloading from files, decode unsafe chars
-	} else if (!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") || (!source && fromTo.From() == common.ELocation.File()) {
+		// If uploading from Windows or downloading from files, decode unsafe chars if user enables decoding
+	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") || (!source && fromTo.From() == common.ELocation.File())) && !disableAutoDecoding {
 
 		for encoded, c := range reverseEncodedChars {
 			for k, p := range pathParts {
@@ -548,7 +556,7 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 			}
 		}
 
-		return pathEncodeRules(relativePath, cca.fromTo, source)
+		return pathEncodeRules(relativePath, cca.fromTo, cca.disableAutoDecoding, source)
 	}
 
 	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true
@@ -590,7 +598,7 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 		relativePath = "/" + rootDir + relativePath
 	}
 
-	return pathEncodeRules(relativePath, cca.fromTo, source)
+	return pathEncodeRules(relativePath, cca.fromTo, cca.disableAutoDecoding, source)
 }
 
 // we assume that preserveSmbPermissions and preserveSmbInfo have already been validated, such that they are only true if both resource types support them

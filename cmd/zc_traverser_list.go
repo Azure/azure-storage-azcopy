@@ -61,7 +61,7 @@ func (l *listTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		}
 
 		// listTraverser will only ever execute on the source
-		if childTraverser.isDirectory(true) && !l.recursive {
+		if !l.recursive && childTraverser.isDirectory(true) {
 			continue // skip over directories
 		}
 

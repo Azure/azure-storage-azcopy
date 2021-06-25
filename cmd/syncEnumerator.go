@@ -108,6 +108,11 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		excludeAttrFilters := buildAttrFilters(cca.excludeFileAttributes, cca.source.ValueLocal(), false)
 		filters = append(filters, excludeAttrFilters...)
 	}
+
+	//includeRegex
+	filters = append(filters, buildRegexFilters(cca.includeRegex, true)...)
+	filters = append(filters, buildRegexFilters(cca.excludeRegex, false)...)
+
 	// after making all filters, log any search prefix computed from them
 	if ste.JobsAdmin != nil {
 		if prefixFilter := filterSet(filters).GetEnumerationPreFilter(cca.recursive); prefixFilter != "" {

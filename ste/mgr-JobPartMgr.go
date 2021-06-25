@@ -57,7 +57,7 @@ type IJobPartMgr interface {
 	CpkInfo() common.CpkInfo
 	CpkScopeInfo() common.CpkScopeInfo
 	IsSourceEncrypted() bool
-  /* Status Manager Updates */
+	/* Status Manager Updates */
 	SendXferDoneMsg(msg xferDoneMsg)
 }
 
@@ -619,6 +619,8 @@ func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byt
 	}, jpm.metadata, jpm.blobTags, jpm.cpkOptions
 }
 
+var environmentMimeMap map[string]string
+
 // TODO do we want these charset=utf-8?
 var builtinTypes = map[string]string{
 	".css":  "text/css",
@@ -640,6 +642,9 @@ var builtinTypes = map[string]string{
 func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []byte) string {
 	fileExtension := filepath.Ext(fullFilePath)
 
+	if contentType, ok := environmentMimeMap[strings.ToLower(fileExtension)]; ok {
+		return contentType
+	}
 	// short-circuit for common static website files
 	// mime.TypeByExtension takes the registry into account, which is most often undesirable in practice
 	if override, ok := builtinTypes[strings.ToLower(fileExtension)]; ok {

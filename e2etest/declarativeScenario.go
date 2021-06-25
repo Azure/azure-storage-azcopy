@@ -508,3 +508,7 @@ func (s *scenario) CancelAndResume() {
 	s.needResume = true
 	s.chToStdin <- "cancel"
 }
+
+func (s *scenario) SkipTest() {
+	s.a.Skip("Skipping test")
+}

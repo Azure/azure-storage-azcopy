@@ -25,6 +25,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -453,5 +454,251 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithPattern(c *chk.C) {
 		c.Assert(mockedRPC.transfers[0].Source, chk.Equals, mockedRPC.transfers[0].Destination)
 		c.Assert(strings.HasSuffix(mockedRPC.transfers[0].Source, ".pdf"), chk.Equals, true)
 		c.Assert(strings.Contains(mockedRPC.transfers[0].Source[1:], common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+	})
+}
+
+// test for include with one regular expression
+func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithRegexInclude(c *chk.C) {
+	bsu := getBSU()
+
+	// set up the container with  blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	blobsToIgnore := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
+	defer deleteContainer(c, containerURL)
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobsToIgnore), chk.Not(chk.Equals), 0)
+
+	// add blobs that we wish to include
+	blobsToInclude := []string{"tessssssssssssst.txt", "subOne/tetingessssss.jpeg", "subOne/tessssst/hi.pdf"}
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude, blockBlobDefaultData)
+
+	// set up the destination with an empty folder
+	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawContainerURLWithSAS.Path = path.Join(rawContainerURLWithSAS.Path, string([]byte{0x00}))
+	containerString := strings.ReplaceAll(rawContainerURLWithSAS.String(), "%00", "*")
+	raw := getDefaultCopyRawInput(containerString, dstDirName)
+	raw.recursive = true
+	raw.includeRegex = "es{4,}"
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
+		//comparing is names of files match
+		actualTransfer := []string{}
+		for i := 0; i < len(mockedRPC.transfers); i++ {
+			actualTransfer = append(actualTransfer, strings.Trim(mockedRPC.transfers[i].Source, "/"))
+		}
+		sort.Strings(actualTransfer)
+		sort.Strings(blobsToInclude)
+		c.Assert(actualTransfer, chk.DeepEquals, blobsToInclude)
+
+		// validate that the right transfers were sent
+		validateDownloadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING,
+			blobsToInclude, mockedRPC)
+	})
+}
+
+//test multiple regular expression with include
+func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithMultRegexInclude(c *chk.C) {
+	bsu := getBSU()
+
+	// set up the container with  blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	blobsToIgnore := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
+	defer deleteContainer(c, containerURL)
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobsToIgnore), chk.Not(chk.Equals), 0)
+
+	// add blobs that we wish to include
+	blobsToInclude := []string{"tessssssssssssst.txt", "zxcfile.txt", "subOne/tetingessssss.jpeg", "subOne/subTwo/tessssst.pdf"}
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude, blockBlobDefaultData)
+
+	// set up the destination with an empty folder
+	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawContainerURLWithSAS.Path = path.Join(rawContainerURLWithSAS.Path, string([]byte{0x00}))
+	containerString := strings.ReplaceAll(rawContainerURLWithSAS.String(), "%00", "*")
+	raw := getDefaultCopyRawInput(containerString, dstDirName)
+	raw.recursive = true
+	raw.includeRegex = "es{4,};^zxc"
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
+		// validate that the right transfers were sent
+
+		//comparing is names of files, since not in order need to sort each string and the compare them
+		actualTransfer := []string{}
+		for i := 0; i < len(mockedRPC.transfers); i++ {
+			actualTransfer = append(actualTransfer, strings.Trim(mockedRPC.transfers[i].Source, "/"))
+		}
+		sort.Strings(actualTransfer)
+		sort.Strings(blobsToInclude)
+		c.Assert(actualTransfer, chk.DeepEquals, blobsToInclude)
+
+		validateDownloadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING,
+			blobsToInclude, mockedRPC)
+	})
+}
+
+//testing empty expressions for both include and exclude
+func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithEmptyRegex(c *chk.C) {
+	bsu := getBSU()
+
+	// set up the container with  blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	//test empty regex flag so all blobs will be included since there is no filter
+	blobsToInclude := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
+	defer deleteContainer(c, containerURL)
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobsToInclude), chk.Not(chk.Equals), 0)
+
+	// set up the destination with an empty folder
+	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawContainerURLWithSAS.Path = path.Join(rawContainerURLWithSAS.Path, string([]byte{0x00}))
+	containerString := strings.ReplaceAll(rawContainerURLWithSAS.String(), "%00", "*")
+	raw := getDefaultCopyRawInput(containerString, dstDirName)
+	raw.recursive = true
+	raw.includeRegex = ""
+	raw.excludeRegex = ""
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
+		//do not need to check file names since all files for blobsToInclude are passed bc flags are empty
+		// validate that the right transfers were sent
+		validateDownloadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING,
+			blobsToInclude, mockedRPC)
+	})
+}
+
+//testing exclude with one regular expression
+func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithRegexExclude(c *chk.C) {
+	bsu := getBSU()
+
+	// set up the container with  blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	blobsToInclude := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
+	defer deleteContainer(c, containerURL)
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobsToInclude), chk.Not(chk.Equals), 0)
+
+	// add blobs that we wish to exclude
+	blobsToIgnore := []string{"tessssssssssssst.txt", "subOne/tetingessssss.jpeg", "subOne/subTwo/tessssst.pdf"}
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToIgnore, blockBlobDefaultData)
+
+	// set up the destination with an empty folder
+	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawContainerURLWithSAS.Path = path.Join(rawContainerURLWithSAS.Path, string([]byte{0x00}))
+	containerString := strings.ReplaceAll(rawContainerURLWithSAS.String(), "%00", "*")
+	raw := getDefaultCopyRawInput(containerString, dstDirName)
+	raw.recursive = true
+	raw.excludeRegex = "es{4,}"
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		// validate that only blobsTo
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
+		//comparing is names of files, since not in order need to sort each string and the compare them
+		actualTransfer := []string{}
+		for i := 0; i < len(mockedRPC.transfers); i++ {
+			actualTransfer = append(actualTransfer, strings.Trim(mockedRPC.transfers[i].Destination, "/"))
+		}
+		sort.Strings(actualTransfer)
+		sort.Strings(blobsToInclude)
+		c.Assert(actualTransfer, chk.DeepEquals, blobsToInclude)
+
+		// validate that the right transfers were sent
+		validateDownloadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING,
+			blobsToInclude, mockedRPC)
+	})
+}
+
+//testing exclude with multiple regular expressions
+func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithMultRegexExclude(c *chk.C) {
+	bsu := getBSU()
+
+	// set up the container with  blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	blobsToInclude := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
+	defer deleteContainer(c, containerURL)
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobsToInclude), chk.Not(chk.Equals), 0)
+
+	// add blobs that we wish to exclude
+	blobsToIgnore := []string{"tessssssssssssst.txt", "subOne/dogs.jpeg", "subOne/subTwo/tessssst.pdf"}
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToIgnore, blockBlobDefaultData)
+
+	// set up the destination with an empty folder
+	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawContainerURLWithSAS.Path = path.Join(rawContainerURLWithSAS.Path, string([]byte{0x00}))
+	containerString := strings.ReplaceAll(rawContainerURLWithSAS.String(), "%00", "*")
+	raw := getDefaultCopyRawInput(containerString, dstDirName)
+	raw.recursive = true
+	raw.excludeRegex = "es{4,};o(g)"
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
+		//comparing is names of files, since not in order need to sort each string and the compare them
+		actualTransfer := []string{}
+		for i := 0; i < len(mockedRPC.transfers); i++ {
+			actualTransfer = append(actualTransfer, strings.Trim(mockedRPC.transfers[i].Destination, "/"))
+		}
+		sort.Strings(actualTransfer)
+		sort.Strings(blobsToInclude)
+		c.Assert(actualTransfer, chk.DeepEquals, blobsToInclude)
+
+		// validate that the right transfers were sent
+		validateDownloadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING,
+			blobsToInclude, mockedRPC)
 	})
 }
