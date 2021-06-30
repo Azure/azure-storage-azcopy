@@ -22,7 +22,6 @@ package cmd
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"os"
 	"path"
@@ -739,9 +738,12 @@ func (s *cmdIntegrationSuite) TestDryrunCopyLocalToBlob(c *chk.C) {
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
 
 		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
-		folder := strings.Split(srcDirName, "\\")
+		//folder := strings.Split(srcDirName, "\\")
 		for i := 0; i < len(blobsToInclude); i++ {
-			c.Check(strings.Compare(msg[i], fmt.Sprintf("DRYRUN: copy %v\\%v to %v/%v/%v", srcDirName, strings.ReplaceAll(blobsToInclude[i], "/", "\\"), dstContainerURL, folder[len(folder)-1], blobsToInclude[i])), chk.Equals, 0)
+			c.Check(strings.Contains(msg[i], "DRYRUN: copy"), chk.Equals, true)
+			c.Check(strings.Contains(msg[i], srcDirName), chk.Equals, true)
+			c.Check(strings.Contains(msg[i], dstContainerURL.String()), chk.Equals, true)
+			c.Check(strings.Contains(msg[i], blobsToInclude[i]), chk.Equals, true)
 		}
 	})
 }
@@ -782,7 +784,10 @@ func (s *cmdIntegrationSuite) TestDryrunCopyBlobToBlob(c *chk.C) {
 
 		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
 		for i := 0; i < len(blobsToInclude); i++ {
-			c.Check(strings.Compare(msg[i], fmt.Sprintf("DRYRUN: copy %v/%v to %v/%v", srcContainerURL, blobsToInclude[i], dstContainerURL, blobsToInclude[i])), chk.Equals, 0)
+			c.Check(strings.Contains(msg[i], "DRYRUN: copy"), chk.Equals, true)
+			c.Check(strings.Contains(msg[i], srcContainerURL.String()), chk.Equals, true)
+			c.Check(strings.Contains(msg[i], dstContainerURL.String()), chk.Equals, true)
+			c.Check(strings.Contains(msg[i], blobsToInclude[i]), chk.Equals, true)
 		}
 	})
 }
@@ -869,7 +874,10 @@ func (s *cmdIntegrationSuite) TestDryrunCopyS3toBlob(c *chk.C) {
 
 		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
 		dstPath := strings.Split(rawDstContainerURLWithSAS.String(), "?")
-		c.Check(strings.Compare(msg[0], fmt.Sprintf("DRYRUN: copy %v to %v/%v", rawSrcS3ObjectURL.String(), dstPath[0], objectList[0])), chk.Equals, 0)
+		c.Check(strings.Contains(msg[0], "DRYRUN: copy"), chk.Equals, true)
+		c.Check(strings.Contains(msg[0], rawSrcS3ObjectURL.String()), chk.Equals, true)
+		c.Check(strings.Contains(msg[0], dstPath[0]), chk.Equals, true)
+		c.Check(strings.Contains(msg[0], objectList[0]), chk.Equals, true)
 	})
 }
 
@@ -911,6 +919,9 @@ func (s *cmdIntegrationSuite) TestDryrunCopyGCPtoBlob(c *chk.C) {
 
 		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
 		dstPath := strings.Split(rawDstContainerURLWithSAS.String(), "?")
-		c.Check(strings.Compare(msg[0], fmt.Sprintf("DRYRUN: copy %v to %v/%v", rawSrcGCPObjectURL.String(), dstPath[0], blobsToInclude[0])), chk.Equals, 0)
+		c.Check(strings.Contains(msg[0], "DRYRUN: copy"), chk.Equals, true)
+		c.Check(strings.Contains(msg[0], rawSrcGCPObjectURL.String()), chk.Equals, true)
+		c.Check(strings.Contains(msg[0], dstPath[0]), chk.Equals, true)
+		c.Check(strings.Contains(msg[0], blobsToInclude[0]), chk.Equals, true)
 	})
 }
