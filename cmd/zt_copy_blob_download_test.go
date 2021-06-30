@@ -21,6 +21,8 @@
 package cmd
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"os"
 	"path"
@@ -700,5 +702,216 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithMultRegexExclude(c *c
 		// validate that the right transfers were sent
 		validateDownloadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING,
 			blobsToInclude, mockedRPC)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestDryrunCopyLocalToBlob(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	// set up the local source
+	blobsToInclude := []string{"AzURE2021.jpeg", "sub1/dir2/HELLO-4.txt", "sub1/test/testing.txt"}
+	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirName)
+	scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, blobsToInclude)
+	c.Assert(srcDirName, chk.NotNil)
+
+	// set up the destination container
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, []string{}, blockBlobDefaultData)
+	c.Assert(containerURL, chk.NotNil)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) //text format
+	glcm = &mockedLcm
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultCopyRawInput(srcDirName, rawContainerURLWithSAS.String())
+	raw.dryrun = true
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		// validate that none where transferred
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+
+		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
+		folder := strings.Split(srcDirName, "\\")
+		for i := 0; i < len(blobsToInclude); i++ {
+			c.Check(strings.Compare(msg[i], fmt.Sprintf("DRYRUN: copy %v\\%v to %v/%v/%v", srcDirName, strings.ReplaceAll(blobsToInclude[i], "/", "\\"), containerURL, folder[6], blobsToInclude[i])), chk.Equals, 0)
+		}
+	})
+}
+
+func (s *cmdIntegrationSuite) TestDryrunCopyBlobToBlob(c *chk.C) {
+	bsu := getBSU()
+
+	// set up src container
+	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, srcContainerURL)
+	blobsToInclude := []string{"AzURE2021.jpeg", "sub1/dir2/HELLO-4.txt", "sub1/test/testing.txt"}
+	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, blobsToInclude, blockBlobDefaultData)
+	c.Assert(srcContainerURL, chk.NotNil)
+
+	// set up the destination
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, dstContainerURL)
+	c.Assert(dstContainerURL, chk.NotNil)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) //text format
+	glcm = &mockedLcm
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultCopyRawInput(rawContainerURLWithSAS.String(), rawDstContainerURLWithSAS.String())
+	raw.dryrun = true
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		// validate that none where transferred
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+
+		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
+		for i := 0; i < len(blobsToInclude); i++ {
+			c.Check(strings.Compare(msg[i], fmt.Sprintf("DRYRUN: copy %v/%v to %v/%v", srcContainerURL, blobsToInclude[i], dstContainerURL, blobsToInclude[i])), chk.Equals, 0)
+		}
+	})
+}
+
+func (s *cmdIntegrationSuite) TestDryrunCopyBlobToBlobJson(c *chk.C) {
+	bsu := getBSU()
+	// set up src container
+	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, srcContainerURL)
+	blobsToInclude := []string{"AzURE2021.jpeg"}
+	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, blobsToInclude, blockBlobDefaultData)
+	c.Assert(srcContainerURL, chk.NotNil)
+
+	// set up the destination
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, dstContainerURL)
+	c.Assert(dstContainerURL, chk.NotNil)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Json()) //text format
+	glcm = &mockedLcm
+
+	// construct the raw input to simulate user input
+	rawSrcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultCopyRawInput(rawSrcContainerURLWithSAS.String(), rawDstContainerURLWithSAS.String())
+	raw.dryrun = true
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		// validate that none where transferred
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+
+		msg := <-mockedLcm.dryrunLog
+		copyMessage := common.CopyTransfer{}
+		errMarshal := json.Unmarshal([]byte(msg), &copyMessage)
+		c.Assert(errMarshal, chk.IsNil)
+		//comparing some values of deleteTransfer
+		c.Check(strings.Compare(strings.Trim(copyMessage.Source, "/"), blobsToInclude[0]), chk.Equals, 0)
+		c.Check(strings.Compare(strings.Trim(copyMessage.Destination, "/"), blobsToInclude[0]), chk.Equals, 0)
+		c.Check(strings.Compare(string(copyMessage.BlobType), "BlockBlob"), chk.Equals, 0)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestDryrunCopyS3toBlob(c *chk.C) {
+	skipIfS3Disabled(c)
+	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
+	if err != nil {
+		c.Skip("S3 client credentials not supplied")
+	}
+
+	// set up src s3 bucket
+	bucketName := generateBucketName()
+	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
+	defer deleteBucket(c, s3Client, bucketName, true)
+	objectList := []string{"AzURE2021.jpeg"}
+	scenarioHelper{}.generateObjects(c, s3Client, bucketName, objectList)
+
+	// initialize dst container
+	dstContainerName := generateContainerName()
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) //text format
+	glcm = &mockedLcm
+
+	// construct the raw input to simulate user input
+	rawSrcS3ObjectURL := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, "AzURE2021.jpeg")
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultRawCopyInput(rawSrcS3ObjectURL.String(), rawDstContainerURLWithSAS.String())
+	raw.dryrun = true
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		// validate that none where transferred
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+
+		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
+		dstPath := strings.Split(rawDstContainerURLWithSAS.String(), "?")
+		c.Check(strings.Compare(msg[0], fmt.Sprintf("DRYRUN: copy %v to %v/%v", rawSrcS3ObjectURL.String(), dstPath[0], objectList[0])), chk.Equals, 0)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestDryrunCopyGCPtoBlob(c *chk.C) {
+	//skipIfGCPDisabled(c)
+	gcpClient, err := createGCPClientWithGCSSDK()
+	if err != nil {
+		c.Skip("GCP client credentials not supplied")
+	}
+	// set up src gcp bucket
+	bucketName := generateBucketName()
+	createNewGCPBucketWithName(c, gcpClient, bucketName)
+	defer deleteGCPBucket(c, gcpClient, bucketName, true)
+	blobsToInclude := []string{"AzURE2021.jpeg"}
+	scenarioHelper{}.generateGCPObjects(c, gcpClient, bucketName, blobsToInclude)
+	c.Assert(gcpClient, chk.NotNil)
+
+	// initialiaze dst container
+	dstContainerName := generateContainerName()
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) //text format
+	glcm = &mockedLcm
+
+	// construct the raw input to simulate user input
+	rawSrcGCPObjectURL := scenarioHelper{}.getRawGCPObjectURL(c, bucketName, "AzURE2021.jpeg") // Use default region
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultRawCopyInput(rawSrcGCPObjectURL.String(), rawDstContainerURLWithSAS.String())
+	raw.dryrun = true
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		// validate that none where transferred
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+
+		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
+		dstPath := strings.Split(rawDstContainerURLWithSAS.String(), "?")
+		c.Check(strings.Compare(msg[0], fmt.Sprintf("DRYRUN: copy %v to %v/%v", rawSrcGCPObjectURL.String(), dstPath[0], blobsToInclude[0])), chk.Equals, 0)
 	})
 }
