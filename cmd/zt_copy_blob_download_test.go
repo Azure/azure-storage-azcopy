@@ -707,8 +707,6 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithMultRegexExclude(c *c
 
 func (s *cmdIntegrationSuite) TestDryrunCopyLocalToBlob(c *chk.C) {
 	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
 
 	// set up the local source
 	blobsToInclude := []string{"AzURE2021.jpeg", "sub1/dir2/HELLO-4.txt", "sub1/test/testing.txt"}
@@ -718,8 +716,9 @@ func (s *cmdIntegrationSuite) TestDryrunCopyLocalToBlob(c *chk.C) {
 	c.Assert(srcDirName, chk.NotNil)
 
 	// set up the destination container
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, []string{}, blockBlobDefaultData)
-	c.Assert(containerURL, chk.NotNil)
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, dstContainerURL)
+	c.Assert(dstContainerURL, chk.NotNil)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -729,7 +728,7 @@ func (s *cmdIntegrationSuite) TestDryrunCopyLocalToBlob(c *chk.C) {
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
-	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw := getDefaultCopyRawInput(srcDirName, rawContainerURLWithSAS.String())
 	raw.dryrun = true
 	raw.recursive = true
@@ -742,7 +741,7 @@ func (s *cmdIntegrationSuite) TestDryrunCopyLocalToBlob(c *chk.C) {
 		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
 		folder := strings.Split(srcDirName, "\\")
 		for i := 0; i < len(blobsToInclude); i++ {
-			c.Check(strings.Compare(msg[i], fmt.Sprintf("DRYRUN: copy %v\\%v to %v/%v/%v", srcDirName, strings.ReplaceAll(blobsToInclude[i], "/", "\\"), containerURL, folder[6], blobsToInclude[i])), chk.Equals, 0)
+			c.Check(strings.Compare(msg[i], fmt.Sprintf("DRYRUN: copy %v\\%v to %v/%v/%v", srcDirName, strings.ReplaceAll(blobsToInclude[i], "/", "\\"), dstContainerURL, folder[len(folder)-1], blobsToInclude[i])), chk.Equals, 0)
 		}
 	})
 }
