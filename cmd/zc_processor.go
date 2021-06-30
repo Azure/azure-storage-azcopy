@@ -90,18 +90,10 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
-				// if remove then To() will equal to common.ELocation.Unknown()
-				if s.copyJobTemplate.FromTo.To() == common.ELocation.Unknown() { //remove
-					return fmt.Sprintf("DRYRUN: remove %v/%v",
-						s.copyJobTemplate.SourceRoot.Value,
-						srcRelativePath)
-				} else { //copy
-					return fmt.Sprintf("DRYRUN: copy %v/%v to %v/%v",
-						s.copyJobTemplate.SourceRoot.Value,
-						srcRelativePath,
-						s.copyJobTemplate.DestinationRoot.Value,
-						dstRelativePath)
-				}
+				// formatting string for remove
+				return fmt.Sprintf("DRYRUN: remove %v/%v",
+					s.copyJobTemplate.SourceRoot.Value,
+					srcRelativePath)
 			}
 		})
 		return nil

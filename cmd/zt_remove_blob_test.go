@@ -22,7 +22,6 @@ package cmd
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
 	"net/url"
@@ -507,7 +506,9 @@ func (s *cmdIntegrationSuite) TestDryrunRemoveSingleBlob(c *chk.C) {
 
 		msg := <-mockedLcm.dryrunLog
 		//comparing message printed for dry run
-		c.Check(strings.Compare(msg, fmt.Sprintf("DRYRUN: remove %v/%v/", containerURL, blobName[0])), chk.Equals, 0)
+		c.Check(strings.Contains(msg, "DRYRUN: remove"), chk.Equals, true)
+		c.Check(strings.Contains(msg, containerURL.String()), chk.Equals, true)
+		c.Check(strings.Contains(msg, blobName[0]), chk.Equals, true)
 	})
 }
 
@@ -517,8 +518,8 @@ func (s *cmdIntegrationSuite) TestDryrunRemoveBlobsUnderContainer(c *chk.C) {
 	defer deleteContainer(c, containerURL)
 
 	// set up the container with a single blob
-	bloblist := []string{"AzURE2021.jpeg", "sub1/dir2/HELLO-4.txt", "sub1/test/testing.txt"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, bloblist, blockBlobDefaultData)
+	blobList := []string{"AzURE2021.jpeg", "sub1/dir2/HELLO-4.txt", "sub1/test/testing.txt"}
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
 	c.Assert(containerURL, chk.NotNil)
 
 	// set up interceptor
@@ -540,8 +541,10 @@ func (s *cmdIntegrationSuite) TestDryrunRemoveBlobsUnderContainer(c *chk.C) {
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
 
 		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
-		for i := 0; i < len(bloblist); i++ {
-			c.Check(strings.Compare(msg[i], fmt.Sprintf("DRYRUN: remove %v/%v", containerURL, bloblist[i])), chk.Equals, 0)
+		for i := 0; i < len(blobList); i++ {
+			c.Check(strings.Contains(msg[i], "DRYRUN: remove"), chk.Equals, true)
+			c.Check(strings.Contains(msg[i], containerURL.String()), chk.Equals, true)
+			c.Check(strings.Contains(msg[i], blobList[i]), chk.Equals, true)
 		}
 	})
 }
@@ -580,6 +583,7 @@ func (s *cmdIntegrationSuite) TestDryrunRemoveBlobsUnderContainerJson(c *chk.C) 
 		//comparing some values of deleteTransfer
 		c.Check(strings.Compare(deleteTransfer.Source, blobName[0]), chk.Equals, 0)
 		c.Check(strings.Compare(deleteTransfer.Destination, blobName[0]), chk.Equals, 0)
+		c.Check(strings.Compare(deleteTransfer.EntityType.String(), common.EEntityType.File().String()), chk.Equals, 0)
 		c.Check(strings.Compare(string(deleteTransfer.BlobType), "BlockBlob"), chk.Equals, 0)
 	})
 }

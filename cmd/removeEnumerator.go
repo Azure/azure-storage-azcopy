@@ -81,11 +81,11 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	finalize := func() error {
 		jobInitiated, err := transferScheduler.dispatchFinalPart()
 		if err != nil {
-			if err == NothingScheduledError && !cca.dryrunMode {
+			if cca.dryrunMode {
+				return nil
+			} else if err == NothingScheduledError {
 				// No log file needed. Logging begins as a part of awaiting job completion.
 				return NothingToRemoveError
-			} else if cca.dryrunMode {
-				return nil
 			}
 
 			return err
