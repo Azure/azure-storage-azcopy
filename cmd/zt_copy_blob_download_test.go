@@ -738,7 +738,6 @@ func (s *cmdIntegrationSuite) TestDryrunCopyLocalToBlob(c *chk.C) {
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
 
 		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
-		//folder := strings.Split(srcDirName, "\\")
 		for i := 0; i < len(blobsToInclude); i++ {
 			c.Check(strings.Contains(msg[i], "DRYRUN: copy"), chk.Equals, true)
 			c.Check(strings.Contains(msg[i], srcDirName), chk.Equals, true)
@@ -829,7 +828,7 @@ func (s *cmdIntegrationSuite) TestDryrunCopyBlobToBlobJson(c *chk.C) {
 		copyMessage := common.CopyTransfer{}
 		errMarshal := json.Unmarshal([]byte(msg), &copyMessage)
 		c.Assert(errMarshal, chk.IsNil)
-		//comparing some values of deleteTransfer
+		//comparing some values of copyMessage
 		c.Check(strings.Compare(strings.Trim(copyMessage.Source, "/"), blobsToInclude[0]), chk.Equals, 0)
 		c.Check(strings.Compare(strings.Trim(copyMessage.Destination, "/"), blobsToInclude[0]), chk.Equals, 0)
 		c.Check(strings.Compare(copyMessage.EntityType.String(), common.EEntityType.File().String()), chk.Equals, 0)
