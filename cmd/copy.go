@@ -26,11 +26,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math"
 	"net/url"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -45,6 +45,7 @@ import (
 )
 
 const pipingUploadParallelism = 5
+const pipingDownloadParallelism = 5
 const pipingDefaultBlockSize = 8 * 1024 * 1024
 
 // For networking throughput in Mbps, (and only for networking), we divide by 1000*1000 (not 1024 * 1024) because
@@ -1171,18 +1172,84 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	if cca.cpkOptions.IsSourceEncrypted {
 		clientProvidedKey = common.GetClientProvidedKey(cca.cpkOptions)
 	}
-	blobStream, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, clientProvidedKey)
+
+	// Calculate size of source blob
+	var blobSize int64
+	props, err := blobURL.GetProperties(ctx, azblob.BlobAccessConditions{}, clientProvidedKey)
 	if err != nil {
-		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
+		blobSize = 0 // default
 	}
+	blobSize = props.ContentLength()
 
-	blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: ste.MaxRetryPerDownloadBody})
-	defer blobBody.Close()
+	if blobSize > 0 {
+		if cca.blockSize == 0 {
+			cca.blockSize = pipingDefaultBlockSize
+		}
 
-	// step 4: pipe everything into Stdout
-	_, err = io.Copy(os.Stdout, blobBody)
-	if err != nil {
-		return fmt.Errorf("fatal: cannot download blob to Stdout due to error: %s", err.Error())
+		// Extracted conurrency value from AZCOPY_CONCURRENCY_VALUE
+		concurrencyValue, err := strconv.Atoi(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()))
+		if err != nil || concurrencyValue <= 0 {
+			concurrencyValue = pipingDownloadParallelism
+		}
+
+		// Prepare and do parallel download.
+		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion) //TODO: is this correct
+		sourceMd5Exists := len(props.ContentMD5()) > 0
+
+		maxTotalGB := float32(16) // Even 6 is enough at 10 Gbps with standard 8MB chunk size, but we need allow extra here to help if larger blob block sizes are selected by user, since then we need more memory to get enough chunks to have enough network-level concurrency
+		if strconv.IntSize == 32 {
+			maxTotalGB = 1 // 32-bit apps can only address 2 GB, and best to leave plenty for needs outside our cache (e.g. running the app itself)
+		}
+		gbToUse := float32(runtime.NumCPU()) * 0.5
+		if gbToUse > maxTotalGB {
+			gbToUse = maxTotalGB // cap it.
+		}
+		maxRamBytesToUse := int64(gbToUse * 1024 * 1024 * 1024)
+
+		dstWriter := common.NewChunkedFileWriter(
+			ctx,
+			common.NewMultiSizeSlicePool(cca.blockSize),
+			common.NewCacheLimiter(maxRamBytesToUse),
+			common.DownloadChunkStatusLogger{},
+			os.Stdout,
+			uint32(cca.blockSize),
+			ste.MaxRetryPerDownloadBody,
+			common.EHashValidationOption.NoCheck(),
+			sourceMd5Exists)
+
+		// step 4: pipe everything into Stdout
+		err = azblob.DoBatchTransfer(ctx, azblob.BatchTransferOptions{
+			TransferSize: blobSize,
+			ChunkSize:    cca.blockSize,
+			Parallelism:  uint16(concurrencyValue),
+			Operation: func(chunkStart int64, count int64, ctx context.Context) error {
+				dr, err := blobURL.Download(ctx, chunkStart, count, azblob.BlobAccessConditions{}, false, clientProvidedKey)
+				if err != nil {
+					return err
+				}
+				body := dr.Body(azblob.RetryReaderOptions{MaxRetryRequests: ste.MaxRetryPerDownloadBody})
+
+				// step 4: pipe everything into Stdout
+				err = dstWriter.EnqueueChunk(ctx, common.ChunkID{}, cca.blockSize, os.Stdout, true)
+				if err != nil {
+					return err
+				}
+				_, err = dstWriter.Flush(ctx)
+				if err != nil {
+					return err
+				}
+
+				body.Close()
+				return err
+			},
+		})
+
+		if err != nil {
+			return err
+		}
+
+	} else {
+		return nil
 	}
 
 	return nil
@@ -1215,7 +1282,11 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 		return fmt.Errorf("fatal: cannot parse destination blob URL due to error: %s", err.Error())
 	}
 
-	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
+	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel, extract concurrency value from AZCOPY_CONCURRENCY_VALUE
+	concurrencyValue, err := strconv.Atoi(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()))
+	if err != nil || concurrencyValue <= 0 {
+		concurrencyValue = pipingUploadParallelism
+	}
 	blockBlobUrl := azblob.NewBlockBlobURL(*u, p)
 	metadataString := cca.metadata
 	metadataMap := common.Metadata{}
@@ -1231,8 +1302,8 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 		bbAccessTier = azblob.AccessTierType(cca.blockBlobTier.String())
 	}
 	_, err = azblob.UploadStreamToBlockBlob(ctx, os.Stdin, blockBlobUrl, azblob.UploadStreamToBlockBlobOptions{
-		BufferSize:  int(blockSize),
-		MaxBuffers:  pipingUploadParallelism,
+		BufferSize: int(blockSize),
+		MaxBuffers: concurrencyValue,
 		Metadata:    metadataMap.ToAzBlobMetadata(),
 		BlobTagsMap: blobTags.ToAzBlobTagsMap(),
 		BlobHTTPHeaders: azblob.BlobHTTPHeaders{
