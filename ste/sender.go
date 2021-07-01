@@ -72,7 +72,7 @@ type sender interface {
 type folderSender interface {
 	EnsureFolderExists() error
 	SetFolderProperties() error
-	DirUrlToString() string
+	DirUrlToString() string // This is only used in folder tracking, so this should trim the SAS token.
 }
 
 type senderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error)

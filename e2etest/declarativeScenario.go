@@ -90,7 +90,8 @@ func (s *scenario) Run() {
 	// resume if needed
 	if s.needResume {
 		// TODO: create a method something like runAzCopy, but which does a resume, based on the job id returned inside runAzCopy
-		s.a.Error("Resume support is not built yet")
+		// s.a.Error("Resume support is not built yet")
+
 	}
 	if s.a.Failed() {
 		return // resume failed. No point in running validation

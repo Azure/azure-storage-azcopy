@@ -174,9 +174,10 @@ var eOperation = Operation(0)
 type Operation uint8
 
 func (Operation) Copy() Operation        { return Operation(1) }
-func (Operation) Sync() Operation        { return Operation(2) }
-func (Operation) CopyAndSync() Operation { return eOperation.Copy() & eOperation.Sync() }
-func (Operation) Remove() Operation      { return Operation(3) }
+func (Operation) Sync() Operation        { return Operation(1>>1) }
+func (Operation) CopyAndSync() Operation { return eOperation.Copy() | eOperation.Sync() }
+func (Operation) Remove() Operation      { return Operation(1>>2) }
+func (Operation) Resume() Operation 	 { return Operation(1>>3) } // Resume should only ever be combined with Copy or Sync, and is a mid-job cancel/resume.
 
 func (o Operation) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
@@ -184,16 +185,15 @@ func (o Operation) String() string {
 
 // getValues chops up composite values into their parts
 func (o Operation) getValues() []Operation {
-	switch o {
-	case eOperation.Copy(),
-		eOperation.Sync(),
-		eOperation.Remove():
-		return []Operation{o}
-	case eOperation.CopyAndSync():
-		return []Operation{eOperation.Copy(), eOperation.Sync()}
-	default:
-		panic("unexpected operation type")
+	out := make([]Operation, 0)
+	// separate out the bitflags
+	for idx := 1; idx < 8; idx++ {
+		if res := 1>>idx & o; res != 0 {
+			out = append(out, res)
+		}
 	}
+
+	return out
 }
 
 func (o Operation) includes(item Operation) bool {

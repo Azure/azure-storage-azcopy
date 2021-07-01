@@ -56,6 +56,10 @@ func RunScenarios(
 	// construct all the scenarios
 	scenarios := make([]scenario, 0, 16)
 	for _, op := range operations.getValues() {
+		if op == eOperation.Resume() {
+			continue
+		}
+
 		for _, fromTo := range testFromTo.getValues(op) {
 			// Create unique name for generating container names
 			compactScenarioName := fmt.Sprintf("%.4s-%s-%c-%c%c", suiteName, testName, op.String()[0], fromTo.From().String()[0], fromTo.To().String()[0])
@@ -79,6 +83,7 @@ func RunScenarios(
 				hs:                  hsToUse,
 				fs:                  fs.DeepCopy(),
 				stripTopDir:         false, // TODO: how will we set this?
+				needResume: operations | eOperation.Resume() != 0,
 			}
 
 			scenarios = append(scenarios, s)
