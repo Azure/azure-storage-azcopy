@@ -74,6 +74,10 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *cookedCopyCmdArgs
 		// Output the log location and such
 		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID), cca.isCleanupJob, cca.cleanupJobMessage))
 
+		if cca.dryrunMode {
+			return nil
+		}
+
 		if resp.ErrorMsg == common.ECopyJobPartOrderErrorType.NoTransfersScheduledErr() {
 			return NothingScheduledError
 		}
