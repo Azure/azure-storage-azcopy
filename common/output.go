@@ -17,6 +17,7 @@ type outputMessageType uint8
 func (outputMessageType) Init() outputMessageType     { return outputMessageType(0) } // simple print, allowed to float up
 func (outputMessageType) Info() outputMessageType     { return outputMessageType(1) } // simple print, allowed to float up
 func (outputMessageType) Progress() outputMessageType { return outputMessageType(2) } // should be printed on the same line over and over again, not allowed to float up
+func (outputMessageType) Dryrun() outputMessageType   { return outputMessageType(6) } // simple print
 
 // EndOfJob used to be called Exit, but now it's not necessarily an exit, because we may have follow-up jobs
 func (outputMessageType) EndOfJob() outputMessageType { return outputMessageType(3) } // (may) exit after printing
