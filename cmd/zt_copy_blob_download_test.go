@@ -810,7 +810,7 @@ func (s *cmdIntegrationSuite) TestDryrunCopyBlobToBlobJson(c *chk.C) {
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Json()) //text format
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Json()) //json format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -832,6 +832,7 @@ func (s *cmdIntegrationSuite) TestDryrunCopyBlobToBlobJson(c *chk.C) {
 		//comparing some values of deleteTransfer
 		c.Check(strings.Compare(strings.Trim(copyMessage.Source, "/"), blobsToInclude[0]), chk.Equals, 0)
 		c.Check(strings.Compare(strings.Trim(copyMessage.Destination, "/"), blobsToInclude[0]), chk.Equals, 0)
+		c.Check(strings.Compare(copyMessage.EntityType.String(), common.EEntityType.File().String()), chk.Equals, 0)
 		c.Check(strings.Compare(string(copyMessage.BlobType), "BlockBlob"), chk.Equals, 0)
 	})
 }
@@ -882,7 +883,7 @@ func (s *cmdIntegrationSuite) TestDryrunCopyS3toBlob(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestDryrunCopyGCPtoBlob(c *chk.C) {
-	//skipIfGCPDisabled(c)
+	skipIfGCPDisabled(c)
 	gcpClient, err := createGCPClientWithGCSSDK()
 	if err != nil {
 		c.Skip("GCP client credentials not supplied")
@@ -895,7 +896,7 @@ func (s *cmdIntegrationSuite) TestDryrunCopyGCPtoBlob(c *chk.C) {
 	scenarioHelper{}.generateGCPObjects(c, gcpClient, bucketName, blobsToInclude)
 	c.Assert(gcpClient, chk.NotNil)
 
-	// initialiaze dst container
+	// initialize dst container
 	dstContainerName := generateContainerName()
 
 	// set up interceptor
