@@ -71,7 +71,7 @@ class Blob_Sync_User_Scenario(unittest.TestCase):
 
         # sync to local
         src = vdir_sas
-        dst = dir_path
+        dst = dir_path + "/"
         result = util.Command("sync").add_arguments(src).add_arguments(dst).add_flags("log-level", "info")\
             .execute_azcopy_copy_command()
         self.assertTrue(result)
@@ -116,7 +116,7 @@ class Blob_Sync_User_Scenario(unittest.TestCase):
         content_dir_name = "dir_sync_test"
         content_dir_path = util.create_test_n_files(1024, 10, content_dir_name)
         src_vdir_path = util.get_resource_sas("srcdir")
-        dst_vdir_path = util.get_resource_sas("dstdir")
+        dst_vdir_path = util.get_resource_sas("dstdir/")
 
         # create sub-directory inside directory
         sub_dir_name = os.path.join(content_dir_name, "sub_dir_sync_test")
