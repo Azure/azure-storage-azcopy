@@ -145,6 +145,15 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 	return up, nil
 }
 
+func (p *S3URLParts) ToPathStyle() S3URLParts {
+	out := *p
+
+	out.Host = p.Endpoint
+	out.isPathStyle = true
+
+	return out
+}
+
 // URL returns a URL object whose fields are initialized from the S3URLParts fields.
 func (p *S3URLParts) URL() url.URL {
 	path := ""
