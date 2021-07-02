@@ -31,11 +31,13 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
     ##################################
     # Test from blob to blob copy.
     ##################################
+    @unittest.skip("Covered by E2E tests")
     def test_copy_single_1kb_file_from_blob_to_blob(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 1)
 
+    @unittest.skip("Covered by E2E tests")
     def test_copy_single_1kb_file_from_blob_to_blob_with_auth_env_var(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
@@ -78,6 +80,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 512,
                                                     srcBlobType="AppendBlob", dstBlobType="BlockBlob")
 
+    @unittest.skip("Covered by E2E tests")
     def test_copy_single_0kb_file_from_blob_to_blob(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
@@ -88,36 +91,43 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 63 * 1024 * 1024)
 
+    @unittest.skip("Covered by E2E tests")
     def test_copy_10_files_from_blob_container_to_blob_container(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_n_files_from_x_bucket_to_x_bucket(src_container_url, "Blob", dst_container_url, "Blob")
 
+    @unittest.skip("Covered by E2E tests")
     def test_copy_file_from_blob_container_to_blob_container_strip_top_dir_recursive(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_file_from_x_bucket_to_x_bucket_strip_top_dir(src_container_url, "Blob", dst_container_url, "Blob", True)
 
+    @unittest.skip("Covered by E2E tests")
     def test_copy_file_from_blob_container_to_blob_container_strip_top_dir_non_recursive(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_file_from_x_bucket_to_x_bucket_strip_top_dir(src_container_url, "Blob", dst_container_url, "Blob", False)
     
+    @unittest.skip("Covered by E2E tests")
     def test_copy_n_files_from_blob_dir_to_blob_dir(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_n_files_from_x_dir_to_x_dir(src_container_url, "Blob", dst_container_url, "Blob")
 
+    @unittest.skip("Covered by E2E tests")
     def test_copy_n_files_from_blob_dir_to_blob_dir_strip_top_dir_recursive(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_n_files_from_x_dir_to_x_dir_strip_top_dir(src_container_url, "Blob", dst_container_url, "Blob", True)
 
+    @unittest.skip("Covered by E2E tests")
     def test_copy_n_files_from_blob_dir_to_blob_dir_strip_top_dir_non_recursive(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_n_files_from_x_dir_to_x_dir_strip_top_dir(src_container_url, "Blob", dst_container_url, "Blob", False)
 
+    @unittest.skip("Covered by E2E tests")
     def test_copy_files_from_blob_account_to_blob_account(self):
         self.util_test_copy_files_from_x_account_to_x_account(
             util.test_s2s_src_blob_account_url, 
@@ -135,6 +145,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             dst_container_url, 
             "Blob")
 
+    @unittest.skip("Covered by E2E tests")
     def test_copy_file_from_blob_container_to_blob_container_propertyandmetadata(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
@@ -144,6 +155,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             dst_container_url, 
             "Blob")
 
+    @unittest.skip("Covered by E2E tests")
     def test_overwrite_copy_single_file_from_blob_to_blob(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
@@ -155,6 +167,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             False,
             True)
 
+    @unittest.skip("Covered by E2E tests")
     def test_non_overwrite_copy_single_file_from_blob_to_blob(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
@@ -168,6 +181,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
 
     # Test oauth support for service to service copy, where source is authenticated with SAS
     # and destination is authenticated with OAuth token.
+    @unittest.skip("Covered by E2E tests")
     def test_copy_single_17mb_file_from_blob_to_blob_oauth(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         # URL on next line was test_s2s_dst_blob_account_url, but for now its changed to
@@ -179,11 +193,13 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
     # Test from blob to file copy
     # Note: tests go from dst blob to src file to avoid the extra config-- Ze's suggestion
     ##################################
+    @unittest.skip("Covered by E2E tests")
     def test_copy_single_1kb_file_from_blob_to_file(self):
         src_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_blob_file)
         dst_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_blob_file)
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_share_url, "File", 1)
 
+    @unittest.skip("Covered by E2E tests")
     def test_copy_10_files_from_blob_container_to_file_share(self):
         src_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_blob_file)
         dst_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_blob_file)
@@ -204,46 +220,55 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
         self.util_test_copy_single_file_from_x_to_x(src_share_url, "File", dst_container_url, "Blob", 1)
 
+    @unittest.skip("Covered by E2E tests")
     def test_copy_single_0kb_file_from_file_to_blob(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
         self.util_test_copy_single_file_from_x_to_x(src_share_url, "File", dst_container_url, "Blob", 0)
 
+    @unittest.skip("Covered by E2E tests")
     def test_copy_single_63mb_file_from_file_to_blob(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
         self.util_test_copy_single_file_from_x_to_x(src_share_url, "File", dst_container_url, "Blob", 63 * 1024 * 1024)
 
+    @unittest.skip("Covered by E2E tests")
     def test_copy_10_files_from_file_share_to_blob_container(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
         self.util_test_copy_n_files_from_x_bucket_to_x_bucket(src_share_url, "File", dst_container_url, "Blob")
 
+    @unittest.skip("Covered by E2E tests")
     def test_copy_file_from_file_share_to_blob_container_strip_top_dir_recursive(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
         self.util_test_copy_file_from_x_bucket_to_x_bucket_strip_top_dir(src_share_url, "File", dst_container_url, "Blob", True)
 
+    @unittest.skip("Covered by E2E tests")
     def test_copy_file_from_file_share_to_blob_container_strip_top_dir_non_recursive(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
         self.util_test_copy_file_from_x_bucket_to_x_bucket_strip_top_dir(src_share_url, "File", dst_container_url, "Blob", False)
     
+    @unittest.skip("Covered by E2E tests")
     def test_copy_n_files_from_file_dir_to_blob_dir(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
         self.util_test_copy_n_files_from_x_dir_to_x_dir(src_share_url, "File", dst_container_url, "Blob")
 
+    @unittest.skip("Covered by E2E tests")
     def test_copy_n_files_from_file_dir_to_blob_dir_strip_top_dir_recursive(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
         self.util_test_copy_n_files_from_x_dir_to_x_dir_strip_top_dir(src_share_url, "File", dst_container_url, "Blob", True)
 
+    @unittest.skip("Covered by E2E tests")
     def test_copy_n_files_from_file_dir_to_blob_dir_strip_top_dir_non_recursive(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
         self.util_test_copy_n_files_from_x_dir_to_x_dir_strip_top_dir(src_share_url, "File", dst_container_url, "Blob", False)
 
+    @unittest.skip("Covered by E2E tests")
     def test_copy_files_from_file_account_to_blob_account(self):
         self.util_test_copy_files_from_x_account_to_x_account(
             util.test_s2s_src_file_account_url, 
@@ -270,6 +295,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             dst_container_url, 
             "Blob")
     
+    @unittest.skip("Covered by E2E tests")
     def test_copy_file_from_file_share_to_blob_container_no_preserve_propertyandmetadata(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
@@ -280,6 +306,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             "Blob",
             False)
 
+    @unittest.skip("Covered by E2E tests")
     def test_overwrite_copy_single_file_from_file_to_blob(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
@@ -291,6 +318,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             False,
             True)
 
+    @unittest.skip("Covered by E2E tests")
     def test_non_overwrite_copy_single_file_from_file_to_blob(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)

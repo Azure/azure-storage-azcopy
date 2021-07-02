@@ -12,6 +12,7 @@ import unittest
 # TODO Replace with better tests in the future
 class Blob_Sync_User_Scenario(unittest.TestCase):
 
+    @unittest.skip("Covered by E2E tests")
     def test_sync_single_blob_with_local(self):
         # create file of size 1KB.
         filename = "test_1kb_blob_sync.txt"
@@ -48,6 +49,7 @@ class Blob_Sync_User_Scenario(unittest.TestCase):
             add_flags("log-level", "info").execute_azcopy_copy_command()
         self.assertTrue(result)
 
+    @unittest.skip("Covered by E2E tests")
     def test_sync_entire_directory_with_local(self):
         dir_name = "dir_sync_test"
         dir_path = util.create_test_n_files(1024, 10, dir_name)
@@ -84,6 +86,7 @@ class Blob_Sync_User_Scenario(unittest.TestCase):
             .execute_azcopy_copy_command()
         self.assertTrue(result)
 
+    @unittest.skip("Covered by E2E tests")
     def test_sync_single_blob_to_blob(self):
         content_file_name = "test_1kb_blob_sync.txt"
         content_file_path = util.create_test_file(content_file_name, 1024)
@@ -112,6 +115,7 @@ class Blob_Sync_User_Scenario(unittest.TestCase):
             add_flags("log-level", "info").execute_azcopy_copy_command()
         self.assertTrue(result)
 
+    @unittest.skip("Covered by E2E tests")
     def test_sync_entire_vdir_to_vdir(self):
         content_dir_name = "dir_sync_test"
         content_dir_path = util.create_test_n_files(1024, 10, content_dir_name)

@@ -7,6 +7,7 @@ import utility as util
 class FileShare_Download_User_Scenario(unittest.TestCase):
 
     # test_upload_download_1kb_file_fullname verifies the upload/download of 1Kb file with fullname using azcopy.
+    @unittest.skip("Covered by E2E tests")
     def test_upload_download_1kb_file_fullname(self):
         # create file of size 1KB.
         filename = "test_upload_download_1kb_file_fullname.txt"
@@ -38,6 +39,7 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
         self.assertTrue(result)
 
     # test_upload_download_1kb_file_wildcard_all_files verifies the upload/download of 1Kb file with wildcard using azcopy.
+    @unittest.skip("Covered by E2E tests")
     def test_upload_download_1kb_file_wildcard_all_files(self):
         # create file of size 1KB.
         filename = "test_upload_download_1kb_file_wildcard_all_files.txt"
@@ -80,6 +82,7 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
         self.assertTrue(result)
 
     # test_upload_download_1kb_file_fullname verifies the upload/download of 1Kb file with wildcard using azcopy.
+    @unittest.skip("Covered by E2E tests")
     def test_upload_download_1kb_file_wildcard_several_files(self):
         # create file of size 1KB.
         filename = "test_upload_download_1kb_file_wildcard_several_files.txt"
@@ -165,6 +168,7 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
             download_azure_src_dir).add_flags("is-object-dir", "true").execute_azcopy_verify()
         self.assertTrue(result)
 
+    @unittest.skip("Covered by E2E tests")
     def test_6_1kb_file_in_dir_upload_download_share(self):
         self.util_test_n_1kb_file_in_dir_upload_download_share(6)
 
@@ -225,6 +229,7 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
             add_flags("is-object-dir", "true").add_flags("is-recursive", recursive).execute_azcopy_verify()
         self.assertTrue(result)
 
+    @unittest.skip("Covered by E2E tests")
     def test_3_1kb_file_in_dir_upload_download_azure_directory_recursive(self):
         self.util_test_n_1kb_file_in_dir_upload_download_azure_directory(3, "true")
 
@@ -293,6 +298,7 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
         self.assertTrue(result)
 
     # test_recursive_download_file downloads a directory recursively from share through azcopy
+    @unittest.skip("Covered by E2E tests")
     def test_recursive_download_file(self):
         # create directory and 5 files of 1KB inside that directory.
         dir_name = "dir_" + str(10) + "_files"

@@ -6,6 +6,7 @@ import utility as util
 
 class File_Service_2_Service_Copy_User_Scenario(unittest.TestCase):
 
+    @unittest.skip("Covered by E2E tests")
     def test_copy_single_file_to_file(self):
         content_file_name_src = "test_1kb_file_copy_src.txt"
         content_file_path_src = util.create_test_file(content_file_name_src, 1024)
@@ -31,6 +32,7 @@ class File_Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             remote_dst_file_path).execute_azcopy_verify()
         self.assertTrue(result)
 
+    @unittest.skip("Covered by E2E tests")
     def test_copy_entire_dir_to_dir(self):
         content_dir_name_src = "dir_file_copy_test_src"
         content_dir_path_src = util.create_test_n_files(1024, 10, content_dir_name_src)
