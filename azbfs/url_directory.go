@@ -157,3 +157,30 @@ func (d DirectoryURL) IsDirectory(ctx context.Context) (bool, error) {
 func (d DirectoryURL) NewFileUrl() FileURL {
 	return NewFileURL(d.URL(), d.directoryClient.Pipeline())
 }
+
+func (d DirectoryURL) GetAccessControl(ctx context.Context) (BlobFSPermissions, error) {
+	resp, err := d.directoryClient.GetProperties(ctx, d.filesystem, d.pathParameter, PathGetPropertiesActionGetAccessControl, nil,
+		nil, nil, nil,
+		nil, nil, nil, nil, nil)
+
+	if err != nil {
+		return BlobFSPermissions{}, err
+	}
+
+	return BlobFSPermissions{resp.XMsOwner(), resp.XMsGroup(), resp.XMsACL()}, nil
+}
+
+func (d DirectoryURL) SetAccessControl(ctx context.Context, permissions BlobFSPermissions) (*PathUpdateResponse, error) {
+	// TODO: the go http client has a problem with PATCH and content-length header
+	//       we should investigate and report the issue
+	// See similar todo, with larger comments, in AppendData
+	overrideHttpVerb := "PATCH"
+
+	// This does not yet have support for recursive updates. But then again, we don't really need it.
+	return d.directoryClient.Update(ctx, PathUpdateActionSetAccessControl, d.filesystem, d.pathParameter,
+		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
+		nil, nil, &permissions.Owner, &permissions.Group, nil, &permissions.ACL,
+		nil, nil, nil, nil, &overrideHttpVerb,
+		nil, nil, nil, nil)
+}
