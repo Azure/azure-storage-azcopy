@@ -278,7 +278,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					if cca.fromTo.From() == common.ELocation.Local() {
 						// formatting from local source
 						return fmt.Sprintf("DRYRUN: copy %v%v to %v%v",
-							strings.Trim(cca.source.Value, "\\?"),
+							common.ToShortPath(cca.source.Value),
 							strings.ReplaceAll(srcRelPath, "/", "\\"),
 							strings.Trim(cca.destination.Value, "/"),
 							dstRelPath)
@@ -287,7 +287,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						return fmt.Sprintf("DRYRUN: copy %v%v to %v%v",
 							strings.Trim(cca.source.Value, "/"),
 							srcRelPath,
-							strings.Trim(cca.destination.Value, "\\?"),
+							common.ToShortPath(cca.destination.Value),
 							strings.ReplaceAll(dstRelPath, "/", "\\"))
 					} else {
 						return fmt.Sprintf("DRYRUN: copy %v%v to %v%v",
