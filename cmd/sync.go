@@ -421,9 +421,7 @@ func (cca *cookedSyncCmdArgs) scanningComplete() bool {
 // if blocking is specified to false, then another goroutine spawns and wait out the job
 func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
-	if !cca.dryrunMode {
-		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID), false, ""))
-	}
+	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID), false, ""))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -434,7 +432,7 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 	if blocking {
 		glcm.InitiateProgressReporting(cca)
 		glcm.SurrenderControl()
-	} else if !cca.dryrunMode {
+	} else {
 		// non-blocking, return after spawning a go routine to watch the job
 		glcm.InitiateProgressReporting(cca)
 	}
@@ -652,7 +650,9 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 	}
 
 	// trigger the progress reporting
-	cca.waitUntilJobCompletion(false)
+	if !cca.dryrunMode {
+		cca.waitUntilJobCompletion(false)
+	}
 
 	// trigger the enumeration
 	err = enumerator.enumerate()

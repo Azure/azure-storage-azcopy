@@ -902,7 +902,7 @@ func (s *cmdIntegrationSuite) TestDryrunSyncBlobtoBlobJson(c *chk.C) {
 		validateS2SSyncTransfersAreScheduled(c, "", "", []string{}, mockedRPC)
 
 		msg := <-mockedLcm.dryrunLog
-		syncMessage := DeleteTransfer{}
+		syncMessage := common.CopyTransfer{}
 		errMarshal := json.Unmarshal([]byte(msg), &syncMessage)
 		c.Assert(errMarshal, chk.IsNil)
 		c.Check(strings.Contains(syncMessage.Source, blobsToDelete[0]), chk.Equals, true)

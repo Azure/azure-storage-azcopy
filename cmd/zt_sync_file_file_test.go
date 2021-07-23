@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"context"
+	"os"
 	"sort"
 	"strings"
 
@@ -559,6 +560,55 @@ func (s *cmdIntegrationSuite) TestDryrunSyncFiletoFile(c *chk.C) {
 				c.Check(strings.Contains(msg[i], "DRYRUN: copy"), chk.Equals, true)
 				c.Check(strings.Contains(msg[i], filesToInclude[i]), chk.Equals, true)
 				c.Check(strings.Contains(msg[i], srcShareName), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], dstShareURL.String()), chk.Equals, true)
+			}
+
+		}
+	})
+}
+
+func (s *cmdIntegrationSuite) TestDryrunSyncLocaltoFile(c *chk.C) {
+	fsu := getFSU()
+
+	//set up local src
+	blobsToInclude := []string{"AzURE2.jpeg"}
+	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirName)
+	scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, blobsToInclude)
+
+	//set up dst share
+	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	defer deleteShare(c, dstShareURL)
+	fileToDelete := []string{"testThree.jpeg"}
+	scenarioHelper{}.generateAzureFilesFromList(c, dstShareURL, fileToDelete)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Text())
+	glcm = &mockedLcm
+
+	// construct the raw input to simulate user input
+	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
+	raw := getDefaultSyncRawInput(srcDirName, dstShareURLWithSAS.String())
+	raw.dryrun = true
+	raw.deleteDestination = "true"
+
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateS2SSyncTransfersAreScheduled(c, "", "", []string{}, mockedRPC)
+
+		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
+		sort.Strings(msg)
+		for i := 0; i < len(msg); i++ {
+			if strings.Contains(msg[i], "DRYRUN: remove") {
+				c.Check(strings.Contains(msg[i], fileToDelete[0]), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], dstShareURL.String()), chk.Equals, true)
+			} else {
+				c.Check(strings.Contains(msg[i], "DRYRUN: copy"), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], blobsToInclude[0]), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], srcDirName), chk.Equals, true)
 				c.Check(strings.Contains(msg[i], dstShareURL.String()), chk.Equals, true)
 			}
 

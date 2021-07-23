@@ -23,6 +23,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -99,18 +100,25 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 				} else { //copy for sync
 					if s.copyJobTemplate.FromTo.From() == common.ELocation.Local() {
 						// formatting from local source
-						return fmt.Sprintf("DRYRUN: copy %v\\%v to %v/%v",
-							common.ToShortPath(s.copyJobTemplate.SourceRoot.Value),
-							strings.ReplaceAll(srcRelativePath, "/", "\\"),
-							strings.Trim(s.copyJobTemplate.DestinationRoot.Value, "/"),
-							dstRelativePath)
+						dryrunValue := fmt.Sprintf("DRYRUN: copy %v", common.ToShortPath(s.copyJobTemplate.SourceRoot.Value))
+						if runtime.GOOS == "windows" {
+							dryrunValue += "\\" + strings.ReplaceAll(srcRelativePath, "/", "\\")
+						} else { //linux and mac
+							dryrunValue += "/" + srcRelativePath
+						}
+						dryrunValue += fmt.Sprintf(" to %v/%v", strings.Trim(s.copyJobTemplate.DestinationRoot.Value, "/"), dstRelativePath)
+						return dryrunValue
 					} else if s.copyJobTemplate.FromTo.To() == common.ELocation.Local() {
 						// formatting to local source
-						return fmt.Sprintf("DRYRUN: copy %v/%v to %v\\%v",
-							strings.Trim(s.copyJobTemplate.SourceRoot.Value, "/"),
-							srcRelativePath,
-							common.ToShortPath(s.copyJobTemplate.DestinationRoot.Value),
-							strings.ReplaceAll(dstRelativePath, "/", "\\"))
+						dryrunValue := fmt.Sprintf("DRYRUN: copy %v/%v to %v",
+							strings.Trim(s.copyJobTemplate.SourceRoot.Value, "/"), srcRelativePath,
+							common.ToShortPath(s.copyJobTemplate.DestinationRoot.Value))
+						if runtime.GOOS == "windows" {
+							dryrunValue += "\\" + strings.ReplaceAll(dstRelativePath, "/", "\\")
+						} else { //linux and mac
+							dryrunValue += "/" + dstRelativePath
+						}
+						return dryrunValue
 					} else {
 						return fmt.Sprintf("DRYRUN: copy %v/%v to %v/%v",
 							s.copyJobTemplate.SourceRoot.Value,
