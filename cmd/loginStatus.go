@@ -46,7 +46,7 @@ func init() {
 			uotm := GetUserOAuthTokenManagerInstance()
 			tokenInfo, err := uotm.GetTokenInfo(ctx)
 
-			if err == nil && tokenInfo != nil {
+			if err == nil && !tokenInfo.IsExpired() {
 				glcm.Info("You are successfully login")
 				glcm.Exit(nil, common.EExitCode.Success())
 			} else {
