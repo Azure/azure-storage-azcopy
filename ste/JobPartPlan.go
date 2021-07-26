@@ -85,6 +85,9 @@ type JobPartPlanHeader struct {
 
 	// For delete operation specify what to do with snapshots
 	DeleteSnapshotsOption common.DeleteSnapshotsOption
+
+	// Determine what to do with soft-deleted snapshots
+	PermanentDeleteOption common.PermanentDeleteOption
 }
 
 // Status returns the job status stored in JobPartPlanHeader in thread-safe manner

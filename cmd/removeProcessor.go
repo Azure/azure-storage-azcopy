@@ -36,8 +36,9 @@ func newRemoveTransferProcessor(cca *cookedCopyCmdArgs, numOfTransfersPerPart in
 		ForceIfReadOnly: cca.forceIfReadOnly,
 
 		// flags
-		LogLevel:       cca.logVerbosity,
-		BlobAttributes: common.BlobTransferAttributes{DeleteSnapshotsOption: cca.deleteSnapshotsOption},
+		LogLevel: cca.logVerbosity,
+		BlobAttributes: common.BlobTransferAttributes{DeleteSnapshotsOption: cca.deleteSnapshotsOption,
+			PermanentDeleteOption: cca.permanentDeleteOption},
 	}
 
 	reportFirstPart := func(jobStarted bool) {

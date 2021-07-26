@@ -715,6 +715,10 @@ func (jpm *jobPartMgr) deleteSnapshotsOption() common.DeleteSnapshotsOption {
 	return jpm.Plan().DeleteSnapshotsOption
 }
 
+func (jpm *jobPartMgr) permanentDeleteOption() common.PermanentDeleteOption {
+	return jpm.Plan().PermanentDeleteOption
+}
+
 func (jpm *jobPartMgr) updateJobPartProgress(status common.TransferStatus) {
 	switch status {
 	case common.ETransferStatus.Success():

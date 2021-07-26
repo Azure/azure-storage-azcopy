@@ -83,6 +83,7 @@ type IJobPartTransferMgr interface {
 	GetFolderCreationTracker() common.FolderCreationTracker
 	common.ILogger
 	DeleteSnapshotsOption() common.DeleteSnapshotsOption
+	PermanentDeleteOption() common.PermanentDeleteOption
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 	FolderDeletionManager() common.FolderDeletionManager
 	GetDestinationRoot() string
@@ -93,7 +94,7 @@ type IJobPartTransferMgr interface {
 }
 
 type TransferInfo struct {
-	JobID 				   common.JobID
+	JobID                  common.JobID
 	BlockSize              int64
 	Source                 string
 	SourceSize             int64
@@ -330,7 +331,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	}
 
 	jptm.transferInfo = &TransferInfo{
-		JobID: 							plan.JobID,
+		JobID:                          plan.JobID,
 		BlockSize:                      blockSize,
 		Source:                         src,
 		SourceSize:                     sourceSize,
@@ -475,6 +476,10 @@ func (jptm *jobPartTransferMgr) MD5ValidationOption() common.HashValidationOptio
 
 func (jptm *jobPartTransferMgr) DeleteSnapshotsOption() common.DeleteSnapshotsOption {
 	return jptm.jobPartMgr.(*jobPartMgr).deleteSnapshotsOption()
+}
+
+func (jptm *jobPartTransferMgr) PermanentDeleteOption() common.PermanentDeleteOption {
+	return jptm.jobPartMgr.(*jobPartMgr).permanentDeleteOption()
 }
 
 func (jptm *jobPartTransferMgr) BlobTypeOverride() common.BlobType {

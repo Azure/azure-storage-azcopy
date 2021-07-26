@@ -103,4 +103,5 @@ func init() {
 	deleteCmd.PersistentFlags().StringVar(&raw.deleteSnapshotsOption, "delete-snapshots", "", "By default, the delete operation fails if a blob has snapshots. Specify 'include' to remove the root blob and all its snapshots; alternatively specify 'only' to remove only the snapshots but keep the root blob.")
 	deleteCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-versions", "", "Specifies a file where each version id is listed on a separate line. Ensure that the source must point to a single blob and all the version ids specified in the file using this flag must belong to the source blob only. Specified version ids of the given blob will get deleted from Azure Storage.")
 	deleteCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the path files that would be removed by the command. This flag does not trigger the removal of the files.")
+	deleteCmd.PersistentFlags().StringVar(&raw.permanentDeleteOption, "permanent-delete", "", "Permanently deletes soft-deleted snapshots. Specify 'permanent' to remove soft-deleted snapshots. Please ensure that verisioning is disabled on your storage account.")
 }

@@ -161,6 +161,9 @@ type rawCopyCmdArgs struct {
 	// Key is present in AzureKeyVault and Azure KeyVault is linked with storage account.
 	// Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data
 	cpkScopeInfo string
+
+	// Optional flag that permanently deletes soft-deleted snapshots
+	permanentDeleteOption string
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -636,6 +639,12 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
+	// Make sure the given input is the one of the enums given by the blob SDK
+	err = cooked.permanentDeleteOption.Parse(raw.permanentDeleteOption)
+	if err != nil {
+		return cooked, err
+	}
+
 	// check for the flag value relative to fromTo location type
 	// Example1: for Local to Blob, preserve-last-modified-time flag should not be set to true
 	// Example2: for Blob to Local, follow-symlinks, blob-tier flags should not be provided with values.
@@ -1090,6 +1099,9 @@ type cookedCopyCmdArgs struct {
 	dryrunMode bool
 
 	cpkOptions common.CpkOptions
+
+	// Optional flag that permanently deletes soft deleted blobs
+	permanentDeleteOption common.PermanentDeleteOption
 }
 
 func (cca *cookedCopyCmdArgs) isRedirection() bool {
