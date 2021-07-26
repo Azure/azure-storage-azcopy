@@ -24,7 +24,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -232,18 +231,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.includeFileAttributes = raw.parsePatterns(raw.includeFileAttributes)
 	cooked.excludeFileAttributes = raw.parsePatterns(raw.excludeFileAttributes)
 
-	// preserverSMBInfo will be true by default for SMB-aware locations unless specified false.
-	// 1. Upload (Windows -> Azure File)
-	// 2. Download (Azure File -> Windows)
-	// 3. S2S (Azure File -> Azure File)
-	if runtime.GOOS == "windows" && (cooked.fromTo == common.EFromTo.LocalFile() || cooked.fromTo == common.EFromTo.FileLocal()) {
-		cooked.preserveSMBInfo = true
-	} else if cooked.fromTo == common.EFromTo.FileFile() {
-		cooked.preserveSMBInfo = true
-	} else {
-		cooked.preserveSMBInfo = false
-	}
-
+	cooked.preserveSMBInfo = areBothLocationsSMBAware(cooked.fromTo)
 	// If user has explicitly specified not to copy SMB Information, set cooked.preserveSMBInfo to false
 	if !raw.preserveSMBInfo {
 		cooked.preserveSMBInfo = false

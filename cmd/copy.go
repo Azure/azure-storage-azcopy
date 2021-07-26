@@ -614,18 +614,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
 
-	// preserverSMBInfo will be true by default for SMB-aware locations unless specified false.
-	// 1. Upload (Windows -> Azure File)
-	// 2. Download (Azure File -> Windows)
-	// 3. S2S (Azure File -> Azure File)
-	if runtime.GOOS == "windows" && (fromTo == common.EFromTo.LocalFile() || fromTo == common.EFromTo.FileLocal()) {
-		cooked.preserveSMBInfo = true
-	} else if fromTo == common.EFromTo.FileFile() {
-		cooked.preserveSMBInfo = true
-	} else {
-		cooked.preserveSMBInfo = false
-	}
-
+	cooked.preserveSMBInfo = areBothLocationsSMBAware(cooked.fromTo)
 	// If user has explicitly specified not to copy SMB Information, set cooked.preserveSMBInfo to false
 	if !raw.preserveSMBInfo {
 		cooked.preserveSMBInfo = false
@@ -869,6 +858,20 @@ func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
 		return errors.New("force-if-read-only is only supported when the target is Azure Files or a Windows file system")
 	}
 	return nil
+}
+
+func areBothLocationsSMBAware(fromTo common.FromTo) bool {
+	// preserverSMBInfo will be true by default for SMB-aware locations unless specified false.
+	// 1. Upload (Windows -> Azure File)
+	// 2. Download (Azure File -> Windows)
+	// 3. S2S (Azure File -> Azure File)
+	if runtime.GOOS == "windows" && (fromTo == common.EFromTo.LocalFile() || fromTo == common.EFromTo.FileLocal()) {
+		return true
+	} else if fromTo == common.EFromTo.FileFile() {
+		return true
+	} else {
+		return false
+	}
 }
 
 func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, overwrite *common.OverwriteOption, flagName string) error {
