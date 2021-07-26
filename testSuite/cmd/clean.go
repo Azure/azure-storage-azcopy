@@ -176,7 +176,7 @@ func cleanContainer(container string) {
 
 		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 		for _, blobInfo := range listBlob.Segment.BlobItems {
-			_, err := containerUrl.NewBlobURL(blobInfo.Name).Delete(context.Background(), "include", azblob.BlobAccessConditions{})
+			_, err := containerUrl.NewBlobURL(blobInfo.Name).Delete(context.Background(), "include", azblob.BlobAccessConditions{}, azblob.BlobDeleteNone)
 			if err != nil {
 				fmt.Println("error deleting the blob from container ", blobInfo.Name)
 				os.Exit(1)
@@ -197,7 +197,7 @@ func cleanBlob(blob string) {
 	p := createBlobPipeline(*blobURLBase)
 	blobUrl := azblob.NewBlobURL(*blobURLBase, p)
 
-	_, err = blobUrl.Delete(context.Background(), "include", azblob.BlobAccessConditions{})
+	_, err = blobUrl.Delete(context.Background(), "include", azblob.BlobAccessConditions{}, azblob.BlobDeleteNone)
 	if err != nil {
 		fmt.Println("error deleting the blob ", err)
 		os.Exit(1)

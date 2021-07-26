@@ -291,7 +291,7 @@ func (s *pageBlobSenderBase) Cleanup() {
 		} else {
 			deletionContext, cancelFunc := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancelFunc()
-			_, err := s.destPageBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+			_, err := s.destPageBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{}, azblob.BlobDeleteNone)
 			if err != nil {
 				jptm.LogError(s.destPageBlobURL.String(), "Delete (incomplete) Page Blob ", err)
 			}

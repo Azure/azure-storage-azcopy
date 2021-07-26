@@ -4,7 +4,7 @@ require (
 	cloud.google.com/go v0.84.0 // indirect
 	cloud.google.com/go/storage v1.15.0
 	github.com/Azure/azure-pipeline-go v0.2.3
-	github.com/Azure/azure-storage-blob-go v0.10.1-0.20210407023846-16cf969ec1c3
+	github.com/Azure/azure-storage-blob-go v0.13.1-0.20210723041401-13c1bdb6e6fb
 	github.com/Azure/azure-storage-file-go v0.6.1-0.20201111053559-3c1754dc00a5
 	github.com/Azure/go-autorest/autorest/adal v0.9.14
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
@@ -12,7 +12,6 @@ require (
 	github.com/form3tech-oss/jwt-go v3.2.3+incompatible // indirect
 	github.com/go-ini/ini v1.62.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
-	github.com/google/uuid v1.2.0 // indirect
 	github.com/jiacfan/keychain v0.0.0-20180920053336-f2c902a3d807
 	github.com/jiacfan/keyctl v0.3.1
 	github.com/kr/text v0.2.0 // indirect
