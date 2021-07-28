@@ -67,7 +67,8 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	// decide our folder transfer strategy
 	// (Must enumerate folders when deleting from a folder-aware location. Can't do folder deletion just based on file
 	// deletion, because that would not handle folders that were empty at the start of the job).
-	fpo, message := newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters, false, false)
+	// isDfsDfs is IGNORED here, because BlobFS locations don't take this route currently.
+	fpo, message := newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters, false, false, false)
 	// do not print Info message if in dry run mode
 	if !cca.dryrunMode {
 		glcm.Info(message)

@@ -231,7 +231,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.includeFileAttributes = raw.parsePatterns(raw.includeFileAttributes)
 	cooked.excludeFileAttributes = raw.parsePatterns(raw.excludeFileAttributes)
 
-	if err = validatePreserveSMBPropertyOption(raw.preserveSMBPermissions, cooked.fromTo, nil, "preserve-smb-permissions"); err != nil {
+	if err = validatePreserveSMBPropertyOption(raw.preserveSMBPermissions, cooked.fromTo, nil, "preserve-smb-permissions", false); err != nil {
 		return cooked, err
 	}
 	// TODO: the check on raw.preserveSMBPermissions on the next line can be removed once we have full support for these properties in sync
@@ -241,7 +241,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.preserveSMBPermissions = common.NewPreservePermissionsOption(raw.preserveSMBPermissions, raw.preserveOwner, cooked.fromTo)
 
 	cooked.preserveSMBInfo = raw.preserveSMBInfo
-	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, nil, "preserve-smb-info"); err != nil {
+	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, nil, "preserve-smb-info", false); err != nil {
 		return cooked, err
 	}
 
@@ -329,6 +329,7 @@ type cookedSyncCmdArgs struct {
 	destination    common.ResourceString
 	fromTo         common.FromTo
 	credentialInfo common.CredentialInfo
+	isDfsDfs       bool // Because DFS sources and destinations are obscured, this is necessary for folder property transfers on ADLS Gen 2.
 
 	// filters
 	recursive             bool

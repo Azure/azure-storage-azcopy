@@ -24,8 +24,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"sync/atomic"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -121,7 +122,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	}
 
 	// decide our folder transfer strategy
-	fpo, folderMessage := newFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preserveSMBPermissions.IsTruthy()) // sync always acts like stripTopDir=true
+	// TODO: Copy isDfsDfs
+	fpo, folderMessage := newFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preserveSMBPermissions.IsTruthy(), false) // sync always acts like stripTopDir=true
 	glcm.Info(folderMessage)
 	if ste.JobsAdmin != nil {
 		ste.JobsAdmin.LogToJobLog(folderMessage, pipeline.LogInfo)
