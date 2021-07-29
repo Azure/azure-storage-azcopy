@@ -92,3 +92,26 @@ func (osScenarioHelper) getFileSDDLString(c asserter, filepath string) *string {
 
 	return &ret
 }
+
+func (osScenarioHelper) setFileSDDLString(c asserter, filepath string, sddldata string) {
+	sd, err := windows.SecurityDescriptorFromString(sddldata)
+	c.AssertNoErr(err, "Failed to parse SDDL supplied")
+
+	o, _, err := sd.Owner()
+	c.AssertNoErr(err)
+
+	g, _, err := sd.Group()
+	c.AssertNoErr(err)
+
+	d, _, err := sd.DACL()
+	c.AssertNoErr(err)
+
+	secInfo := windows.SECURITY_INFORMATION(windows.DACL_SECURITY_INFORMATION | windows.OWNER_SECURITY_INFORMATION | windows.GROUP_SECURITY_INFORMATION)
+
+	if strings.Contains(sddldata, "D:P") {
+		secInfo |= windows.PROTECTED_DACL_SECURITY_INFORMATION
+	}
+
+	err = windows.SetNamedSecurityInfo(filepath, windows.SE_FILE_OBJECT, secInfo, o, g, d,nil)
+	c.AssertNoErr(err)
+}

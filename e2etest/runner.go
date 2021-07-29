@@ -83,6 +83,7 @@ func (t *TestRunner) SetAllFlags(p params) {
 	set("cancel-from-stdin", p.cancelFromStdin, false)
 	set("preserve-smb-info", p.preserveSMBInfo, false)
 	set("preserve-smb-permissions", p.preserveSMBPermissions, false)
+	set("backup", p.backupMode, false)
 	set("blob-tags", p.blobTags, "")
 	set("s2s-preserve-blob-tags", p.s2sPreserveBlobTags, false)
 	set("cpk-by-name", p.cpkByName, "")

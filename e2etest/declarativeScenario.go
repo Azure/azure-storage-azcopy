@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 )
 
 // E.g. if we have enumerationSuite/TestFooBar/Copy-LocalBlob the scenario is "Copy-LocalBlob"
@@ -90,7 +91,8 @@ func (s *scenario) Run() {
 	// resume if needed
 	if s.needResume {
 		// TODO: create a method something like runAzCopy, but which does a resume, based on the job id returned inside runAzCopy
-		s.a.Error("Resume support is not built yet")
+		// s.a.Error("Resume support is not built yet")
+
 	}
 	if s.a.Failed() {
 		return // resume failed. No point in running validation
@@ -310,10 +312,25 @@ func (s *scenario) validateProperties() {
 		s.validateCPKByScope(expected.cpkScopeInfo, actual.cpkScopeInfo)
 		s.validateCPKByValue(expected.cpkInfo, actual.cpkInfo)
 		if expected.smbPermissionsSddl != nil {
-			s.a.Error("validateProperties does not yet support the properties you are using")
+			// s.a.Error("validateProperties does not yet support the properties you are using")
 			// TODO: nakulkar-msft it will be necessary to validate all of these
+			if actual.smbPermissionsSddl == nil {
+				s.a.Error("Expected a SDDL on file " + destName + ", but none was found")
+			} else {
+				s.validateSMBPermissionsByValue(*expected.smbPermissionsSddl, *actual.smbPermissionsSddl, destName)
+			}
 		}
 	}
+}
+
+func (s *scenario) validateSMBPermissionsByValue(expected, actual string, objName string) {
+	expectedSDDL, err := sddl.ParseSDDL(expected)
+	s.a.AssertNoErr(err)
+
+	actualSDDL, err := sddl.ParseSDDL(actual)
+	s.a.AssertNoErr(err)
+
+	s.a.Assert(actualSDDL.PortableString(), equals(), expectedSDDL.PortableString(), "On object " + objName)
 }
 
 func (s *scenario) validateContent() {
