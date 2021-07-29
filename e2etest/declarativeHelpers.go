@@ -164,8 +164,9 @@ type params struct {
 }
 
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level
+// TODO : Make this *actually* check with azcopy code instead of assuming azcopy's black magic.
 func (p params) allowsFolderTransfers() bool {
-	return p.includePattern+p.includeAfter+p.includeAttributes+p.excludePattern+p.excludeAttributes == ""
+	return p.includePattern+p.includeAttributes+p.excludePattern+p.excludeAttributes == ""
 }
 
 //////////////
@@ -481,7 +482,7 @@ type hookHelper interface {
 	GetTestFiles() testFiles
 
 	// CreateFiles creates the specified files (overwriting any that are already there of the same name)
-	CreateFiles(fs testFiles, atSource bool)
+	CreateFiles(fs testFiles, atSource bool, setTestFiles bool, createSourceFilesAtDest bool)
 
 	// CancelAndResume tells the runner to cancel the running AzCopy job (with "cancel" to stdin) and the resume the job
 	CancelAndResume()

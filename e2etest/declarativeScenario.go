@@ -507,12 +507,17 @@ func (s *scenario) GetTestFiles() testFiles {
 	return s.fs
 }
 
-func (s *scenario) CreateFiles(fs testFiles, atSource bool) {
+func (s *scenario) CreateFiles(fs testFiles, atSource bool, setTestFiles bool, createSourceFilesAtDest bool) {
+	original := s.fs
 	s.fs = fs
 	if atSource {
 		s.state.source.createFiles(s.a, s, true)
 	} else {
-		s.state.dest.createFiles(s.a, s, false)
+		s.state.dest.createFiles(s.a, s, createSourceFilesAtDest)
+	}
+
+	if !setTestFiles {
+		s.fs = original
 	}
 }
 

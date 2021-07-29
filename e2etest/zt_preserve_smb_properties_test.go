@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-file-go/azfile"
 	"golang.org/x/sys/windows"
 )
 
@@ -107,7 +108,7 @@ func TestProperties_SMBDates(t *testing.T) {
 				// So that when validating, our validation can be sure that the right datetime has ended up in the right
 				// field
 				time.Sleep(5 * time.Second)
-				h.CreateFiles(h.GetTestFiles(), true)
+				h.CreateFiles(h.GetTestFiles(), true, true, false)
 				// And pause again, so that that the write times at the destination wont' just _automatically_ match the source times
 				// (due to there being < 1 sec delay between creation and completion of copy). With this delay, we know they only match
 				// if AzCopy really did preserve them
@@ -147,6 +148,109 @@ func TestProperties_SMBFlags(t *testing.T) {
 				folder("fldr1", with{smbAttributes: 2}),
 				f("fldr1/file2.txt", with{smbAttributes: 2}),
 			},
+		},
+	)
+}
+
+func TestProperties_SMBPermsAndFlagsWithIncludeAfter(t *testing.T) {
+	recreateFiles := []interface{}{
+		folder("", with{smbAttributes: 2}),
+		f("filea", with{smbAttributes: 2}),
+	}
+
+	skippedFiles := []interface{}{
+		folder("fold1", with{smbAttributes: 2}),
+		f("fold1/fileb", with{smbAttributes: 2}),
+	}
+
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.FileLocal()), // these are the only pairs where we preserve last write time AND creation time
+		eValidate.Auto(),
+		params{
+			recursive:              true,
+			preserveSMBInfo:        true, // this wasn't compatible with time-sensitive filtering prior.
+			// includeAfter: SET LATER
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				// Pause for a includeAfter time
+				time.Sleep(5 * time.Second)
+				h.GetModifiableParameters().includeAfter = time.Now().Format(azfile.ISO8601)
+				// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
+				// So that when validating, our validation can be sure that the right datetime has ended up in the right
+				// field
+				time.Sleep(5 * time.Second)
+				h.CreateFiles(testFiles{
+					defaultSize:    "1K",
+					shouldTransfer: recreateFiles,
+				}, true, true, false)
+
+				// And pause again, so that that the write times at the destination wont' just _automatically_ match the source times
+				// (due to there being < 1 sec delay between creation and completion of copy). With this delay, we know they only match
+				// if AzCopy really did preserve them
+				time.Sleep(10 * time.Second) // we are assuming here, that the clock skew between source and dest is less than 10 secs
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			// no need to set specific dates on these. Instead, we just mess with the write times in
+			// beforeRunJob
+			// TODO: is that what we really want, or do we want to set write times here?
+			shouldTransfer: recreateFiles,
+			shouldIgnore: skippedFiles,
+		},
+	)
+}
+
+// TODO: Sync test for modern LMT getting
+func TestProperties_SMBPermsAndFlagsWithSync(t *testing.T) {
+	recreateFiles := []interface{}{
+		folder("", with{smbAttributes: 2}),
+		f("filea", with{smbAttributes: 2}),
+		folder("fold2", with{smbAttributes: 2}),
+		f("fold2/filec", with{smbAttributes: 2}),
+	}
+
+	transferredFiles := []interface{}{
+		folder("fold1", with{smbAttributes: 2}),
+		f("fold1/fileb", with{smbAttributes: 2}),
+	}
+
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileLocal()), // these are the only pairs where we preserve last write time AND creation time
+		eValidate.Auto(),
+		params{
+			recursive:              true,
+			preserveSMBInfo:        true, // this wasn't compatible with time-sensitive filtering prior.
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
+				// So that when validating, our validation can be sure that the right datetime has ended up in the right
+				// field
+				time.Sleep(5 * time.Second)
+				h.CreateFiles(testFiles{
+					defaultSize:    "1K",
+					shouldTransfer: recreateFiles,
+				}, false, false, true)
+
+				// And pause again, so that that the write times at the destination wont' just _automatically_ match the source times
+				// (due to there being < 1 sec delay between creation and completion of copy). With this delay, we know they only match
+				// if AzCopy really did preserve them
+				time.Sleep(10 * time.Second) // we are assuming here, that the clock skew between source and dest is less than 10 secs
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			// no need to set specific dates on these. Instead, we just mess with the write times in
+			// beforeRunJob
+			// TODO: is that what we really want, or do we want to set write times here?
+			shouldTransfer: transferredFiles,
+			shouldIgnore:   recreateFiles,
 		},
 	)
 }
