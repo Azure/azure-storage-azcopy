@@ -34,27 +34,34 @@ func init() {
 		Short: loginStatusShortDescription,
 		Long:  loginStatusLongDescription,
 		Args: func(cmd *cobra.Command, args []string) error {
-			// no arguments should be passed
-			if len(args) > 0 {
-				return fmt.Errorf("login status does not require any argument")
-			}
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			// getting login token info
+			// getting current token info and refreshing it with GetTokenInfo()
 			ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 			uotm := GetUserOAuthTokenManagerInstance()
 			tokenInfo, err := uotm.GetTokenInfo(ctx)
 
 			if err == nil && !tokenInfo.IsExpired() {
-				glcm.Info("You are successfully login")
+				glcm.Info("You have successfully refreshed your token. Your login session is still active")
+
+				if loginCmdArg.tenantName {
+					glcm.Info(fmt.Sprintf("Tenant ID: %v", tokenInfo.Tenant))
+				}
+
+				if loginCmdArg.endpoint {
+					glcm.Info(fmt.Sprintf("Active directory endpoint: %v", tokenInfo.ActiveDirectoryEndpoint))
+				}
+
 				glcm.Exit(nil, common.EExitCode.Success())
-			} else {
-				glcm.Info("You are currently not logged in. Please login using 'azcopy login'")
-				glcm.Exit(nil, common.EExitCode.Error())
 			}
+
+			glcm.Info("You are currently not logged in. Please login using 'azcopy login'")
+			glcm.Exit(nil, common.EExitCode.Error())
 		},
 	}
 
 	lgCmd.AddCommand(lgStatus)
+	lgStatus.PersistentFlags().BoolVar(&loginCmdArg.tenantName, "tenant-id", false, "Prints the Azure Active Directory tenant ID that is currently being used in session.")
+	lgStatus.PersistentFlags().BoolVar(&loginCmdArg.endpoint, "aad-endpoint", false, "Prints the Azure Active Directory endpoint that is being used in the current session.")
 }

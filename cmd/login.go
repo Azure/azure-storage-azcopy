@@ -103,6 +103,8 @@ type loginCmdArgs struct {
 	certPass      string
 	clientSecret  string
 	persistToken  bool
+	tenantName    bool
+	endpoint      bool
 }
 
 type argValidity struct {
