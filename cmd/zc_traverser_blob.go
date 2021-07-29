@@ -232,37 +232,39 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 				for _, virtualDir := range lResp.Segment.BlobPrefixes {
 					enqueueDir(virtualDir.Name)
 
-					// try to get properties on the directory itself, since it's not listed in BlobItems
-					fblobURL := containerURL.NewBlobURL(strings.TrimSuffix(currentDirPath + virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING))
-					resp, err := fblobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
-					if err == nil {
-						storedObject := newStoredObject(
-							preprocessor,
-							getObjectNameOnly(strings.TrimSuffix(currentDirPath + virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)),
-							strings.TrimSuffix(currentDirPath + virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING),
-							common.EEntityType.File(), // folder stubs are treated like files in in the serial lister as well
-							resp.LastModified(),
-							resp.ContentLength(),
-							resp,
-							blobPropertiesResponseAdapter{resp},
-							common.FromAzBlobMetadataToCommonMetadata(resp.NewMetadata()),
-							containerName,
-						)
+					if t.includeDirectoryStubs {
+						// try to get properties on the directory itself, since it's not listed in BlobItems
+						fblobURL := containerURL.NewBlobURL(strings.TrimSuffix(currentDirPath+virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING))
+						resp, err := fblobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+						if err == nil {
+							storedObject := newStoredObject(
+								preprocessor,
+								getObjectNameOnly(strings.TrimSuffix(currentDirPath+virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)),
+								strings.TrimSuffix(currentDirPath+virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING),
+								common.EEntityType.File(), // folder stubs are treated like files in in the serial lister as well
+								resp.LastModified(),
+								resp.ContentLength(),
+								resp,
+								blobPropertiesResponseAdapter{resp},
+								common.FromAzBlobMetadataToCommonMetadata(resp.NewMetadata()),
+								containerName,
+							)
 
-						if t.s2sPreserveSourceTags {
-							var BlobTags *azblob.BlobTags
-							BlobTags, err = fblobURL.GetTags(t.ctx, nil)
+							if t.s2sPreserveSourceTags {
+								var BlobTags *azblob.BlobTags
+								BlobTags, err = fblobURL.GetTags(t.ctx, nil)
 
-							if err == nil {
-								blobTagsMap := common.BlobTags{}
-								for _, blobTag := range BlobTags.BlobTagSet {
-									blobTagsMap[url.QueryEscape(blobTag.Key)] = url.QueryEscape(blobTag.Value)
+								if err == nil {
+									blobTagsMap := common.BlobTags{}
+									for _, blobTag := range BlobTags.BlobTagSet {
+										blobTagsMap[url.QueryEscape(blobTag.Key)] = url.QueryEscape(blobTag.Value)
+									}
+									storedObject.blobTags = blobTagsMap
 								}
-								storedObject.blobTags = blobTagsMap
 							}
-						}
 
-						enqueueOutput(storedObject, err)
+							enqueueOutput(storedObject, err)
+						}
 					}
 				}
 			}
