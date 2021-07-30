@@ -29,11 +29,20 @@ import (
 )
 
 func init() {
+	type loginStatus struct {
+		tenantID bool
+		endpoint bool
+	}
+	commandLineInput := loginStatus{}
+
 	lgStatus := &cobra.Command{
 		Use:   "status",
 		Short: loginStatusShortDescription,
 		Long:  loginStatusLongDescription,
 		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return fmt.Errorf("login status does not require any argument")
+			}
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
@@ -45,11 +54,11 @@ func init() {
 			if err == nil && !tokenInfo.IsExpired() {
 				glcm.Info("You have successfully refreshed your token. Your login session is still active")
 
-				if loginCmdArg.tenantName {
+				if commandLineInput.tenantID {
 					glcm.Info(fmt.Sprintf("Tenant ID: %v", tokenInfo.Tenant))
 				}
 
-				if loginCmdArg.endpoint {
+				if commandLineInput.endpoint {
 					glcm.Info(fmt.Sprintf("Active directory endpoint: %v", tokenInfo.ActiveDirectoryEndpoint))
 				}
 
@@ -62,6 +71,6 @@ func init() {
 	}
 
 	lgCmd.AddCommand(lgStatus)
-	lgStatus.PersistentFlags().BoolVar(&loginCmdArg.tenantName, "tenant-id", false, "Prints the Azure Active Directory tenant ID that is currently being used in session.")
-	lgStatus.PersistentFlags().BoolVar(&loginCmdArg.endpoint, "aad-endpoint", false, "Prints the Azure Active Directory endpoint that is being used in the current session.")
+	lgStatus.PersistentFlags().BoolVar(&commandLineInput.tenantID, "tenant", false, "Prints the Azure Active Directory tenant ID that is currently being used in session.")
+	lgStatus.PersistentFlags().BoolVar(&commandLineInput.endpoint, "endpoint", false, "Prints the Azure Active Directory endpoint that is being used in the current session.")
 }
