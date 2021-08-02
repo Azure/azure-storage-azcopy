@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"runtime"
 	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -169,6 +170,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 
 		return newSyncEnumerator(sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize), nil
 	default:
+		indexer.isDestinationCaseInsensitive = IsLocationCaseInsensitive(cca.fromTo)
 		// in all other cases (download and S2S), the destination is scanned/indexed first
 		// then the source is scanned and filtered based on what the destination contains
 		comparator = newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.mirrorMode).processIfNecessary
@@ -208,6 +210,14 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		}
 
 		return newSyncEnumerator(destinationTraverser, sourceTraverser, indexer, filters, comparator, finalize), nil
+	}
+}
+
+func IsLocationCaseInsensitive(fromTo common.FromTo) bool {
+	if fromTo.IsDownload() && runtime.GOOS == "windows" {
+		return true
+	} else {
+		return false
 	}
 }
 
