@@ -955,6 +955,8 @@ type CopyTransfer struct {
 	BlobVersionID string
 	// Blob index tags categorize data in your storage account utilizing key-value tag attributes
 	BlobTags BlobTags
+
+	BlobSnapshotID string
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

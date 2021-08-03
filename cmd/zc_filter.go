@@ -362,6 +362,34 @@ func (_ includeBeforeDateFilter) FormatAsUTC(t time.Time) string {
 	return formatAsUTC(t)
 }
 
+type softDeletedSnapshotFilter struct {
+	isIncluded bool
+}
+
+func (s *softDeletedSnapshotFilter) doesSupportThisOS() (msg string, supported bool) {
+	msg = ""
+	supported = true
+	return
+}
+
+func (s *softDeletedSnapshotFilter) appliesOnlyToFiles() bool {
+	return false
+}
+func (s *softDeletedSnapshotFilter) doesPass(storedObject storedObject) bool {
+	if storedObject.blobDeleted && storedObject.blobSnapshotID != "" {
+		return true
+	}
+	return false
+}
+
+func buildIncludeSoftDeletedSnapshot(permanentDeleteOption common.PermanentDeleteOption) []objectFilter {
+	filters := make([]objectFilter, 0)
+	if permanentDeleteOption == common.PermanentDeleteOption(1) {
+		filters = append(filters, &softDeletedSnapshotFilter{isIncluded: true})
+	}
+	return filters
+}
+
 // parseISO8601 parses ISO 8601 dates. This routine is needed because GoLang's time.Parse* routines require all expected
 // elements to be present.  I.e. you can't specify just a date, and have the time default to 00:00. But ISO 8601 requires
 // that and, for usability, that's what we want.  (So that users can omit the whole time, or at least the seconds portion of it, if they wish)

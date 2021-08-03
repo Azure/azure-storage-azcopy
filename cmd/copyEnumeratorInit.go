@@ -68,7 +68,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo,
 		&cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties,
-		cca.includeDirectoryStubs, func(common.EntityType) {}, cca.listOfVersionIDs,
+		cca.includeDirectoryStubs, common.PermanentDeleteOption(0), func(common.EntityType) {}, cca.listOfVersionIDs,
 		cca.s2sPreserveBlobTags, cca.logVerbosity.ToPipelineLogLevel(), cca.cpkOptions)
 
 	if err != nil {
@@ -212,6 +212,9 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	filters := cca.initModularFilters()
+	// TODO check if remove action happening
+	// check if remove soft delete is on
+	// append new filter called soft delete filter
 
 	// decide our folder transfer strategy
 	var message string
@@ -292,7 +295,7 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 	}
 
 	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil,
-		nil, false, false, false,
+		nil, false, false, false, common.PermanentDeleteOption(0),
 		func(common.EntityType) {}, cca.listOfVersionIDs, false, pipeline.LogNone, cca.cpkOptions)
 
 	if err != nil {
@@ -364,6 +367,10 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 		if prefixFilter := filterSet(filters).GetEnumerationPreFilter(cca.recursive); prefixFilter != "" {
 			ste.JobsAdmin.LogToJobLog("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, pipeline.LogInfo) // "May be used" because we don't know here which enumerators will use it
 		}
+	}
+
+	if cca.permanentDeleteOption == common.PermanentDeleteOption(1) {
+		filters = append(filters, &softDeletedSnapshotFilter{isIncluded: true})
 	}
 
 	return filters

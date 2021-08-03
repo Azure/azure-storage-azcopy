@@ -48,7 +48,7 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	// Include-path is handled by ListOfFilesChannel.
 	sourceTraverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &cca.credentialInfo,
 		nil, cca.listOfFilesChannel, cca.recursive, false, cca.includeDirectoryStubs,
-		func(common.EntityType) {}, cca.listOfVersionIDs, false,
+		cca.permanentDeleteOption, func(common.EntityType) {}, cca.listOfVersionIDs, false,
 		cca.logVerbosity.ToPipelineLogLevel(), cca.cpkOptions)
 
 	// report failure to create traverser
@@ -59,10 +59,12 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	includeFilters := buildIncludeFilters(cca.includePatterns)
 	excludeFilters := buildExcludeFilters(cca.excludePatterns, false)
 	excludePathFilters := buildExcludeFilters(cca.excludePathPatterns, true)
+	includeSoftDelete := buildIncludeSoftDeletedSnapshot(cca.permanentDeleteOption)
 
 	// set up the filters in the right order
 	filters := append(includeFilters, excludeFilters...)
 	filters = append(filters, excludePathFilters...)
+	filters = append(filters, includeSoftDelete...)
 
 	// decide our folder transfer strategy
 	// (Must enumerate folders when deleting from a folder-aware location. Can't do folder deletion just based on file

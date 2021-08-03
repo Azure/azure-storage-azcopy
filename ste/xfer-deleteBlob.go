@@ -70,7 +70,7 @@ func doDeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 			}
 
 			// if the delete failed because the blob has snapshots, then skip it
-			if strErr.Response().StatusCode == http.StatusConflict && strErr.ServiceCode() == azblob.ServiceCodeSnapshotsPresent {
+			if strErr.Response().StatusCode == http.StatusConflict && strErr.ServiceCode() == azblob.ServiceCodeSnapshotsPresent && jptm.PermanentDeleteOption().ToPermanentDeleteOptionType() == azblob.BlobDeleteNone {
 				transferDone(common.ETransferStatus.SkippedBlobHasSnapshots(), nil)
 				return
 			}
