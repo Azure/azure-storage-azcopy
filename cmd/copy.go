@@ -106,6 +106,7 @@ type rawCopyCmdArgs struct {
 	md5ValidationOption      string
 	CheckLength              bool
 	deleteSnapshotsOption    string
+	dryrun                   bool
 
 	blobTags string
 	// defines the type of the blob at the destination in case of upload / account to account copy
@@ -258,8 +259,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	})
 
 	/* We support DFS by using blob end-point of the account. We replace dfs by blob in src and dst */
-	if src,dst := inferArgumentLocation(raw.src), inferArgumentLocation(raw.dst);
-				src == common.ELocation.BlobFS() || dst == common.ELocation.BlobFS() {
+	if src, dst := inferArgumentLocation(raw.src), inferArgumentLocation(raw.dst); src == common.ELocation.BlobFS() || dst == common.ELocation.BlobFS() {
 		if src == common.ELocation.BlobFS() && dst != common.ELocation.Local() {
 			raw.src = strings.Replace(raw.src, ".dfs", ".blob", 1)
 			glcm.Info("Switching to use blob endpoint on source account.")
@@ -809,6 +809,8 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.includeRegex = raw.parsePatterns(raw.includeRegex)
 	cooked.excludeRegex = raw.parsePatterns(raw.excludeRegex)
 
+	cooked.dryrunMode = raw.dryrun
+
 	return cooked, nil
 }
 
@@ -1083,6 +1085,9 @@ type cookedCopyCmdArgs struct {
 
 	// whether to disable automatic decoding of illegal chars on Windows
 	disableAutoDecoding bool
+
+	// specify if dry run mode on
+	dryrunMode bool
 
 	cpkOptions common.CpkOptions
 }
@@ -1394,13 +1399,16 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 // if blocking is specified to false, then another goroutine spawns and wait out the job
 func (cca *cookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
-	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(),
-		fmt.Sprintf("%s%s%s.log",
-			azcopyLogPathFolder,
-			common.OS_PATH_SEPARATOR,
-			cca.jobID),
-		cca.isCleanupJob,
-		cca.cleanupJobMessage))
+	// if on dry run mode do not want to print message since no  job is being done
+	if !cca.dryrunMode {
+		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(),
+			fmt.Sprintf("%s%s%s.log",
+				azcopyLogPathFolder,
+				common.OS_PATH_SEPARATOR,
+				cca.jobID),
+			cca.isCleanupJob,
+			cca.cleanupJobMessage))
+	}
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -1749,6 +1757,10 @@ func init() {
 				glcm.Error("failed to perform copy command due to error: " + err.Error())
 			}
 
+			if cooked.dryrunMode {
+				glcm.Exit(nil, common.EExitCode.Success())
+			}
+
 			glcm.SurrenderControl()
 		},
 	}
@@ -1812,6 +1824,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveBlobTags, "s2s-preserve-blob-tags", false, "Preserve index tags during service to service transfer from one blob storage to another")
 	cpCmd.PersistentFlags().BoolVar(&raw.includeDirectoryStubs, "include-directory-stub", false, "False by default to ignore directory stubs. Directory stubs are blobs with metadata 'hdi_isfolder:true'. Setting value to true will preserve directory stubs during transfers.")
 	cpCmd.PersistentFlags().BoolVar(&raw.disableAutoDecoding, "disable-auto-decoding", false, "False by default to enable automatic decoding of illegal chars on Windows. Can be set to true to disable automatic decoding.")
+	cpCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the file paths that would be copied by this command. This flag does not copy the actual files.")
 	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
 	// right before transferring in ste(backend).
 	// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),

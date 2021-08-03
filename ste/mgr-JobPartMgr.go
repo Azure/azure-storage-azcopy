@@ -57,7 +57,7 @@ type IJobPartMgr interface {
 	CpkInfo() common.CpkInfo
 	CpkScopeInfo() common.CpkScopeInfo
 	IsSourceEncrypted() bool
-  /* Status Manager Updates */
+	/* Status Manager Updates */
 	SendXferDoneMsg(msg xferDoneMsg)
 }
 
