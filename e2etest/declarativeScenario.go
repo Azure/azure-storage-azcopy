@@ -90,9 +90,15 @@ func (s *scenario) Run() {
 
 	// resume if needed
 	if s.needResume {
-		// TODO: create a method something like runAzCopy, but which does a resume, based on the job id returned inside runAzCopy
-		// s.a.Error("Resume support is not built yet")
+		tx, err := s.state.result.GetTransferList(common.ETransferStatus.Cancelled())
+		s.a.AssertNoErr(err, "Failed to get transfer list for Cancelled")
+		s.a.Assert(len(tx), equals(), len(s.p.debugSkipFiles), "Job cancel didn't completely work")
 
+		if !s.runHook(s.hs.beforeResumeHook) {
+			return
+		}
+
+		s.resumeAzCopy()
 	}
 	if s.a.Failed() {
 		return // resume failed. No point in running validation
@@ -185,6 +191,46 @@ func (s *scenario) runAzCopy() {
 
 	s.state.result = &result
 }
+
+func (s *scenario) resumeAzCopy() {
+	s.chToStdin = make(chan string) // unubuffered seems the most predictable for our usages
+	defer close(s.chToStdin)
+
+	r := newTestRunner()
+	if sas := s.state.source.getSAS(); sas != "" {
+		r.flags["source-sas"] = sas
+	}
+	if sas := s.state.dest.getSAS(); sas != "" {
+		r.flags["destination-sas"] = sas
+	}
+
+	// use the general-purpose "after start" mechanism, provided by execDebuggableWithOutput,
+	// for the _specific_ purpose of running beforeOpenFirstFile, if that hook exists.
+	afterStart := func() string { return "" }
+	if s.hs.beforeOpenFirstFile != nil {
+		r.SetAwaitOpenFlag() // tell AzCopy to wait for "open" on stdin before opening any files
+		afterStart = func() string {
+			time.Sleep(2 * time.Second) // give AzCopy a moment to initialize it's monitoring of stdin
+			s.hs.beforeOpenFirstFile(s)
+			return "open" // send open to AzCopy's stdin
+		}
+	}
+
+	result, wasClean, err := r.ExecuteAzCopyCommand(
+		eOperation.Resume(),
+		s.state.result.jobID.String(),
+		"",
+		afterStart,
+		s.chToStdin,
+	)
+
+	if !wasClean {
+		s.a.AssertNoErr(err, "running AzCopy")
+	}
+
+	s.state.result = &result
+}
+
 func (s *scenario) validateRemove() {
 	removedFiles := s.fs.toTestObjects(s.fs.shouldTransfer, false)
 	props := s.state.source.getAllProperties(s.a)
@@ -513,6 +559,14 @@ func (s *scenario) CreateFiles(fs testFiles, atSource bool) {
 		s.state.source.createFiles(s.a, s, true)
 	} else {
 		s.state.dest.createFiles(s.a, s, false)
+	}
+}
+
+func (s *scenario) CreateFile(f *testObject, atSource bool) {
+	if atSource {
+		s.state.source.createFile(s.a, f, s, atSource)
+	} else {
+		s.state.dest.createFile(s.a, f, s, atSource)
 	}
 }
 

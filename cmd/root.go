@@ -24,13 +24,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"net/url"
 	"os"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -56,6 +57,9 @@ var azcopyCurrentJobID common.JobID
 // it can be thought of as an "ambient" property. That's the (weak?) justification for implementing
 // it as a global
 var cmdLineExtraSuffixesAAD string
+
+// It would be preferable if this was a local variable, since it just gets altered and shot off to the STE
+var debugSkipFiles string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -131,6 +135,16 @@ var rootCmd = &cobra.Command{
 		// beginDetectNewVersion call in Execute (below)
 		beginDetectNewVersion()
 
+		if debugSkipFiles != "" {
+			for _, v := range strings.Split(debugSkipFiles, ";") {
+				if strings.HasPrefix(v, "/") {
+					v = strings.TrimPrefix(v, common.AZCOPY_PATH_SEPARATOR_STRING)
+				}
+
+				ste.DebugSkipFiles[v] = true
+			}
+		}
+
 		return nil
 	},
 }
@@ -179,6 +193,7 @@ func init() {
 	// special E2E testing flags
 	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitContinue, "await-continue", false, "Used when debugging, to tell AzCopy to await `continue` on stdin before starting any work. Assists with debugging AzCopy via attach-to-process")
 	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitAllowOpenFiles, "await-open", false, "Used when debugging, to tell AzCopy to await `open` on stdin, after scanning but before opening the first file. Assists with testing cases around file modifications between scanning and usage")
+	rootCmd.PersistentFlags().StringVar(&debugSkipFiles, "debug-skip-files", "", "Used when debugging, to tell AzCopy to cancel the job midway. List of relative paths to skip in the STE.")
 
 	// reserved for partner teams
 	rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")

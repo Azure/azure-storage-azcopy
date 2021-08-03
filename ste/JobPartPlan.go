@@ -3,9 +3,8 @@ package ste
 import (
 	"errors"
 	"reflect"
-	"unsafe"
-
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -117,6 +116,26 @@ func (jpph *JobPartPlanHeader) CommandString() string {
 	sh.Len = int(jpph.CommandStringLength)
 	sh.Cap = sh.Len
 	return string(commandSlice)
+}
+
+func (jpph *JobPartPlanHeader) TransferSrcDstRelatives(transferIndex uint32) (relSource, relDest string) {
+	jppt := jpph.Transfer(transferIndex)
+
+	srcSlice := []byte{}
+	sh := (*reflect.SliceHeader)(unsafe.Pointer(&srcSlice))
+	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) // Address of Job Part Plan + this transfer's src string offset
+	sh.Len = int(jppt.SrcLength)
+	sh.Cap = sh.Len
+	srcRelative := string(srcSlice)
+
+	dstSlice := []byte{}
+	sh = (*reflect.SliceHeader)(unsafe.Pointer(&dstSlice))
+	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) + uintptr(jppt.SrcLength) // Address of Job Part Plan + this transfer's src string offset + length of this transfer's src string
+	sh.Len = int(jppt.DstLength)
+	sh.Cap = sh.Len
+	dstRelative := string(dstSlice)
+
+	return srcRelative, dstRelative
 }
 
 // TransferSrcDstDetail returns the source and destination string for a transfer at given transferIndex in JobPartOrder

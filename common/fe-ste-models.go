@@ -23,7 +23,9 @@ package common
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"math"
+	"os"
 	"reflect"
 	"regexp"
 	"strings"
@@ -31,10 +33,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-
-	"fmt"
-
-	"os"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"

@@ -423,6 +423,33 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			jpm.Log(pipeline.LogInfo, fmt.Sprintf("scheduling JobID=%v, Part#=%d, Transfer#=%d, priority=%v", plan.JobID, plan.PartNum, t, plan.Priority))
 		}
 
+		// ===== TEST KNOB
+		relSrc, relDst := plan.TransferSrcDstRelatives(t)
+
+		var err error
+		relSrc, err = url.PathUnescape(relSrc)
+		relSrc = strings.TrimPrefix(relSrc, common.AZCOPY_PATH_SEPARATOR_STRING)
+		common.PanicIfErr(err) // neither of these panics should happen, they already would have had a clean error.
+		relDst, err = url.PathUnescape(relDst)
+		relDst = strings.TrimPrefix(relSrc, common.AZCOPY_PATH_SEPARATOR_STRING)
+		common.PanicIfErr(err)
+
+		_, srcOk := DebugSkipFiles[relSrc]
+		_, dstOk := DebugSkipFiles[relDst]
+		if srcOk || dstOk {
+			if jpm.ShouldLog(pipeline.LogInfo) {
+				jpm.Log(pipeline.LogInfo, fmt.Sprintf("Transfer %d cancelled: %s", jptm.transferIndex, relSrc))
+			}
+
+			// cancel the transfer
+			jptm.Cancel()
+			jptm.SetStatus(common.ETransferStatus.Cancelled())
+		} else {
+			if len(DebugSkipFiles) != 0 && jpm.ShouldLog(pipeline.LogInfo) {
+				jpm.Log(pipeline.LogInfo, fmt.Sprintf("Did not exclude: src: %s dst: %s", relSrc, relDst))
+			}
+		}
+		// ===== TEST KNOB
 		JobsAdmin.(*jobsAdmin).ScheduleTransfer(jpm.priority, jptm)
 
 		// This sets the atomic variable atomicAllTransfersScheduled to 1

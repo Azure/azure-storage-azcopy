@@ -35,6 +35,8 @@ import (
 )
 
 var steCtx = context.Background()
+// debug knob
+var DebugSkipFiles = make(map[string]bool)
 
 const EMPTY_SAS_STRING = ""
 
@@ -377,6 +379,11 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 			})
 
 		jpp0.SetJobStatus(common.EJobStatus.InProgress())
+
+		// Jank, force the jstm to recognize that it's also in progress
+		summaryResp := jm.ListJobSummary()
+		summaryResp.JobStatus = common.EJobStatus.InProgress()
+		jm.ResurrectSummary(summaryResp)
 
 		if jm.ShouldLog(pipeline.LogInfo) {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v resumed", req.JobID))
