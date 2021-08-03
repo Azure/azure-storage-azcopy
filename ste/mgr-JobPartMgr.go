@@ -427,10 +427,14 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		relSrc, relDst := plan.TransferSrcDstRelatives(t)
 
 		var err error
-		relSrc, err = url.PathUnescape(relSrc)
+		if plan.FromTo.From().IsRemote() {
+			relSrc, err = url.PathUnescape(relSrc)
+		}
 		relSrc = strings.TrimPrefix(relSrc, common.AZCOPY_PATH_SEPARATOR_STRING)
 		common.PanicIfErr(err) // neither of these panics should happen, they already would have had a clean error.
-		relDst, err = url.PathUnescape(relDst)
+		if plan.FromTo.To().IsRemote() {
+			relDst, err = url.PathUnescape(relDst)
+		}
 		relDst = strings.TrimPrefix(relSrc, common.AZCOPY_PATH_SEPARATOR_STRING)
 		common.PanicIfErr(err)
 
