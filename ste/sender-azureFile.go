@@ -383,6 +383,8 @@ func (u *azureFileSenderBase) SetFolderProperties() error {
 func (u *azureFileSenderBase) DirUrlToString() string {
 	dirUrl := azfile.NewFileURLParts(u.dirURL().URL()).URL()
 	dirUrl.RawQuery = ""
+	// To avoid encoding/decoding
+	dirUrl.RawPath = ""
 	return dirUrl.String()
 }
 

@@ -1,6 +1,7 @@
 package ste
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 	"sync"
@@ -135,7 +136,13 @@ func (f *jpptFolderTracker) StopTracking(folder string) {
 	if _, ok := f.contents[folder]; ok {
 		delete(f.contents, folder)
 	} else {
+		currentContents := ""
+
+		for k, v := range f.contents {
+			currentContents += fmt.Sprintf("K: %s V: %d\n", k, v)
+		}
+
 		// double should never be hit, but *just in case*.
-		panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("Folder " + folder + " shouldn't finish tracking until it's been recorded"))
+		panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("Folder " + folder + " shouldn't finish tracking until it's been recorded\nCurrent Contents:\n" + currentContents))
 	}
 }

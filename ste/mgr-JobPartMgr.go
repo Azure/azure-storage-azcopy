@@ -403,6 +403,15 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		if _, dst, isFolder := plan.TransferSrcDstStrings(t); isFolder {
 			// register the folder!
 			if jpptFolderTracker, ok := jpm.getFolderCreationTracker().(JPPTCompatibleFolderCreationTracker); ok {
+				if plan.FromTo.To().IsRemote() {
+					uri, err := url.Parse(dst)
+					common.PanicIfErr(err)
+					uri.RawPath = ""
+					uri.RawQuery = ""
+
+					dst = uri.String()
+				}
+
 				jpptFolderTracker.RegisterPropertiesTransfer(dst, t)
 			}
 		}
