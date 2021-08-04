@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
+	"strings"
 )
 
 func init() {
@@ -46,15 +47,20 @@ func init() {
 
 			srcLocationType := inferArgumentLocation(raw.src)
 			if raw.fromTo == "" {
-				// infer the location of the delete
-				if srcLocationType == common.ELocation.Blob() {
+				switch srcLocationType {
+				case common.ELocation.Blob():
 					raw.fromTo = common.EFromTo.BlobTrash().String()
-				} else if srcLocationType == common.ELocation.File() {
+				case common.ELocation.File():
 					raw.fromTo = common.EFromTo.FileTrash().String()
-				} else if srcLocationType == common.ELocation.BlobFS() {
+				case common.ELocation.BlobFS():
 					raw.fromTo = common.EFromTo.BlobFSTrash().String()
-				} else {
+				default:
 					return fmt.Errorf("invalid source type %s to delete. azcopy support removing blobs/files/adls gen2", srcLocationType.String())
+				}
+			} else if raw.fromTo != "" {
+				err := strings.Contains(raw.fromTo, "Trash")
+				if !err {
+					return fmt.Errorf("Invalid destination. Please enter a valid destination, i.e. BlobTrash, FileTrash, BlobFSTrash")
 				}
 			}
 			raw.setMandatoryDefaults()
