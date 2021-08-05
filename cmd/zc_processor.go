@@ -23,6 +23,8 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"runtime"
+	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
@@ -90,10 +92,41 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
-				// formatting string for remove
-				return fmt.Sprintf("DRYRUN: remove %v/%v",
-					s.copyJobTemplate.SourceRoot.Value,
-					srcRelativePath)
+				// if remove then To() will equal to common.ELocation.Unknown()
+				if s.copyJobTemplate.FromTo.To() == common.ELocation.Unknown() { //remove
+					return fmt.Sprintf("DRYRUN: remove %v/%v",
+						s.copyJobTemplate.SourceRoot.Value,
+						srcRelativePath)
+				} else { //copy for sync
+					if s.copyJobTemplate.FromTo.From() == common.ELocation.Local() {
+						// formatting from local source
+						dryrunValue := fmt.Sprintf("DRYRUN: copy %v", common.ToShortPath(s.copyJobTemplate.SourceRoot.Value))
+						if runtime.GOOS == "windows" {
+							dryrunValue += "\\" + strings.ReplaceAll(srcRelativePath, "/", "\\")
+						} else { //linux and mac
+							dryrunValue += "/" + srcRelativePath
+						}
+						dryrunValue += fmt.Sprintf(" to %v/%v", strings.Trim(s.copyJobTemplate.DestinationRoot.Value, "/"), dstRelativePath)
+						return dryrunValue
+					} else if s.copyJobTemplate.FromTo.To() == common.ELocation.Local() {
+						// formatting to local source
+						dryrunValue := fmt.Sprintf("DRYRUN: copy %v/%v to %v",
+							strings.Trim(s.copyJobTemplate.SourceRoot.Value, "/"), srcRelativePath,
+							common.ToShortPath(s.copyJobTemplate.DestinationRoot.Value))
+						if runtime.GOOS == "windows" {
+							dryrunValue += "\\" + strings.ReplaceAll(dstRelativePath, "/", "\\")
+						} else { //linux and mac
+							dryrunValue += "/" + dstRelativePath
+						}
+						return dryrunValue
+					} else {
+						return fmt.Sprintf("DRYRUN: copy %v/%v to %v/%v",
+							s.copyJobTemplate.SourceRoot.Value,
+							srcRelativePath,
+							s.copyJobTemplate.DestinationRoot.Value,
+							dstRelativePath)
+					}
+				}
 			}
 		})
 		return nil
