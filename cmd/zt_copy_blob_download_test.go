@@ -22,10 +22,7 @@ package cmd
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/minio/minio-go"
-	"github.com/minio/minio-go/pkg/credentials"
 	"os"
 	"path"
 	"path/filepath"
@@ -927,21 +924,4 @@ func (s *cmdIntegrationSuite) TestDryrunCopyGCPtoBlob(c *chk.C) {
 		c.Check(strings.Contains(msg[0], dstPath[0]), chk.Equals, true)
 		c.Check(strings.Contains(msg[0], blobsToInclude[0]), chk.Equals, true)
 	})
-}
-
-func (s *cmdIntegrationSuite) TestMinioWithPublicBucket(c *chk.C) {
-	// s3client, err := newAdminClient(aliasedURL)
-	cred := credentials.NewStatic("", "", "", credentials.SignatureAnonymous)
-	s3Client, err := minio.NewWithOptions("s3.amazonaws.com", &minio.Options{Creds: cred, Secure: true, Region: "us-east-2"})
-	c.Check(err, chk.IsNil)
-
-	objectCh := s3Client.ListObjects("nakulkarbucket", "", false, nil)
-	for object := range objectCh {
-		c.Assert(object.Err, chk.IsNil)
-		if object.Err != nil {
-			fmt.Println(object.Err)
-			return
-		}
-		fmt.Println(object)
-	}
 }
