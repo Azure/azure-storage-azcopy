@@ -206,7 +206,6 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		DestLengthValidation:           order.DestLengthValidation,
 		atomicJobStatus:                common.EJobStatus.InProgress(), // We default to InProgress
 		DeleteSnapshotsOption:          order.BlobAttributes.DeleteSnapshotsOption,
-		CredentialType:                 common.ECredentialType,
 	}
 
 	// Copy any strings into their respective fields

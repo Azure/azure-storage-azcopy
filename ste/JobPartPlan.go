@@ -85,9 +85,6 @@ type JobPartPlanHeader struct {
 
 	// For delete operation specify what to do with snapshots
 	DeleteSnapshotsOption common.DeleteSnapshotsOption
-
-	// Used to determine S3 Type (public or private)
-	CredentialType common.CredentialType
 }
 
 // Status returns the job status stored in JobPartPlanHeader in thread-safe manner

@@ -715,10 +715,6 @@ func (jpm *jobPartMgr) deleteSnapshotsOption() common.DeleteSnapshotsOption {
 	return jpm.Plan().DeleteSnapshotsOption
 }
 
-func (jpm *jobPartMgr) credentialType() common.CredentialType {
-	return jpm.Plan().CredentialType
-}
-
 func (jpm *jobPartMgr) updateJobPartProgress(status common.TransferStatus) {
 	switch status {
 	case common.ETransferStatus.Success():

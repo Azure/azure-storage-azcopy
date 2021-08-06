@@ -479,7 +479,7 @@ func (jptm *jobPartTransferMgr) DeleteSnapshotsOption() common.DeleteSnapshotsOp
 }
 
 func (jptm *jobPartTransferMgr) CredentialType() common.CredentialType {
-	return jptm.jobPartMgr.(*jobPartMgr).credentialType()
+	return jptm.jobPartMgr.(*jobPartMgr).jobMgr.(*jobMgr).credentialType
 }
 
 func (jptm *jobPartTransferMgr) BlobTypeOverride() common.BlobType {
