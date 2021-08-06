@@ -166,7 +166,7 @@ func (t *s3Traverser) traverse(preprocessor objectMorpher, processor objectProce
 	return
 }
 
-func newS3Traverser(rawURL *url.URL, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (t *s3Traverser, err error) {
+func newS3Traverser(credential *common.CredentialInfo, rawURL *url.URL, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (t *s3Traverser, err error) {
 	t = &s3Traverser{rawURL: rawURL, ctx: ctx, recursive: recursive, getProperties: getProperties, incrementEnumerationCounter: incrementEnumerationCounter}
 
 	// initialize S3 client and URL parts
@@ -184,7 +184,7 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, recursive, getProperti
 	t.s3Client, err = common.CreateS3Client(
 		t.ctx,
 		common.CredentialInfo{
-			CredentialType: common.ECredentialType.S3AccessKey(),
+			CredentialType: credential.CredentialType,
 			S3CredentialInfo: common.S3CredentialInfo{
 				Endpoint: t.s3URLParts.Endpoint,
 				Region:   t.s3URLParts.Region,

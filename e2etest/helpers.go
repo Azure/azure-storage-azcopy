@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/minio/minio-go/pkg/credentials"
 	chk "gopkg.in/check.v1"
 	"io/ioutil"
 	"math/rand"
@@ -325,7 +326,8 @@ func createS3ClientWithMinio(o createS3ResOptions) (*minio.Client, error) {
 	secretAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
 
 	if accessKeyID == "" || secretAccessKey == "" {
-		return nil, fmt.Errorf("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY should be set before creating the S3 client")
+		cred := credentials.NewStatic("", "", "", credentials.SignatureAnonymous)
+		return minio.NewWithOptions("s3.amazonaws.com", &minio.Options{Creds: cred, Secure: true, Region: o.Location})
 	}
 
 	s3Client, err := minio.NewWithRegion("s3.amazonaws.com", accessKeyID, secretAccessKey, true, o.Location)

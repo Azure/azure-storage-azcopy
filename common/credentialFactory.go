@@ -198,13 +198,16 @@ func CreateBlobFSCredential(ctx context.Context, credInfo CredentialInfo, option
 func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) (*credentials.Credentials, error) {
 	glcm := GetLifecycleMgr()
 	switch credInfo.CredentialType {
+	case ECredentialType.S3PublicBucket():
+		return credentials.NewStatic("", "", "", credentials.SignatureAnonymous), nil
 	case ECredentialType.S3AccessKey():
 		accessKeyID := glcm.GetEnvironmentVariable(EEnvironmentVariable.AWSAccessKeyID())
 		secretAccessKey := glcm.GetEnvironmentVariable(EEnvironmentVariable.AWSSecretAccessKey())
 		sessionToken := glcm.GetEnvironmentVariable(EEnvironmentVariable.AwsSessionToken())
 
+		// if empty, create anon creds and assume bucket is public
 		if accessKeyID == "" || secretAccessKey == "" {
-			return nil, errors.New("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables must be set before creating the S3 AccessKey credential")
+			return credentials.NewStatic("", "", "", credentials.SignatureAnonymous), nil
 		}
 
 		// create and return s3 credential
@@ -240,7 +243,11 @@ func refreshBlobFSToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCred
 // S3 credential related factory methods
 // ==============================================================================================
 func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions) (*minio.Client, error) {
-	// Currently only support access key
+	if credInfo.CredentialType == ECredentialType.S3PublicBucket() {
+		cred := credentials.NewStatic("", "", "", credentials.SignatureAnonymous)
+		return minio.NewWithOptions(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: cred, Secure: true, Region: credInfo.S3CredentialInfo.Region})
+	}
+	// Support access key
 	credential, err := CreateS3Credential(ctx, credInfo, option)
 	if err != nil {
 		return nil, err
