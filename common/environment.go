@@ -44,6 +44,9 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.DisableHierarchicalScanning(),
 	EEnvironmentVariable.ParallelStatFiles(),
 	EEnvironmentVariable.BufferGB(),
+	EEnvironmentVariable.AWSAccessKeyID(),
+	EEnvironmentVariable.AWSSecretAccessKey(),
+	EEnvironmentVariable.GoogleAppCredentials(),
 	EEnvironmentVariable.ShowPerfStates(),
 	EEnvironmentVariable.PacePageBlobs(),
 	EEnvironmentVariable.AutoTuneToCpu(),
@@ -62,6 +65,11 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ManagedIdentityClientID(),
 	EEnvironmentVariable.ManagedIdentityObjectID(),
 	EEnvironmentVariable.ManagedIdentityResourceString(),
+	EEnvironmentVariable.RequestTryTimeout(),
+	EEnvironmentVariable.CPKEncryptionKey(),
+	EEnvironmentVariable.CPKEncryptionKeySHA256(),
+	EEnvironmentVariable.DisableSyslog(),
+	EEnvironmentVariable.MimeMapping(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
@@ -278,9 +286,23 @@ func (EnvironmentVariable) AWSSecretAccessKey() EnvironmentVariable {
 	}
 }
 
-// AwsSessionToken is temporaily internally reserved, and not exposed to users.
+// AwsSessionToken is temporarily internally reserved, and not exposed to users.
 func (EnvironmentVariable) AwsSessionToken() EnvironmentVariable {
 	return EnvironmentVariable{Name: "AWS_SESSION_TOKEN"}
+}
+
+func (EnvironmentVariable) GoogleAppCredentials() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "GOOGLE_APPLICATION_CREDENTIALS",
+		Description: "The application credentials required to access GCP resources for service to service copy.",
+	}
+}
+
+func (EnvironmentVariable) GoogleCloudProject() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "GOOGLE_CLOUD_PROJECT",
+		Description: "Project ID required for service level traversals in Google Cloud Storage",
+	}
 }
 
 // OAuthTokenInfo is only used for internal integration.
@@ -305,5 +327,37 @@ func (EnvironmentVariable) UserAgentPrefix() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_USER_AGENT_PREFIX",
 		Description: "Add a prefix to the default AzCopy User Agent, which is used for telemetry purposes. A space is automatically inserted.",
+	}
+}
+
+func (EnvironmentVariable) RequestTryTimeout() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_REQUEST_TRY_TIMEOUT",
+		Description: "Set time (in minutes) for how long AzCopy should try to upload files for each request before AzCopy times out.",
+	}
+}
+
+func (EnvironmentVariable) CPKEncryptionKey() EnvironmentVariable {
+	return EnvironmentVariable{Name: "CPK_ENCRYPTION_KEY", Hidden: true}
+}
+
+func (EnvironmentVariable) CPKEncryptionKeySHA256() EnvironmentVariable {
+	return EnvironmentVariable{Name: "CPK_ENCRYPTION_KEY_SHA256", Hidden: false}
+}
+
+func (EnvironmentVariable) DisableSyslog() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_DISABLE_SYSLOG",
+		DefaultValue: "false",
+		Description: "Disables logging in Syslog or Windows Event Logger. By default we log to these channels. " +
+			"However, to reduce the noise in Syslog/Windows Event Log, consider setting this environment variable to true.",
+	}
+}
+
+func (EnvironmentVariable) MimeMapping() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_CONTENT_TYPE_MAP",
+		DefaultValue: "",
+		Description:  "Location of the file to override default OS mime mapping",
 	}
 }

@@ -23,14 +23,15 @@ package cmd
 import (
 	"context"
 	"fmt"
+	pipeline2 "github.com/Azure/azure-pipeline-go/pipeline"
 	"net/url"
 	"strings"
 
 	"errors"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
@@ -76,14 +77,14 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		return err
 	}
 
-	credentialInfo, _, err := getCredentialInfoForLocation(ctx, cookedArgs.resourceLocation, resourceStringParts.Value, resourceStringParts.SAS, false)
+	credentialInfo, _, err := getCredentialInfoForLocation(ctx, cookedArgs.resourceLocation, resourceStringParts.Value, resourceStringParts.SAS, false, common.CpkOptions{})
 	if err != nil {
 		return err
 	}
 
 	switch cookedArgs.resourceLocation {
 	case common.ELocation.BlobFS():
-		p, err := createBlobFSPipeline(ctx, credentialInfo)
+		p, err := createBlobFSPipeline(ctx, credentialInfo, pipeline2.LogNone)
 		if err != nil {
 			return err
 		}
@@ -103,7 +104,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 			return err
 		}
 	case common.ELocation.Blob():
-		p, err := createBlobPipeline(ctx, credentialInfo)
+		p, err := createBlobPipeline(ctx, credentialInfo, pipeline2.LogNone)
 		if err != nil {
 			return err
 		}
@@ -122,7 +123,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 			return err
 		}
 	case common.ELocation.File():
-		p, err := createFilePipeline(ctx, credentialInfo)
+		p, err := createFilePipeline(ctx, credentialInfo, pipeline2.LogNone)
 		if err != nil {
 			return err
 		}

@@ -27,7 +27,7 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -72,6 +72,7 @@ type sender interface {
 type folderSender interface {
 	EnsureFolderExists() error
 	SetFolderProperties() error
+	DirUrlToString() string
 }
 
 type senderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error)

@@ -107,6 +107,15 @@ func ConsolidatePathSeparators(path string) string {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+//Transfers describes each file/folder being transferred in a given JobPartOrder, and
+//other auxilliary details of this order.
+type Transfers struct {
+	List                []CopyTransfer
+	TotalSizeInBytes    uint64
+	FileTransferCount   uint32
+	FolderTransferCount uint32
+}
+
 // This struct represents the job info (a single part) to be sent to the storage engine
 type CopyJobPartOrderRequest struct {
 	Version         Version         // version of azcopy
@@ -125,7 +134,7 @@ type CopyJobPartOrderRequest struct {
 	SourceRoot      ResourceString
 	DestinationRoot ResourceString
 
-	Transfers      []CopyTransfer
+	Transfers      Transfers
 	LogLevel       LogLevel
 	BlobAttributes BlobTransferAttributes
 	CommandString  string // commandString hold the user given command which is logged to the Job log file
@@ -137,14 +146,20 @@ type CopyJobPartOrderRequest struct {
 	S2SSourceChangeValidation      bool
 	DestLengthValidation           bool
 	S2SInvalidMetadataHandleOption InvalidMetadataHandleOption
+	S2SPreserveBlobTags            bool
+	CpkOptions                     CpkOptions
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,
 // and used during creating Azure storage client Credential.
 type CredentialInfo struct {
-	CredentialType   CredentialType
-	OAuthTokenInfo   OAuthTokenInfo
-	S3CredentialInfo S3CredentialInfo
+	CredentialType    CredentialType
+	OAuthTokenInfo    OAuthTokenInfo
+	S3CredentialInfo  S3CredentialInfo
+	GCPCredentialInfo GCPCredentialInfo
+}
+
+type GCPCredentialInfo struct {
 }
 
 // S3CredentialInfo contains essential credential info which need to build up S3 client.
@@ -190,7 +205,7 @@ type BlobTransferAttributes struct {
 	MD5ValidationOption      HashValidationOption  // when downloading, how strictly should we validate MD5 hashes?
 	BlockSizeInBytes         int64                 // when uploading/downloading/copying, specify the size of each chunk
 	DeleteSnapshotsOption    DeleteSnapshotsOption // when deleting, specify what to do with the snapshots
-	BlobTagsString           string
+	BlobTagsString           string                // when user explicitly provides blob tags
 }
 
 type JobIDDetails struct {
@@ -291,6 +306,7 @@ type TransferDetail struct {
 	Dst                string
 	IsFolderProperties bool
 	TransferStatus     TransferStatus
+	TransferSize       uint64
 	ErrorCode          int32 `json:",string"`
 }
 

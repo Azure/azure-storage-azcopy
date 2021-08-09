@@ -32,7 +32,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 var _ IJobMgr = &jobMgr{}
@@ -81,17 +81,29 @@ type IJobMgr interface {
 	PipelineNetworkStats() *pipelineNetworkStats
 	getOverwritePrompter() *overwritePrompter
 	common.ILoggerCloser
+
+	/* Status related functions */
+	SendJobPartCreatedMsg(msg jobPartCreatedMsg)
+	SendXferDoneMsg(msg xferDoneMsg)
+	ListJobSummary() common.ListJobSummaryResponse
+	ResurrectSummary(js common.ListJobSummaryResponse)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel, commandString string, logFileFolder string) IJobMgr {
+func newJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel, commandString string, logFileFolder string) IJobMgr {
 	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
 	enableChunkLogOutput := level.ToPipelineLogLevel() == pipeline.LogDebug
+	/* Create book-keeping channels */
 	jobPartProgressCh := make(chan jobPartProgressInfo)
+	jstm.respChan = make(chan common.ListJobSummaryResponse)
+	jstm.listReq = make(chan bool)
+	jstm.partCreated = make(chan jobPartCreatedMsg, 100)
+	jstm.xferDone = make(chan xferDoneMsg, 1000)
+
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
 		httpClient:                    NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
-		logger:                        common.NewJobLogger(jobID, level, appLogger, logFileFolder),
+		logger:                        common.NewJobLogger(jobID, level, logFileFolder, ""),
 		chunkStatusLogger:             common.NewChunkStatusLogger(jobID, cpuMon, logFileFolder, enableChunkLogOutput),
 		concurrency:                   concurrency,
 		overwritePrompter:             newOverwritePrompter(),
@@ -103,6 +115,7 @@ func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID 
 	jm.reset(appCtx, commandString)
 	jm.logJobsAdminMessages()
 	go jm.reportJobPartDoneHandler()
+	go jm.handleStatusUpdateMessage()
 	return &jm
 }
 
@@ -501,38 +514,38 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 		isCancelling := jobStatus == common.EJobStatus.Cancelling()
 		shouldComplete := allKnownPartsDone && (haveFinalPart || isCancelling)
 		if shouldComplete {
-			break
+			partDescription := "all parts of entire Job"
+			if !haveFinalPart {
+				partDescription = "known parts of incomplete Job"
+			}
+			if shouldLog {
+				jm.Log(pipeline.LogInfo, fmt.Sprintf("%s %s successfully completed, cancelled or paused", partDescription, jm.jobID.String()))
+			}
+
+			switch part0Plan.JobStatus() {
+			case common.EJobStatus.Cancelling():
+				part0Plan.SetJobStatus(common.EJobStatus.Cancelled())
+				if shouldLog {
+					jm.Log(pipeline.LogInfo, fmt.Sprintf("%s %v successfully cancelled", partDescription, jm.jobID))
+				}
+			case common.EJobStatus.InProgress():
+				part0Plan.SetJobStatus((common.EJobStatus).EnhanceJobStatusInfo(jobProgressInfo.transfersSkipped > 0,
+					jobProgressInfo.transfersFailed > 0,
+					jobProgressInfo.transfersCompleted > 0))
+			}
+
+			// reset counters
+			atomic.StoreUint32(&jm.partsDone, 0)
+			jobProgressInfo = jobPartProgressInfo{}
+
+			// flush logs
+			jm.chunkStatusLogger.FlushLog() // TODO: remove once we sort out what will be calling CloseLog (currently nothing)
 		} //Else log and wait for next part to complete
 
 		if shouldLog {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("is part of Job which %d total number of parts done ", partsDone))
 		}
 	}
-
-	jobPart0Mgr, _ := jm.jobPartMgrs.Get(0)
-	part0Plan := jobPart0Mgr.Plan() // status of part 0 is status of job as whole.
-
-	partDescription := "all parts of entire Job"
-	if !haveFinalPart {
-		partDescription = "known parts of incomplete Job"
-	}
-	if shouldLog {
-		jm.Log(pipeline.LogInfo, fmt.Sprintf("%s %s successfully completed, cancelled or paused", partDescription, jm.jobID.String()))
-	}
-
-	switch part0Plan.JobStatus() {
-	case common.EJobStatus.Cancelling():
-		part0Plan.SetJobStatus(common.EJobStatus.Cancelled())
-		if shouldLog {
-			jm.Log(pipeline.LogInfo, fmt.Sprintf("%s %v successfully cancelled", partDescription, jm.jobID))
-		}
-	case common.EJobStatus.InProgress():
-		part0Plan.SetJobStatus((common.EJobStatus).EnhanceJobStatusInfo(jobProgressInfo.transfersSkipped > 0,
-			jobProgressInfo.transfersFailed > 0,
-			jobProgressInfo.transfersCompleted > 0))
-	}
-
-	jm.chunkStatusLogger.FlushLog() // TODO: remove once we sort out what will be calling CloseLog (currently nothing)
 }
 
 func (jm *jobMgr) getInMemoryTransitJobState() InMemoryTransitJobState {

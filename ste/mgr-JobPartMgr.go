@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"golang.org/x/sync/semaphore"
@@ -54,6 +54,11 @@ type IJobPartMgr interface {
 	getFolderCreationTracker() common.FolderCreationTracker
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 	FolderDeletionManager() common.FolderDeletionManager
+	CpkInfo() common.CpkInfo
+	CpkScopeInfo() common.CpkScopeInfo
+	IsSourceEncrypted() bool
+	/* Status Manager Updates */
+	SendXferDoneMsg(msg xferDoneMsg)
 }
 
 type serviceAPIVersionOverride struct{}
@@ -164,7 +169,10 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		//NewPacerPolicyFactory(p),
 		NewVersionPolicyFactory(),
-		NewRequestLogPolicyFactory(RequestLogOptions{LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold}),
+		NewRequestLogPolicyFactory(RequestLogOptions{
+			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
+			SyslogDisabled:               common.IsForceLoggingDisabled(),
+		}),
 		newXferStatsPolicyFactory(statsAcc),
 	}
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
@@ -188,7 +196,10 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 
 	f = append(f,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		NewRequestLogPolicyFactory(RequestLogOptions{LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold}),
+		NewRequestLogPolicyFactory(RequestLogOptions{
+			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
+			SyslogDisabled:               common.IsForceLoggingDisabled(),
+		}),
 		newXferStatsPolicyFactory(statsAcc))
 
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
@@ -208,7 +219,10 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		NewVersionPolicyFactory(),
-		NewRequestLogPolicyFactory(RequestLogOptions{LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold}),
+		NewRequestLogPolicyFactory(RequestLogOptions{
+			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
+			SyslogDisabled:               common.IsForceLoggingDisabled(),
+		}),
 		newXferStatsPolicyFactory(statsAcc),
 	}
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
@@ -286,6 +300,8 @@ type jobPartMgr struct {
 	atomicTransfersCompleted uint32
 	atomicTransfersFailed    uint32
 	atomicTransfersSkipped   uint32
+
+	cpkOptions common.CpkOptions
 }
 
 func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {
@@ -353,6 +369,12 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			value, _ := url.QueryUnescape(kv[1])
 			jpm.blobTags[key] = value
 		}
+	}
+
+	jpm.cpkOptions = common.CpkOptions{
+		CpkInfo:           dstData.CpkInfo,
+		CpkScopeInfo:      string(dstData.CpkScopeInfo[:dstData.CpkScopeInfoLength]),
+		IsSourceEncrypted: dstData.IsSourceEncrypted,
 	}
 
 	jpm.preserveLastModifiedTime = plan.DstLocalData.PreserveLastModifiedTime
@@ -428,6 +450,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	userAgent := common.UserAgent
 	if fromTo.From() == common.ELocation.S3() {
 		userAgent = common.S3ImportUserAgent
+	} else if fromTo.From() == common.ELocation.GCP() {
+		userAgent = common.GCPImportUserAgent
 	} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
 		userAgent = common.BenchmarkUserAgent
 	}
@@ -490,7 +514,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	// Create pipeline for data transfer.
 	switch fromTo {
 	case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(), common.EFromTo.BenchmarkBlob(),
-		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob():
+		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob(), common.EFromTo.GCPBlob():
 		credential := common.CreateBlobCredential(ctx, credInfo, credOption)
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 		jpm.pipeline = NewBlobPipeline(
@@ -580,9 +604,10 @@ func (jpm *jobPartMgr) AutoDecompress() bool {
 	return jpm.Plan().AutoDecompress
 }
 
-func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags) {
+func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byte) (headers common.ResourceHTTPHeaders,
+	metadata common.Metadata, blobTags common.BlobTags, cpkOptions common.CpkOptions) {
 	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType {
-		return jpm.httpHeaders, jpm.metadata, jpm.blobTags
+		return jpm.httpHeaders, jpm.metadata, jpm.blobTags, jpm.cpkOptions
 	}
 
 	return common.ResourceHTTPHeaders{
@@ -590,8 +615,11 @@ func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byt
 		ContentLanguage:    jpm.httpHeaders.ContentLanguage,
 		ContentDisposition: jpm.httpHeaders.ContentDisposition,
 		ContentEncoding:    jpm.httpHeaders.ContentEncoding,
-		CacheControl:       jpm.httpHeaders.CacheControl}, jpm.metadata, jpm.blobTags
+		CacheControl:       jpm.httpHeaders.CacheControl,
+	}, jpm.metadata, jpm.blobTags, jpm.cpkOptions
 }
+
+var environmentMimeMap map[string]string
 
 // TODO do we want these charset=utf-8?
 var builtinTypes = map[string]string{
@@ -614,6 +642,9 @@ var builtinTypes = map[string]string{
 func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []byte) string {
 	fileExtension := filepath.Ext(fullFilePath)
 
+	if contentType, ok := environmentMimeMap[strings.ToLower(fileExtension)]; ok {
+		return contentType
+	}
 	// short-circuit for common static website files
 	// mime.TypeByExtension takes the registry into account, which is most often undesirable in practice
 	if override, ok := builtinTypes[strings.ToLower(fileExtension)]; ok {
@@ -638,6 +669,18 @@ func (jpm *jobPartMgr) BlobTypeOverride() common.BlobType {
 
 func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {
 	return jpm.blockBlobTier, jpm.pageBlobTier
+}
+
+func (jpm *jobPartMgr) CpkInfo() common.CpkInfo {
+	return common.GetCpkInfo(jpm.cpkOptions.CpkInfo)
+}
+
+func (jpm *jobPartMgr) CpkScopeInfo() common.CpkScopeInfo {
+	return common.GetCpkScopeInfo(jpm.cpkOptions.CpkScopeInfo)
+}
+
+func (jpm *jobPartMgr) IsSourceEncrypted() bool {
+	return jpm.cpkOptions.IsSourceEncrypted
 }
 
 func (jpm *jobPartMgr) ShouldPutMd5() bool {
@@ -742,6 +785,11 @@ func (jpm *jobPartMgr) ChunkStatusLogger() common.ChunkStatusLogger {
 
 func (jpm *jobPartMgr) SourceProviderPipeline() pipeline.Pipeline {
 	return jpm.sourceProviderPipeline
+}
+
+/* Status update messages should not fail */
+func (jpm *jobPartMgr) SendXferDoneMsg(msg xferDoneMsg) {
+	jpm.jobMgr.SendXferDoneMsg(msg)
 }
 
 // TODO: Can we delete this method?

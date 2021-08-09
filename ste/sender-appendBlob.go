@@ -29,7 +29,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"golang.org/x/sync/semaphore"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type appendBlobSenderBase struct {
@@ -45,6 +45,7 @@ type appendBlobSenderBase struct {
 	headersToApply  azblob.BlobHTTPHeaders
 	metadataToApply azblob.Metadata
 	blobTagsToApply azblob.BlobTagsMap
+	cpkToApply      azblob.ClientProvidedKeyOptions
 
 	soleChunkFuncSemaphore *semaphore.Weighted
 }
@@ -78,6 +79,9 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 		return nil, err
 	}
 
+	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
+	cpkToApply := common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
+
 	return &appendBlobSenderBase{
 		jptm:                   jptm,
 		destAppendBlobURL:      destAppendBlobURL,
@@ -87,6 +91,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 		headersToApply:         props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply:        props.SrcMetadata.ToAzBlobMetadata(),
 		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
+		cpkToApply:             cpkToApply,
 		soleChunkFuncSemaphore: semaphore.NewWeighted(1)}, nil
 }
 
@@ -103,7 +108,7 @@ func (s *appendBlobSenderBase) NumChunks() uint32 {
 }
 
 func (s *appendBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
-	return remoteObjectExists(s.destAppendBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}))
+	return remoteObjectExists(s.destAppendBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkToApply))
 }
 
 // Returns a chunk-func for sending append blob to remote
@@ -148,13 +153,13 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 	if separateSetTagsRequired || len(blobTags) == 0 {
 		blobTags = nil
 	}
-	if _, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, blobTags); err != nil {
+	if _, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, blobTags, s.cpkToApply); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}
 
 	if separateSetTagsRequired {
-		if _, err := s.destAppendBlobURL.SetTags(s.jptm.Context(), nil, nil, nil, nil, nil, nil, s.blobTagsToApply); err != nil {
+		if _, err := s.destAppendBlobURL.SetTags(s.jptm.Context(), nil, nil, nil, s.blobTagsToApply); err != nil {
 			s.jptm.Log(pipeline.LogWarning, err.Error())
 		}
 	}

@@ -30,7 +30,7 @@ class FileShare_Upload_User_Scenario(unittest.TestCase):
 
         # execute azcopy upload.
         destination = util.get_resource_sas_from_share(file_name)
-        result = util.Command("copy").add_arguments(file_path).add_arguments(destination).add_flags("log-level", "info"). \
+        result = util.Command("copy").add_arguments(file_path).add_arguments(destination).add_flags("log-level", "debug"). \
             add_flags("block-size-mb", "4").execute_azcopy_copy_command()
         self.assertTrue(result)
 

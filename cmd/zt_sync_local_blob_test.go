@@ -24,9 +24,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
 )
@@ -399,5 +400,54 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithMissingDestination(c *chk.C) {
 
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestDryrunSyncLocaltoBlob(c *chk.C) {
+	bsu := getBSU()
+
+	//set up local src
+	blobsToInclude := []string{"AzURE2.jpeg", "sub1/aTestOne.txt", "sub1/sub2/testTwo.pdf"}
+	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirName)
+	scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, blobsToInclude)
+
+	//set up dst container
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, dstContainerURL)
+	blobsToDelete := []string{"testThree.jpeg"}
+	scenarioHelper{}.generateBlobsFromList(c, dstContainerURL, blobsToDelete, blockBlobDefaultData)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Text())
+	glcm = &mockedLcm
+
+	// construct the raw input to simulate user input
+	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultSyncRawInput(srcDirName, dstContainerURLWithSAS.String())
+	raw.dryrun = true
+	raw.deleteDestination = "true"
+
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateS2SSyncTransfersAreScheduled(c, "", "", []string{}, mockedRPC)
+
+		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
+		sort.Strings(msg)
+		for i := 0; i < len(msg); i++ {
+			if strings.Contains(msg[i], "DRYRUN: remove") {
+				c.Check(strings.Contains(msg[i], blobsToDelete[0]), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], dstContainerURL.String()), chk.Equals, true)
+			} else {
+				c.Check(strings.Contains(msg[i], "DRYRUN: copy"), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], blobsToInclude[i]), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], srcDirName), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], dstContainerURL.String()), chk.Equals, true)
+			}
+
+		}
 	})
 }

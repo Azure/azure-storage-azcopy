@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type autopacer interface {
@@ -85,9 +85,8 @@ func newPageBlobAutoPacer(bytesPerSecond int64, expectedBytesPerRequest int64, i
 
 	if shouldPacePageBlobs {
 		return newAutoPacer(bytesPerSecond, expectedBytesPerRequest, isFair, logger, pageBlobThroughputTunerString)
-	} else {
-		return newNullAutoPacer()
 	}
+	return newNullAutoPacer()
 }
 
 func newAutoPacer(bytesPerSecond int64, expectedBytesPerRequest int64, isFair bool, logger common.ILogger, logPrefix string) autopacer {

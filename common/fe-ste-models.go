@@ -30,7 +30,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 
 	"fmt"
 
@@ -415,6 +415,7 @@ func (Location) File() Location      { return Location(4) }
 func (Location) BlobFS() Location    { return Location(5) }
 func (Location) S3() Location        { return Location(6) }
 func (Location) Benchmark() Location { return Location(7) }
+func (Location) GCP() Location       { return Location(8) }
 
 func (l Location) String() string {
 	return enum.StringInt(l, reflect.TypeOf(l))
@@ -441,7 +442,7 @@ func fromToValue(from Location, to Location) FromTo {
 
 func (l Location) IsRemote() bool {
 	switch l {
-	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3():
+	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3(), ELocation.GCP():
 		return true
 	case ELocation.Local(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
 		return false
@@ -464,7 +465,7 @@ func (l Location) IsFolderAware() bool {
 	switch l {
 	case ELocation.BlobFS(), ELocation.File(), ELocation.Local():
 		return true
-	case ELocation.Blob(), ELocation.S3(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
+	case ELocation.Blob(), ELocation.S3(), ELocation.GCP(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
 		return false
 	default:
 		panic("unexpected location, please specify if it is folder-aware")
@@ -501,6 +502,7 @@ func (FromTo) FileBlob() FromTo    { return FromTo(fromToValue(ELocation.File(),
 func (FromTo) BlobFile() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.File())) }
 func (FromTo) FileFile() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.File())) }
 func (FromTo) S3Blob() FromTo      { return FromTo(fromToValue(ELocation.S3(), ELocation.Blob())) }
+func (FromTo) GCPBlob() FromTo     { return FromTo(fromToValue(ELocation.GCP(), ELocation.Blob())) }
 
 // todo: to we really want these?  Starts to look like a bit of a combinatorial explosion
 func (FromTo) BenchmarkBlob() FromTo {
@@ -617,7 +619,7 @@ func (TransferStatus) NotStarted() TransferStatus { return TransferStatus(0) }
 
 // TODO confirm whether this is actually needed
 //   Outdated:
-//     Transfer started & at least 1 chunk has successfully been transfered.
+//     Transfer started & at least 1 chunk has successfully been transferred.
 //     Used to resume a transfer that started to avoid transferring all chunks thereby improving performance
 // Update(Jul 2020): This represents the state of transfer as soon as the file is scheduled.
 func (TransferStatus) Started() TransferStatus { return TransferStatus(1) }
@@ -769,11 +771,12 @@ var ECredentialType = CredentialType(0)
 // CredentialType defines the different types of credentials
 type CredentialType uint8
 
-func (CredentialType) Unknown() CredentialType     { return CredentialType(0) }
-func (CredentialType) OAuthToken() CredentialType  { return CredentialType(1) } // For Azure, OAuth
-func (CredentialType) Anonymous() CredentialType   { return CredentialType(2) } // For Azure, SAS or public.
-func (CredentialType) SharedKey() CredentialType   { return CredentialType(3) } // For Azure, SharedKey
-func (CredentialType) S3AccessKey() CredentialType { return CredentialType(4) } // For S3, AccessKeyID and SecretAccessKey
+func (CredentialType) Unknown() CredentialType              { return CredentialType(0) }
+func (CredentialType) OAuthToken() CredentialType           { return CredentialType(1) } // For Azure, OAuth
+func (CredentialType) Anonymous() CredentialType            { return CredentialType(2) } // For Azure, SAS or public.
+func (CredentialType) SharedKey() CredentialType            { return CredentialType(3) } // For Azure, SharedKey
+func (CredentialType) S3AccessKey() CredentialType          { return CredentialType(4) } // For S3, AccessKeyID and SecretAccessKey
+func (CredentialType) GoogleAppCredentials() CredentialType { return CredentialType(5) }
 
 func (ct CredentialType) String() string {
 	return enum.StringInt(ct, reflect.TypeOf(ct))
@@ -1027,10 +1030,10 @@ func (bt BlobTags) ToAzBlobTagsMap() azblob.BlobTagsMap {
 	return azblob.BlobTagsMap(bt)
 }
 
-// FromAzBlobTagsMapToCommonBlobTags converts azblob's BlobTagsMap to common BlobTags
-func FromAzBlobTagsMapToCommonBlobTags(azbt azblob.BlobTagsMap) BlobTags {
-	return BlobTags(azbt)
-}
+//// FromAzBlobTagsMapToCommonBlobTags converts azblob's BlobTagsMap to common BlobTags
+//func FromAzBlobTagsMapToCommonBlobTags(azbt azblob.BlobTagsMap) BlobTags {
+//	return BlobTags(azbt)
+//}
 
 func (bt BlobTags) ToString() string {
 	lst := make([]string, 0)
@@ -1364,4 +1367,77 @@ func (p PreservePermissionsOption) IsTruthy() bool {
 	default:
 		panic("unknown permissions option")
 	}
+}
+
+////////////////////////////////////////////////////////////////
+
+// CpkScopeInfo specifies the name of the encryption scope to use to encrypt the data provided in the request.
+// If not specified, encryption is performed with the default account encryption scope.
+// For more information, see Encryption at Rest for Azure Storage Services.
+type CpkScopeInfo struct {
+	EncryptionScope *string
+}
+
+func (csi CpkScopeInfo) Marshal() (string, error) {
+	result, err := json.Marshal(csi)
+	if err != nil {
+		return "", err
+	}
+	return string(result), nil
+}
+
+type CpkInfo struct {
+	// The algorithm used to produce the encryption key hash.
+	// Currently, the only accepted value is "AES256".
+	// Must be provided if the x-ms-encryption-key header is provided.
+	EncryptionAlgorithm *string
+
+	// Optional. Specifies the encryption key to use to encrypt the data provided in the request.
+	// If not specified, encryption is performed with the root account encryption key.
+	EncryptionKey *string
+
+	// The SHA-256 hash of the provided encryption key.
+	// Must be provided if the x-ms-encryption-key header is provided.
+	EncryptionKeySha256 *string
+}
+
+func (csi CpkInfo) Marshal() (string, error) {
+	result, err := json.Marshal(csi)
+	if err != nil {
+		return "", err
+	}
+	return string(result), nil
+}
+
+func ToClientProvidedKeyOptions(cpkInfo CpkInfo, cpkScopeInfo CpkScopeInfo) azblob.ClientProvidedKeyOptions {
+	if (cpkInfo.EncryptionKey == nil || cpkInfo.EncryptionKeySha256 == nil) && cpkScopeInfo.EncryptionScope == nil {
+		return azblob.ClientProvidedKeyOptions{}
+	}
+
+	return azblob.ClientProvidedKeyOptions{
+		EncryptionKey:       cpkInfo.EncryptionKey,
+		EncryptionAlgorithm: azblob.EncryptionAlgorithmAES256,
+		EncryptionKeySha256: cpkInfo.EncryptionKeySha256,
+		EncryptionScope:     cpkScopeInfo.EncryptionScope,
+	}
+}
+
+type CpkOptions struct {
+	// Optional flag to encrypt user data with user provided key.
+	// Key is provide in the REST request itself
+	// Provided key (EncryptionKey and EncryptionKeySHA256) and its hash will be fetched from environment variables
+	// Set EncryptionAlgorithm = "AES256" by default.
+	CpkInfo bool
+	// Key is present in AzureKeyVault and Azure KeyVault is linked with storage account.
+	// Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data
+	CpkScopeInfo string
+	// flag to check if the source is encrypted by user provided key or not.
+	// True only if user wishes to download source encrypted by user provided key
+	IsSourceEncrypted bool
+}
+
+func GetClientProvidedKey(options CpkOptions) azblob.ClientProvidedKeyOptions {
+	_cpkInfo := GetCpkInfo(options.CpkInfo)
+	_cpkScopeInfo := GetCpkScopeInfo(options.CpkScopeInfo)
+	return ToClientProvidedKeyOptions(_cpkInfo, _cpkScopeInfo)
 }

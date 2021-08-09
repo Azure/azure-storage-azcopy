@@ -28,7 +28,7 @@ import (
 
 	"github.com/minio/minio-go"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // As we discussed, the general architecture is that this is going to search a list of buckets and spawn s3Traversers for each bucket.
@@ -105,16 +105,16 @@ func (t *s3ServiceTraverser) traverse(preprocessor objectMorpher, processor obje
 
 		if err != nil {
 			if strings.Contains(err.Error(), "301 response missing Location header") {
-				WarnStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q , as it's not in the region specified by source URL", v))
+				WarnStdoutAndScanningLog(fmt.Sprintf("skip enumerating the bucket %q , as it's not in the region specified by source URL", v))
 				continue
 			}
 
 			if strings.Contains(err.Error(), "cannot list objects, The specified bucket does not exist") {
-				WarnStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q, as it does not exist.", v))
+				WarnStdoutAndScanningLog(fmt.Sprintf("skip enumerating the bucket %q, as it does not exist.", v))
 				continue
 			}
 
-			WarnStdoutAndJobLog(fmt.Sprintf("failed to list objects in bucket %s: %s", v, err))
+			WarnStdoutAndScanningLog(fmt.Sprintf("failed to list objects in bucket %s: %s", v, err))
 			continue
 		}
 	}

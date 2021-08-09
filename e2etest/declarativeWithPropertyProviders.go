@@ -23,8 +23,8 @@ package e2etest
 import (
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/cmd"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // All the structs in this file have names starting with "with", to make the readability flow when they are used
@@ -44,10 +44,13 @@ type with struct {
 	contentMD5         []byte
 
 	nameValueMetadata  map[string]string
+	blobTags           string
 	lastWriteTime      time.Time
 	creationTime       time.Time
 	smbAttributes      uint32
 	smbPermissionsSddl string
+	cpkByName          string
+	cpkByValue         bool
 }
 
 func (with) appliesToCreation() bool {
@@ -114,6 +117,11 @@ func (w with) createObjectProperties() *objectProperties {
 		populated = true
 		result.nameValueMetadata = w.nameValueMetadata
 	}
+
+	if w.blobTags != "" {
+		populated = true
+		result.blobTags = common.ToCommonBlobTagsMap(w.blobTags)
+	}
 	if w.lastWriteTime != (time.Time{}) {
 		populated = true
 		result.lastWriteTime = &w.lastWriteTime
@@ -129,6 +137,18 @@ func (w with) createObjectProperties() *objectProperties {
 	if w.smbPermissionsSddl != "" {
 		populated = true
 		result.smbPermissionsSddl = &w.smbPermissionsSddl
+	}
+
+	if w.cpkByName != "" {
+		populated = true
+		cpkScopeInfo := common.GetCpkScopeInfo(w.cpkByName)
+		result.cpkScopeInfo = &cpkScopeInfo
+	}
+
+	if w.cpkByValue {
+		populated = true
+		cpkInfo := common.GetCpkInfo(w.cpkByValue)
+		result.cpkInfo = &cpkInfo
 	}
 
 	if populated {

@@ -16,7 +16,7 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
         src = file_path
         dest = util.test_share_url
         result = util.Command("copy").add_arguments(src).add_arguments(dest). \
-            add_flags("log-level", "info").execute_azcopy_copy_command()
+            add_flags("log-level", "debug").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # Verifying the uploaded file.
@@ -30,7 +30,7 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
         src = util.get_resource_sas_from_share(filename)
         dest = util.test_directory_path + "/test_1kb_file_download.txt"
         result = util.Command("copy").add_arguments(src).add_arguments(dest).add_flags("log-level",
-                                                                                       "info").execute_azcopy_copy_command()
+                                                                                       "debug").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # Verifying the downloaded file
@@ -192,7 +192,7 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
 
         # execute azcopy command
         result = util.Command("copy").add_arguments(src_dir).add_arguments(dest_azure_dir). \
-            add_flags("recursive", recursive).add_flags("log-level", "info").execute_azcopy_copy_command()
+            add_flags("recursive", recursive).add_flags("log-level", "debug").execute_azcopy_copy_command()
         self.assertTrue(result)
         
         # execute the validator.
@@ -214,7 +214,7 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
 
         # downloading the directory created from azure file directory through azcopy with recursive flag to true.
         result = util.Command("copy").add_arguments(download_azure_src_dir).add_arguments(
-            download_local_dest_dir).add_flags("log-level", "info"). \
+            download_local_dest_dir).add_flags("log-level", "debug"). \
             add_flags("recursive", recursive).execute_azcopy_copy_command()
         self.assertTrue(result)
 
@@ -242,7 +242,7 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
         # upload file through azcopy.
         destination_sas = util.get_resource_sas_from_share(filename)
         result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-            add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+            add_flags("log-level", "debug").add_flags("recursive", "true").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # Verifying the uploaded file
@@ -254,7 +254,7 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
         # download file through azcopy with flag preserve-last-modified-time set to true
         download_file_name = util.test_directory_path + "/test_download_preserve_last_mtime.txt"
         result = util.Command("copy").add_arguments(destination_sas).add_arguments(download_file_name).add_flags("log-level",
-                                                                                                                 "info").add_flags(
+                                                                                                                 "debug").add_flags(
             "preserve-last-modified-time", "true").execute_azcopy_copy_command()
         self.assertTrue(result)
 

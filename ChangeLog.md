@@ -1,6 +1,51 @@
 
 # Change Log
 
+## Version 10.11.0
+
+### New features
+1. Improved performance for copying small blobs (with size less than `256MiB`) with [Put Blob from URL](https://docs.microsoft.com/en-us/rest/api/storageservices/put-blob-from-url).
+1. Added mirror mode support in sync operation via `mirror-mode` flag. The new mode disables last-modified-time based comparisons and overwrites the conflicting files and blobs at the destination if this flag is set to true.
+1. Added flag `disable-auto-decoding` to avoid automatic decoding of URL-encoded illegal characters when uploading from Windows. These illegal characters could have encoded as a result of downloading them onto Windows which does not support them.
+1. Support custom mime type mapping via environment variable `AZCOPY_CONTENT_TYPE_MAP`.
+1. Output message on the CLI when AzCopy detects a proxy for each domain.
+1. Interpret DFS endpoints as Blob endpoint automatically when performing service-to-service copy. 
+
+### Bug fixes
+1. Tolerate enumeration errors for Azure Files and not fail the entire job when a directory is deleted/modified during scanning. 
+1. Log skipped transfers to the scanning log.
+1. Fixed pipe upload by adding missing fields such as Metadata, Blob Index Tags, Client Provided Key, Blob Access Tier, etc.
+1. Fixed issue of clean up for the benchmark command.
+
+## Version 10.10.0
+
+### New features
+1. Support sync for Local/Blob <-> Azure File.
+1. Download to temporary file path (.azDownload-[jobID]-[name]) before renaming to the original path.
+1. Support CPK by name and CPK by value.
+1. Offer knob to disable application logging (Syslog/Windows Event Log).
+1. Trust zonal DNS suffix for OAuth by default.
+1. Added include-directory-stub flag for the copy command, to allow copying of blobs with metadata of `hdi_isfolder:true`.
+1. Display more fields for the list command, please refer to the help message for example.
+1. Provide environment variable to set request try timeout, to allow faster retries.
+
+### Bug fixes
+1. Improve job progress updating mechanism to improve scalability for larger jobs.
+1. Time limit the container creation step, to avoid hanging and improve UX.
+1. Set SMB info/permission again after file upload and copy, to fully preserve the integrity of the permission string and last-write-time.
+1. Fixed module import problem for V10.
+
+## Version 10.9.0
+
+### New features
+1. Added preview support for importing from GCP Storage to Azure Block Blobs.
+1. Added scanning logs which have low output by default but can become verbose if desired to help in debugging.
+1. Support preservation of tags when copying blobs.
+1. Added last modified time info to the list command.
+
+### Bug fixes
+1. Removed unexpected conflict prompt for file share folders with special characters in the name, such as ";".
+   
 ## Version 10.8.0
 
 ### New features

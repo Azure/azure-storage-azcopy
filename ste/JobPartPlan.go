@@ -7,7 +7,7 @@ import (
 
 	"sync/atomic"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
@@ -20,7 +20,6 @@ const (
 	CustomHeaderMaxBytes = 256
 	MetadataMaxBytes     = 1000 // If > 65536, then jobPartPlanBlobData's MetadataLength field's type must change
 	BlobTagsMaxByte      = 4000
-	BlobTierMaxBytes     = 10
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -280,6 +279,11 @@ type JobPartPlanDstBlob struct {
 
 	BlobTagsLength uint16
 	BlobTags       [BlobTagsMaxByte]byte
+
+	CpkInfo            bool
+	IsSourceEncrypted  bool
+	CpkScopeInfo       [CustomHeaderMaxBytes]byte
+	CpkScopeInfoLength uint16
 
 	// Specifies the maximum size of block which determines the number of chunks and chunk size of a transfer
 	BlockSize int64

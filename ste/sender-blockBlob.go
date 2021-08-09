@@ -32,7 +32,7 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 var lowMemoryLimitAdvice sync.Once
@@ -46,13 +46,13 @@ type blockBlobSenderBase struct {
 	blockIDs         []string
 	destBlobTier     azblob.AccessTierType
 
-	// Headers and other info that we will apply to the destination
-	// object. For S2S, these come from the source service.
-	// When sending local data, they are computed based on
-	// the properties of the local file
+	// Headers and other info that we will apply to the destination object.
+	// 1. For S2S, these come from the source service.
+	// 2. When sending local data, they are computed based on the properties of the local file
 	headersToApply  azblob.BlobHTTPHeaders
 	metadataToApply azblob.Metadata
 	blobTagsToApply azblob.BlobTagsMap
+	cpkToApply      azblob.ClientProvidedKeyOptions
 
 	atomicPutListIndicator int32
 	muBlockIDs             *sync.Mutex
@@ -126,6 +126,9 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		destBlobTier = blockBlobTierOverride.ToAccessTierType()
 	}
 
+	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
+	cpkToApply := common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
+
 	return &blockBlobSenderBase{
 		jptm:             jptm,
 		destBlockBlobURL: destBlockBlobURL,
@@ -137,6 +140,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		metadataToApply:  props.SrcMetadata.ToAzBlobMetadata(),
 		blobTagsToApply:  props.SrcBlobTags.ToAzBlobTagsMap(),
 		destBlobTier:     destBlobTier,
+		cpkToApply:       cpkToApply,
 		muBlockIDs:       &sync.Mutex{}}, nil
 }
 
@@ -153,7 +157,7 @@ func (s *blockBlobSenderBase) NumChunks() uint32 {
 }
 
 func (s *blockBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
-	return remoteObjectExists(s.destBlockBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}))
+	return remoteObjectExists(s.destBlockBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkToApply))
 }
 
 func (s *blockBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
@@ -191,13 +195,19 @@ func (s *blockBlobSenderBase) Epilogue() {
 			blobTags = nil
 		}
 
-		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, s.destBlobTier, blobTags); err != nil {
+		// TODO: Remove this snippet once service starts supporting CPK with blob tier
+		destBlobTier := s.destBlobTier
+		if s.cpkToApply.EncryptionScope != nil || (s.cpkToApply.EncryptionKey != nil && s.cpkToApply.EncryptionKeySha256 != nil) {
+			destBlobTier = azblob.AccessTierNone
+		}
+
+		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, destBlobTier, blobTags, s.cpkToApply); err != nil {
 			jptm.FailActiveSend("Committing block list", err)
 			return
 		}
 
 		if separateSetTagsRequired {
-			if _, err := s.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, nil, nil, nil, s.blobTagsToApply); err != nil {
+			if _, err := s.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, s.blobTagsToApply); err != nil {
 				s.jptm.Log(pipeline.LogWarning, err.Error())
 			}
 		}

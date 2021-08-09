@@ -53,7 +53,7 @@ func (s *fileSystemCrawlerSuite) TestParallelEnumerationFindsTheRightFiles(c *ch
 	_ = filepath.Walk(dir, func(path string, _ os.FileInfo, fileErr error) error {
 		if fileErr == nil {
 			stdResults[path] = struct{}{}
-		} else if strings.Contains(fileErr.Error(), "Access is denied") {
+		} else if strings.Contains(fileErr.Error(), "denied") {
 			stdAccessDenied[path] = struct{}{} // for a directory that cannot have _it's contents_ enumerated, filepath.Walk treats the directory as an error, whereas parallel.Walk returns a valid entry for the directory PLUS a separate error for trying to enumerate it
 		}
 		return nil
@@ -149,7 +149,7 @@ func (s *fileSystemCrawlerSuite) doTestParallelEnumerationGetsTheRightFileInfo(p
 				// anything useful, we don't use them.
 				// But a discrepancy on a file (not a directory) would be bad.
 				//
-				// Note that the directory discrepancies are reproducable from PowerShell on Win 10, so it's not a Go thing.
+				// Note that the directory discrepancies are reproducible from PowerShell on Win 10, so it's not a Go thing.
 				// Looking at the directory C:\Program Files\Microsoft SQL Server\90
 				// PS C:\Program Files\Microsoft SQL Server> (get-item 90).LastWriteTime
 				// Tuesday, August 27, 2019 5:29:08 AM

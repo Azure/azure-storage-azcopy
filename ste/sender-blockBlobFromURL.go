@@ -28,7 +28,7 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type urlToBlockBlobCopier struct {
@@ -68,25 +68,20 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 		setPutListNeed(&c.atomicPutListIndicator, putListNotNeeded)
 		return c.generateCreateEmptyBlob(id)
 	}
+	// Small blobs from all sources will be copied over to destination using PutBlobFromUrl with the exception of files
+	fromTo := c.blockBlobSenderBase.jptm.FromTo()
+	if c.NumChunks() == 1 && adjustedChunkSize <= int64(azblob.BlockBlobMaxUploadBlobBytes) && fromTo.From() != common.ELocation.File() {
+		/*
+		 * siminsavani: FYI: For GCP, if the blob is the entirety of the file, GCP still returns
+		 * invalid error from service due to PutBlockFromUrl.
+		 */
+		setPutListNeed(&c.atomicPutListIndicator, putListNotNeeded)
+		return c.generateStartPutBlobFromURL(id, blockIndex, adjustedChunkSize)
 
+	}
 	setPutListNeed(&c.atomicPutListIndicator, putListNeeded)
 	return c.generatePutBlockFromURL(id, blockIndex, adjustedChunkSize)
 }
-
-// Version with Sync CopyBlob
-// TODO: Consider to use sync version of copy blob from URL later.
-// func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
-// 	if chunkIsWholeFile {
-// 		if blockIndex > 0 {
-// 			panic("chunk cannot be whole file where there is more than one chunk")
-// 		}
-// 		setPutListNeed(&c.atomicPutListIndicator, putListNotNeeded)
-// 		return c.generateSyncCopyBlob(id, adjustedChunkSize)
-// 	} else {
-// 		setPutListNeed(&c.atomicPutListIndicator, putListNeeded)
-// 		return c.generatePutBlockFromURL(id, blockIndex, adjustedChunkSize)
-// 	}
-// }
 
 // generateCreateEmptyBlob generates a func to create empty blob in destination.
 // This could be replaced by sync version of copy blob from URL.
@@ -105,36 +100,25 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 		if separateSetTagsRequired || len(blobTags) == 0 {
 			blobTags = nil
 		}
-		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.headersToApply, c.metadataToApply, azblob.BlobAccessConditions{}, c.destBlobTier, blobTags); err != nil {
+
+		// TODO: Remove this snippet once service starts supporting CPK with blob tier
+		destBlobTier := c.destBlobTier
+		if c.cpkToApply.EncryptionScope != nil || (c.cpkToApply.EncryptionKey != nil && c.cpkToApply.EncryptionKeySha256 != nil) {
+			destBlobTier = azblob.AccessTierNone
+		}
+
+		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.headersToApply, c.metadataToApply, azblob.BlobAccessConditions{}, destBlobTier, blobTags, c.cpkToApply); err != nil {
 			jptm.FailActiveSend("Creating empty blob", err)
 			return
 		}
 
 		if separateSetTagsRequired {
-			if _, err := c.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, nil, nil, nil, c.blobTagsToApply); err != nil {
+			if _, err := c.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, c.blobTagsToApply); err != nil {
 				c.jptm.Log(pipeline.LogWarning, err.Error())
 			}
 		}
 	})
 }
-
-// generateSyncCopyBlob generates a func to sync copy entire blob to destination.
-// func (c *urlToBlockBlobCopier) generateSyncCopyBlob(id common.ChunkID, adjustedChunkSize int64) chunkFunc {
-// 	return createSendToRemoteChunkFunc(c.jptm, id, func() {
-// 		jptm := c.jptm
-
-// 		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
-// 		s2sPacer := newS2SPacer(c.pacer)
-
-// 		// Set the latest service version from sdk as service version in the context, to use SyncCopyFromURL API
-// 		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-// 		if _, err := c.destBlockBlobURL.SyncCopyFromURL(ctxWithLatestServiceVersion, c.srcURL, c.metadataToApply, azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}); err != nil {
-// 			jptm.FailActiveSend("Sync copy entire blob", err)
-// 			return
-// 		}
-// 		s2sPacer.Done(adjustedChunkSize)
-// 	})
-// }
 
 // generatePutBlockFromURL generates a func to copy the block of src data from given startIndex till the given chunkSize.
 func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockIndex int32, adjustedChunkSize int64) chunkFunc {
@@ -155,7 +139,7 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
 		_, err := c.destBlockBlobURL.StageBlockFromURL(ctxWithLatestServiceVersion, encodedBlockID, c.srcURL,
-			id.OffsetInFile(), adjustedChunkSize, azblob.LeaseAccessConditions{}, azblob.ModifiedAccessConditions{})
+			id.OffsetInFile(), adjustedChunkSize, azblob.LeaseAccessConditions{}, azblob.ModifiedAccessConditions{}, c.cpkToApply)
 		if err != nil {
 			c.jptm.FailActiveSend("Staging block from URL", err)
 			return
@@ -163,10 +147,55 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 	})
 }
 
+func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, blockIndex int32, adjustedChunkSize int64) chunkFunc {
+	return createSendToRemoteChunkFunc(c.jptm, id, func() {
+
+		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
+
+		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+
+		// Create blob and finish.
+		if !ValidateTier(c.jptm, c.destBlobTier, c.destBlockBlobURL.BlobURL, c.jptm.Context()) {
+			c.destBlobTier = azblob.DefaultAccessTier
+		}
+
+		blobTags := c.blobTagsToApply
+		separateSetTagsRequired := separateSetTagsRequired(blobTags)
+		if separateSetTagsRequired || len(blobTags) == 0 {
+			blobTags = nil
+		}
+
+		// TODO: Remove this snippet once service starts supporting CPK with blob tier
+		destBlobTier := c.destBlobTier
+		if c.cpkToApply.EncryptionScope != nil || (c.cpkToApply.EncryptionKey != nil && c.cpkToApply.EncryptionKeySha256 != nil) {
+			destBlobTier = azblob.AccessTierNone
+		}
+
+		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
+			c.jptm.FailActiveUpload("Pacing block", err)
+		}
+
+		_, err := c.destBlockBlobURL.PutBlobFromURL(ctxWithLatestServiceVersion, c.headersToApply, c.srcURL, c.metadataToApply,
+			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil, nil, destBlobTier, blobTags,
+			c.cpkToApply)
+
+		if err != nil {
+			c.jptm.FailActiveSend("Put Blob from URL", err)
+			return
+		}
+
+		if separateSetTagsRequired {
+			if _, err := c.destBlockBlobURL.SetTags(c.jptm.Context(), nil, nil, nil, c.blobTagsToApply); err != nil {
+				c.jptm.Log(pipeline.LogWarning, err.Error())
+			}
+		}
+	})
+}
+
 // GetDestinationLength gets the destination length.
 func (c *urlToBlockBlobCopier) GetDestinationLength() (int64, error) {
 	ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-	properties, err := c.destBlockBlobURL.GetProperties(ctxWithLatestServiceVersion, azblob.BlobAccessConditions{})
+	properties, err := c.destBlockBlobURL.GetProperties(ctxWithLatestServiceVersion, azblob.BlobAccessConditions{}, c.cpkToApply)
 	if err != nil {
 		return -1, err
 	}

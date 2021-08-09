@@ -23,7 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common/parallel"
+	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 	"net/url"
 	"strings"
 	"time"
@@ -31,7 +31,7 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-file-go/azfile"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // allow us to iterate through a path pointing to the file endpoint
@@ -70,6 +70,10 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		// check if the url points to a single file
 		fileProperties, isFile := t.getPropertiesIfSingleFile()
 		if isFile {
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(pipeline.LogDebug, "Detected the root as a file.")
+			}
+
 			storedObject := newStoredObject(
 				preprocessor,
 				getObjectNameOnly(targetURLParts.DirectoryOrFilePath),
@@ -115,7 +119,9 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			var fullProperties azfilePropertiesAdapter
 			fullProperties, err = f.propertyGetter(t.ctx)
 			if err != nil {
-				return storedObject{}, err
+				return storedObject{
+					relativePath: relativePath,
+				}, err
 			}
 			lmt = fullProperties.LastModified()
 			if f.entityType == common.EEntityType.File() {
@@ -188,6 +194,29 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 					enqueueDir(currentDirURL.NewDirectoryURL(dirInfo.Name))
 				}
 			}
+
+			// if debug mode is on, note down the result, this is not going to be fast
+			if azcopyScanningLogger != nil && azcopyScanningLogger.ShouldLog(pipeline.LogDebug) {
+				tokenValue := "NONE"
+				if marker.Val != nil {
+					tokenValue = *marker.Val
+				}
+
+				var dirListBuilder strings.Builder
+				for _, dir := range lResp.DirectoryItems {
+					fmt.Fprintf(&dirListBuilder, " %s,", dir.Name)
+				}
+				var fileListBuilder strings.Builder
+				for _, fileInfo := range lResp.FileItems {
+					fmt.Fprintf(&fileListBuilder, " %s,", fileInfo.Name)
+				}
+
+				dirName := azfile.NewFileURLParts(currentDirURL.URL()).DirectoryOrFilePath
+				msg := fmt.Sprintf("Enumerating %s with token %s. Sub-dirs:%s Files:%s", dirName,
+					tokenValue, dirListBuilder.String(), fileListBuilder.String())
+				azcopyScanningLogger.Log(pipeline.LogDebug, msg)
+			}
+
 			marker = lResp.NextMarker
 		}
 		return nil
@@ -207,8 +236,15 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 	for x := range cTransformed {
 		item, workerError := x.Item()
 		if workerError != nil {
-			cancelWorkers()
-			return workerError
+			relativePath := ""
+			if item != nil {
+				relativePath = item.(storedObject).relativePath
+			}
+			glcm.Info("Failed to scan directory/file " + relativePath + ". Logging errors in scanning logs.")
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(pipeline.LogWarning, workerError.Error())
+			}
+			continue
 		}
 		processErr := processStoredObject(item.(storedObject))
 		if processErr != nil {
@@ -217,6 +253,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		}
 	}
 
+	cancelWorkers()
 	return
 }
 

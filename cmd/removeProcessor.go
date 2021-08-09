@@ -21,7 +21,7 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
@@ -50,5 +50,5 @@ func newRemoveTransferProcessor(cca *cookedCopyCmdArgs, numOfTransfersPerPart in
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
 	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.source, cca.destination,
-		reportFirstPart, reportFinalPart, false)
+		reportFirstPart, reportFinalPart, false, cca.dryrunMode)
 }

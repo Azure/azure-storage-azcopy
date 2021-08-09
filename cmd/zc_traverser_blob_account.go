@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -40,9 +41,13 @@ type blobAccountTraverser struct {
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
+
+	s2sPreserveSourceTags bool
+
+	cpkOptions common.CpkOptions
 }
 
-func (t *blobAccountTraverser) isDirectory(isSource bool) bool {
+func (t *blobAccountTraverser) isDirectory(_ bool) bool {
 	return true // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
@@ -95,14 +100,15 @@ func (t *blobAccountTraverser) traverse(preprocessor objectMorpher, processor ob
 
 	for _, v := range cList {
 		containerURL := t.accountURL.NewContainerURL(v).URL()
-		containerTraverser := newBlobTraverser(&containerURL, t.p, t.ctx, true, t.includeDirectoryStubs, t.incrementEnumerationCounter)
+		containerTraverser := newBlobTraverser(&containerURL, t.p, t.ctx, true,
+			t.includeDirectoryStubs, t.incrementEnumerationCounter, t.s2sPreserveSourceTags, t.cpkOptions)
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
 		err = containerTraverser.traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
-			WarnStdoutAndJobLog(fmt.Sprintf("failed to list blobs in container %s: %s", v, err))
+			WarnStdoutAndScanningLog(fmt.Sprintf("failed to list blobs in container %s: %s", v, err))
 			continue
 		}
 	}
@@ -110,7 +116,9 @@ func (t *blobAccountTraverser) traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc) (t *blobAccountTraverser) {
+func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
+	includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc,
+	s2sPreserveSourceTags bool, cpkOptions common.CpkOptions) (t *blobAccountTraverser) {
 	bURLParts := azblob.NewBlobURLParts(*rawURL)
 	cPattern := bURLParts.ContainerName
 
@@ -119,8 +127,16 @@ func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.C
 		bURLParts.ContainerName = ""
 	}
 
-	t = &blobAccountTraverser{p: p, ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter,
-		accountURL: azblob.NewServiceURL(bURLParts.URL(), p), containerPattern: cPattern, includeDirectoryStubs: includeDirectoryStubs}
+	t = &blobAccountTraverser{
+		p:                           p,
+		ctx:                         ctx,
+		incrementEnumerationCounter: incrementEnumerationCounter,
+		accountURL:                  azblob.NewServiceURL(bURLParts.URL(), p),
+		containerPattern:            cPattern,
+		includeDirectoryStubs:       includeDirectoryStubs,
+		s2sPreserveSourceTags:       s2sPreserveSourceTags,
+		cpkOptions:                  cpkOptions,
+	}
 
 	return
 }

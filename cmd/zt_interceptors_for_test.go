@@ -24,7 +24,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // the interceptor gathers/saves the job part orders for validation
@@ -38,7 +38,7 @@ func (i *interceptor) intercept(cmd common.RpcCmd, request interface{}, response
 	case common.ERpcCmd.CopyJobPartOrder():
 		// cache the transfers
 		copyRequest := *request.(*common.CopyJobPartOrderRequest)
-		i.transfers = append(i.transfers, copyRequest.Transfers...)
+		i.transfers = append(i.transfers, copyRequest.Transfers.List...)
 		i.lastRequest = request
 
 		// mock the result
@@ -74,10 +74,12 @@ func (i *interceptor) reset() {
 
 // this lifecycle manager substitute does not perform any action
 type mockedLifecycleManager struct {
-	infoLog     chan string
-	errorLog    chan string
-	progressLog chan string
-	exitLog     chan string
+	infoLog      chan string
+	errorLog     chan string
+	progressLog  chan string
+	exitLog      chan string
+	dryrunLog    chan string
+	outputFormat common.OutputFormat
 }
 
 func (m *mockedLifecycleManager) Progress(o common.OutputBuilder) {
@@ -90,6 +92,12 @@ func (*mockedLifecycleManager) Init(common.OutputBuilder) {}
 func (m *mockedLifecycleManager) Info(msg string) {
 	select {
 	case m.infoLog <- msg:
+	default:
+	}
+}
+func (m *mockedLifecycleManager) Dryrun(o common.OutputBuilder) {
+	select {
+	case m.dryrunLog <- o(m.outputFormat):
 	default:
 	}
 }
@@ -109,6 +117,7 @@ func (m *mockedLifecycleManager) Error(msg string) {
 	}
 }
 func (*mockedLifecycleManager) SurrenderControl()                               {}
+func (*mockedLifecycleManager) RegisterCloseFunc(func())                        {}
 func (mockedLifecycleManager) AllowReinitiateProgressReporting()                {}
 func (*mockedLifecycleManager) InitiateProgressReporting(common.WorkController) {}
 func (*mockedLifecycleManager) ClearEnvironmentVariable(env common.EnvironmentVariable) {
@@ -121,11 +130,19 @@ func (*mockedLifecycleManager) GetEnvironmentVariable(env common.EnvironmentVari
 	}
 	return value
 }
-func (*mockedLifecycleManager) SetOutputFormat(common.OutputFormat) {}
-func (*mockedLifecycleManager) EnableInputWatcher()                 {}
-func (*mockedLifecycleManager) EnableCancelFromStdIn()              {}
+func (m *mockedLifecycleManager) SetOutputFormat(format common.OutputFormat) {
+	m.outputFormat = format
+}
+func (*mockedLifecycleManager) EnableInputWatcher()    {}
+func (*mockedLifecycleManager) EnableCancelFromStdIn() {}
 func (*mockedLifecycleManager) AddUserAgentPrefix(userAgent string) string {
 	return userAgent
+}
+
+func (*mockedLifecycleManager) SetForceLogging() {}
+
+func (*mockedLifecycleManager) IsForceLoggingDisabled() bool {
+	return false
 }
 
 func (*mockedLifecycleManager) E2EAwaitContinue() {

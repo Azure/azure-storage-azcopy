@@ -29,15 +29,14 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // upload related
 const UploadMaxTries = 20
-const UploadTryTimeout = time.Minute * 15
 const UploadRetryDelay = time.Second * 1
 const UploadMaxRetryDelay = time.Second * 60
-
+var UploadTryTimeout = time.Minute * 15
 var ADLSFlushThreshold uint32 = 7500 // The # of blocks to flush at a time-- Implemented only for CI.
 
 // download related
@@ -104,7 +103,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 			// sending from remote = doing an S2S copy
 			switch fromTo.To() {
 			case common.ELocation.Blob(),
-				common.ELocation.S3():
+				common.ELocation.S3(), common.ELocation.GCP():
 				return newURLToBlobCopier
 			case common.ELocation.File():
 				return newURLToAzureFileCopier
@@ -142,6 +141,8 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 			panic(blobFSNotS2S)
 		case common.ELocation.S3():
 			return newS3SourceInfoProvider
+		case common.ELocation.GCP():
+			return newGCPSourceInfoProvider
 		default:
 			panic("unexpected source type")
 		}

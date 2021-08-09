@@ -40,8 +40,8 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
 
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
 const pipingUploadParallelism = 5
@@ -72,6 +72,8 @@ type rawCopyCmdArgs struct {
 	exclude               string
 	includePath           string // NOTE: This gets handled like list-of-files! It may LOOK like a bug, but it is not.
 	excludePath           string
+	includeRegex          string
+	excludeRegex          string
 	includeFileAttributes string
 	excludeFileAttributes string
 	includeBefore         string
@@ -104,6 +106,7 @@ type rawCopyCmdArgs struct {
 	md5ValidationOption      string
 	CheckLength              bool
 	deleteSnapshotsOption    string
+	dryrun                   bool
 
 	blobTags string
 	// defines the type of the blob at the destination in case of upload / account to account copy
@@ -120,6 +123,8 @@ type rawCopyCmdArgs struct {
 	// Opt-in flag to persist additional SMB properties to Azure Files. Named ...info instead of ...properties
 	// because the latter was similar enough to preserveSMBPermissions to induce user error
 	preserveSMBInfo bool
+	// Opt-in flag to preserve the blob index tags during service to service transfer.
+	s2sPreserveBlobTags bool
 	// Flag to enable Window's special privileges
 	backupMode bool
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
@@ -144,6 +149,18 @@ type rawCopyCmdArgs struct {
 
 	// whether to include blobs that have metadata 'hdi_isfolder = true'
 	includeDirectoryStubs bool
+
+	// whether to disable automatic decoding of illegal chars on Windows
+	disableAutoDecoding bool
+
+	// Optional flag to encrypt user data with user provided key.
+	// Key is provide in the REST request itself
+	// Provided key (EncryptionKey and EncryptionKeySHA256) and its hash will be fetched from environment variables
+	// Set EncryptionAlgorithm = "AES256" by default.
+	cpkInfo bool
+	// Key is present in AzureKeyVault and Azure KeyVault is linked with storage account.
+	// Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data
+	cpkScopeInfo string
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -181,12 +198,6 @@ func blockSizeInBytes(rawBlockSizeInMiB float64) (int64, error) {
 		return 0, fmt.Errorf("while fractional numbers of MiB are allowed as the block size, the fraction must result to a whole number of bytes. %.12f MiB resolves to %.3f bytes", rawBlockSizeInMiB, rawSizeInBytes)
 	}
 	return int64(math.Round(rawSizeInBytes)), nil
-}
-
-// validates and transform raw input into cooked input
-func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
-	// generate a unique job ID
-	return raw.cookWithId(common.NewJobID())
 }
 
 // returns result of stripping and if striptopdir is enabled
@@ -230,10 +241,34 @@ func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Lo
 	return
 }
 
-func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, error) {
-
+func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked := cookedCopyCmdArgs{
-		jobID: jobId,
+		jobID: azcopyCurrentJobID,
+	}
+
+	err := cooked.logVerbosity.Parse(raw.logVerbosity)
+	if err != nil {
+		return cooked, err
+	}
+
+	// set up the front end scanning logger
+	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, cooked.logVerbosity, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger.OpenLog()
+	glcm.RegisterCloseFunc(func() {
+		azcopyScanningLogger.CloseLog()
+	})
+
+	/* We support DFS by using blob end-point of the account. We replace dfs by blob in src and dst */
+	if src, dst := inferArgumentLocation(raw.src), inferArgumentLocation(raw.dst); src == common.ELocation.BlobFS() || dst == common.ELocation.BlobFS() {
+		if src == common.ELocation.BlobFS() && dst != common.ELocation.Local() {
+			raw.src = strings.Replace(raw.src, ".dfs", ".blob", 1)
+			glcm.Info("Switching to use blob endpoint on source account.")
+		}
+
+		if dst == common.ELocation.BlobFS() && src != common.ELocation.Local() {
+			raw.dst = strings.Replace(raw.dst, ".dfs", ".blob", 1)
+			glcm.Info("Switching to use blob endpoint on destination account.")
+		}
 	}
 
 	fromTo, err := validateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
@@ -323,10 +358,6 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		return cooked, err
 	}
 	err = cooked.pageBlobTier.Parse(raw.pageBlobTier)
-	if err != nil {
-		return cooked, err
-	}
-	err = cooked.logVerbosity.Parse(raw.logVerbosity)
 	if err != nil {
 		return cooked, err
 	}
@@ -498,6 +529,7 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 	cooked.includeDirectoryStubs = raw.includeDirectoryStubs
+	cooked.disableAutoDecoding = raw.disableAutoDecoding
 
 	if cooked.fromTo.To() != common.ELocation.Blob() && raw.blobTags != "" {
 		return cooked, errors.New("blob tags can only be set when transferring to blob storage")
@@ -508,6 +540,51 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		return cooked, err
 	}
 	cooked.blobTags = blobTags
+
+	// Check if user has provided `s2s-preserve-blob-tags` flag. If yes, we have to ensure that
+	// 1. Both source and destination must be blob storages.
+	// 2. `blob-tags` is not present as they create conflicting scenario of whether to preserve blob tags from the source or set user defined tags on the destination
+	if raw.s2sPreserveBlobTags {
+		if cooked.fromTo.From() != common.ELocation.Blob() || cooked.fromTo.To() != common.ELocation.Blob() {
+			return cooked, errors.New("either source or destination is not a blob storage. blob index tags is a property of blobs only therefore both source and destination must be blob storage")
+		} else if raw.blobTags != "" {
+			return cooked, errors.New("both s2s-preserve-blob-tags and blob-tags flags cannot be used in conjunction")
+		} else {
+			cooked.s2sPreserveBlobTags = raw.s2sPreserveBlobTags
+		}
+	}
+
+	// Setting CPK-N
+	cpkOptions := common.CpkOptions{}
+	// Setting CPK-N
+	if raw.cpkScopeInfo != "" {
+		if raw.cpkInfo {
+			return cooked, errors.New("cannot use both cpk-by-name and cpk-by-value at the same time")
+		}
+		cpkOptions.CpkScopeInfo = raw.cpkScopeInfo
+	}
+
+	// Setting CPK-V
+	// Get the key (EncryptionKey and EncryptionKeySHA256) value from environment variables when required.
+	cpkOptions.CpkInfo = raw.cpkInfo
+
+	if cpkOptions.CpkScopeInfo != "" || cpkOptions.CpkInfo {
+		// We only support transfer from source encrypted by user key when user wishes to download.
+		// Due to service limitation, S2S transfer is not supported for source encrypted by user key.
+		if cooked.fromTo.IsDownload() {
+			glcm.Info("Client Provided Key (CPK) for encryption/decryption is provided for download scenario. " +
+				"Assuming source is encrypted.")
+			cpkOptions.IsSourceEncrypted = true
+		}
+
+		// TODO: Remove these warnings once service starts supporting it
+		if cooked.blockBlobTier != common.EBlockBlobTier.None() || cooked.pageBlobTier != common.EPageBlobTier.None() {
+			glcm.Info("Tier is provided by user explicitly. Ignoring it because Azure Service currently does" +
+				" not support setting tier when client provided keys are involved.")
+		}
+	}
+
+	cooked.cpkOptions = cpkOptions
 
 	// Make sure the given input is the one of the enums given by the blob SDK
 	err = cooked.deleteSnapshotsOption.Parse(raw.deleteSnapshotsOption)
@@ -660,7 +737,8 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		common.EFromTo.S3Blob(),
 		common.EFromTo.BlobBlob(),
 		common.EFromTo.FileBlob(),
-		common.EFromTo.FileFile():
+		common.EFromTo.FileFile(),
+		common.EFromTo.GCPBlob():
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while copying from service to service")
 		}
@@ -727,6 +805,11 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 	}
 	cooked.includeFileAttributes = raw.parsePatterns(raw.includeFileAttributes)
 	cooked.excludeFileAttributes = raw.parsePatterns(raw.excludeFileAttributes)
+
+	cooked.includeRegex = raw.parsePatterns(raw.includeRegex)
+	cooked.excludeRegex = raw.parsePatterns(raw.excludeRegex)
+
+	cooked.dryrunMode = raw.dryrun
 
 	return cooked, nil
 }
@@ -902,6 +985,10 @@ type cookedCopyCmdArgs struct {
 	includeBefore         *time.Time
 	includeAfter          *time.Time
 
+	// include/exclude filters with regular expression (also for sync)
+	includeRegex []string
+	excludeRegex []string
+
 	// list of version ids
 	listOfVersionIDs chan string
 	// filters from flags
@@ -981,6 +1068,8 @@ type cookedCopyCmdArgs struct {
 	// whether user wants to check if source has changed after enumerating, the default value is true.
 	// For S2S copy, as source is a remote resource, validating whether source has changed need additional request costs.
 	s2sSourceChangeValidation bool
+	// To specify whether user wants to preserve the blob index tags during service to service transfer.
+	s2sPreserveBlobTags bool
 	// specify how user wants to handle invalid metadata.
 	s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption
 
@@ -993,6 +1082,14 @@ type cookedCopyCmdArgs struct {
 
 	// whether to include blobs that have metadata 'hdi_isfolder = true'
 	includeDirectoryStubs bool
+
+	// whether to disable automatic decoding of illegal chars on Windows
+	disableAutoDecoding bool
+
+	// specify if dry run mode on
+	dryrunMode bool
+
+	cpkOptions common.CpkOptions
 }
 
 func (cca *cookedCopyCmdArgs) isRedirection() bool {
@@ -1050,14 +1147,14 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	// The isPublic flag is useful in S2S transfers but doesn't much matter for download. Fortunately, no S2S happens here.
 	// This means that if there's auth, there's auth. We're happy and can move on.
 	// getCredentialInfoForLocation also populates oauth token fields... so, it's very easy.
-	credInfo, _, err := getCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, true)
+	credInfo, _, err := getCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, true, cca.cpkOptions)
 
 	if err != nil {
 		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
 	}
 
 	// step 1: initialize pipeline
-	p, err := createBlobPipeline(ctx, credInfo)
+	p, err := createBlobPipeline(ctx, credInfo, pipeline.LogNone)
 	if err != nil {
 		return err
 	}
@@ -1070,7 +1167,11 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	// step 3: start download
 	blobURL := azblob.NewBlobURL(*u, p)
-	blobStream, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
+	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
+	if cca.cpkOptions.IsSourceEncrypted {
+		clientProvidedKey = common.GetClientProvidedKey(cca.cpkOptions)
+	}
+	blobStream, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, clientProvidedKey)
 	if err != nil {
 		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
 	}
@@ -1096,14 +1197,14 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// getCredentialInfoForLocation populates oauth token fields... so, it's very easy.
-	credInfo, _, err := getCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, false)
+	credInfo, _, err := getCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, false, cca.cpkOptions)
 
 	if err != nil {
 		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
 	}
 
 	// step 0: initialize pipeline
-	p, err := createBlobPipeline(ctx, credInfo)
+	p, err := createBlobPipeline(ctx, credInfo, pipeline.LogNone)
 	if err != nil {
 		return err
 	}
@@ -1116,9 +1217,33 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
 	blockBlobUrl := azblob.NewBlockBlobURL(*u, p)
+	metadataString := cca.metadata
+	metadataMap := common.Metadata{}
+	if len(metadataString) > 0 {
+		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
+			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+			metadataMap[kv[0]] = kv[1]
+		}
+	}
+	blobTags := cca.blobTags
+	bbAccessTier := azblob.DefaultAccessTier
+	if cca.blockBlobTier != common.EBlockBlobTier.None() {
+		bbAccessTier = azblob.AccessTierType(cca.blockBlobTier.String())
+	}
 	_, err = azblob.UploadStreamToBlockBlob(ctx, os.Stdin, blockBlobUrl, azblob.UploadStreamToBlockBlobOptions{
-		BufferSize: int(blockSize),
-		MaxBuffers: pipingUploadParallelism,
+		BufferSize:  int(blockSize),
+		MaxBuffers:  pipingUploadParallelism,
+		Metadata:    metadataMap.ToAzBlobMetadata(),
+		BlobTagsMap: blobTags.ToAzBlobTagsMap(),
+		BlobHTTPHeaders: azblob.BlobHTTPHeaders{
+			ContentType:        cca.contentType,
+			ContentLanguage:    cca.contentLanguage,
+			ContentEncoding:    cca.contentEncoding,
+			ContentDisposition: cca.contentDisposition,
+			CacheControl:       cca.cacheControl,
+		},
+		BlobAccessTier:           bbAccessTier,
+		ClientProvidedKeyOptions: common.GetClientProvidedKey(cca.cpkOptions),
 	})
 
 	return err
@@ -1142,7 +1267,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		destination:    cca.destination.Value,
 		sourceSAS:      cca.source.SAS,
 		destinationSAS: cca.destination.SAS,
-	}); err != nil {
+	}, cca.cpkOptions); err != nil {
 		return err
 	}
 
@@ -1185,7 +1310,8 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			PutMd5:                   cca.putMd5,
 			MD5ValidationOption:      cca.md5ValidationOption,
 			DeleteSnapshotsOption:    cca.deleteSnapshotsOption,
-			BlobTagsString:           cca.blobTags.ToString(),
+			// Setting tags when tags explicitly provided by the user through blob-tags flag
+			BlobTagsString: cca.blobTags.ToString(),
 		},
 		CommandString:  cca.commandString,
 		CredentialInfo: cca.credentialInfo,
@@ -1225,6 +1351,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		common.EFromTo.FileFile(),
 		common.EFromTo.BlobFile(),
 		common.EFromTo.S3Blob(),
+		common.EFromTo.GCPBlob(),
 		common.EFromTo.BenchmarkBlob(),
 		common.EFromTo.BenchmarkBlobFS(),
 		common.EFromTo.BenchmarkFile():
@@ -1272,13 +1399,16 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 // if blocking is specified to false, then another goroutine spawns and wait out the job
 func (cca *cookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
-	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(),
-		fmt.Sprintf("%s%s%s.log",
-			azcopyLogPathFolder,
-			common.OS_PATH_SEPARATOR,
-			cca.jobID),
-		cca.isCleanupJob,
-		cca.cleanupJobMessage))
+	// if on dry run mode do not want to print message since no  job is being done
+	if !cca.dryrunMode {
+		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(),
+			fmt.Sprintf("%s%s%s.log",
+				azcopyLogPathFolder,
+				common.OS_PATH_SEPARATOR,
+				cca.jobID),
+			cca.isCleanupJob,
+			cca.cleanupJobMessage))
+	}
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -1627,6 +1757,10 @@ func init() {
 				glcm.Error("failed to perform copy command due to error: " + err.Error())
 			}
 
+			if cooked.dryrunMode {
+				glcm.Exit(nil, common.EExitCode.Success())
+			}
+
 			glcm.SurrenderControl()
 		},
 	}
@@ -1642,6 +1776,8 @@ func init() {
 		"This option does not support wildcard characters (*). Checks relative path prefix (For example: myFolder;myFolder/subDirName/file.pdf).")
 	cpCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "Exclude these paths when copying. "+ // Currently, only exclude-path is supported alongside account traversal.
 		"This option does not support wildcard characters (*). Checks relative path prefix(For example: myFolder;myFolder/subDirName/file.pdf). When used in combination with account traversal, paths do not include the container name.")
+	cpCmd.PersistentFlags().StringVar(&raw.includeRegex, "include-regex", "", "Include only the relative path of the files that align with regular expressions. Separate regular expressions with ';'.")
+	cpCmd.PersistentFlags().StringVar(&raw.excludeRegex, "exclude-regex", "", "Exclude all the relative path of the files that align with regular expressions. Separate regular expressions with ';'.")
 	// This flag is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "Defines the location of text file which has the list of only files to be copied.")
 	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude these files when copying. This option supports wildcard characters (*)")
@@ -1685,6 +1821,10 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.s2sInvalidMetadataHandleOption, "s2s-handle-invalid-metadata", common.DefaultInvalidMetadataHandleOption.String(), "Specifies how invalid metadata keys are handled. Available options: ExcludeIfInvalid, FailIfInvalid, RenameIfInvalid. (default 'ExcludeIfInvalid').")
 	cpCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-versions", "", "Specifies a file where each version id is listed on a separate line. Ensure that the source must point to a single blob and all the version ids specified in the file using this flag must belong to the source blob only. AzCopy will download the specified versions in the destination folder provided.")
 	cpCmd.PersistentFlags().StringVar(&raw.blobTags, "blob-tags", "", "Set tags on blobs to categorize data in your storage account")
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveBlobTags, "s2s-preserve-blob-tags", false, "Preserve index tags during service to service transfer from one blob storage to another")
+	cpCmd.PersistentFlags().BoolVar(&raw.includeDirectoryStubs, "include-directory-stub", false, "False by default to ignore directory stubs. Directory stubs are blobs with metadata 'hdi_isfolder:true'. Setting value to true will preserve directory stubs during transfers.")
+	cpCmd.PersistentFlags().BoolVar(&raw.disableAutoDecoding, "disable-auto-decoding", false, "False by default to enable automatic decoding of illegal chars on Windows. Can be set to true to disable automatic decoding.")
+	cpCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the file paths that would be copied by this command. This flag does not copy the actual files.")
 	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
 	// right before transferring in ste(backend).
 	// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),
@@ -1694,6 +1834,13 @@ func init() {
 	// so properties can be get in parallel, at same time no additional go routines are created for this specific job.
 	// The usage of this hidden flag is to provide fallback to traditional behavior, when service supports returning full properties during list.
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true, "get S3 objects' or Azure files' properties in backend, if properties need to be accessed. Properties need to be accessed if s2s-preserve-properties is true, and in certain other cases where we need the properties for modification time checks or MD5 checks")
+
+	// Public Documentation: https://docs.microsoft.com/en-us/azure/storage/blobs/encryption-customer-provided-keys
+	// Clients making requests against Azure Blob storage have the option to provide an encryption key on a per-request basis.
+	// Including the encryption key on the request provides granular control over encryption settings for Blob storage operations.
+	// Customer-provided keys can be stored in Azure Key Vault or in another key store linked to storage account.
+	cpCmd.PersistentFlags().StringVar(&raw.cpkScopeInfo, "cpk-by-name", "", "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data")
+	cpCmd.PersistentFlags().BoolVar(&raw.cpkInfo, "cpk-by-value", false, "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key and its hash will be fetched from environment variables")
 
 	// permanently hidden
 	// Hide the list-of-files flag since it is implemented only for Storage Explorer.

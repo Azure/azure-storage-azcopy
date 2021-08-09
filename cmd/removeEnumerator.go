@@ -29,9 +29,9 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
 var NothingToRemoveError = errors.New("nothing found to remove")
@@ -46,8 +46,10 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &cca.credentialInfo, nil,
-		cca.listOfFilesChannel, cca.recursive, false, cca.includeDirectoryStubs, func(common.EntityType) {}, cca.listOfVersionIDs)
+	sourceTraverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &cca.credentialInfo,
+		nil, cca.listOfFilesChannel, cca.recursive, false, cca.includeDirectoryStubs,
+		func(common.EntityType) {}, cca.listOfVersionIDs, false,
+		cca.logVerbosity.ToPipelineLogLevel(), cca.cpkOptions)
 
 	// report failure to create traverser
 	if err != nil {
@@ -66,7 +68,10 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	// (Must enumerate folders when deleting from a folder-aware location. Can't do folder deletion just based on file
 	// deletion, because that would not handle folders that were empty at the start of the job).
 	fpo, message := newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters, false, false)
-	glcm.Info(message)
+	// do not print Info message if in dry run mode
+	if !cca.dryrunMode {
+		glcm.Info(message)
+	}
 	if ste.JobsAdmin != nil {
 		ste.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
 	}
@@ -76,7 +81,9 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	finalize := func() error {
 		jobInitiated, err := transferScheduler.dispatchFinalPart()
 		if err != nil {
-			if err == NothingScheduledError {
+			if cca.dryrunMode {
+				return nil
+			} else if err == NothingScheduledError {
 				// No log file needed. Logging begins as a part of awaiting job completion.
 				return NothingToRemoveError
 			}
@@ -117,7 +124,7 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
 	}
 
 	// create bfs pipeline
-	p, err := createBlobFSPipeline(ctx, cca.credentialInfo)
+	p, err := createBlobFSPipeline(ctx, cca.credentialInfo, cca.logVerbosity.ToPipelineLogLevel())
 	if err != nil {
 		return err
 	}

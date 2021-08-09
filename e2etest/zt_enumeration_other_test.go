@@ -21,7 +21,7 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"testing"
 )
 
@@ -30,7 +30,7 @@ import (
 func TestEnumeration_DirectoryStubsAreNotDownloaded(t *testing.T) {
 	RunScenarios(
 		t,
-		eOperation.CopyAndSync(),
+		eOperation.Copy(),
 		eTestFromTo.Other(common.EFromTo.BlobLocal()), // TODO: does this apply to any additional cases?
 		eValidate.Auto(),
 		params{

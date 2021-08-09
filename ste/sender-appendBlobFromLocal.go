@@ -22,7 +22,7 @@ package ste
 
 import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
@@ -52,7 +52,7 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 		_, err := u.destAppendBlobURL.AppendBlock(u.jptm.Context(), body,
 			azblob.AppendBlobAccessConditions{
 				AppendPositionAccessConditions: azblob.AppendPositionAccessConditions{IfAppendPositionEqual: id.OffsetInFile()},
-			}, nil)
+			}, nil, u.cpkToApply)
 		if err != nil {
 			u.jptm.FailActiveUpload("Appending block", err)
 			return
@@ -79,7 +79,7 @@ func (u *appendBlobUploader) Epilogue() {
 }
 
 func (u *appendBlobUploader) GetDestinationLength() (int64, error) {
-	prop, err := u.destAppendBlobURL.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{})
+	prop, err := u.destAppendBlobURL.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{}, u.cpkToApply)
 
 	if err != nil {
 		return -1, err

@@ -32,8 +32,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
 )
@@ -48,6 +48,8 @@ var azcopyOutputFormat common.OutputFormat
 var cmdLineCapMegaBitsPerSecond float64
 var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
+var azcopyScanningLogger common.ILoggerResetable
+var azcopyCurrentJobID common.JobID
 
 // It's not pretty that this one is read directly by credential util.
 // But doing otherwise required us passing it around in many places, even though really
@@ -62,7 +64,12 @@ var rootCmd = &cobra.Command{
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-
+		if glcm.GetEnvironmentVariable(common.EEnvironmentVariable.RequestTryTimeout()) != "" {
+			timeout, err := time.ParseDuration(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.RequestTryTimeout()) + "m")
+			if err == nil {
+				ste.UploadTryTimeout = timeout
+			}
+		}
 		glcm.E2EEnableAwaitAllowOpenFiles(azcopyAwaitAllowOpenFiles)
 		if azcopyAwaitContinue {
 			glcm.E2EAwaitContinue()
@@ -75,6 +82,8 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
+		glcm.SetForceLogging()
 
 		// warn Windows users re quoting (since our docs all use single quotes, but CMD needs double)
 		// Single ones just come through as part of the args, in CMD.
@@ -137,6 +146,7 @@ func Execute(azsAppPathFolder, logPathFolder string, jobPlanFolder string, maxFi
 	azcopyLogPathFolder = logPathFolder
 	azcopyJobPlanFolder = jobPlanFolder
 	azcopyMaxFileAndSocketHandles = maxFileAndSocketHandles
+	azcopyCurrentJobID = common.NewJobID()
 
 	if err := rootCmd.Execute(); err != nil {
 		glcm.Error(err.Error())
@@ -195,7 +205,7 @@ func beginDetectNewVersion() chan struct{} {
 		}
 
 		// step 1: initialize pipeline
-		p, err := createBlobPipeline(context.TODO(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+		p, err := createBlobPipeline(context.TODO(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, pipeline.LogNone)
 		if err != nil {
 			return
 		}
@@ -208,7 +218,7 @@ func beginDetectNewVersion() chan struct{} {
 
 		// step 3: start download
 		blobURL := azblob.NewBlobURL(*u, p)
-		blobStream, err := blobURL.Download(context.TODO(), 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
+		blobStream, err := blobURL.Download(context.TODO(), 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
 		if err != nil {
 			return
 		}

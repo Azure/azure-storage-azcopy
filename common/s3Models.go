@@ -34,6 +34,7 @@ type ObjectInfoExtension struct {
 func (oie *ObjectInfoExtension) ContentType() string {
 	return oie.ObjectInfo.ContentType
 }
+
 // CacheControl returns the value for header Cache-Control.
 func (oie *ObjectInfoExtension) CacheControl() string {
 	return oie.ObjectInfo.Metadata.Get("Cache-Control")

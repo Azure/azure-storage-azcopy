@@ -31,7 +31,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
@@ -80,8 +80,8 @@ func (TestResourceFactory) GetBlobServiceURLWithSAS(c asserter, accountType Acco
 	sasQueryParams, err := azblob.AccountSASSignatureValues{
 		Protocol:      azblob.SASProtocolHTTPS,
 		ExpiryTime:    time.Now().Add(48 * time.Hour),
-		Permissions:   azfile.AccountSASPermissions{Read: true, List: true, Write: true, Delete: true, Add: true, Create: true, Update: true, Process: true}.String(),
-		Services:      azfile.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
+		Permissions:   azblob.AccountSASPermissions{Read: true, List: true, Write: true, Delete: true, DeletePreviousVersion: true, Add: true, Create: true, Update: true, Process: true, Tag: true, FilterByTags: true}.String(),
+		Services:      azblob.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
 		ResourceTypes: azfile.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
 	}.NewSASQueryParameters(credential)
 	c.AssertNoErr(err)
@@ -107,7 +107,7 @@ func (TestResourceFactory) GetContainerURLWithSAS(c asserter, accountType Accoun
 		Protocol:      azblob.SASProtocolHTTPS,
 		ExpiryTime:    time.Now().UTC().Add(48 * time.Hour),
 		ContainerName: containerName,
-		Permissions:   azblob.ContainerSASPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, List: true}.String(),
+		Permissions:   azblob.ContainerSASPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true, Tag: true}.String(),
 	}.NewSASQueryParameters(credential)
 	c.AssertNoErr(err)
 
@@ -247,7 +247,7 @@ func getTestName(t *testing.T) (pseudoSuite, test string) {
 // Will truncate the end of the test name, if there is not enough room for it, followed by the time-based suffix,
 // with a non-zero maxLen.
 func generateName(c asserter, prefix string, maxLen int) string {
-	name := c.CompactScenarioName() // don't want to just use test name here, because each test contains multiple scearios with the declarative runner
+	name := c.CompactScenarioName() // don't want to just use test name here, because each test contains multiple scenarios with the declarative runner
 
 	textualPortion := fmt.Sprintf("%s-%s", prefix, strings.ToLower(name))
 	currentTime := time.Now()

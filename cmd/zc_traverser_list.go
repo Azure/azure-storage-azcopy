@@ -23,9 +23,10 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"net/url"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // a meta traverser that goes through a list of paths (potentially directory entities) and scans them one by one
@@ -60,7 +61,7 @@ func (l *listTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		}
 
 		// listTraverser will only ever execute on the source
-		if childTraverser.isDirectory(true) && !l.recursive {
+		if !l.recursive && childTraverser.isDirectory(true) {
 			continue // skip over directories
 		}
 
@@ -87,8 +88,10 @@ func (l *listTraverser) traverse(preprocessor objectMorpher, processor objectPro
 	return nil
 }
 
-func newListTraverser(parent common.ResourceString, parentType common.Location, credential *common.CredentialInfo, ctx *context.Context,
-	recursive, followSymlinks, getProperties bool, listChan chan string, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc) resourceTraverser {
+func newListTraverser(parent common.ResourceString, parentType common.Location, credential *common.CredentialInfo,
+	ctx *context.Context, recursive, followSymlinks, getProperties bool, listChan chan string,
+	includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveBlobTags bool,
+	logLevel pipeline.LogLevel, cpkOptions common.CpkOptions) resourceTraverser {
 	var traverserGenerator childTraverserGenerator
 
 	traverserGenerator = func(relativeChildPath string) (resourceTraverser, error) {
@@ -104,7 +107,9 @@ func newListTraverser(parent common.ResourceString, parentType common.Location, 
 		}
 
 		// Construct a traverser that goes through the child
-		traverser, err := initResourceTraverser(source, parentType, ctx, credential, &followSymlinks, nil, recursive, getProperties, includeDirectoryStubs, incrementEnumerationCounter, nil)
+		traverser, err := initResourceTraverser(source, parentType, ctx, credential, &followSymlinks,
+			nil, recursive, getProperties, includeDirectoryStubs, incrementEnumerationCounter,
+			nil, s2sPreserveBlobTags, logLevel, cpkOptions)
 		if err != nil {
 			return nil, err
 		}

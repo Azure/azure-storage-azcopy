@@ -34,7 +34,7 @@ import (
 	"sync"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // This code for blob tier safety is _not_ safe for multiple jobs at once.
@@ -165,10 +165,8 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 			// if src does not have snapshot/versionId, then error out as we cannot copy into the object itself
 			// if dst has snapshot or versionId specified, do not error and let the service fail the request with clear message
 			srcRQ := srcURL.Query()
-			dstRQ := dstURL.Query()
 
-			// note that query is now all lower case at this point
-			if len(srcRQ["snapshot"]) == 0 && len(srcRQ["versionid"]) == 0 && len(dstRQ["snapshot"]) == 0 && len(dstRQ["versionid"]) == 0 {
+			if len(srcRQ["sharesnapshot"]) == 0 && len(srcRQ["snapshot"]) == 0 && len(srcRQ["versionid"]) == 0 {
 				jptm.LogSendError(info.Source, info.Destination, "Transfer source and destination are the same, which would cause data loss. Aborting transfer.", 0)
 				jptm.SetStatus(common.ETransferStatus.Failed())
 				jptm.ReportTransferDone()
@@ -407,6 +405,11 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 					// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
 					prefetchErr = chunkReader.BlockingPrefetch(srcFile, false)
 					if prefetchErr == nil {
+						// *** NOTE: the hasher hashes the buffer as it is right now.  IF the chunk upload fails, then
+						//     the chunkReader will repeat the read from disk. So there is an essential dependency
+						//     between the hashing and our change detection logic.
+						common.DocumentationForDependencyOnChangeDetection() // <-- read the documentation here ***
+
 						chunkReader.WriteBufferTo(md5Hasher)
 						ps = chunkReader.GetPrologueState()
 					} else {
@@ -503,7 +506,12 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 			if err != nil {
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", err)
 			}
+
 			if !lmt.Equal(jptm.LastModifiedTime()) {
+				// **** Note that this check is ESSENTIAL and not just for the obvious reason of not wanting to upload
+				//      corrupt or inconsistent data. It's also essential to the integrity of our MD5 hashes.
+				common.DocumentationForDependencyOnChangeDetection() // <-- read the documentation here ***
+
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("source modified during transfer"))
 			}
 		}

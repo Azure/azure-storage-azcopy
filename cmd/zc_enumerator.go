@@ -35,9 +35,8 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // -------------------------------------- Component Definitions -------------------------------------- \\
@@ -81,11 +80,13 @@ type storedObject struct {
 	// metadata, included in S2S transfers
 	Metadata      common.Metadata
 	blobVersionID string
-}
+	blobTags      common.BlobTags
 
-const (
-	blobTypeNA = azblob.BlobNone // some things, e.g. local files, aren't blobs so they don't have their own blob type so we use this "not applicable" constant
-)
+	// Lease information
+	leaseState    azblob.LeaseStateType
+	leaseStatus   azblob.LeaseStatusType
+	leaseDuration azblob.LeaseDurationType
+}
 
 func (s *storedObject) isMoreRecentThan(storedObject2 storedObject) bool {
 	return s.lastModifiedTime.After(storedObject2.lastModifiedTime)
@@ -166,7 +167,7 @@ func (s *storedObject) ToNewCopyTransfer(
 		Metadata:           s.Metadata,
 		BlobType:           s.blobType,
 		BlobVersionID:      s.blobVersionID,
-		// set this below, conditionally: BlobTier
+		BlobTags:           s.blobTags,
 	}
 
 	if preserveBlobTier {
@@ -207,6 +208,9 @@ type contentPropsProvider interface {
 type blobPropsProvider interface {
 	BlobType() azblob.BlobType
 	AccessTier() azblob.AccessTierType
+	LeaseStatus() azblob.LeaseStatusType
+	LeaseDuration() azblob.LeaseDurationType
+	LeaseState() azblob.LeaseStateType
 }
 
 // a constructor is used so that in case the storedObject has to change, the callers would get a compilation error
@@ -228,6 +232,10 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, en
 		blobAccessTier:     blobProps.AccessTier(),
 		Metadata:           meta,
 		containerName:      containerName,
+		// Additional lease properties. To be used in listing
+		leaseStatus:   blobProps.LeaseStatus(),
+		leaseState:    blobProps.LeaseState(),
+		leaseDuration: blobProps.LeaseDuration(),
 	}
 
 	// Folders don't have size, and root ones shouldn't have names in the storedObject. Ensure those rules are consistently followed
@@ -293,8 +301,11 @@ type enumerationCounterFunc func(entityType common.EntityType)
 // ctx, pipeline are only required for remote resources.
 // followSymlinks is only required for local resources (defaults to false)
 // errorOnDirWOutRecursive is used by copy.
-func initResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo,
-	followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string) (resourceTraverser, error) {
+
+func initResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context,
+	credential *common.CredentialInfo, followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties,
+	includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string,
+	s2sPreserveBlobTags bool, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions) (resourceTraverser, error) {
 	var output resourceTraverser
 	var p *pipeline.Pipeline
 
@@ -305,7 +316,7 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 
 	// Initialize the pipeline if creds and ctx is provided
 	if ctx != nil && credential != nil {
-		tmppipe, err := initPipeline(*ctx, location, *credential)
+		tmppipe, err := initPipeline(*ctx, location, *credential, logLevel)
 
 		if err != nil {
 			return nil, err
@@ -331,7 +342,8 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 			}
 		}
 
-		output = newListTraverser(resource, location, credential, ctx, recursive, toFollow, getProperties, listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter)
+		output = newListTraverser(resource, location, credential, ctx, recursive, toFollow, getProperties,
+			listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions)
 		return output, nil
 	}
 
@@ -358,7 +370,8 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 			}()
 
 			baseResource := resource.CloneWithValue(cleanLocalPath(basePath))
-			output = newListTraverser(baseResource, location, nil, nil, recursive, toFollow, getProperties, globChan, includeDirectoryStubs, incrementEnumerationCounter)
+			output = newListTraverser(baseResource, location, nil, nil, recursive, toFollow, getProperties,
+				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions)
 		} else {
 			output = newLocalTraverser(resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter)
 		}
@@ -389,11 +402,11 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output = newBlobAccountTraverser(resourceURL, *p, *ctx, includeDirectoryStubs, incrementEnumerationCounter)
+			output = newBlobAccountTraverser(resourceURL, *p, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions)
 		} else if listOfVersionIds != nil {
-			output = newBlobVersionsTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds)
+			output = newBlobVersionsTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
-			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter)
+			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions)
 		}
 	case common.ELocation.File():
 		resourceURL, err := resource.FullURL()
@@ -481,6 +494,39 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 				return nil, err
 			}
 		}
+	case common.ELocation.GCP():
+		resourceURL, err := resource.FullURL()
+		if err != nil {
+			return nil, err
+		}
+
+		recommendHttpsIfNecessary(*resourceURL)
+
+		gcpURLParts, err := common.NewGCPURLParts(*resourceURL)
+		if err != nil {
+			return nil, err
+		}
+
+		if ctx == nil {
+			return nil, errors.New("a valid context must be supplied to create a GCP traverser")
+		}
+
+		if gcpURLParts.BucketName == "" || strings.Contains(gcpURLParts.BucketName, "*") {
+			if !recursive {
+				return nil, errors.New(accountTraversalInherentlyRecursiveError)
+			}
+
+			output, err = newGCPServiceTraverser(resourceURL, *ctx, getProperties, incrementEnumerationCounter)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			output, err = newGCPTraverser(resourceURL, *ctx, recursive, getProperties, incrementEnumerationCounter)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 	default:
 		return nil, errors.New("could not choose a traverser from currently available traversers")
 	}
@@ -618,10 +664,11 @@ func newCopyEnumerator(traverser resourceTraverser, filters []objectFilter, obje
 	}
 }
 
-func WarnStdoutAndJobLog(toLog string) {
+func WarnStdoutAndScanningLog(toLog string) {
 	glcm.Info(toLog)
-	if ste.JobsAdmin != nil {
-		ste.JobsAdmin.LogToJobLog(toLog, pipeline.LogWarning)
+	if azcopyScanningLogger != nil {
+		// ste.JobsAdmin.LogToJobLog(toLog, pipeline.LogWarning)
+		azcopyScanningLogger.Log(pipeline.LogWarning, toLog)
 	}
 }
 

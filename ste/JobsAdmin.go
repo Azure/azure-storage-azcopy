@@ -34,7 +34,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // sortPlanFiles is struct that implements len, swap and less than functions
@@ -574,7 +574,7 @@ func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
 		func() IJobMgr {
 			// Return existing or new IJobMgr to caller
-			return newJobMgr(ja.concurrency, ja.logger, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir)
+			return newJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir)
 		})
 }
 
@@ -648,6 +648,11 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinat
 		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
 		jm.AddJobPart(partNum, planFile, mmf, sourceSAS, destinationSAS, false)
 	}
+
+	jm, _ := ja.JobMgr(jobId)
+	js := resurrectJobSummary(jm)
+	jm.ResurrectSummary(js)
+
 	return true
 }
 

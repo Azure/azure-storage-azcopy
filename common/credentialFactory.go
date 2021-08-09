@@ -21,6 +21,7 @@
 package common
 
 import (
+	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"errors"
 	"fmt"
@@ -29,12 +30,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/minio/minio-go"
 	"github.com/minio/minio-go/pkg/credentials"
-
-	"github.com/Azure/azure-storage-azcopy/azbfs"
 )
 
 // ==============================================================================================
@@ -48,7 +48,7 @@ type CredentialOpOptions struct {
 	Panic    func(error)
 	CallerID string
 
-	// Used to cancel operations, if fatal error happend during operation.
+	// Used to cancel operations, if fatal error happened during operation.
 	Cancel context.CancelFunc
 }
 
@@ -283,5 +283,82 @@ func (f *S3ClientFactory) GetS3Client(ctx context.Context, credInfo CredentialIn
 		return newS3Client, nil
 	} else {
 		return s3Client, nil
+	}
+}
+
+// ====================================================================
+// GCP credential factory related methods
+// ====================================================================
+func CreateGCPClient(ctx context.Context) (*gcpUtils.Client, error) {
+	client, err := gcpUtils.NewClient(ctx)
+	return client, err
+}
+
+type GCPClientFactory struct {
+	gcpClients map[CredentialInfo]*gcpUtils.Client
+	lock       sync.RWMutex
+}
+
+func NewGCPClientFactory() GCPClientFactory {
+	return GCPClientFactory{
+		gcpClients: make(map[CredentialInfo]*gcpUtils.Client),
+	}
+}
+
+func (f *GCPClientFactory) GetGCPClient(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions) (*gcpUtils.Client, error) {
+	f.lock.RLock()
+	gcpClient, ok := f.gcpClients[credInfo]
+	f.lock.RUnlock()
+
+	if ok {
+		return gcpClient, nil
+	}
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	if gcpClient, ok := f.gcpClients[credInfo]; !ok {
+		newGCPClient, err := CreateGCPClient(ctx)
+		if err != nil {
+			return nil, err
+		}
+		f.gcpClients[credInfo] = newGCPClient
+		return newGCPClient, nil
+	} else {
+		return gcpClient, nil
+	}
+}
+
+// Default Encryption Algorithm Supported
+const EncryptionAlgorithmAES256 string = "AES256"
+
+func GetCpkInfo(cpkInfo bool) CpkInfo {
+	if !cpkInfo {
+		return CpkInfo{}
+	}
+
+	// fetch EncryptionKey and EncryptionKeySHA256 from the environment variables
+	glcm := GetLifecycleMgr()
+	encryptionKey := glcm.GetEnvironmentVariable(EEnvironmentVariable.CPKEncryptionKey())
+	encryptionKeySHA256 := glcm.GetEnvironmentVariable(EEnvironmentVariable.CPKEncryptionKeySHA256())
+	encryptionAlgorithmAES256 := EncryptionAlgorithmAES256
+
+	if encryptionKey == "" || encryptionKeySHA256 == "" {
+		glcm.Error("fatal: failed to fetch cpk encryption key (" + EEnvironmentVariable.CPKEncryptionKey().Name +
+			") or hash (" + EEnvironmentVariable.CPKEncryptionKeySHA256().Name + ") from environment variables")
+	}
+
+	return CpkInfo{
+		EncryptionKey:       &encryptionKey,
+		EncryptionKeySha256: &encryptionKeySHA256,
+		EncryptionAlgorithm: &encryptionAlgorithmAES256,
+	}
+}
+
+func GetCpkScopeInfo(cpkScopeInfo string) CpkScopeInfo {
+	if cpkScopeInfo == "" {
+		return CpkScopeInfo{}
+	} else {
+		return CpkScopeInfo{
+			EncryptionScope: &cpkScopeInfo,
+		}
 	}
 }

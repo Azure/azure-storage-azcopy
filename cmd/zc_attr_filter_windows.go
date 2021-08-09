@@ -25,7 +25,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type attrFilter struct {

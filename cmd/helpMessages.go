@@ -1,6 +1,6 @@
 package cmd
 
-import "github.com/Azure/azure-storage-azcopy/common"
+import "github.com/Azure/azure-storage-azcopy/v10/common"
 
 // ===================================== ROOT COMMAND ===================================== //
 const rootCmdShortDescription = "AzCopy is a command line tool that moves data into and out of Azure Storage."
@@ -28,6 +28,7 @@ Copies source data to a destination location. The supported directions are:
   - Azure Files (SAS) -> Azure Files (SAS)
   - Azure Files (SAS) -> Azure Blob (SAS or OAuth authentication)
   - AWS S3 (Access Key) -> Azure Block Blob (SAS or OAuth authentication)
+  - Google Cloud Storage (Service Account Key) -> Azure Block Blob (SAS or OAuth authentication) [Preview]
 
 Please refer to the examples for more information.
 
@@ -167,13 +168,37 @@ Copy a subset of buckets by using a wildcard symbol (*) in the bucket name. Like
 
   - azcopy cp "https://s3.amazonaws.com/[bucket*name]/" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
 
+Copy blobs from one blob storage to another and preserve the tags from source. To preserve tags, use the following syntax :
+  	
+  - azcopy cp "https://[account].blob.core.windows.net/[source_container]/[path/to/directory]?[SAS]" "https://[account].blob.core.windows.net/[destination_container]/[path/to/directory]?[SAS]" --s2s-preserve-blob-tags=true
+
 Transfer files and directories to Azure Storage account and set the given query-string encoded tags on the blob. 
 
 	- To set tags {key = "bla bla", val = "foo"} and {key = "bla bla 2", val = "bar"}, use the following syntax :
 		- azcopy cp "https://[account].blob.core.windows.net/[source_container]/[path/to/directory]?[SAS]" "https://[account].blob.core.windows.net/[destination_container]/[path/to/directory]?[SAS]" --blob-tags="bla%20bla=foo&bla%20bla%202=bar"
 	- Keys and values are URL encoded and the key-value pairs are separated by an ampersand('&')
 	- https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-index-how-to?tabs=azure-portal
-	- While setting tags on the blobs, there are additional permissions('t' for tags) in SAS without which the service will give authorization error back.
+  - While setting tags on the blobs, there are additional permissions('t' for tags) in SAS without which the service will give authorization error back.
+
+Copy a single object to Blob Storage from Google Cloud Storage (GCS) by using a service account key and a SAS token. First, set the environment variable GOOGLE_APPLICATION_CREDENTIALS for GCS source.
+  
+  - azcopy cp "https://storage.cloud.google.com/[bucket]/[object]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
+
+Copy an entire directory to Blob Storage from Google Cloud Storage (GCS) by using a service account key and a SAS token. First, set the environment variable GOOGLE_APPLICATION_CREDENTIALS for GCS source.
+ 
+  - azcopy cp "https://storage.cloud.google.com/[bucket]/[folder]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
+
+Copy an entire bucket to Blob Storage from Google Cloud Storage (GCS) by using a service account key and a SAS token. First, set the environment variable GOOGLE_APPLICATION_CREDENTIALS for GCS source.
+ 
+  - azcopy cp "https://storage.cloud.google.com/[bucket]" "https://[destaccount].blob.core.windows.net/?[SAS]" --recursive=true
+
+Copy all buckets to Blob Storage from Google Cloud Storage (GCS) by using a service account key and a SAS token. First, set the environment variables GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_CLOUD_PROJECT=<project-id> for GCS source
+ 
+  - azcopy cp "https://storage.cloud.google.com/" "https://[destaccount].blob.core.windows.net/?[SAS]" --recursive=true
+
+Copy a subset of buckets by using a wildcard symbol (*) in the bucket name from Google Cloud Storage (GCS) by using a service account key and a SAS token for destination. First, set the environment variables GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_CLOUD_PROJECT=<project-id> for GCS source
+ 
+  - azcopy cp "https://storage.cloud.google.com/[bucket*name]/" "https://[destaccount].blob.core.windows.net/?[SAS]" --recursive=true
 `
 
 // ===================================== ENV COMMAND ===================================== //
@@ -228,7 +253,9 @@ const listCmdShortDescription = "List the entities in a given resource"
 
 const listCmdLongDescription = `List the entities in a given resource. Blob, Files, and ADLS Gen 2 containers, folders, and accounts are supported.`
 
-const listCmdExample = "azcopy list [containerURL]"
+const listCmdExample = "azcopy list [containerURL] --properties [semicolon(;) separated list of attributes " +
+	"(LastModifiedTime, VersionId, BlobType, BlobAccessTier, ContentType, ContentEncoding, LeaseState, LeaseDuration, LeaseStatus) " +
+	"enclosed in double quotes (\")]"
 
 // ===================================== LOGIN COMMAND ===================================== //
 const loginCmdShortDescription = "Log in to Azure Active Directory (AD) to access Azure Storage resources."
@@ -278,7 +305,14 @@ Set the environment variable AZCOPY_SPA_CERT_PASSWORD to the certificate's passw
 
    Please treat /path/to/my/cert as a path to a PEM or PKCS12 file-- AzCopy does not reach into the system cert store to obtain your certificate.
    --certificate-path is mandatory when doing cert-based service principal auth.
+
+Subcommand for login to check the login status of your current session.
+	- azcopy login status 
 `
+
+const loginStatusShortDescription = "Prints if you are currently logged in to your Azure Storage account."
+
+const loginStatusLongDescription = "This command will let you know if you are currently logged in to your Azure Storage account."
 
 // ===================================== LOGOUT COMMAND ===================================== //
 const logoutCmdShortDescription = "Log out to terminate access to Azure Storage resources."
@@ -347,9 +381,10 @@ const syncCmdShortDescription = "Replicate source to the destination location"
 const syncCmdLongDescription = `
 The last modified times are used for comparison. The file is skipped if the last modified time in the destination is more recent. The supported pairs are:
   
-  - local <-> Azure Blob (either SAS or OAuth authentication can be used)
+  - Local <-> Azure Blob / Azure File (either SAS or OAuth authentication can be used)
   - Azure Blob <-> Azure Blob (Source must include a SAS or is publicly accessible; either SAS or OAuth authentication can be used for destination)
   - Azure File <-> Azure File (Source must include a SAS or is publicly accessible; SAS authentication should be used for destination)
+  - Azure Blob <-> Azure File
 
 The sync command differs from the copy command in several ways:
 

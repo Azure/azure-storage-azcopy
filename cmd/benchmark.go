@@ -28,8 +28,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
@@ -102,8 +102,7 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	glcm.Info(common.BenchmarkPreviewNotice)
 
 	dummyCooked := cookedCopyCmdArgs{}
-	jobID := common.NewJobID()
-	virtualDir := "benchmark-" + jobID.String() // create unique directory name, so we won't overwrite anything
+	virtualDir := "benchmark-" + azcopyCurrentJobID.String() // create unique directory name, so we won't overwrite anything
 
 	if raw.fileCount <= 0 {
 		return dummyCooked, errors.New(common.FileCountParam + " must be greater than zero")
@@ -156,7 +155,7 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	c.output = raw.output
 	c.logVerbosity = raw.logVerbosity
 
-	cooked, err := c.cookWithId(jobID)
+	cooked, err := c.cook()
 	if err != nil {
 		return cooked, err
 	}

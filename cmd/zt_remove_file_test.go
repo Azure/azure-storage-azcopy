@@ -21,7 +21,7 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
 	"net/url"
 	"strings"
@@ -390,5 +390,143 @@ func (s *cmdIntegrationSuite) TestRemoveListOfFilesWithIncludeAndExclude(c *chk.
 
 		// validate that the right transfers were sent
 		validateRemoveTransfersAreScheduled(c, true, filesToInclude, mockedRPC)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestRemoveSingleFileWithFromTo(c *chk.C) {
+	fsu := getFSU()
+	shareURL, shareName := createNewAzureShare(c, fsu)
+	defer deleteShare(c, shareURL)
+
+	for _, fileName := range []string{"top/mid/low/singlefileisbest", "打麻将.txt", "%4509%4254$85140&"} {
+		// set up the share with a single file
+		fileList := []string{fileName}
+		scenarioHelper{}.generateAzureFilesFromList(c, shareURL, fileList)
+		c.Assert(shareURL, chk.NotNil)
+
+		// set up interceptor
+		mockedRPC := interceptor{}
+		Rpc = mockedRPC.intercept
+		mockedRPC.init()
+
+		// construct the raw input to simulate user input
+		rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, fileList[0])
+		raw := getDefaultRemoveRawInput(rawFileURLWithSAS.String())
+		raw.fromTo = "FileTrash"
+
+		runCopyAndVerify(c, raw, func(err error) {
+			c.Assert(err, chk.IsNil)
+
+			// note that when we are targeting single files, the relative path is empty ("") since the root path already points to the file
+			validateRemoveTransfersAreScheduled(c, true, []string{""}, mockedRPC)
+		})
+	}
+}
+
+func (s *cmdIntegrationSuite) TestRemoveFilesUnderShareWithFromTo(c *chk.C) {
+	fsu := getFSU()
+
+	// set up the share with numerous files
+	shareURL, shareName := createNewAzureShare(c, fsu)
+	defer deleteShare(c, shareURL)
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, shareURL, "")
+	c.Assert(shareURL, chk.NotNil)
+	c.Assert(len(fileList), chk.Not(chk.Equals), 0)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
+	raw := getDefaultRemoveRawInput(rawShareURLWithSAS.String())
+	raw.recursive = true
+	raw.fromTo = "FileTrash"
+
+	// this is our current behaviour (schedule it, but STE does nothing for
+	// any attempt to remove the share root. It will remove roots that are _directories_,
+	// i.e. not the file share itself).
+	includeRootInTransfers := true
+
+	expectedRemovals := scenarioHelper{}.addFoldersToList(fileList, includeRootInTransfers)
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedRemovals))
+
+		// validate that the right transfers were sent
+		validateRemoveTransfersAreScheduled(c, true, expectedRemovals, mockedRPC)
+	})
+
+	// turn off recursive, this time only top files should be deleted
+	raw.recursive = false
+	mockedRPC.reset()
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(expectedRemovals))
+
+		for _, transfer := range mockedRPC.transfers {
+			c.Assert(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+		}
+	})
+}
+
+func (s *cmdIntegrationSuite) TestRemoveFilesUnderDirectoryWithFromTo(c *chk.C) {
+	fsu := getFSU()
+	dirName := "dir1/dir2/dir3/"
+
+	// set up the share with numerous files
+	shareURL, shareName := createNewAzureShare(c, fsu)
+	defer deleteShare(c, shareURL)
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, shareURL, dirName)
+	c.Assert(shareURL, chk.NotNil)
+	c.Assert(len(fileList), chk.Not(chk.Equals), 0)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawDirectoryURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, dirName)
+	raw := getDefaultRemoveRawInput(rawDirectoryURLWithSAS.String())
+	raw.recursive = true
+	raw.fromTo = "FileTrash"
+
+	expectedDeletionMap := scenarioHelper{}.convertListToMap(
+		scenarioHelper{}.addFoldersToList(fileList, false),
+	)
+	delete(expectedDeletionMap, "dir1")
+	delete(expectedDeletionMap, "dir1/dir2")
+	delete(expectedDeletionMap, "dir1/dir2/dir3")
+	expectedDeletionMap[""] = 0 // add this one, because that's how dir1/dir2/dir3 appears, relative to the root (which itself)
+	expectedDeletions := scenarioHelper{}.convertMapKeysToList(expectedDeletionMap)
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedDeletions))
+
+		// validate that the right transfers were sent
+		expectedTransfers := scenarioHelper{}.shaveOffPrefix(expectedDeletions, dirName)
+		validateRemoveTransfersAreScheduled(c, true, expectedTransfers, mockedRPC)
+	})
+
+	// turn off recursive, this time only top files should be deleted
+	raw.recursive = false
+	mockedRPC.reset()
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(expectedDeletions))
+
+		for _, transfer := range mockedRPC.transfers {
+			c.Assert(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+		}
 	})
 }

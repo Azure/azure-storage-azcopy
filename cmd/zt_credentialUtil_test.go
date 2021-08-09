@@ -22,7 +22,7 @@ package cmd
 
 import (
 	"context"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
 	"strings"
 )
@@ -55,16 +55,20 @@ func (s *credentialUtilSuite) TestCheckAuthSafeForTarget(c *chk.C) {
 		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://s3.eu-central-1.amazonaws.com", "", true},
 		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://s3.cn-north-1.amazonaws.com.cn", "", true},
 		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://s3.amazonaws.com", "", true},
+		{common.ECredentialType.GoogleAppCredentials(), common.ELocation.GCP(), "http://storage.cloud.google.com", "", true},
 
 		// These should fail (they are not storage)
 		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://somethingelseinazure.windows.net", "", false},
 		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://somethingelseinaws.amazonaws.com", "", false},
+		{common.ECredentialType.GoogleAppCredentials(), common.ELocation.GCP(), "http://appengine.google.com", "", false},
 
 		// As should these (they are nothing to do with the expected URLs)
 		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://abc.example.com", "", false},
 		{common.ECredentialType.S3AccessKey(), common.ELocation.S3(), "http://abc.example.com", "", false},
+		{common.ECredentialType.GoogleAppCredentials(), common.ELocation.GCP(), "http://abc.example.com", "", false},
 		// Test that we don't want to send an S3 access key to a blob resource type.
 		{common.ECredentialType.S3AccessKey(), common.ELocation.Blob(), "http://abc.example.com", "", false},
+		{common.ECredentialType.GoogleAppCredentials(), common.ELocation.Blob(), "http://abc.example.com", "", false},
 
 		// But the same Azure one should pass if the user opts in to them (we don't support any similar override for S3)
 		{common.ECredentialType.OAuthToken(), common.ELocation.Blob(), "http://abc.example.com", "*.foo.com;*.example.com", true},
@@ -84,8 +88,7 @@ func (s *credentialUtilSuite) TestCheckAuthSafeForTargetIsCalledWhenGettingAuthT
 	// Call our core cred type getter function, in a way that will fail the safety check, and assert
 	// that it really does fail.
 	// This checks that our safety check is hooked into the main logic
-	_, _, err := doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(),
-		"http://notblob.example.com", "", true, mockGetCredTypeFromEnvVar)
+	_, _, err := doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(), "http://notblob.example.com", "", true, mockGetCredTypeFromEnvVar, common.CpkOptions{})
 	c.Assert(err, chk.NotNil)
 	c.Assert(strings.Contains(err.Error(), "If this URL is in fact an Azure service, you can enable Azure authentication to notblob.example.com."),
 		chk.Equals, true)

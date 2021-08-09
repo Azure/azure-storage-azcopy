@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"runtime"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -27,6 +28,7 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 		inputQueue:           make(chan userInput, 1000),
 		allowCancelFromStdIn: false,
 		allowWatchInput:      false,
+		closeFunc:            func() {}, // noop since we have nothing to do by default
 	}
 
 	// kick off the single routine that processes output
@@ -48,6 +50,7 @@ type LifecycleMgr interface {
 	Progress(OutputBuilder)                                      // print on the same line over and over again, not allowed to float up
 	Exit(OutputBuilder, ExitCode)                                // indicates successful execution exit after printing, allow user to specify exit code
 	Info(string)                                                 // simple print, allowed to float up
+	Dryrun(OutputBuilder)                                        // print files for dry run mode
 	Error(string)                                                // indicates fatal error, exit after printing, exit code is always Failed (1)
 	Prompt(message string, details PromptDetails) ResponseOption // ask the user a question(after erasing the progress), then return the response
 	SurrenderControl()                                           // give up control, this should never return
@@ -62,6 +65,9 @@ type LifecycleMgr interface {
 	E2EAwaitContinue()                                           // used by E2E tests
 	E2EAwaitAllowOpenFiles()                                     // used by E2E tests
 	E2EEnableAwaitAllowOpenFiles(enable bool)                    // used by E2E tests
+	RegisterCloseFunc(func())
+	SetForceLogging()
+	IsForceLoggingDisabled() bool
 }
 
 func GetLifecycleMgr() LifecycleMgr {
@@ -83,6 +89,8 @@ type lifecycleMgr struct {
 	allowCancelFromStdIn  bool           // allow user to send in 'cancel' from the stdin to stop the current job
 	e2eAllowAwaitContinue bool           // allow the user to send 'continue' from stdin to start the current job
 	e2eAllowAwaitOpen     bool           // allow the user to send 'open' from stdin to allow the opening of the first file
+	closeFunc             func()         // used to close logs before exiting
+	disableSyslog         bool
 }
 
 type userInput struct {
@@ -257,6 +265,18 @@ func (lcm *lifecycleMgr) Prompt(message string, details PromptDetails) ResponseO
 	return EResponseOption.Default()
 }
 
+func (lcm *lifecycleMgr) Dryrun(o OutputBuilder) {
+	dryrunMessage := ""
+	if o != nil {
+		dryrunMessage = o(lcm.outputFormat)
+	}
+
+	lcm.msgQueue <- outputMessage{
+		msgContent: dryrunMessage,
+		msgType:    eOutputMessageType.Dryrun(),
+	}
+}
+
 // TODO minor: consider merging with Exit
 func (lcm *lifecycleMgr) Error(msg string) {
 
@@ -310,6 +330,10 @@ func (lcm *lifecycleMgr) SurrenderControl() {
 	select {}
 }
 
+func (lcm *lifecycleMgr) RegisterCloseFunc(closeFunc func()) {
+	lcm.closeFunc = closeFunc
+}
+
 func (lcm *lifecycleMgr) processOutputMessage() {
 	// this function constantly pulls out message to output
 	// and pass them onto the right handler based on the output format
@@ -331,8 +355,10 @@ func (lcm *lifecycleMgr) processOutputMessage() {
 
 func (lcm *lifecycleMgr) processNoneOutput(msgToOutput outputMessage) {
 	if msgToOutput.msgType == eOutputMessageType.Error() {
+		lcm.closeFunc()
 		os.Exit(int(EExitCode.Error()))
 	} else if msgToOutput.shouldExitProcess() {
+		lcm.closeFunc()
 		os.Exit(int(msgToOutput.exitCode))
 	}
 
@@ -351,6 +377,7 @@ func (lcm *lifecycleMgr) processJSONOutput(msgToOutput outputMessage) {
 
 	// exit if needed
 	if msgToOutput.shouldExitProcess() {
+		lcm.closeFunc()
 		os.Exit(int(msgToOutput.exitCode))
 	} else if msgType == eOutputMessageType.Prompt() {
 		// read the response to the prompt and send it back through the channel
@@ -377,6 +404,7 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 			fmt.Println("\n" + msgToOutput.msgContent)
 		}
 		if msgToOutput.shouldExitProcess() {
+			lcm.closeFunc()
 			os.Exit(int(msgToOutput.exitCode))
 		}
 
@@ -390,7 +418,7 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 
 		lcm.progressCache = msgToOutput.msgContent
 
-	case eOutputMessageType.Init(), eOutputMessageType.Info():
+	case eOutputMessageType.Init(), eOutputMessageType.Info(), eOutputMessageType.Dryrun():
 		if lcm.progressCache != "" { // a progress status is already on the last line
 			// print the info from the beginning on current line
 			fmt.Print("\r")
@@ -545,6 +573,21 @@ func (lcm *lifecycleMgr) E2EEnableAwaitAllowOpenFiles(enable bool) {
 	} else {
 		close(lcm.e2eAllowOpenChannel) // so that E2EAwaitAllowOpenFiles will instantly return every time
 	}
+}
+
+// Fetching `AZCOPY_DISABLE_SYSLOG` from the environment variables and
+// setting `disableSyslog` flag in LifeCycleManager to avoid Env Vars Lookup redundantly
+func (lcm *lifecycleMgr) SetForceLogging() {
+	disableSyslog, err := strconv.ParseBool(lcm.GetEnvironmentVariable(EEnvironmentVariable.DisableSyslog()))
+	if err != nil {
+		// By default, we'll retain the current behaviour. i.e. To log in Syslog/WindowsEventLog if not specified by the user
+		disableSyslog = false
+	}
+	lcm.disableSyslog = disableSyslog
+}
+
+func (lcm *lifecycleMgr) IsForceLoggingDisabled() bool {
+	return lcm.disableSyslog
 }
 
 // captures the common logic of exiting if there's an expected error

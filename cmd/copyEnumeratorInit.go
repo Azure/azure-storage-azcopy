@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -11,24 +12,34 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
+
+type BucketToContainerNameResolver interface {
+	ResolveName(bucketName string) (string, error)
+}
 
 func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) (*copyEnumerator, error) {
 	var traverser resourceTraverser
+
+	// Warn about GCP -> Blob being in preview. Also, we do not support GCP as destination.
+	if cca.fromTo.From() == common.ELocation.GCP() {
+		glcm.Info("Google Cloud Storage to Azure Blob copy is currently in preview. Validate the copy operation carefully before removing your data at source.")
+	}
 
 	srcCredInfo := common.CredentialInfo{}
 	var isPublic bool
 	var err error
 
-	if srcCredInfo, isPublic, err = getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true); err != nil {
+	if srcCredInfo, isPublic, err = getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true, cca.cpkOptions); err != nil {
 		return nil, err
 		// If S2S and source takes OAuthToken as its cred type (OR) source takes anonymous as its cred type, but it's not public and there's no SAS
 	} else if cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() &&
@@ -38,6 +49,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource")
 	}
 
+	jobPartOrder.CpkOptions = cca.cpkOptions
 	jobPartOrder.PreserveSMBPermissions = cca.preserveSMBPermissions
 	jobPartOrder.PreserveSMBInfo = cca.preserveSMBInfo
 
@@ -53,8 +65,12 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.S2SSourceChangeValidation = cca.s2sSourceChangeValidation
 	jobPartOrder.DestLengthValidation = cca.CheckLength
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
+	jobPartOrder.S2SPreserveBlobTags = cca.s2sPreserveBlobTags
 
-	traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, cca.includeDirectoryStubs, func(common.EntityType) {}, cca.listOfVersionIDs)
+	traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo,
+		&cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties,
+		cca.includeDirectoryStubs, func(common.EntityType) {}, cca.listOfVersionIDs,
+		cca.s2sPreserveBlobTags, cca.logVerbosity.ToPipelineLogLevel(), cca.cpkOptions)
 
 	if err != nil {
 		return nil, err
@@ -102,9 +118,13 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		cca.stripTopDir = true
 	}
 
-	// Create a S3 bucket resolver
+	// Create a Remote resource resolver
 	// Giving it nothing to work with as new names will be added as we traverse.
-	var containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
+	var containerResolver BucketToContainerNameResolver
+	containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
+	if cca.fromTo == common.EFromTo.GCPBlob() {
+		containerResolver = NewGCPBucketNameToAzureResourcesResolver(nil)
+	}
 	existingContainers := make(map[string]bool)
 	var logDstContainerCreateFailureOnce sync.Once
 	seenFailedContainers := make(map[string]bool) // Create map of already failed container conversions so we don't log a million items just for one container.
@@ -121,7 +141,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		// only create the destination container in S2S scenarios
 		if cca.fromTo.From().IsRemote() && dstContainerName != "" { // if the destination has a explicit container name
 			// Attempt to create the container. If we fail, fail silently.
-			err = cca.createDstContainer(dstContainerName, cca.destination, ctx, existingContainers)
+			err = cca.createDstContainer(dstContainerName, cca.destination, ctx, existingContainers, cca.logVerbosity)
 
 			// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 			if _, ok := seenFailedContainers[dstContainerName]; err != nil && ste.JobsAdmin != nil && !ok {
@@ -141,7 +161,11 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 				// Resolve all container names up front.
 				// If we were to resolve on-the-fly, then name order would affect the results inconsistently.
-				containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
+				if cca.fromTo == common.EFromTo.S3Blob() {
+					containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
+				} else if cca.fromTo == common.EFromTo.GCPBlob() {
+					containerResolver = NewGCPBucketNameToAzureResourcesResolver(containers)
+				}
 
 				for _, v := range containers {
 					bucketName, err := containerResolver.ResolveName(v)
@@ -151,7 +175,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						continue
 					}
 
-					err = cca.createDstContainer(bucketName, cca.destination, ctx, existingContainers)
+					err = cca.createDstContainer(bucketName, cca.destination, ctx, existingContainers, cca.logVerbosity)
 
 					// if JobsAdmin is nil, we're probably in testing mode.
 					// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
@@ -171,11 +195,10 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					// this will probably never be reached
 					return nil, fmt.Errorf("failed to get container name from source (is it formatted correctly?)")
 				}
-
 				resName, err := containerResolver.ResolveName(cName)
 
 				if err == nil {
-					err = cca.createDstContainer(resName, cca.destination, ctx, existingContainers)
+					err = cca.createDstContainer(resName, cca.destination, ctx, existingContainers, cca.logVerbosity)
 
 					if _, ok := seenFailedContainers[dstContainerName]; err != nil && ste.JobsAdmin != nil && !ok {
 						logDstContainerCreateFailureOnce.Do(func() {
@@ -194,7 +217,9 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// decide our folder transfer strategy
 	var message string
 	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters, cca.preserveSMBInfo, cca.preserveSMBPermissions.IsTruthy())
-	glcm.Info(message)
+	if !cca.dryrunMode {
+		glcm.Info(message)
+	}
 	if ste.JobsAdmin != nil {
 		ste.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
 	}
@@ -210,7 +235,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 				if err != nil {
 					if _, ok := seenFailedContainers[object.containerName]; !ok {
-						WarnStdoutAndJobLog(fmt.Sprintf("failed to add transfers from container %s as it has an invalid name. Please manually transfer from this container to one with a valid name.", object.containerName))
+						WarnStdoutAndScanningLog(fmt.Sprintf("failed to add transfers from container %s as it has an invalid name. Please manually transfer from this container to one with a valid name.", object.containerName))
 						seenFailedContainers[object.containerName] = true
 					}
 					return nil
@@ -239,13 +264,54 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			cca.s2sPreserveAccessTier,
 			jobPartOrder.Fpo,
 		)
-		transfer.BlobTags = cca.blobTags
+		if !cca.s2sPreserveBlobTags {
+			transfer.BlobTags = cca.blobTags
+		}
+
+		if cca.dryrunMode && shouldSendToSte {
+			glcm.Dryrun(func(format common.OutputFormat) string {
+				if format == common.EOutputFormat.Json() {
+					jsonOutput, err := json.Marshal(transfer)
+					common.PanicIfErr(err)
+					return string(jsonOutput)
+				} else {
+					if cca.fromTo.From() == common.ELocation.Local() {
+						// formatting from local source
+						dryrunValue := fmt.Sprintf("DRYRUN: copy %v", common.ToShortPath(cca.source.Value))
+						if runtime.GOOS == "windows" {
+							dryrunValue += strings.ReplaceAll(srcRelPath, "/", "\\")
+						} else { //linux and mac
+							dryrunValue += srcRelPath
+						}
+						dryrunValue += fmt.Sprintf(" to %v%v", strings.Trim(cca.destination.Value, "/"), dstRelPath)
+						return dryrunValue
+					} else if cca.fromTo.To() == common.ELocation.Local() {
+						// formatting to local source
+						dryrunValue := fmt.Sprintf("DRYRUN: copy %v%v to %v",
+							strings.Trim(cca.source.Value, "/"), srcRelPath,
+							common.ToShortPath(cca.destination.Value))
+						if runtime.GOOS == "windows" {
+							dryrunValue += strings.ReplaceAll(dstRelPath, "/", "\\")
+						} else { //linux and mac
+							dryrunValue += dstRelPath
+						}
+						return dryrunValue
+					} else {
+						return fmt.Sprintf("DRYRUN: copy %v%v to %v%v",
+							cca.source.Value,
+							srcRelPath,
+							cca.destination.Value,
+							dstRelPath)
+					}
+				}
+			})
+			return nil
+		}
 
 		if shouldSendToSte {
 			return addTransfer(&jobPartOrder, transfer, cca)
-		} else {
-			return nil
 		}
+		return nil
 	}
 	finalizer := func() error {
 		return dispatchFinalPart(&jobPartOrder, cca)
@@ -264,11 +330,13 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	if dstCredInfo, _, err = getCredentialInfoForLocation(*ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false); err != nil {
+	if dstCredInfo, _, err = getCredentialInfoForLocation(*ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false, cca.cpkOptions); err != nil {
 		return false
 	}
 
-	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, false, func(common.EntityType) {}, cca.listOfVersionIDs)
+	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil,
+		nil, false, false, false,
+		func(common.EntityType) {}, cca.listOfVersionIDs, false, pipeline.LogNone, cca.cpkOptions)
 
 	if err != nil {
 		return false
@@ -308,6 +376,14 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 		}
 	}
 
+	if len(cca.includeRegex) != 0 {
+		filters = append(filters, &regexFilter{patterns: cca.includeRegex, isIncluded: true})
+	}
+
+	if len(cca.excludeRegex) != 0 {
+		filters = append(filters, &regexFilter{patterns: cca.excludeRegex, isIncluded: false})
+	}
+
 	if len(cca.excludeBlobType) != 0 {
 		excludeSet := map[azblob.BlobType]bool{}
 
@@ -336,7 +412,7 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 	return filters
 }
 
-func (cca *cookedCopyCmdArgs) createDstContainer(containerName string, dstWithSAS common.ResourceString, ctx context.Context, existingContainers map[string]bool) (err error) {
+func (cca *cookedCopyCmdArgs) createDstContainer(containerName string, dstWithSAS common.ResourceString, parentCtx context.Context, existingContainers map[string]bool, logLevel common.LogLevel) (err error) {
 	if _, ok := existingContainers[containerName]; ok {
 		return
 	}
@@ -344,11 +420,13 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 
 	dstCredInfo := common.CredentialInfo{}
 
-	if dstCredInfo, _, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false); err != nil {
+	// 3minutes is enough time to list properties of a container, and create new if it does not exist.
+	ctx, _ := context.WithTimeout(parentCtx, time.Minute*3)
+	if dstCredInfo, _, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false, cca.cpkOptions); err != nil {
 		return err
 	}
 
-	dstPipeline, err := initPipeline(ctx, cca.fromTo.To(), dstCredInfo)
+	dstPipeline, err := initPipeline(ctx, cca.fromTo.To(), dstCredInfo, logLevel.ToPipelineLogLevel())
 	if err != nil {
 		return
 	}
@@ -454,7 +532,7 @@ var reverseEncodedChars = map[string]rune{
 	"%2A": '*',
 }
 
-func pathEncodeRules(path string, fromTo common.FromTo, source bool) string {
+func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool, source bool) string {
 	loc := common.ELocation.Unknown()
 
 	if source {
@@ -474,8 +552,8 @@ func pathEncodeRules(path string, fromTo common.FromTo, source bool) string {
 			}
 		}
 
-		// If uploading from Windows or downloading from files, decode unsafe chars
-	} else if (!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") || (!source && fromTo.From() == common.ELocation.File()) {
+		// If uploading from Windows or downloading from files, decode unsafe chars if user enables decoding
+	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") || (!source && fromTo.From() == common.ELocation.File())) && !disableAutoDecoding {
 
 		for encoded, c := range reverseEncodedChars {
 			for k, p := range pathParts {
@@ -521,7 +599,7 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 			}
 		}
 
-		return pathEncodeRules(relativePath, cca.fromTo, source)
+		return pathEncodeRules(relativePath, cca.fromTo, cca.disableAutoDecoding, source)
 	}
 
 	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true
@@ -563,7 +641,7 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 		relativePath = "/" + rootDir + relativePath
 	}
 
-	return pathEncodeRules(relativePath, cca.fromTo, source)
+	return pathEncodeRules(relativePath, cca.fromTo, cca.disableAutoDecoding, source)
 }
 
 // we assume that preserveSmbPermissions and preserveSmbInfo have already been validated, such that they are only true if both resource types support them
@@ -616,9 +694,8 @@ func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir b
 		message += getSuffix(true)
 		if stripTopDir {
 			return common.EFolderPropertiesOption.AllFoldersExceptRoot(), message
-		} else {
-			return common.EFolderPropertiesOption.AllFolders(), message
 		}
+		return common.EFolderPropertiesOption.AllFolders(), message
 	}
 
 	return common.EFolderPropertiesOption.NoFolders(),

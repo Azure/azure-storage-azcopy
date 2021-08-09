@@ -28,8 +28,8 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type blobFSSenderBase struct {
@@ -216,4 +216,11 @@ func (u *blobFSSenderBase) doEnsureDirExists(d azbfs.DirectoryURL) error {
 func (u *blobFSSenderBase) SetFolderProperties() error {
 	// we don't currently preserve any properties for BlobFS folders
 	return nil
+}
+
+func (u *blobFSSenderBase) DirUrlToString() string {
+	dirUrl := u.dirURL().URL()
+	// To avoid encoding/decoding
+	dirUrl.RawPath = ""
+	return u.dirURL().String()
 }
