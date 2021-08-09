@@ -651,7 +651,9 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 	}
 
 	// trigger the progress reporting
-	cca.waitUntilJobCompletion(false)
+	if !cca.dryrunMode {
+		cca.waitUntilJobCompletion(false)
+	}
 
 	// trigger the enumeration
 	err = enumerator.enumerate()
@@ -692,6 +694,9 @@ func init() {
 			err = cooked.process()
 			if err != nil {
 				glcm.Error("Cannot perform sync due to error: " + err.Error())
+			}
+			if cooked.dryrunMode {
+				glcm.Exit(nil, common.EExitCode.Success())
 			}
 
 			glcm.SurrenderControl()
@@ -736,6 +741,7 @@ func init() {
 	syncCmd.PersistentFlags().StringVar(&raw.cpkScopeInfo, "cpk-by-name", "", "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data")
 	syncCmd.PersistentFlags().BoolVar(&raw.cpkInfo, "cpk-by-value", false, "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key and its hash will be fetched from environment variables")
 	syncCmd.PersistentFlags().BoolVar(&raw.mirrorMode, "mirror-mode", false, "Disable last-modified-time based comparison and overwrites the conflicting files and blobs at the destination if this flag is set to true. Default is false")
+	syncCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the path of files that would be copied or removed by the sync command. This flag does not copy or remove the actual files.")
 
 	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
 	syncCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")

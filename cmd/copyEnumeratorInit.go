@@ -277,18 +277,25 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				} else {
 					if cca.fromTo.From() == common.ELocation.Local() {
 						// formatting from local source
-						return fmt.Sprintf("DRYRUN: copy %v%v to %v%v",
-							common.ToShortPath(cca.source.Value),
-							strings.ReplaceAll(srcRelPath, "/", "\\"),
-							strings.Trim(cca.destination.Value, "/"),
-							dstRelPath)
+						dryrunValue := fmt.Sprintf("DRYRUN: copy %v", common.ToShortPath(cca.source.Value))
+						if runtime.GOOS == "windows" {
+							dryrunValue += strings.ReplaceAll(srcRelPath, "/", "\\")
+						} else { //linux and mac
+							dryrunValue += srcRelPath
+						}
+						dryrunValue += fmt.Sprintf(" to %v%v", strings.Trim(cca.destination.Value, "/"), dstRelPath)
+						return dryrunValue
 					} else if cca.fromTo.To() == common.ELocation.Local() {
 						// formatting to local source
-						return fmt.Sprintf("DRYRUN: copy %v%v to %v%v",
-							strings.Trim(cca.source.Value, "/"),
-							srcRelPath,
-							common.ToShortPath(cca.destination.Value),
-							strings.ReplaceAll(dstRelPath, "/", "\\"))
+						dryrunValue := fmt.Sprintf("DRYRUN: copy %v%v to %v",
+							strings.Trim(cca.source.Value, "/"), srcRelPath,
+							common.ToShortPath(cca.destination.Value))
+						if runtime.GOOS == "windows" {
+							dryrunValue += strings.ReplaceAll(dstRelPath, "/", "\\")
+						} else { //linux and mac
+							dryrunValue += dstRelPath
+						}
+						return dryrunValue
 					} else {
 						return fmt.Sprintf("DRYRUN: copy %v%v to %v%v",
 							cca.source.Value,

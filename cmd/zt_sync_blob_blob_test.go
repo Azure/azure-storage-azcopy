@@ -23,6 +23,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"sort"
 	"strings"
 
@@ -816,5 +817,97 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeAndExcludeRegexFlag(c *chk.C
 		c.Assert(actualTransfer, chk.DeepEquals, blobsToInclude)
 
 		validateS2SSyncTransfersAreScheduled(c, "", "", blobsToInclude, mockedRPC)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestDryrunSyncBlobtoBlob(c *chk.C) {
+	bsu := getBSU()
+
+	//set up src container
+	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, srcContainerURL)
+	blobsToInclude := []string{"AzURE2.jpeg", "sub1/aTestOne.txt", "sub1/sub2/testTwo.pdf"}
+	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, blobsToInclude, blockBlobDefaultData)
+
+	//set up dst container
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, dstContainerURL)
+	blobsToDelete := []string{"testThree.jpeg"}
+	scenarioHelper{}.generateBlobsFromList(c, dstContainerURL, blobsToDelete, blockBlobDefaultData)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Text())
+	glcm = &mockedLcm
+
+	// construct the raw input to simulate user input
+	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
+	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
+	raw.dryrun = true
+	raw.deleteDestination = "true"
+
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateS2SSyncTransfersAreScheduled(c, "", "", []string{}, mockedRPC)
+
+		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
+		sort.Strings(msg)
+		for i := 0; i < len(msg); i++ {
+			if strings.Contains(msg[i], "DRYRUN: remove") {
+				c.Check(strings.Contains(msg[i], blobsToDelete[0]), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], dstContainerURL.String()), chk.Equals, true)
+			} else {
+				c.Check(strings.Contains(msg[i], "DRYRUN: copy"), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], blobsToInclude[i]), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], srcContainerURL.String()), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], dstContainerURL.String()), chk.Equals, true)
+			}
+
+		}
+	})
+}
+
+func (s *cmdIntegrationSuite) TestDryrunSyncBlobtoBlobJson(c *chk.C) {
+	bsu := getBSU()
+
+	//set up src container
+	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, srcContainerURL)
+
+	//set up dst container
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, dstContainerURL)
+	blobsToDelete := []string{"testThree.jpeg"}
+	scenarioHelper{}.generateBlobsFromList(c, dstContainerURL, blobsToDelete, blockBlobDefaultData)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Json())
+	glcm = &mockedLcm
+
+	// construct the raw input to simulate user input
+	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
+	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
+	raw.dryrun = true
+	raw.deleteDestination = "true"
+
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateS2SSyncTransfersAreScheduled(c, "", "", []string{}, mockedRPC)
+
+		msg := <-mockedLcm.dryrunLog
+		syncMessage := common.CopyTransfer{}
+		errMarshal := json.Unmarshal([]byte(msg), &syncMessage)
+		c.Assert(errMarshal, chk.IsNil)
+		c.Check(strings.Contains(syncMessage.Source, blobsToDelete[0]), chk.Equals, true)
+		c.Check(strings.Compare(syncMessage.EntityType.String(), common.EEntityType.File().String()), chk.Equals, 0)
+		c.Check(strings.Compare(string(syncMessage.BlobType), "BlockBlob"), chk.Equals, 0)
+
 	})
 }
