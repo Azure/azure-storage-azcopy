@@ -331,7 +331,7 @@ func (s *FileURLSuite) TestRenameDirectory(c *chk.C) {
 	c.Assert(err, chk.IsNil)
 }
 
-func (s *FileURLSuite) TestRenameDirectoryWithFile(c *chk.C) {
+func (s *FileURLSuite) TestRenameDirWithFile(c *chk.C) {
 	fsu := getBfsServiceURL()
 	fileSystemURL, _ := createNewFileSystem(c, fsu)
 	defer delFileSystem(c, fileSystemURL)
