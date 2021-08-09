@@ -21,6 +21,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
 	"net/url"
@@ -473,5 +474,239 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubsWithListOfFiles(c
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.NotNil)
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestDryrunRemoveSingleBlob(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	// set up the container with a single blob
+	blobName := []string{"sub1/test/testing.txt"}
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobName, blockBlobDefaultData)
+	c.Assert(containerURL, chk.NotNil)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) //text format
+	glcm = &mockedLcm
+
+	// construct the raw input to simulate user input
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobName[0])
+	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
+	raw.dryrun = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		// validate that none where transferred
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+
+		msg := <-mockedLcm.dryrunLog
+		//comparing message printed for dry run
+		c.Check(strings.Contains(msg, "DRYRUN: remove"), chk.Equals, true)
+		c.Check(strings.Contains(msg, containerURL.String()), chk.Equals, true)
+		c.Check(strings.Contains(msg, blobName[0]), chk.Equals, true)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestDryrunRemoveBlobsUnderContainer(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	// set up the container with a single blob
+	blobList := []string{"AzURE2021.jpeg", "sub1/dir2/HELLO-4.txt", "sub1/test/testing.txt"}
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
+	c.Assert(containerURL, chk.NotNil)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) //text format
+	glcm = &mockedLcm
+
+	// construct the raw input to simulate user input
+	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
+	raw.dryrun = true
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		// validate that none where transferred
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+
+		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
+		for i := 0; i < len(blobList); i++ {
+			c.Check(strings.Contains(msg[i], "DRYRUN: remove"), chk.Equals, true)
+			c.Check(strings.Contains(msg[i], containerURL.String()), chk.Equals, true)
+			c.Check(strings.Contains(msg[i], blobList[i]), chk.Equals, true)
+		}
+	})
+}
+
+func (s *cmdIntegrationSuite) TestDryrunRemoveBlobsUnderContainerJson(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	// set up the container with a single blob
+	blobName := []string{"tech.txt"}
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobName, blockBlobDefaultData)
+	c.Assert(containerURL, chk.NotNil)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Json()) //json format
+	glcm = &mockedLcm
+
+	// construct the raw input to simulate user input
+	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
+	raw.dryrun = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		// validate that none where transferred
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+
+		msg := <-mockedLcm.dryrunLog
+		deleteTransfer := common.CopyTransfer{}
+		errMarshal := json.Unmarshal([]byte(msg), &deleteTransfer)
+		c.Assert(errMarshal, chk.IsNil)
+		//comparing some values of deleteTransfer
+		c.Check(strings.Compare(deleteTransfer.Source, blobName[0]), chk.Equals, 0)
+		c.Check(strings.Compare(deleteTransfer.Destination, blobName[0]), chk.Equals, 0)
+		c.Check(strings.Compare(deleteTransfer.EntityType.String(), common.EEntityType.File().String()), chk.Equals, 0)
+		c.Check(strings.Compare(string(deleteTransfer.BlobType), "BlockBlob"), chk.Equals, 0)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestRemoveSingleBlobWithFromTo(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	for _, blobName := range []string{"top/mid/low/singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
+		// set up the container with a single blob
+		blobList := []string{blobName}
+		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
+		c.Assert(containerURL, chk.NotNil)
+
+		// set up interceptor
+		mockedRPC := interceptor{}
+		Rpc = mockedRPC.intercept
+		mockedRPC.init()
+
+		// construct the raw input to simulate user input
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
+		raw.fromTo = "BlobTrash"
+
+		runCopyAndVerify(c, raw, func(err error) {
+			c.Assert(err, chk.IsNil)
+
+			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
+			validateRemoveTransfersAreScheduled(c, true, []string{""}, mockedRPC)
+		})
+	}
+}
+
+func (s *cmdIntegrationSuite) TestRemoveBlobsUnderContainerWithFromTo(c *chk.C) {
+	bsu := getBSU()
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String())
+	raw.fromTo = "BlobTrash"
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
+
+		// validate that the right transfers were sent
+		validateRemoveTransfersAreScheduled(c, true, blobList, mockedRPC)
+	})
+
+	// turn off recursive, this time only top blobs should be deleted
+	raw.recursive = false
+	mockedRPC.reset()
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(blobList))
+
+		for _, transfer := range mockedRPC.transfers {
+			c.Assert(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+		}
+	})
+}
+
+func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDirWithFromTo(c *chk.C) {
+	c.Skip("Enable after setting Account to non-HNS")
+	bsu := getBSU()
+	vdirName := "vdir1/vdir2/vdir3/"
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, vdirName)
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName)
+	raw := getDefaultRemoveRawInput(rawVirtualDirectoryURLWithSAS.String())
+	raw.fromTo = "BlobTrash"
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
+
+		// validate that the right transfers were sent
+		expectedTransfers := scenarioHelper{}.shaveOffPrefix(blobList, vdirName)
+		validateRemoveTransfersAreScheduled(c, true, expectedTransfers, mockedRPC)
+	})
+
+	// turn off recursive, this time only top blobs should be deleted
+	raw.recursive = false
+	mockedRPC.reset()
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(blobList))
+
+		for _, transfer := range mockedRPC.transfers {
+			c.Assert(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+		}
 	})
 }

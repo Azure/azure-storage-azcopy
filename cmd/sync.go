@@ -51,6 +51,8 @@ type rawSyncCmdArgs struct {
 	excludeFileAttributes string
 	legacyInclude         string // for warning messages only
 	legacyExclude         string // for warning messages only
+	includeRegex          string
+	excludeRegex          string
 
 	preserveSMBPermissions bool
 	preserveOwner          bool
@@ -81,6 +83,8 @@ type rawSyncCmdArgs struct {
 	// Key is present in AzureKeyVault and Azure KeyVault is linked with storage account.
 	// Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data
 	cpkScopeInfo string
+	// dry run mode bool
+	dryrun bool
 }
 
 func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -295,6 +299,11 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	cooked.mirrorMode = raw.mirrorMode
 
+	cooked.includeRegex = raw.parsePatterns(raw.includeRegex)
+	cooked.excludeRegex = raw.parsePatterns(raw.excludeRegex)
+
+	cooked.dryrunMode = raw.dryrun
+
 	return cooked, nil
 }
 
@@ -329,6 +338,8 @@ type cookedSyncCmdArgs struct {
 	excludePaths          []string
 	includeFileAttributes []string
 	excludeFileAttributes []string
+	includeRegex          []string
+	excludeRegex          []string
 
 	// options
 	preserveSMBPermissions common.PreservePermissionsOption
@@ -373,6 +384,8 @@ type cookedSyncCmdArgs struct {
 	cpkOptions common.CpkOptions
 
 	mirrorMode bool
+
+	dryrunMode bool
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -637,7 +650,9 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 	}
 
 	// trigger the progress reporting
-	cca.waitUntilJobCompletion(false)
+	if !cca.dryrunMode {
+		cca.waitUntilJobCompletion(false)
+	}
 
 	// trigger the enumeration
 	err = enumerator.enumerate()
@@ -679,6 +694,9 @@ func init() {
 			if err != nil {
 				glcm.Error("Cannot perform sync due to error: " + err.Error())
 			}
+			if cooked.dryrunMode {
+				glcm.Exit(nil, common.EExitCode.Success())
+			}
 
 			glcm.SurrenderControl()
 		},
@@ -704,6 +722,8 @@ func init() {
 		"This option does not support wildcard characters (*). Checks relative path prefix(For example: myFolder;myFolder/subDirName/file.pdf).")
 	syncCmd.PersistentFlags().StringVar(&raw.includeFileAttributes, "include-attributes", "", "(Windows only) Include only files whose attributes match the attribute list. For example: A;S;R")
 	syncCmd.PersistentFlags().StringVar(&raw.excludeFileAttributes, "exclude-attributes", "", "(Windows only) Exclude files whose attributes match the attribute list. For example: A;S;R")
+	syncCmd.PersistentFlags().StringVar(&raw.includeRegex, "include-regex", "", "Include the relative path of the files that match with the regular expressions. Separate regular expressions with ';'.")
+	syncCmd.PersistentFlags().StringVar(&raw.excludeRegex, "exclude-regex", "", "Exclude the relative path of the files that match with the regular expressions. Separate regular expressions with ';'.")
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "Define the log verbosity for the log file, available levels: INFO(all requests and responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default INFO).")
 	syncCmd.PersistentFlags().StringVar(&raw.deleteDestination, "delete-destination", "false", "Defines whether to delete extra files from the destination that are not present at the source. Could be set to true, false, or prompt. "+
 		"If set to prompt, the user will be asked a question before scheduling files and blobs for deletion. (default 'false').")
@@ -720,6 +740,7 @@ func init() {
 	syncCmd.PersistentFlags().StringVar(&raw.cpkScopeInfo, "cpk-by-name", "", "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data")
 	syncCmd.PersistentFlags().BoolVar(&raw.cpkInfo, "cpk-by-value", false, "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key and its hash will be fetched from environment variables")
 	syncCmd.PersistentFlags().BoolVar(&raw.mirrorMode, "mirror-mode", false, "Disable last-modified-time based comparison and overwrites the conflicting files and blobs at the destination if this flag is set to true. Default is false")
+	syncCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the path of files that would be copied or removed by the sync command. This flag does not copy or remove the actual files.")
 
 	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
 	syncCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")

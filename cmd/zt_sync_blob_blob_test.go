@@ -23,6 +23,8 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"sort"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -679,5 +681,233 @@ func (s *cmdIntegrationSuite) TestSyncS2SADLSDirectory(c *chk.C) {
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		validateS2SSyncTransfersAreScheduled(c, "", "", expectedTransfers, mockedRPC)
+	})
+}
+
+//testing multiple include regular expression
+func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeRegexFlag(c *chk.C) {
+	bsu := getBSU()
+	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, srcContainerURL)
+	defer deleteContainer(c, dstContainerURL)
+
+	// set up the source container with numerous blobs
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, srcContainerURL, "")
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// add special blobs that we wish to include
+	blobsToInclude := []string{"tessssssssssssst.txt", "zxcfile.txt", "subOne/tetingessssss.jpeg", "subOne/subTwo/tessssst.pdf"}
+	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, blobsToInclude, blockBlobDefaultData)
+	includeString := "es{4,};^zxc"
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
+	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
+	raw.includeRegex = includeString
+
+	// verify that only the blobs specified by the include flag are synced
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
+		//comparing is names of files, since not in order need to sort each string and the compare them
+		actualTransfer := []string{}
+		for i := 0; i < len(mockedRPC.transfers); i++ {
+			actualTransfer = append(actualTransfer, strings.Trim(mockedRPC.transfers[i].Source, "/"))
+		}
+		sort.Strings(actualTransfer)
+		sort.Strings(blobsToInclude)
+		c.Assert(actualTransfer, chk.DeepEquals, blobsToInclude)
+
+		validateS2SSyncTransfersAreScheduled(c, "", "", blobsToInclude, mockedRPC)
+	})
+}
+
+// testing multiple exclude regular expressions
+func (s *cmdIntegrationSuite) TestSyncS2SWithExcludeRegexFlag(c *chk.C) {
+	bsu := getBSU()
+	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, srcContainerURL)
+	defer deleteContainer(c, dstContainerURL)
+
+	// set up the source container with blobs
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, srcContainerURL, "")
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// add special blobs that we wish to exclude
+	blobsToExclude := []string{"tessssssssssssst.txt", "subOne/dogs.jpeg", "subOne/subTwo/tessssst.pdf"}
+	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, blobsToExclude, blockBlobDefaultData)
+	excludeString := "es{4,};o(g)"
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
+	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
+	raw.excludeRegex = excludeString
+
+	// make sure the list doesn't include the blobs specified by the exclude flag
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
+		// all blobs from the blobList are transferred
+		validateS2SSyncTransfersAreScheduled(c, "", "", blobList, mockedRPC)
+	})
+}
+
+// testing with both include and exclude regular expression flags
+func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeAndExcludeRegexFlag(c *chk.C) {
+	bsu := getBSU()
+	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, srcContainerURL)
+	defer deleteContainer(c, dstContainerURL)
+
+	// set up the source container with numerous blobs
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, srcContainerURL, "")
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// add special blobs that we wish to include
+	blobsToInclude := []string{"tessssssssssssst.txt", "zxcfile.txt", "subOne/tetingessssss.jpeg"}
+	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, blobsToInclude, blockBlobDefaultData)
+	includeString := "es{4,};^zxc"
+
+	// add special blobs that we wish to exclude
+	blobsToExclude := []string{"zxca.txt", "subOne/dogs.jpeg", "subOne/subTwo/zxcat.pdf"}
+	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, blobsToExclude, blockBlobDefaultData)
+	excludeString := "^zxca;o(g)"
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
+	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
+	raw.includeRegex = includeString
+	raw.excludeRegex = excludeString
+
+	// verify that only the blobs specified by the include flag are synced
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
+		//comparing is names of files, since not in order need to sort each string and the compare them
+		actualTransfer := []string{}
+		for i := 0; i < len(mockedRPC.transfers); i++ {
+			actualTransfer = append(actualTransfer, strings.Trim(mockedRPC.transfers[i].Source, "/"))
+		}
+		sort.Strings(actualTransfer)
+		sort.Strings(blobsToInclude)
+		c.Assert(actualTransfer, chk.DeepEquals, blobsToInclude)
+
+		validateS2SSyncTransfersAreScheduled(c, "", "", blobsToInclude, mockedRPC)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestDryrunSyncBlobtoBlob(c *chk.C) {
+	bsu := getBSU()
+
+	//set up src container
+	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, srcContainerURL)
+	blobsToInclude := []string{"AzURE2.jpeg", "sub1/aTestOne.txt", "sub1/sub2/testTwo.pdf"}
+	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, blobsToInclude, blockBlobDefaultData)
+
+	//set up dst container
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, dstContainerURL)
+	blobsToDelete := []string{"testThree.jpeg"}
+	scenarioHelper{}.generateBlobsFromList(c, dstContainerURL, blobsToDelete, blockBlobDefaultData)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Text())
+	glcm = &mockedLcm
+
+	// construct the raw input to simulate user input
+	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
+	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
+	raw.dryrun = true
+	raw.deleteDestination = "true"
+
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateS2SSyncTransfersAreScheduled(c, "", "", []string{}, mockedRPC)
+
+		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
+		sort.Strings(msg)
+		for i := 0; i < len(msg); i++ {
+			if strings.Contains(msg[i], "DRYRUN: remove") {
+				c.Check(strings.Contains(msg[i], blobsToDelete[0]), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], dstContainerURL.String()), chk.Equals, true)
+			} else {
+				c.Check(strings.Contains(msg[i], "DRYRUN: copy"), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], blobsToInclude[i]), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], srcContainerURL.String()), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], dstContainerURL.String()), chk.Equals, true)
+			}
+
+		}
+	})
+}
+
+func (s *cmdIntegrationSuite) TestDryrunSyncBlobtoBlobJson(c *chk.C) {
+	bsu := getBSU()
+
+	//set up src container
+	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, srcContainerURL)
+
+	//set up dst container
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, dstContainerURL)
+	blobsToDelete := []string{"testThree.jpeg"}
+	scenarioHelper{}.generateBlobsFromList(c, dstContainerURL, blobsToDelete, blockBlobDefaultData)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Json())
+	glcm = &mockedLcm
+
+	// construct the raw input to simulate user input
+	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
+	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
+	raw.dryrun = true
+	raw.deleteDestination = "true"
+
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateS2SSyncTransfersAreScheduled(c, "", "", []string{}, mockedRPC)
+
+		msg := <-mockedLcm.dryrunLog
+		syncMessage := common.CopyTransfer{}
+		errMarshal := json.Unmarshal([]byte(msg), &syncMessage)
+		c.Assert(errMarshal, chk.IsNil)
+		c.Check(strings.Contains(syncMessage.Source, blobsToDelete[0]), chk.Equals, true)
+		c.Check(strings.Compare(syncMessage.EntityType.String(), common.EEntityType.File().String()), chk.Equals, 0)
+		c.Check(strings.Compare(string(syncMessage.BlobType), "BlockBlob"), chk.Equals, 0)
+
 	})
 }

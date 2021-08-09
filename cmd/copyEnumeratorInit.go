@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -216,7 +217,9 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// decide our folder transfer strategy
 	var message string
 	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters, cca.preserveSMBInfo, cca.preserveSMBPermissions.IsTruthy())
-	glcm.Info(message)
+	if !cca.dryrunMode {
+		glcm.Info(message)
+	}
 	if ste.JobsAdmin != nil {
 		ste.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
 	}
@@ -263,6 +266,46 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		)
 		if !cca.s2sPreserveBlobTags {
 			transfer.BlobTags = cca.blobTags
+		}
+
+		if cca.dryrunMode && shouldSendToSte {
+			glcm.Dryrun(func(format common.OutputFormat) string {
+				if format == common.EOutputFormat.Json() {
+					jsonOutput, err := json.Marshal(transfer)
+					common.PanicIfErr(err)
+					return string(jsonOutput)
+				} else {
+					if cca.fromTo.From() == common.ELocation.Local() {
+						// formatting from local source
+						dryrunValue := fmt.Sprintf("DRYRUN: copy %v", common.ToShortPath(cca.source.Value))
+						if runtime.GOOS == "windows" {
+							dryrunValue += strings.ReplaceAll(srcRelPath, "/", "\\")
+						} else { //linux and mac
+							dryrunValue += srcRelPath
+						}
+						dryrunValue += fmt.Sprintf(" to %v%v", strings.Trim(cca.destination.Value, "/"), dstRelPath)
+						return dryrunValue
+					} else if cca.fromTo.To() == common.ELocation.Local() {
+						// formatting to local source
+						dryrunValue := fmt.Sprintf("DRYRUN: copy %v%v to %v",
+							strings.Trim(cca.source.Value, "/"), srcRelPath,
+							common.ToShortPath(cca.destination.Value))
+						if runtime.GOOS == "windows" {
+							dryrunValue += strings.ReplaceAll(dstRelPath, "/", "\\")
+						} else { //linux and mac
+							dryrunValue += dstRelPath
+						}
+						return dryrunValue
+					} else {
+						return fmt.Sprintf("DRYRUN: copy %v%v to %v%v",
+							cca.source.Value,
+							srcRelPath,
+							cca.destination.Value,
+							dstRelPath)
+					}
+				}
+			})
+			return nil
 		}
 
 		if shouldSendToSte {
@@ -331,6 +374,14 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 		for _, v := range cca.excludePathPatterns {
 			filters = append(filters, &excludeFilter{pattern: v, targetsPath: true})
 		}
+	}
+
+	if len(cca.includeRegex) != 0 {
+		filters = append(filters, &regexFilter{patterns: cca.includeRegex, isIncluded: true})
+	}
+
+	if len(cca.excludeRegex) != 0 {
+		filters = append(filters, &regexFilter{patterns: cca.excludeRegex, isIncluded: false})
 	}
 
 	if len(cca.excludeBlobType) != 0 {

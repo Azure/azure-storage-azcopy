@@ -23,6 +23,7 @@ package cmd
 import (
 	"fmt"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 
@@ -230,6 +231,63 @@ func (fs filterSet) GetEnumerationPreFilter(recursive bool) string {
 }
 
 ////////
+
+// includeRegex & excludeRegex
+type regexFilter struct {
+	patterns   []string
+	isIncluded bool
+}
+
+func (f *regexFilter) doesSupportThisOS() (msg string, supported bool) {
+	msg = ""
+	supported = true
+	return
+}
+
+func (f *regexFilter) appliesOnlyToFiles() bool {
+	return false
+}
+
+func (f *regexFilter) doesPass(storedObject storedObject) bool {
+	if len(f.patterns) == 0 {
+		return true
+	}
+	for _, pattern := range f.patterns {
+		matched := false
+		var err error
+
+		matched, err = regexp.MatchString(pattern, storedObject.relativePath)
+		// if pattern fails to match with an error, we assume the pattern is invalid
+		if err != nil {
+			if f.isIncluded { //if include filter then we ignore it
+				continue
+			} else { //if exclude filter then we let it pass
+				return true
+			}
+		}
+		//check if pattern matched relative path
+		//if matched then return isIncluded which is a boolean expression to represent included and excluded
+		if matched {
+			return f.isIncluded
+		}
+	}
+	return !f.isIncluded
+}
+
+func buildRegexFilters(patterns []string, isIncluded bool) []objectFilter {
+	if len(patterns) == 0 {
+		return []objectFilter{}
+	}
+
+	filters := make([]string, 0)
+	for _, pattern := range patterns {
+		if pattern != "" {
+			filters = append(filters, pattern)
+		}
+	}
+
+	return []objectFilter{&regexFilter{patterns: filters, isIncluded: isIncluded}}
+}
 
 // includeAfterDateFilter includes files with Last Modified Times >= the specified threshold
 // Used for copy, but doesn't make conceptual sense for sync

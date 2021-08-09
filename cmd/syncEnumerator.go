@@ -108,6 +108,11 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		excludeAttrFilters := buildAttrFilters(cca.excludeFileAttributes, cca.source.ValueLocal(), false)
 		filters = append(filters, excludeAttrFilters...)
 	}
+
+	//includeRegex
+	filters = append(filters, buildRegexFilters(cca.includeRegex, true)...)
+	filters = append(filters, buildRegexFilters(cca.excludeRegex, false)...)
+
 	// after making all filters, log any search prefix computed from them
 	if ste.JobsAdmin != nil {
 		if prefixFilter := filterSet(filters).GetEnumerationPreFilter(cca.recursive); prefixFilter != "" {
@@ -117,7 +122,9 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 
 	// decide our folder transfer strategy
 	fpo, folderMessage := newFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preserveSMBPermissions.IsTruthy()) // sync always acts like stripTopDir=true
-	glcm.Info(folderMessage)
+	if !cca.dryrunMode {
+		glcm.Info(folderMessage)
+	}
 	if ste.JobsAdmin != nil {
 		ste.JobsAdmin.LogToJobLog(folderMessage, pipeline.LogInfo)
 	}
