@@ -136,15 +136,20 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	// TODO: if expand the set of source/dest combos supported by sync, update this method the declarative test framework:
 
 	/* We support DFS by using blob end-point of the account. We replace dfs by blob in src and dst */
+	srcDfs, dstDfs := false, false
 	if loc := inferArgumentLocation(raw.src); loc == common.ELocation.BlobFS() {
 		raw.src = strings.Replace(raw.src, ".dfs", ".blob", 1)
 		glcm.Info("Sync operates only on blob endpoint. Switching to use blob endpoint on source account.")
+		srcDfs = true
 	}
 
 	if loc := inferArgumentLocation(raw.dst); loc == common.ELocation.BlobFS() {
 		raw.dst = strings.Replace(raw.dst, ".dfs", ".blob", 1)
 		glcm.Info("Sync operates only on blob endpoint. Switching to use blob endpoint on destination account.")
+		dstDfs = true
 	}
+
+	cooked.isDfsDfs = srcDfs && dstDfs
 
 	cooked.fromTo = inferFromTo(raw.src, raw.dst)
 	switch cooked.fromTo {
