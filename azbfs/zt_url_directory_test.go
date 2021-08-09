@@ -168,6 +168,37 @@ func (dus *DirectoryUrlSuite) TestReCreateDirectory(c *chk.C) {
 	c.Assert(stgErr.ServiceCode(), chk.Equals, azbfs.ServiceCodePathAlreadyExists)
 }
 
+// TestCreateMetadataDeleteDirectory test the creation of a directory with metadata
+func (dus *DirectoryUrlSuite) TestCreateMetadataDeleteDirectory(c *chk.C) {
+	// Create a file system
+	fsu := getBfsServiceURL()
+	fsURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fsURL)
+
+	// Create metadata
+	metadata := make(map[string]string)
+	metadata["foo"] = "bar"
+
+	// Create a directory url from the fileSystem Url
+	dirUrl, _ := getDirectoryURLFromFileSystem(c, fsURL)
+	cResp, err := dirUrl.CreateWithMetadata(context.Background(), true, metadata)
+	defer deleteDirectory(c, dirUrl)
+
+	// Assert the directory create response header attributes
+	c.Assert(err, chk.IsNil)
+	c.Assert(cResp.StatusCode(), chk.Equals, http.StatusCreated)
+	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
+	c.Assert(cResp.LastModified(), chk.Not(chk.Equals), "")
+	c.Assert(cResp.XMsRequestID(), chk.Not(chk.Equals), "")
+	c.Assert(cResp.XMsVersion(), chk.Not(chk.Equals), "")
+	c.Assert(cResp.Date(), chk.Not(chk.Equals), "")
+
+	getResp, err := dirUrl.GetProperties(context.Background())
+	c.Assert(err, chk.IsNil)
+	c.Assert(getResp.Response().StatusCode, chk.Equals, http.StatusOK)
+	c.Assert(getResp.XMsProperties(), chk.Not(chk.Equals), "") // Check metadata returned is not null.
+}
+
 // TestDirectoryStructure tests creating dir, sub-dir inside dir and files
 // inside dirs and sub-dirs. Then verify the count of files / sub-dirs inside directory
 func (dus *DirectoryUrlSuite) TestDirectoryStructure(c *chk.C) {
@@ -275,4 +306,58 @@ func (dus *DirectoryUrlSuite) TestListDirectoryWithSpaces(c *chk.C) {
 	c.Assert(lresp.XMsRequestID(), chk.Not(chk.Equals), "")
 	c.Assert(lresp.XMsVersion(), chk.Not(chk.Equals), "")
 	c.Assert(lresp.Date(), chk.Not(chk.Equals), "")
+}
+
+func (s *FileURLSuite) TestRenameDirectory(c *chk.C) {
+	fsu := getBfsServiceURL()
+	fileSystemURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fileSystemURL)
+
+	dirURL, _ := createNewDirectoryFromFileSystem(c, fileSystemURL)
+	dirRename := generateDirectoryName()
+
+	renamedDirURL, err := dirURL.Rename(context.Background(), nil, &dirRename)
+	c.Assert(renamedDirURL, chk.NotNil)
+	c.Assert(err, chk.IsNil)
+
+	// Check that the old directory does not exist
+	getPropertiesResp, err := dirURL.GetProperties(context.Background())
+	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	c.Assert(getPropertiesResp, chk.IsNil)
+
+	// Check that the renamed directory does exist
+	getPropertiesResp, err = renamedDirURL.GetProperties(context.Background())
+	c.Assert(getPropertiesResp.StatusCode(), chk.Equals, http.StatusOK)
+	c.Assert(err, chk.IsNil)
+}
+
+func (s *FileURLSuite) TestRenameDirectoryWithFile(c *chk.C) {
+	fsu := getBfsServiceURL()
+	fileSystemURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fileSystemURL)
+
+	dirURL, _ := createNewDirectoryFromFileSystem(c, fileSystemURL)
+	fileName := generateFileName()
+	fileURL := dirURL.NewFileURL(fileName)
+	dirRename := generateDirectoryName()
+
+	renamedDirURL, err := dirURL.Rename(context.Background(), nil, &dirRename)
+	c.Assert(renamedDirURL, chk.NotNil)
+	c.Assert(err, chk.IsNil)
+
+	// Check that the old directory and file do not exist
+	getPropertiesResp, err := dirURL.GetProperties(context.Background())
+	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	c.Assert(getPropertiesResp, chk.IsNil)
+	getPropertiesResp2, err := fileURL.GetProperties(context.Background())
+	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	c.Assert(getPropertiesResp2, chk.IsNil)
+
+	// Check that the renamed directory and file do exist
+	getPropertiesResp, err = renamedDirURL.GetProperties(context.Background())
+	c.Assert(getPropertiesResp.StatusCode(), chk.Equals, http.StatusOK)
+	c.Assert(err, chk.IsNil)
+	getPropertiesResp2, err = renamedDirURL.NewFileURL(fileName).GetProperties(context.Background())
+	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	c.Assert(getPropertiesResp2, chk.IsNil)
 }

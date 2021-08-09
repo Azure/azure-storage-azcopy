@@ -74,3 +74,8 @@ func (s FileSystemURL) Delete(ctx context.Context) (*FilesystemDeleteResponse, e
 func (s FileSystemURL) GetProperties(ctx context.Context) (*FilesystemGetPropertiesResponse, error) {
 	return s.fileSystemClient.GetProperties(ctx, s.name, nil, nil, nil)
 }
+
+// ListPaths returns a list of paths in the file system.
+func (s FileSystemURL) ListPaths(ctx context.Context, path *string, recursive bool, upnReturned *bool, maxResults int32, continuation *string) (*PathList, error) {
+	return s.fileSystemClient.ListPaths(ctx, recursive, s.name, path, continuation, &maxResults, upnReturned, nil, nil, nil)
+}

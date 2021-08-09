@@ -69,6 +69,11 @@ func (d DirectoryURL) NewDirectoryURL(dirName string) DirectoryURL {
 
 // Create creates a new directory within a File System
 func (d DirectoryURL) Create(ctx context.Context, recreateIfExists bool) (*DirectoryCreateResponse, error) {
+	return d.CreateWithMetadata(ctx, recreateIfExists, nil)
+}
+
+// Create creates a new directory within a File System
+func (d DirectoryURL) CreateWithMetadata(ctx context.Context, recreateIfExists bool, metadata map[string]string) (*DirectoryCreateResponse, error) {
 	var ifNoneMatch *string
 	if recreateIfExists {
 		ifNoneMatch = nil // the default ADLS Gen2 behavior, see https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create
@@ -76,14 +81,14 @@ func (d DirectoryURL) Create(ctx context.Context, recreateIfExists bool) (*Direc
 		star := "*" // see https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create
 		ifNoneMatch = &star
 	}
-	return d.doCreate(ctx, ifNoneMatch)
+	return d.doCreate(ctx, ifNoneMatch, metadata)
 }
 
-func (d DirectoryURL) doCreate(ctx context.Context, ifNoneMatch *string) (*DirectoryCreateResponse, error) {
+func (d DirectoryURL) doCreate(ctx context.Context, ifNoneMatch *string, metadata map[string]string) (*DirectoryCreateResponse, error) {
 	resp, err := d.directoryClient.Create(ctx, d.filesystem, d.pathParameter, PathResourceDirectory, nil,
 		PathRenameModeNone, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil, ifNoneMatch,
+		nil, BuildMetadataString(metadata), nil, nil, nil, ifNoneMatch,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, nil)
 	return (*DirectoryCreateResponse)(resp), err
@@ -156,4 +161,32 @@ func (d DirectoryURL) IsDirectory(ctx context.Context) (bool, error) {
 // This api is used when the directoryUrl is to represents a file
 func (d DirectoryURL) NewFileUrl() FileURL {
 	return NewFileURL(d.URL(), d.directoryClient.Pipeline())
+}
+
+// Renames the directory to the provided destination
+func (d DirectoryURL) Rename(ctx context.Context, destinationFileSystem *string, destinationPath *string) (DirectoryURL, error) {
+
+	// If the destinationFileSystem is not provided, use the current filesystem
+	fileSystemName := destinationFileSystem
+	if fileSystemName == nil || *fileSystemName == "" {
+		fileSystemName = &d.filesystem
+	}
+
+	renameSource := "/" + d.filesystem + "/" + d.pathParameter
+
+	urlParts := NewBfsURLParts(d.directoryClient.URL())
+	urlParts.FileSystemName = *fileSystemName
+	urlParts.DirectoryOrFilePath = *destinationPath
+
+	destinationDirectoryURL := NewDirectoryURL(urlParts.URL(), d.directoryClient.Pipeline())
+
+	_, err := destinationDirectoryURL.directoryClient.Create(ctx, *fileSystemName, *destinationPath, PathResourceNone, nil, PathRenameModeLegacy,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, &renameSource, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil)
+
+	if err != nil {
+		return DirectoryURL{}, err
+	}
+
+	return destinationDirectoryURL, nil
 }

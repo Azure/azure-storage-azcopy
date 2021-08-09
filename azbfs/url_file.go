@@ -64,10 +64,16 @@ func (f FileURL) GetParentDir() (DirectoryURL, error) {
 // Create creates a new file or replaces a file. Note that this method only initializes the file.
 // For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/create-file.
 func (f FileURL) Create(ctx context.Context, headers BlobFSHTTPHeaders) (*PathCreateResponse, error) {
+	return f.CreateWithMetadata(ctx, headers, nil)
+}
+
+// Create creates a new file or replaces a file. Note that this method only initializes the file.
+// For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/create-file.
+func (f FileURL) CreateWithMetadata(ctx context.Context, headers BlobFSHTTPHeaders, metadata map[string]string) (*PathCreateResponse, error) {
 	return f.fileClient.Create(ctx, f.fileSystemName, f.path, PathResourceFile,
 		nil, PathRenameModeNone, nil, nil, nil, nil,
 		&headers.CacheControl, &headers.ContentType, &headers.ContentEncoding, &headers.ContentLanguage, &headers.ContentDisposition,
-		nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, BuildMetadataString(metadata), nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil)
@@ -197,4 +203,51 @@ func (f FileURL) FlushData(ctx context.Context, fileSize int64, contentMd5 []byt
 		&headers.CacheControl, &headers.ContentType, &headers.ContentDisposition, &headers.ContentEncoding, &headers.ContentLanguage,
 		md5InBase64, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil, &overrideHttpVerb, nil, nil, nil, nil)
+}
+
+// Renames the file to the provided destination
+func (f FileURL) Rename(ctx context.Context, destinationFileSystem *string, destinationPath *string) (FileURL, error) {
+
+	// If the destinationFileSystem is not provided, use the current filesystem
+	fileSystemName := destinationFileSystem
+	if fileSystemName == nil || *fileSystemName == "" {
+		fileSystemName = &f.fileSystemName
+	}
+
+	renameSource := "/" + f.fileSystemName + "/" + f.path
+
+	urlParts := NewBfsURLParts(f.fileClient.URL())
+	urlParts.FileSystemName = *fileSystemName
+	urlParts.DirectoryOrFilePath = *destinationPath
+
+	destinationFileURL := NewFileURL(urlParts.URL(), f.fileClient.Pipeline())
+
+	_, err := destinationFileURL.fileClient.Create(ctx, *fileSystemName, *destinationPath, PathResourceNone, nil, PathRenameModeLegacy,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, &renameSource, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil)
+
+	if err != nil {
+		return FileURL{}, err
+	}
+
+	return destinationFileURL, nil
+}
+
+func (f FileURL) SetAccessControlList(ctx context.Context, accessControlList *string, group *string, owner *string) (*PathUpdateResponse, error) {
+
+	// TODO: the go http client has a problem with PATCH and content-length header
+	//       we should investigate and report the issue
+	// See similar todo, with larger comments, in AppendData
+	overrideHttpVerb := "PATCH"
+
+	return f.fileClient.Update(ctx, PathUpdateActionSetAccessControl, f.fileSystemName, f.path, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, owner, group, nil, accessControlList, nil, nil, nil, nil, &overrideHttpVerb, nil, nil, nil, nil)
+}
+
+// GetAccessControl returns the file's access control properties.
+// For more information, see https://docs.microsoft.com/rest/api/storageservices/get-file-properties.
+func (f FileURL) GetAccessControl(ctx context.Context) (*PathGetPropertiesResponse, error) {
+	action := PathGetPropertiesActionGetAccessControl
+
+	return f.fileClient.GetProperties(ctx, f.fileSystemName, f.path, action, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 }
