@@ -55,7 +55,7 @@ func getBfsServiceURL() azbfs.ServiceURL {
 func generateName(prefix string) string {
 	// These next lines up through the for loop are obtaining and walking up the stack
 	// trace to extract the test name, which is stored in name
-	pc := make([]uintptr, 20)
+	pc := make([]uintptr, 10)
 	runtime.Callers(0, pc)
 	f := runtime.FuncForPC(pc[0])
 	name := f.Name()
