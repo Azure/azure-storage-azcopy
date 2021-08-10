@@ -61,7 +61,6 @@ func generateName(prefix string) string {
 	name := f.Name()
 	for i := 0; !strings.Contains(name, "Suite"); i++ { // The tests are all scoped to the suite, so this ensures getting the actual test name
 		f = runtime.FuncForPC(pc[i])
-		fmt.Println(f.Name())
 		name = f.Name()
 	}
 	funcNameStart := strings.Index(name, "Test")
