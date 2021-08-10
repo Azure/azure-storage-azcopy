@@ -337,9 +337,9 @@ func (s *FileURLSuite) TestRenameDirWithFile(c *chk.C) {
 	defer delFileSystem(c, fileSystemURL)
 
 	dirURL, _ := createNewDirectoryFromFileSystem(c, fileSystemURL)
-	var fileName string = generateFileName()
+	fileName := "test.txt"
 	fileURL := dirURL.NewFileURL(fileName)
-	var dirRename string = generateDirectoryName()
+	dirRename := generateDirectoryName()
 
 	renamedDirURL, err := dirURL.Rename(context.Background(), nil, &dirRename)
 	c.Assert(renamedDirURL, chk.NotNil)
