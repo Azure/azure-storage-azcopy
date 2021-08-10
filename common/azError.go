@@ -50,3 +50,7 @@ var EAzError AzError
 func (err AzError) LoginCredMissing() AzError {
 	return AzError{uint64(1), "Login Credentials missing. ", ""}
 }
+
+func (err AzError) InvalidBlobName() AzError {
+	return AzError {uint64(2), "Invalid Blob Name.", ""}
+}

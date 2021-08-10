@@ -64,12 +64,24 @@ func (t *s3Traverser) isDirectory(isSource bool) bool {
 }
 
 func (t *s3Traverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
+	invalidAzureBlobName := func (objectKey string) bool {
+		/* S3 object name is invalid if it ends with period or
+		   one of virtual directories in path ends with period.
+		   This list is not exhaustive
+		 */
+		return strings.HasSuffix(objectKey, ".") ||
+		       strings.Contains(objectKey, "\\.")
+	}
 	// Check if resource is a single object.
 	if t.s3URLParts.IsObjectSyntactically() && !t.s3URLParts.IsDirectorySyntactically() && !t.s3URLParts.IsBucketSyntactically() {
 		objectPath := strings.Split(t.s3URLParts.ObjectKey, "/")
 		objectName := objectPath[len(objectPath)-1]
 
 		oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
+
+		if invalidAzureBlobName(t.s3URLParts.ObjectKey) {
+			return common.EAzError.InvalidBlobName()
+		}
 
 		// If we actually got object properties, process them.
 		// Otherwise, treat it as a directory.
@@ -119,6 +131,13 @@ func (t *s3Traverser) traverse(preprocessor objectMorpher, processor objectProce
 
 		if objectInfo.StorageClass == "" {
 			// Directories are the only objects without storage classes.
+			continue
+		}
+
+		if invalidAzureBlobName(objectInfo.Key) {
+			//Throw a warning on console and continue
+			msg := fmt.Sprintf("Skipping S3 object %s, as it is not a valid Blob name. Rename the object and retry the transfer", objectInfo.Key)
+			glcm.Info(msg)
 			continue
 		}
 
