@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -46,6 +47,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 		scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, fileList)
 
 		// set up the destination container with a single blob
+		time.Sleep(time.Second)
 		dstBlobName := srcFileName
 		scenarioHelper{}.generateBlobsFromList(c, containerURL, []string{dstBlobName}, blockBlobDefaultData)
 		c.Assert(containerURL, chk.NotNil)
@@ -68,6 +70,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 		})
 
 		// recreate the file to have a later last modified time
+		time.Sleep(time.Second)
 		scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, []string{srcFileName})
 		mockedRPC.reset()
 
