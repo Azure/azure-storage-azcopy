@@ -22,12 +22,9 @@ package cmd
 
 import (
 	"bytes"
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"google.golang.org/api/iterator"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -38,9 +35,13 @@ import (
 	"testing"
 	"time"
 
+	gcpUtils "cloud.google.com/go/storage"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"google.golang.org/api/iterator"
+
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	minio "github.com/minio/minio-go"
+	"github.com/minio/minio-go"
 
 	chk "gopkg.in/check.v1"
 
@@ -632,7 +633,16 @@ func cleanBlobAccount(c *chk.C, serviceURL azblob.ServiceURL) {
 
 		for _, v := range resp.ContainerItems {
 			_, err = serviceURL.NewContainerURL(v.Name).Delete(ctx, azblob.ContainerAccessConditions{})
-			c.Assert(err, chk.IsNil)
+
+			if err != nil {
+				if stgErr, ok := err.(azblob.StorageError); ok {
+					if stgErr.ServiceCode() == azblob.ServiceCodeContainerNotFound {
+						continue
+					}
+				}
+
+				c.Assert(err, chk.IsNil)
+			}
 		}
 
 		marker = resp.NextMarker
@@ -647,7 +657,16 @@ func cleanFileAccount(c *chk.C, serviceURL azfile.ServiceURL) {
 
 		for _, v := range resp.ShareItems {
 			_, err = serviceURL.NewShareURL(v.Name).Delete(ctx, azfile.DeleteSnapshotsOptionNone)
-			c.Assert(err, chk.IsNil)
+
+			if err != nil {
+				if stgErr, ok := err.(azfile.StorageError); ok {
+					if stgErr.ServiceCode() == azfile.ServiceCodeShareNotFound {
+						continue
+					}
+				}
+
+				c.Assert(err, chk.IsNil)
+			}
 		}
 
 		marker = resp.NextMarker
