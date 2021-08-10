@@ -62,7 +62,7 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 		return nil, err
 	}
 
-	p.credType = jptm.CredentialType().GetCredentialTypeOption()
+	p.credType = jptm.CredentialType()
 	p.s3Client, err = s3ClientFactory.GetS3Client(
 		p.jptm.Context(),
 		common.CredentialInfo{

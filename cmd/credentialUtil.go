@@ -512,11 +512,10 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 			accessKeyID := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
 			secretAccessKey := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSSecretAccessKey())
 			if accessKeyID == "" || secretAccessKey == "" {
-				credType.SetCredentialTypeOption(common.ECredentialType.S3PublicBucket())
+				credType = common.ECredentialType.S3PublicBucket()
 				return credType, true, nil
 			}
-			credType.SetCredentialTypeOption(common.ECredentialType.S3AccessKey())
-			// credType = common.ECredentialType.S3AccessKey()
+			credType = common.ECredentialType.S3AccessKey()
 		case common.ELocation.GCP():
 			googleAppCredentials := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleAppCredentials())
 			if googleAppCredentials == "" {
@@ -567,7 +566,7 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, raw.sourceSAS, true, common.CpkOptions{})
 	case raw.fromTo.To().IsRemote():
 		// we authenticate to the destination. Source is assumed to be SAS, or public, or a local resource
-		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.destination, raw.destinationSAS, false, common.CpkOptions{})
+		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.To(), raw.destination, raw.destinationSAS, false, common.CpkOptions{})
 	case raw.fromTo == common.EFromTo.BlobTrash() ||
 		raw.fromTo == common.EFromTo.BlobFSTrash() ||
 		raw.fromTo == common.EFromTo.FileTrash():

@@ -205,11 +205,6 @@ func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options Cr
 		secretAccessKey := glcm.GetEnvironmentVariable(EEnvironmentVariable.AWSSecretAccessKey())
 		sessionToken := glcm.GetEnvironmentVariable(EEnvironmentVariable.AwsSessionToken())
 
-		// if empty, create anon creds and assume bucket is public
-		if accessKeyID == "" || secretAccessKey == "" {
-			return credentials.NewStatic("", "", "", credentials.SignatureAnonymous), nil
-		}
-
 		// create and return s3 credential
 		return credentials.NewStaticV4(accessKeyID, secretAccessKey, sessionToken), nil // S3 uses V4 signature
 	default:

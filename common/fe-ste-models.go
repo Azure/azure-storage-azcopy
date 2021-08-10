@@ -790,13 +790,6 @@ func (ct *CredentialType) Parse(s string) error {
 	return err
 }
 
-func (ct *CredentialType) SetCredentialTypeOption(credentialType CredentialType) {
-	*ct = credentialType
-}
-func (ct CredentialType) GetCredentialTypeOption() CredentialType {
-	return ct
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var EHashValidationOption = HashValidationOption(0)
