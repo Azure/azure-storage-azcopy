@@ -70,7 +70,7 @@ func (t *s3Traverser) traverse(preprocessor objectMorpher, processor objectProce
 		   This list is not exhaustive
 		 */
 		return strings.HasSuffix(objectKey, ".") ||
-		       strings.Contains(objectKey, "\\.")
+		       strings.Contains(objectKey, "/.")
 	}
 	// Check if resource is a single object.
 	if t.s3URLParts.IsObjectSyntactically() && !t.s3URLParts.IsDirectorySyntactically() && !t.s3URLParts.IsBucketSyntactically() {
