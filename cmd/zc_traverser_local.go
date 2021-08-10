@@ -235,8 +235,8 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 						skipped, err := getProcessingError(err)
 
 						if !skipped { // Don't go any deeper (or record it) if we skipped it.
-							seenPaths.Record(result)
-							seenPaths.Record(slPath) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
+							seenPaths.Record(common.ToExtendedPath(result))
+							seenPaths.Record(common.ToExtendedPath(slPath)) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
 							walkQueue = append(walkQueue, walkItem{
 								fullPath:     result,
 								relativeBase: computedRelativePath,
@@ -284,7 +284,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 
 					// If the file was skipped, don't record it.
 					if !skipped {
-						seenPaths.Record(result)
+						seenPaths.Record(common.ToExtendedPath(result))
 					}
 
 					return err
