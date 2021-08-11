@@ -144,6 +144,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIdenticalDestination(c *chk.C) {
 	defer deleteContainer(c, containerURL)
 
 	// wait for 1 second so that the last modified times of the blobs are guaranteed to be newer
+	time.Sleep(time.Second)
 	scenarioHelper{}.generateBlobsFromList(c, containerURL, fileList, blockBlobDefaultData)
 
 	// set up interceptor
