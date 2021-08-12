@@ -29,8 +29,13 @@ import (
 // 		1. objectProcessor: accumulate a lookup map with given storedObjects
 //		2. resourceTraverser: go through the entities in the map like a traverser
 type objectIndexer struct {
-	indexMap                     map[string]storedObject
-	counter                      int
+	indexMap map[string]storedObject
+	counter  int
+
+	// isDestinationCaseInsensitive is true when the destination is case-insensitive
+	// In Windows, both paths D:\path\to\dir and D:\Path\TO\DiR point to the same resource.
+	// Apple File System (APFS) can be configured to be case-sensitive or case-insensitive.
+	// So for such locations, the key in the indexMap will be lowercase to avoid infinite syncing.
 	isDestinationCaseInsensitive bool
 }
 
