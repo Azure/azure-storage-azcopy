@@ -196,7 +196,7 @@ func init() {
 func beginDetectNewVersion() chan struct{} {
 	completionChannel := make(chan struct{})
 	go func() {
-		const versionMetadataUrl = "https://aka.ms/azcopyv10-version-metadata"
+		const versionMetadataUrl = "https://azcopyvnextrelease.blob.core.windows.net/releasemetadata/latest_version.txt"
 
 		// step 0: check the Stderr before checking version
 		_, err := os.Stderr.Stat()
