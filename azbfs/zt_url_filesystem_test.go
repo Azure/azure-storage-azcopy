@@ -73,7 +73,7 @@ func (s *FileSystemURLSuite) TestFileSystemList(c *chk.C) {
 	fileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{})
 
 	// List
-	paths, err := fileSystemURL.ListPaths(context.Background(), nil, false, nil, 5000, nil)
+	paths, err := fileSystemURL.ListPaths(context.Background(), azbfs.ListPathsFilesystemOptions{Recursive: false})
 	c.Assert(err, chk.IsNil)
 	c.Assert(paths.Paths, chk.NotNil)
 	c.Assert(len(paths.Paths), chk.Equals, 2)
