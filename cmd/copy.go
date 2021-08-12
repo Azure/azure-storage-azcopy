@@ -625,7 +625,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	}
 
 	if cooked.preserveSMBInfo && !raw.preserveSMBPermissions {
-		glcm.Info("preserve-smb-permissions flag is set to false. AzCopy will not copy SMB ACLs between aware resources.")
+		glcm.Info("Please note: the preserve-smb-permissions flag is set to false, thus AzCopy will not copy SMB ACLs between the source and destination.")
 	}
 
 	if err = validatePreserveSMBPropertyOption(raw.preserveSMBPermissions, cooked.fromTo, &cooked.forceWrite, "preserve-smb-permissions"); err != nil {
