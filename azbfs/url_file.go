@@ -207,10 +207,10 @@ func (f FileURL) FlushData(ctx context.Context, fileSize int64, contentMd5 []byt
 }
 
 // Renames the file to the provided destination
-func (f FileURL) Rename(ctx context.Context, destinationFileSystem *string, destinationPath *string) (FileURL, error) {
+func (f FileURL) Rename(ctx context.Context, options RenameFileOptions) (FileURL, error) {
 
 	// If the destinationFileSystem is not provided, use the current filesystem
-	fileSystemName := destinationFileSystem
+	fileSystemName := options.DestinationFileSystem
 	if fileSystemName == nil || *fileSystemName == "" {
 		fileSystemName = &f.fileSystemName
 	}
@@ -219,11 +219,11 @@ func (f FileURL) Rename(ctx context.Context, destinationFileSystem *string, dest
 
 	urlParts := NewBfsURLParts(f.fileClient.URL())
 	urlParts.FileSystemName = *fileSystemName
-	urlParts.DirectoryOrFilePath = *destinationPath
+	urlParts.DirectoryOrFilePath = options.DestinationPath
 
 	destinationFileURL := NewFileURL(urlParts.URL(), f.fileClient.Pipeline())
 
-	_, err := destinationFileURL.fileClient.Create(ctx, *fileSystemName, *destinationPath, PathResourceNone, nil, PathRenameModeLegacy,
+	_, err := destinationFileURL.fileClient.Create(ctx, *fileSystemName, options.DestinationPath, PathResourceNone, nil, PathRenameModeLegacy,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, &renameSource, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil)
 

@@ -164,10 +164,10 @@ func (d DirectoryURL) NewFileUrl() FileURL {
 }
 
 // Renames the directory to the provided destination
-func (d DirectoryURL) Rename(ctx context.Context, destinationFileSystem *string, destinationPath *string) (DirectoryURL, error) {
+func (d DirectoryURL) Rename(ctx context.Context, options RenameDirectoryOptions) (DirectoryURL, error) {
 
 	// If the destinationFileSystem is not provided, use the current filesystem
-	fileSystemName := destinationFileSystem
+	fileSystemName := options.DestinationFileSystem
 	if fileSystemName == nil || *fileSystemName == "" {
 		fileSystemName = &d.filesystem
 	}
@@ -176,11 +176,11 @@ func (d DirectoryURL) Rename(ctx context.Context, destinationFileSystem *string,
 
 	urlParts := NewBfsURLParts(d.directoryClient.URL())
 	urlParts.FileSystemName = *fileSystemName
-	urlParts.DirectoryOrFilePath = *destinationPath
+	urlParts.DirectoryOrFilePath = options.DestinationPath
 
 	destinationDirectoryURL := NewDirectoryURL(urlParts.URL(), d.directoryClient.Pipeline())
 
-	_, err := destinationDirectoryURL.directoryClient.Create(ctx, *fileSystemName, *destinationPath, PathResourceNone, nil, PathRenameModeLegacy,
+	_, err := destinationDirectoryURL.directoryClient.Create(ctx, *fileSystemName, options.DestinationPath, PathResourceNone, nil, PathRenameModeLegacy,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, &renameSource, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil)
 

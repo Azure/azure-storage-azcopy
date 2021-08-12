@@ -10,3 +10,11 @@ type CreateDirectoryOptions struct {
 	// User defined properties to be stored with the directory.
 	Metadata map[string]string
 }
+
+// For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create.
+type RenameDirectoryOptions struct {
+	// The optional destination file system for the directory.
+	DestinationFileSystem *string
+	// The destination path for the directory.
+	DestinationPath string
+}

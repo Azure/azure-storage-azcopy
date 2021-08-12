@@ -317,7 +317,7 @@ func (s *FileURLSuite) TestRenameDirectory(c *chk.C) {
 	dirURL, _ := createNewDirectoryFromFileSystem(c, fileSystemURL)
 	dirRename := generateDirectoryName()
 
-	renamedDirURL, err := dirURL.Rename(context.Background(), nil, &dirRename)
+	renamedDirURL, err := dirURL.Rename(context.Background(), azbfs.RenameDirectoryOptions{DestinationPath: dirRename})
 	c.Assert(renamedDirURL, chk.NotNil)
 	c.Assert(err, chk.IsNil)
 
@@ -342,7 +342,7 @@ func (s *FileURLSuite) TestRenameDirWithFile(c *chk.C) {
 	fileURL := dirURL.NewFileURL(fileName)
 	dirRename := generateDirectoryName()
 
-	renamedDirURL, err := dirURL.Rename(context.Background(), nil, &dirRename)
+	renamedDirURL, err := dirURL.Rename(context.Background(), azbfs.RenameDirectoryOptions{DestinationPath: dirRename})
 	c.Assert(renamedDirURL, chk.NotNil)
 	c.Assert(err, chk.IsNil)
 
