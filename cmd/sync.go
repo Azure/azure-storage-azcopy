@@ -54,7 +54,8 @@ type rawSyncCmdArgs struct {
 	includeRegex          string
 	excludeRegex          string
 
-	preserveSMBPermissions bool
+	preservePermissions    bool
+	preserveSMBPermissions bool // deprecated and synonymous with preservePermissions
 	preserveOwner          bool
 	preserveSMBInfo        bool
 	followSymlinks         bool
@@ -84,7 +85,7 @@ type rawSyncCmdArgs struct {
 	// Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data
 	cpkScopeInfo string
 	// dry run mode bool
-	dryrun bool
+	dryrun              bool
 }
 
 func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -236,7 +237,22 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.includeFileAttributes = raw.parsePatterns(raw.includeFileAttributes)
 	cooked.excludeFileAttributes = raw.parsePatterns(raw.excludeFileAttributes)
 
-	if err = validatePreserveSMBPropertyOption(raw.preserveSMBPermissions, cooked.fromTo, nil, "preserve-smb-permissions", false); err != nil {
+	cooked.preserveSMBInfo = areBothLocationsSMBAware(cooked.fromTo)
+	// If user has explicitly specified not to copy SMB Information, set cooked.preserveSMBInfo to false
+	if !raw.preserveSMBInfo {
+		cooked.preserveSMBInfo = false
+	}
+
+	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, nil, "preserve-smb-info", false); err != nil {
+		return cooked, err
+	}
+
+	isUserPersistingPermissions := raw.preserveSMBPermissions || raw.preservePermissions
+	if cooked.preserveSMBInfo && !isUserPersistingPermissions {
+		glcm.Info("Please note: the preserve-permissions flag is set to false, thus AzCopy will not copy SMB ACLs between the source and destination.")
+	}
+
+	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions, cooked.fromTo, nil, "preserve-smb-permissions", cooked.isDfsDfs); err != nil {
 		return cooked, err
 	}
 	// TODO: the check on raw.preserveSMBPermissions on the next line can be removed once we have full support for these properties in sync
@@ -244,11 +260,6 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	//	return cooked, err
 	//}
 	cooked.preserveSMBPermissions = common.NewPreservePermissionsOption(raw.preserveSMBPermissions, raw.preserveOwner, cooked.fromTo)
-
-	cooked.preserveSMBInfo = raw.preserveSMBInfo
-	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, nil, "preserve-smb-info", false); err != nil {
-		return cooked, err
-	}
 
 	cooked.putMd5 = raw.putMd5
 	if err = validatePutMd5(cooked.putMd5, cooked.fromTo); err != nil {
@@ -714,7 +725,7 @@ func init() {
 	// TODO: enable for copy with IfSourceNewer
 	// smb info/permissions can be persisted in the scenario of File -> File
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Azure Files). This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
-	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", false, "False by default. Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Azure Files). This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is not preserved for folders. ")
+	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", true, "For SMB-aware locations, flag will be set to true by default. Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Azure Files). This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is not preserved for folders. ")
 
 	// TODO: enable when we support local <-> File
 	//syncCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
@@ -758,4 +769,8 @@ func init() {
 	//syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when performing sync from local file system.")
 
 	// TODO sync does not support all BlobAttributes on the command line, this functionality should be added
+
+	// Deprecate the old persist-smb-permissions flag
+	syncCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
+	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files, or ADLS Gen 2 to ADLS Gen 2). For Hierarchical Namespace accounts, you will need a container SAS or OAuth token with Modify Ownership and Modify Permissions permissions. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 }
