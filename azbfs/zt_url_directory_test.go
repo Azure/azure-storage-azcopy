@@ -181,7 +181,8 @@ func (dus *DirectoryUrlSuite) TestCreateMetadataDeleteDirectory(c *chk.C) {
 
 	// Create a directory url from the fileSystem Url
 	dirUrl, _ := getDirectoryURLFromFileSystem(c, fsURL)
-	cResp, err := dirUrl.CreateWithMetadata(context.Background(), true, metadata)
+	cResp, err := dirUrl.CreateWithOptions(context.Background(),
+		azbfs.CreateDirectoryOptions{RecreateIfExists: true, Metadata: metadata})
 	defer deleteDirectory(c, dirUrl)
 
 	// Assert the directory create response header attributes

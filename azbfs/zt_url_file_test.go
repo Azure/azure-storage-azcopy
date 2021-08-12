@@ -124,7 +124,7 @@ func (s *FileURLSuite) TestFileCreateWithMetadataDelete(c *chk.C) {
 	metadata := make(map[string]string)
 	metadata["foo"] = "bar"
 
-	cResp, err := file.CreateWithMetadata(context.Background(), azbfs.BlobFSHTTPHeaders{}, metadata)
+	cResp, err := file.CreateWithOptions(context.Background(), azbfs.CreateFileOptions{Metadata: metadata})
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.Response().StatusCode, chk.Equals, http.StatusCreated)
 	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")

@@ -69,19 +69,19 @@ func (d DirectoryURL) NewDirectoryURL(dirName string) DirectoryURL {
 
 // Create creates a new directory within a File System
 func (d DirectoryURL) Create(ctx context.Context, recreateIfExists bool) (*DirectoryCreateResponse, error) {
-	return d.CreateWithMetadata(ctx, recreateIfExists, nil)
+	return d.CreateWithOptions(ctx, CreateDirectoryOptions{RecreateIfExists: recreateIfExists})
 }
 
 // Create creates a new directory within a File System
-func (d DirectoryURL) CreateWithMetadata(ctx context.Context, recreateIfExists bool, metadata map[string]string) (*DirectoryCreateResponse, error) {
+func (d DirectoryURL) CreateWithOptions(ctx context.Context, options CreateDirectoryOptions) (*DirectoryCreateResponse, error) {
 	var ifNoneMatch *string
-	if recreateIfExists {
+	if options.RecreateIfExists {
 		ifNoneMatch = nil // the default ADLS Gen2 behavior, see https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create
 	} else {
 		star := "*" // see https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create
 		ifNoneMatch = &star
 	}
-	return d.doCreate(ctx, ifNoneMatch, metadata)
+	return d.doCreate(ctx, ifNoneMatch, options.Metadata)
 }
 
 func (d DirectoryURL) doCreate(ctx context.Context, ifNoneMatch *string, metadata map[string]string) (*DirectoryCreateResponse, error) {
