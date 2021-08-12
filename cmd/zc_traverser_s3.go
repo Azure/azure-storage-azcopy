@@ -72,6 +72,7 @@ func (t *s3Traverser) traverse(preprocessor objectMorpher, processor objectProce
 		return strings.HasSuffix(objectKey, ".") ||
 		       strings.Contains(objectKey, "/.")
 	}
+	invalidNameErrorMsg := "Skipping S3 object %s, as it is not a valid Blob name. Rename the object and retry the transfer"
 	// Check if resource is a single object.
 	if t.s3URLParts.IsObjectSyntactically() && !t.s3URLParts.IsDirectorySyntactically() && !t.s3URLParts.IsBucketSyntactically() {
 		objectPath := strings.Split(t.s3URLParts.ObjectKey, "/")
@@ -80,6 +81,7 @@ func (t *s3Traverser) traverse(preprocessor objectMorpher, processor objectProce
 		oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
 
 		if invalidAzureBlobName(t.s3URLParts.ObjectKey) {
+			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, t.s3URLParts.ObjectKey))
 			return common.EAzError.InvalidBlobName()
 		}
 
@@ -136,8 +138,7 @@ func (t *s3Traverser) traverse(preprocessor objectMorpher, processor objectProce
 
 		if invalidAzureBlobName(objectInfo.Key) {
 			//Throw a warning on console and continue
-			msg := fmt.Sprintf("Skipping S3 object %s, as it is not a valid Blob name. Rename the object and retry the transfer", objectInfo.Key)
-			glcm.Info(msg)
+			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, objectInfo.Key))
 			continue
 		}
 
