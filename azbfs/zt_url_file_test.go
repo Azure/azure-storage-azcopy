@@ -389,21 +389,3 @@ func (s *FileURLSuite) TestRenameFile(c *chk.C) {
 	c.Assert(getPropertiesResp.StatusCode(), chk.Equals, http.StatusOK)
 	c.Assert(err, chk.IsNil)
 }
-
-func (s *FileURLSuite) TestSetAccessControl(c *chk.C) {
-	fsu := getBfsServiceURL()
-	fileSystemURL, _ := createNewFileSystem(c, fsu)
-	defer delFileSystem(c, fileSystemURL)
-
-	fileURL, _ := createNewFileFromFileSystem(c, fileSystemURL)
-	accessControlList := "user::rwx,group::r--,mask::rwx,other::---"
-
-	resp, err := fileURL.SetAccessControlList(context.Background(), &accessControlList, nil, nil)
-	c.Assert(err, chk.IsNil)
-	c.Assert(resp, chk.NotNil)
-
-	getResp, err := fileURL.GetAccessControl(context.Background())
-	c.Assert(err, chk.IsNil)
-	c.Assert(getResp, chk.NotNil)
-	c.Assert(getResp.XMsACL(), chk.Equals, accessControlList) // Note: The service returns the accessControlList back in alphabetical order of the principal name
-}

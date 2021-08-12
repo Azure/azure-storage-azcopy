@@ -233,22 +233,3 @@ func (f FileURL) Rename(ctx context.Context, options RenameFileOptions) (FileURL
 
 	return destinationFileURL, nil
 }
-
-func (f FileURL) SetAccessControlList(ctx context.Context, accessControlList *string, group *string, owner *string) (*PathUpdateResponse, error) {
-
-	// TODO: the go http client has a problem with PATCH and content-length header
-	//       we should investigate and report the issue
-	// See similar todo, with larger comments, in AppendData
-	overrideHttpVerb := "PATCH"
-
-	return f.fileClient.Update(ctx, PathUpdateActionSetAccessControl, f.fileSystemName, f.path, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
-		nil, nil, owner, group, nil, accessControlList, nil, nil, nil, nil, &overrideHttpVerb, nil, nil, nil, nil)
-}
-
-// GetAccessControl returns the file's access control properties.
-// For more information, see https://docs.microsoft.com/rest/api/storageservices/get-file-properties.
-func (f FileURL) GetAccessControl(ctx context.Context) (*PathGetPropertiesResponse, error) {
-	action := PathGetPropertiesActionGetAccessControl
-
-	return f.fileClient.GetProperties(ctx, f.fileSystemName, f.path, action, nil, nil, nil, nil, nil, nil, nil, nil, nil)
-}
