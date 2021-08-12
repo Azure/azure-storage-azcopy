@@ -443,15 +443,15 @@ func (s *cmdIntegrationSuite) TestDryrunSyncLocaltoBlob(c *chk.C) {
 		sort.Strings(msg)
 		for i := 0; i < len(msg); i++ {
 			if strings.Contains(msg[i], "DRYRUN: remove") {
-				c.Check(strings.Contains(msg[i], blobsToDelete[0]), chk.Equals, true)
 				c.Check(strings.Contains(msg[i], dstContainerURL.String()), chk.Equals, true)
 			} else {
 				c.Check(strings.Contains(msg[i], "DRYRUN: copy"), chk.Equals, true)
-				c.Check(strings.Contains(msg[i], blobsToInclude[i]), chk.Equals, true)
 				c.Check(strings.Contains(msg[i], srcDirName), chk.Equals, true)
 				c.Check(strings.Contains(msg[i], dstContainerURL.String()), chk.Equals, true)
 			}
-
 		}
+
+		c.Check(testDryrunStatements(blobsToInclude, msg), chk.Equals, true)
+		c.Check(testDryrunStatements(blobsToDelete, msg), chk.Equals, true)
 	})
 }

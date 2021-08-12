@@ -100,6 +100,22 @@ func skipIfGCPDisabled(c *chk.C) {
 	}
 }
 
+func testDryrunStatements(items, messages []string) bool {
+	for _,v := range items {
+		for _,m := range messages {
+			if strings.HasSuffix(m, v) {
+				goto continueBlobs
+			}
+		}
+
+		return false
+
+		continueBlobs:
+	}
+
+	return true
+}
+
 // This function generates an entity name by concatenating the passed prefix,
 // the name of the test requesting the entity name, and the minute, second, and nanoseconds of the call.
 // This should make it easy to associate the entities with their test, uniquely identify

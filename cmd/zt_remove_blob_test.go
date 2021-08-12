@@ -76,6 +76,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderContainer(c *chk.C) {
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
 	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String())
 	raw.recursive = true
+	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
 
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
@@ -207,6 +208,7 @@ func (s *cmdIntegrationSuite) TestRemoveWithExcludeFlag(c *chk.C) {
 	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String())
 	raw.exclude = excludeString
 	raw.recursive = true
+	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
 
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
@@ -544,8 +546,9 @@ func (s *cmdIntegrationSuite) TestDryrunRemoveBlobsUnderContainer(c *chk.C) {
 		for i := 0; i < len(blobList); i++ {
 			c.Check(strings.Contains(msg[i], "DRYRUN: remove"), chk.Equals, true)
 			c.Check(strings.Contains(msg[i], containerURL.String()), chk.Equals, true)
-			c.Check(strings.Contains(msg[i], blobList[i]), chk.Equals, true)
 		}
+
+		c.Check(testDryrunStatements(blobList, msg), chk.Equals, true)
 	})
 }
 
@@ -638,6 +641,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderContainerWithFromTo(c *chk.C) 
 	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String())
 	raw.fromTo = "BlobTrash"
 	raw.recursive = true
+	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
 
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
