@@ -6,7 +6,7 @@ import (
 )
 
 // Converts metadata into a string of format "key1=value1, key2=value2" and Base64 encodes the values.
-func BuildMetadataString(md map[string]string) *string {
+func buildMetadataString(md map[string]string) *string {
 	if len(md) == 0 {
 		return nil
 	}

@@ -73,7 +73,7 @@ func (f FileURL) CreateWithMetadata(ctx context.Context, headers BlobFSHTTPHeade
 	return f.fileClient.Create(ctx, f.fileSystemName, f.path, PathResourceFile,
 		nil, PathRenameModeNone, nil, nil, nil, nil,
 		&headers.CacheControl, &headers.ContentType, &headers.ContentEncoding, &headers.ContentLanguage, &headers.ContentDisposition,
-		nil, nil, nil, BuildMetadataString(metadata), nil, nil,
+		nil, nil, nil, buildMetadataString(metadata), nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil)

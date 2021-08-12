@@ -88,7 +88,7 @@ func (d DirectoryURL) doCreate(ctx context.Context, ifNoneMatch *string, metadat
 	resp, err := d.directoryClient.Create(ctx, d.filesystem, d.pathParameter, PathResourceDirectory, nil,
 		PathRenameModeNone, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
-		nil, BuildMetadataString(metadata), nil, nil, nil, ifNoneMatch,
+		nil, buildMetadataString(metadata), nil, nil, nil, ifNoneMatch,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, nil)
 	return (*DirectoryCreateResponse)(resp), err
