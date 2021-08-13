@@ -26,7 +26,7 @@ jobs:
     steps:
       - task: GoTool@0
         inputs:
-          version: '1.15'
+          version: '1.16'
       - script: |
           GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
           GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
@@ -65,7 +65,7 @@ jobs:
     steps:
       - task: GoTool@0
         inputs:
-          version: '1.15'
+          version: '1.16'
 
       # Running E2E Tests on Linux
       - script: |
@@ -126,7 +126,7 @@ jobs:
       - task: GoTool@0
         name: 'Set_up_Golang'
         inputs:
-          version: '1.15'
+          version: '1.16'
       - task: DownloadSecureFile@1
         name: ciGCSServiceAccountKey
         displayName: 'Download GCS Service Account Key'
