@@ -20,6 +20,10 @@
 
 package cmd
 
+import (
+	"strings"
+)
+
 // the objectIndexer is essential for the generic sync enumerator to work
 // it can serve as a:
 // 		1. objectProcessor: accumulate a lookup map with given storedObjects
@@ -27,6 +31,12 @@ package cmd
 type objectIndexer struct {
 	indexMap map[string]storedObject
 	counter  int
+
+	// isDestinationCaseInsensitive is true when the destination is case-insensitive
+	// In Windows, both paths D:\path\to\dir and D:\Path\TO\DiR point to the same resource.
+	// Apple File System (APFS) can be configured to be case-sensitive or case-insensitive.
+	// So for such locations, the key in the indexMap will be lowercase to avoid infinite syncing.
+	isDestinationCaseInsensitive bool
 }
 
 func newObjectIndexer() *objectIndexer {
@@ -41,8 +51,12 @@ func (i *objectIndexer) store(storedObject storedObject) (err error) {
 	// It is safe to index all storedObjects just by relative path, regardless of their entity type, because
 	// no filesystem allows a file and a folder to have the exact same full path.  This is true of
 	// Linux file systems, Windows, Azure Files and ADLS Gen 2 (and logically should be true of all file systems).
-
-	i.indexMap[storedObject.relativePath] = storedObject
+	if i.isDestinationCaseInsensitive {
+		lcRelativePath := strings.ToLower(storedObject.relativePath)
+		i.indexMap[lcRelativePath] = storedObject
+	} else {
+		i.indexMap[storedObject.relativePath] = storedObject
+	}
 	i.counter += 1
 	return
 }
