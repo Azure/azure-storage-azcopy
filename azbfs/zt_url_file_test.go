@@ -372,8 +372,8 @@ func (s *FileURLSuite) TestRenameFile(c *chk.C) {
 	fileSystemURL, _ := createNewFileSystem(c, fsu)
 	defer delFileSystem(c, fileSystemURL)
 
-	fileURL, _ := createNewFileFromFileSystem(c, fileSystemURL)
-	fileRename := generateFileName()
+	fileURL, fileName := createNewFileFromFileSystem(c, fileSystemURL)
+	fileRename := fileName + "rename"
 
 	renamedFileURL, err := fileURL.Rename(context.Background(), azbfs.RenameFileOptions{DestinationPath: fileRename})
 	c.Assert(renamedFileURL, chk.NotNil)

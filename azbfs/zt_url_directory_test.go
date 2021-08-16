@@ -314,8 +314,8 @@ func (s *FileURLSuite) TestRenameDirectory(c *chk.C) {
 	fileSystemURL, _ := createNewFileSystem(c, fsu)
 	defer delFileSystem(c, fileSystemURL)
 
-	dirURL, _ := createNewDirectoryFromFileSystem(c, fileSystemURL)
-	dirRename := generateDirectoryName()
+	dirURL, dirName := createNewDirectoryFromFileSystem(c, fileSystemURL)
+	dirRename := dirName + "rename"
 
 	renamedDirURL, err := dirURL.Rename(context.Background(), azbfs.RenameDirectoryOptions{DestinationPath: dirRename})
 	c.Assert(renamedDirURL, chk.NotNil)
@@ -337,10 +337,10 @@ func (s *FileURLSuite) TestRenameDirWithFile(c *chk.C) {
 	fileSystemURL, _ := createNewFileSystem(c, fsu)
 	defer delFileSystem(c, fileSystemURL)
 
-	dirURL, _ := createNewDirectoryFromFileSystem(c, fileSystemURL)
+	dirURL, dirName := createNewDirectoryFromFileSystem(c, fileSystemURL)
 	fileName := "test.txt"
 	fileURL := dirURL.NewFileURL(fileName)
-	dirRename := generateDirectoryName()
+	dirRename := dirName + "rename"
 
 	renamedDirURL, err := dirURL.Rename(context.Background(), azbfs.RenameDirectoryOptions{DestinationPath: dirRename})
 	c.Assert(renamedDirURL, chk.NotNil)
