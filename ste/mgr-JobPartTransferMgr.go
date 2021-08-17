@@ -83,7 +83,6 @@ type IJobPartTransferMgr interface {
 	GetFolderCreationTracker() common.FolderCreationTracker
 	common.ILogger
 	DeleteSnapshotsOption() common.DeleteSnapshotsOption
-	CredentialType() common.CredentialType
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 	FolderDeletionManager() common.FolderDeletionManager
 	GetDestinationRoot() string
@@ -476,10 +475,6 @@ func (jptm *jobPartTransferMgr) MD5ValidationOption() common.HashValidationOptio
 
 func (jptm *jobPartTransferMgr) DeleteSnapshotsOption() common.DeleteSnapshotsOption {
 	return jptm.jobPartMgr.(*jobPartMgr).deleteSnapshotsOption()
-}
-
-func (jptm *jobPartTransferMgr) CredentialType() common.CredentialType {
-	return jptm.jobPartMgr.(*jobPartMgr).jobMgr.(*jobMgr).credentialType
 }
 
 func (jptm *jobPartTransferMgr) BlobTypeOverride() common.BlobType {

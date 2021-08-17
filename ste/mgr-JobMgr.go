@@ -87,8 +87,6 @@ type IJobMgr interface {
 	SendXferDoneMsg(msg xferDoneMsg)
 	ListJobSummary() common.ListJobSummaryResponse
 	ResurrectSummary(js common.ListJobSummaryResponse)
-
-	CredentialType(common.CredentialType)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -235,12 +233,6 @@ type jobMgr struct {
 	initState *jobMgrInitState
 
 	jobPartProgress chan jobPartProgressInfo
-
-	credentialType common.CredentialType
-}
-
-func (jm *jobMgr) CredentialType(credential common.CredentialType) {
-	jm.credentialType = credential
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
