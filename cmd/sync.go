@@ -104,7 +104,7 @@ func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []strin
 
 // it is assume that the given url has the SAS stripped, and safe to print
 func (raw *rawSyncCmdArgs) validateURLIsNotServiceLevel(url string, location common.Location) error {
-	srcLevel, err := determineLocationLevel(url, location, true)
+	srcLevel, err := DetermineLocationLevel(url, location, true)
 	if err != nil {
 		return err
 	}
@@ -138,13 +138,13 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	/* We support DFS by using blob end-point of the account. We replace dfs by blob in src and dst */
 	srcHNS, dstHNS := false, false
-	if loc := inferArgumentLocation(raw.src); loc == common.ELocation.BlobFS() {
+	if loc := InferArgumentLocation(raw.src); loc == common.ELocation.BlobFS() {
 		raw.src = strings.Replace(raw.src, ".dfs", ".blob", 1)
 		glcm.Info("Sync operates only on blob endpoint. Switching to use blob endpoint on source account.")
 		srcHNS = true
 	}
 
-	if loc := inferArgumentLocation(raw.dst); loc == common.ELocation.BlobFS() {
+	if loc := InferArgumentLocation(raw.dst); loc == common.ELocation.BlobFS() {
 		raw.dst = strings.Replace(raw.dst, ".dfs", ".blob", 1)
 		glcm.Info("Sync operates only on blob endpoint. Switching to use blob endpoint on destination account.")
 		dstHNS = true
@@ -346,7 +346,7 @@ type cookedSyncCmdArgs struct {
 
 	source         common.ResourceString
 	destination    common.ResourceString
-	fromTo         common.FromTo
+        fromTo         common.FromTo
 	credentialInfo common.CredentialInfo
 	isHNSToHNS     bool // Because DFS sources and destinations are obscured, this is necessary for folder property transfers on ADLS Gen 2.
 
@@ -635,13 +635,13 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 
 	// Verifies credential type and initializes credential info.
 	// Note that this is for the destination.
-	cca.credentialInfo, _, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false, cca.cpkOptions)
+	cca.credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false, cca.cpkOptions)
 
 	if err != nil {
 		return err
 	}
 
-	srcCredInfo, _, err := getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true, cca.cpkOptions)
+	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true, cca.cpkOptions)
 
 	if err != nil {
 		return err

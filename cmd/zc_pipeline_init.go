@@ -9,7 +9,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-func initPipeline(ctx context.Context, location common.Location, credential common.CredentialInfo, logLevel pipeline.LogLevel) (p pipeline.Pipeline, err error) {
+func InitPipeline(ctx context.Context, location common.Location, credential common.CredentialInfo, logLevel pipeline.LogLevel) (p pipeline.Pipeline, err error) {
 	switch location {
 	case common.ELocation.Local(),
 		common.ELocation.Benchmark():

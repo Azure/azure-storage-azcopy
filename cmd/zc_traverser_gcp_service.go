@@ -24,7 +24,7 @@ type gcpServiceTraverser struct {
 
 var projectID = ""
 
-func (t *gcpServiceTraverser) isDirectory(isSource bool) bool {
+func (t *gcpServiceTraverser) IsDirectory(isSource bool) bool {
 	return true //Account traversals are inherently folder based
 }
 
@@ -60,7 +60,7 @@ func (t *gcpServiceTraverser) listContainers() ([]string, error) {
 	}
 }
 
-func (t *gcpServiceTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) error {
+func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 	bucketList, err := t.listContainers()
 
 	if err != nil {
@@ -78,7 +78,7 @@ func (t *gcpServiceTraverser) traverse(preprocessor objectMorpher, processor obj
 		}
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
-		err = bucketTraverser.traverse(preprocessorForThisChild, processor, filters)
+		err = bucketTraverser.Traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
 			if strings.Contains(err.Error(), "cannot list objects, The specified bucket does not exist") {

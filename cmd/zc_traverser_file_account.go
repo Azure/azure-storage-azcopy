@@ -42,7 +42,7 @@ type fileAccountTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func (t *fileAccountTraverser) isDirectory(isSource bool) bool {
+func (t *fileAccountTraverser) IsDirectory(isSource bool) bool {
 	return true // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
@@ -83,7 +83,7 @@ func (t *fileAccountTraverser) listContainers() ([]string, error) {
 	}
 }
 
-func (t *fileAccountTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) error {
+func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 	// listContainers will return the cached share list if shares have already been listed by this traverser.
 	shareList, err := t.listContainers()
 
@@ -97,7 +97,7 @@ func (t *fileAccountTraverser) traverse(preprocessor objectMorpher, processor ob
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
-		err = shareTraverser.traverse(preprocessorForThisChild, processor, filters)
+		err = shareTraverser.Traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
 			WarnStdoutAndScanningLog(fmt.Sprintf("failed to list files in share %s: %s", v, err))

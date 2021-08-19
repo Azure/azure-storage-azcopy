@@ -57,7 +57,7 @@ func (raw rawMakeCmdArgs) cook() (cookedMakeCmdArgs, error) {
 	// resourceLocation could be unknown at this stage, it will be handled by the caller
 	return cookedMakeCmdArgs{
 		resourceURL:      *parsedURL,
-		resourceLocation: inferArgumentLocation(raw.resourceToCreate),
+		resourceLocation: InferArgumentLocation(raw.resourceToCreate),
 		quota:            int32(raw.quota),
 	}, nil
 }
@@ -77,7 +77,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		return err
 	}
 
-	credentialInfo, _, err := getCredentialInfoForLocation(ctx, cookedArgs.resourceLocation, resourceStringParts.Value, resourceStringParts.SAS, false, common.CpkOptions{})
+	credentialInfo, _, err := GetCredentialInfoForLocation(ctx, cookedArgs.resourceLocation, resourceStringParts.Value, resourceStringParts.SAS, false, common.CpkOptions{})
 	if err != nil {
 		return err
 	}
