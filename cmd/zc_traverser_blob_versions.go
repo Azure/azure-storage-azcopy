@@ -40,7 +40,7 @@ type blobVersionsTraverser struct {
 	cpkOptions                  common.CpkOptions
 }
 
-func (t *blobVersionsTraverser) isDirectory(isSource bool) bool {
+func (t *blobVersionsTraverser) IsDirectory(isSource bool) bool {
 	isDirDirect := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(t.rawURL)
 
 	// Skip the single blob check if we're checking a destination.
@@ -69,7 +69,7 @@ func (t *blobVersionsTraverser) getBlobProperties(versionID string) (props *azbl
 	return props, err
 }
 
-func (t *blobVersionsTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
+func (t *blobVersionsTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
 	blobURLParts := azblob.NewBlobURLParts(*t.rawURL)
 
 	versionID, ok := <-t.listOfVersionIds

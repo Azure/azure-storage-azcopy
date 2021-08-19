@@ -41,7 +41,7 @@ type localTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func (t *localTraverser) isDirectory(bool) bool {
+func (t *localTraverser) IsDirectory(bool) bool {
 	if strings.HasSuffix(t.fullPath, "/") {
 		return true
 	}
@@ -164,7 +164,6 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 	}
 
 	fullPath, err = filepath.Abs(fullPath)
-
 	if err != nil {
 		return err
 	}
@@ -181,15 +180,13 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 	for len(walkQueue) > 0 {
 		queueItem := walkQueue[0]
 		walkQueue = walkQueue[1:]
-
 		// walk contents of this queueItem in parallel
 		// (for simplicity of coding, we don't parallelize across multiple queueItems)
-		parallel.Walk(queueItem.fullPath, enumerationParallelism, enumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
+		parallel.Walk(queueItem.fullPath, EnumerationParallelism, EnumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
 			if fileError != nil {
 				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError))
 				return nil
 			}
-
 			computedRelativePath := strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(queueItem.fullPath))
 			computedRelativePath = cleanLocalPath(common.GenerateFullPath(queueItem.relativeBase, computedRelativePath))
 			computedRelativePath = strings.TrimPrefix(computedRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
@@ -299,7 +296,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 	return
 }
 
-func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
+func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 
 	if err != nil {
@@ -371,7 +368,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 					processor)
 			}
 
-			// note: Walk includes root, so no need here to separately create storedObject for root (as we do for other folder-aware sources)
+			// note: Walk includes root, so no need here to separately create StoredObject for root (as we do for other folder-aware sources)
 			return WalkWithSymlinks(t.fullPath, processFile, t.followSymlinks)
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath

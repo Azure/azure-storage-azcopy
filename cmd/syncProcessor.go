@@ -101,7 +101,7 @@ type interactiveDeleteProcessor struct {
 	dryrunMode bool
 }
 
-func newDeleteTransfer(object storedObject) (newDeleteTransfer common.CopyTransfer) {
+func newDeleteTransfer(object StoredObject) (newDeleteTransfer common.CopyTransfer) {
 	return common.CopyTransfer{
 		Source:             object.relativePath,
 		EntityType:         object.entityType,
@@ -119,7 +119,7 @@ func newDeleteTransfer(object storedObject) (newDeleteTransfer common.CopyTransf
 	}
 }
 
-func (d *interactiveDeleteProcessor) removeImmediately(object storedObject) (err error) {
+func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err error) {
 	if d.shouldPromptUser {
 		d.shouldDelete, d.shouldPromptUser = d.promptForConfirmation(object) // note down the user's decision
 	}
@@ -163,7 +163,7 @@ func (d *interactiveDeleteProcessor) removeImmediately(object storedObject) (err
 	return
 }
 
-func (d *interactiveDeleteProcessor) promptForConfirmation(object storedObject) (shouldDelete bool, keepPrompting bool) {
+func (d *interactiveDeleteProcessor) promptForConfirmation(object StoredObject) (shouldDelete bool, keepPrompting bool) {
 	answer := glcm.Prompt(fmt.Sprintf("The %s '%s' does not exist at the source. "+
 		"Do you wish to delete it from the destination(%s)?",
 		d.objectTypeToDisplay, object.relativePath, d.objectLocationToDisplay),
@@ -236,7 +236,7 @@ func shouldSyncRemoveFolders() bool {
 	return false
 }
 
-func (l *localFileDeleter) deleteFile(object storedObject) error {
+func (l *localFileDeleter) deleteFile(object StoredObject) error {
 	if object.entityType == common.EEntityType.File() {
 		glcm.Info("Deleting extra file: " + object.relativePath)
 		return os.Remove(common.GenerateFullPath(l.rootPath, object.relativePath))
@@ -255,7 +255,7 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	p, err := initPipeline(ctx, cca.fromTo.To(), cca.credentialInfo, cca.logVerbosity.ToPipelineLogLevel())
+	p, err := InitPipeline(ctx, cca.fromTo.To(), cca.credentialInfo, cca.logVerbosity.ToPipelineLogLevel())
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +280,7 @@ func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx cont
 	}
 }
 
-func (b *remoteResourceDeleter) delete(object storedObject) error {
+func (b *remoteResourceDeleter) delete(object StoredObject) error {
 	if object.entityType == common.EEntityType.File() {
 		// TODO: use b.targetLocation.String() in the next line, instead of "object", if we can make it come out as string
 		glcm.Info("Deleting extra object: " + object.relativePath)

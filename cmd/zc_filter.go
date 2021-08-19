@@ -41,15 +41,15 @@ type excludeBlobTypeFilter struct {
 	blobTypes map[azblob.BlobType]bool
 }
 
-func (f *excludeBlobTypeFilter) doesSupportThisOS() (msg string, supported bool) {
+func (f *excludeBlobTypeFilter) DoesSupportThisOS() (msg string, supported bool) {
 	return "", true
 }
 
-func (f *excludeBlobTypeFilter) appliesOnlyToFiles() bool {
+func (f *excludeBlobTypeFilter) AppliesOnlyToFiles() bool {
 	return true // there aren't any (real) folders in Blob Storage
 }
 
-func (f *excludeBlobTypeFilter) doesPass(object storedObject) bool {
+func (f *excludeBlobTypeFilter) DoesPass(object StoredObject) bool {
 	if _, ok := f.blobTypes[object.blobType]; !ok {
 		// For readability purposes, focus on returning false.
 		// Basically, the statement says "If the blob type is not present in the list, the object passes the filters."
@@ -64,21 +64,21 @@ type excludeFilter struct {
 	targetsPath bool
 }
 
-func (f *excludeFilter) doesSupportThisOS() (msg string, supported bool) {
+func (f *excludeFilter) DoesSupportThisOS() (msg string, supported bool) {
 	msg = ""
 	supported = true
 	return
 }
 
-func (f *excludeFilter) appliesOnlyToFiles() bool {
+func (f *excludeFilter) AppliesOnlyToFiles() bool {
 	return !f.targetsPath
 }
 
-func (f *excludeFilter) doesPass(storedObject storedObject) bool {
+func (f *excludeFilter) DoesPass(storedObject StoredObject) bool {
 	matched := false
 
 	if f.targetsPath {
-		// Don't actually support patterns here.
+		// Don't actually support Patterns here.
 		// Isolate the path separator
 		pattern := strings.ReplaceAll(f.pattern, common.AZCOPY_PATH_SEPARATOR_STRING, common.DeterminePathSeparator(storedObject.relativePath))
 		matched = strings.HasPrefix(storedObject.relativePath, pattern)
@@ -100,9 +100,9 @@ func (f *excludeFilter) doesPass(storedObject storedObject) bool {
 	return true
 }
 
-func buildExcludeFilters(patterns []string, targetPath bool) []objectFilter {
-	filters := make([]objectFilter, 0)
-	for _, pattern := range patterns {
+func buildExcludeFilters(Patterns []string, targetPath bool) []ObjectFilter {
+	filters := make([]ObjectFilter, 0)
+	for _, pattern := range Patterns {
 		if pattern != "" {
 			filters = append(filters, &excludeFilter{pattern: pattern, targetsPath: targetPath})
 		}
@@ -113,26 +113,26 @@ func buildExcludeFilters(patterns []string, targetPath bool) []objectFilter {
 
 // design explanation:
 // include filters are different from the exclude ones, which work together in the "AND" manner
-// meaning and if an storedObject is rejected by any of the exclude filters, then it is rejected by all of them
+// meaning and if an StoredObject is rejected by any of the exclude filters, then it is rejected by all of them
 // as a result, the exclude filters can be in their own struct, and work correctly
 // on the other hand, include filters work in the "OR" manner
-// meaning that if an storedObject is accepted by any of the include filters, then it is accepted by all of them
-// consequently, all the include patterns must be stored together
-type includeFilter struct {
+// meaning that if an StoredObject is accepted by any of the include filters, then it is accepted by all of them
+// consequently, all the include Patterns must be stored together
+type IncludeFilter struct {
 	patterns []string
 }
 
-func (f *includeFilter) doesSupportThisOS() (msg string, supported bool) {
+func (f *IncludeFilter) DoesSupportThisOS() (msg string, supported bool) {
 	msg = ""
 	supported = true
 	return
 }
 
-func (f *includeFilter) appliesOnlyToFiles() bool {
-	return true // includeFilter is a name-pattern-based filter, and we treat those as relating to FILE names only
+func (f *IncludeFilter) AppliesOnlyToFiles() bool {
+	return true // IncludeFilter is a name-pattern-based filter, and we treat those as relating to FILE names only
 }
 
-func (f *includeFilter) doesPass(storedObject storedObject) bool {
+func (f *IncludeFilter) DoesPass(storedObject StoredObject) bool {
 	if len(f.patterns) == 0 {
 		return true
 	}
@@ -151,7 +151,7 @@ func (f *includeFilter) doesPass(storedObject storedObject) bool {
 			continue
 		}
 
-		// if an storedObject is accepted by any of the include filters
+		// if an StoredObject is accepted by any of the include filters
 		// it is accepted
 		if matched {
 			return true
@@ -165,7 +165,7 @@ func (f *includeFilter) doesPass(storedObject storedObject) bool {
 // things that will pass the filter. E.g. if there's exactly one include pattern, and it is
 // "foo*bar", then this routine will return "foo", since only things starting with "foo" can pass the filters.
 // Service side enumeration code can be given that prefix, to optimize the enumeration.
-func (f *includeFilter) getEnumerationPreFilter() string {
+func (f *IncludeFilter) getEnumerationPreFilter() string {
 	if len(f.patterns) == 1 {
 		pat := f.patterns[0]
 		if strings.ContainsAny(pat, "?[\\") {
@@ -174,33 +174,33 @@ func (f *includeFilter) getEnumerationPreFilter() string {
 		}
 		return strings.Split(pat, "*")[0]
 	} else {
-		// for simplicity, we won't even try computing a common prefix for all patterns (even though that might help in theory in some cases)
+		// for simplicity, we won't even try computing a common prefix for all Patterns (even though that might help in theory in some cases)
 		return ""
 	}
 }
 
-func buildIncludeFilters(patterns []string) []objectFilter {
-	if len(patterns) == 0 {
-		return []objectFilter{}
+func buildIncludeFilters(Patterns []string) []ObjectFilter {
+	if len(Patterns) == 0 {
+		return []ObjectFilter{}
 	}
 
 	validPatterns := make([]string, 0)
-	for _, pattern := range patterns {
+	for _, pattern := range Patterns {
 		if pattern != "" {
 			validPatterns = append(validPatterns, pattern)
 		}
 	}
 
-	return []objectFilter{&includeFilter{patterns: validPatterns}}
+	return []ObjectFilter{&IncludeFilter{patterns: validPatterns}}
 }
 
-type filterSet []objectFilter
+type FilterSet []ObjectFilter
 
 // GetEnumerationPreFilter returns a prefix that is common to all the include filters, or "" if no such prefix can
 // be found. (The implementation may return "" even in cases where such a prefix does exist, but in at least the simplest
 // cases, it should return a non-empty prefix.)
-// The result can be used to optimize enumeration, since anything without this prefix will fail the filterSet
-func (fs filterSet) GetEnumerationPreFilter(recursive bool) string {
+// The result can be used to optimize enumeration, since anything without this prefix will fail the FilterSet
+func (fs FilterSet) GetEnumerationPreFilter(recursive bool) string {
 	if recursive {
 		return ""
 		// we don't/can't support recursive cases yet, with a strict prefix-based search.
@@ -221,7 +221,7 @@ func (fs filterSet) GetEnumerationPreFilter(recursive bool) string {
 				prefix = participatingFilter.getEnumerationPreFilter()
 			} else {
 				// prefix already has a value, which means there must be two participating filters, and we can't handle that.
-				// Normally this won't happen, because there's only one includeFilter on matter how many include patterns have been supplied.
+				// Normally this won't happen, because there's only one IncludeFilter on matter how many include Patterns have been supplied.
 				return ""
 			}
 		}
@@ -237,17 +237,17 @@ type regexFilter struct {
 	isIncluded bool
 }
 
-func (f *regexFilter) doesSupportThisOS() (msg string, supported bool) {
+func (f *regexFilter) DoesSupportThisOS() (msg string, supported bool) {
 	msg = ""
 	supported = true
 	return
 }
 
-func (f *regexFilter) appliesOnlyToFiles() bool {
+func (f *regexFilter) AppliesOnlyToFiles() bool {
 	return false
 }
 
-func (f *regexFilter) doesPass(storedObject storedObject) bool {
+func (f *regexFilter) DoesPass(storedObject StoredObject) bool {
 	if len(f.patterns) == 0 {
 		return true
 	}
@@ -273,9 +273,9 @@ func (f *regexFilter) doesPass(storedObject storedObject) bool {
 	return !f.isIncluded
 }
 
-func buildRegexFilters(patterns []string, isIncluded bool) []objectFilter {
+func buildRegexFilters(patterns []string, isIncluded bool) []ObjectFilter {
 	if len(patterns) == 0 {
-		return []objectFilter{}
+		return []ObjectFilter{}
 	}
 
 	filters := make([]string, 0)
@@ -285,80 +285,80 @@ func buildRegexFilters(patterns []string, isIncluded bool) []objectFilter {
 		}
 	}
 
-	return []objectFilter{&regexFilter{patterns: filters, isIncluded: isIncluded}}
+	return []ObjectFilter{&regexFilter{patterns: filters, isIncluded: isIncluded}}
 }
 
 // includeAfterDateFilter includes files with Last Modified Times >= the specified threshold
 // Used for copy, but doesn't make conceptual sense for sync
-type includeAfterDateFilter struct {
-	threshold time.Time
+type IncludeAfterDateFilter struct {
+	Threshold time.Time
 }
 
-func (f *includeAfterDateFilter) doesSupportThisOS() (msg string, supported bool) {
+func (f *IncludeAfterDateFilter) DoesSupportThisOS() (msg string, supported bool) {
 	msg = ""
 	supported = true
 	return
 }
 
-func (f *includeAfterDateFilter) appliesOnlyToFiles() bool {
+func (f *IncludeAfterDateFilter) AppliesOnlyToFiles() bool {
 	return true
 	// because we don't currently (May 2020) have meaningful LMTs for folders. The meaningful time for a folder is the "change time" not the "last write time", and the change time can only be obtained via NtGetFileInformation, which we don't yet call.
 	// TODO: the consequence of this is that folder properties and folder acls can't be moved when using this filter.
 	//       Can we live with that, for now?
 }
 
-func (f *includeAfterDateFilter) doesPass(storedObject storedObject) bool {
+func (f *IncludeAfterDateFilter) DoesPass(storedObject StoredObject) bool {
 	zeroTime := time.Time{}
 	if storedObject.lastModifiedTime == zeroTime {
-		panic("cannot use includeAfterDateFilter on an object for which no Last Modified Time has been retrieved")
+		panic("cannot use IncludeAfterDateFilter on an object for which no Last Modified Time has been retrieved")
 	}
 
-	return storedObject.lastModifiedTime.After(f.threshold) ||
-		storedObject.lastModifiedTime.Equal(f.threshold) // >= is easier for users to understand than >
+	return storedObject.lastModifiedTime.After(f.Threshold) ||
+		storedObject.lastModifiedTime.Equal(f.Threshold) // >= is easier for users to understand than >
 }
 
-func (_ includeAfterDateFilter) ParseISO8601(s string, chooseEarliest bool) (time.Time, error) {
+func (_ IncludeAfterDateFilter) ParseISO8601(s string, chooseEarliest bool) (time.Time, error) {
 	return parseISO8601(s, chooseEarliest)
 }
 
-func (_ includeAfterDateFilter) FormatAsUTC(t time.Time) string {
+func (_ IncludeAfterDateFilter) FormatAsUTC(t time.Time) string {
 	return formatAsUTC(t)
 }
 
-// includeBeforeDateFilter includes files with Last Modified Times <= the specified threshold
+// IncludeBeforeDateFilter includes files with Last Modified Times <= the specified Threshold
 // Used for copy, but doesn't make conceptual sense for sync
-type includeBeforeDateFilter struct {
-	threshold time.Time
+type IncludeBeforeDateFilter struct {
+	Threshold time.Time
 }
 
-func (f *includeBeforeDateFilter) doesSupportThisOS() (msg string, supported bool) {
+func (f *IncludeBeforeDateFilter) DoesSupportThisOS() (msg string, supported bool) {
 	msg = ""
 	supported = true
 	return
 }
 
-func (f *includeBeforeDateFilter) appliesOnlyToFiles() bool {
+func (f *IncludeBeforeDateFilter) AppliesOnlyToFiles() bool {
 	return true
 	// because we don't currently (May 2020) have meaningful LMTs for folders. The meaningful time for a folder is the "change time" not the "last write time", and the change time can only be obtained via NtGetFileInformation, which we don't yet call.
 	// TODO: the consequence of this is that folder properties and folder acls can't be moved when using this filter.
 	//       Can we live with that, for now?
 }
 
-func (f *includeBeforeDateFilter) doesPass(storedObject storedObject) bool {
+func (f *IncludeBeforeDateFilter) DoesPass(storedObject StoredObject) bool {
 	zeroTime := time.Time{}
 	if storedObject.lastModifiedTime == zeroTime {
-		panic("cannot use includeBeforeDateFilter on an object for which no Last Modified Time has been retrieved")
+		panic("cannot use IncludeBeforeDateFilter on an object for which no Last Modified Time has been retrieved")
 	}
 
-	return storedObject.lastModifiedTime.Before(f.threshold) ||
-		storedObject.lastModifiedTime.Equal(f.threshold) // <= is easier for users to understand than <
+	return storedObject.lastModifiedTime.Before(f.Threshold) ||
+		storedObject.lastModifiedTime.Equal(f.Threshold) // <= is easier for users to understand than <
 }
 
-func (_ includeBeforeDateFilter) ParseISO8601(s string, chooseEarliest bool) (time.Time, error) {
+func (_ IncludeBeforeDateFilter) ParseISO8601(s string, chooseEarliest bool) (time.Time, error) {
 	return parseISO8601(s, chooseEarliest)
 }
 
-func (_ includeBeforeDateFilter) FormatAsUTC(t time.Time) string {
+func (_ IncludeBeforeDateFilter) FormatAsUTC(t time.Time) string {
 	return formatAsUTC(t)
 }
 

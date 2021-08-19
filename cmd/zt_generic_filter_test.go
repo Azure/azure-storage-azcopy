@@ -41,14 +41,14 @@ func (s *genericFilterSuite) TestIncludeFilter(c *chk.C) {
 	// test the positive cases
 	filesToPass := []string{"bla.pdf", "fancy.jpeg", "socool.jpeg.pdf", "exactName"}
 	for _, file := range filesToPass {
-		passed := includeFilter.doesPass(storedObject{name: file})
+		passed := includeFilter.DoesPass(StoredObject{name: file})
 		c.Assert(passed, chk.Equals, true)
 	}
 
 	// test the negative cases
 	filesNotToPass := []string{"bla.pdff", "fancyjpeg", "socool.jpeg.pdf.wut", "eexactName"}
 	for _, file := range filesNotToPass {
-		passed := includeFilter.doesPass(storedObject{name: file})
+		passed := includeFilter.DoesPass(StoredObject{name: file})
 		c.Assert(passed, chk.Equals, false)
 	}
 }
@@ -63,7 +63,7 @@ func (s *genericFilterSuite) TestExcludeFilter(c *chk.C) {
 	filesToPass := []string{"bla.pdfe", "fancy.jjpeg", "socool.png", "eexactName"}
 	for _, file := range filesToPass {
 		dummyProcessor := &dummyProcessor{}
-		err := processIfPassedFilters(excludeFilterList, storedObject{name: file}, dummyProcessor.process)
+		err := processIfPassedFilters(excludeFilterList, StoredObject{name: file}, dummyProcessor.process)
 		c.Assert(err, chk.IsNil)
 		c.Assert(len(dummyProcessor.record), chk.Equals, 1)
 	}
@@ -72,7 +72,7 @@ func (s *genericFilterSuite) TestExcludeFilter(c *chk.C) {
 	filesToNotPass := []string{"bla.pdf", "fancy.jpeg", "socool.jpeg.pdf", "exactName"}
 	for _, file := range filesToNotPass {
 		dummyProcessor := &dummyProcessor{}
-		err := processIfPassedFilters(excludeFilterList, storedObject{name: file}, dummyProcessor.process)
+		err := processIfPassedFilters(excludeFilterList, StoredObject{name: file}, dummyProcessor.process)
 		c.Assert(err, chk.Equals, ignoredError)
 		c.Assert(len(dummyProcessor.record), chk.Equals, 0)
 	}
@@ -107,7 +107,7 @@ func (s *genericFilterSuite) TestDateParsingForIncludeAfter(c *chk.C) {
 	loc, _ := time.LoadLocation("Local")
 
 	for _, x := range examples {
-		t, err := includeAfterDateFilter{}.ParseISO8601(x.input, true)
+		t, err := IncludeAfterDateFilter{}.ParseISO8601(x.input, true)
 		if x.expectedErrorContents == "" {
 			c.Assert(err, chk.IsNil, chk.Commentf(x.input))
 			//fmt.Printf("%v -> %v\n", x.input, t)
@@ -147,14 +147,14 @@ func (s *genericFilterSuite) TestDateParsingForIncludeAfter_IsSafeAtDaylightSavi
 	fmt.Println("Testing end of daylight saving at " + dateString + " local time")
 
 	// ask for the earliest of the two ambiguous times
-	parsed, err := includeAfterDateFilter{}.ParseISO8601(dateString, true) // we use chooseEarliest=true for includeAfter
+	parsed, err := IncludeAfterDateFilter{}.ParseISO8601(dateString, true) // we use chooseEarliest=true for includeAfter
 	c.Assert(err, chk.IsNil)
 	fmt.Printf("For chooseEarliest = true, the times are parsed %v, utcEarly %v, utcLate %v \n", parsed, utcEarlyVersion, utcLateVersion)
 	c.Assert(parsed.Equal(utcEarlyVersion), chk.Equals, true)
 	c.Assert(parsed.Equal(utcLateVersion), chk.Equals, false)
 
 	// ask for the latest of the two ambiguous times
-	parsed, err = includeAfterDateFilter{}.ParseISO8601(dateString, false) // we test the false case in this test too, just for completeness
+	parsed, err = IncludeAfterDateFilter{}.ParseISO8601(dateString, false) // we test the false case in this test too, just for completeness
 	c.Assert(err, chk.IsNil)
 	fmt.Printf("For chooseEarliest = false, the times are parsed %v, utcEarly %v, utcLate %v \n", parsed, utcEarlyVersion, utcLateVersion)
 	c.Assert(parsed.UTC().Equal(utcEarlyVersion), chk.Equals, false)

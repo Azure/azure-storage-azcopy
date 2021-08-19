@@ -45,7 +45,7 @@ func init() {
 			// the resource to delete is set as the source
 			raw.src = args[0]
 
-			srcLocationType := inferArgumentLocation(raw.src)
+			srcLocationType := InferArgumentLocation(raw.src)
 			if raw.fromTo == "" {
 				switch srcLocationType {
 				case common.ELocation.Blob():

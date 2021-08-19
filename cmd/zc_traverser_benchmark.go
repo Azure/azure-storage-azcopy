@@ -45,7 +45,7 @@ func newBenchmarkTraverser(source string, incrementEnumerationCounter enumeratio
 		nil
 }
 
-func (t *benchmarkTraverser) isDirectory(bool) bool {
+func (t *benchmarkTraverser) IsDirectory(bool) bool {
 	return true
 }
 
@@ -61,7 +61,7 @@ func (_ *benchmarkTraverser) toReversedString(i uint) string {
 	return string(r)
 }
 
-func (t *benchmarkTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
+func (t *benchmarkTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
 	if len(filters) > 0 {
 		panic("filters not expected or supported in benchmark traverser") // but we still call processIfPassedFilters below, for consistency with other traversers
 	}

@@ -26,10 +26,10 @@ import (
 
 // the objectIndexer is essential for the generic sync enumerator to work
 // it can serve as a:
-// 		1. objectProcessor: accumulate a lookup map with given storedObjects
+// 		1. objectProcessor: accumulate a lookup map with given StoredObjects
 //		2. resourceTraverser: go through the entities in the map like a traverser
 type objectIndexer struct {
-	indexMap map[string]storedObject
+	indexMap map[string]StoredObject
 	counter  int
 
 	// isDestinationCaseInsensitive is true when the destination is case-insensitive
@@ -40,15 +40,15 @@ type objectIndexer struct {
 }
 
 func newObjectIndexer() *objectIndexer {
-	return &objectIndexer{indexMap: make(map[string]storedObject)}
+	return &objectIndexer{indexMap: make(map[string]StoredObject)}
 }
 
 // process the given stored object by indexing it using its relative path
-func (i *objectIndexer) store(storedObject storedObject) (err error) {
+func (i *objectIndexer) store(storedObject StoredObject) (err error) {
 	// TODO we might buffer too much data in memory, figure out whether we should limit the max number of files
 	// TODO previously we used 10M as the max, but it was proven to be too small for some users
 
-	// It is safe to index all storedObjects just by relative path, regardless of their entity type, because
+	// It is safe to index all StoredObjects just by relative path, regardless of their entity type, because
 	// no filesystem allows a file and a folder to have the exact same full path.  This is true of
 	// Linux file systems, Windows, Azure Files and ADLS Gen 2 (and logically should be true of all file systems).
 	if i.isDestinationCaseInsensitive {
@@ -62,7 +62,7 @@ func (i *objectIndexer) store(storedObject storedObject) (err error) {
 }
 
 // go through the remaining stored objects in the map to process them
-func (i *objectIndexer) traverse(processor objectProcessor, filters []objectFilter) (err error) {
+func (i *objectIndexer) traverse(processor objectProcessor, filters []ObjectFilter) (err error) {
 	for _, value := range i.indexMap {
 		err = processIfPassedFilters(filters, value, processor)
 		_, err = getProcessingError(err)
