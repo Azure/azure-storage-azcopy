@@ -46,7 +46,7 @@ func init() {
 			raw.src = args[0]
 
 			// infer the location of the delete
-			srcLocationType := inferArgumentLocation(raw.src)
+			srcLocationType := InferArgumentLocation(raw.src)
 			if srcLocationType == common.ELocation.Blob() {
 				raw.fromTo = common.EFromTo.BlobTrash().String()
 			} else if srcLocationType == common.ELocation.File() {

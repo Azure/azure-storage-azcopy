@@ -111,8 +111,8 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		enumerationParallelism = concurrencySettings.EnumerationPoolSize.Value
-		enumerationParallelStatFiles = concurrencySettings.ParallelStatFiles.Value
+	        EnumerationParallelism = concurrencySettings.EnumerationPoolSize.Value
+		EnumerationParallelStatFiles = concurrencySettings.ParallelStatFiles.Value
 
 		// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
 		// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
@@ -120,8 +120,8 @@ var rootCmd = &cobra.Command{
 		// or after this job
 		adjustedTime := timeAtPrestart.Add(-5 * time.Second)
 		startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
-			common.IncludeBeforeFlagName, includeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
-			common.IncludeAfterFlagName, includeAfterDateFilter{}.FormatAsUTC(adjustedTime))
+			common.IncludeBeforeFlagName, IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
+			common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
 		ste.JobsAdmin.LogToJobLog(startTimeMessage, pipeline.LogInfo)
 
 		// spawn a routine to fetch and compare the local application's version against the latest version available

@@ -25,18 +25,18 @@ import (
 )
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
-func newRemoveTransferProcessor(cca *cookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption) *copyTransferProcessor {
+func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption) *copyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:           cca.jobID,
 		CommandString:   cca.commandString,
-		FromTo:          cca.fromTo,
+		FromTo:          cca.FromTo,
 		Fpo:             fpo,
-		SourceRoot:      cca.source.CloneWithConsolidatedSeparators(), // TODO: why do we consolidate here, but not in "copy"? Is it needed in both places or neither? Or is copy just covering the same need differently?
+		SourceRoot:      cca.Source.CloneWithConsolidatedSeparators(), // TODO: why do we consolidate here, but not in "copy"? Is it needed in both places or neither? Or is copy just covering the same need differently?
 		CredentialInfo:  cca.credentialInfo,
-		ForceIfReadOnly: cca.forceIfReadOnly,
+		ForceIfReadOnly: cca.ForceIfReadOnly,
 
 		// flags
-		LogLevel:       cca.logVerbosity,
+		LogLevel:       cca.LogVerbosity,
 		BlobAttributes: common.BlobTransferAttributes{DeleteSnapshotsOption: cca.deleteSnapshotsOption},
 	}
 
@@ -49,6 +49,6 @@ func newRemoveTransferProcessor(cca *cookedCopyCmdArgs, numOfTransfersPerPart in
 
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
-	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.source, cca.destination,
+	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.Source, cca.Destination,
 		reportFirstPart, reportFinalPart, false)
 }

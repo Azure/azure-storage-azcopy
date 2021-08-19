@@ -35,8 +35,8 @@ var _ = chk.Suite(&genericProcessorSuite{})
 type processorTestSuiteHelper struct{}
 
 // return a list of sample entities
-func (processorTestSuiteHelper) getSampleObjectList() []storedObject {
-	return []storedObject{
+func (processorTestSuiteHelper) getSampleObjectList() []StoredObject {
+	return []StoredObject{
 		{name: "file1", relativePath: "file1", lastModifiedTime: time.Now()},
 		{name: "file2", relativePath: "file2", lastModifiedTime: time.Now()},
 		{name: "file3", relativePath: "sub1/file3", lastModifiedTime: time.Now()},
@@ -47,7 +47,7 @@ func (processorTestSuiteHelper) getSampleObjectList() []storedObject {
 }
 
 // given a list of entities, return the relative paths in a list, to help with validations
-func (processorTestSuiteHelper) getExpectedTransferFromStoredObjectList(storedObjectList []storedObject) []string {
+func (processorTestSuiteHelper) getExpectedTransferFromStoredObjectList(storedObjectList []StoredObject) []string {
 	expectedTransfers := make([]string, 0)
 	for _, storedObject := range storedObjectList {
 		expectedTransfers = append(expectedTransfers, storedObject.relativePath)

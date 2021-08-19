@@ -54,7 +54,7 @@ func (s *copyEnumeratorHelperTestSuite) TestAddTransferPathRootsTrimmed(c *chk.C
 	}
 
 	// execute
-	err := addTransfer(&request, transfer, &cookedCopyCmdArgs{})
+	err := addTransfer(&request, transfer, &CookedCopyCmdArgs{})
 
 	// assert
 	c.Assert(err, chk.IsNil)

@@ -32,7 +32,7 @@ import (
 )
 
 // As we discussed, the general architecture is that this is going to search a list of buckets and spawn s3Traversers for each bucket.
-// This will modify the storedObject format a slight bit to add a "container" parameter.
+// This will modify the StoredObject format a slight bit to add a "container" parameter.
 
 // Enumerates an entire S3 account, looking into each matching bucket as it goes
 type s3ServiceTraverser struct {
@@ -48,7 +48,7 @@ type s3ServiceTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func (t *s3ServiceTraverser) isDirectory(isSource bool) bool {
+func (t *s3ServiceTraverser) IsDirectory(isSource bool) bool {
 	return true // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
@@ -82,7 +82,7 @@ func (t *s3ServiceTraverser) listContainers() ([]string, error) {
 	}
 }
 
-func (t *s3ServiceTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) error {
+func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 	bucketList, err := t.listContainers()
 
 	if err != nil {
@@ -101,7 +101,7 @@ func (t *s3ServiceTraverser) traverse(preprocessor objectMorpher, processor obje
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
-		err = bucketTraverser.traverse(preprocessorForThisChild, processor, filters)
+		err = bucketTraverser.Traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
 			if strings.Contains(err.Error(), "301 response missing Location header") {

@@ -40,25 +40,25 @@ var NothingToRemoveError = errors.New("nothing found to remove")
 // and schedule delete transfers to remove them
 // TODO: Make this merge into the other copy refactor code
 // TODO: initEnumerator is significantly more verbose at this point, evaluate the impact of switching over
-func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, err error) {
-	var sourceTraverser resourceTraverser
+func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, err error) {
+	var sourceTraverser ResourceTraverser
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &cca.credentialInfo,
-		nil, cca.listOfFilesChannel, cca.recursive, false, cca.includeDirectoryStubs,
-		func(common.EntityType) {}, cca.listOfVersionIDs, false,
-		cca.logVerbosity.ToPipelineLogLevel(), cca.cpkOptions)
+	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo,
+		nil, cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs,
+		func(common.EntityType) {}, cca.ListOfVersionIDs, false,
+		cca.LogVerbosity.ToPipelineLogLevel(), cca.CpkOptions)
 
 	// report failure to create traverser
 	if err != nil {
 		return nil, err
 	}
 
-	includeFilters := buildIncludeFilters(cca.includePatterns)
-	excludeFilters := buildExcludeFilters(cca.excludePatterns, false)
-	excludePathFilters := buildExcludeFilters(cca.excludePathPatterns, true)
+	includeFilters := buildIncludeFilters(cca.IncludePatterns)
+	excludeFilters := buildExcludeFilters(cca.ExcludePatterns, false)
+	excludePathFilters := buildExcludeFilters(cca.ExcludePathPatterns, true)
 
 	// set up the filters in the right order
 	filters := append(includeFilters, excludeFilters...)
@@ -67,7 +67,7 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	// decide our folder transfer strategy
 	// (Must enumerate folders when deleting from a folder-aware location. Can't do folder deletion just based on file
 	// deletion, because that would not handle folders that were empty at the start of the job).
-	fpo, message := newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters, false, false)
+	fpo, message := newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false)
 	glcm.Info(message)
 	if ste.JobsAdmin != nil {
 		ste.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
@@ -98,34 +98,34 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 		return nil
 	}
 
-	return newCopyEnumerator(sourceTraverser, filters, transferScheduler.scheduleCopyTransfer, finalize), nil
+	return NewCopyEnumerator(sourceTraverser, filters, transferScheduler.scheduleCopyTransfer, finalize), nil
 }
 
 // TODO move after ADLS/Blob interop goes public
 // TODO this simple remove command is only here to support the scenario temporarily
 // Ultimately, this code can be merged into the newRemoveEnumerator
-func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
+func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 	ctx := context.Background()
 
 	// return an error if the unsupported options are passed in
-	if len(cca.initModularFilters()) > 0 {
+	if len(cca.InitModularFilters()) > 0 {
 		return errors.New("filter options, such as include/exclude, are not supported for this destination")
 		// because we just ignore them and delete the root
 	}
 
 	// patterns are not supported
-	if strings.Contains(cca.source.Value, "*") {
+	if strings.Contains(cca.Source.Value, "*") {
 		return errors.New("pattern matches are not supported in this command")
 	}
 
 	// create bfs pipeline
-	p, err := createBlobFSPipeline(ctx, cca.credentialInfo, cca.logVerbosity.ToPipelineLogLevel())
+	p, err := createBlobFSPipeline(ctx, cca.credentialInfo, cca.LogVerbosity.ToPipelineLogLevel())
 	if err != nil {
 		return err
 	}
 
 	// attempt to parse the source url
-	sourceURL, err := cca.source.FullURL()
+	sourceURL, err := cca.Source.FullURL()
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
@@ -133,8 +133,8 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
 	// parse the given source URL into parts, which separates the filesystem name and directory/file path
 	urlParts := azbfs.NewBfsURLParts(*sourceURL)
 
-	if cca.listOfFilesChannel == nil {
-		successMsg, err := removeSingleBfsResource(urlParts, p, ctx, cca.recursive)
+	if cca.ListOfFilesChannel == nil {
+		successMsg, err := removeSingleBfsResource(urlParts, p, ctx, cca.Recursive)
 		if err != nil {
 			return err
 		}
@@ -166,11 +166,11 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
 	failedTransfers := make([]common.TransferDetail, 0)
 
 	// read from the list of files channel to find out what needs to be deleted.
-	childPath, ok := <-cca.listOfFilesChannel
-	for ; ok; childPath, ok = <-cca.listOfFilesChannel {
+	childPath, ok := <-cca.ListOfFilesChannel
+	for ; ok; childPath, ok = <-cca.ListOfFilesChannel {
 		// remove the child path
 		urlParts.DirectoryOrFilePath = common.GenerateFullPath(parentPath, childPath)
-		successMessage, err := removeSingleBfsResource(urlParts, p, ctx, cca.recursive)
+		successMessage, err := removeSingleBfsResource(urlParts, p, ctx, cca.Recursive)
 		if err != nil {
 			// the specific error is not included in the details, since it doesn't have a field for full error message
 			failedTransfers = append(failedTransfers, common.TransferDetail{Src: childPath, TransferStatus: common.ETransferStatus.Failed()})
