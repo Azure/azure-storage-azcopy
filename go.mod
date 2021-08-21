@@ -4,7 +4,7 @@ require (
 	cloud.google.com/go v0.91.1 // indirect
 	cloud.google.com/go/storage v1.16.0
 	github.com/Azure/azure-pipeline-go v0.2.3
-	github.com/Azure/azure-storage-blob-go v0.14.0
+	github.com/Azure/azure-storage-blob-go v0.13.1-0.20210728203804-11581b0bb53e
 	github.com/Azure/azure-storage-file-go v0.6.1-0.20201111053559-3c1754dc00a5
 	github.com/Azure/go-autorest/autorest/adal v0.9.14
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda

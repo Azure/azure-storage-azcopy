@@ -3,6 +3,7 @@ package azbfs
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -26,13 +27,12 @@ type BlobFSHTTPHeaders struct {
 	CacheControl       string
 }
 
-// BlobFSPermissions represents the set of custom headers available for defining access conditions for the content.
-type BlobFSPermissions struct {
-	Owner string
-	Group string
-	ACL   string
-
-	// POSIX/"x-ms-permissions" is not present, since it seems to be invalid to so much as specify in a setAccessControls request.
+// BlobFSAccessControl represents the set of custom headers available for defining access conditions for the content.
+type BlobFSAccessControl struct {
+	Owner 		string
+	Group 		string
+	ACL   		string // Combining ACL & Permissions = invalid for SetAccessControl.
+	Permissions string
 }
 
 // NewFileURL creates a FileURL object using the specified URL and request policy pipeline.
@@ -208,23 +208,27 @@ func (f FileURL) FlushData(ctx context.Context, fileSize int64, contentMd5 []byt
 		nil, nil, &overrideHttpVerb, nil, nil, nil, nil)
 }
 
-func (f FileURL) GetAccessControl(ctx context.Context) (BlobFSPermissions, error) {
+func (f FileURL) GetAccessControl(ctx context.Context) (BlobFSAccessControl, error) {
 	resp, err := f.fileClient.GetProperties(ctx, f.fileSystemName, f.path, PathGetPropertiesActionGetAccessControl, nil,
 		nil, nil, nil,
 		nil, nil, nil, nil, nil)
 
 	if err != nil {
-		return BlobFSPermissions{}, err
+		return BlobFSAccessControl{}, err
 	}
 
-	return BlobFSPermissions{ resp.XMsOwner(), resp.XMsGroup(), resp.XMsACL()}, nil
+	return BlobFSAccessControl{resp.XMsOwner(), resp.XMsGroup(), resp.XMsACL(), resp.XMsPermissions()}, nil
 }
 
-func (f FileURL) SetAccessControl(ctx context.Context, permissions BlobFSPermissions) (*PathUpdateResponse, error) {
+func (f FileURL) SetAccessControl(ctx context.Context, permissions BlobFSAccessControl) (*PathUpdateResponse, error) {
 	// TODO: the go http client has a problem with PATCH and content-length header
 	//       we should investigate and report the issue
 	// See similar todo, with larger comments, in AppendData
 	overrideHttpVerb := "PATCH"
+
+	if permissions.ACL != "" && permissions.Permissions != "" {
+		return nil, errors.New("specifying both Permissions and ACL conflicts for SetAccessControl")
+	}
 
 	// This does not yet have support for recursive updates. But then again, we don't really need it.
 	return f.fileClient.Update(ctx, PathUpdateActionSetAccessControl, f.fileSystemName, f.path,

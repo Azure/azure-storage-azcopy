@@ -22,7 +22,6 @@ package cmd
 
 import (
 	"os"
-	"time"
 
 	chk "gopkg.in/check.v1"
 )
@@ -40,8 +39,6 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeAttrFlag(c *chk.C) {
 	attrList := []string{"H", "I", "C"}
 	excludeAttrsStr := "H;I;S"
 	scenarioHelper{}.setAttributesForLocalFiles(c, srcDirName, filesToExclude, attrList)
-
-	time.Sleep(5 * time.Second)
 
 	// set up the destination as an empty container
 	containerURL, containerName := createNewContainer(c, bsu)

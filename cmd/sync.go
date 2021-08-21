@@ -137,20 +137,20 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	// TODO: if expand the set of source/dest combos supported by sync, update this method the declarative test framework:
 
 	/* We support DFS by using blob end-point of the account. We replace dfs by blob in src and dst */
-	srcDfs, dstDfs := false, false
+	srcHNS, dstHNS := false, false
 	if loc := inferArgumentLocation(raw.src); loc == common.ELocation.BlobFS() {
 		raw.src = strings.Replace(raw.src, ".dfs", ".blob", 1)
 		glcm.Info("Sync operates only on blob endpoint. Switching to use blob endpoint on source account.")
-		srcDfs = true
+		srcHNS = true
 	}
 
 	if loc := inferArgumentLocation(raw.dst); loc == common.ELocation.BlobFS() {
 		raw.dst = strings.Replace(raw.dst, ".dfs", ".blob", 1)
 		glcm.Info("Sync operates only on blob endpoint. Switching to use blob endpoint on destination account.")
-		dstDfs = true
+		dstHNS = true
 	}
 
-	cooked.isDfsDfs = srcDfs && dstDfs
+	cooked.isHNSToHNS = srcHNS && dstHNS
 
 	cooked.fromTo = inferFromTo(raw.src, raw.dst)
 	switch cooked.fromTo {
@@ -243,8 +243,11 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		cooked.preserveSMBInfo = false
 	}
 
-	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, nil, "preserve-smb-info", false); err != nil {
+	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, nil, "preserve-smb-info"); err != nil {
 		return cooked, err
+	}
+	if cooked.fromTo == common.EFromTo.BlobBlob() && cooked.preserveSMBPermissions.IsTruthy() {
+		cooked.isHNSToHNS = true // override HNS settings, since if a user is tx'ing blob->blob and copying permissions, it's DEFINITELY going to be HNS (since perms don't exist w/o HNS).
 	}
 
 	isUserPersistingPermissions := raw.preserveSMBPermissions || raw.preservePermissions
@@ -252,7 +255,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		glcm.Info("Please note: the preserve-permissions flag is set to false, thus AzCopy will not copy SMB ACLs between the source and destination.")
 	}
 
-	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions, cooked.fromTo, nil, PreservePermissionsFlag, cooked.isDfsDfs); err != nil {
+	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions, cooked.fromTo, nil, PreservePermissionsFlag); err != nil {
 		return cooked, err
 	}
 	// TODO: the check on raw.preserveSMBPermissions on the next line can be removed once we have full support for these properties in sync
@@ -345,7 +348,7 @@ type cookedSyncCmdArgs struct {
 	destination    common.ResourceString
 	fromTo         common.FromTo
 	credentialInfo common.CredentialInfo
-	isDfsDfs       bool // Because DFS sources and destinations are obscured, this is necessary for folder property transfers on ADLS Gen 2.
+	isHNSToHNS     bool // Because DFS sources and destinations are obscured, this is necessary for folder property transfers on ADLS Gen 2.
 
 	// filters
 	recursive             bool

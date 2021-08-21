@@ -121,7 +121,7 @@ type rawCopyCmdArgs struct {
 	excludeBlobType string
 	// Opt-in flag to persist SMB ACLs to Azure Files.
 	preserveSMBPermissions bool
-	preservePermissions    bool // Separate flag so taht we don't get funkiness with two "flags" targeting the same boolean
+	preservePermissions    bool // Separate flag so that we don't get funkiness with two "flags" targeting the same boolean
 	preserveOwner          bool // works in conjunction with preserveSmbPermissions
 	// Opt-in flag to persist additional SMB properties to Azure Files. Named ...info instead of ...properties
 	// because the latter was similar enough to preserveSMBPermissions to induce user error
@@ -276,7 +276,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			glcm.Info("Switching to use blob endpoint on destination account.")
 		}
 
-		cooked.isDfsDfs = srcDfs && dstDfs
+		cooked.isHNStoHNS = srcDfs && dstDfs
 	}
 
 	fromTo, err := validateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
@@ -627,7 +627,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		cooked.preserveSMBInfo = false
 	}
 
-	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, &cooked.forceWrite, "preserve-smb-info", false); err != nil {
+	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, &cooked.forceWrite, "preserve-smb-info"); err != nil {
 		return cooked, err
 	}
 
@@ -636,15 +636,18 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		glcm.Info("Please note: the preserve-permissions flag is set to false, thus AzCopy will not copy SMB ACLs between the source and destination.")
 	}
 
-	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions, cooked.fromTo, &cooked.forceWrite, PreservePermissionsFlag, cooked.isDfsDfs); err != nil {
+	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions, cooked.fromTo, &cooked.forceWrite, PreservePermissionsFlag); err != nil {
 		return cooked, err
 	}
 	if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); err != nil {
 		return cooked, err
 	}
 	cooked.preserveSMBPermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions, raw.preserveOwner, cooked.fromTo)
+	if cooked.fromTo == common.EFromTo.BlobBlob() && cooked.preserveSMBPermissions.IsTruthy() {
+		cooked.isHNStoHNS = true // override HNS settings, since if a user is tx'ing blob->blob and copying permissions, it's DEFINITELY going to be HNS (since perms don't exist w/o HNS).
+	}
 
-	cooked.includeDirectoryStubs = raw.includeDirectoryStubs || (cooked.isDfsDfs && cooked.preserveSMBPermissions.IsTruthy())
+	cooked.includeDirectoryStubs = raw.includeDirectoryStubs || (cooked.isHNStoHNS && cooked.preserveSMBPermissions.IsTruthy())
 
 	if err = crossValidateSymlinksAndPermissions(cooked.followSymlinks, cooked.preserveSMBPermissions.IsTruthy()); err != nil {
 		return cooked, err
@@ -884,12 +887,12 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 	}
 }
 
-func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, overwrite *common.OverwriteOption, flagName string, isDfsDfs bool) error {
+func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, overwrite *common.OverwriteOption, flagName string) error {
 	if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
 		fromTo == common.EFromTo.FileLocal() ||
 		fromTo == common.EFromTo.FileFile() ||
-		(fromTo == common.EFromTo.BlobBlob() && isDfsDfs && flagName == PreservePermissionsFlag)) {
-		return fmt.Errorf("%s is set but the job is not between SMB-aware resources", flagName)
+		fromTo == common.EFromTo.BlobBlob()) {
+		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.IffString(flagName == PreservePermissionsFlag, "permission", "SMB"))
 	}
 
 	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) && runtime.GOOS != "windows" {
@@ -1006,7 +1009,7 @@ type cookedCopyCmdArgs struct {
 	// from arguments
 	source      common.ResourceString
 	destination common.ResourceString
-	isDfsDfs    bool //
+	isHNStoHNS  bool // workaround to indicate that BlobBlob is actually HNS->HNS, since we shift to Blob instead of HNS.
 	fromTo      common.FromTo
 
 	// new include/exclude only apply to file names

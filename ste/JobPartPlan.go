@@ -3,9 +3,8 @@ package ste
 import (
 	"errors"
 	"reflect"
-	"unsafe"
-
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -64,8 +63,8 @@ type JobPartPlanHeader struct {
 	DstBlobData            JobPartPlanDstBlob  // Additional data for blob destinations
 	DstLocalData           JobPartPlanDstLocal // Additional data for local destinations
 
-	PreserveSMBPermissions common.PreservePermissionsOption
-	PreserveSMBInfo        bool
+	PreservePermissions common.PreservePermissionsOption
+	PreserveSMBInfo     bool
 	// S2SGetPropertiesInBackend represents whether to enable get S3 objects' or Azure files' properties during s2s copy in backend.
 	S2SGetPropertiesInBackend bool
 	// S2SSourceChangeValidation represents whether user wants to check if source has changed after enumerating.

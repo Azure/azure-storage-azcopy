@@ -158,19 +158,19 @@ func (d DirectoryURL) NewFileUrl() FileURL {
 	return NewFileURL(d.URL(), d.directoryClient.Pipeline())
 }
 
-func (d DirectoryURL) GetAccessControl(ctx context.Context) (BlobFSPermissions, error) {
+func (d DirectoryURL) GetAccessControl(ctx context.Context) (BlobFSAccessControl, error) {
 	resp, err := d.directoryClient.GetProperties(ctx, d.filesystem, d.pathParameter, PathGetPropertiesActionGetAccessControl, nil,
 		nil, nil, nil,
 		nil, nil, nil, nil, nil)
 
 	if err != nil {
-		return BlobFSPermissions{}, err
+		return BlobFSAccessControl{}, err
 	}
 
-	return BlobFSPermissions{resp.XMsOwner(), resp.XMsGroup(), resp.XMsACL()}, nil
+	return BlobFSAccessControl{resp.XMsOwner(), resp.XMsGroup(), resp.XMsACL()}, nil
 }
 
-func (d DirectoryURL) SetAccessControl(ctx context.Context, permissions BlobFSPermissions) (*PathUpdateResponse, error) {
+func (d DirectoryURL) SetAccessControl(ctx context.Context, permissions BlobFSAccessControl) (*PathUpdateResponse, error) {
 	// TODO: the go http client has a problem with PATCH and content-length header
 	//       we should investigate and report the issue
 	// See similar todo, with larger comments, in AppendData

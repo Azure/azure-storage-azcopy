@@ -22,50 +22,51 @@ package e2etest
 
 import (
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // Purpose: Tests for preserving transferred properties, info and ACLs.  Both those possessed by the original source file/folder,
 //   and those specified on the command line
 
 func TestProperties_NameValueMetadataIsPreservedS2S(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.AllS2S(),
-		eValidate.Auto(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.Auto(), params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			f("filea", with{nameValueMetadata: map[string]string{"foo": "abc", "bar": "def"}}),
+			folder("fold1", with{nameValueMetadata: map[string]string{"other": "xyz"}}),
 		},
-		nil,
-		testFiles{
-			defaultSize: "1K",
-			shouldTransfer: []interface{}{
-				f("filea", with{nameValueMetadata: map[string]string{"foo": "abc", "bar": "def"}}),
-				folder("fold1", with{nameValueMetadata: map[string]string{"other": "xyz"}}),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 func TestProperties_NameValueMetadataCanBeUploaded(t *testing.T) {
 	expectedMap := map[string]string{"foo": "abc", "bar": "def"}
 
-	RunScenarios(
-		t,
-		eOperation.Copy(),        // Sync doesn't support the command-line metadata flag
-		eTestFromTo.AllUploads(), // TODO: Metadata copy not supported while performing S2S transfers
-		eValidate.Auto(),
-		params{
-			recursive: true,
-			metadata:  "foo=abc;bar=def",
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllUploads(), eValidate.Auto(), params{
+		recursive: true,
+		metadata:  "foo=abc;bar=def",
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder("", verifyOnly{with{nameValueMetadata: expectedMap}}), // root folder
+			f("filea", verifyOnly{with{nameValueMetadata: expectedMap}}),
 		},
-		nil,
-		testFiles{
-			defaultSize: "1K",
-			shouldTransfer: []interface{}{
-				folder("", verifyOnly{with{nameValueMetadata: expectedMap}}), // root folder
-				f("filea", verifyOnly{with{nameValueMetadata: expectedMap}}),
-			},
-		})
+	}, EAccountType.Standard())
+}
+
+func TestProperties_HNSACLs(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), params{
+		recursive:              true,
+		preserveSMBPermissions: true, // this flag is deprecated, but still held over to avoid breaking.
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("filea", with{adlsPermissionsACL: "user::rwx,group::rwx,other::--x"}),
+		},
+	}, EAccountType.HierarchicalNamespaceEnabled())
 }
 
 //func TestProperties_SMBPermissionsSDDLPreserved(t *testing.T) {

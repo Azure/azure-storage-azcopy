@@ -46,10 +46,10 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 
 // AccessControl should ONLY get called when we know for a fact it is a blobFS->blobFS tranfser.
 // It *assumes* that the source is actually a HNS account.
-func (p *blobSourceInfoProvider) AccessControl() (azbfs.BlobFSPermissions, error) {
+func (p *blobSourceInfoProvider) AccessControl() (azbfs.BlobFSAccessControl, error) {
 	presignedURL, err := p.PreSignedSourceURL()
 	if err != nil {
-		return azbfs.BlobFSPermissions{}, err
+		return azbfs.BlobFSAccessControl{}, err
 	}
 
 	bURLParts := azblob.NewBlobURLParts(*presignedURL)

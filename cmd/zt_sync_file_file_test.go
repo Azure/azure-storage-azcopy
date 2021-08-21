@@ -554,11 +554,9 @@ func (s *cmdIntegrationSuite) TestDryrunSyncFiletoFile(c *chk.C) {
 		sort.Strings(msg)
 		for i := 0; i < len(msg); i++ {
 			if strings.Contains(msg[i], "DRYRUN: remove") {
-				//c.Check(strings.Contains(msg[i], fileToDelete[0]), chk.Equals, true)
 				c.Check(strings.Contains(msg[i], dstShareURL.String()), chk.Equals, true)
 			} else {
 				c.Check(strings.Contains(msg[i], "DRYRUN: copy"), chk.Equals, true)
-				//c.Check(strings.Contains(msg[i], filesToInclude[i]), chk.Equals, true)
 				c.Check(strings.Contains(msg[i], srcShareName), chk.Equals, true)
 				c.Check(strings.Contains(msg[i], dstShareURL.String()), chk.Equals, true)
 			}

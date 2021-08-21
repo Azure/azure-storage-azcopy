@@ -336,7 +336,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		SourceSize:                     sourceSize,
 		Destination:                    dst,
 		EntityType:                     entityType,
-		PreserveSMBPermissions:         plan.PreserveSMBPermissions,
+		PreserveSMBPermissions:         plan.PreservePermissions,
 		PreserveSMBInfo:                plan.PreserveSMBInfo,
 		S2SGetPropertiesInBackend:      s2sGetPropertiesInBackend,
 		S2SSourceChangeValidation:      s2sSourceChangeValidation,
