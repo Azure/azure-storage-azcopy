@@ -21,9 +21,7 @@ require (
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/pkg/errors v0.9.1
-	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/spf13/cobra v1.2.1
-	github.com/stretchr/objx v0.3.0 // indirect
 	golang.org/x/crypto v0.0.0-20210812204632-0ba0e8f03122
 	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d // indirect
 	golang.org/x/oauth2 v0.0.0-20210810183815-faf39c7919d5
