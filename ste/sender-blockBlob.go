@@ -234,6 +234,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 		if err != nil {
 			jptm.FailActiveSend("Grabbing source ACLs", err)
 		}
+		acl.Permissions = "" // Since we're sending the full ACL, Permissions is irrelevant.
 		_, err = fileURL.SetAccessControl(jptm.Context(), acl)
 		if err != nil {
 			jptm.FailActiveSend("Putting ACLs", err)
