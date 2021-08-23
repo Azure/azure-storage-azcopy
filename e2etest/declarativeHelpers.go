@@ -491,9 +491,11 @@ type hookHelper interface {
 	GetTestFiles() testFiles
 
 	// CreateFiles creates the specified files (overwriting any that are already there of the same name)
+	// This overwrites the scenario's testFiles struct.
 	CreateFiles(fs testFiles, atSource bool)
 
 	// CreateFile creates a specified file (overwriting what was already there of the same name)
+	// This is intended to be used in hook functions for pre or mid transfer adjustments.
 	CreateFile(f *testObject, atSource bool)
 
 	// CancelAndResume tells the runner to cancel the running AzCopy job (with "cancel" to stdin) and the resume the job

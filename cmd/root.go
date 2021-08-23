@@ -201,6 +201,7 @@ func init() {
 	// debug-only
 	rootCmd.PersistentFlags().MarkHidden("await-continue")
 	rootCmd.PersistentFlags().MarkHidden("await-open")
+	rootCmd.PersistentFlags().MarkHidden("debug-skip-files")
 }
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where
