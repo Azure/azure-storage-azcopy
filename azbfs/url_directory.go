@@ -2,9 +2,10 @@ package azbfs
 
 import (
 	"context"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 var directoryResourceName = "directory" // constant value for the resource query parameter
@@ -167,7 +168,7 @@ func (d DirectoryURL) GetAccessControl(ctx context.Context) (BlobFSAccessControl
 		return BlobFSAccessControl{}, err
 	}
 
-	return BlobFSAccessControl{resp.XMsOwner(), resp.XMsGroup(), resp.XMsACL()}, nil
+	return BlobFSAccessControl{resp.XMsOwner(), resp.XMsGroup(), resp.XMsACL(), resp.XMsPermissions()}, nil
 }
 
 func (d DirectoryURL) SetAccessControl(ctx context.Context, permissions BlobFSAccessControl) (*PathUpdateResponse, error) {
