@@ -2,6 +2,7 @@ package azbfs
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"strings"
 
@@ -177,11 +178,22 @@ func (d DirectoryURL) SetAccessControl(ctx context.Context, permissions BlobFSAc
 	// See similar todo, with larger comments, in AppendData
 	overrideHttpVerb := "PATCH"
 
+	if permissions.ACL != "" && permissions.Permissions != "" {
+		return nil, errors.New("specifying both Permissions and ACL conflicts for SetAccessControl")
+	}
+
+	var perms, acl *string
+	if permissions.Permissions != "" {
+		perms = &permissions.Permissions
+	} else {
+		acl = &permissions.ACL
+	}
+
 	// This does not yet have support for recursive updates. But then again, we don't really need it.
 	return d.directoryClient.Update(ctx, PathUpdateActionSetAccessControl, d.filesystem, d.pathParameter,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
-		nil, nil, &permissions.Owner, &permissions.Group, nil, &permissions.ACL,
+		nil, nil, &permissions.Owner, &permissions.Group, perms, acl,
 		nil, nil, nil, nil, &overrideHttpVerb,
 		nil, nil, nil, nil)
 }

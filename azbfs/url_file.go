@@ -230,11 +230,18 @@ func (f FileURL) SetAccessControl(ctx context.Context, permissions BlobFSAccessC
 		return nil, errors.New("specifying both Permissions and ACL conflicts for SetAccessControl")
 	}
 
+	var perms, acl *string
+	if permissions.Permissions != "" {
+		perms = &permissions.Permissions
+	} else {
+		acl = &permissions.ACL
+	}
+
 	// This does not yet have support for recursive updates. But then again, we don't really need it.
 	return f.fileClient.Update(ctx, PathUpdateActionSetAccessControl, f.fileSystemName, f.path,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
-		nil, nil, &permissions.Owner, &permissions.Group, nil, &permissions.ACL,
+		nil, nil, &permissions.Owner, &permissions.Group, perms, acl,
 		nil, nil, nil, nil, &overrideHttpVerb,
 		nil, nil, nil, nil)
 }
