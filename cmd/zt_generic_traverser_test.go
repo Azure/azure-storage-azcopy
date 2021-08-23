@@ -141,7 +141,8 @@ func (s *genericTraverserSuite) TestS3GetProperties(c *chk.C) {
 	// First test against the bucket
 	s3BucketURL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName)
 
-	traverser, err := newS3Traverser(&s3BucketURL, ctx, false, true, func(common.EntityType) {})
+	credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
+	traverser, err := newS3Traverser(credentialInfo.CredentialType, &s3BucketURL, ctx, false, true, func(common.EntityType) {})
 	c.Assert(err, chk.IsNil)
 
 	// Embed the check into the processor for ease of use
@@ -164,7 +165,8 @@ func (s *genericTraverserSuite) TestS3GetProperties(c *chk.C) {
 	// Then, test against the object itself because that's a different codepath.
 	seenContentType = false
 	s3ObjectURL := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, objectName)
-	traverser, err = newS3Traverser(&s3ObjectURL, ctx, false, true, func(common.EntityType) {})
+	credentialInfo = common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
+	traverser, err = newS3Traverser(credentialInfo.CredentialType, &s3ObjectURL, ctx, false, true, func(common.EntityType) {})
 	c.Assert(err, chk.IsNil)
 
 	err = traverser.traverse(noPreProccessor, processor, nil)
@@ -562,7 +564,8 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 			// construct a s3 traverser
 			s3DummyProcessor := dummyProcessor{}
 			url := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, storedObjectName)
-			S3Traverser, err := newS3Traverser(&url, ctx, false, false, func(common.EntityType) {})
+			credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
+			S3Traverser, err := newS3Traverser(credentialInfo.CredentialType, &url, ctx, false, false, func(common.EntityType) {})
 			c.Assert(err, chk.IsNil)
 
 			err = S3Traverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
@@ -692,7 +695,8 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		if s3Enabled {
 			// construct and run a S3 traverser
 			rawS3URL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName)
-			S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, false, func(common.EntityType) {})
+			credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
+			S3Traverser, err := newS3Traverser(credentialInfo.CredentialType, &rawS3URL, ctx, isRecursiveOn, false, func(common.EntityType) {})
 			c.Assert(err, chk.IsNil)
 			err = S3Traverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
 			c.Assert(err, chk.IsNil)
@@ -861,7 +865,8 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 			// construct and run a S3 traverser
 			// directory object keys always end with / in S3
 			rawS3URL := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, virDirName+"/")
-			S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, false, func(common.EntityType) {})
+			credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
+			S3Traverser, err := newS3Traverser(credentialInfo.CredentialType, &rawS3URL, ctx, isRecursiveOn, false, func(common.EntityType) {})
 			c.Assert(err, chk.IsNil)
 			err = S3Traverser.traverse(noPreProccessor, s3DummyProcessor.process, nil)
 			c.Assert(err, chk.IsNil)
