@@ -274,7 +274,7 @@ func (rca resumeCmdArgs) process() error {
 		return errors.New("resuming benchmark jobs is not supported")
 	}
 
-	ctx := context.TODO()
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Initialize credential info.
 	credentialInfo := common.CredentialInfo{}
 	// TODO: Replace context with root context
