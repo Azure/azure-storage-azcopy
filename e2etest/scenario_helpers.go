@@ -115,6 +115,10 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 			//TODO: nakulkar-msft you'll need to set up things like attributes, and other relevant things from
 			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
 			//			//   by local files. E.g. not contentHeaders or metadata).
+
+			if file.creationProperties.smbPermissionsSddl != nil {
+				osScenarioHelper{}.setFileSDDLString(c, filepath.Join(options.dirPath, file.name), *file.creationProperties.smbPermissionsSddl)
+			}
 		} else {
 			sourceData, err := s.generateLocalFile(
 				filepath.Join(options.dirPath, file.name),
@@ -129,6 +133,10 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 			//TODO: nakulkar-msft you'll need to set up things like attributes, and other relevant things from
 			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
 			//   by local files. E.g. not contentHeaders or metadata).
+
+			if file.creationProperties.smbPermissionsSddl != nil {
+				osScenarioHelper{}.setFileSDDLString(c, filepath.Join(options.dirPath, file.name), *file.creationProperties.smbPermissionsSddl)
+			}
 		}
 	}
 
@@ -622,21 +630,26 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			file := options.shareURL.NewRootDirectoryURL().NewFileURL(path.Join(f.name, "dummyChild"))
 			generateParentsForAzureFile(c, file)
 
+			dir := options.shareURL.NewRootDirectoryURL().NewDirectoryURL(f.name)
+
 			// set its metadata if any
 			if f.creationProperties.nameValueMetadata != nil {
-				dir := options.shareURL.NewRootDirectoryURL().NewDirectoryURL(f.name)
 				_, err := dir.SetMetadata(context.TODO(), ad.toMetadata())
+				c.AssertNoErr(err)
+			}
+
+			if f.creationProperties.smbPermissionsSddl != nil || f.creationProperties.smbAttributes != nil {
+				_, err := dir.SetProperties(ctx, ad.toHeaders(c, options.shareURL).SMBProperties)
 				c.AssertNoErr(err)
 			}
 
 			// set other properties
 			// TODO: do we need a SetProperties method on dir...?  Discuss with zezha-msft
-			if f.creationProperties.creationTime != nil ||
-				f.creationProperties.smbPermissionsSddl != nil ||
-				f.creationProperties.smbAttributes != nil {
+			if f.creationProperties.creationTime != nil {
 				panic("setting these properties isn't implmented yet for folders in the test harnesss")
 				// TODO: nakulkar-msft the attributes stuff will need to be implemented here before attributes can be tested on Azure Files
 			}
+
 			// TODO: I'm pretty sure we don't prserve lastWritetime or contentProperties (headers) for folders, so the above if statement doesn't test those
 			//    Is that the correct decision?
 		} else {
@@ -658,8 +671,9 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			//	f.verificationProperties.contentHeaders = &contentHeaders{}
 			//}
 			//f.verificationProperties.contentHeaders.contentMD5 = contentMD5[:]
-			headers := ad.toHeaders()
+			headers := ad.toHeaders(c, options.shareURL)
 			headers.ContentMD5 = contentMD5[:]
+
 			cResp, err := file.Create(ctx, fileSize, headers, ad.toMetadata())
 			c.AssertNoErr(err)
 			c.Assert(cResp.StatusCode(), equals(), 201)
@@ -711,7 +725,15 @@ func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile
 					contentMD5:         contentHeader.ContentMD5,
 				}
 				fileAttrs := uint32(azfile.ParseFileAttributeFlagsString(fProps.FileAttributes()))
-				filePermissions := fProps.FilePermissionKey()
+				permissionKey := fProps.FilePermissionKey()
+
+				var perm string
+				if permissionKey != "" {
+					sharePerm, err := shareURL.GetPermission(ctx, permissionKey)
+					a.AssertNoErr(err, "Failed to get permissions from key")
+
+					perm = sharePerm.Permission
+				}
 
 				props := objectProperties{
 					isFolder:           false, // no folders in Blob
@@ -721,7 +743,7 @@ func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile
 					creationTime:       &creationTime,
 					lastWriteTime:      &lastWriteTime,
 					smbAttributes:      &fileAttrs,
-					smbPermissionsSddl: &filePermissions,
+					smbPermissionsSddl: &perm,
 				}
 
 				relativePath := lResp.DirectoryPath + "/"
@@ -742,14 +764,33 @@ func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile
 				lastWriteTime, err := time.Parse(azfile.ISO8601, dProps.FileLastWriteTime())
 				a.AssertNoErr(err)
 
+				// Grab the permissions
+				permKey := dProps.FilePermissionKey()
+
+				var perm string
+				if permKey != "" {
+					permResp, err := shareURL.GetPermission(ctx, permKey)
+					a.AssertNoErr(err, "Failed to get permissions from key")
+
+					perm = permResp.Permission
+				}
+
+				// Set up properties
 				props := objectProperties{
 					isFolder:          true,
 					nameValueMetadata: dProps.NewMetadata(),
 					creationTime:      &creationTime,
 					lastWriteTime:     &lastWriteTime,
+					smbPermissionsSddl: &perm,
 				}
 
-				result[dirInfo.Name] = &props
+				// get the directory name properly
+				relativePath := lResp.DirectoryPath + "/"
+				if relativePath == "/" {
+					relativePath = ""
+				}
+				result[relativePath+dirInfo.Name] = &props
+
 				dirQ = append(dirQ, dirURL)
 			}
 

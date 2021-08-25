@@ -396,7 +396,7 @@ func createNewAzureFile(c *chk.C, share azfile.ShareURL, prefix string) (file az
 func generateParentsForAzureFile(c *chk.C, fileURL azfile.FileURL) {
 	accountName, accountKey := getAccountAndKey()
 	credential, _ := azfile.NewSharedKeyCredential(accountName, accountKey)
-	t := common.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders())
+	t := ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
 	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileURL, azfile.NewPipeline(credential, azfile.PipelineOptions{}), t)
 	c.Assert(err, chk.IsNil)
 }
