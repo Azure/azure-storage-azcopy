@@ -50,7 +50,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	jobPartOrder.CpkOptions = cca.cpkOptions
-	jobPartOrder.PreserveSMBPermissions = cca.preserveSMBPermissions
+	jobPartOrder.PreserveSMBPermissions = cca.preservePermissions
 	jobPartOrder.PreserveSMBInfo = cca.preserveSMBInfo
 
 	// Infer on download so that we get LMT and MD5 on files download
@@ -216,7 +216,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters, cca.preserveSMBInfo, cca.preserveSMBPermissions.IsTruthy())
+	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.isHNStoHNS)
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
@@ -645,7 +645,7 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 }
 
 // we assume that preserveSmbPermissions and preserveSmbInfo have already been validated, such that they are only true if both resource types support them
-func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir bool, filters []objectFilter, preserveSmbInfo, preserveSmbPermissions bool) (common.FolderPropertyOption, string) {
+func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir bool, filters []objectFilter, preserveSmbInfo, preserveSmbPermissions, isDfsDfs bool) (common.FolderPropertyOption, string) {
 
 	getSuffix := func(willProcess bool) string {
 		willProcessString := common.IffString(willProcess, "will be processed", "will not be processed")
@@ -663,7 +663,7 @@ func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir b
 		}
 	}
 
-	bothFolderAware := fromTo.AreBothFolderAware()
+	bothFolderAware := fromTo.AreBothFolderAware() || isDfsDfs
 	isRemoveFromFolderAware := fromTo == common.EFromTo.FileTrash()
 	if bothFolderAware || isRemoveFromFolderAware {
 		if !recursive {

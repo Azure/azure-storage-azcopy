@@ -38,155 +38,113 @@ import (
 func TestClient_ProvidedScopeUpload(t *testing.T) {
 	cpkByName := "blobgokeytestscope"
 	verifyOnlyProps := verifyOnly{with{cpkByName: cpkByName}}
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFile()),
-		eValidate.AutoPlusContent(),
-		params{
-			recursive: true,
-			cpkByName: cpkByName,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFile()), eValidate.AutoPlusContent(), params{
+		recursive: true,
+		cpkByName: cpkByName,
+	}, nil, testFiles{
+		defaultSize: "100K",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file1.txt", verifyOnlyProps),
+			f("file2.txt", verifyOnlyProps),
+			folder("folder1"),
+			folder("folder2"),
+			f("folder1/file3", verifyOnlyProps),
+			f("folder1/file4", verifyOnlyProps),
+			f("folder2/file5", verifyOnlyProps),
+			f("file6", verifyOnlyProps),
 		},
-		nil,
-		testFiles{
-			defaultSize: "100K",
-			shouldTransfer: []interface{}{
-				folder(""),
-				f("file1.txt", verifyOnlyProps),
-				f("file2.txt", verifyOnlyProps),
-				folder("folder1"),
-				folder("folder2"),
-				f("folder1/file3", verifyOnlyProps),
-				f("folder1/file4", verifyOnlyProps),
-				f("folder2/file5", verifyOnlyProps),
-				f("file6", verifyOnlyProps),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 func TestClient_ProvidedScopeS2S(t *testing.T) {
 	cpkByName := "blobgokeytestscope"
 	verifyOnlyProps := verifyOnly{with{cpkByName: cpkByName}}
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.Other(common.EFromTo.FileBlob()),
-		eValidate.AutoPlusContent(),
-		params{
-			recursive: true,
-			cpkByName: cpkByName,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileBlob()), eValidate.AutoPlusContent(), params{
+		recursive: true,
+		cpkByName: cpkByName,
+	}, nil, testFiles{
+		defaultSize: "100K",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file1.txt", verifyOnlyProps),
+			f("file2.txt", verifyOnlyProps),
+			folder("folder1"),
+			f("folder1/file3", verifyOnlyProps),
+			f("folder1/file4", verifyOnlyProps),
+			f("folder2/file5", verifyOnlyProps),
+			f("file6", verifyOnlyProps),
 		},
-		nil,
-		testFiles{
-			defaultSize: "100K",
-			shouldTransfer: []interface{}{
-				folder(""),
-				f("file1.txt", verifyOnlyProps),
-				f("file2.txt", verifyOnlyProps),
-				folder("folder1"),
-				f("folder1/file3", verifyOnlyProps),
-				f("folder1/file4", verifyOnlyProps),
-				f("folder2/file5", verifyOnlyProps),
-				f("file6", verifyOnlyProps),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 func TestClient_ProvidedScopeDownload(t *testing.T) {
 	cpkByName := "blobgokeytestscope"
 	verifyOnlyProps := verifyOnly{with{cpkByName: cpkByName}}
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.Other(common.EFromTo.BlobLocal()),
-		eValidate.Auto(),
-		params{
-			recursive: true,
-			cpkByName: cpkByName,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.BlobLocal()), eValidate.Auto(), params{
+		recursive: true,
+		cpkByName: cpkByName,
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file1", verifyOnlyProps),
 		},
-		nil,
-		testFiles{
-			defaultSize: "1K",
-			shouldTransfer: []interface{}{
-				folder(""),
-				f("file1", verifyOnlyProps),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 func TestClient_ProvidedKeyUpload(t *testing.T) {
 	verifyOnlyProps := verifyOnly{with{cpkByValue: true}}
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.Other(common.EFromTo.LocalBlob()),
-		eValidate.AutoPlusContent(),
-		params{
-			recursive:  true,
-			cpkByValue: true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), params{
+		recursive:  true,
+		cpkByValue: true,
+	}, nil, testFiles{
+		defaultSize: "100K",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file1.txt", verifyOnlyProps),
+			f("file2.txt", verifyOnlyProps),
+			folder("folder1"),
+			folder("folder2"),
+			f("folder1/file3", verifyOnlyProps),
+			f("folder1/file4", verifyOnlyProps),
+			f("folder2/file5", verifyOnlyProps),
+			f("file6", verifyOnlyProps),
 		},
-		nil,
-		testFiles{
-			defaultSize: "100K",
-			shouldTransfer: []interface{}{
-				folder(""),
-				f("file1.txt", verifyOnlyProps),
-				f("file2.txt", verifyOnlyProps),
-				folder("folder1"),
-				folder("folder2"),
-				f("folder1/file3", verifyOnlyProps),
-				f("folder1/file4", verifyOnlyProps),
-				f("folder2/file5", verifyOnlyProps),
-				f("file6", verifyOnlyProps),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 func TestClient_ProvidedKeyS2S(t *testing.T) {
 	verifyOnlyProps := verifyOnly{with{cpkByValue: true}}
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.Other(common.EFromTo.FileBlob()),
-		eValidate.Auto(),
-		params{
-			recursive:  true,
-			cpkByValue: true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileBlob()), eValidate.Auto(), params{
+		recursive:  true,
+		cpkByValue: true,
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file1.txt", verifyOnlyProps),
+			f("file2.txt", verifyOnlyProps),
+			folder("folder1"),
+			f("folder1/file3", verifyOnlyProps),
+			f("folder1/file4", verifyOnlyProps),
+			f("folder2/file5", verifyOnlyProps),
+			f("file6", verifyOnlyProps),
 		},
-		nil,
-		testFiles{
-			defaultSize: "1K",
-			shouldTransfer: []interface{}{
-				folder(""),
-				f("file1.txt", verifyOnlyProps),
-				f("file2.txt", verifyOnlyProps),
-				folder("folder1"),
-				f("folder1/file3", verifyOnlyProps),
-				f("folder1/file4", verifyOnlyProps),
-				f("folder2/file5", verifyOnlyProps),
-				f("file6", verifyOnlyProps),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 func TestClient_ProvidedKeyDownload(t *testing.T) {
 	verifyOnlyProps := verifyOnly{with{cpkByValue: true}}
-	RunScenarios(
-		t,
-		eOperation.Copy(),
-		eTestFromTo.Other(common.EFromTo.BlobLocal()),
-		eValidate.Auto(),
-		params{
-			recursive:  true,
-			cpkByValue: true,
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobLocal()), eValidate.Auto(), params{
+		recursive:  true,
+		cpkByValue: true,
+	}, nil, testFiles{
+		defaultSize: "100K",
+		shouldTransfer: []interface{}{
+			f("file1", verifyOnlyProps),
+			folder("dir"),
+			f("dir/file2", verifyOnlyProps),
 		},
-		nil,
-		testFiles{
-			defaultSize: "100K",
-			shouldTransfer: []interface{}{
-				f("file1", verifyOnlyProps),
-				folder("dir"),
-				f("dir/file2", verifyOnlyProps),
-			},
-		})
+	}, EAccountType.Standard())
 }

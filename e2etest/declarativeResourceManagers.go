@@ -179,10 +179,12 @@ func (r *resourceBlobContainer) createLocation(a asserter, s *scenario) {
 
 func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bool) {
 	options := &generateBlobFromListOptions{
+		rawSASURL:    *r.rawSasURL,
 		containerURL: *r.containerURL,
 		generateFromListOptions: generateFromListOptions{
 			fs:          s.fs.allObjects(isSource),
 			defaultSize: s.fs.defaultSize,
+			accountType: s.accountType,
 		},
 	}
 	if s.fromTo.IsDownload() {

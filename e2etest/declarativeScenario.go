@@ -36,8 +36,8 @@ import (
 // E.g. if we have enumerationSuite/TestFooBar/Copy-LocalBlob the scenario is "Copy-LocalBlob"
 // A scenario is treated as a sub-test by our declarative test runner
 type scenario struct {
-
 	// scenario config properties
+	accountType         AccountType
 	subtestName         string
 	compactScenarioName string
 	fullScenarioName    string
@@ -136,11 +136,11 @@ func (s *scenario) assignSourceAndDest() {
 		case common.ELocation.Local():
 			return &resourceLocal{}
 		case common.ELocation.File():
-			return &resourceAzureFileShare{accountType: EAccountType.Standard()}
+			return &resourceAzureFileShare{accountType: s.accountType}
 		case common.ELocation.Blob():
 			// TODO: handle the multi-container (whole account) scenario
 			// TODO: handle wider variety of account types
-			return &resourceBlobContainer{accountType: EAccountType.Standard()}
+			return &resourceBlobContainer{accountType: s.accountType}
 		case common.ELocation.BlobFS():
 			s.a.Error("Not implementd yet for blob FS")
 			return &resourceDummy{}
@@ -357,6 +357,7 @@ func (s *scenario) validateProperties() {
 		s.validateLastWriteTime(expected.lastWriteTime, actual.lastWriteTime)
 		s.validateCPKByScope(expected.cpkScopeInfo, actual.cpkScopeInfo)
 		s.validateCPKByValue(expected.cpkInfo, actual.cpkInfo)
+		s.validateADLSACLs(expected.adlsPermissionsACL, actual.adlsPermissionsACL)
 		if expected.smbPermissionsSddl != nil {
 			if actual.smbPermissionsSddl == nil {
 				s.a.Error("Expected a SDDL on file " + destName + ", but none was found")
@@ -417,6 +418,18 @@ func (s *scenario) validateMetadata(expected, actual map[string]string) {
 			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("Expect value for key '%s' to be '%s' but found '%s'", key, exValue, actualValue))
 		}
 	}
+}
+
+func (s *scenario) validateADLSACLs(expected, actual *string) {
+	if expected == nil && actual == nil {
+		return
+	}
+	if expected == nil || actual == nil {
+		s.a.Failed()
+		return
+	}
+
+	s.a.Assert(expected, equals(), actual, fmt.Sprintf("Expected Gen 2 ACL: %s but found: %s", *expected, *actual))
 }
 
 func (s *scenario) validateCPKByScope(expected, actual *common.CpkScopeInfo) {

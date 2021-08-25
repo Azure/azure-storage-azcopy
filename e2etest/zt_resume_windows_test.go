@@ -30,6 +30,7 @@ func TestResume_FolderState(t *testing.T) {
 				f("a/b"),
 			},
 		},
+		EAccountType.Standard(),
 	)
 }
 
@@ -67,5 +68,6 @@ func TestResume_NoCreateFolder(t *testing.T) {
 				folder("a", with{smbAttributes: 2}),
 			},
 		},
+		EAccountType.Standard(),
 	)
 }

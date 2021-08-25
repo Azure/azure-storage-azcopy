@@ -58,6 +58,8 @@ const base10Mega = 1000 * 1000
 
 const pipeLocation = "~pipe~"
 
+const PreservePermissionsFlag = "preserve-permissions"
+
 // represents the raw copy command input from the user
 type rawCopyCmdArgs struct {
 	// from arguments
@@ -119,6 +121,7 @@ type rawCopyCmdArgs struct {
 	excludeBlobType string
 	// Opt-in flag to persist SMB ACLs to Azure Files.
 	preserveSMBPermissions bool
+	preservePermissions    bool // Separate flag so that we don't get funkiness with two "flags" targeting the same boolean
 	preserveOwner          bool // works in conjunction with preserveSmbPermissions
 	// Opt-in flag to persist additional SMB properties to Azure Files. Named ...info instead of ...properties
 	// because the latter was similar enough to preserveSMBPermissions to induce user error
@@ -260,15 +263,20 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 
 	/* We support DFS by using blob end-point of the account. We replace dfs by blob in src and dst */
 	if src, dst := inferArgumentLocation(raw.src), inferArgumentLocation(raw.dst); src == common.ELocation.BlobFS() || dst == common.ELocation.BlobFS() {
-		if src == common.ELocation.BlobFS() && dst != common.ELocation.Local() {
+		srcDfs := src == common.ELocation.BlobFS() && dst != common.ELocation.Local()
+		if srcDfs {
 			raw.src = strings.Replace(raw.src, ".dfs", ".blob", 1)
 			glcm.Info("Switching to use blob endpoint on source account.")
+
 		}
 
-		if dst == common.ELocation.BlobFS() && src != common.ELocation.Local() {
+		dstDfs := dst == common.ELocation.BlobFS() && src != common.ELocation.Local()
+		if dstDfs {
 			raw.dst = strings.Replace(raw.dst, ".dfs", ".blob", 1)
 			glcm.Info("Switching to use blob endpoint on destination account.")
 		}
+
+		cooked.isHNStoHNS = srcDfs && dstDfs
 	}
 
 	fromTo, err := validateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
@@ -528,7 +536,6 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.cacheControl = raw.cacheControl
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
-	cooked.includeDirectoryStubs = raw.includeDirectoryStubs
 	cooked.disableAutoDecoding = raw.disableAutoDecoding
 
 	if cooked.fromTo.To() != common.ELocation.Blob() && raw.blobTags != "" {
@@ -624,19 +631,25 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
-	if cooked.preserveSMBInfo && !raw.preserveSMBPermissions {
-		glcm.Info("Please note: the preserve-smb-permissions flag is set to false, thus AzCopy will not copy SMB ACLs between the source and destination.")
+	isUserPersistingPermissions := raw.preservePermissions || raw.preserveSMBPermissions
+	if cooked.preserveSMBInfo && !isUserPersistingPermissions {
+		glcm.Info("Please note: the preserve-permissions flag is set to false, thus AzCopy will not copy SMB ACLs between the source and destination.")
 	}
 
-	if err = validatePreserveSMBPropertyOption(raw.preserveSMBPermissions, cooked.fromTo, &cooked.forceWrite, "preserve-smb-permissions"); err != nil {
+	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions, cooked.fromTo, &cooked.forceWrite, PreservePermissionsFlag); err != nil {
 		return cooked, err
 	}
 	if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); err != nil {
 		return cooked, err
 	}
-	cooked.preserveSMBPermissions = common.NewPreservePermissionsOption(raw.preserveSMBPermissions, raw.preserveOwner, cooked.fromTo)
+	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions, raw.preserveOwner, cooked.fromTo)
+	if cooked.fromTo == common.EFromTo.BlobBlob() && cooked.preservePermissions.IsTruthy() {
+		cooked.isHNStoHNS = true // override HNS settings, since if a user is tx'ing blob->blob and copying permissions, it's DEFINITELY going to be HNS (since perms don't exist w/o HNS).
+	}
 
-	if err = crossValidateSymlinksAndPermissions(cooked.followSymlinks, cooked.preserveSMBPermissions.IsTruthy()); err != nil {
+	cooked.includeDirectoryStubs = raw.includeDirectoryStubs || (cooked.isHNStoHNS && cooked.preservePermissions.IsTruthy())
+
+	if err = crossValidateSymlinksAndPermissions(cooked.followSymlinks, cooked.preservePermissions.IsTruthy()); err != nil {
 		return cooked, err
 	}
 
@@ -660,7 +673,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
 			return cooked, fmt.Errorf("blob-tier is not supported while uploading to ADLS Gen 2")
 		}
-		if cooked.preserveSMBPermissions.IsTruthy() {
+		if cooked.preservePermissions.IsTruthy() {
 			return cooked, fmt.Errorf("preserve-smb-permissions is not supported while uploading to ADLS Gen 2")
 		}
 		if cooked.s2sPreserveProperties {
@@ -877,8 +890,9 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, overwrite *common.OverwriteOption, flagName string) error {
 	if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
 		fromTo == common.EFromTo.FileLocal() ||
-		fromTo == common.EFromTo.FileFile()) {
-		return fmt.Errorf("%s is set but the job is not between SMB-aware resources", flagName)
+		fromTo == common.EFromTo.FileFile() ||
+		fromTo == common.EFromTo.BlobBlob()) {
+		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.IffString(flagName == PreservePermissionsFlag, "permission", "SMB"))
 	}
 
 	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) && runtime.GOOS != "windows" {
@@ -991,6 +1005,7 @@ type cookedCopyCmdArgs struct {
 	// from arguments
 	source      common.ResourceString
 	destination common.ResourceString
+	isHNStoHNS  bool // workaround to indicate that BlobBlob is actually HNS->HNS, since we shift to Blob instead of HNS.
 	fromTo      common.FromTo
 
 	// new include/exclude only apply to file names
@@ -1066,7 +1081,7 @@ type cookedCopyCmdArgs struct {
 	isEnumerationComplete bool
 
 	// Whether the user wants to preserve the SMB ACLs assigned to their files when moving between resources that are SMB ACL aware.
-	preserveSMBPermissions common.PreservePermissionsOption
+	preservePermissions common.PreservePermissionsOption
 	// Whether the user wants to preserve the SMB properties ...
 	preserveSMBInfo bool
 
@@ -1875,4 +1890,8 @@ func init() {
 	// Hide the flush-threshold flag since it is implemented only for CI.
 	cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on accounts that have a hierarchical namespace.")
 	cpCmd.PersistentFlags().MarkHidden("flush-threshold")
+
+	// Deprecate the old persist-smb-permissions flag
+	cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
+	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files, or ADLS Gen 2 to ADLS Gen 2). For Hierarchical Namespace accounts, you will need a container SAS or OAuth token with Modify Ownership and Modify Permissions permissions. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 }

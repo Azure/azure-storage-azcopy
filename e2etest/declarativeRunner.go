@@ -46,7 +46,7 @@ func RunScenarios(
 	hs *hooks,
 	fs testFiles,
 	// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
-) {
+	accountType AccountType) {
 	// enable this if we want parents in parallel: t.Parallel()
 
 	suiteName, testName := getTestName(t)
@@ -83,6 +83,7 @@ func RunScenarios(
 			}
 
 			s := scenario{
+				accountType:         accountType,
 				subtestName:         subtestName,
 				compactScenarioName: compactScenarioName,
 				fullScenarioName:    fullScenarioName,

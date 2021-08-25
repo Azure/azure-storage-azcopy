@@ -51,6 +51,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 		c.Assert(containerURL, chk.NotNil)
 
 		// set up the destination as a single file
+		time.Sleep(time.Second)
 		dstDirName := scenarioHelper{}.generateLocalDirectory(c)
 		defer os.RemoveAll(dstDirName)
 		dstFileName := blobName
@@ -76,6 +77,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 		// Sleep a bit to offset LMTs
 		time.Sleep(5 * time.Second)
 		// recreate the blob to have a later last modified time
+		time.Sleep(time.Second)
 		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
 		mockedRPC.reset()
 

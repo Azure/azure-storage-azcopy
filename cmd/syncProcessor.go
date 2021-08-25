@@ -56,7 +56,7 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
 		ForceIfReadOnly:                cca.forceIfReadOnly,
 		LogLevel:                       cca.logVerbosity,
-		PreserveSMBPermissions:         cca.preserveSMBPermissions,
+		PreserveSMBPermissions:         cca.preservePermissions,
 		PreserveSMBInfo:                cca.preserveSMBInfo,
 		S2SSourceChangeValidation:      true,
 		DestLengthValidation:           true,

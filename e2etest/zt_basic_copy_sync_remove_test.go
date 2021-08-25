@@ -26,352 +26,240 @@ import (
 
 // ================================  Copy And Sync: Upload, Download, and S2S  =========================================
 func TestBasic_CopyUploadSingleBlob(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.AllUploads(),
-		eValidate.AutoPlusContent(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file1.txt"),
 		},
-		nil,
-		testFiles{
-			defaultSize: "1K",
-			shouldTransfer: []interface{}{
-				folder(""),
-				f("file1.txt"),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 func TestBasic_CopyUploadEmptyBlob(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.AllUploads(),
-		eValidate.Auto(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.Auto(), params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "0K",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file1.txt"),
 		},
-		nil,
-		testFiles{
-			defaultSize: "0K",
-			shouldTransfer: []interface{}{
-				folder(""),
-				f("file1.txt"),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 func TestBasic_CopyUploadLargeBlob(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.AllUploads(),
-		eValidate.AutoPlusContent(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), params{
+		recursive: true,
+	}, &hooks{
+		beforeTestRun: func(h hookHelper) {
+			h.SkipTest()
 		},
-		&hooks{
-			beforeTestRun: func(h hookHelper) {
-				h.SkipTest()
-			},
+	}, testFiles{
+		defaultSize: "1G",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file1.txt"),
 		},
-		testFiles{
-			defaultSize: "1G",
-			shouldTransfer: []interface{}{
-				folder(""),
-				f("file1.txt"),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 func TestBasic_CopyDownloadSingleBlob(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.AllDownloads(),
-		eValidate.Auto(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file1.txt"),
 		},
-		nil,
-		testFiles{
-			defaultSize: "1K",
-			shouldTransfer: []interface{}{
-				folder(""),
-				f("file1.txt"),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 func TestBasic_CopyDownloadEmptyBlob(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.AllDownloads(),
-		eValidate.Auto(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "0K",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file1.txt"),
 		},
-		nil,
-		testFiles{
-			defaultSize: "0K",
-			shouldTransfer: []interface{}{
-				folder(""),
-				f("file1.txt"),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 func TestBasic_CopyDownloadLargeBlob(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.AllDownloads(),
-		eValidate.Auto(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), params{
+		recursive: true,
+	}, &hooks{
+		beforeTestRun: func(h hookHelper) {
+			h.SkipTest()
 		},
-		&hooks{
-			beforeTestRun: func(h hookHelper) {
-				h.SkipTest()
-			},
+	}, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file1.txt"),
 		},
-		testFiles{
-			defaultSize: "1K",
-			shouldTransfer: []interface{}{
-				folder(""),
-				f("file1.txt"),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 func TestBasic_CopyS2SSingleBlob(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.AllS2S(),
-		eValidate.AutoPlusContent(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			f("file1.txt"),
 		},
-		nil,
-		testFiles{
-			defaultSize: "1K",
-			shouldTransfer: []interface{}{
-				f("file1.txt"),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 func TestBasic_CopyS2SEmptyBlob(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.AllS2S(),
-		eValidate.AutoPlusContent(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "0K",
+		shouldTransfer: []interface{}{
+			f("file1.txt"),
 		},
-		nil,
-		testFiles{
-			defaultSize: "0K",
-			shouldTransfer: []interface{}{
-				f("file1.txt"),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 func TestBasic_CopyS2SLargeBlob(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.AllS2S(),
-		eValidate.AutoPlusContent(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), params{
+		recursive: true,
+	}, &hooks{
+		beforeTestRun: func(h hookHelper) {
+			h.SkipTest()
 		},
-		&hooks{
-			beforeTestRun: func(h hookHelper) {
-				h.SkipTest()
-			},
+	}, testFiles{
+		defaultSize: "1G",
+		shouldTransfer: []interface{}{
+			f("file1.txt"),
 		},
-		testFiles{
-			defaultSize: "1G",
-			shouldTransfer: []interface{}{
-				f("file1.txt"),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 func TestBasic_CopyUploadDir(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.AllUploads(),
-		eValidate.AutoPlusContent(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "1M",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file1"),
+			f("file2"),
+			folder("folder1"),
+			folder("folder2"),
+			f("folder1/file1"),
+			f("folder1/file2"),
+			f("folder2/file3"),
 		},
-		nil,
-		testFiles{
-			defaultSize: "1M",
-			shouldTransfer: []interface{}{
-				folder(""),
-				f("file1"),
-				f("file2"),
-				folder("folder1"),
-				folder("folder2"),
-				f("folder1/file1"),
-				f("folder1/file2"),
-				f("folder2/file3"),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 func TestBasic_CopyDownloadDir(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.AllDownloads(),
-		eValidate.Auto(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "1M",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file1"),
+			f("file2"),
+			folder("folder1"),
+			folder("folder2"),
+			f("folder1/file1"),
+			f("folder1/file2"),
+			f("folder2/file3"),
 		},
-		nil,
-		testFiles{
-			defaultSize: "1M",
-			shouldTransfer: []interface{}{
-				folder(""),
-				f("file1"),
-				f("file2"),
-				folder("folder1"),
-				folder("folder2"),
-				f("folder1/file1"),
-				f("folder1/file2"),
-				f("folder2/file3"),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 func TestBasic_CopyS2SDir(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.AllS2S(),
-		eValidate.AutoPlusContent(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "1M",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file1"),
+			f("file2"),
+			folder("folder1"),
+			folder("folder2"),
+			f("folder1/file1"),
+			f("folder1/file2"),
+			f("folder2/file3"),
 		},
-		nil,
-		testFiles{
-			defaultSize: "1M",
-			shouldTransfer: []interface{}{
-				folder(""),
-				f("file1"),
-				f("file2"),
-				folder("folder1"),
-				folder("folder2"),
-				f("folder1/file1"),
-				f("folder1/file2"),
-				f("folder2/file3"),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 // ================================  Remove: File, Folder, and Container  ==============================================
 func TestBasic_CopyRemoveFile(t *testing.T) {
 
-	RunScenarios(
-		t,
-		eOperation.Remove(),
-		eTestFromTo.AllRemove(),
-		eValidate.Auto(),
-		params{
-			relativeSourcePath: "file2.txt",
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), params{
+		relativeSourcePath: "file2.txt",
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			"file1.txt",
 		},
-		nil,
-		testFiles{
-			defaultSize: "1K",
-			shouldTransfer: []interface{}{
-				"file1.txt",
-			},
-			shouldIgnore: []interface{}{
-				"file2.txt",
-			},
-		})
+		shouldIgnore: []interface{}{
+			"file2.txt",
+		},
+	}, EAccountType.Standard())
 }
 
 func TestBasic_CopyRemoveLargeFile(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.Remove(),
-		eTestFromTo.AllRemove(),
-		eValidate.Auto(),
-		params{
-			relativeSourcePath: "file2.txt",
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), params{
+		relativeSourcePath: "file2.txt",
+	}, &hooks{
+		beforeTestRun: func(h hookHelper) {
+			h.SkipTest()
 		},
-		&hooks{
-			beforeTestRun: func(h hookHelper) {
-				h.SkipTest()
-			},
+	}, testFiles{
+		defaultSize: "1G",
+		shouldTransfer: []interface{}{
+			"file1.txt",
 		},
-		testFiles{
-			defaultSize: "1G",
-			shouldTransfer: []interface{}{
-				"file1.txt",
-			},
-			shouldIgnore: []interface{}{
-				"file2.txt",
-			},
-		})
+		shouldIgnore: []interface{}{
+			"file2.txt",
+		},
+	}, EAccountType.Standard())
 }
 
 func TestBasic_CopyRemoveFolder(t *testing.T) {
 
-	RunScenarios(
-		t,
-		eOperation.Remove(),
-		eTestFromTo.AllRemove(),
-		eValidate.Auto(),
-		params{
-			recursive:          true,
-			relativeSourcePath: "folder2/",
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), params{
+		recursive:          true,
+		relativeSourcePath: "folder2/",
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			"file1.txt",
+			"folder1/file11.txt",
+			"folder1/file12.txt",
 		},
-		nil,
-		testFiles{
-			defaultSize: "1K",
-			shouldTransfer: []interface{}{
-				"file1.txt",
-				"folder1/file11.txt",
-				"folder1/file12.txt",
-			},
-			shouldIgnore: []interface{}{
-				"folder2/file21.txt",
-				"folder2/file22.txt",
-			},
-		})
+		shouldIgnore: []interface{}{
+			"folder2/file21.txt",
+			"folder2/file22.txt",
+		},
+	}, EAccountType.Standard())
 }
 
 func TestBasic_CopyRemoveContainer(t *testing.T) {
 
-	RunScenarios(
-		t,
-		eOperation.Remove(),
-		eTestFromTo.AllRemove(),
-		eValidate.Auto(),
-		params{
-			recursive:          true,
-			relativeSourcePath: "",
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), params{
+		recursive:          true,
+		relativeSourcePath: "",
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			"file1.txt",
+			"folder1/file11.txt",
+			"folder1/file12.txt",
 		},
-		nil,
-		testFiles{
-			defaultSize: "1K",
-			shouldTransfer: []interface{}{
-				"file1.txt",
-				"folder1/file11.txt",
-				"folder1/file12.txt",
-			},
-		})
+	}, EAccountType.Standard())
 }

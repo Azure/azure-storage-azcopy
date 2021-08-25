@@ -68,25 +68,27 @@ func TestProperties_SMBPermissionsSDDLPreserved(t *testing.T) {
 		// Anybody know how to get that going on Azure pipelines? Or just hand a UAC escalation prompt off to the suite runner so it can be tested locally?
 		eTestFromTo.Other(
 			common.EFromTo.LocalFile(),
-			// common.EFromTo.FileFile(), // TODO: finish inquiring with Jason Shay about this wonkiness. Context: Auto-inherit bit is getting flipped on S2S unrelated to azcopy
-			),
+		// common.EFromTo.FileFile(), // TODO: finish inquiring with Jason Shay about this wonkiness. Context: Auto-inherit bit is getting flipped on S2S unrelated to azcopy
+		),
 		eValidate.Auto(),
 		params{
-			recursive: true,
-			preserveSMBInfo: true,
+			recursive:              true,
+			preserveSMBInfo:        true,
 			preserveSMBPermissions: true,
 		},
 		nil,
 		testFiles{
 			defaultSize: "1K",
 			shouldTransfer: []interface{}{
-				folder("", with{ smbPermissionsSddl: rootSDDL}),
-				f("file1", with{ smbPermissionsSddl: fileSDDL}),
-				f("file2.txt", with{ smbPermissionsSddl: fileSDDL}),
-				folder("fldr1", with{ smbPermissionsSddl: folderSDDL}),
-				f("fldr1/file3.txt", with{ smbPermissionsSddl: fileSDDL}),
+				folder("", with{smbPermissionsSddl: rootSDDL}),
+				f("file1", with{smbPermissionsSddl: fileSDDL}),
+				f("file2.txt", with{smbPermissionsSddl: fileSDDL}),
+				folder("fldr1", with{smbPermissionsSddl: folderSDDL}),
+				f("fldr1/file3.txt", with{smbPermissionsSddl: fileSDDL}),
 			},
-		})
+		},
+		EAccountType.Standard(),
+	)
 }
 
 // TODO: add some tests (or modify the above) to make assertions about case preservation (or not) in metadata
@@ -126,7 +128,9 @@ func TestProperties_SMBDates(t *testing.T) {
 				folder("fold1"),
 				"fold1/fileb",
 			},
-		})
+		},
+		EAccountType.Standard(),
+	)
 }
 
 func TestProperties_SMBFlags(t *testing.T) {
@@ -136,19 +140,20 @@ func TestProperties_SMBFlags(t *testing.T) {
 		eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileFile(), common.EFromTo.FileLocal()),
 		eValidate.Auto(),
 		params{
-			recursive: true,
+			recursive:       true,
 			preserveSMBInfo: true,
 		},
 		nil,
 		testFiles{
 			defaultSize: "1K",
-			shouldTransfer: []interface {}{
+			shouldTransfer: []interface{}{
 				folder("", with{smbAttributes: 2}), // hidden
 				f("file1.txt", with{smbAttributes: 2}),
 				folder("fldr1", with{smbAttributes: 2}),
 				f("fldr1/file2.txt", with{smbAttributes: 2}),
 			},
 		},
+		EAccountType.Standard(),
 	)
 }
 
@@ -201,6 +206,7 @@ func TestProperties_SMBPermsAndFlagsWithIncludeAfter(t *testing.T) {
 			shouldTransfer: recreateFiles,
 			shouldIgnore: skippedFiles,
 		},
+		EAccountType.Standard(),
 	)
 }
 
@@ -252,5 +258,6 @@ func TestProperties_SMBPermsAndFlagsWithSync(t *testing.T) {
 			shouldTransfer: transferredFiles,
 			shouldIgnore:   recreateFiles,
 		},
+		EAccountType.Standard(),
 	)
 }

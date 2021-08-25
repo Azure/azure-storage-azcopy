@@ -287,8 +287,12 @@ type jobPartMgr struct {
 	exclusiveDestinationMap *common.ExclusiveStringMap
 
 	pipeline pipeline.Pipeline // ordered list of Factory objects and an object implementing the HTTPSender interface
+	// Currently, this only sees use in ADLSG2->ADLSG2 ACL transfers. TODO: Remove it when we can reliably get/set ACLs on blob.
+	secondaryPipeline pipeline.Pipeline
 
 	sourceProviderPipeline pipeline.Pipeline
+	// TODO: Ditto
+	secondarySourceProviderPipeline pipeline.Pipeline
 
 	// used defensively to protect double init
 	atomicPipelinesInitedIndicator uint32
@@ -535,6 +539,22 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.pacer,
 			jpm.jobMgr.HttpClient(),
 			statsAccForSip)
+
+		// Consider the ADLSG2->ADLSG2 ACLs case
+		if fromTo == common.EFromTo.BlobBlob() && jpm.Plan().PreservePermissions.IsTruthy() {
+			jpm.secondarySourceProviderPipeline = NewBlobFSPipeline(
+				azbfs.NewAnonymousCredential(),
+				azbfs.PipelineOptions{
+					Log: jpm.jobMgr.PipelineLogInfo(),
+					Telemetry: azbfs.TelemetryOptions{
+						Value: userAgent,
+					},
+				},
+				xferRetryOption,
+				jpm.pacer,
+				jpm.jobMgr.HttpClient(),
+				statsAccForSip)
+		}
 	}
 	// Consider the file-local SDDL transfer case.
 	if fromTo == common.EFromTo.FileBlob() || fromTo == common.EFromTo.FileFile() || fromTo == common.EFromTo.FileLocal() {
@@ -576,6 +596,23 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.pacer,
 			jpm.jobMgr.HttpClient(),
 			jpm.jobMgr.PipelineNetworkStats())
+
+		// Consider the ADLSG2->ADLSG2 ACLs case
+		if fromTo == common.EFromTo.BlobBlob() && jpm.Plan().PreservePermissions.IsTruthy() {
+			credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
+			jpm.secondaryPipeline = NewBlobFSPipeline(
+				credential,
+				azbfs.PipelineOptions{
+					Log: jpm.jobMgr.PipelineLogInfo(),
+					Telemetry: azbfs.TelemetryOptions{
+						Value: userAgent,
+					},
+				},
+				xferRetryOption,
+				jpm.pacer,
+				jpm.jobMgr.HttpClient(),
+				statsAccForSip)
+		}
 	// Create pipeline for Azure BlobFS.
 	case common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS(), common.EFromTo.BenchmarkBlobFS():
 		credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)

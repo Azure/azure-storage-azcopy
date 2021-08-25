@@ -21,7 +21,6 @@
 package cmd
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"io"
 	"io/ioutil"
@@ -29,6 +28,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	gcpUtils "cloud.google.com/go/storage"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"

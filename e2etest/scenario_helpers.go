@@ -334,9 +334,11 @@ func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c asserter, s3Clien
 type generateFromListOptions struct {
 	fs          []*testObject
 	defaultSize string
+	accountType AccountType
 }
 
 type generateBlobFromListOptions struct {
+	rawSASURL    url.URL
 	containerURL azblob.ContainerURL
 	cpkInfo      common.CpkInfo
 	cpkScopeInfo common.CpkScopeInfo
@@ -360,6 +362,12 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 		}
 		ad.obj.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
 
+		tags := ad.toBlobTags()
+
+		if options.accountType == EAccountType.HierarchicalNamespaceEnabled() {
+			tags = nil
+		}
+
 		headers := ad.toHeaders()
 		headers.ContentMD5 = contentMD5[:]
 		cResp, err := blob.Upload(ctx,
@@ -368,11 +376,38 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 			ad.toMetadata(),
 			azblob.BlobAccessConditions{},
 			azblob.DefaultAccessTier,
-			ad.toBlobTags(),
+			tags,
 			common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo),
 		)
 		c.AssertNoErr(err)
 		c.Assert(cResp.StatusCode(), equals(), 201)
+
+		if b.creationProperties.adlsPermissionsACL != nil {
+			bfsURLParts := azbfs.NewBfsURLParts(options.rawSASURL)
+			bfsURLParts.Host = strings.Replace(bfsURLParts.Host, ".blob", ".dfs", 1)
+
+			bfsContainer := azbfs.NewFileSystemURL(bfsURLParts.URL(), azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{}))
+
+			var updateResp *azbfs.PathUpdateResponse
+			if b.isFolder() {
+				dirURL := bfsContainer.NewDirectoryURL(b.name)
+
+				updateResp, err = dirURL.SetAccessControl(ctx, azbfs.BlobFSAccessControl{
+					ACL: *b.creationProperties.adlsPermissionsACL,
+				})
+			} else {
+				d, f := path.Split(b.name)
+				dirURL := bfsContainer.NewDirectoryURL(d)
+				fileURL := dirURL.NewFileURL(f)
+
+				updateResp, err = fileURL.SetAccessControl(ctx, azbfs.BlobFSAccessControl{
+					ACL: *b.creationProperties.adlsPermissionsACL,
+				})
+			}
+
+			c.AssertNoErr(err)
+			c.Assert(updateResp.StatusCode(), equals(), 200)
+		}
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
@@ -403,15 +438,18 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 			}
 			md := map[string]string(blobInfo.Metadata)
 
+
+
 			props := objectProperties{
-				isFolder:          false, // no folders in Blob
-				size:              bp.ContentLength,
-				contentHeaders:    &h,
-				nameValueMetadata: md,
-				creationTime:      bp.CreationTime,
-				lastWriteTime:     &bp.LastModified,
-				cpkInfo:           &common.CpkInfo{EncryptionKeySha256: bp.CustomerProvidedKeySha256},
-				cpkScopeInfo:      &common.CpkScopeInfo{EncryptionScope: bp.EncryptionScope},
+				isFolder:           false, // no folders in Blob
+				size:               bp.ContentLength,
+				contentHeaders:     &h,
+				nameValueMetadata:  md,
+				creationTime:       bp.CreationTime,
+				lastWriteTime:      &bp.LastModified,
+				cpkInfo:            &common.CpkInfo{EncryptionKeySha256: bp.CustomerProvidedKeySha256},
+				cpkScopeInfo:       &common.CpkScopeInfo{EncryptionScope: bp.EncryptionScope},
+				adlsPermissionsACL: bp.ACL,
 				// smbAttributes and smbPermissions don't exist in blob
 			}
 
@@ -792,6 +830,8 @@ func (scenarioHelper) generateBFSPathsFromList(c asserter, filesystemURL azbfs.F
 		fResp, err := file.FlushData(ctx, defaultBlobFSFileSizeInBytes, nil, azbfs.BlobFSHTTPHeaders{}, false, true)
 		c.AssertNoErr(err)
 		c.Assert(fResp.StatusCode(), equals(), 200)
+
+
 	}
 }
 

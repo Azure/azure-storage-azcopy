@@ -100,6 +100,22 @@ func skipIfGCPDisabled(c *chk.C) {
 	}
 }
 
+func testDryrunStatements(items, messages []string) bool {
+	for _,v := range items {
+		for _,m := range messages {
+			if strings.HasSuffix(m, v) {
+				goto continueBlobs
+			}
+		}
+
+		return false
+
+		continueBlobs:
+	}
+
+	return true
+}
+
 // This function generates an entity name by concatenating the passed prefix,
 // the name of the test requesting the entity name, and the minute, second, and nanoseconds of the call.
 // This should make it easy to associate the entities with their test, uniquely identify
@@ -290,6 +306,9 @@ func GetBFSSU() azbfs.ServiceURL {
 func createNewContainer(c *chk.C, bsu azblob.ServiceURL) (container azblob.ContainerURL, name string) {
 	container, name = getContainerURL(c, bsu)
 
+	// ignore any errors here, since it doesn't matter if this fails (if it does, it's probably because the container didn't exist)
+	_, _ = container.Delete(ctx, azblob.ContainerAccessConditions{})
+
 	cResp, err := container.Create(ctx, nil, azblob.PublicAccessNone)
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
@@ -298,6 +317,9 @@ func createNewContainer(c *chk.C, bsu azblob.ServiceURL) (container azblob.Conta
 
 func createNewFilesystem(c *chk.C, bfssu azbfs.ServiceURL) (filesystem azbfs.FileSystemURL, name string) {
 	filesystem, name = getFilesystemURL(c, bfssu)
+
+	// ditto
+	_, _ = filesystem.Delete(ctx)
 
 	cResp, err := filesystem.Create(ctx)
 	c.Assert(err, chk.IsNil)
@@ -349,6 +371,8 @@ func createNewDirectoryStub(c *chk.C, container azblob.ContainerURL, dirPath str
 
 func createNewAzureShare(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
 	share, name = getShareURL(c, fsu)
+
+	//
 
 	cResp, err := share.Create(ctx, nil, 0)
 	c.Assert(err, chk.IsNil)

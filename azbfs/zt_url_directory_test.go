@@ -2,9 +2,10 @@ package azbfs_test
 
 import (
 	"context"
+	"net/http"
+
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	chk "gopkg.in/check.v1"
-	"net/http"
 )
 
 type DirectoryUrlSuite struct{}
@@ -275,4 +276,57 @@ func (dus *DirectoryUrlSuite) TestListDirectoryWithSpaces(c *chk.C) {
 	c.Assert(lresp.XMsRequestID(), chk.Not(chk.Equals), "")
 	c.Assert(lresp.XMsVersion(), chk.Not(chk.Equals), "")
 	c.Assert(lresp.Date(), chk.Not(chk.Equals), "")
+}
+
+func (dus *DirectoryUrlSuite) TestSetACL(c *chk.C) {
+	// Create a filesystem
+	fsu := getBfsServiceURL()
+	fsURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fsURL)
+
+	// Create a directory inside the filesystem
+	dirURL := fsURL.NewDirectoryURL("test")
+	_, err := dirURL.Create(ctx, true)
+	c.Assert(err, chk.IsNil)
+
+	// Grab it's default ACLs
+	folderAccess, err := dirURL.GetAccessControl(ctx)
+	c.Assert(err, chk.IsNil)
+
+	// Modify it slightly
+	folderAccess.ACL = "user::r-x,group::r-x,other::---"
+	folderAccess.Permissions = ""
+	_, err = dirURL.SetAccessControl(ctx, folderAccess)
+	c.Assert(err, chk.IsNil)
+
+	// Compare them
+	folderAccessToValidate, err := dirURL.GetAccessControl(ctx)
+	c.Assert(err, chk.IsNil)
+	// We're checking ACLs are the same
+	folderAccessToValidate.Permissions = ""
+	c.Assert(folderAccessToValidate, chk.Equals, folderAccess)
+
+	// Create a file
+	fileUrl := dirURL.NewFileURL("foo.bar")
+	_, err = fileUrl.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	c.Assert(err, chk.IsNil)
+
+	// Grab it's default ACLs
+	fileAccess, err := fileUrl.GetAccessControl(ctx)
+	c.Assert(err, chk.IsNil)
+
+	// Modify it slightly.
+	fileAccess.ACL = "user::r-x,group::r-x,other::---"
+	fileAccess.Permissions = ""
+	_, err = fileUrl.SetAccessControl(ctx, fileAccess)
+	c.Assert(err, chk.IsNil)
+
+	// Compare them
+	fileAccessToValidate, err := fileUrl.GetAccessControl(ctx)
+	c.Assert(err, chk.IsNil)
+	// We're checking ACLs are the same
+	fileAccessToValidate.Permissions = ""
+	c.Assert(fileAccessToValidate, chk.Equals, fileAccess)
+
+	// Don't bother testing the root ACLs, since it calls into the directoryclient
 }

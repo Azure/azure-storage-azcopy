@@ -742,8 +742,9 @@ func (s *cmdIntegrationSuite) TestDryrunCopyLocalToBlob(c *chk.C) {
 			c.Check(strings.Contains(msg[i], "DRYRUN: copy"), chk.Equals, true)
 			c.Check(strings.Contains(msg[i], srcDirName), chk.Equals, true)
 			c.Check(strings.Contains(msg[i], dstContainerURL.String()), chk.Equals, true)
-			c.Check(strings.Contains(msg[i], blobsToInclude[i]), chk.Equals, true)
 		}
+
+		c.Check(testDryrunStatements(blobsToInclude, msg), chk.Equals, true)
 	})
 }
 
@@ -786,8 +787,9 @@ func (s *cmdIntegrationSuite) TestDryrunCopyBlobToBlob(c *chk.C) {
 			c.Check(strings.Contains(msg[i], "DRYRUN: copy"), chk.Equals, true)
 			c.Check(strings.Contains(msg[i], srcContainerURL.String()), chk.Equals, true)
 			c.Check(strings.Contains(msg[i], dstContainerURL.String()), chk.Equals, true)
-			c.Check(strings.Contains(msg[i], blobsToInclude[i]), chk.Equals, true)
 		}
+
+		c.Check(testDryrunStatements(blobsToInclude, msg), chk.Equals, true)
 	})
 }
 
@@ -877,7 +879,8 @@ func (s *cmdIntegrationSuite) TestDryrunCopyS3toBlob(c *chk.C) {
 		c.Check(strings.Contains(msg[0], "DRYRUN: copy"), chk.Equals, true)
 		c.Check(strings.Contains(msg[0], rawSrcS3ObjectURL.String()), chk.Equals, true)
 		c.Check(strings.Contains(msg[0], dstPath[0]), chk.Equals, true)
-		c.Check(strings.Contains(msg[0], objectList[0]), chk.Equals, true)
+
+		c.Check(testDryrunStatements(objectList, msg), chk.Equals, true)
 	})
 }
 
@@ -922,6 +925,7 @@ func (s *cmdIntegrationSuite) TestDryrunCopyGCPtoBlob(c *chk.C) {
 		c.Check(strings.Contains(msg[0], "DRYRUN: copy"), chk.Equals, true)
 		c.Check(strings.Contains(msg[0], rawSrcGCPObjectURL.String()), chk.Equals, true)
 		c.Check(strings.Contains(msg[0], dstPath[0]), chk.Equals, true)
-		c.Check(strings.Contains(msg[0], blobsToInclude[0]), chk.Equals, true)
+
+		c.Check(testDryrunStatements(blobsToInclude, msg), chk.Equals, true)
 	})
 }
