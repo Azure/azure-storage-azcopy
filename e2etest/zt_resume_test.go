@@ -31,6 +31,7 @@ func TestResume_Generic(t *testing.T) {
 				f("filed"),
 			},
 		},
+		EAccountType.Standard(),
 	)
 }
 
@@ -80,5 +81,6 @@ func TestResume_LargeGeneric(t *testing.T) {
 
 			shouldTransfer: allFiles,
 		},
+		EAccountType.Standard(),
 	)
 }
