@@ -246,7 +246,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, nil, "preserve-smb-info"); err != nil {
 		return cooked, err
 	}
-	if cooked.fromTo == common.EFromTo.BlobBlob() && cooked.preserveSMBPermissions.IsTruthy() {
+	if cooked.fromTo == common.EFromTo.BlobBlob() && cooked.preservePermissions.IsTruthy() {
 		cooked.isHNSToHNS = true // override HNS settings, since if a user is tx'ing blob->blob and copying permissions, it's DEFINITELY going to be HNS (since perms don't exist w/o HNS).
 	}
 
@@ -258,11 +258,11 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions, cooked.fromTo, nil, PreservePermissionsFlag); err != nil {
 		return cooked, err
 	}
-	// TODO: the check on raw.preserveSMBPermissions on the next line can be removed once we have full support for these properties in sync
-	//if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); raw.preserveSMBPermissions && err != nil {
+	// TODO: the check on raw.preservePermissions on the next line can be removed once we have full support for these properties in sync
+	//if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); raw.preservePermissions && err != nil {
 	//	return cooked, err
 	//}
-	cooked.preserveSMBPermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions, raw.preserveOwner, cooked.fromTo)
+	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions, raw.preserveOwner, cooked.fromTo)
 
 	cooked.putMd5 = raw.putMd5
 	if err = validatePutMd5(cooked.putMd5, cooked.fromTo); err != nil {
@@ -362,14 +362,14 @@ type cookedSyncCmdArgs struct {
 	excludeRegex          []string
 
 	// options
-	preserveSMBPermissions common.PreservePermissionsOption
-	preserveSMBInfo        bool
-	putMd5                 bool
-	md5ValidationOption    common.HashValidationOption
-	blockSize              int64
-	logVerbosity           common.LogLevel
-	forceIfReadOnly        bool
-	backupMode             bool
+	preservePermissions common.PreservePermissionsOption
+	preserveSMBInfo     bool
+	putMd5              bool
+	md5ValidationOption common.HashValidationOption
+	blockSize           int64
+	logVerbosity        common.LogLevel
+	forceIfReadOnly     bool
+	backupMode          bool
 
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string

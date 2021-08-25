@@ -50,7 +50,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	jobPartOrder.CpkOptions = cca.cpkOptions
-	jobPartOrder.PreserveSMBPermissions = cca.preserveSMBPermissions
+	jobPartOrder.PreserveSMBPermissions = cca.preservePermissions
 	jobPartOrder.PreserveSMBInfo = cca.preserveSMBInfo
 
 	// Infer on download so that we get LMT and MD5 on files download
@@ -216,7 +216,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters, cca.preserveSMBInfo, cca.preserveSMBPermissions.IsTruthy(), cca.isHNStoHNS)
+	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.isHNStoHNS)
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}

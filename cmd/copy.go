@@ -642,14 +642,14 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); err != nil {
 		return cooked, err
 	}
-	cooked.preserveSMBPermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions, raw.preserveOwner, cooked.fromTo)
-	if cooked.fromTo == common.EFromTo.BlobBlob() && cooked.preserveSMBPermissions.IsTruthy() {
+	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions, raw.preserveOwner, cooked.fromTo)
+	if cooked.fromTo == common.EFromTo.BlobBlob() && cooked.preservePermissions.IsTruthy() {
 		cooked.isHNStoHNS = true // override HNS settings, since if a user is tx'ing blob->blob and copying permissions, it's DEFINITELY going to be HNS (since perms don't exist w/o HNS).
 	}
 
-	cooked.includeDirectoryStubs = raw.includeDirectoryStubs || (cooked.isHNStoHNS && cooked.preserveSMBPermissions.IsTruthy())
+	cooked.includeDirectoryStubs = raw.includeDirectoryStubs || (cooked.isHNStoHNS && cooked.preservePermissions.IsTruthy())
 
-	if err = crossValidateSymlinksAndPermissions(cooked.followSymlinks, cooked.preserveSMBPermissions.IsTruthy()); err != nil {
+	if err = crossValidateSymlinksAndPermissions(cooked.followSymlinks, cooked.preservePermissions.IsTruthy()); err != nil {
 		return cooked, err
 	}
 
@@ -673,7 +673,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
 			return cooked, fmt.Errorf("blob-tier is not supported while uploading to ADLS Gen 2")
 		}
-		if cooked.preserveSMBPermissions.IsTruthy() {
+		if cooked.preservePermissions.IsTruthy() {
 			return cooked, fmt.Errorf("preserve-smb-permissions is not supported while uploading to ADLS Gen 2")
 		}
 		if cooked.s2sPreserveProperties {
@@ -1085,7 +1085,7 @@ type cookedCopyCmdArgs struct {
 	isEnumerationComplete bool
 
 	// Whether the user wants to preserve the SMB ACLs assigned to their files when moving between resources that are SMB ACL aware.
-	preserveSMBPermissions common.PreservePermissionsOption
+	preservePermissions common.PreservePermissionsOption
 	// Whether the user wants to preserve the SMB properties ...
 	preserveSMBInfo bool
 
