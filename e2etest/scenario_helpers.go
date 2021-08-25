@@ -112,7 +112,7 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 		if file.isFolder() {
 			err = os.MkdirAll(filepath.Join(options.dirPath, file.name), os.ModePerm)
 			c.AssertNoErr(err)
-			//TODO: nakulkar-msft you'll need to set up things like attributes, and other relevant things from
+			// TODO: You'll need to set up things like attributes, and other relevant things from
 			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
 			//			//   by local files. E.g. not contentHeaders or metadata).
 
@@ -130,7 +130,7 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 			file.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
 
 			c.AssertNoErr(err)
-			//TODO: nakulkar-msft you'll need to set up things like attributes, and other relevant things from
+			// TODO: You'll need to set up things like attributes, and other relevant things from
 			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
 			//   by local files. E.g. not contentHeaders or metadata).
 

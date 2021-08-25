@@ -52,7 +52,7 @@ func TestChange_DetectFileChangedDuringTransfer(t *testing.T) {
 				// Re-create the source files (over top of what AzCopy has already scanned, but has not yet started to transfer)
 				// This will give them new LMTs
 				time.Sleep(2 * time.Second) // make sure the new LMTs really will be different
-				h.CreateFiles(h.GetTestFiles(), true)
+				h.CreateFiles(h.GetTestFiles(), true, true, false)
 			},
 		},
 		testFiles{
@@ -85,7 +85,7 @@ func TestChange_DefaultToNoDetectionForCopyS2S(t *testing.T) {
 				// Re-create the source files (over top of what AzCopy has already scanned, but has not yet started to transfer)
 				// This will give them new LMTs
 				time.Sleep(2 * time.Second) // make sure the new LMTs really will be different
-				h.CreateFiles(h.GetTestFiles(), true)
+				h.CreateFiles(h.GetTestFiles(), true, true, false)
 			},
 		},
 		testFiles{

@@ -358,8 +358,6 @@ func (s *scenario) validateProperties() {
 		s.validateCPKByScope(expected.cpkScopeInfo, actual.cpkScopeInfo)
 		s.validateCPKByValue(expected.cpkInfo, actual.cpkInfo)
 		if expected.smbPermissionsSddl != nil {
-			// s.a.Error("validateProperties does not yet support the properties you are using")
-			// TODO: nakulkar-msft it will be necessary to validate all of these
 			if actual.smbPermissionsSddl == nil {
 				s.a.Error("Expected a SDDL on file " + destName + ", but none was found")
 			} else {
@@ -553,12 +551,17 @@ func (s *scenario) GetTestFiles() testFiles {
 	return s.fs
 }
 
-func (s *scenario) CreateFiles(fs testFiles, atSource bool) {
+func (s *scenario) CreateFiles(fs testFiles, atSource bool, setTestFiles bool, createSourceFilesAtDest bool) {
+	original := s.fs
 	s.fs = fs
 	if atSource {
 		s.state.source.createFiles(s.a, s, true)
 	} else {
-		s.state.dest.createFiles(s.a, s, false)
+		s.state.dest.createFiles(s.a, s, createSourceFilesAtDest)
+	}
+
+	if !setTestFiles {
+		s.fs = original
 	}
 }
 

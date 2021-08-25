@@ -27,6 +27,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -72,6 +73,8 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 			c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
 		})
 
+		// Sleep a bit to offset LMTs
+		time.Sleep(5 * time.Second)
 		// recreate the blob to have a later last modified time
 		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
 		mockedRPC.reset()
