@@ -206,6 +206,7 @@ func TestProperties_SMBPermsAndFlagsWithIncludeAfter(t *testing.T) {
 			shouldTransfer: recreateFiles,
 			shouldIgnore: skippedFiles,
 		},
+		EAccountType.Standard(),
 	)
 }
 
@@ -257,5 +258,6 @@ func TestProperties_SMBPermsAndFlagsWithSync(t *testing.T) {
 			shouldTransfer: transferredFiles,
 			shouldIgnore:   recreateFiles,
 		},
+		EAccountType.Standard(),
 	)
 }

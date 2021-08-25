@@ -43,21 +43,11 @@ func TestChange_DetectFileChangedDuringTransfer(t *testing.T) {
 				h.GetModifiableParameters().s2sSourceChangeValidation = true
 			}
 		},
-		&hooks{
-			beforeRunJob: func(h hookHelper) {
-				ft := h.FromTo()
-				if ft.IsS2S() && h.Operation() == eOperation.Copy() {
-					// in Copy, s2s change detection is not enabled by default.
-					// (Whereas in Sync, it is is, so we don't need to, and cannot, set it.)
-					h.GetModifiableParameters().s2sSourceChangeValidation = true
-				}
-			},
-			beforeOpenFirstFile: func(h hookHelper) {
-				// Re-create the source files (over top of what AzCopy has already scanned, but has not yet started to transfer)
-				// This will give them new LMTs
-				time.Sleep(2 * time.Second) // make sure the new LMTs really will be different
-				h.CreateFiles(h.GetTestFiles(), true, true, false)
-			},
+		beforeOpenFirstFile: func(h hookHelper) {
+			// Re-create the source files (over top of what AzCopy has already scanned, but has not yet started to transfer)
+			// This will give them new LMTs
+			time.Sleep(2 * time.Second) // make sure the new LMTs really will be different
+			h.CreateFiles(h.GetTestFiles(), true, true, false)
 		},
 	}, testFiles{
 		defaultSize: "1k",
@@ -83,7 +73,7 @@ func TestChange_DefaultToNoDetectionForCopyS2S(t *testing.T) {
 			// Re-create the source files (over top of what AzCopy has already scanned, but has not yet started to transfer)
 			// This will give them new LMTs
 			time.Sleep(2 * time.Second) // make sure the new LMTs really will be different
-			h.CreateFiles(h.GetTestFiles(), true)
+			h.CreateFiles(h.GetTestFiles(), true, false, false)
 		},
 	}, testFiles{
 		defaultSize: "1k",
