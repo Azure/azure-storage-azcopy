@@ -94,7 +94,6 @@ func RunScenarios(
 				fs:                  fs.DeepCopy(),
 				needResume:          operations & eOperation.Resume() != 0,
 				stripTopDir:         false, // TODO: how will we set this?
-				needResume: operations | eOperation.Resume() != 0,
 			}
 
 			scenarios = append(scenarios, s)
