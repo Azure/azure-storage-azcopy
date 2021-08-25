@@ -24,8 +24,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
+	"runtime"
 	"sync/atomic"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -56,7 +58,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
 	sourceTraverser, err := initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, nil,
-		nil, cca.recursive, true, false, func(entityType common.EntityType) {
+		nil, cca.recursive, true, cca.isHNSToHNS, func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			}
@@ -77,7 +79,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
-	destinationTraverser, err := initResourceTraverser(cca.destination, cca.fromTo.To(), &ctx, &dstCredInfo, nil, nil, cca.recursive, true, false, func(entityType common.EntityType) {
+	destinationTraverser, err := initResourceTraverser(cca.destination, cca.fromTo.To(), &ctx, &dstCredInfo, nil, nil, cca.recursive, true, cca.isHNSToHNS, func(entityType common.EntityType) {
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 		}
@@ -121,7 +123,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	}
 
 	// decide our folder transfer strategy
-	fpo, folderMessage := newFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preserveSMBPermissions.IsTruthy()) // sync always acts like stripTopDir=true
+	fpo, folderMessage := newFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.isHNSToHNS) // sync always acts like stripTopDir=true
 	if !cca.dryrunMode {
 		glcm.Info(folderMessage)
 	}
@@ -171,6 +173,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 
 		return newSyncEnumerator(sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize), nil
 	default:
+		indexer.isDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
 		// in all other cases (download and S2S), the destination is scanned/indexed first
 		// then the source is scanned and filtered based on what the destination contains
 		comparator = newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer, cca.mirrorMode).processIfNecessary
@@ -210,6 +213,14 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		}
 
 		return newSyncEnumerator(destinationTraverser, sourceTraverser, indexer, filters, comparator, finalize), nil
+	}
+}
+
+func IsDestinationCaseInsensitive(fromTo common.FromTo) bool {
+	if fromTo.IsDownload() && runtime.GOOS == "windows" {
+		return true
+	} else {
+		return false
 	}
 }
 

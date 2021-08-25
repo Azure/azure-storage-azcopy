@@ -23,13 +23,14 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
 
 type localTraverser struct {
@@ -194,6 +195,10 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 			computedRelativePath = cleanLocalPath(common.GenerateFullPath(queueItem.relativeBase, computedRelativePath))
 			computedRelativePath = strings.TrimPrefix(computedRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
+			if computedRelativePath == "." {
+				computedRelativePath = ""
+			}
+
 			if fileInfo.Mode()&os.ModeSymlink != 0 {
 				if !followSymlinks {
 					return nil // skip it
@@ -230,8 +235,8 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 						skipped, err := getProcessingError(err)
 
 						if !skipped { // Don't go any deeper (or record it) if we skipped it.
-							seenPaths.Record(result)
-							seenPaths.Record(slPath) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
+							seenPaths.Record(common.ToExtendedPath(result))
+							seenPaths.Record(common.ToExtendedPath(slPath)) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
 							walkQueue = append(walkQueue, walkItem{
 								fullPath:     result,
 								relativeBase: computedRelativePath,
@@ -279,7 +284,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 
 					// If the file was skipped, don't record it.
 					if !skipped {
-						seenPaths.Record(result)
+						seenPaths.Record(common.ToExtendedPath(result))
 					}
 
 					return err
@@ -339,6 +344,11 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 
 				var entityType common.EntityType
 				if fileInfo.IsDir() {
+					fileInfo, err = WrapFolder(filePath, fileInfo)
+					if err != nil {
+						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get last change of target at %s: %s", filePath, err))
+					}
+
 					entityType = common.EEntityType.Folder()
 				} else {
 					entityType = common.EEntityType.File()

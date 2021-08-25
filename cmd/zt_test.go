@@ -22,12 +22,9 @@ package cmd
 
 import (
 	"bytes"
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"google.golang.org/api/iterator"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -38,9 +35,13 @@ import (
 	"testing"
 	"time"
 
+	gcpUtils "cloud.google.com/go/storage"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"google.golang.org/api/iterator"
+
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	minio "github.com/minio/minio-go"
+	"github.com/minio/minio-go"
 
 	chk "gopkg.in/check.v1"
 
@@ -97,6 +98,22 @@ func skipIfGCPDisabled(c *chk.C) {
 	if gcpTestsDisabled() {
 		c.Skip("GCP testing is disabled for this run")
 	}
+}
+
+func testDryrunStatements(items, messages []string) bool {
+	for _,v := range items {
+		for _,m := range messages {
+			if strings.HasSuffix(m, v) {
+				goto continueBlobs
+			}
+		}
+
+		return false
+
+		continueBlobs:
+	}
+
+	return true
 }
 
 // This function generates an entity name by concatenating the passed prefix,
@@ -289,6 +306,9 @@ func GetBFSSU() azbfs.ServiceURL {
 func createNewContainer(c *chk.C, bsu azblob.ServiceURL) (container azblob.ContainerURL, name string) {
 	container, name = getContainerURL(c, bsu)
 
+	// ignore any errors here, since it doesn't matter if this fails (if it does, it's probably because the container didn't exist)
+	_, _ = container.Delete(ctx, azblob.ContainerAccessConditions{})
+
 	cResp, err := container.Create(ctx, nil, azblob.PublicAccessNone)
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
@@ -297,6 +317,9 @@ func createNewContainer(c *chk.C, bsu azblob.ServiceURL) (container azblob.Conta
 
 func createNewFilesystem(c *chk.C, bfssu azbfs.ServiceURL) (filesystem azbfs.FileSystemURL, name string) {
 	filesystem, name = getFilesystemURL(c, bfssu)
+
+	// ditto
+	_, _ = filesystem.Delete(ctx)
 
 	cResp, err := filesystem.Create(ctx)
 	c.Assert(err, chk.IsNil)
@@ -349,6 +372,8 @@ func createNewDirectoryStub(c *chk.C, container azblob.ContainerURL, dirPath str
 func createNewAzureShare(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
 	share, name = getShareURL(c, fsu)
 
+	//
+
 	cResp, err := share.Create(ctx, nil, 0)
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
@@ -371,7 +396,7 @@ func createNewAzureFile(c *chk.C, share azfile.ShareURL, prefix string) (file az
 func generateParentsForAzureFile(c *chk.C, fileURL azfile.FileURL) {
 	accountName, accountKey := getAccountAndKey()
 	credential, _ := azfile.NewSharedKeyCredential(accountName, accountKey)
-	t := common.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders())
+	t := ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
 	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileURL, azfile.NewPipeline(credential, azfile.PipelineOptions{}), t)
 	c.Assert(err, chk.IsNil)
 }
@@ -632,7 +657,16 @@ func cleanBlobAccount(c *chk.C, serviceURL azblob.ServiceURL) {
 
 		for _, v := range resp.ContainerItems {
 			_, err = serviceURL.NewContainerURL(v.Name).Delete(ctx, azblob.ContainerAccessConditions{})
-			c.Assert(err, chk.IsNil)
+
+			if err != nil {
+				if stgErr, ok := err.(azblob.StorageError); ok {
+					if stgErr.ServiceCode() == azblob.ServiceCodeContainerNotFound {
+						continue
+					}
+				}
+
+				c.Assert(err, chk.IsNil)
+			}
 		}
 
 		marker = resp.NextMarker
@@ -647,7 +681,16 @@ func cleanFileAccount(c *chk.C, serviceURL azfile.ServiceURL) {
 
 		for _, v := range resp.ShareItems {
 			_, err = serviceURL.NewShareURL(v.Name).Delete(ctx, azfile.DeleteSnapshotsOptionNone)
-			c.Assert(err, chk.IsNil)
+
+			if err != nil {
+				if stgErr, ok := err.(azfile.StorageError); ok {
+					if stgErr.ServiceCode() == azfile.ServiceCodeShareNotFound {
+						continue
+					}
+				}
+
+				c.Assert(err, chk.IsNil)
+			}
 		}
 
 		marker = resp.NextMarker

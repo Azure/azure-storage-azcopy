@@ -26,10 +26,12 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -39,6 +41,7 @@ var lowMemoryLimitAdvice sync.Once
 
 type blockBlobSenderBase struct {
 	jptm             IJobPartTransferMgr
+	sip              ISourceInfoProvider
 	destBlockBlobURL azblob.BlockBlobURL
 	chunkSize        int64
 	numChunks        uint32
@@ -126,11 +129,16 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		destBlobTier = blockBlobTierOverride.ToAccessTierType()
 	}
 
+	if props.SrcMetadata["hdi_isfolder"] == "true" {
+		destBlobTier = azblob.AccessTierNone
+	}
+
 	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
 	cpkToApply := common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
 
 	return &blockBlobSenderBase{
 		jptm:             jptm,
+		sip:              srcInfoProvider,
 		destBlockBlobURL: destBlockBlobURL,
 		chunkSize:        chunkSize,
 		numChunks:        numChunks,
@@ -210,6 +218,26 @@ func (s *blockBlobSenderBase) Epilogue() {
 			if _, err := s.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, s.blobTagsToApply); err != nil {
 				s.jptm.Log(pipeline.LogWarning, err.Error())
 			}
+		}
+	}
+
+	// Upload ADLS Gen 2 ACLs
+	if jptm.FromTo() == common.EFromTo.BlobBlob() && jptm.Info().PreserveSMBPermissions.IsTruthy() {
+		bURLParts := azblob.NewBlobURLParts(s.destBlockBlobURL.URL())
+		bURLParts.BlobName = strings.TrimSuffix(bURLParts.BlobName, "/") // BlobFS does not like when we target a folder with the /
+		bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".blob", ".dfs")
+		// todo: jank, and violates the principle of interfaces
+		fileURL := azbfs.NewFileURL(bURLParts.URL(), s.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline)
+
+		// We know for a fact our source is a "blob".
+		acl, err := s.sip.(*blobSourceInfoProvider).AccessControl()
+		if err != nil {
+			jptm.FailActiveSend("Grabbing source ACLs", err)
+		}
+		acl.Permissions = "" // Since we're sending the full ACL, Permissions is irrelevant.
+		_, err = fileURL.SetAccessControl(jptm.Context(), acl)
+		if err != nil {
+			jptm.FailActiveSend("Putting ACLs", err)
 		}
 	}
 }

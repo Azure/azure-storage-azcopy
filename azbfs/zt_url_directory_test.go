@@ -2,9 +2,10 @@ package azbfs_test
 
 import (
 	"context"
+	"net/http"
+
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	chk "gopkg.in/check.v1"
-	"net/http"
 )
 
 type DirectoryUrlSuite struct{}
@@ -361,4 +362,57 @@ func (s *FileURLSuite) TestRenameDirWithFile(c *chk.C) {
 	getPropertiesResp2, err = renamedDirURL.NewFileURL(fileName).GetProperties(context.Background())
 	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
 	c.Assert(getPropertiesResp2, chk.IsNil)
+}
+
+func (dus *DirectoryUrlSuite) TestSetACL(c *chk.C) {
+	// Create a filesystem
+	fsu := getBfsServiceURL()
+	fsURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fsURL)
+
+	// Create a directory inside the filesystem
+	dirURL := fsURL.NewDirectoryURL("test")
+	_, err := dirURL.Create(ctx, true)
+	c.Assert(err, chk.IsNil)
+
+	// Grab it's default ACLs
+	folderAccess, err := dirURL.GetAccessControl(ctx)
+	c.Assert(err, chk.IsNil)
+
+	// Modify it slightly
+	folderAccess.ACL = "user::r-x,group::r-x,other::---"
+	folderAccess.Permissions = ""
+	_, err = dirURL.SetAccessControl(ctx, folderAccess)
+	c.Assert(err, chk.IsNil)
+
+	// Compare them
+	folderAccessToValidate, err := dirURL.GetAccessControl(ctx)
+	c.Assert(err, chk.IsNil)
+	// We're checking ACLs are the same
+	folderAccessToValidate.Permissions = ""
+	c.Assert(folderAccessToValidate, chk.Equals, folderAccess)
+
+	// Create a file
+	fileUrl := dirURL.NewFileURL("foo.bar")
+	_, err = fileUrl.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	c.Assert(err, chk.IsNil)
+
+	// Grab it's default ACLs
+	fileAccess, err := fileUrl.GetAccessControl(ctx)
+	c.Assert(err, chk.IsNil)
+
+	// Modify it slightly.
+	fileAccess.ACL = "user::r-x,group::r-x,other::---"
+	fileAccess.Permissions = ""
+	_, err = fileUrl.SetAccessControl(ctx, fileAccess)
+	c.Assert(err, chk.IsNil)
+
+	// Compare them
+	fileAccessToValidate, err := fileUrl.GetAccessControl(ctx)
+	c.Assert(err, chk.IsNil)
+	// We're checking ACLs are the same
+	fileAccessToValidate.Permissions = ""
+	c.Assert(fileAccessToValidate, chk.Equals, fileAccess)
+
+	// Don't bother testing the root ACLs, since it calls into the directoryclient
 }

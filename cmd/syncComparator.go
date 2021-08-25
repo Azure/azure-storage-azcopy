@@ -20,6 +20,8 @@
 
 package cmd
 
+import "strings"
+
 // with the help of an objectIndexer containing the source objects
 // find out the destination objects that should be transferred
 // in other words, this should be used when destination is being enumerated secondly
@@ -47,6 +49,10 @@ func newSyncDestinationComparator(i *objectIndexer, copyScheduler, cleaner objec
 // if file x does not exist at the source, then it is considered extra, and will be deleted
 func (f *syncDestinationComparator) processIfNecessary(destinationObject storedObject) error {
 	sourceObjectInMap, present := f.sourceIndex.indexMap[destinationObject.relativePath]
+	if !present && f.sourceIndex.isDestinationCaseInsensitive {
+		lcRelativePath := strings.ToLower(destinationObject.relativePath)
+		sourceObjectInMap, present = f.sourceIndex.indexMap[lcRelativePath]
+	}
 
 	// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
 	if present {
@@ -90,6 +96,10 @@ func newSyncSourceComparator(i *objectIndexer, copyScheduler objectProcessor, di
 // the index will contain all objects which exist at the destination but were NOT seen at the source
 func (f *syncSourceComparator) processIfNecessary(sourceObject storedObject) error {
 	destinationObjectInMap, present := f.destinationIndex.indexMap[sourceObject.relativePath]
+	if !present && f.destinationIndex.isDestinationCaseInsensitive {
+		lcRelativePath := strings.ToLower(sourceObject.relativePath)
+		destinationObjectInMap, present = f.destinationIndex.indexMap[lcRelativePath]
+	}
 
 	if present {
 		defer delete(f.destinationIndex.indexMap, sourceObject.relativePath)

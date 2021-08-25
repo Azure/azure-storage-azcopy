@@ -80,6 +80,9 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			js.TotalBytesExpected += msg.totalBytesEnumerated
 
 		case msg := <-jstm.xferDone:
+			msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()
+			msg.Dst = common.URLStringExtension(msg.Dst).RedactSecretQueryParamForLogging()
+
 			switch msg.TransferStatus {
 			case common.ETransferStatus.Success():
 				js.TransfersCompleted++
@@ -88,11 +91,11 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				common.ETransferStatus.TierAvailabilityCheckFailure(),
 				common.ETransferStatus.BlobTierFailure():
 				js.TransfersFailed++
-				js.FailedTransfers = append(js.FailedTransfers, common.TransferDetail(msg))
+				js.FailedTransfers = append(js.FailedTransfers, msg)
 			case common.ETransferStatus.SkippedEntityAlreadyExists(),
 				common.ETransferStatus.SkippedBlobHasSnapshots():
 				js.TransfersSkipped++
-				js.SkippedTransfers = append(js.SkippedTransfers, common.TransferDetail(msg))
+				js.SkippedTransfers = append(js.SkippedTransfers, msg)
 			}
 
 		case <-jstm.listReq:

@@ -92,6 +92,7 @@ type objectProperties struct {
 	lastWriteTime      *time.Time
 	smbAttributes      *uint32
 	smbPermissionsSddl *string
+	adlsPermissionsACL *string // TODO: Test owner and group; needs a good target though.
 	cpkInfo            *common.CpkInfo
 	cpkScopeInfo       *common.CpkScopeInfo
 }
@@ -154,15 +155,23 @@ func (op objectProperties) DeepCopy() objectProperties {
 	}
 
 	if op.smbPermissionsSddl != nil {
-		ret.smbPermissionsSddl = op.smbPermissionsSddl
+		val := *op.smbPermissionsSddl
+		ret.smbPermissionsSddl = &val
+	}
+
+	if op.adlsPermissionsACL != nil {
+		val := *op.adlsPermissionsACL
+		ret.adlsPermissionsACL = &val
 	}
 
 	if op.cpkInfo != nil {
-		ret.cpkInfo = op.cpkInfo
+		val := *op.cpkInfo
+		ret.cpkInfo = &val
 	}
 
 	if op.cpkScopeInfo != nil {
-		ret.cpkScopeInfo = op.cpkScopeInfo
+		val := *op.cpkScopeInfo
+		ret.cpkScopeInfo = &val
 	}
 
 	return ret

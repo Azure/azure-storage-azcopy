@@ -2,9 +2,11 @@ package azbfs
 
 import (
 	"context"
-	"github.com/Azure/azure-pipeline-go/pipeline"
+	"errors"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 var directoryResourceName = "directory" // constant value for the resource query parameter
@@ -189,4 +191,42 @@ func (d DirectoryURL) Rename(ctx context.Context, options RenameDirectoryOptions
 	}
 
 	return destinationDirectoryURL, nil
+}
+
+func (d DirectoryURL) GetAccessControl(ctx context.Context) (BlobFSAccessControl, error) {
+	resp, err := d.directoryClient.GetProperties(ctx, d.filesystem, d.pathParameter, PathGetPropertiesActionGetAccessControl, nil,
+		nil, nil, nil,
+		nil, nil, nil, nil, nil)
+
+	if err != nil {
+		return BlobFSAccessControl{}, err
+	}
+
+	return BlobFSAccessControl{resp.XMsOwner(), resp.XMsGroup(), resp.XMsACL(), resp.XMsPermissions()}, nil
+}
+
+func (d DirectoryURL) SetAccessControl(ctx context.Context, permissions BlobFSAccessControl) (*PathUpdateResponse, error) {
+	// TODO: the go http client has a problem with PATCH and content-length header
+	//       we should investigate and report the issue
+	// See similar todo, with larger comments, in AppendData
+	overrideHttpVerb := "PATCH"
+
+	if permissions.ACL != "" && permissions.Permissions != "" {
+		return nil, errors.New("specifying both Permissions and ACL conflicts for SetAccessControl")
+	}
+
+	var perms, acl *string
+	if permissions.Permissions != "" {
+		perms = &permissions.Permissions
+	} else {
+		acl = &permissions.ACL
+	}
+
+	// This does not yet have support for recursive updates. But then again, we don't really need it.
+	return d.directoryClient.Update(ctx, PathUpdateActionSetAccessControl, d.filesystem, d.pathParameter,
+		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
+		nil, nil, &permissions.Owner, &permissions.Group, perms, acl,
+		nil, nil, nil, nil, &overrideHttpVerb,
+		nil, nil, nil, nil)
 }

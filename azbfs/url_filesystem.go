@@ -80,3 +80,10 @@ func (s FileSystemURL) ListPaths(ctx context.Context, options ListPathsFilesyste
 	return s.fileSystemClient.ListPaths(ctx, options.Recursive, s.name, options.Path, options.ContinuationToken,
 		options.MaxResults, options.UpnReturned, nil, nil, nil)
 }
+func (s FileSystemURL) GetAccessControl(ctx context.Context) (BlobFSAccessControl, error) {
+	return s.NewRootDirectoryURL().GetAccessControl(ctx)
+}
+
+func (s FileSystemURL) SetAccessControl(ctx context.Context, permissions BlobFSAccessControl) (*PathUpdateResponse, error) {
+	return s.NewRootDirectoryURL().SetAccessControl(ctx, permissions)
+}

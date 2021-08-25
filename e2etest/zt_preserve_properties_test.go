@@ -22,161 +22,49 @@ package e2etest
 
 import (
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // Purpose: Tests for preserving transferred properties, info and ACLs.  Both those possessed by the original source file/folder,
 //   and those specified on the command line
 
 func TestProperties_NameValueMetadataIsPreservedS2S(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.AllS2S(),
-		eValidate.Auto(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.Auto(), params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			f("filea", with{nameValueMetadata: map[string]string{"foo": "abc", "bar": "def"}}),
+			folder("fold1", with{nameValueMetadata: map[string]string{"other": "xyz"}}),
 		},
-		nil,
-		testFiles{
-			defaultSize: "1K",
-			shouldTransfer: []interface{}{
-				f("filea", with{nameValueMetadata: map[string]string{"foo": "abc", "bar": "def"}}),
-				folder("fold1", with{nameValueMetadata: map[string]string{"other": "xyz"}}),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 func TestProperties_NameValueMetadataCanBeUploaded(t *testing.T) {
 	expectedMap := map[string]string{"foo": "abc", "bar": "def"}
 
-	RunScenarios(
-		t,
-		eOperation.Copy(),        // Sync doesn't support the command-line metadata flag
-		eTestFromTo.AllUploads(), // TODO: Metadata copy not supported while performing S2S transfers
-		eValidate.Auto(),
-		params{
-			recursive: true,
-			metadata:  "foo=abc;bar=def",
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllUploads(), eValidate.Auto(), params{
+		recursive: true,
+		metadata:  "foo=abc;bar=def",
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder("", verifyOnly{with{nameValueMetadata: expectedMap}}), // root folder
+			f("filea", verifyOnly{with{nameValueMetadata: expectedMap}}),
 		},
-		nil,
-		testFiles{
-			defaultSize: "1K",
-			shouldTransfer: []interface{}{
-				folder("", verifyOnly{with{nameValueMetadata: expectedMap}}), // root folder
-				f("filea", verifyOnly{with{nameValueMetadata: expectedMap}}),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
-//func TestProperties_SMBPermissionsSDDLPreserved(t *testing.T) {
-//	RunScenarios(
-//		t,
-//		eOperation.CopyAndSync(),
-//		eTestFromTo.AllAzureS2S(),
-//		eValidate.Auto(),
-//		params{
-//			recursive: true,
-//		},
-//		nil,
-//		testFiles{
-//			defaultSize: "1K",
-//			shouldTransfer: []interface{}{
-//				f("file1", verifyOnly{with{}}),
-//				folder("fldr1", verifyOnly{with{}}),
-//				f("file2.txt, with{}"),
-//			},
-//		})
-//}
-
-//
-//func TestProperties_SMBPermissionsSDDLPreserved(t *testing.T) {
-//	RunScenarios(
-//		t,
-//		eOperation.CopyAndSync(),
-//		eTestFromTo.AllAzureS2S(),
-//		eValidate.Auto(),
-//		params{
-//			recursive: true,
-//		},
-//		nil,
-//		testFiles{
-//			defaultSize: "1K",
-//			shouldTransfer: []interface{}{
-//				f("file1", with{smbPermissionsSddl: "rawdl"}),
-//				folder("fldr1", with{smbPermissionsSddl: "rawdl"}),
-//			},
-//		})
-//}
-
-// TODO: add some tests (or modify the above) to make assertions about case preservation (or not) in metadata
-//    See https://github.com/Azure/azure-storage-azcopy/issues/113 (which incidentally, I'm not observing in the tests above, for reasons unknown)
-
-//func TestProperties_SMBDates(t *testing.T) {
-//	RunScenarios(
-//		t,
-//		eOperation.CopyAndSync(),
-//		eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileLocal()), // these are the only pairs where we preserve last write time AND creation time
-//		eValidate.Auto(),
-//		params{
-//			recursive:       true,
-//			preserveSMBInfo: true,
-//		},
-//		&hooks{
-//			beforeRunJob: func(h hookHelper) {
-//				// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
-//				// So that when validating, our validation can be sure that the right datetime has ended up in the right
-//				// field
-//				time.Sleep(5 * time.Second)
-//				h.CreateFiles(h.GetTestFiles(), true)
-//				// And pause again, so that that the write times at the destination wont' just _automatically_ match the source times
-//				// (due to there being < 1 sec delay between creation and completion of copy). With this delay, we know they only match
-//				// if AzCopy really did preserve them
-//				time.Sleep(10 * time.Second) // we are assuming here, that the clock skew between source and dest is less than 10 secs
-//			},
-//		},
-//		testFiles{
-//			defaultSize: "1K",
-//			// no need to set specific dates on these. Instead, we just mess with the write times in
-//			// beforeRunJob
-//			// TODO: is that what we really want, or do we want to set write times here?
-//			shouldTransfer: []interface{}{
-//				"filea",
-//				folder("fold1"),
-//				"fold1/fileb",
-//			},
-//		})
-//}
-
-//func TestProperties_SMBDates(t *testing.T) {
-//	RunScenarios(
-//		t,
-//		eOperation.CopyAndSync(),
-//		// eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileLocal()),
-//		eTestFromTo.Other(common.EFromTo.LocalFile()), // these are the only pairs where we preserve last write time AND creation time
-//		eValidate.Auto(),
-//		params{
-//			recursive:       true,
-//			preserveSMBInfo: true,
-//		},
-//		&hooks{
-//			beforeRunJob: func(h hookHelper) {
-//				// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
-//				// So that when validating, our validation can be sure that the right datetime has ended up in the right
-//				// field
-//				time.Sleep(5 * time.Second)
-//				h.CreateFiles(h.GetTestFiles(), true)
-//				// And pause again, so that that the write times at the destination wont' just _automatically_ match the source times
-//				// (due to there being < 1 sec delay between creation and completion of copy). With this delay, we know they only match
-//				// if AzCopy really did preserve them
-//				time.Sleep(10 * time.Second) // we are assuming here, that the clock skew between source and dest is less than 10 secs
-//			},
-//		},
-//		testFiles{
-//			defaultSize: "1K",
-//			shouldTransfer: []interface{} {
-//				f("filea", with{smbAttributes: 0}), // TODO: Set smbAttributes Value
-//				folder("fold1"),
-//				"fold1/fileb",
-//			},
-//		})
-//}
+func TestProperties_HNSACLs(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), params{
+		recursive:              true,
+		preserveSMBPermissions: true, // this flag is deprecated, but still held over to avoid breaking.
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("filea", with{adlsPermissionsACL: "user::rwx,group::rwx,other::--x"}),
+		},
+	}, EAccountType.HierarchicalNamespaceEnabled())
+}

@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -46,6 +47,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 		scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, fileList)
 
 		// set up the destination container with a single blob
+		time.Sleep(time.Second) // later LMT
 		dstBlobName := srcFileName
 		scenarioHelper{}.generateBlobsFromList(c, containerURL, []string{dstBlobName}, blockBlobDefaultData)
 		c.Assert(containerURL, chk.NotNil)
@@ -68,6 +70,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 		})
 
 		// recreate the file to have a later last modified time
+		time.Sleep(time.Second)
 		scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, []string{srcFileName})
 		mockedRPC.reset()
 
@@ -82,6 +85,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 }
 
 // regular directory->container sync but destination is empty, so everything has to be transferred
+// this test seems to flake out.
 func (s *cmdIntegrationSuite) TestSyncUploadWithEmptyDestination(c *chk.C) {
 	bsu := getBSU()
 
@@ -89,6 +93,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithEmptyDestination(c *chk.C) {
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(srcDirName)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
+	time.Sleep(time.Second)
 
 	// set up an empty container
 	containerURL, containerName := createNewContainer(c, bsu)
@@ -141,6 +146,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIdenticalDestination(c *chk.C) {
 	defer deleteContainer(c, containerURL)
 
 	// wait for 1 second so that the last modified times of the blobs are guaranteed to be newer
+	time.Sleep(time.Second)
 	scenarioHelper{}.generateBlobsFromList(c, containerURL, fileList, blockBlobDefaultData)
 
 	// set up interceptor
@@ -439,15 +445,15 @@ func (s *cmdIntegrationSuite) TestDryrunSyncLocaltoBlob(c *chk.C) {
 		sort.Strings(msg)
 		for i := 0; i < len(msg); i++ {
 			if strings.Contains(msg[i], "DRYRUN: remove") {
-				c.Check(strings.Contains(msg[i], blobsToDelete[0]), chk.Equals, true)
 				c.Check(strings.Contains(msg[i], dstContainerURL.String()), chk.Equals, true)
 			} else {
 				c.Check(strings.Contains(msg[i], "DRYRUN: copy"), chk.Equals, true)
-				c.Check(strings.Contains(msg[i], blobsToInclude[i]), chk.Equals, true)
 				c.Check(strings.Contains(msg[i], srcDirName), chk.Equals, true)
 				c.Check(strings.Contains(msg[i], dstContainerURL.String()), chk.Equals, true)
 			}
-
 		}
+
+		c.Check(testDryrunStatements(blobsToInclude, msg), chk.Equals, true)
+		c.Check(testDryrunStatements(blobsToDelete, msg), chk.Equals, true)
 	})
 }

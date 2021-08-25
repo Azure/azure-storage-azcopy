@@ -26,7 +26,7 @@ jobs:
     steps:
       - task: GoTool@0
         inputs:
-          version: '1.15'
+          version: '1.16'
       - script: |
           GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
           GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
@@ -65,7 +65,7 @@ jobs:
     steps:
       - task: GoTool@0
         inputs:
-          version: '1.15'
+          version: '1.16'
 
       # Running E2E Tests on Linux
       - script: |
@@ -76,6 +76,8 @@ jobs:
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+          AZCOPY_E2E_ACCOUNT_KEY_HNS: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
+          AZCOPY_E2E_ACCOUNT_NAME_HNS: $(AZCOPY_E2E_ACCOUNT_NAME_HNS)
           CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
           CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
         displayName: 'E2E Test Linux'
@@ -90,6 +92,8 @@ jobs:
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+          AZCOPY_E2E_ACCOUNT_KEY_HNS: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
+          AZCOPY_E2E_ACCOUNT_NAME_HNS: $(AZCOPY_E2E_ACCOUNT_NAME_HNS)
           CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
           CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
           AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/azcopy_windows_amd64.exe
@@ -106,6 +110,8 @@ jobs:
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+          AZCOPY_E2E_ACCOUNT_KEY_HNS: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
+          AZCOPY_E2E_ACCOUNT_NAME_HNS: $(AZCOPY_E2E_ACCOUNT_NAME_HNS)
           CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
           CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
         displayName: 'E2E Test MacOs'
@@ -126,7 +132,7 @@ jobs:
       - task: GoTool@0
         name: 'Set_up_Golang'
         inputs:
-          version: '1.15'
+          version: '1.16'
       - task: DownloadSecureFile@1
         name: ciGCSServiceAccountKey
         displayName: 'Download GCS Service Account Key'
