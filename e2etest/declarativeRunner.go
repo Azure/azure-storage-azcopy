@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"os"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // This declarative test runner adds a layer on top of e2etest/base. The added layer allows us to test in a declarative style,
@@ -56,7 +58,19 @@ func RunScenarios(
 	// construct all the scenarios
 	scenarios := make([]scenario, 0, 16)
 	for _, op := range operations.getValues() {
+		if op == eOperation.Resume() {
+			continue
+		}
+
+		seenFromTos := make(map[common.FromTo]bool)
+
 		for _, fromTo := range testFromTo.getValues(op) {
+			// dedupe the scenarios
+			if _, ok := seenFromTos[fromTo]; ok {
+				continue
+			}
+			seenFromTos[fromTo] = true
+
 			// Create unique name for generating container names
 			compactScenarioName := fmt.Sprintf("%.4s-%s-%c-%c%c", suiteName, testName, op.String()[0], fromTo.From().String()[0], fromTo.To().String()[0])
 			fullScenarioName := fmt.Sprintf("%s.%s.%s-%s", suiteName, testName, op.String(), fromTo.String())
@@ -78,6 +92,7 @@ func RunScenarios(
 				p:                   p, // copies them, because they are a struct. This is what we need, since they may be morphed while running
 				hs:                  hsToUse,
 				fs:                  fs.DeepCopy(),
+				needResume:          operations & eOperation.Resume() != 0,
 				stripTopDir:         false, // TODO: how will we set this?
 			}
 
