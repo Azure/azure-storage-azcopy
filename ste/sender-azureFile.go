@@ -382,6 +382,9 @@ func (u *azureFileSenderBase) SetFolderProperties() error {
 
 func (u *azureFileSenderBase) DirUrlToString() string {
 	dirUrl := azfile.NewFileURLParts(u.dirURL().URL()).URL()
+	dirUrl.RawQuery = ""
+	// To avoid encoding/decoding
+	dirUrl.RawPath = ""
 	return dirUrl.String()
 }
 
@@ -420,13 +423,13 @@ func (AzureFileParentDirCreator) splitWithoutToken(str string, token rune) []str
 }
 
 // CreateParentDirToRoot creates parent directories of the Azure file if file's parent directory doesn't exist.
-func (d AzureFileParentDirCreator) CreateParentDirToRoot(ctx context.Context, fileURL azfile.FileURL, p pipeline.Pipeline, t common.FolderCreationTracker) error {
+func (d AzureFileParentDirCreator) CreateParentDirToRoot(ctx context.Context, fileURL azfile.FileURL, p pipeline.Pipeline, t FolderCreationTracker) error {
 	dirURL := d.getParentDirectoryURL(fileURL, p)
 	return d.CreateDirToRoot(ctx, dirURL, p, t)
 }
 
 // CreateDirToRoot Creates the dir (and parents as necessary) if it does not exist
-func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, dirURL azfile.DirectoryURL, p pipeline.Pipeline, t common.FolderCreationTracker) error {
+func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, dirURL azfile.DirectoryURL, p pipeline.Pipeline, t FolderCreationTracker) error {
 	dirURLExtension := common.FileURLPartsExtension{FileURLParts: azfile.NewFileURLParts(dirURL.URL())}
 	if _, err := dirURL.GetProperties(ctx); err != nil {
 		if resp, respOk := err.(pipeline.Response); respOk && resp.Response() != nil &&

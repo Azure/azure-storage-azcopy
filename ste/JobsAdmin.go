@@ -460,7 +460,7 @@ func (ja *jobsAdmin) transferProcessor(workerID int) {
 		} else {
 			// TODO fix preceding space
 			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, fmt.Sprintf("has worker %d which is processing TRANSFER", workerID))
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("has worker %d which is processing TRANSFER %d", workerID, jptm.(*jobPartTransferMgr).transferIndex))
 			}
 			jptm.StartJobXfer()
 		}

@@ -161,6 +161,16 @@ type params struct {
 	cpkByName                 string
 	cpkByValue                bool
 	isObjectDir               bool
+	debugSkipFiles            []string // a list of localized filepaths to skip over on the first run in the STE.
+	// looks like this for a folder transfer:
+	/*
+	INFO: source: /New folder/New Text Document.txt dest: /Test/New folder/New Text Document.txt
+	INFO: source: /New Text Document.txt dest: /Test/New Text Document.txt
+	*/
+	// and this for a single file transfer to a folder:
+	/*
+	INFO: source:  dest: /New Text Document.txt
+	*/
 }
 
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level
@@ -179,7 +189,7 @@ func (Operation) Copy() Operation        { return Operation(1) }
 func (Operation) Sync() Operation        { return Operation(1<<1) }
 func (Operation) CopyAndSync() Operation { return eOperation.Copy() | eOperation.Sync() }
 func (Operation) Remove() Operation      { return Operation(1<<2) }
-func (Operation) Resume() Operation 	 { return Operation(1<<3) } // Resume should only ever be combined with Copy or Sync, and is a mid-job cancel/resume.
+func (Operation) Resume() Operation 	 { return Operation(1<<7) } // Resume should only ever be combined with Copy or Sync, and is a mid-job cancel/resume.
 
 func (o Operation) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
@@ -484,6 +494,10 @@ type hookHelper interface {
 	// CreateFiles creates the specified files (overwriting any that are already there of the same name)
 	CreateFiles(fs testFiles, atSource bool, setTestFiles bool, createSourceFilesAtDest bool)
 
+	// CreateFile creates a specified file (overwriting what was already there of the same name)
+	// This is intended to be used in hook functions for pre or mid transfer adjustments.
+	CreateFile(f *testObject, atSource bool)
+
 	// CancelAndResume tells the runner to cancel the running AzCopy job (with "cancel" to stdin) and the resume the job
 	CancelAndResume()
 
@@ -508,6 +522,9 @@ type hooks struct {
 
 	// called after all the setup is done, and before AzCopy is actually invoked
 	beforeRunJob hookFunc
+
+	// called after the first execution, but before the resume.
+	beforeResumeHook hookFunc
 
 	// called after AzCopy has started running, but before it has started its first transfer.  Moment of call may be
 	// before, during or after AzCopy's scanning phase.  If this hook is set, AzCopy won't open its first file, to start
