@@ -195,6 +195,10 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 			computedRelativePath = cleanLocalPath(common.GenerateFullPath(queueItem.relativeBase, computedRelativePath))
 			computedRelativePath = strings.TrimPrefix(computedRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
+			if computedRelativePath == "." {
+				computedRelativePath = ""
+			}
+
 			if fileInfo.Mode()&os.ModeSymlink != 0 {
 				if !followSymlinks {
 					return nil // skip it
@@ -340,6 +344,11 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 
 				var entityType common.EntityType
 				if fileInfo.IsDir() {
+					fileInfo, err = WrapFolder(filePath, fileInfo)
+					if err != nil {
+						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get last change of target at %s: %s", filePath, err))
+					}
+
 					entityType = common.EEntityType.Folder()
 				} else {
 					entityType = common.EEntityType.File()

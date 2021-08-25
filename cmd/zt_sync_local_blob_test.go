@@ -47,7 +47,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 		scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, fileList)
 
 		// set up the destination container with a single blob
-		time.Sleep(time.Second)
+		time.Sleep(time.Second) // later LMT
 		dstBlobName := srcFileName
 		scenarioHelper{}.generateBlobsFromList(c, containerURL, []string{dstBlobName}, blockBlobDefaultData)
 		c.Assert(containerURL, chk.NotNil)
@@ -85,6 +85,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 }
 
 // regular directory->container sync but destination is empty, so everything has to be transferred
+// this test seems to flake out.
 func (s *cmdIntegrationSuite) TestSyncUploadWithEmptyDestination(c *chk.C) {
 	bsu := getBSU()
 
@@ -92,6 +93,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithEmptyDestination(c *chk.C) {
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(srcDirName)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
+	time.Sleep(time.Second)
 
 	// set up an empty container
 	containerURL, containerName := createNewContainer(c, bsu)

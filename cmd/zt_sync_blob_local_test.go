@@ -74,6 +74,8 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 			c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
 		})
 
+		// Sleep a bit to offset LMTs
+		time.Sleep(5 * time.Second)
 		// recreate the blob to have a later last modified time
 		time.Sleep(time.Second)
 		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)

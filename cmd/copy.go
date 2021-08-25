@@ -899,10 +899,6 @@ func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, ov
 		return fmt.Errorf("%s is set but persistence for up/downloads is a Windows-only feature", flagName)
 	}
 
-	if toPreserve && overwrite != nil && *overwrite == common.EOverwriteOption.IfSourceNewer() {
-		return fmt.Errorf("%s is set, but it is not currently supported when overwrite mode is IfSourceNewer", flagName)
-	}
-
 	return nil
 }
 
