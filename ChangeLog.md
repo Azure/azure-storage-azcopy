@@ -4,6 +4,25 @@
 ## Version 10.11.0
 
 ### New features
+1. Added support for include and exclude regex flags, which allow pattern matching on the entire path.
+2. Added dry run mode copy, remove, and sync. This feature allows the user to visualize the changes before committing them.
+3. For SMB aware locations, preserve-smb-info flag is now true by default.
+4. Allow time-based filters for folders.
+5. Added support for ACL copying between HNS enabled accounts.
+
+### Bug fixes
+1. Allow from-to to be set for the remove command.
+2. Fixed the problem where resume command did not honor AZCOPY_DEFAULT_SERVICE_API_VERSION.
+3. Fixed the new version check.
+4. Fixed sync issue on Windows where paths are case-insensitive.
+5. Added prompt for invalid characters when importing from S3.
+6. Fixed bug where public S3 buckets cannot be listed.
+7. Fixed SAS leaks in JSON output for skipped and failed transfers. 
+8. Improved folder property preservation across resumes.
+
+## Version 10.11.0
+
+### New features
 1. Improved performance for copying small blobs (with size less than `256MiB`) with [Put Blob from URL](https://docs.microsoft.com/en-us/rest/api/storageservices/put-blob-from-url).
 1. Added mirror mode support in sync operation via `mirror-mode` flag. The new mode disables last-modified-time based comparisons and overwrites the conflicting files and blobs at the destination if this flag is set to true.
 1. Added flag `disable-auto-decoding` to avoid automatic decoding of URL-encoded illegal characters when uploading from Windows. These illegal characters could have encoded as a result of downloading them onto Windows which does not support them.
