@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"strings"
 	"time"
 
@@ -109,7 +110,7 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 				return fmt.Sprintf(
 					"\n\nJob %s summary\nElapsed Time (Minutes): %v\nNumber of File Transfers: %v\nNumber of Folder Property Transfers: %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nTotalBytesTransferred: %v\nFinal Job Status: %v\n",
 					summary.JobID.String(),
-					ste.ToFixed(duration.Minutes(), 4),
+					jobsAdmin.ToFixed(duration.Minutes(), 4),
 					summary.FileTransfers,
 					summary.FolderPropertyTransfers,
 					summary.TotalTransfers,
@@ -148,7 +149,7 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 			}
 
 			throughput := computeThroughput()
-			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", ste.ToFixed(throughput, 4))
+			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
 			if throughput == 0 {
 				// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
 				throughputString = ""

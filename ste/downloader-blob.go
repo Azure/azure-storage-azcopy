@@ -41,7 +41,7 @@ type blobDownloader struct {
 
 func newBlobDownloader() downloader {
 	return &blobDownloader{
-		filePacer: newNullAutoPacer(), // defer creation of real one, if needed, to Prologue
+		filePacer: NewNullAutoPacer(), // defer creation of real one, if needed, to Prologue
 	}
 
 }
