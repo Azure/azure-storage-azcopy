@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"net/url"
 	"os"
 	"runtime"
@@ -41,7 +42,6 @@ import (
 
 var azcopyAppPathFolder string
 var azcopyLogPathFolder string
-var azcopyJobPlanFolder string
 var azcopyMaxFileAndSocketHandles int
 var outputFormatRaw string
 var cancelFromStdin bool
@@ -111,7 +111,7 @@ var rootCmd = &cobra.Command{
 
 		// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
 		concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles, preferToAutoTuneGRs)
-		err = ste.MainSTE(concurrencySettings, float64(cmdLineCapMegaBitsPerSecond), azcopyJobPlanFolder, azcopyLogPathFolder, providePerformanceAdvice)
+		err = jobsAdmin.MainSTE(concurrencySettings, float64(cmdLineCapMegaBitsPerSecond), common.AzcopyJobPlanFolder, azcopyLogPathFolder, providePerformanceAdvice)
 		if err != nil {
 			return err
 		}
@@ -124,9 +124,9 @@ var rootCmd = &cobra.Command{
 		// or after this job
 		adjustedTime := timeAtPrestart.Add(-5 * time.Second)
 		startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
-			common.IncludeBeforeFlagName, IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
-			common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
-		ste.JobsAdmin.LogToJobLog(startTimeMessage, pipeline.LogInfo)
+		common.IncludeBeforeFlagName, IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
+		common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
+		jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, pipeline.LogInfo)
 
 		// spawn a routine to fetch and compare the local application's version against the latest version available
 		// if there's a newer version that can be used, then write the suggestion to stderr
@@ -155,12 +155,14 @@ var glcmSwapOnce = &sync.Once{}
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
-func Execute(azsAppPathFolder, logPathFolder string, jobPlanFolder string, maxFileAndSocketHandles int) {
+func Execute(azsAppPathFolder, logPathFolder string, jobPlanFolder string, maxFileAndSocketHandles int, jobID common.JobID) {
 	azcopyAppPathFolder = azsAppPathFolder
 	azcopyLogPathFolder = logPathFolder
-	azcopyJobPlanFolder = jobPlanFolder
+	common.AzcopyJobPlanFolder = jobPlanFolder
 	azcopyMaxFileAndSocketHandles = maxFileAndSocketHandles
-	azcopyCurrentJobID = common.NewJobID()
+	azcopyCurrentJobID = jobID
+	common.AzcopyCurrentJobLogger = common.NewJobLogger(jobID, common.ELogLevel.Debug(), logPathFolder, "")
+	common.AzcopyCurrentJobLogger.OpenLog()
 
 	if err := rootCmd.Execute(); err != nil {
 		glcm.Error(err.Error())

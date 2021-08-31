@@ -18,11 +18,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package ste
+package jobsAdmin
 
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -46,11 +47,11 @@ type sortPlanFiles struct{ Files []os.FileInfo }
 // Less determines the comparison between two fileInfo's
 // compares the part number of the Job Part files
 func (spf sortPlanFiles) Less(i, j int) bool {
-	_, parti, err := JobPartPlanFileName(spf.Files[i].Name()).Parse()
+	_, parti, err := ste.JobPartPlanFileName(spf.Files[i].Name()).Parse()
 	if err != nil {
 		panic(fmt.Errorf("error parsing the JobPartPlanfile name %s. Failed with error %s", spf.Files[i].Name(), err.Error()))
 	}
-	_, partj, err := JobPartPlanFileName(spf.Files[j].Name()).Parse()
+	_, partj, err := ste.JobPartPlanFileName(spf.Files[j].Name()).Parse()
 	if err != nil {
 		panic(fmt.Errorf("error parsing the JobPartPlanfile name %s. Failed with error %s", spf.Files[j].Name(), err.Error()))
 	}
@@ -64,25 +65,21 @@ func (spf sortPlanFiles) Swap(i, j int) { spf.Files[i], spf.Files[j] = spf.Files
 
 // JobAdmin is the singleton that manages ALL running Jobs, their parts, & their transfers
 var JobsAdmin interface {
-	NewJobPartPlanFileName(jobID common.JobID, partNumber common.PartNumber) JobPartPlanFileName
+	NewJobPartPlanFileName(jobID common.JobID, partNumber common.PartNumber) ste.JobPartPlanFileName
 
 	// JobIDDetails returns point-in-time list of JobIDDetails
 	JobIDs() []common.JobID
 
 	// JobMgr returns the specified JobID's JobMgr
-	JobMgr(jobID common.JobID) (IJobMgr, bool)
-	JobMgrEnsureExists(jobID common.JobID, level common.LogLevel, commandString string) IJobMgr
+	JobMgr(jobID common.JobID) (ste.IJobMgr, bool)
+	JobMgrEnsureExists(jobID common.JobID, level common.LogLevel, commandString string) ste.IJobMgr
 
 	// AddJobPartMgr associates the specified JobPartMgr with the Jobs Administrator
 	//AddJobPartMgr(appContext context.Context, planFile JobPartPlanFileName) IJobPartMgr
 	/*ScheduleTransfer(jptm IJobPartTransferMgr)*/
-	ScheduleChunk(priority common.JobPriority, chunkFunc chunkFunc)
-
 	ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string) bool
 
 	ResurrectJobParts()
-
-	QueueJobParts(jpm IJobPartMgr)
 
 	// AppPathFolder returns the Azcopy application path folder.
 	// JobPartPlanFile will be created inside this folder.
@@ -91,15 +88,6 @@ var JobsAdmin interface {
 	// returns the current value of bytesOverWire.
 	BytesOverWire() int64
 
-	AddSuccessfulBytesInActiveFiles(n int64)
-
-	// returns number of bytes successfully transferred in transfers that are currently in progress
-	SuccessfulBytesInActiveFiles() uint64
-
-	MessagesForJobLog() <-chan struct {
-		string
-		pipeline.LogLevel
-	}
 	LogToJobLog(msg string, level pipeline.LogLevel)
 
 	//DeleteJob(jobID common.JobID)
@@ -107,10 +95,11 @@ var JobsAdmin interface {
 
 	CurrentMainPoolSize() int
 
-	RequestTuneSlowly()
+	TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32, fromTo common.FromTo, dir common.TransferDirection, p *ste.PipelineNetworkStats) []common.PerformanceAdvice
+
 }
 
-func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {
+func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {
 	if JobsAdmin != nil {
 		panic("initJobsAdmin was already called once")
 	}
@@ -123,41 +112,23 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 		cpuMon = common.NewCalibratedCpuUsageMonitor()
 	}
 
-	const channelSize = 100000
-	// PartsChannelSize defines the number of JobParts which can be placed into the
-	// parts channel. Any JobPart which comes from FE and partChannel is full,
-	// has to wait and enumeration of transfer gets blocked till then.
-	// TODO : PartsChannelSize Needs to be discussed and can change.
-	const PartsChannelSize = 10000
-
-	// partsCh is the channel in which all JobParts are put
-	// for scheduling transfers. When the next JobPart order arrives
-	// transfer engine creates the JobPartPlan file and
-	// puts the JobPartMgr in partchannel
-	// from which each part is picked up one by one
-	// and transfers of that JobPart are scheduled
-	partsCh := make(chan IJobPartMgr, PartsChannelSize)
-	// Create normal & low transfer/chunk channels
-	normalTransferCh, normalChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
-	lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
-
 	maxRamBytesToUse := getMaxRamForChunks()
 
 	// default to a pacer that doesn't actually control the rate
 	// (it just records total throughput, since for historical reasons we do that in the pacer)
-	var pacer pacerAdmin = newNullAutoPacer()
+	var pacer ste.PacerAdmin = ste.NewNullAutoPacer()
 	if targetRateInMegaBitsPerSec > 0 {
 		// use the "networking mega" (based on powers of 10, not powers of 2, since that's what mega means in networking context)
 		targetRateInBytesPerSec := int64(targetRateInMegaBitsPerSec * 1000 * 1000 / 8)
 		unusedExpectedCoarseRequestByteCount := int64(0)
-		pacer = newTokenBucketPacer(targetRateInBytesPerSec, unusedExpectedCoarseRequestByteCount)
+		pacer = ste.NewTokenBucketPacer(targetRateInBytesPerSec, unusedExpectedCoarseRequestByteCount)
 		// Note: as at July 2019, we don't currently have a shutdown method/event on JobsAdmin where this pacer
 		// could be shut down. But, it's global anyway, so we just leave it running until application exit.
 	}
 
 	ja := &jobsAdmin{
 		concurrency:             concurrency,
-		logger:                  common.NewAppLogger(pipeline.LogInfo, azcopyLogPathFolder),
+		logger:                  common.AzcopyCurrentJobLogger,
 		jobIDToJobMgr:           newJobIDToJobMgr(),
 		logDir:                  azcopyLogPathFolder,
 		planDir:                 azcopyJobPlanFolder,
@@ -169,31 +140,10 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 		appCtx:                  appCtx,
 		commandLineMbpsCap:      targetRateInMegaBitsPerSec,
 		provideBenchmarkResults: providePerfAdvice,
-		coordinatorChannels: CoordinatorChannels{
-			partsChannel:     partsCh,
-			normalTransferCh: normalTransferCh,
-			lowTransferCh:    lowTransferCh,
-		},
-		xferChannels: XferChannels{
-			partsChannel:     partsCh,
-			normalTransferCh: normalTransferCh,
-			lowTransferCh:    lowTransferCh,
-			normalChunckCh:   normalChunkCh,
-			lowChunkCh:       lowChunkCh,
-		},
-		poolSizingChannels: poolSizingChannels{ // all deliberately unbuffered, because pool sizer routine works in lock-step with these - processing them as they happen, never catching up on populated buffer later
-			entryNotificationCh: make(chan struct{}),
-			exitNotificationCh:  make(chan struct{}),
-			scalebackRequestCh:  make(chan struct{}),
-			requestSlowTuneCh:   make(chan struct{}),
-		},
-		workaroundJobLoggingChannel: make(chan struct {
-			string
-			pipeline.LogLevel
-		}, 1000), // workaround to support logging from JobsAdmin
 	}
 	// create new context with the defaultService api version set as value to serviceAPIVersionOverride in the app context.
-	ja.appCtx = context.WithValue(ja.appCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
+	ja.appCtx = context.WithValue(ja.appCtx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	ja.jobLogger = common.AzcopyCurrentJobLogger
 
 	// create concurrency tuner...
 	// ... but don't spin up the main pool. That is done when
@@ -207,17 +157,6 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 	// Spin up slice pool pruner
 	go ja.slicePoolPruneLoop()
 
-	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
-	// the Channel and schedules the transfers of that JobPart.
-	go ja.scheduleJobParts()
-
-	// In addition to the main pool (which is governed ja.poolSizer), we spin up a separate set of workers to process initiation of transfers
-	// (so that transfer initiation can't starve out progress on already-scheduled chunks.
-	// (Not sure whether that can really happen, but this protects against it anyway.)
-	// Perhaps MORE importantly, doing this separately gives us more CONTROL over how we interact with the file system.
-	for cc := 0; cc < concurrency.TransferInitiationPoolSize.Value; cc++ {
-		go ja.transferProcessor(cc)
-	}
 }
 
 // Decide on a max amount of RAM we are willing to use. This functions as a cap, and prevents excessive usage.
@@ -255,49 +194,16 @@ func getMaxRamForChunks() int64 {
 	return maxRamBytesToUse
 }
 
-// QueueJobParts puts the given JobPartManager into the partChannel
-// from where this JobPartMgr will be picked by a routine and
-// its transfers will be scheduled
-func (ja *jobsAdmin) QueueJobParts(jpm IJobPartMgr) {
-	ja.coordinatorChannels.partsChannel <- jpm
-}
-
-// 1 single goroutine runs this method and InitJobsAdmin  kicks that goroutine off.
-func (ja *jobsAdmin) scheduleJobParts() {
-	startedPoolSizer := false
-	for {
-		jobPart := <-ja.xferChannels.partsChannel
-
-		if !startedPoolSizer {
-			// spin up a GR to co-ordinate dynamic sizing of the main pool
-			// It will automatically spin up the right number of chunk processors
-			go ja.poolSizer(ja.concurrencyTuner)
-			startedPoolSizer = true
-		}
-		// If the job manager is not found for the JobId of JobPart
-		// taken from partsChannel
-		// there is an error in our code
-		// this not should not happen since JobMgr is initialized before any
-		// job part is added
-		jobId := jobPart.Plan().JobID
-		jm, found := ja.JobMgr(jobId)
-		if !found {
-			panic(fmt.Errorf("no job manager found for JobId %s", jobId.String()))
-		}
-		jobPart.ScheduleTransfers(jm.Context())
-	}
-}
-
-func (ja *jobsAdmin) createConcurrencyTuner() ConcurrencyTuner {
+func (ja *jobsAdmin) createConcurrencyTuner() ste.ConcurrencyTuner {
 	if ja.concurrency.AutoTuneMainPool() {
-		t := NewAutoConcurrencyTuner(ja.concurrency.InitialMainPoolSize, ja.concurrency.MaxMainPoolSize.Value, ja.provideBenchmarkResults)
+		t := ste.NewAutoConcurrencyTuner(ja.concurrency.InitialMainPoolSize, ja.concurrency.MaxMainPoolSize.Value, ja.provideBenchmarkResults)
 		if !t.RequestCallbackWhenStable(func() { ja.recordTuningCompleted(true) }) {
 			panic("could not register tuning completion callback")
 		}
 		return t
 	} else {
 		ja.recordTuningCompleted(false)
-		return &nullConcurrencyTuner{fixedValue: ja.concurrency.InitialMainPoolSize}
+		return &ste.NullConcurrencyTuner{FixedValue: ja.concurrency.InitialMainPoolSize}
 	}
 }
 
@@ -323,165 +229,6 @@ func (ja *jobsAdmin) recordTuningCompleted(showOutput bool) {
 	}
 }
 
-// worker that sizes the chunkProcessor pool, dynamically if necessary
-func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
-
-	logConcurrency := func(targetConcurrency int, reason string) {
-		switch reason {
-		case concurrencyReasonNone,
-			concurrencyReasonFinished,
-			concurrencyReasonTunerDisabled:
-			return
-		default:
-			msg := fmt.Sprintf("Trying %d concurrent connections (%s)", targetConcurrency, reason)
-			common.GetLifecycleMgr().Info(msg)
-			ja.LogToJobLog(msg, pipeline.LogInfo)
-		}
-	}
-
-	nextWorkerId := 0
-	actualConcurrency := 0
-	lastBytesOnWire := int64(0)
-	lastBytesTime := time.Now()
-	hasHadTimeToStablize := false
-	initialMonitoringInterval := time.Duration(4 * time.Second)
-	expandedMonitoringInterval := time.Duration(8 * time.Second)
-	throughputMonitoringInterval := initialMonitoringInterval
-	slowTuneCh := ja.poolSizingChannels.requestSlowTuneCh
-
-	// get initial pool size
-	targetConcurrency, reason := tuner.GetRecommendedConcurrency(-1, ja.cpuMonitor.CPUContentionExists())
-	logConcurrency(targetConcurrency, reason)
-
-	// loop for ever, driving the actual concurrency towards the most up-to-date target
-	for {
-		// add or remove a worker if necessary
-		if actualConcurrency < targetConcurrency {
-			hasHadTimeToStablize = false
-			nextWorkerId++
-			go ja.chunkProcessor(nextWorkerId) // TODO: make sure this numbering is OK, even if we grow and shrink the pool (the id values don't matter right?)
-		} else if actualConcurrency > targetConcurrency {
-			hasHadTimeToStablize = false
-			ja.poolSizingChannels.scalebackRequestCh <- struct{}{}
-		}
-
-		// wait for something to happen (maybe ack from the worker of the change, else a timer interval)
-		select {
-		case <-ja.poolSizingChannels.entryNotificationCh:
-			// new worker has started
-			actualConcurrency++
-			atomic.StoreInt32(&ja.atomicCurrentMainPoolSize, int32(actualConcurrency))
-		case <-ja.poolSizingChannels.exitNotificationCh:
-			// worker has exited
-			actualConcurrency--
-			atomic.StoreInt32(&ja.atomicCurrentMainPoolSize, int32(actualConcurrency))
-		case <-slowTuneCh:
-			// we've been asked to tune more slowly
-			// TODO: confirm we don't need this: expandedMonitoringInterval *= 2
-			throughputMonitoringInterval = expandedMonitoringInterval
-			slowTuneCh = nil // so we won't keep running this case at the expense of others)
-		case <-time.After(throughputMonitoringInterval):
-			if actualConcurrency == targetConcurrency { // scalebacks can take time. Don't want to do any tuning if actual is not yet aligned to target
-				bytesOnWire := ja.BytesOverWire()
-				if hasHadTimeToStablize {
-					// throughput has had time to stabilize since last change, so we can meaningfully measure and act on throughput
-					elapsedSeconds := time.Since(lastBytesTime).Seconds()
-					bytes := bytesOnWire - lastBytesOnWire
-					megabitsPerSec := (8 * float64(bytes) / elapsedSeconds) / (1000 * 1000)
-					if megabitsPerSec > 4000 {
-						throughputMonitoringInterval = expandedMonitoringInterval // start averaging throughputs over longer time period, since in some tests it takes a little longer to get a good average
-					}
-					targetConcurrency, reason = tuner.GetRecommendedConcurrency(int(megabitsPerSec), ja.cpuMonitor.CPUContentionExists())
-					logConcurrency(targetConcurrency, reason)
-				} else {
-					// we weren't in steady state before, but given that throughputMonitoringInterval has now elapsed,
-					// we'll deem that we are in steady state now (so can start measuring throughput from now)
-					hasHadTimeToStablize = true
-				}
-				lastBytesOnWire = bytesOnWire
-				lastBytesTime = time.Now()
-			}
-		}
-	}
-}
-
-// RequestTuneSlowly is used to ask for a slower rate of auto-concurrency tuning.
-// Necessary because if there's a download or S2S transfer going on, we need to measure throughputs over longer intervals to make
-// the auto tuning work.
-func (ja *jobsAdmin) RequestTuneSlowly() {
-	select {
-	case ja.poolSizingChannels.requestSlowTuneCh <- struct{}{}:
-	default:
-		return // channel already full, so don't need to add our signal there too, it already has one
-	}
-}
-
-// general purpose worker that reads in schedules chunk jobs, and executes chunk jobs
-func (ja *jobsAdmin) chunkProcessor(workerID int) {
-	ja.poolSizingChannels.entryNotificationCh <- struct{}{}                   // say we have started
-	defer func() { ja.poolSizingChannels.exitNotificationCh <- struct{}{} }() // say we have exited
-
-	for {
-		// We check for scalebacks first to shrink goroutine pool
-		// Then, we check chunks: normal & low priority
-		select {
-		case <-ja.poolSizingChannels.scalebackRequestCh:
-			return
-		default:
-			select {
-			case chunkFunc := <-ja.xferChannels.normalChunckCh:
-				chunkFunc(workerID)
-			default:
-				select {
-				case chunkFunc := <-ja.xferChannels.lowChunkCh:
-					chunkFunc(workerID)
-				default:
-					time.Sleep(100 * time.Millisecond) // Sleep before looping around
-					// TODO: Question: In order to safely support high goroutine counts,
-					// do we need to review sleep duration, or find an approach that does not require waking every x milliseconds
-					// For now, duration has been increased substantially from the previous 1 ms, to reduce cost of
-					// the wake-ups.
-				}
-			}
-		}
-	}
-}
-
-// separate from the chunkProcessor, this dedicated worker that reads in and executes transfer initiation jobs
-// (which in turn schedule chunks that get picked up by chunkProcessor)
-func (ja *jobsAdmin) transferProcessor(workerID int) {
-	startTransfer := func(jptm IJobPartTransferMgr) {
-		if jptm.WasCanceled() {
-			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, fmt.Sprintf(" is not picked up worked %d because transfer was cancelled", workerID))
-			}
-			jptm.SetStatus(common.ETransferStatus.Cancelled())
-			jptm.ReportTransferDone()
-		} else {
-			// TODO fix preceding space
-			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, fmt.Sprintf("has worker %d which is processing TRANSFER %d", workerID, jptm.(*jobPartTransferMgr).transferIndex))
-			}
-			jptm.StartJobXfer()
-		}
-	}
-
-	for {
-		// No scaleback check here, because this routine runs only in a small number of goroutines, so no need to kill them off
-		select {
-		case jptm := <-ja.xferChannels.normalTransferCh:
-			startTransfer(jptm)
-		default:
-			select {
-			case jptm := <-ja.xferChannels.lowTransferCh:
-				startTransfer(jptm)
-			default:
-				time.Sleep(10 * time.Millisecond) // Sleep before looping around
-			}
-		}
-	}
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // There will be only 1 instance of the jobsAdmin type.
@@ -491,72 +238,44 @@ type jobsAdmin struct {
 	atomicBytesTransferredWhileTuning  int64
 	atomicTuningEndSeconds             int64
 	atomicCurrentMainPoolSize          int32 // align 64 bit integers for 32 bit arch
-	concurrency                        ConcurrencySettings
+	concurrency                        ste.ConcurrencySettings
 	logger                             common.ILoggerCloser
 	jobIDToJobMgr                      jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
 	// Other global state can be stored in more fields here...
 	logDir                      string // Where log files are stored
 	planDir                     string // Initialize to directory where Job Part Plans are stored
-	coordinatorChannels         CoordinatorChannels
-	xferChannels                XferChannels
-	poolSizingChannels          poolSizingChannels
 	appCtx                      context.Context
-	pacer                       pacerAdmin
+	pacer                       ste.PacerAdmin
 	slicePool                   common.ByteSlicePooler
 	cacheLimiter                common.CacheLimiter
 	fileCountLimiter            common.CacheLimiter
-	workaroundJobLoggingChannel chan struct {
-		string
-		pipeline.LogLevel
-	}
-	concurrencyTuner        ConcurrencyTuner
-	commandLineMbpsCap      float64
+	concurrencyTuner   ste.ConcurrencyTuner
+	commandLineMbpsCap float64
 	provideBenchmarkResults bool
 	cpuMonitor              common.CPUMonitor
+	jobLogger               common.ILoggerResetable
 }
-
-type CoordinatorChannels struct {
-	partsChannel     chan<- IJobPartMgr         // Write Only
-	normalTransferCh chan<- IJobPartTransferMgr // Write-only
-	lowTransferCh    chan<- IJobPartTransferMgr // Write-only
-}
-
-type XferChannels struct {
-	partsChannel     <-chan IJobPartMgr         // Read only
-	normalTransferCh <-chan IJobPartTransferMgr // Read-only
-	lowTransferCh    <-chan IJobPartTransferMgr // Read-only
-	normalChunckCh   chan chunkFunc             // Read-write
-	lowChunkCh       chan chunkFunc             // Read-write
-}
-
-type poolSizingChannels struct {
-	entryNotificationCh chan struct{}
-	exitNotificationCh  chan struct{}
-	scalebackRequestCh  chan struct{}
-	requestSlowTuneCh   chan struct{}
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-func (ja *jobsAdmin) NewJobPartPlanFileName(jobID common.JobID, partNumber common.PartNumber) JobPartPlanFileName {
-	return JobPartPlanFileName(fmt.Sprintf(jobPartPlanFileNameFormat, jobID.String(), partNumber, DataSchemaVersion))
+func (ja *jobsAdmin) NewJobPartPlanFileName(jobID common.JobID, partNumber common.PartNumber) ste.JobPartPlanFileName {
+	return ste.JobPartPlanFileName(fmt.Sprintf(ste.JobPartPlanFileNameFormat, jobID.String(), partNumber, ste.DataSchemaVersion))
 }
 
 func (ja *jobsAdmin) FileExtension() string {
-	return fmt.Sprintf(".strV%05d", DataSchemaVersion)
+	return fmt.Sprintf(".strV%05d", ste.DataSchemaVersion)
 }
 
 // JobIDDetails returns point-in-time list of JobIDDetails
 func (ja *jobsAdmin) JobIDs() []common.JobID {
 	var jobIDs []common.JobID
-	ja.jobIDToJobMgr.Iterate(false, func(k common.JobID, v IJobMgr) {
+	ja.jobIDToJobMgr.Iterate(false, func(k common.JobID, v ste.IJobMgr) {
 		jobIDs = append(jobIDs, k)
 	})
 	return jobIDs
 }
 
 // JobMgr returns the specified JobID's JobMgr if it exists
-func (ja *jobsAdmin) JobMgr(jobID common.JobID) (IJobMgr, bool) {
+func (ja *jobsAdmin) JobMgr(jobID common.JobID) (ste.IJobMgr, bool) {
 	return ja.jobIDToJobMgr.Get(jobID)
 }
 
@@ -569,43 +288,19 @@ func (ja *jobsAdmin) AppPathFolder() string {
 // JobMgrEnsureExists returns the specified JobID's IJobMgr if it exists or creates it if it doesn't already exit
 // If it does exist, then the appCtx argument is ignored.
 func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
-	level common.LogLevel, commandString string) IJobMgr {
+	level common.LogLevel, commandString string) ste.IJobMgr {
 
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
-		func() IJobMgr {
+		func() ste.IJobMgr {
 			// Return existing or new IJobMgr to caller
-			return newJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir)
+			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, ja.jobLogger)
 		})
-}
-
-func (ja *jobsAdmin) ScheduleTransfer(priority common.JobPriority, jptm IJobPartTransferMgr) {
-	switch priority { // priority determines which channel handles the job part's transfers
-	case common.EJobPriority.Normal():
-		//jptm.SetChunkChannel(ja.xferChannels.normalChunckCh)
-		ja.coordinatorChannels.normalTransferCh <- jptm
-	case common.EJobPriority.Low():
-		//jptm.SetChunkChannel(ja.xferChannels.lowChunkCh)
-		ja.coordinatorChannels.lowTransferCh <- jptm
-	default:
-		ja.Panic(fmt.Errorf("invalid priority: %q", priority))
-	}
-}
-
-func (ja *jobsAdmin) ScheduleChunk(priority common.JobPriority, chunkFunc chunkFunc) {
-	switch priority { // priority determines which channel handles the job part's transfers
-	case common.EJobPriority.Normal():
-		ja.xferChannels.normalChunckCh <- chunkFunc
-	case common.EJobPriority.Low():
-		ja.xferChannels.lowChunkCh <- chunkFunc
-	default:
-		ja.Panic(fmt.Errorf("invalid priority: %q", priority))
-	}
 }
 
 func (ja *jobsAdmin) BytesOverWire() int64 {
 	return ja.pacer.GetTotalTraffic()
 }
-
+/*
 func (ja *jobsAdmin) AddSuccessfulBytesInActiveFiles(n int64) {
 	atomic.AddInt64(&ja.atomicSuccessfulBytesInActiveFiles, n)
 }
@@ -617,6 +312,7 @@ func (ja *jobsAdmin) SuccessfulBytesInActiveFiles() uint64 {
 	}
 	return uint64(n)
 }
+*/
 
 func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string) bool {
 	// Search the existing plan files for the PartPlans for the given jobId
@@ -631,7 +327,7 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinat
 			return nil
 		})
 		return files
-	}(jobId.String(), fmt.Sprintf(".steV%d", DataSchemaVersion))
+	}(jobId.String(), fmt.Sprintf(".steV%d", ste.DataSchemaVersion))
 	// If no files with JobId exists then return false
 	if len(files) == 0 {
 		return false
@@ -639,7 +335,7 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinat
 	// sort the JobPartPlan files with respect to Part Number
 	sort.Sort(sortPlanFiles{Files: files})
 	for f := 0; f < len(files); f++ {
-		planFile := JobPartPlanFileName(files[f].Name())
+		planFile := ste.JobPartPlanFileName(files[f].Name())
 		jobID, partNum, err := planFile.Parse()
 		if err != nil {
 			continue
@@ -668,11 +364,11 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 			return nil
 		})
 		return files
-	}(fmt.Sprintf(".steV%d", DataSchemaVersion))
+	}(fmt.Sprintf(".steV%d", ste.DataSchemaVersion))
 
 	// TODO : sort the file.
 	for f := 0; f < len(files); f++ {
-		planFile := JobPartPlanFileName(files[f].Name())
+		planFile := ste.JobPartPlanFileName(files[f].Name())
 		jobID, partNum, err := planFile.Parse()
 		if err != nil {
 			continue
@@ -753,45 +449,68 @@ func (ja *jobsAdmin) slicePoolPruneLoop() {
 // be several concurrent jobs running. That's not the case any more, so this is safe now, but it doesn't quite fit with the
 // architecture around it.
 func (ja *jobsAdmin) LogToJobLog(msg string, level pipeline.LogLevel) {
-	select {
-	case ja.workaroundJobLoggingChannel <- struct {
-		string
-		pipeline.LogLevel
-	}{msg, level}:
-		// done, we have passed it off to get logged
-	default:
-		// channel buffer is full, have to drop this message
+	prefix := ""
+	if level <= pipeline.LogWarning {
+		prefix = fmt.Sprintf("%s: ", common.LogLevel(level)) // so readers can find serious ones, but information ones still look uncluttered without INFO:
 	}
+	ja.jobLogger.Log(pipeline.LogWarning, prefix+msg) // use LogError here, so that it forces these to get logged, even if user is running at warning level instead of Info.  They won't have "warning" prefix, if Info level was passed in to MessagesForJobLog
 }
 
-func (ja *jobsAdmin) MessagesForJobLog() <-chan struct {
-	string
-	pipeline.LogLevel
-} {
-	return ja.workaroundJobLoggingChannel
-}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32, fromTo common.FromTo, dir common.TransferDirection, p *ste.PipelineNetworkStats) []common.PerformanceAdvice {
+	if !ja.provideBenchmarkResults {
+		return make([]common.PerformanceAdvice, 0)
+	}
+
+	megabitsPerSec := float64(0)
+	finalReason, finalConcurrency := ja.concurrencyTuner.GetFinalState()
+
+	secondsAfterTuning := float64(0)
+	tuningEndSeconds := atomic.LoadInt64(&ja.atomicTuningEndSeconds)
+	if tuningEndSeconds > 0 {
+		bytesTransferredAfterTuning := ja.BytesOverWire() - atomic.LoadInt64(&ja.atomicBytesTransferredWhileTuning)
+		secondsAfterTuning = time.Since(time.Unix(tuningEndSeconds, 0)).Seconds()
+		megabitsPerSec = (8 * float64(bytesTransferredAfterTuning) / secondsAfterTuning) / (1000 * 1000)
+	}
+
+	// if we we didn't run enough after the end of tuning, due to too little time or too close the slow patch as throughput winds down approaching 100%,
+	// then pretend that we didn't get any tuning result at all
+	percentCompleteAtTuningStart := 100 * float64(atomic.LoadInt64(&ja.atomicBytesTransferredWhileTuning)) / float64(bytesInJob)
+	if finalReason != ste.ConcurrencyReasonTunerDisabled && (secondsAfterTuning < 10 || percentCompleteAtTuningStart > 95) {
+		finalReason = ste.ConcurrencyReasonNone
+	}
+
+	averageBytesPerFile := int64(0)
+	if filesInJob > 0 {
+		averageBytesPerFile = int64(bytesInJob / uint64(filesInJob))
+	}
+
+	isToAzureFiles := fromTo.To() == common.ELocation.File()
+	a := ste.NewPerformanceAdvisor(p, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency, dir, averageBytesPerFile, isToAzureFiles)
+	return a.GetAdvice()
+}
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // The jobIDToJobMgr maps each JobID to its JobMgr
 type jobIDToJobMgr struct {
 	nocopy common.NoCopy
 	lock   sync.RWMutex
-	m      map[common.JobID]IJobMgr
+	m      map[common.JobID]ste.IJobMgr
 }
 
 func newJobIDToJobMgr() jobIDToJobMgr {
-	return jobIDToJobMgr{m: make(map[common.JobID]IJobMgr)}
+	return jobIDToJobMgr{m: make(map[common.JobID]ste.IJobMgr)}
 }
 
-func (j *jobIDToJobMgr) Set(key common.JobID, value IJobMgr) {
+func (j *jobIDToJobMgr) Set(key common.JobID, value ste.IJobMgr) {
 	j.nocopy.Check()
 	j.lock.Lock()
 	j.m[key] = value
 	j.lock.Unlock()
 }
 
-func (j *jobIDToJobMgr) Get(key common.JobID) (value IJobMgr, found bool) {
+func (j *jobIDToJobMgr) Get(key common.JobID) (value ste.IJobMgr, found bool) {
 	j.nocopy.Check()
 	j.lock.RLock()
 	value, found = j.m[key]
@@ -799,13 +518,13 @@ func (j *jobIDToJobMgr) Get(key common.JobID) (value IJobMgr, found bool) {
 	return
 }
 
-func (j *jobIDToJobMgr) EnsureExists(jobID common.JobID, newJobMgr func() IJobMgr) IJobMgr {
+func (j *jobIDToJobMgr) EnsureExists(jobID common.JobID, newJobMgr func() ste.IJobMgr) ste.IJobMgr {
 	j.nocopy.Check()
 	j.lock.Lock()
 
 	// defined variables both jm & found above condition since defined variables might get re-initialized
 	// in if condition if any variable in the left was not initialized.
-	var jm IJobMgr
+	var jm ste.IJobMgr
 	var found bool
 
 	// NOTE: We look up the desired IJobMgr and add it if it's not there atomically using a write lock
@@ -824,7 +543,7 @@ func (j *jobIDToJobMgr) Delete(key common.JobID) {
 	j.lock.Unlock()
 }
 
-func (j *jobIDToJobMgr) Iterate(write bool, f func(k common.JobID, v IJobMgr)) {
+func (j *jobIDToJobMgr) Iterate(write bool, f func(k common.JobID, v ste.IJobMgr)) {
 	j.nocopy.Check()
 	locker := sync.Locker(&j.lock)
 	if !write {
