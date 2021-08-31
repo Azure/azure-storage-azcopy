@@ -1,6 +1,25 @@
 
 # Change Log
 
+## Version 10.12.0
+
+### New features
+1. Added support for include and exclude regex flags, which allow pattern matching on the entire paths.
+2. Added dry run mode for copy, remove, and sync. This feature allows the user to visualize the changes before committing them.
+3. For SMB aware locations, preserve-smb-info flag is now true by default.
+4. Improved how folder lmts are obtained to allow time-based filters for folders.
+5. Added support for ACL copying between HNS enabled accounts. The preserve-smb-permissions flag is now deprecated and has been renamed to preserve-permissions.
+
+### Bug fixes
+1. Allow from-to to be set for the remove command.
+2. Fixed the problem where resume command did not honor AZCOPY_DEFAULT_SERVICE_API_VERSION.
+3. Fixed the new version check.
+4. Fixed sync issue on Windows where paths are case-insensitive.
+5. Added prompt for invalid characters when importing from S3.
+6. Fixed bug where public S3 buckets cannot be listed.
+7. Sanitize SAS tokens in JSON output for skipped and failed transfers. 
+8. Improved folder property preservation across resumes.
+
 ## Version 10.11.0
 
 ### New features
