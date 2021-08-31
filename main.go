@@ -37,7 +37,7 @@ import (
 // get the lifecycle manager to print messages
 var glcm = common.GetLifecycleMgr()
 
-func main() {
+func main1() {
 	pipeline.SetLogSanitizer(common.NewAzCopyLogSanitizer()) // make sure SyslogDisabled logs get secrets redacted
 
 	rand.Seed(time.Now().UnixNano()) // make sure our random numbers actually are random (but remember, use crypto/rand for anything where strong/reliable randomness is required
