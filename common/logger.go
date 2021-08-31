@@ -130,7 +130,8 @@ func (jl *jobLogger) OpenLog() {
 		return
 	}
 
-	file, err := os.OpenFile(path.Join(jl.logFileFolder, jl.jobID.String()+jl.logFileNameSuffix+".log"),
+	logpath := path.Join(jl.logFileFolder, jl.jobID.String()+jl.logFileNameSuffix+".log")
+	file, err := os.OpenFile(logpath, //path.Join(jl.logFileFolder, jl.jobID.String()+jl.logFileNameSuffix+".log"),
 		os.O_RDWR|os.O_CREATE|os.O_APPEND, DEFAULT_FILE_PERM)
 	PanicIfErr(err)
 

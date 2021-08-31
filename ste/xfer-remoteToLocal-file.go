@@ -219,7 +219,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		sourceMd5Exists)
 
 	// step 5c: run prologue in downloader (here it can, for example, create things that will require cleanup in the epilogue)
-	common.GetLifecycleMgr().E2EAwaitAllowOpenFiles()
+	//common.GetLifecycleMgr().E2EAwaitAllowOpenFiles()
 	dl.Prologue(jptm, p)
 
 	// step 5d: tell jptm what to expect, and how to clean up at the end
