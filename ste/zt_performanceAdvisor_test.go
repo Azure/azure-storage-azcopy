@@ -87,7 +87,7 @@ func (s *perfAdvisorSuite) TestPerfAdvisor(c *chk.C) {
 		{"otherThrottling", 0, 0, 8, 0, concurrencyReasonAtOptimum, normal, 0, 1000, 0, otherBusy, netOK, none, none},
 		{"networkErrors  ", 0, 0, 0, 7, concurrencyReasonAtOptimum, normal, 0, 1000, 0, netErrors, netOK, none, none},
 		{"cappedMbps     ", 0, 0, 0, 0, concurrencyReasonAtOptimum, normal, 1000, 950, 0, mbpsCapped, netOK, none, none},
-		{"concNotTuned   ", 0, 0, 0, 0, concurrencyReasonTunerDisabled, normal, 0, 1000, 0, concNotTuned, none, none, none},
+		{"concNotTuned   ", 0, 0, 0, 0, ConcurrencyReasonTunerDisabled, normal, 0, 1000, 0, concNotTuned, none, none, none},
 		{"concHitLimit   ", 0, 0, 0, 0, concurrencyReasonHitMax, normal, 0, 1000, 0, concHitMax, none, none, none},
 		{"concOutOfTime1 ", 0, 0, 0, 0, concurrencyReasonSeeking, normal, 0, 1000, 0, concNotEnoughTime, none, none, none},
 		{"concOutOfTime2 ", 0, 0, 0, 0, concurrencyReasonBackoff, normal, 0, 1000, 0, concNotEnoughTime, none, none, none},

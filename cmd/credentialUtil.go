@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"net/http"
 	"net/url"
 	"strings"
@@ -460,8 +461,8 @@ func logAuthType(ct common.CredentialType, location common.Location, isSource bo
 	message := fmt.Sprintf("Authenticating to %s using %s", resource, name)
 	if _, exists := authMessagesAlreadyLogged.Load(message); !exists {
 		authMessagesAlreadyLogged.Store(message, struct{}{}) // dedup because source is auth'd by both enumerator and STE
-		if ste.JobsAdmin != nil {
-			ste.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
+		if jobsAdmin.JobsAdmin != nil {
+			jobsAdmin.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
 		}
 		glcm.Info(message)
 	}

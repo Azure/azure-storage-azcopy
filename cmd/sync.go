@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -507,7 +508,7 @@ func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, th
 		// text output
 		throughputString := ""
 		if cca.firstPartOrdered() {
-			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", ste.ToFixed(throughput, 4))
+			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
 		}
 		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
 			srcScanned, dstScanned, throughputString)
@@ -584,7 +585,7 @@ Final Job Status: %v%s%s
 				summary.JobID.String(),
 				atomic.LoadUint64(&cca.atomicSourceFilesScanned),
 				atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
-				ste.ToFixed(duration.Minutes(), 4),
+				jobsAdmin.ToFixed(duration.Minutes(), 4),
 				summary.FileTransfers,
 				summary.FolderPropertyTransfers,
 				summary.TotalTransfers,
@@ -597,7 +598,7 @@ Final Job Status: %v%s%s
 				screenStats,
 				formatPerfAdvice(summary.PerformanceAdvice))
 
-			jobMan, exists := ste.JobsAdmin.JobMgr(summary.JobID)
+			jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
 			if exists {
 				jobMan.Log(pipeline.LogInfo, logStats+"\n"+output)
 			}
@@ -619,7 +620,7 @@ Final Job Status: %v%s%s
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
 			summary.TotalTransfers-summary.TransfersCompleted-summary.TransfersFailed,
-			summary.TotalTransfers, perfString, ste.ToFixed(throughput, 4), diskString)
+			summary.TotalTransfers, perfString, jobsAdmin.ToFixed(throughput, 4), diskString)
 	})
 
 	return

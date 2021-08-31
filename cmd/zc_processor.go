@@ -23,14 +23,13 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"runtime"
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/pkg/errors"
-
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -169,8 +168,8 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 			s.copyJobTemplate.JobID, s.copyJobTemplate.PartNum, resp.ErrorMsg)
 	}
 
-	if ste.JobsAdmin != nil {
-		ste.JobsAdmin.LogToJobLog(FinalPartCreatedMessage, pipeline.LogInfo)
+	if jobsAdmin.JobsAdmin != nil {
+		jobsAdmin.JobsAdmin.LogToJobLog(FinalPartCreatedMessage, pipeline.LogInfo)
 	}
 
 	if s.reportFinalPartDispatched != nil {
