@@ -488,7 +488,7 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 				return nil, err
 			}
 		} else {
-			output, err = newS3Traverser(resourceURL, *ctx, recursive, getProperties, incrementEnumerationCounter)
+			output, err = newS3Traverser(credential.CredentialType, resourceURL, *ctx, recursive, getProperties, incrementEnumerationCounter)
 
 			if err != nil {
 				return nil, err

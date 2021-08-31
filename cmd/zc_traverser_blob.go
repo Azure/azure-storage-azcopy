@@ -23,9 +23,10 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -230,6 +231,41 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 			if t.recursive {
 				for _, virtualDir := range lResp.Segment.BlobPrefixes {
 					enqueueDir(virtualDir.Name)
+
+					if t.includeDirectoryStubs {
+						// try to get properties on the directory itself, since it's not listed in BlobItems
+						fblobURL := containerURL.NewBlobURL(strings.TrimSuffix(currentDirPath+virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING))
+						resp, err := fblobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+						if err == nil {
+							storedObject := newStoredObject(
+								preprocessor,
+								getObjectNameOnly(strings.TrimSuffix(currentDirPath+virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)),
+								strings.TrimSuffix(currentDirPath+virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING),
+								common.EEntityType.File(), // folder stubs are treated like files in in the serial lister as well
+								resp.LastModified(),
+								resp.ContentLength(),
+								resp,
+								blobPropertiesResponseAdapter{resp},
+								common.FromAzBlobMetadataToCommonMetadata(resp.NewMetadata()),
+								containerName,
+							)
+
+							if t.s2sPreserveSourceTags {
+								var BlobTags *azblob.BlobTags
+								BlobTags, err = fblobURL.GetTags(t.ctx, nil)
+
+								if err == nil {
+									blobTagsMap := common.BlobTags{}
+									for _, blobTag := range BlobTags.BlobTagSet {
+										blobTagsMap[url.QueryEscape(blobTag.Key)] = url.QueryEscape(blobTag.Value)
+									}
+									storedObject.blobTags = blobTagsMap
+								}
+							}
+
+							enqueueOutput(storedObject, err)
+						}
+					}
 				}
 			}
 

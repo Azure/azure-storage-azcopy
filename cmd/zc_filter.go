@@ -23,10 +23,12 @@ package cmd
 import (
 	"fmt"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -230,6 +232,63 @@ func (fs filterSet) GetEnumerationPreFilter(recursive bool) string {
 
 ////////
 
+// includeRegex & excludeRegex
+type regexFilter struct {
+	patterns   []string
+	isIncluded bool
+}
+
+func (f *regexFilter) doesSupportThisOS() (msg string, supported bool) {
+	msg = ""
+	supported = true
+	return
+}
+
+func (f *regexFilter) appliesOnlyToFiles() bool {
+	return false
+}
+
+func (f *regexFilter) doesPass(storedObject storedObject) bool {
+	if len(f.patterns) == 0 {
+		return true
+	}
+	for _, pattern := range f.patterns {
+		matched := false
+		var err error
+
+		matched, err = regexp.MatchString(pattern, storedObject.relativePath)
+		// if pattern fails to match with an error, we assume the pattern is invalid
+		if err != nil {
+			if f.isIncluded { //if include filter then we ignore it
+				continue
+			} else { //if exclude filter then we let it pass
+				return true
+			}
+		}
+		//check if pattern matched relative path
+		//if matched then return isIncluded which is a boolean expression to represent included and excluded
+		if matched {
+			return f.isIncluded
+		}
+	}
+	return !f.isIncluded
+}
+
+func buildRegexFilters(patterns []string, isIncluded bool) []objectFilter {
+	if len(patterns) == 0 {
+		return []objectFilter{}
+	}
+
+	filters := make([]string, 0)
+	for _, pattern := range patterns {
+		if pattern != "" {
+			filters = append(filters, pattern)
+		}
+	}
+
+	return []objectFilter{&regexFilter{patterns: filters, isIncluded: isIncluded}}
+}
+
 // includeAfterDateFilter includes files with Last Modified Times >= the specified threshold
 // Used for copy, but doesn't make conceptual sense for sync
 type includeAfterDateFilter struct {
@@ -243,10 +302,7 @@ func (f *includeAfterDateFilter) doesSupportThisOS() (msg string, supported bool
 }
 
 func (f *includeAfterDateFilter) appliesOnlyToFiles() bool {
-	return true
-	// because we don't currently (May 2020) have meaningful LMTs for folders. The meaningful time for a folder is the "change time" not the "last write time", and the change time can only be obtained via NtGetFileInformation, which we don't yet call.
-	// TODO: the consequence of this is that folder properties and folder acls can't be moved when using this filter.
-	//       Can we live with that, for now?
+	return false
 }
 
 func (f *includeAfterDateFilter) doesPass(storedObject storedObject) bool {
@@ -280,10 +336,7 @@ func (f *includeBeforeDateFilter) doesSupportThisOS() (msg string, supported boo
 }
 
 func (f *includeBeforeDateFilter) appliesOnlyToFiles() bool {
-	return true
-	// because we don't currently (May 2020) have meaningful LMTs for folders. The meaningful time for a folder is the "change time" not the "last write time", and the change time can only be obtained via NtGetFileInformation, which we don't yet call.
-	// TODO: the consequence of this is that folder properties and folder acls can't be moved when using this filter.
-	//       Can we live with that, for now?
+	return false
 }
 
 func (f *includeBeforeDateFilter) doesPass(storedObject storedObject) bool {
@@ -311,6 +364,7 @@ func parseISO8601(s string, chooseEarliest bool) (time.Time, error) {
 
 	// list of ISO-8601 Go-lang formats in descending order of completeness
 	formats := []string{
+		azfile.ISO8601,              // Support AzFile's more accurate format
 		"2006-01-02T15:04:05Z07:00", // equal to time.RFC3339, which in Go parsing is basically "ISO 8601 with nothing optional"
 		"2006-01-02T15:04:05",       // no timezone
 		"2006-01-02T15:04",          // no seconds

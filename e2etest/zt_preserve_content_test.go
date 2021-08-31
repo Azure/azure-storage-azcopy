@@ -32,62 +32,40 @@ import (
 
 func TestContent_AtBlobStorage(t *testing.T) {
 
-	RunScenarios(
-		t,
-		eOperation.Copy(), // Sync doesn't support the command-line metadata flag
-		eTestFromTo.Other(common.EFromTo.LocalBlob()),
-		eValidate.AutoPlusContent(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "4M",
+		shouldTransfer: []interface{}{
+			folder(""), // root folder
+			f("filea"),
 		},
-		nil,
-		testFiles{
-			defaultSize: "4M",
-			shouldTransfer: []interface{}{
-				folder(""), // root folder
-				f("filea"),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 func TestContent_AtFileShare(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.Copy(), // Sync doesn't support the command-line metadata flag
-		eTestFromTo.Other(common.EFromTo.LocalFile()),
-		eValidate.AutoPlusContent(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalFile()), eValidate.AutoPlusContent(), params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "4M",
+		shouldTransfer: []interface{}{
+			folder(""), // root folder
+			folder("folder1"),
+			f("folder1/filea"),
 		},
-		nil,
-		testFiles{
-			defaultSize: "4M",
-			shouldTransfer: []interface{}{
-				folder(""), // root folder
-				folder("folder1"),
-				f("folder1/filea"),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 func TestContent_BlobToBlob(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.Copy(), // Sync doesn't support the command-line metadata flag
-		// eTestFromTo.Other(common.EFromTo.BlobBlob()),
-		eTestFromTo.Other(common.EFromTo.BlobBlob()),
-		eValidate.AutoPlusContent(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "8M",
+		shouldTransfer: []interface{}{
+			folder(""), // root folder
+			f("filea"),
 		},
-		nil,
-		testFiles{
-			defaultSize: "8M",
-			shouldTransfer: []interface{}{
-				folder(""), // root folder
-				f("filea"),
-			},
-		})
+	}, EAccountType.Standard())
 }
 
 //func TestChange_ValidateFileContentAtRemote(t *testing.T) {

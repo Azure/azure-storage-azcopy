@@ -3,11 +3,12 @@ package azbfs
 import (
 	"context"
 	"encoding/base64"
+	"errors"
+	"io"
+	"net/http"
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"io"
-	"net/http"
 )
 
 // A FileURL represents a URL to an Azure Storage file.
@@ -24,6 +25,14 @@ type BlobFSHTTPHeaders struct {
 	ContentLanguage    string
 	ContentDisposition string
 	CacheControl       string
+}
+
+// BlobFSAccessControl represents the set of custom headers available for defining access conditions for the content.
+type BlobFSAccessControl struct {
+	Owner 		string
+	Group 		string
+	ACL   		string // Combining ACL & Permissions = invalid for SetAccessControl.
+	Permissions string
 }
 
 // NewFileURL creates a FileURL object using the specified URL and request policy pipeline.
@@ -197,4 +206,42 @@ func (f FileURL) FlushData(ctx context.Context, fileSize int64, contentMd5 []byt
 		&headers.CacheControl, &headers.ContentType, &headers.ContentDisposition, &headers.ContentEncoding, &headers.ContentLanguage,
 		md5InBase64, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil, &overrideHttpVerb, nil, nil, nil, nil)
+}
+
+func (f FileURL) GetAccessControl(ctx context.Context) (BlobFSAccessControl, error) {
+	resp, err := f.fileClient.GetProperties(ctx, f.fileSystemName, f.path, PathGetPropertiesActionGetAccessControl, nil,
+		nil, nil, nil,
+		nil, nil, nil, nil, nil)
+
+	if err != nil {
+		return BlobFSAccessControl{}, err
+	}
+
+	return BlobFSAccessControl{resp.XMsOwner(), resp.XMsGroup(), resp.XMsACL(), resp.XMsPermissions()}, nil
+}
+
+func (f FileURL) SetAccessControl(ctx context.Context, permissions BlobFSAccessControl) (*PathUpdateResponse, error) {
+	// TODO: the go http client has a problem with PATCH and content-length header
+	//       we should investigate and report the issue
+	// See similar todo, with larger comments, in AppendData
+	overrideHttpVerb := "PATCH"
+
+	if permissions.ACL != "" && permissions.Permissions != "" {
+		return nil, errors.New("specifying both Permissions and ACL conflicts for SetAccessControl")
+	}
+
+	var perms, acl *string
+	if permissions.Permissions != "" {
+		perms = &permissions.Permissions
+	} else {
+		acl = &permissions.ACL
+	}
+
+	// This does not yet have support for recursive updates. But then again, we don't really need it.
+	return f.fileClient.Update(ctx, PathUpdateActionSetAccessControl, f.fileSystemName, f.path,
+		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
+		nil, nil, &permissions.Owner, &permissions.Group, perms, acl,
+		nil, nil, nil, nil, &overrideHttpVerb,
+		nil, nil, nil, nil)
 }

@@ -49,6 +49,7 @@ type with struct {
 	creationTime       time.Time
 	smbAttributes      uint32
 	smbPermissionsSddl string
+	adlsPermissionsACL string
 	cpkByName          string
 	cpkByValue         bool
 }
@@ -137,6 +138,10 @@ func (w with) createObjectProperties() *objectProperties {
 	if w.smbPermissionsSddl != "" {
 		populated = true
 		result.smbPermissionsSddl = &w.smbPermissionsSddl
+	}
+	if w.adlsPermissionsACL != "" {
+		populated = true
+		result.adlsPermissionsACL = &w.adlsPermissionsACL
 	}
 
 	if w.cpkByName != "" {

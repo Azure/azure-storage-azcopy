@@ -22,17 +22,18 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"net/url"
-	"os"
-	"path"
-
-	"github.com/Azure/azure-storage-file-go/azfile"
-
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
+	"net/url"
+	"os"
+	"path"
+	"runtime"
+	"strings"
 )
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
@@ -55,7 +56,7 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
 		ForceIfReadOnly:                cca.forceIfReadOnly,
 		LogLevel:                       cca.logVerbosity,
-		PreserveSMBPermissions:         cca.preserveSMBPermissions,
+		PreserveSMBPermissions:         cca.preservePermissions,
 		PreserveSMBInfo:                cca.preserveSMBInfo,
 		S2SSourceChangeValidation:      true,
 		DestLengthValidation:           true,
@@ -71,7 +72,7 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
 	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.source, cca.destination,
-		reportFirstPart, reportFinalPart, cca.preserveAccessTier)
+		reportFirstPart, reportFinalPart, cca.preserveAccessTier, cca.dryrunMode)
 }
 
 // base for delete processors targeting different resources
@@ -95,6 +96,27 @@ type interactiveDeleteProcessor struct {
 
 	// count the deletions that happened
 	incrementDeletionCount func()
+
+	//dryrunMode
+	dryrunMode bool
+}
+
+func newDeleteTransfer(object storedObject) (newDeleteTransfer common.CopyTransfer) {
+	return common.CopyTransfer{
+		Source:             object.relativePath,
+		EntityType:         object.entityType,
+		LastModifiedTime:   object.lastModifiedTime,
+		SourceSize:         object.size,
+		ContentType:        object.contentType,
+		ContentEncoding:    object.contentEncoding,
+		ContentDisposition: object.contentDisposition,
+		ContentLanguage:    object.contentLanguage,
+		CacheControl:       object.cacheControl,
+		Metadata:           object.Metadata,
+		BlobType:           object.blobType,
+		BlobVersionID:      object.blobVersionID,
+		BlobTags:           object.blobTags,
+	}
 }
 
 func (d *interactiveDeleteProcessor) removeImmediately(object storedObject) (err error) {
@@ -103,6 +125,30 @@ func (d *interactiveDeleteProcessor) removeImmediately(object storedObject) (err
 	}
 
 	if !d.shouldDelete {
+		return nil
+	}
+
+	if d.dryrunMode {
+		glcm.Dryrun(func(format common.OutputFormat) string {
+			if format == common.EOutputFormat.Json() {
+				jsonOutput, err := json.Marshal(newDeleteTransfer(object))
+				common.PanicIfErr(err)
+				return string(jsonOutput)
+			} else { // remove for sync
+				if d.objectTypeToDisplay == "local file" { //removing from local src
+					dryrunValue := fmt.Sprintf("DRYRUN: remove %v", common.ToShortPath(d.objectLocationToDisplay))
+					if runtime.GOOS == "windows" {
+						dryrunValue += "\\" + strings.ReplaceAll(object.relativePath, "/", "\\")
+					} else { //linux and mac
+						dryrunValue += "/" + object.relativePath
+					}
+					return dryrunValue
+				}
+				return fmt.Sprintf("DRYRUN: remove %v/%v",
+					d.objectLocationToDisplay,
+					object.relativePath)
+			}
+		})
 		return nil
 	}
 
@@ -152,7 +198,7 @@ func (d *interactiveDeleteProcessor) promptForConfirmation(object storedObject) 
 }
 
 func newInteractiveDeleteProcessor(deleter objectProcessor, deleteDestination common.DeleteDestination,
-	objectTypeToDisplay string, objectLocationToDisplay common.ResourceString, incrementDeletionCounter func()) *interactiveDeleteProcessor {
+	objectTypeToDisplay string, objectLocationToDisplay common.ResourceString, incrementDeletionCounter func(), dryrun bool) *interactiveDeleteProcessor {
 
 	return &interactiveDeleteProcessor{
 		deleter:                 deleter,
@@ -161,12 +207,13 @@ func newInteractiveDeleteProcessor(deleter objectProcessor, deleteDestination co
 		incrementDeletionCount:  incrementDeletionCounter,
 		shouldPromptUser:        deleteDestination == common.EDeleteDestination.Prompt(),
 		shouldDelete:            deleteDestination == common.EDeleteDestination.True(), // if shouldPromptUser is true, this will start as false, but we will determine its value later
+		dryrunMode:              dryrun,
 	}
 }
 
 func newSyncLocalDeleteProcessor(cca *cookedSyncCmdArgs) *interactiveDeleteProcessor {
 	localDeleter := localFileDeleter{rootPath: cca.destination.ValueLocal()}
-	return newInteractiveDeleteProcessor(localDeleter.deleteFile, cca.deleteDestination, "local file", cca.destination, cca.incrementDeletionCount)
+	return newInteractiveDeleteProcessor(localDeleter.deleteFile, cca.deleteDestination, "local file", cca.destination, cca.incrementDeletionCount, cca.dryrunMode)
 }
 
 type localFileDeleter struct {
@@ -214,7 +261,7 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor
 	}
 
 	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, p, ctx, cca.fromTo.To()).delete,
-		cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount), nil
+		cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount, cca.dryrunMode), nil
 }
 
 type remoteResourceDeleter struct {

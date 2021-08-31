@@ -74,3 +74,11 @@ func (s FileSystemURL) Delete(ctx context.Context) (*FilesystemDeleteResponse, e
 func (s FileSystemURL) GetProperties(ctx context.Context) (*FilesystemGetPropertiesResponse, error) {
 	return s.fileSystemClient.GetProperties(ctx, s.name, nil, nil, nil)
 }
+
+func (s FileSystemURL) GetAccessControl(ctx context.Context) (BlobFSAccessControl, error) {
+	return s.NewRootDirectoryURL().GetAccessControl(ctx)
+}
+
+func (s FileSystemURL) SetAccessControl(ctx context.Context, permissions BlobFSAccessControl) (*PathUpdateResponse, error) {
+	return s.NewRootDirectoryURL().SetAccessControl(ctx, permissions)
+}

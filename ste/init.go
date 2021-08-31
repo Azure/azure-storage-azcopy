@@ -35,12 +35,15 @@ import (
 )
 
 var steCtx = context.Background()
+// debug knob
+var DebugSkipFiles = make(map[string]bool)
 
 const EMPTY_SAS_STRING = ""
 
 type azCopyConfig struct {
 	MIMETypeMapping map[string]string
 }
+
 // round api rounds up the float number after the decimal point.
 func round(num float64) int {
 	return int(num + math.Copysign(0.5, num))
@@ -75,7 +78,6 @@ func MainSTE(concurrency ConcurrencySettings, targetRateInMegaBitsPerSec float64
 
 		environmentMimeMap = config.MIMETypeMapping
 	}
-
 
 	deserialize := func(request *http.Request, v interface{}) {
 		// TODO: Check the HTTP verb here?
@@ -378,6 +380,11 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 
 		jpp0.SetJobStatus(common.EJobStatus.InProgress())
 
+		// Jank, force the jstm to recognize that it's also in progress
+		summaryResp := jm.ListJobSummary()
+		summaryResp.JobStatus = common.EJobStatus.InProgress()
+		jm.ResurrectSummary(summaryResp)
+
 		if jm.ShouldLog(pipeline.LogInfo) {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v resumed", req.JobID))
 		}
@@ -540,6 +547,7 @@ func resurrectJobSummary(jm IJobMgr) common.ListJobSummaryResponse {
 			// check for all completed transfer to calculate the progress percentage at the end
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.NotStarted(),
+				common.ETransferStatus.FolderCreated(),
 				common.ETransferStatus.Started():
 				js.TotalBytesExpected += uint64(jppt.SourceSize)
 			case common.ETransferStatus.Success():

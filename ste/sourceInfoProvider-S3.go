@@ -23,6 +23,7 @@ package ste
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -39,6 +40,7 @@ type s3SourceInfoProvider struct {
 
 	s3Client  *minio.Client
 	s3URLPart common.S3URLParts
+	credType  common.CredentialType
 }
 
 // By default presign expires after 7 days, which is considered enough for large amounts of files transfer.
@@ -61,10 +63,15 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 		return nil, err
 	}
 
+	if os.Getenv("AWS_ACCESS_KEY_ID") == "" && os.Getenv("AWS_SECRET_ACCESS_KEY") == "" {
+		p.credType = common.ECredentialType.S3PublicBucket()
+	} else {
+		p.credType = common.ECredentialType.S3AccessKey()
+	}
 	p.s3Client, err = s3ClientFactory.GetS3Client(
 		p.jptm.Context(),
 		common.CredentialInfo{
-			CredentialType: common.ECredentialType.S3AccessKey(),
+			CredentialType: p.credType,
 			S3CredentialInfo: common.S3CredentialInfo{
 				Endpoint: p.s3URLPart.Endpoint,
 				Region:   p.s3URLPart.Region,
@@ -83,6 +90,9 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 }
 
 func (p *s3SourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
+	if p.credType == common.ECredentialType.S3PublicBucket() {
+		return p.rawSourceURL, nil
+	}
 	return p.s3Client.PresignedGetObject(p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, defaultPresignExpires, url.Values{})
 }
 

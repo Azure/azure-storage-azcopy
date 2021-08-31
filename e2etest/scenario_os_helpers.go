@@ -51,3 +51,7 @@ func (osScenarioHelper) getFileSDDLString(c asserter, filepath string) *string {
 	ret := ""
 	return &ret
 }
+
+func (osScenarioHelper) setFileSDDLString(c asserter, filepath string, sddldata string) {
+	panic("should never be called")
+}

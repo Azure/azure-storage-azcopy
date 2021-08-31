@@ -30,13 +30,14 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 )
 
 // E.g. if we have enumerationSuite/TestFooBar/Copy-LocalBlob the scenario is "Copy-LocalBlob"
 // A scenario is treated as a sub-test by our declarative test runner
 type scenario struct {
-
 	// scenario config properties
+	accountType         AccountType
 	subtestName         string
 	compactScenarioName string
 	fullScenarioName    string
@@ -89,8 +90,15 @@ func (s *scenario) Run() {
 
 	// resume if needed
 	if s.needResume {
-		// TODO: create a method something like runAzCopy, but which does a resume, based on the job id returned inside runAzCopy
-		s.a.Error("Resume support is not built yet")
+		tx, err := s.state.result.GetTransferList(common.ETransferStatus.Cancelled())
+		s.a.AssertNoErr(err, "Failed to get transfer list for Cancelled")
+		s.a.Assert(len(tx), equals(), len(s.p.debugSkipFiles), "Job cancel didn't completely work")
+
+		if !s.runHook(s.hs.beforeResumeHook) {
+			return
+		}
+
+		s.resumeAzCopy()
 	}
 	if s.a.Failed() {
 		return // resume failed. No point in running validation
@@ -128,11 +136,11 @@ func (s *scenario) assignSourceAndDest() {
 		case common.ELocation.Local():
 			return &resourceLocal{}
 		case common.ELocation.File():
-			return &resourceAzureFileShare{accountType: EAccountType.Standard()}
+			return &resourceAzureFileShare{accountType: s.accountType}
 		case common.ELocation.Blob():
 			// TODO: handle the multi-container (whole account) scenario
 			// TODO: handle wider variety of account types
-			return &resourceBlobContainer{accountType: EAccountType.Standard()}
+			return &resourceBlobContainer{accountType: s.accountType}
 		case common.ELocation.BlobFS():
 			s.a.Error("Not implementd yet for blob FS")
 			return &resourceDummy{}
@@ -183,6 +191,46 @@ func (s *scenario) runAzCopy() {
 
 	s.state.result = &result
 }
+
+func (s *scenario) resumeAzCopy() {
+	s.chToStdin = make(chan string) // unubuffered seems the most predictable for our usages
+	defer close(s.chToStdin)
+
+	r := newTestRunner()
+	if sas := s.state.source.getSAS(); sas != "" {
+		r.flags["source-sas"] = sas
+	}
+	if sas := s.state.dest.getSAS(); sas != "" {
+		r.flags["destination-sas"] = sas
+	}
+
+	// use the general-purpose "after start" mechanism, provided by execDebuggableWithOutput,
+	// for the _specific_ purpose of running beforeOpenFirstFile, if that hook exists.
+	afterStart := func() string { return "" }
+	if s.hs.beforeOpenFirstFile != nil {
+		r.SetAwaitOpenFlag() // tell AzCopy to wait for "open" on stdin before opening any files
+		afterStart = func() string {
+			time.Sleep(2 * time.Second) // give AzCopy a moment to initialize it's monitoring of stdin
+			s.hs.beforeOpenFirstFile(s)
+			return "open" // send open to AzCopy's stdin
+		}
+	}
+
+	result, wasClean, err := r.ExecuteAzCopyCommand(
+		eOperation.Resume(),
+		s.state.result.jobID.String(),
+		"",
+		afterStart,
+		s.chToStdin,
+	)
+
+	if !wasClean {
+		s.a.AssertNoErr(err, "running AzCopy")
+	}
+
+	s.state.result = &result
+}
+
 func (s *scenario) validateRemove() {
 	removedFiles := s.fs.toTestObjects(s.fs.shouldTransfer, false)
 	props := s.state.source.getAllProperties(s.a)
@@ -309,11 +357,25 @@ func (s *scenario) validateProperties() {
 		s.validateLastWriteTime(expected.lastWriteTime, actual.lastWriteTime)
 		s.validateCPKByScope(expected.cpkScopeInfo, actual.cpkScopeInfo)
 		s.validateCPKByValue(expected.cpkInfo, actual.cpkInfo)
+		s.validateADLSACLs(expected.adlsPermissionsACL, actual.adlsPermissionsACL)
 		if expected.smbPermissionsSddl != nil {
-			s.a.Error("validateProperties does not yet support the properties you are using")
-			// TODO: nakulkar-msft it will be necessary to validate all of these
+			if actual.smbPermissionsSddl == nil {
+				s.a.Error("Expected a SDDL on file " + destName + ", but none was found")
+			} else {
+				s.validateSMBPermissionsByValue(*expected.smbPermissionsSddl, *actual.smbPermissionsSddl, destName)
+			}
 		}
 	}
+}
+
+func (s *scenario) validateSMBPermissionsByValue(expected, actual string, objName string) {
+	expectedSDDL, err := sddl.ParseSDDL(expected)
+	s.a.AssertNoErr(err)
+
+	actualSDDL, err := sddl.ParseSDDL(actual)
+	s.a.AssertNoErr(err)
+
+	s.a.Assert(actualSDDL.PortableString(), equals(), expectedSDDL.PortableString(), "On object " + objName)
 }
 
 func (s *scenario) validateContent() {
@@ -356,6 +418,18 @@ func (s *scenario) validateMetadata(expected, actual map[string]string) {
 			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("Expect value for key '%s' to be '%s' but found '%s'", key, exValue, actualValue))
 		}
 	}
+}
+
+func (s *scenario) validateADLSACLs(expected, actual *string) {
+	if expected == nil && actual == nil {
+		return
+	}
+	if expected == nil || actual == nil {
+		s.a.Failed()
+		return
+	}
+
+	s.a.Assert(expected, equals(), actual, fmt.Sprintf("Expected Gen 2 ACL: %s but found: %s", *expected, *actual))
 }
 
 func (s *scenario) validateCPKByScope(expected, actual *common.CpkScopeInfo) {
@@ -490,12 +564,25 @@ func (s *scenario) GetTestFiles() testFiles {
 	return s.fs
 }
 
-func (s *scenario) CreateFiles(fs testFiles, atSource bool) {
+func (s *scenario) CreateFiles(fs testFiles, atSource bool, setTestFiles bool, createSourceFilesAtDest bool) {
+	original := s.fs
 	s.fs = fs
 	if atSource {
 		s.state.source.createFiles(s.a, s, true)
 	} else {
-		s.state.dest.createFiles(s.a, s, false)
+		s.state.dest.createFiles(s.a, s, createSourceFilesAtDest)
+	}
+
+	if !setTestFiles {
+		s.fs = original
+	}
+}
+
+func (s *scenario) CreateFile(f *testObject, atSource bool) {
+	if atSource {
+		s.state.source.createFile(s.a, f, s, atSource)
+	} else {
+		s.state.dest.createFile(s.a, f, s, atSource)
 	}
 }
 
