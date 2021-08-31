@@ -43,7 +43,7 @@ type pacer interface {
 	Close() error
 }
 
-type pacerAdmin interface {
+type PacerAdmin interface {
 	pacer
 
 	// GetTotalTraffic returns the cumulative count of all traffic that has been processed
@@ -72,7 +72,7 @@ type tokenBucketPacer struct {
 	done                       chan struct{}
 }
 
-func newTokenBucketPacer(bytesPerSecond int64, expectedBytesPerCoarseRequest int64) *tokenBucketPacer {
+func NewTokenBucketPacer(bytesPerSecond int64, expectedBytesPerCoarseRequest int64) *tokenBucketPacer {
 	p := &tokenBucketPacer{atomicTokenBucket: bytesPerSecond / 4, // seed it immediately with part-of-a-second's worth, to avoid a sluggish start
 		atomicTargetBytesPerSecond: bytesPerSecond,
 		expectedBytesPerRequest:    int64(expectedBytesPerCoarseRequest),

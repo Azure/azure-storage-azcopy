@@ -22,6 +22,8 @@ import (
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
+// debug knob
+var DebugSkipFiles = make(map[string]bool)
 
 type IJobPartMgr interface {
 	Plan() *JobPartPlanHeader
@@ -155,7 +157,7 @@ func newAzcopyHTTPClientFactory(pipelineHTTPClient *http.Client) pipeline.Factor
 }
 
 // NewBlobPipeline creates a Pipeline using the specified credentials and options.
-func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client, statsAcc *pipelineNetworkStats) pipeline.Pipeline {
+func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -180,7 +182,7 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 
 // NewBlobFSPipeline creates a pipeline for transfers to and from BlobFS Service
 // The blobFS operations currently in azcopy are supported by SharedKey Credentials
-func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client, statsAcc *pipelineNetworkStats) pipeline.Pipeline {
+func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -206,7 +208,7 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 }
 
 // NewFilePipeline creates a Pipeline using the specified credentials and options.
-func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client, statsAcc *pipelineNetworkStats) pipeline.Pipeline {
+func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -467,7 +469,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			}
 		}
 		// ===== TEST KNOB
-		JobsAdmin.(*jobsAdmin).ScheduleTransfer(jpm.priority, jptm)
+		jpm.jobMgr.ScheduleTransfer(jpm.priority, jptm)
 
 		// This sets the atomic variable atomicAllTransfersScheduled to 1
 		// atomicAllTransfersScheduled variables is used in case of resume job
@@ -484,11 +486,11 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 }
 
 func (jpm *jobPartMgr) ScheduleChunks(chunkFunc chunkFunc) {
-	JobsAdmin.ScheduleChunk(jpm.priority, chunkFunc)
+	jpm.jobMgr.ScheduleChunk(jpm.priority, chunkFunc)
 }
 
 func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
-	JobsAdmin.(*jobsAdmin).ScheduleTransfer(jpm.priority, jptm)
+	jpm.jobMgr.ScheduleTransfer(jpm.priority, jptm)
 }
 
 func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
@@ -497,7 +499,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	}
 
 	fromTo := jpm.planMMF.Plan().FromTo
-	credInfo := jpm.jobMgr.getInMemoryTransitJobState().credentialInfo
+	credInfo := jpm.jobMgr.getInMemoryTransitJobState().CredentialInfo
 	userAgent := common.UserAgent
 	if fromTo.From() == common.ELocation.S3() {
 		userAgent = common.S3ImportUserAgent
@@ -523,7 +525,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 		RetryDelay:    UploadRetryDelay,
 		MaxRetryDelay: UploadMaxRetryDelay}
 
-	var statsAccForSip *pipelineNetworkStats = nil // we don't accumulate stats on the source info provider
+	var statsAccForSip *PipelineNetworkStats = nil // we don't accumulate stats on the source info provider
 
 	// Create source info provider's pipeline for S2S copy.
 	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() {
@@ -703,7 +705,7 @@ func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byt
 	}, jpm.metadata, jpm.blobTags, jpm.cpkOptions
 }
 
-var environmentMimeMap map[string]string
+var EnvironmentMimeMap map[string]string
 
 // TODO do we want these charset=utf-8?
 var builtinTypes = map[string]string{
@@ -726,7 +728,7 @@ var builtinTypes = map[string]string{
 func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []byte) string {
 	fileExtension := filepath.Ext(fullFilePath)
 
-	if contentType, ok := environmentMimeMap[strings.ToLower(fileExtension)]; ok {
+	if contentType, ok := EnvironmentMimeMap[strings.ToLower(fileExtension)]; ok {
 		return contentType
 	}
 	// short-circuit for common static website files
