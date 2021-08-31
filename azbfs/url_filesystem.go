@@ -75,6 +75,11 @@ func (s FileSystemURL) GetProperties(ctx context.Context) (*FilesystemGetPropert
 	return s.fileSystemClient.GetProperties(ctx, s.name, nil, nil, nil)
 }
 
+// ListPaths returns a list of paths in the file system.
+func (s FileSystemURL) ListPaths(ctx context.Context, options ListPathsFilesystemOptions) (*PathList, error) {
+	return s.fileSystemClient.ListPaths(ctx, options.Recursive, s.name, options.Path, options.ContinuationToken,
+		options.MaxResults, options.UpnReturned, nil, nil, nil)
+}
 func (s FileSystemURL) GetAccessControl(ctx context.Context) (BlobFSAccessControl, error) {
 	return s.NewRootDirectoryURL().GetAccessControl(ctx)
 }

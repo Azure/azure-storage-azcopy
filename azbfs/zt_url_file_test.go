@@ -114,6 +114,38 @@ func (s *FileURLSuite) TestFileCreateDeleteNonExistingParent(c *chk.C) {
 	c.Assert(dirResp.StatusCode(), chk.Equals, http.StatusOK)
 }
 
+func (s *FileURLSuite) TestFileCreateWithMetadataDelete(c *chk.C) {
+	fsu := getBfsServiceURL()
+	fsURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fsURL)
+
+	file, _ := getFileURLFromFileSystem(c, fsURL)
+
+	metadata := make(map[string]string)
+	metadata["foo"] = "bar"
+
+	cResp, err := file.CreateWithOptions(context.Background(), azbfs.CreateFileOptions{Metadata: metadata})
+	c.Assert(err, chk.IsNil)
+	c.Assert(cResp.Response().StatusCode, chk.Equals, http.StatusCreated)
+	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
+	c.Assert(cResp.LastModified(), chk.Not(chk.Equals), "")
+	c.Assert(cResp.XMsRequestID(), chk.Not(chk.Equals), "")
+	c.Assert(cResp.XMsVersion(), chk.Not(chk.Equals), "")
+	c.Assert(cResp.Date(), chk.Not(chk.Equals), "")
+
+	getResp, err := file.GetProperties(context.Background())
+	c.Assert(err, chk.IsNil)
+	c.Assert(getResp.Response().StatusCode, chk.Equals, http.StatusOK)
+	c.Assert(getResp.XMsProperties(), chk.Not(chk.Equals), "") // Check metadata returned is not null.
+
+	delResp, err := file.Delete(context.Background())
+	c.Assert(err, chk.IsNil)
+	c.Assert(delResp.Response().StatusCode, chk.Equals, http.StatusOK)
+	c.Assert(delResp.XMsRequestID(), chk.Not(chk.Equals), "")
+	c.Assert(delResp.XMsVersion(), chk.Not(chk.Equals), "")
+	c.Assert(delResp.Date(), chk.Not(chk.Equals), "")
+}
+
 func (s *FileURLSuite) TestFileGetProperties(c *chk.C) {
 	fsu := getBfsServiceURL()
 	fileSystemURL, _ := createNewFileSystem(c, fsu)
@@ -333,4 +365,27 @@ func (s *FileURLSuite) TestBlobURLPartsSASQueryTimes(c *chk.C) {
 		c.Log(urlString)
 		c.Assert(uResult.String(), chk.Equals, urlString)
 	}
+}
+
+func (s *FileURLSuite) TestRenameFile(c *chk.C) {
+	fsu := getBfsServiceURL()
+	fileSystemURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fileSystemURL)
+
+	fileURL, fileName := createNewFileFromFileSystem(c, fileSystemURL)
+	fileRename := fileName + "rename"
+
+	renamedFileURL, err := fileURL.Rename(context.Background(), azbfs.RenameFileOptions{DestinationPath: fileRename})
+	c.Assert(renamedFileURL, chk.NotNil)
+	c.Assert(err, chk.IsNil)
+
+	// Check that the old file does not exist
+	getPropertiesResp, err := fileURL.GetProperties(context.Background())
+	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	c.Assert(getPropertiesResp, chk.IsNil)
+
+	// Check that the renamed file does exist
+	getPropertiesResp, err = renamedFileURL.GetProperties(context.Background())
+	c.Assert(getPropertiesResp.StatusCode(), chk.Equals, http.StatusOK)
+	c.Assert(err, chk.IsNil)
 }
