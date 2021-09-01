@@ -146,8 +146,8 @@ func NewConcurrencySettings(maxFileAndSocketHandles int, requestAutoTuneGRs bool
 		InitialMainPoolSize:        initialMainPoolSize,
 		MaxMainPoolSize:            maxMainPoolSize,
 		TransferInitiationPoolSize: getTransferInitiationPoolSize(),
-		EnumerationPoolSize:        getEnumerationPoolSize(),
-		ParallelStatFiles:          getParallelStatFiles(),
+		EnumerationPoolSize:        GetEnumerationPoolSize(),
+		ParallelStatFiles:          GetParallelStatFiles(),
 		CheckCpuWhenTuning:         getCheckCpuUsageWhenTuning(),
 	}
 
@@ -230,7 +230,7 @@ func getTransferInitiationPoolSize() *ConfiguredInt {
 	return &ConfiguredInt{defaultTransferInitiationPoolSize, false, envVar.Name, "hard-coded default"}
 }
 
-func getEnumerationPoolSize() *ConfiguredInt {
+func GetEnumerationPoolSize() *ConfiguredInt {
 	envVar := common.EEnvironmentVariable.EnumerationPoolSize()
 
 	if c := tryNewConfiguredInt(envVar); c != nil {
@@ -241,7 +241,7 @@ func getEnumerationPoolSize() *ConfiguredInt {
 
 }
 
-func getParallelStatFiles() *ConfiguredBool {
+func GetParallelStatFiles() *ConfiguredBool {
 	envVar := common.EEnvironmentVariable.ParallelStatFiles()
 	if c := tryNewConfiguredBool(envVar); c != nil {
 		return c

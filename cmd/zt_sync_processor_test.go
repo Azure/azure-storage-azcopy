@@ -55,7 +55,7 @@ func (s *syncProcessorSuite) TestLocalDeleter(c *chk.C) {
 	c.Assert(err, chk.IsNil)
 
 	// exercise the deleter
-	err = deleter.removeImmediately(storedObject{relativePath: dstFileName})
+	err = deleter.removeImmediately(StoredObject{relativePath: dstFileName})
 	c.Assert(err, chk.IsNil)
 
 	// validate that the file no longer exists
@@ -91,7 +91,7 @@ func (s *syncProcessorSuite) TestBlobDeleter(c *chk.C) {
 	c.Assert(err, chk.IsNil)
 
 	// exercise the deleter
-	err = deleter.removeImmediately(storedObject{relativePath: blobName})
+	err = deleter.removeImmediately(StoredObject{relativePath: blobName})
 	c.Assert(err, chk.IsNil)
 
 	// validate that the blob was deleted
@@ -127,7 +127,7 @@ func (s *syncProcessorSuite) TestFileDeleter(c *chk.C) {
 	c.Assert(err, chk.IsNil)
 
 	// exercise the deleter
-	err = deleter.removeImmediately(storedObject{relativePath: fileName})
+	err = deleter.removeImmediately(StoredObject{relativePath: fileName})
 	c.Assert(err, chk.IsNil)
 
 	// validate that the file was deleted

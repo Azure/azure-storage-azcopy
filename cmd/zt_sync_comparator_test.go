@@ -39,11 +39,11 @@ func (s *syncComparatorSuite) TestSyncSourceComparator(c *chk.C) {
 	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process, false)
 
 	// create a sample destination object
-	sampleDestinationObject := storedObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now(), md5: destMD5}
+	sampleDestinationObject := StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now(), md5: destMD5}
 
 	// test the comparator in case a given source object is not present at the destination
 	// meaning no entry in the index, so the comparator should pass the given object to schedule a transfer
-	compareErr := sourceComparator.processIfNecessary(storedObject{name: "only_at_source", relativePath: "only_at_source", lastModifiedTime: time.Now(), md5: srcMD5})
+	compareErr := sourceComparator.processIfNecessary(StoredObject{name: "only_at_source", relativePath: "only_at_source", lastModifiedTime: time.Now(), md5: srcMD5})
 	c.Assert(compareErr, chk.Equals, nil)
 
 	// check the source object was indeed scheduled
@@ -57,7 +57,7 @@ func (s *syncComparatorSuite) TestSyncSourceComparator(c *chk.C) {
 	// and it has a later modified time, so the comparator should pass the give object to schedule a transfer
 	err := indexer.store(sampleDestinationObject)
 	c.Assert(err, chk.IsNil)
-	compareErr = sourceComparator.processIfNecessary(storedObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now().Add(time.Hour), md5: srcMD5})
+	compareErr = sourceComparator.processIfNecessary(StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now().Add(time.Hour), md5: srcMD5})
 	c.Assert(compareErr, chk.Equals, nil)
 
 	// check the source object was indeed scheduled
@@ -73,7 +73,7 @@ func (s *syncComparatorSuite) TestSyncSourceComparator(c *chk.C) {
 	// meaning that the source object is considered stale, so no transfer should be scheduled
 	err = indexer.store(sampleDestinationObject)
 	c.Assert(err, chk.IsNil)
-	compareErr = sourceComparator.processIfNecessary(storedObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now().Add(-time.Hour), md5: srcMD5})
+	compareErr = sourceComparator.processIfNecessary(StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now().Add(-time.Hour), md5: srcMD5})
 	c.Assert(compareErr, chk.Equals, nil)
 
 	// check no source object was scheduled
@@ -92,7 +92,7 @@ func (s *syncComparatorSuite) TestSyncSrcCompDisableComparator(c *chk.C) {
 
 	// test the comparator in case a given source object is not present at the destination
 	// meaning no entry in the index, so the comparator should pass the given object to schedule a transfer
-	compareErr := sourceComparator.processIfNecessary(storedObject{name: "only_at_source", relativePath: "only_at_source", lastModifiedTime: time.Now(), md5: srcMD5})
+	compareErr := sourceComparator.processIfNecessary(StoredObject{name: "only_at_source", relativePath: "only_at_source", lastModifiedTime: time.Now(), md5: srcMD5})
 	c.Assert(compareErr, chk.Equals, nil)
 
 	// check the source object was indeed scheduled
@@ -104,14 +104,14 @@ func (s *syncComparatorSuite) TestSyncSrcCompDisableComparator(c *chk.C) {
 
 	// create a sample source object
 	currTime := time.Now()
-	destinationStoredObjects := []storedObject{
+	destinationStoredObjects := []StoredObject{
 		// file whose last modified time is greater than that of source
 		{name: "test1", relativePath: "/usr/test1", lastModifiedTime: currTime, md5: destMD5},
 		// file whose last modified time is less than that of source
 		{name: "test2", relativePath: "/usr/test2", lastModifiedTime: currTime, md5: destMD5},
 	}
 
-	sourceStoredObjects := []storedObject{
+	sourceStoredObjects := []StoredObject{
 		{name: "test1", relativePath: "/usr/test1", lastModifiedTime: currTime.Add(time.Hour), md5: srcMD5},
 		{name: "test2", relativePath: "/usr/test2", lastModifiedTime: currTime.Add(-time.Hour), md5: srcMD5},
 	}
@@ -140,11 +140,11 @@ func (s *syncComparatorSuite) TestSyncDestinationComparator(c *chk.C) {
 	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, false)
 
 	// create a sample source object
-	sampleSourceObject := storedObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now(), md5: srcMD5}
+	sampleSourceObject := StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now(), md5: srcMD5}
 
 	// test the comparator in case a given destination object is not present at the source
 	// meaning it is an extra file that needs to be deleted, so the comparator should pass the given object to the destinationCleaner
-	compareErr := destinationComparator.processIfNecessary(storedObject{name: "only_at_dst", relativePath: "only_at_dst", lastModifiedTime: time.Now(), md5: destMD5})
+	compareErr := destinationComparator.processIfNecessary(StoredObject{name: "only_at_dst", relativePath: "only_at_dst", lastModifiedTime: time.Now(), md5: destMD5})
 	c.Assert(compareErr, chk.Equals, nil)
 
 	// verify that destination object is being deleted
@@ -161,7 +161,7 @@ func (s *syncComparatorSuite) TestSyncDestinationComparator(c *chk.C) {
 	// no transfer happens
 	err := indexer.store(sampleSourceObject)
 	c.Assert(err, chk.IsNil)
-	compareErr = destinationComparator.processIfNecessary(storedObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now().Add(time.Hour), md5: destMD5})
+	compareErr = destinationComparator.processIfNecessary(StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now().Add(time.Hour), md5: destMD5})
 	c.Assert(compareErr, chk.Equals, nil)
 
 	// verify that the source object is scheduled for transfer
@@ -177,7 +177,7 @@ func (s *syncComparatorSuite) TestSyncDestinationComparator(c *chk.C) {
 	// meaning that the source object should be transferred since the destination object is stale
 	err = indexer.store(sampleSourceObject)
 	c.Assert(err, chk.IsNil)
-	compareErr = destinationComparator.processIfNecessary(storedObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now().Add(-time.Hour), md5: destMD5})
+	compareErr = destinationComparator.processIfNecessary(StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now().Add(-time.Hour), md5: destMD5})
 	c.Assert(compareErr, chk.Equals, nil)
 
 	// verify that there's no transfer & no deletes
@@ -198,14 +198,14 @@ func (s *syncComparatorSuite) TestSyncDestCompDisableComparison(c *chk.C) {
 
 	// create a sample source object
 	currTime := time.Now()
-	sourceStoredObjects := []storedObject{
+	sourceStoredObjects := []StoredObject{
 		{name: "test1", relativePath: "/usr/test1", lastModifiedTime: currTime, md5: srcMD5},
 		{name: "test2", relativePath: "/usr/test2", lastModifiedTime: currTime, md5: srcMD5},
 	}
 
-	//onlyAtSrc := storedObject{name: "only_at_src", relativePath: "/usr/only_at_src", lastModifiedTime: currTime, md5: destMD5}
+	//onlyAtSrc := StoredObject{name: "only_at_src", relativePath: "/usr/only_at_src", lastModifiedTime: currTime, md5: destMD5}
 
-	destinationStoredObjects := []storedObject{
+	destinationStoredObjects := []StoredObject{
 		// file whose last modified time is greater than that of source
 		{name: "test1", relativePath: "/usr/test1", lastModifiedTime: time.Now().Add(time.Hour), md5: destMD5},
 		// file whose last modified time is less than that of source
@@ -214,7 +214,7 @@ func (s *syncComparatorSuite) TestSyncDestCompDisableComparison(c *chk.C) {
 
 	// test the comparator in case a given destination object is not present at the source
 	// meaning it is an extra file that needs to be deleted, so the comparator should pass the given object to the destinationCleaner
-	compareErr := destinationComparator.processIfNecessary(storedObject{name: "only_at_dst", relativePath: "only_at_dst", lastModifiedTime: currTime, md5: destMD5})
+	compareErr := destinationComparator.processIfNecessary(StoredObject{name: "only_at_dst", relativePath: "only_at_dst", lastModifiedTime: currTime, md5: destMD5})
 	c.Assert(compareErr, chk.Equals, nil)
 
 	// verify that destination object is being deleted
