@@ -12,7 +12,7 @@ pr:
 
 jobs:
   - job: Analysis
-    timeout: 120
+    timeoutInMinutes: 120
     strategy:
       matrix:
         Ubuntu-20:
