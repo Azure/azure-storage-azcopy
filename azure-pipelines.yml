@@ -29,8 +29,8 @@ jobs:
           whereis go
           cd $(go env GOPATH)/bin
           pwd
-          golangci-lint run --skip-dirs-use-default=true
-          golangci-lint --version
+          /home/vsts/go/bin/golangci-lint run --skip-dirs-use-default=true
+#          golangci-lint --version
         displayName: 'Golang CLI Lint'
 #        workingDirectory: '${{parameters.GoWorkspace}}'
 
