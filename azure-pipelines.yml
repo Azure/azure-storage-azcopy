@@ -25,12 +25,14 @@ jobs:
         inputs:
           version: '1.16'
       - script: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin ${{parameters.LintVersion}}
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin ${{parameters.1.42.0}}
           whereis go
+          cd $(go env GOPATH)/bin
+          pwd
           golangci-lint run --skip-dirs-use-default=true
           golangci-lint --version
         displayName: 'Golang CLI Lint'
-        workingDirectory: '${{parameters.GoWorkspace}}'
+#        workingDirectory: '${{parameters.GoWorkspace}}'
 
 #      - pwsh: |
 #          $modDirs = (./scripts/get_dirs.ps1 -serviceDir $(SCOPE))
