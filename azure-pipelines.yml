@@ -26,20 +26,23 @@ jobs:
           version: '1.16'
       - script: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin ${{parameters.LintVersion}}
+          whereis go
+          golangci-lint run --skip-dirs-use-default=true
           golangci-lint --version
-        displayName: 'Install GoLintCLI and dependencies.'
+        displayName: 'Golang CLI Lint'
         workingDirectory: '${{parameters.GoWorkspace}}'
 
-      - pwsh: |
-          $modDirs = (./scripts/get_dirs.ps1 -serviceDir $(SCOPE))
-          foreach ($md in $modDirs) {
-            pushd $md
-            Write-Host "##[command]Executing golangci-lint run --skip-dirs-use-default=true in $md"
-            golangci-lint run --skip-dirs-use-default=true
-          }
-        displayName: 'Lint'
-        failOnStderr: false
-        workingDirectory: '${{parameters.GoWorkspace}}'
+#      - pwsh: |
+#          $modDirs = (./scripts/get_dirs.ps1 -serviceDir $(SCOPE))
+#          foreach ($md in $modDirs) {
+#            pushd $md
+#            Write-Host "##[command]Executing golangci-lint run --skip-dirs-use-default=true in $md"
+#            whereis go
+#            golangci-lint run --skip-dirs-use-default=true
+#          }
+#        displayName: 'Lint'
+#        failOnStderr: false
+#        workingDirectory: '${{parameters.GoWorkspace}}'
 
   - job: Build
     timeoutInMinutes: 360
