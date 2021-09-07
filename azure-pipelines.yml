@@ -29,7 +29,7 @@ jobs:
           whereis go
           cd $(go env GOPATH)/bin
           pwd
-          /home/vsts/go/bin/golangci-lint run ./... --skip-dirs-use-default=true
+          /home/vsts/go/bin/golangci-lint run azbfs/ cmd/ common/ --skip-dirs-use-default=true
 #          golangci-lint --version
         displayName: 'Golang CLI Lint'
 #        workingDirectory: '${{parameters.GoWorkspace}}'
