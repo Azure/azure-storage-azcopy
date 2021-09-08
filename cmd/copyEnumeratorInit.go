@@ -404,7 +404,7 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []ObjectFilter {
 
 	// finally, log any search prefix computed from these
 	if jobsAdmin.JobsAdmin != nil {
-		if prefixFilter := filterSet(filters).GetEnumerationPreFilter(cca.recursive); prefixFilter != "" {
+		if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(cca.Recursive); prefixFilter != "" {
 			jobsAdmin.JobsAdmin.LogToJobLog("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, pipeline.LogInfo) // "May be used" because we don't know here which enumerators will use it
 		}
 	}
