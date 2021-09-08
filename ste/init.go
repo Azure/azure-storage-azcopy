@@ -27,9 +27,11 @@ import (
 	"io/ioutil"
 	"math"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -316,6 +318,42 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 			ErrorMsg:              fmt.Sprintf("JobID=%v, Part#=0 not found", req.JobID),
 		}
 	}
+
+	testSourceBlobPublic := func(sourceURI string) bool {
+		uri, err := url.Parse(sourceURI)
+		if err != nil {
+			// this should never, would never be hit.
+			// a job plan file couldn't be created by AzCopy with an invalid URI.
+			panic("Source URI was invalid.")
+		}
+
+		blobParts := azblob.NewBlobURLParts(*uri)
+
+		// only containers can be public access
+		if blobParts.ContainerName != "" {
+			if blobParts.BlobName != "" {
+				// first test that it's a blob
+				bURL := azblob.NewBlobURL(*uri, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
+				_, err := bURL.GetProperties(steCtx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+				if err == nil {
+					return true
+				}
+
+				// since that failed, maybe it doesn't exist and is public to list?
+				blobParts.BlobName = ""
+			}
+
+			cURL := azblob.NewContainerURL(blobParts.URL(), azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
+
+			_, err := cURL.ListBlobsFlatSegment(steCtx, azblob.Marker{}, azblob.ListBlobsSegmentOptions{})
+			if err == nil {
+				return true
+			}
+		}
+
+		return false
+	}
+
 	// If the credential type is is Anonymous, to resume the Job destinationSAS / sourceSAS needs to be provided
 	// Depending on the FromType, sourceSAS or destinationSAS is checked.
 	if req.CredentialInfo.CredentialType == common.ECredentialType.Anonymous() {
@@ -333,12 +371,29 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 			common.EFromTo.BlobTrash(),
 			common.EFromTo.FileTrash():
 			if len(req.SourceSAS) == 0 {
+				plan := jpm.Plan()
+				if plan.FromTo.From() == common.ELocation.Blob() {
+					src := string(plan.SourceRoot[:plan.SourceRootLength])
+					if testSourceBlobPublic(src) {
+						break
+					}
+				}
+
 				errorMsg = "The source-sas switch must be provided to resume the job"
 			}
 		case common.EFromTo.BlobBlob(),
 			common.EFromTo.FileBlob():
 			if len(req.SourceSAS) == 0 ||
 				len(req.DestinationSAS) == 0 {
+
+				plan := jpm.Plan()
+				if plan.FromTo.From() == common.ELocation.Blob() && len(req.DestinationSAS) != 0 {
+					src := string(plan.SourceRoot[:plan.SourceRootLength])
+					if testSourceBlobPublic(src) {
+						break
+					}
+				}
+
 				errorMsg = "Both the source-sas and destination-sas switches must be provided to resume the job"
 			}
 		}

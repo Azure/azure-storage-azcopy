@@ -31,6 +31,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // E.g. if we have enumerationSuite/TestFooBar/Copy-LocalBlob the scenario is "Copy-LocalBlob"
@@ -179,10 +180,12 @@ func (s *scenario) runAzCopy() {
 
 	// run AzCopy
 	const useSas = true // TODO: support other auth options (see params of RunTest)
+	tf := s.GetTestFiles()
+	var srcUseSas = tf.sourcePublic == azblob.PublicAccessNone
 	result, wasClean, err := r.ExecuteAzCopyCommand(
 		s.operation,
-		s.state.source.getParam(s.stripTopDir, useSas),
-		s.state.dest.getParam(false, useSas),
+		s.state.source.getParam(s.stripTopDir, srcUseSas, tf.objectTarget),
+		s.state.dest.getParam(false, useSas, tf.objectTarget),
 		afterStart, s.chToStdin)
 
 	if !wasClean {
@@ -197,7 +200,7 @@ func (s *scenario) resumeAzCopy() {
 	defer close(s.chToStdin)
 
 	r := newTestRunner()
-	if sas := s.state.source.getSAS(); sas != "" {
+	if sas := s.state.source.getSAS(); s.GetTestFiles().sourcePublic == azblob.PublicAccessNone && sas != "" {
 		r.flags["source-sas"] = sas
 	}
 	if sas := s.state.dest.getSAS(); sas != "" {
@@ -278,8 +281,8 @@ func (s *scenario) validateTransferStates() {
 }
 
 func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFolders bool, expectedRootFolder bool, addedDirAtDest string) {
-	srcRoot = s.state.source.getParam(false, false)
-	dstRoot = s.state.dest.getParam(false, false)
+	srcRoot = s.state.source.getParam(false, false, "")
+	dstRoot = s.state.dest.getParam(false, false, "")
 
 	// do we expect folder transfers
 	expectFolders = s.fromTo.From().IsFolderAware() &&
@@ -297,10 +300,14 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 		// of that kind.
 		expectRootFolder = false
 	} else if s.fromTo.From().IsLocal() {
-		addedDirAtDest = filepath.Base(srcRoot)
+		if s.GetTestFiles().objectTarget == "" {
+			addedDirAtDest = filepath.Base(srcRoot)
+		}
 		dstRoot = fmt.Sprintf("%s%c%s", dstRoot, os.PathSeparator, addedDirAtDest)
 	} else {
-		addedDirAtDest = path.Base(srcRoot)
+		if s.GetTestFiles().objectTarget == "" {
+			addedDirAtDest = path.Base(srcRoot)
+		}
 		dstRoot = fmt.Sprintf("%s/%s", dstRoot, addedDirAtDest)
 	}
 
@@ -375,7 +382,7 @@ func (s *scenario) validateSMBPermissionsByValue(expected, actual string, objNam
 	actualSDDL, err := sddl.ParseSDDL(actual)
 	s.a.AssertNoErr(err)
 
-	s.a.Assert(actualSDDL.PortableString(), equals(), expectedSDDL.PortableString(), "On object " + objName)
+	s.a.Assert(actualSDDL.PortableString(), equals(), expectedSDDL.PortableString(), "On object "+objName)
 }
 
 func (s *scenario) validateContent() {
