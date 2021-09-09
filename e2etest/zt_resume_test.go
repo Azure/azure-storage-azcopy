@@ -43,7 +43,7 @@ func GenerateLargeResumeScenario() (debugSkipFiles []string, allFiles []interfac
 
 	allFiles[0] = folder("")
 
-	for idx := 1; idx < len(allFiles)-1; idx++ {
+	for idx := 1; idx < len(allFiles); idx++ {
 		uuid, err := uuid.NewUUID()
 		if err != nil {
 			return nil, nil, err
