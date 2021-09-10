@@ -21,6 +21,7 @@
 package common
 
 import (
+	"bufio"
 	"context"
 	"crypto/rsa"
 	"crypto/x509"
@@ -49,11 +50,14 @@ import (
 const ApplicationID = "579a7132-0e58-4d80-b1e1-7a1e2d337859"
 
 // Resource used in azure storage OAuth authentication
-const Resource = "https://storage.azure.com"
+const ResourceAzureVM = "https://storage.azure.com"
+const ResourceNonAzureVM = "https://management.azure.com"
 const DefaultTenantID = "common"
 const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
-const IMDSAPIVersion = "2018-02-01"
-const MSIEndpoint = "http://169.254.169.254/metadata/identity/oauth2/token"
+const IMDSAPIVersionNonAzureVM = "2020-06-01"
+const IMDSAPIVersionAzureVM = "2018-02-01"
+const MSIEndpointAzureVM = "http://169.254.169.254/metadata/identity/oauth2/token"
+const MSIEndpointNonAzureVM = "http://localhost:40342/metadata/identity/oauth2/token"
 
 var DefaultTokenExpiryWithinThreshold = time.Minute * 10
 
@@ -720,6 +724,47 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 
 	// Send request
 	resp, err := msiTokenHTTPClient.Do(req)
+	if err != nil {
+		// Try non-Azure VM
+		req, err = http.NewRequest("GET", MSIEndpointNonAzureVM, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request, %v", err)
+		}
+		params = req.URL.Query()
+		params.Set("resource", ResourceNonAzureVM)
+		params.Set("api-version", IMDSAPIVersionNonAzureVM)
+		if credInfo.IdentityInfo.ClientID != "" {
+			params.Set("client_id", credInfo.IdentityInfo.ClientID)
+		}
+		if credInfo.IdentityInfo.ObjectID != "" {
+			params.Set("object_id", credInfo.IdentityInfo.ObjectID)
+		}
+		if credInfo.IdentityInfo.MSIResID != "" {
+			params.Set("msi_res_id", credInfo.IdentityInfo.MSIResID)
+		}
+		req.URL.RawQuery = params.Encode()
+		req.Header.Set("Metadata", "true")
+		// Set context.
+		req.WithContext(ctx)
+		
+		resp, err = msiTokenHTTPClient.Do(req)
+
+		if err != nil {
+			return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm. (Error details: %v)", err)
+		}
+
+		challengeTokenPath := strings.Split(resp.Header["Www-Authenticate"][0], "=")[1]
+		// Open the file.
+		challengeTokenFile, _ := os.Open(challengeTokenPath)
+		// Create a new Scanner for the file.
+		scanner := bufio.NewScanner(challengeTokenFile)
+		scanner.Scan()
+		challengeToken := scanner.Text()
+		req.Header.Set("Authorization", "Basic " + challengeToken)
+
+		resp, err = msiTokenHTTPClient.Do(req)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm. (Error details: %v)", err)
 	}
