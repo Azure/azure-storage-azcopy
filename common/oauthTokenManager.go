@@ -51,13 +51,13 @@ const ApplicationID = "579a7132-0e58-4d80-b1e1-7a1e2d337859"
 
 // Resource used in azure storage OAuth authentication
 const ResourceAzureVM = "https://storage.azure.com"
-const ResourceNonAzureVM = "https://management.azure.com"
+const ResourceArcVM = "https://management.azure.com"
 const DefaultTenantID = "common"
 const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
-const IMDSAPIVersionNonAzureVM = "2020-06-01"
+const IMDSAPIVersionArcVM = "2020-06-01"
 const IMDSAPIVersionAzureVM = "2018-02-01"
 const MSIEndpointAzureVM = "http://169.254.169.254/metadata/identity/oauth2/token"
-const MSIEndpointNonAzureVM = "http://localhost:40342/metadata/identity/oauth2/token"
+const MSIEndpointArcVM = "http://localhost:40342/metadata/identity/oauth2/token"
 
 var DefaultTokenExpiryWithinThreshold = time.Minute * 10
 
@@ -190,7 +190,7 @@ func secretLoginNoUOTM(tenantID, activeDirectoryEndpoint, secret, applicationID 
 		*oauthConfig,
 		applicationID,
 		secret,
-		Resource,
+		ResourceAzureVM,
 	)
 	if err != nil {
 		return nil, err
@@ -372,7 +372,7 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 		applicationID,
 		cert,
 		p,
-		Resource,
+		ResourceAzureVM,
 	)
 	if err != nil {
 		return nil, err
@@ -447,7 +447,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 		uotm.oauthClient,
 		*oauthConfig,
 		ApplicationID,
-		Resource)
+		ResourceAzureVM)
 	if err != nil {
 		return nil, fmt.Errorf("failed to login with tenantID %q, Azure directory endpoint %q, %v",
 			tenantID, activeDirectoryEndpoint, err)
@@ -697,13 +697,11 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromTokenStore(ctx context.Context) (
 	return &(tokenInfo.Token), nil
 }
 
-// GetNewTokenFromMSI gets token from Azure Instance Metadata Service identity endpoint.
-// For details, please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview
-func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.Token, error) {
+func (credInfo *OAuthTokenInfo) ProcessIMDSRequest(MSIEndpoint string, Resource string, IMDSAPIVersion string, ctx context.Context) (*http.Request, *http.Response, error) {
 	// Prepare request to get token from Azure Instance Metadata Service identity endpoint.
 	req, err := http.NewRequest("GET", MSIEndpoint, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request, %v", err)
+		return nil, nil, fmt.Errorf("failed to create request, %v", err)
 	}
 	params := req.URL.Query()
 	params.Set("resource", Resource)
@@ -724,31 +722,18 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 
 	// Send request
 	resp, err := msiTokenHTTPClient.Do(req)
-	if err != nil {
-		// Try non-Azure VM
-		req, err = http.NewRequest("GET", MSIEndpointNonAzureVM, nil)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create request, %v", err)
-		}
-		params = req.URL.Query()
-		params.Set("resource", ResourceNonAzureVM)
-		params.Set("api-version", IMDSAPIVersionNonAzureVM)
-		if credInfo.IdentityInfo.ClientID != "" {
-			params.Set("client_id", credInfo.IdentityInfo.ClientID)
-		}
-		if credInfo.IdentityInfo.ObjectID != "" {
-			params.Set("object_id", credInfo.IdentityInfo.ObjectID)
-		}
-		if credInfo.IdentityInfo.MSIResID != "" {
-			params.Set("msi_res_id", credInfo.IdentityInfo.MSIResID)
-		}
-		req.URL.RawQuery = params.Encode()
-		req.Header.Set("Metadata", "true")
-		// Set context.
-		req.WithContext(ctx)
-		
-		resp, err = msiTokenHTTPClient.Do(req)
 
+	return req, resp, err
+}
+
+// GetNewTokenFromMSI gets token from Azure Instance Metadata Service identity endpoint.
+// For details, please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview
+func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.Token, error) {
+	req, resp, err := credInfo.ProcessIMDSRequest(MSIEndpointAzureVM, ResourceAzureVM, IMDSAPIVersionAzureVM, ctx)
+	if err != nil {
+		// Try Arc VM
+		req, resp, err = credInfo.ProcessIMDSRequest(MSIEndpointArcVM, ResourceArcVM, IMDSAPIVersionArcVM, ctx)
+		// fmt.Printf("%T,%T,%T", req,resp,err) // *http.Request, *http.Response, error
 		if err != nil {
 			return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm. (Error details: %v)", err)
 		}
@@ -809,7 +794,7 @@ func (credInfo *OAuthTokenInfo) RefreshTokenWithUserCredential(ctx context.Conte
 	spt, err := adal.NewServicePrincipalTokenFromManualToken(
 		*oauthConfig,
 		IffString(credInfo.ClientID != "", credInfo.ClientID, ApplicationID),
-		Resource,
+		ResourceAzureVM,
 		credInfo.Token)
 	if err != nil {
 		return nil, err
