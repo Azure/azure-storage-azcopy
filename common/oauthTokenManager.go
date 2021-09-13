@@ -746,9 +746,8 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 			return nil, fmt.Errorf("Error occurred while opening file. (Error details: %v)", fileErr)
 		}
 		// Create a new Scanner for the file.
-		scanner := bufio.NewScanner(challengeTokenFile)
-		scanner.Scan()
-		challengeToken := scanner.Text()
+		reader := bufio.NewReader(challengeTokenFile)
+		challengeToken, fileErr := reader.ReadString('\n')
 		req.Header.Set("Authorization", "Basic " + challengeToken)
 		resp, err = msiTokenHTTPClient.Do(req)
 		if err != nil {
