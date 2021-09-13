@@ -36,6 +36,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -741,8 +742,13 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 		challengeTokenPath := strings.Split(resp.Header["Www-Authenticate"][0], "=")[1]
 		// Open the file.
 		challengeTokenFile, fileErr := os.Open(challengeTokenPath)
-		if fileErr != nil {
-			return nil, fmt.Errorf("Error occurred while opening file. (Error details: %v)", fileErr)
+		if os.IsPermission(fileErr) {
+			if runtime.GOOS == "linux" {
+				return nil, fmt.Errorf("Permission level inadequate to read Arc challenge token file %s. Make sure you are running AzCopy as a user who is a member of the \"himds\" group or is superuser.", challengeTokenPath)
+			}
+			if runtime.GOOS == "windows" {
+				return nil, fmt.Errorf("Permission level inadequate to read Arc challenge token file %s. Make sure you are running AzCopy as a user who is a member of the \"local Administrators\" group or the \"Hybrid Agent Extension Applications\" group.", challengeTokenPath)
+			}
 		}
 		// Create a new Scanner for the file.
 		reader := bufio.NewReader(challengeTokenFile)
@@ -753,7 +759,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 		req.Header.Set("Authorization", "Basic " + challengeToken)
 		resp, err = msiTokenHTTPClient.Do(req)
 		if err != nil {
-                return nil, fmt.Errorf("please check whether Arc is enabled on this VM, to enable Arc please refer to https://docs.microsoft.com/en-us/azure/azure-arc/servers/manage-agent")
+                	return nil, fmt.Errorf("Failed to query token from Arc IMDS endpoint. Please report the issue to azcopysupport@microsoft.com (Error details: %v)", err)
         	}
 	}
 	defer func() { // resp and Body should not be nil
