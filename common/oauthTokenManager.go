@@ -50,8 +50,7 @@ import (
 const ApplicationID = "579a7132-0e58-4d80-b1e1-7a1e2d337859"
 
 // Resource used in azure storage OAuth authentication
-const ResourceAzureVM = "https://storage.azure.com"
-const ResourceArcVM = "https://storage.azure.com"
+const Resource = "https://storage.azure.com"
 const DefaultTenantID = "common"
 const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
 const IMDSAPIVersionArcVM = "2019-11-01"
@@ -190,7 +189,7 @@ func secretLoginNoUOTM(tenantID, activeDirectoryEndpoint, secret, applicationID 
 		*oauthConfig,
 		applicationID,
 		secret,
-		ResourceAzureVM,
+		Resource,
 	)
 	if err != nil {
 		return nil, err
@@ -372,7 +371,7 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 		applicationID,
 		cert,
 		p,
-		ResourceAzureVM,
+		Resource,
 	)
 	if err != nil {
 		return nil, err
@@ -447,7 +446,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 		uotm.oauthClient,
 		*oauthConfig,
 		ApplicationID,
-		ResourceAzureVM)
+		Resource)
 	if err != nil {
 		return nil, fmt.Errorf("failed to login with tenantID %q, Azure directory endpoint %q, %v",
 			tenantID, activeDirectoryEndpoint, err)
@@ -731,10 +730,10 @@ func (credInfo *OAuthTokenInfo) queryIMDS(msiEndpoint string, resource string, i
 // For details, please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview
 func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.Token, error) {
 	// Try Azure VM
-	req, resp, err := credInfo.queryIMDS(MSIEndpointAzureVM, ResourceAzureVM, IMDSAPIVersionAzureVM, ctx)
+	req, resp, err := credInfo.queryIMDS(MSIEndpointAzureVM, Resource, IMDSAPIVersionAzureVM, ctx)
 	if err != nil {
 		// Try Arc VM
-		req, resp, err = credInfo.queryIMDS(MSIEndpointArcVM, ResourceArcVM, IMDSAPIVersionArcVM, ctx)
+		req, resp, err = credInfo.queryIMDS(MSIEndpointArcVM, Resource, IMDSAPIVersionArcVM, ctx)
 		if err != nil {
 			return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm. (Error details: %v)", err)
 		}
@@ -795,7 +794,7 @@ func (credInfo *OAuthTokenInfo) RefreshTokenWithUserCredential(ctx context.Conte
 	spt, err := adal.NewServicePrincipalTokenFromManualToken(
 		*oauthConfig,
 		IffString(credInfo.ClientID != "", credInfo.ClientID, ApplicationID),
-		ResourceAzureVM,
+		Resource,
 		credInfo.Token)
 	if err != nil {
 		return nil, err
