@@ -51,13 +51,13 @@ const ApplicationID = "579a7132-0e58-4d80-b1e1-7a1e2d337859"
 
 // Resource used in azure storage OAuth authentication
 const ResourceAzureVM = "https://storage.azure.com"
-const ResourceArcVM = "https://management.azure.com"
+const ResourceArcVM = "https://storage.azure.com"
 const DefaultTenantID = "common"
 const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
-const IMDSAPIVersionArcVM = "2020-06-01"
+const IMDSAPIVersionArcVM = "2019-11-01"
 const IMDSAPIVersionAzureVM = "2018-02-01"
 const MSIEndpointAzureVM = "http://169.254.169.254/metadata/identity/oauth2/token"
-const MSIEndpointArcVM = "http://localhost:40342/metadata/identity/oauth2/token"
+const MSIEndpointArcVM = "http://127.0.0.1:40342/metadata/identity/oauth2/token"
 
 var DefaultTokenExpiryWithinThreshold = time.Minute * 10
 
@@ -697,15 +697,16 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromTokenStore(ctx context.Context) (
 	return &(tokenInfo.Token), nil
 }
 
-func (credInfo *OAuthTokenInfo) ProcessIMDSRequest(MSIEndpoint string, Resource string, IMDSAPIVersion string, ctx context.Context) (*http.Request, *http.Response, error) {
+// queryIMDS sends a token request to the IMDS endpoint passed by the caller. This IMDS endpoint will be different for Azure and Arc VMs.
+func (credInfo *OAuthTokenInfo) queryIMDS(msiEndpoint string, resource string, imdsAPIVersion string, ctx context.Context) (*http.Request, *http.Response, error) {
 	// Prepare request to get token from Azure Instance Metadata Service identity endpoint.
-	req, err := http.NewRequest("GET", MSIEndpoint, nil)
+	req, err := http.NewRequest("GET", msiEndpoint, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create request, %v", err)
 	}
 	params := req.URL.Query()
-	params.Set("resource", Resource)
-	params.Set("api-version", IMDSAPIVersion)
+	params.Set("resource", resource)
+	params.Set("api-version", imdsAPIVersion)
 	if credInfo.IdentityInfo.ClientID != "" {
 		params.Set("client_id", credInfo.IdentityInfo.ClientID)
 	}
@@ -726,32 +727,33 @@ func (credInfo *OAuthTokenInfo) ProcessIMDSRequest(MSIEndpoint string, Resource 
 	return req, resp, err
 }
 
-// GetNewTokenFromMSI gets token from Azure Instance Metadata Service identity endpoint.
+// GetNewTokenFromMSI gets token from Azure Instance Metadata Service identity endpoint. It first checks if it is an Azure VM. Failing that case, it checks if the VM is registered with Azure Arc.
 // For details, please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview
 func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.Token, error) {
-	req, resp, err := credInfo.ProcessIMDSRequest(MSIEndpointAzureVM, ResourceAzureVM, IMDSAPIVersionAzureVM, ctx)
+	// Try Azure VM
+	req, resp, err := credInfo.queryIMDS(MSIEndpointAzureVM, ResourceAzureVM, IMDSAPIVersionAzureVM, ctx)
 	if err != nil {
 		// Try Arc VM
-		req, resp, err = credInfo.ProcessIMDSRequest(MSIEndpointArcVM, ResourceArcVM, IMDSAPIVersionArcVM, ctx)
-		// fmt.Printf("%T,%T,%T", req,resp,err) // *http.Request, *http.Response, error
+		req, resp, err = credInfo.queryIMDS(MSIEndpointArcVM, ResourceArcVM, IMDSAPIVersionArcVM, ctx)
 		if err != nil {
 			return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm. (Error details: %v)", err)
 		}
 
 		challengeTokenPath := strings.Split(resp.Header["Www-Authenticate"][0], "=")[1]
 		// Open the file.
-		challengeTokenFile, _ := os.Open(challengeTokenPath)
+		challengeTokenFile, fileErr := os.Open(challengeTokenPath)
+		if fileErr != nil {
+			return nil, fmt.Errorf("Error occurred while opening file. (Error details: %v)", fileErr)
+		}
 		// Create a new Scanner for the file.
 		scanner := bufio.NewScanner(challengeTokenFile)
 		scanner.Scan()
 		challengeToken := scanner.Text()
 		req.Header.Set("Authorization", "Basic " + challengeToken)
-
 		resp, err = msiTokenHTTPClient.Do(req)
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm. (Error details: %v)", err)
+		if err != nil {
+                return nil, fmt.Errorf("please check whether Arc is enabled on this VM, to enable Arc please refer to https://docs.microsoft.com/en-us/azure/azure-arc/servers/manage-agent")
+        	}
 	}
 	defer func() { // resp and Body should not be nil
 		io.Copy(ioutil.Discard, resp.Body)
