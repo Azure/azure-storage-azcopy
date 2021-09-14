@@ -736,7 +736,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 		// Try Arc VM
 		req, resp, err = credInfo.queryIMDS(MSIEndpointArcVM, Resource, IMDSAPIVersionArcVM, ctx)
 		if err != nil {
-			return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm. (Error details: %v)", err)
+			return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm: %v", err)
 		}
 
 		challengeTokenPath := strings.Split(resp.Header["Www-Authenticate"][0], "=")[1]
@@ -745,22 +745,25 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 		if os.IsPermission(fileErr) {
 			if runtime.GOOS == "linux" {
 				return nil, fmt.Errorf("Permission level inadequate to read Arc challenge token file %s. Make sure you are running AzCopy as a user who is a member of the \"himds\" group or is superuser.", challengeTokenPath)
-			}
-			if runtime.GOOS == "windows" {
+			} else if runtime.GOOS == "windows" {
 				return nil, fmt.Errorf("Permission level inadequate to read Arc challenge token file %s. Make sure you are running AzCopy as a user who is a member of the \"local Administrators\" group or the \"Hybrid Agent Extension Applications\" group.", challengeTokenPath)
+			} else {
+				return nil, fmt.Errorf("Error occurred while opening file %s in unsupported GOOS %s: %v", challengeTokenPath, runtime.GOOS, fileErr)
 			}
+		} else if fileErr != nil {
+			return nil, fmt.Errorf("Error occurred while opening file %s: %v", challengeTokenPath, fileErr)
 		}
 		// Create a new Scanner for the file.
 		reader := bufio.NewReader(challengeTokenFile)
 		challengeToken, fileErr := reader.ReadString('\n')
 		if fileErr != nil && fileErr != io.EOF {
-			return nil, fmt.Errorf("Error occurred while reading file. (Error details: %v)", fileErr)
+			return nil, fmt.Errorf("Error occurred while reading file: %v", fileErr)
 		}
-		req.Header.Set("Authorization", "Basic " + challengeToken)
+		req.Header.Set("Authorization", "Basic "+challengeToken)
 		resp, err = msiTokenHTTPClient.Do(req)
 		if err != nil {
-                	return nil, fmt.Errorf("Failed to query token from Arc IMDS endpoint. Please report the issue to azcopysupport@microsoft.com (Error details: %v)", err)
-        	}
+			return nil, fmt.Errorf("Failed to query token from Arc IMDS endpoint. Please report the issue to azcopysupport@microsoft.com: %v", err)
+		}
 	}
 	defer func() { // resp and Body should not be nil
 		io.Copy(ioutil.Discard, resp.Body)
