@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"context"
 	"net/url"
+	"sync/atomic"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -112,6 +113,8 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 			return
 		}
 
+		atomic.AddInt32(&c.atomicChunksWritten, 1)
+
 		if separateSetTagsRequired {
 			if _, err := c.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, c.blobTagsToApply); err != nil {
 				c.jptm.Log(pipeline.LogWarning, err.Error())
@@ -144,6 +147,8 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 			c.jptm.FailActiveSend("Staging block from URL", err)
 			return
 		}
+
+		atomic.AddInt32(&c.atomicChunksWritten, 1)
 	})
 }
 
@@ -183,6 +188,8 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 			c.jptm.FailActiveSend("Put Blob from URL", err)
 			return
 		}
+
+		atomic.AddInt32(&c.atomicChunksWritten, 1)
 
 		if separateSetTagsRequired {
 			if _, err := c.destBlockBlobURL.SetTags(c.jptm.Context(), nil, nil, nil, c.blobTagsToApply); err != nil {

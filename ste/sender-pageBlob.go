@@ -228,8 +228,6 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 
 		s.jptm.Log(pipeline.LogInfo, "Blob is managed disk import/export blob, so no Create call is required") // the blob always already exists
 		return
-	} else {
-		destinationModified = true
 	}
 
 	if s.jptm.ShouldInferContentType() {
@@ -267,6 +265,8 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}
+
+	destinationModified = true
 
 	if separateSetTagsRequired {
 		if _, err := s.destPageBlobURL.SetTags(s.jptm.Context(), nil, nil, nil, s.blobTagsToApply); err != nil {
