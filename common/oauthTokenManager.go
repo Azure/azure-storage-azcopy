@@ -30,7 +30,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -745,6 +744,7 @@ func fixupTokenJson(bytes []byte) []byte {
 	if stringSlice[1][0] != '"' {
 		return bytes
 	}
+
 	// If the value of not_before is blank, set to "now - 5 sec" and return the updated slice
 	notBeforeTimeInteger := uint64(time.Now().Unix() - 5)
 	notBeforeTime := strconv.FormatUint(notBeforeTimeInteger, 10)
@@ -766,8 +766,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 		challengeTokenPath := strings.Split(resp.Header["Www-Authenticate"][0], "=")[1]
 		// Open the file.
 		challengeTokenFile, fileErr := os.Open(challengeTokenPath)
-
-		if errors.Is(fileErr, fs.ErrPermission) {
+		if os.IsPermission(fileErr) {
 			if runtime.GOOS == "linux" {
 				return nil, fmt.Errorf("permission level inadequate to read Arc challenge token file %s. Make sure you are running AzCopy as a user who is a member of the \"himds\" group or is superuser.", challengeTokenPath)
 			} else if runtime.GOOS == "windows" {
@@ -780,6 +779,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 		}
 
 		defer challengeTokenFile.Close()
+
 		// Create a new Reader for the file.
 		reader := bufio.NewReader(challengeTokenFile)
 		challengeToken, fileErr := reader.ReadString('\n')
@@ -791,7 +791,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 
 		resp, err = msiTokenHTTPClient.Do(req)
 		if err != nil {
-			return nil, fmt.Errorf("failed to query token from Arc IMDS endpoint. Please report the issue to azcopysupport@microsoft.com: %v", err)
+			return nil, fmt.Errorf("failed to query token from Arc IMDS endpoint. Please report the issue to xxx@microsoft.com: %v", err)
 		}
 	}
 	defer func() { // resp and Body should not be nil
@@ -813,6 +813,8 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 	result := &adal.Token{}
 	if len(b) > 0 {
 		b = ByteSliceExtension{ByteSlice: b}.RemoveBOM()
+		// Unmarshal will give an error for Go version >= 1.14 for a field with blank values. Arc-server endpoint API returns blank for "not_before" field.
+		// TODO: Remove fixup once Arc team fixes the issue.
 		b = fixupTokenJson(b)
 		if err := json.Unmarshal(b, result); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal response body: %v", err)
