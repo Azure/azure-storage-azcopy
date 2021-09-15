@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -702,7 +703,7 @@ func (credInfo *OAuthTokenInfo) queryIMDS(msiEndpoint string, resource string, i
 	// Prepare request to get token from Azure Instance Metadata Service identity endpoint.
 	req, err := http.NewRequest("GET", msiEndpoint, nil)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create request, %v", err)
+		return nil, nil, fmt.Errorf("failed to create request: %v", err)
 	}
 	params := req.URL.Query()
 	params.Set("resource", resource)
@@ -727,14 +728,22 @@ func (credInfo *OAuthTokenInfo) queryIMDS(msiEndpoint string, resource string, i
 	return req, resp, err
 }
 
-// correctByteSlice corrects the value of JSON field "not_before" in the Byte slice from blank to a valid value and returns the corrected Byte slice.
-func correctByteSlice(bytes []byte) []byte {
+// Dated 15th Sep 2021.
+// Token JSON returned by ARC-server endpoint API currently does not set a valid integral value for "not_before" key.
+// Fix will be available in future ARC versions, till then use the current time to fixup the byte slice before we pass it to json.Unmarshal().
+// If the token JSON already has "not_before" correctly set, this will be a no-op.
+// fixupTokenJson corrects the value of JSON field "not_before" in the Byte slice from blank to a valid value and returns the corrected Byte slice.
+func fixupTokenJson(bytes []byte) []byte {
 	byteSliceToString := string(bytes)
 	separatorString := "\"not_before\":\""
 	stringSlice := strings.Split(byteSliceToString, separatorString)
-	correctedString := stringSlice[0] + separatorString + "0" + stringSlice[1]
-	correctedByteSlice := []byte(correctedString)
-	return correctedByteSlice
+	notBeforeTime := ""
+	if stringSlice[1][0] == '"' {
+		notBeforeTimeInteger := uint64(time.Now().Unix() - 5)
+		notBeforeTime = strconv.FormatUint(notBeforeTimeInteger, 10)
+	}
+	correctedString := stringSlice[0] + separatorString + notBeforeTime + stringSlice[1]
+	return []byte(correctedString)
 }
 
 // GetNewTokenFromMSI gets token from Azure Instance Metadata Service identity endpoint. It first checks if it is an Azure VM. Failing that case, it checks if the VM is registered with Azure Arc.
@@ -746,13 +755,13 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 		// Try Arc VM
 		req, resp, err = credInfo.queryIMDS(MSIEndpointArcVM, Resource, IMDSAPIVersionArcVM, ctx)
 		if err != nil {
-			return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm: %v", err)
+			return nil, fmt.Errorf("Please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm: %v", err)
 		}
 
 		challengeTokenPath := strings.Split(resp.Header["Www-Authenticate"][0], "=")[1]
 		// Open the file.
 		challengeTokenFile, fileErr := os.Open(challengeTokenPath)
-		if os.IsPermission(fileErr) {
+		if errors.Is(fileErr, fs.ErrPermission) {
 			if runtime.GOOS == "linux" {
 				return nil, fmt.Errorf("Permission level inadequate to read Arc challenge token file %s. Make sure you are running AzCopy as a user who is a member of the \"himds\" group or is superuser.", challengeTokenPath)
 			} else if runtime.GOOS == "windows" {
@@ -763,11 +772,12 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 		} else if fileErr != nil {
 			return nil, fmt.Errorf("Error occurred while opening file %s: %v", challengeTokenPath, fileErr)
 		}
+		defer challengeTokenFile.Close()
 		// Create a new Reader for the file.
 		reader := bufio.NewReader(challengeTokenFile)
 		challengeToken, fileErr := reader.ReadString('\n')
 		if fileErr != nil && fileErr != io.EOF {
-			return nil, fmt.Errorf("Error occurred while reading file: %v", fileErr)
+			return nil, fmt.Errorf("Error occurred while reading file %s: %v", challengeTokenPath, fileErr)
 		}
 		req.Header.Set("Authorization", "Basic "+challengeToken)
 		resp, err = msiTokenHTTPClient.Do(req)
@@ -783,7 +793,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 	// Check if the status code indicates success
 	// The request returns 200 currently, add 201 and 202 as well for possible extension.
 	if !(HTTPResponseExtension{Response: resp}).IsSuccessStatusCode(http.StatusOK, http.StatusCreated, http.StatusAccepted) {
-		return nil, fmt.Errorf("failed to get token from msi, status code: %v", resp.StatusCode)
+		return nil, fmt.Errorf("Failed to get token from msi, status code: %v", resp.StatusCode)
 	}
 
 	b, err := ioutil.ReadAll(resp.Body)
@@ -794,12 +804,12 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 	result := &adal.Token{}
 	if len(b) > 0 {
 		b = ByteSliceExtension{ByteSlice: b}.RemoveBOM()
-		b = correctByteSlice(b)
+		b = fixupTokenJson(b)
 		if err := json.Unmarshal(b, result); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal response body, %v", err)
+			return nil, fmt.Errorf("Failed to unmarshal response body: %v", err)
 		}
 	} else {
-		return nil, errors.New("failed to get token from msi")
+		return nil, errors.New("Failed to get token from msi")
 	}
 
 	return result, nil
