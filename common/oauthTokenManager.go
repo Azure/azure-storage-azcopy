@@ -735,15 +735,15 @@ func (credInfo *OAuthTokenInfo) queryIMDS(msiEndpoint string, resource string, i
 // fixupTokenJson corrects the value of JSON field "not_before" in the Byte slice from blank to a valid value and returns the corrected Byte slice.
 func fixupTokenJson(bytes []byte) []byte {
 	byteSliceToString := string(bytes)
-	separatorString := "\"not_before\":\""
+	separatorString := `"not_before":"`
 	stringSlice := strings.Split(byteSliceToString, separatorString)
-	notBeforeTime := ""
-	if stringSlice[1][0] == '"' {
-		notBeforeTimeInteger := uint64(time.Now().Unix() - 5)
-		notBeforeTime = strconv.FormatUint(notBeforeTimeInteger, 10)
+	if stringSlice[1][0] != '"' {
+		return bytes
 	}
-	correctedString := stringSlice[0] + separatorString + notBeforeTime + stringSlice[1]
-	return []byte(correctedString)
+	// If the value of not_before is blank, set to "now - 5 sec" and return the updated slice
+	notBeforeTimeInteger := uint64(time.Now().Unix() - 5)
+	notBeforeTime := strconv.FormatUint(notBeforeTimeInteger, 10)
+	return []byte(stringSlice[0] + separatorString + notBeforeTime + stringSlice[1])
 }
 
 // GetNewTokenFromMSI gets token from Azure Instance Metadata Service identity endpoint. It first checks if it is an Azure VM. Failing that case, it checks if the VM is registered with Azure Arc.
