@@ -727,6 +727,15 @@ func (credInfo *OAuthTokenInfo) queryIMDS(msiEndpoint string, resource string, i
 	return req, resp, err
 }
 
+func correctByteSlice(bytes []uint8) ([]uint8) {
+	byteSliceToString := string(bytes)
+	separatorString := "\"not_before\":\""
+	stringSlice := strings.Split(byteSliceToString, separatorString)
+	correctedString := stringSlice[0]+separatorString+"0"+stringSlice[1]
+	correctedByteSlice := []uint8(correctedString)
+	return correctedByteSlice
+}
+
 // GetNewTokenFromMSI gets token from Azure Instance Metadata Service identity endpoint. It first checks if it is an Azure VM. Failing that case, it checks if the VM is registered with Azure Arc.
 // For details, please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview
 func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.Token, error) {
@@ -784,6 +793,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 	result := &adal.Token{}
 	if len(b) > 0 {
 		b = ByteSliceExtension{ByteSlice: b}.RemoveBOM()
+		b = correctByteSlice(b)
 		if err := json.Unmarshal(b, result); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal response body, %v", err)
 		}
