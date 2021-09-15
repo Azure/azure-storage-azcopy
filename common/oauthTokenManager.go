@@ -727,6 +727,7 @@ func (credInfo *OAuthTokenInfo) queryIMDS(msiEndpoint string, resource string, i
 	return req, resp, err
 }
 
+// correctByteSlice corrects the value of JSON field "not_before" in the Byte slice from blank to a valid value and returns the corrected Byte slice.
 func correctByteSlice(bytes []byte) []byte {
 	byteSliceToString := string(bytes)
 	separatorString := "\"not_before\":\""
