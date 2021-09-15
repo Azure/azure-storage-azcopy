@@ -727,7 +727,7 @@ func (credInfo *OAuthTokenInfo) queryIMDS(msiEndpoint string, resource string, i
 	return req, resp, err
 }
 
-func correctByteSlice(bytes []uint8) ([]uint8) {
+func correctByteSlice(bytes []uint8) []uint8 {
 	byteSliceToString := string(bytes)
 	separatorString := "\"not_before\":\""
 	stringSlice := strings.Split(byteSliceToString, separatorString)
