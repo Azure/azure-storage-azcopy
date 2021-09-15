@@ -705,9 +705,11 @@ func (credInfo *OAuthTokenInfo) queryIMDS(msiEndpoint string, resource string, i
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create request: %v", err)
 	}
+
 	params := req.URL.Query()
 	params.Set("resource", resource)
 	params.Set("api-version", imdsAPIVersion)
+
 	if credInfo.IdentityInfo.ClientID != "" {
 		params.Set("client_id", credInfo.IdentityInfo.ClientID)
 	}
@@ -717,8 +719,10 @@ func (credInfo *OAuthTokenInfo) queryIMDS(msiEndpoint string, resource string, i
 	if credInfo.IdentityInfo.MSIResID != "" {
 		params.Set("msi_res_id", credInfo.IdentityInfo.MSIResID)
 	}
+
 	req.URL.RawQuery = params.Encode()
 	req.Header.Set("Metadata", "true")
+
 	// Set context.
 	req.WithContext(ctx)
 
@@ -737,6 +741,7 @@ func fixupTokenJson(bytes []byte) []byte {
 	byteSliceToString := string(bytes)
 	separatorString := `"not_before":"`
 	stringSlice := strings.Split(byteSliceToString, separatorString)
+
 	if stringSlice[1][0] != '"' {
 		return bytes
 	}
@@ -755,34 +760,38 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 		// Try Arc VM
 		req, resp, err = credInfo.queryIMDS(MSIEndpointArcVM, Resource, IMDSAPIVersionArcVM, ctx)
 		if err != nil {
-			return nil, fmt.Errorf("Please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm: %v", err)
+			return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm: %v", err)
 		}
 
 		challengeTokenPath := strings.Split(resp.Header["Www-Authenticate"][0], "=")[1]
 		// Open the file.
 		challengeTokenFile, fileErr := os.Open(challengeTokenPath)
+
 		if errors.Is(fileErr, fs.ErrPermission) {
 			if runtime.GOOS == "linux" {
-				return nil, fmt.Errorf("Permission level inadequate to read Arc challenge token file %s. Make sure you are running AzCopy as a user who is a member of the \"himds\" group or is superuser.", challengeTokenPath)
+				return nil, fmt.Errorf("permission level inadequate to read Arc challenge token file %s. Make sure you are running AzCopy as a user who is a member of the \"himds\" group or is superuser.", challengeTokenPath)
 			} else if runtime.GOOS == "windows" {
-				return nil, fmt.Errorf("Permission level inadequate to read Arc challenge token file %s. Make sure you are running AzCopy as a user who is a member of the \"local Administrators\" group or the \"Hybrid Agent Extension Applications\" group.", challengeTokenPath)
+				return nil, fmt.Errorf("permission level inadequate to read Arc challenge token file %s. Make sure you are running AzCopy as a user who is a member of the \"local Administrators\" group or the \"Hybrid Agent Extension Applications\" group.", challengeTokenPath)
 			} else {
-				return nil, fmt.Errorf("Error occurred while opening file %s in unsupported GOOS %s: %v", challengeTokenPath, runtime.GOOS, fileErr)
+				return nil, fmt.Errorf("error occurred while opening file %s in unsupported GOOS %s: %v", challengeTokenPath, runtime.GOOS, fileErr)
 			}
 		} else if fileErr != nil {
-			return nil, fmt.Errorf("Error occurred while opening file %s: %v", challengeTokenPath, fileErr)
+			return nil, fmt.Errorf("error occurred while opening file %s: %v", challengeTokenPath, fileErr)
 		}
+
 		defer challengeTokenFile.Close()
 		// Create a new Reader for the file.
 		reader := bufio.NewReader(challengeTokenFile)
 		challengeToken, fileErr := reader.ReadString('\n')
 		if fileErr != nil && fileErr != io.EOF {
-			return nil, fmt.Errorf("Error occurred while reading file %s: %v", challengeTokenPath, fileErr)
+			return nil, fmt.Errorf("error occurred while reading file %s: %v", challengeTokenPath, fileErr)
 		}
+
 		req.Header.Set("Authorization", "Basic "+challengeToken)
+
 		resp, err = msiTokenHTTPClient.Do(req)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to query token from Arc IMDS endpoint. Please report the issue to azcopysupport@microsoft.com: %v", err)
+			return nil, fmt.Errorf("failed to query token from Arc IMDS endpoint. Please report the issue to azcopysupport@microsoft.com: %v", err)
 		}
 	}
 	defer func() { // resp and Body should not be nil
@@ -793,7 +802,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 	// Check if the status code indicates success
 	// The request returns 200 currently, add 201 and 202 as well for possible extension.
 	if !(HTTPResponseExtension{Response: resp}).IsSuccessStatusCode(http.StatusOK, http.StatusCreated, http.StatusAccepted) {
-		return nil, fmt.Errorf("Failed to get token from msi, status code: %v", resp.StatusCode)
+		return nil, fmt.Errorf("failed to get token from msi, status code: %v", resp.StatusCode)
 	}
 
 	b, err := ioutil.ReadAll(resp.Body)
@@ -806,10 +815,10 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 		b = ByteSliceExtension{ByteSlice: b}.RemoveBOM()
 		b = fixupTokenJson(b)
 		if err := json.Unmarshal(b, result); err != nil {
-			return nil, fmt.Errorf("Failed to unmarshal response body: %v", err)
+			return nil, fmt.Errorf("failed to unmarshal response body: %v", err)
 		}
 	} else {
-		return nil, errors.New("Failed to get token from msi")
+		return nil, errors.New("failed to get token from msi")
 	}
 
 	return result, nil
