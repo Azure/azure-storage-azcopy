@@ -762,7 +762,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 		} else if fileErr != nil {
 			return nil, fmt.Errorf("Error occurred while opening file %s: %v", challengeTokenPath, fileErr)
 		}
-		// Create a new Scanner for the file.
+		// Create a new Reader for the file.
 		reader := bufio.NewReader(challengeTokenFile)
 		challengeToken, fileErr := reader.ReadString('\n')
 		if fileErr != nil && fileErr != io.EOF {
