@@ -731,7 +731,7 @@ func correctByteSlice(bytes []uint8) ([]uint8) {
 	byteSliceToString := string(bytes)
 	separatorString := "\"not_before\":\""
 	stringSlice := strings.Split(byteSliceToString, separatorString)
-	correctedString := stringSlice[0]+separatorString+"0"+stringSlice[1]
+	correctedString := stringSlice[0] + separatorString + "0" + stringSlice[1]
 	correctedByteSlice := []uint8(correctedString)
 	return correctedByteSlice
 }
