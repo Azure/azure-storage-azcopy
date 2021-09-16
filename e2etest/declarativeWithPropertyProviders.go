@@ -45,6 +45,7 @@ type with struct {
 
 	nameValueMetadata  map[string]string
 	blobTags           string
+	blobType           common.BlobType
 	lastWriteTime      time.Time
 	creationTime       time.Time
 	smbAttributes      uint32
@@ -122,6 +123,10 @@ func (w with) createObjectProperties() *objectProperties {
 	if w.blobTags != "" {
 		populated = true
 		result.blobTags = common.ToCommonBlobTagsMap(w.blobTags)
+	}
+	if w.blobType != common.EBlobType.Detect() {
+		populated = true
+		result.blobType = w.blobType
 	}
 	if w.lastWriteTime != (time.Time{}) {
 		populated = true

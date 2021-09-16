@@ -157,19 +157,23 @@ type params struct {
 	preserveSMBInfo           bool
 	relativeSourcePath        string
 	blobTags                  string
+	blobType                  string
+	stripTopDir               bool
 	s2sPreserveBlobTags       bool
 	cpkByName                 string
 	cpkByValue                bool
 	isObjectDir               bool
 	debugSkipFiles            []string // a list of localized filepaths to skip over on the first run in the STE.
+
+	disableParallelTesting bool
 	// looks like this for a folder transfer:
 	/*
-	INFO: source: /New folder/New Text Document.txt dest: /Test/New folder/New Text Document.txt
-	INFO: source: /New Text Document.txt dest: /Test/New Text Document.txt
+		INFO: source: /New folder/New Text Document.txt dest: /Test/New folder/New Text Document.txt
+		INFO: source: /New Text Document.txt dest: /Test/New Text Document.txt
 	*/
 	// and this for a single file transfer to a folder:
 	/*
-	INFO: source:  dest: /New Text Document.txt
+		INFO: source:  dest: /New Text Document.txt
 	*/
 }
 
@@ -186,10 +190,10 @@ var eOperation = Operation(0)
 type Operation uint8
 
 func (Operation) Copy() Operation        { return Operation(1) }
-func (Operation) Sync() Operation        { return Operation(1<<1) }
+func (Operation) Sync() Operation        { return Operation(1 << 1) }
 func (Operation) CopyAndSync() Operation { return eOperation.Copy() | eOperation.Sync() }
-func (Operation) Remove() Operation      { return Operation(1<<2) }
-func (Operation) Resume() Operation 	 { return Operation(1<<7) } // Resume should only ever be combined with Copy or Sync, and is a mid-job cancel/resume.
+func (Operation) Remove() Operation      { return Operation(1 << 2) }
+func (Operation) Resume() Operation      { return Operation(1 << 7) } // Resume should only ever be combined with Copy or Sync, and is a mid-job cancel/resume.
 
 func (o Operation) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
@@ -200,8 +204,8 @@ func (o Operation) getValues() []Operation {
 	out := make([]Operation, 0)
 	// separate out the bitflags
 	for idx := 0; idx < 8; idx++ {
-		opMatching := Operation(1<<idx)
-		if opMatching & o != 0 {
+		opMatching := Operation(1 << idx)
+		if opMatching&o != 0 {
 			out = append(out, opMatching)
 		}
 	}
@@ -506,6 +510,12 @@ type hookHelper interface {
 
 	// SkipTest skips the test
 	SkipTest()
+
+	// Assert gives access to the asserter
+	GetAsserter() asserter
+
+	// GetDestination returns the destination Resource Manager
+	GetDestination() resourceManager
 }
 
 ///////
@@ -530,4 +540,7 @@ type hooks struct {
 	// before, during or after AzCopy's scanning phase.  If this hook is set, AzCopy won't open its first file, to start
 	// transferring data, until this function executes.
 	beforeOpenFirstFile hookFunc
+
+	// called after AzCopy finishes running & validation of transfer states completes.
+	afterValidation hookFunc
 }
