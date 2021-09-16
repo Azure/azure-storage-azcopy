@@ -562,8 +562,6 @@ func GetCredentialInfoForLocation(ctx context.Context, location common.Location,
 func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common.CpkOptions) (credType common.CredentialType, err error) {
 
 	switch {
-	case raw.fromTo == common.EFromTo.S3Blob(): // S3 Bucket
-		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, raw.sourceSAS, true, common.CpkOptions{})
 	case raw.fromTo.To().IsRemote():
 		// we authenticate to the destination. Source is assumed to be SAS, or public, or a local resource
 		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.To(), raw.destination, raw.destinationSAS, false, common.CpkOptions{})
