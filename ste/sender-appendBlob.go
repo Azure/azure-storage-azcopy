@@ -181,7 +181,7 @@ func (s *appendBlobSenderBase) Cleanup() {
 		//   to be consistent with other
 		deletionContext, cancelFunc := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancelFunc()
-		_, err := s.destAppendBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{}, azblob.BlobDeleteNone)
+		_, err := s.destAppendBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 		if err != nil {
 			jptm.LogError(s.destAppendBlobURL.String(), "Delete (incomplete) Append Blob ", err)
 		}
