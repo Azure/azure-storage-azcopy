@@ -243,7 +243,7 @@ func (b *remoteResourceDeleter) delete(object storedObject) error {
 			blobURLParts.BlobName = path.Join(blobURLParts.BlobName, object.relativePath)
 			blobURL := azblob.NewBlobURL(blobURLParts.URL(), b.p)
 
-			_, err := blobURL.Delete(b.ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{}, azblob.BlobDeleteNone)
+			_, err := blobURL.Delete(b.ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
 			return err
 		case common.ELocation.File():
 			fileURLParts := azfile.NewFileURLParts(*b.rootURL)
