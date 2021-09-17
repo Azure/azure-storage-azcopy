@@ -23,6 +23,7 @@ package e2etest
 import (
 	"net/url"
 	"os"
+	"path"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -132,8 +133,11 @@ func (r *resourceLocal) cleanup(_ asserter) {
 }
 
 func (r *resourceLocal) getParam(stripTopDir bool, _ bool) string {
-	assertNoStripTopDir(stripTopDir)
-	return r.dirPath
+	if !stripTopDir {
+		return r.dirPath
+	} else {
+		return path.Join(r.dirPath, "*")
+	}
 }
 
 func (r *resourceLocal) getSAS() string {
@@ -198,7 +202,7 @@ func (r *resourceBlobContainer) createFile(a asserter, o *testObject, s *scenari
 	options := &generateBlobFromListOptions{
 		containerURL: *r.containerURL,
 		generateFromListOptions: generateFromListOptions{
-			fs: []*testObject{o},
+			fs:          []*testObject{o},
 			defaultSize: s.fs.defaultSize,
 		},
 	}
@@ -218,7 +222,8 @@ func (r *resourceBlobContainer) cleanup(a asserter) {
 }
 
 func (r *resourceBlobContainer) getParam(stripTopDir bool, useSas bool) string {
-	assertNoStripTopDir(stripTopDir)
+	// stripTopDir is automatic on a container level, todo: if we target folder level
+	// assertNoStripTopDir(stripTopDir)
 	if useSas {
 		return r.rawSasURL.String()
 	} else {
@@ -281,8 +286,8 @@ func (r *resourceAzureFileShare) createFiles(a asserter, s *scenario, isSource b
 
 func (r *resourceAzureFileShare) createFile(a asserter, o *testObject, s *scenario, isSource bool) {
 	scenarioHelper{}.generateAzureFilesFromList(a, &generateAzureFilesFromListOptions{
-		shareURL: *r.shareURL,
-		fileList: []*testObject{o},
+		shareURL:    *r.shareURL,
+		fileList:    []*testObject{o},
 		defaultSize: s.fs.defaultSize,
 	})
 }

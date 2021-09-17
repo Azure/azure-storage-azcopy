@@ -54,7 +54,7 @@ func newBlobFSTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Contex
 	return
 }
 
-func (t *blobFSTraverser) isDirectory(bool) bool {
+func (t *blobFSTraverser) IsDirectory(bool) bool {
 	return copyHandlerUtil{}.urlIsBFSFileSystemOrDirectory(t.ctx, t.rawURL, t.p) // This gets all the fanciness done for us.
 }
 
@@ -87,7 +87,7 @@ func (t *blobFSTraverser) getFolderProps() (p contentPropsProvider, size int64) 
 	return noContentProps, 0
 }
 
-func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
+func (t *blobFSTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
 	bfsURLParts := azbfs.NewBfsURLParts(*t.rawURL)
 
 	pathProperties, isFile, _ := t.getPropertiesIfSingleFile()
@@ -180,7 +180,7 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 			}
 
 			// TODO: if we need to get full properties and metadata, then add call here to
-			//     dirUrl.NewFileURL(storedObject.relativePath).GetProperties(t.ctx)
+			//     dirUrl.NewFileURL(StoredObject.relativePath).GetProperties(t.ctx)
 			//     AND consider also supporting alternate mechanism to get the props in the backend
 			//     using s2sGetPropertiesInBackend
 			storedObject := newStoredObject(

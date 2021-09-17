@@ -47,7 +47,7 @@ type blobAccountTraverser struct {
 	cpkOptions common.CpkOptions
 }
 
-func (t *blobAccountTraverser) isDirectory(_ bool) bool {
+func (t *blobAccountTraverser) IsDirectory(_ bool) bool {
 	return true // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
@@ -90,7 +90,7 @@ func (t *blobAccountTraverser) listContainers() ([]string, error) {
 	}
 }
 
-func (t *blobAccountTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) error {
+func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 	// listContainers will return the cached container list if containers have already been listed by this traverser.
 	cList, err := t.listContainers()
 
@@ -105,7 +105,7 @@ func (t *blobAccountTraverser) traverse(preprocessor objectMorpher, processor ob
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
-		err = containerTraverser.traverse(preprocessorForThisChild, processor, filters)
+		err = containerTraverser.Traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
 			WarnStdoutAndScanningLog(fmt.Sprintf("failed to list blobs in container %s: %s", v, err))

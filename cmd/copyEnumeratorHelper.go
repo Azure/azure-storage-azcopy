@@ -10,11 +10,11 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-var enumerationParallelism = 1
-var enumerationParallelStatFiles = false
+var EnumerationParallelism = 1
+var EnumerationParallelStatFiles = false
 
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
-func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
+func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *CookedCopyCmdArgs) error {
 	// Remove the source and destination roots from the path to save space in the plan files
 	transfer.Source = strings.TrimPrefix(transfer.Source, e.SourceRoot.Value)
 	transfer.Destination = strings.TrimPrefix(transfer.Destination, e.DestinationRoot.Value)
@@ -64,7 +64,7 @@ func shuffleTransfers(transfers []common.CopyTransfer) {
 
 // we need to send a last part with isFinalPart set to true, along with whatever transfers that still haven't been sent
 // dispatchFinalPart sends a last part with isFinalPart set to true, along with whatever transfers that still haven't been sent.
-func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *cookedCopyCmdArgs) error {
+func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *CookedCopyCmdArgs) error {
 	shuffleTransfers(e.Transfers.List)
 	e.IsFinalPart = true
 	var resp common.CopyJobPartOrderResponse

@@ -34,6 +34,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/google/uuid"
 )
 
 // provide convenient methods to get access to test resources such as accounts, containers/shares, directories
@@ -266,7 +267,8 @@ func generateName(c asserter, prefix string, maxLen int) string {
 }
 
 func (TestResourceNameGenerator) GenerateContainerName(c asserter) string {
-	return generateName(c, containerPrefix, 63)
+	// return generateName(c, containerPrefix, 63)
+	return uuid.New().String()
 }
 
 func (TestResourceNameGenerator) generateBlobName(c asserter) string {

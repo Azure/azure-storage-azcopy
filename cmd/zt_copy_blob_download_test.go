@@ -75,7 +75,7 @@ func (s *cmdIntegrationSuite) TestInferredStripTopDirDownload(c *chk.C) {
 	// Test inference of striptopdir
 	cooked, err := raw.cook()
 	c.Assert(err, chk.IsNil)
-	c.Assert(cooked.stripTopDir, chk.Equals, false)
+	c.Assert(cooked.StripTopDir, chk.Equals, false)
 
 	// Test and ensure only one file is being downloaded
 	runCopyAndVerify(c, raw, func(err error) {
@@ -102,7 +102,7 @@ func (s *cmdIntegrationSuite) TestInferredStripTopDirDownload(c *chk.C) {
 	// Test inference of striptopdir
 	cooked, err = raw.cook()
 	c.Assert(err, chk.IsNil)
-	c.Assert(cooked.stripTopDir, chk.Equals, true)
+	c.Assert(cooked.StripTopDir, chk.Equals, true)
 
 	// Test and ensure only 3 files get scheduled, nothing under the sub-directory
 	runCopyAndVerify(c, raw, func(err error) {
@@ -151,7 +151,7 @@ func (s *cmdIntegrationSuite) TestInferredStripTopDirDownload(c *chk.C) {
 	// test cook
 	cooked, err = raw.cook()
 	c.Assert(err, chk.IsNil)
-	c.Assert(cooked.stripTopDir, chk.Equals, true)
+	c.Assert(cooked.StripTopDir, chk.Equals, true)
 
 	// Test and ensure only one file got scheduled
 	runCopyAndVerify(c, raw, func(err error) {
@@ -165,7 +165,7 @@ func (s *cmdIntegrationSuite) TestInferredStripTopDirDownload(c *chk.C) {
 func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
 	bsu := getBSU()
 	rawBSU := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
-	p, err := initPipeline(ctx, common.ELocation.Blob(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, pipeline.LogNone)
+	p, err := InitPipeline(ctx, common.ELocation.Blob(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, pipeline.LogNone)
 	c.Assert(err, chk.IsNil)
 
 	// Just in case there are no existing containers...
@@ -175,13 +175,13 @@ func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
 	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{})
-	processor := func(object storedObject) error {
+	processor := func(object StoredObject) error {
 		// Append the container name to the relative path
-		relPath := "/" + object.containerName + "/" + object.relativePath
+		relPath := "/" + object.ContainerName + "/" + object.relativePath
 		relPaths = append(relPaths, relPath)
 		return nil
 	}
-	err = blobTraverser.traverse(noPreProccessor, processor, []objectFilter{})
+	err = blobTraverser.Traverse(noPreProccessor, processor, []ObjectFilter{})
 	c.Assert(err, chk.IsNil)
 
 	// set up a destination
@@ -207,7 +207,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
 func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
 	bsu := getBSU()
 	rawBSU := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
-	p, err := initPipeline(ctx, common.ELocation.Blob(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, pipeline.LogNone)
+	p, err := InitPipeline(ctx, common.ELocation.Blob(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, pipeline.LogNone)
 	c.Assert(err, chk.IsNil)
 
 	// Create a unique container to be targeted.
@@ -223,13 +223,13 @@ func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
 	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{})
-	processor := func(object storedObject) error {
+	processor := func(object StoredObject) error {
 		// Append the container name to the relative path
-		relPath := "/" + object.containerName + "/" + object.relativePath
+		relPath := "/" + object.ContainerName + "/" + object.relativePath
 		relPaths = append(relPaths, relPath)
 		return nil
 	}
-	err = blobTraverser.traverse(noPreProccessor, processor, []objectFilter{})
+	err = blobTraverser.Traverse(noPreProccessor, processor, []ObjectFilter{})
 	c.Assert(err, chk.IsNil)
 
 	// set up a destination

@@ -83,7 +83,7 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	cooked = cookedListCmdArgs{}
 	// the expected argument in input is the container sas / or path of virtual directory in the container.
 	// verifying the location type
-	location := inferArgumentLocation(raw.sourcePath)
+	location := InferArgumentLocation(raw.sourcePath)
 	// Only support listing for Azure locations
 	if location != location.Blob() && location != location.File() && location != location.BlobFS() {
 		return cooked, errors.New("invalid path passed for listing. given source is of type " + location.String() + " while expect is container / container path ")
@@ -158,7 +158,7 @@ func init() {
 	rootCmd.AddCommand(listContainerCmd)
 }
 
-func (cooked cookedListCmdArgs) processProperties(object storedObject) string {
+func (cooked cookedListCmdArgs) processProperties(object StoredObject) string {
 	builder := strings.Builder{}
 	for _, property := range cooked.properties {
 		propertyStr := string(property)
@@ -198,14 +198,14 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		return err
 	}
 
-	level, err := determineLocationLevel(source.Value, cooked.location, true)
+	level, err := DetermineLocationLevel(source.Value, cooked.location, true)
 
 	if err != nil {
 		return err
 	}
 
 	// isSource is rather misnomer for canBePublic. We can list public containers, and hence isSource=true
-	if credentialInfo, _, err = getCredentialInfoForLocation(ctx, cooked.location, source.Value, source.SAS, true, common.CpkOptions{}); err != nil {
+	if credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cooked.location, source.Value, source.SAS, true, common.CpkOptions{}); err != nil {
 		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
 	} else if cooked.location == cooked.location.File() && source.SAS == "" {
 		return errors.New("azure files requires a SAS token for authentication")
@@ -218,7 +218,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		}
 	}
 
-	traverser, err := initResourceTraverser(source, cooked.location, &ctx, &credentialInfo, nil, nil,
+	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, nil, nil,
 		true, false, false, func(common.EntityType) {},
 		nil, false, pipeline2.LogNone, common.CpkOptions{})
 
@@ -229,7 +229,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	var fileCount int64 = 0
 	var sizeCount int64 = 0
 
-	processor := func(object storedObject) error {
+	processor := func(object StoredObject) error {
 		path := object.relativePath
 		if object.entityType == common.EEntityType.Folder() {
 			path += "/" // TODO: reviewer: same questions as for jobs status: OK to hard code direction of slash? OK to use trailing slash to distinguish dirs from files?
@@ -239,7 +239,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		objectSummary := path + properties + " Content Length: "
 
 		if level == level.Service() {
-			objectSummary = object.containerName + "/" + objectSummary
+			objectSummary = object.ContainerName + "/" + objectSummary
 		}
 
 		if cooked.MachineReadable {
@@ -259,7 +259,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		return nil
 	}
 
-	err = traverser.traverse(nil, processor, nil)
+	err = traverser.Traverse(nil, processor, nil)
 
 	if err != nil {
 		return fmt.Errorf("failed to traverse container: %s", err.Error())

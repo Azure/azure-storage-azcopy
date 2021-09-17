@@ -71,12 +71,19 @@ func (f FileURL) GetParentDir() (DirectoryURL, error) {
 }
 
 // Create creates a new file or replaces a file. Note that this method only initializes the file.
-// For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/create-file.
+// For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create.
 func (f FileURL) Create(ctx context.Context, headers BlobFSHTTPHeaders) (*PathCreateResponse, error) {
+	return f.CreateWithOptions(ctx, CreateFileOptions{Headers: headers})
+}
+
+// Create creates a new file or replaces a file. Note that this method only initializes the file.
+// For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create.
+func (f FileURL) CreateWithOptions(ctx context.Context, options CreateFileOptions) (*PathCreateResponse, error) {
 	return f.fileClient.Create(ctx, f.fileSystemName, f.path, PathResourceFile,
 		nil, PathRenameModeNone, nil, nil, nil, nil,
-		&headers.CacheControl, &headers.ContentType, &headers.ContentEncoding, &headers.ContentLanguage, &headers.ContentDisposition,
-		nil, nil, nil, nil, nil, nil,
+		&options.Headers.CacheControl, &options.Headers.ContentType, &options.Headers.ContentEncoding,
+		&options.Headers.ContentLanguage, &options.Headers.ContentDisposition, nil, nil, nil,
+		buildMetadataString(options.Metadata), nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil)
@@ -206,6 +213,34 @@ func (f FileURL) FlushData(ctx context.Context, fileSize int64, contentMd5 []byt
 		&headers.CacheControl, &headers.ContentType, &headers.ContentDisposition, &headers.ContentEncoding, &headers.ContentLanguage,
 		md5InBase64, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil, &overrideHttpVerb, nil, nil, nil, nil)
+}
+
+// Renames the file to the provided destination
+func (f FileURL) Rename(ctx context.Context, options RenameFileOptions) (FileURL, error) {
+
+	// If the destinationFileSystem is not provided, use the current filesystem
+	fileSystemName := options.DestinationFileSystem
+	if fileSystemName == nil || *fileSystemName == "" {
+		fileSystemName = &f.fileSystemName
+	}
+
+	renameSource := "/" + f.fileSystemName + "/" + f.path
+
+	urlParts := NewBfsURLParts(f.fileClient.URL())
+	urlParts.FileSystemName = *fileSystemName
+	urlParts.DirectoryOrFilePath = options.DestinationPath
+
+	destinationFileURL := NewFileURL(urlParts.URL(), f.fileClient.Pipeline())
+
+	_, err := destinationFileURL.fileClient.Create(ctx, *fileSystemName, options.DestinationPath, PathResourceNone, nil, PathRenameModeLegacy,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, &renameSource, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil)
+
+	if err != nil {
+		return FileURL{}, err
+	}
+
+	return destinationFileURL, nil
 }
 
 func (f FileURL) GetAccessControl(ctx context.Context) (BlobFSAccessControl, error) {
