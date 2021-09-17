@@ -754,15 +754,15 @@ func fixupTokenJson(bytes []byte) []byte {
 // GetNewTokenFromMSI gets token from Azure Instance Metadata Service identity endpoint. It first checks if it is an Azure VM. Failing that case, it checks if the VM is registered with Azure Arc.
 // For details, please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview
 func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.Token, error) {
-	// Try Azure VM
-	req, resp, err := credInfo.queryIMDS(MSIEndpointAzureVM, Resource, IMDSAPIVersionAzureVM, ctx)
+	// Try Arc VM
+	req, resp, err := credInfo.queryIMDS(MSIEndpointArcVM, Resource, IMDSAPIVersionArcVM, ctx)
 	if err != nil {
-		// Try Arc VM
-		req, resp, err = credInfo.queryIMDS(MSIEndpointArcVM, Resource, IMDSAPIVersionArcVM, ctx)
+		// Try Azure VM
+		req, resp, err = credInfo.queryIMDS(MSIEndpointAzureVM, Resource, IMDSAPIVersionAzureVM, ctx)
 		if err != nil {
 			return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm: %v", err)
 		}
-
+	} else {
 		challengeTokenPath := strings.Split(resp.Header["Www-Authenticate"][0], "=")[1]
 		// Open the file.
 		challengeTokenFile, fileErr := os.Open(challengeTokenPath)
