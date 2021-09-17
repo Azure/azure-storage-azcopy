@@ -147,7 +147,6 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
 	}
 
-	destinationModified = true
 	blobTags := s.blobTagsToApply
 	separateSetTagsRequired := separateSetTagsRequired(blobTags)
 	if separateSetTagsRequired || len(blobTags) == 0 {
@@ -157,6 +156,7 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}
+	destinationModified = true
 
 	if separateSetTagsRequired {
 		if _, err := s.destAppendBlobURL.SetTags(s.jptm.Context(), nil, nil, nil, s.blobTagsToApply); err != nil {

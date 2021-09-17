@@ -7,32 +7,23 @@ import (
 )
 
 func TestResume_Generic(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync() | eOperation.Resume(),
-		eTestFromTo.AllSync(),
-		eValidate.Auto(),
-		params{
-			recursive: true,
-			debugSkipFiles: []string{
-				"/fileb",
-				"/filec",
-			},
+	RunScenarios(t, eOperation.CopyAndSync()|eOperation.Resume(), eTestFromTo.AllSync(), eValidate.Auto(), params{
+		recursive: true,
+		debugSkipFiles: []string{
+			"/fileb",
+			"/filec",
 		},
-		nil,
-		testFiles{
-			defaultSize: "1K",
+	}, nil, testFiles{
+		defaultSize: "1K",
 
-			shouldTransfer: []interface{}{
-				folder(""),
-				f("filea"),
-				f("fileb"),
-				f("filec"),
-				f("filed"),
-			},
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("filea"),
+			f("fileb"),
+			f("filec"),
+			f("filed"),
 		},
-		EAccountType.Standard(),
-	)
+	}, EAccountType.Standard(), "")
 }
 
 func GenerateLargeResumeScenario() (debugSkipFiles []string, allFiles []interface{}, err error) {
@@ -66,21 +57,12 @@ func TestResume_LargeGeneric(t *testing.T) {
 		t.FailNow()
 	}
 
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync() | eOperation.Resume(),
-		eTestFromTo.AllSync(),
-		eValidate.Auto(),
-		params{
-			recursive: true,
-			debugSkipFiles: toSkip,
-		},
-		nil,
-		testFiles{
-			defaultSize: "1K",
+	RunScenarios(t, eOperation.CopyAndSync()|eOperation.Resume(), eTestFromTo.AllSync(), eValidate.Auto(), params{
+		recursive:      true,
+		debugSkipFiles: toSkip,
+	}, nil, testFiles{
+		defaultSize: "1K",
 
-			shouldTransfer: allFiles,
-		},
-		EAccountType.Standard(),
-	)
+		shouldTransfer: allFiles,
+	}, EAccountType.Standard(), "")
 }

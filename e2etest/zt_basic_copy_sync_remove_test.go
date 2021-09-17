@@ -22,6 +22,8 @@ package e2etest
 
 import (
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // ================================  Copy And Sync: Upload, Download, and S2S  =========================================
@@ -34,7 +36,7 @@ func TestBasic_CopyUploadSingleBlob(t *testing.T) {
 			folder(""),
 			f("file1.txt"),
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestBasic_CopyUploadEmptyBlob(t *testing.T) {
@@ -46,7 +48,7 @@ func TestBasic_CopyUploadEmptyBlob(t *testing.T) {
 			folder(""),
 			f("file1.txt"),
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestBasic_CopyUploadLargeBlob(t *testing.T) {
@@ -62,7 +64,7 @@ func TestBasic_CopyUploadLargeBlob(t *testing.T) {
 			folder(""),
 			f("file1.txt"),
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestBasic_CopyDownloadSingleBlob(t *testing.T) {
@@ -74,7 +76,7 @@ func TestBasic_CopyDownloadSingleBlob(t *testing.T) {
 			folder(""),
 			f("file1.txt"),
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestBasic_CopyDownloadEmptyBlob(t *testing.T) {
@@ -86,7 +88,7 @@ func TestBasic_CopyDownloadEmptyBlob(t *testing.T) {
 			folder(""),
 			f("file1.txt"),
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestBasic_CopyDownloadLargeBlob(t *testing.T) {
@@ -102,7 +104,7 @@ func TestBasic_CopyDownloadLargeBlob(t *testing.T) {
 			folder(""),
 			f("file1.txt"),
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestBasic_CopyS2SSingleBlob(t *testing.T) {
@@ -113,7 +115,7 @@ func TestBasic_CopyS2SSingleBlob(t *testing.T) {
 		shouldTransfer: []interface{}{
 			f("file1.txt"),
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestBasic_CopyS2SEmptyBlob(t *testing.T) {
@@ -124,7 +126,7 @@ func TestBasic_CopyS2SEmptyBlob(t *testing.T) {
 		shouldTransfer: []interface{}{
 			f("file1.txt"),
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestBasic_CopyS2SLargeBlob(t *testing.T) {
@@ -139,7 +141,7 @@ func TestBasic_CopyS2SLargeBlob(t *testing.T) {
 		shouldTransfer: []interface{}{
 			f("file1.txt"),
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestBasic_CopyUploadDir(t *testing.T) {
@@ -157,7 +159,7 @@ func TestBasic_CopyUploadDir(t *testing.T) {
 			f("folder1/file2"),
 			f("folder2/file3"),
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestBasic_CopyDownloadDir(t *testing.T) {
@@ -175,7 +177,7 @@ func TestBasic_CopyDownloadDir(t *testing.T) {
 			f("folder1/file2"),
 			f("folder2/file3"),
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestBasic_CopyS2SDir(t *testing.T) {
@@ -193,7 +195,7 @@ func TestBasic_CopyS2SDir(t *testing.T) {
 			f("folder1/file2"),
 			f("folder2/file3"),
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 // ================================  Remove: File, Folder, and Container  ==============================================
@@ -209,7 +211,7 @@ func TestBasic_CopyRemoveFile(t *testing.T) {
 		shouldIgnore: []interface{}{
 			"file2.txt",
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestBasic_CopyRemoveLargeFile(t *testing.T) {
@@ -227,7 +229,7 @@ func TestBasic_CopyRemoveLargeFile(t *testing.T) {
 		shouldIgnore: []interface{}{
 			"file2.txt",
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestBasic_CopyRemoveFolder(t *testing.T) {
@@ -246,7 +248,7 @@ func TestBasic_CopyRemoveFolder(t *testing.T) {
 			"folder2/file21.txt",
 			"folder2/file22.txt",
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestBasic_CopyRemoveContainer(t *testing.T) {
@@ -261,5 +263,46 @@ func TestBasic_CopyRemoveContainer(t *testing.T) {
 			"folder1/file11.txt",
 			"folder1/file12.txt",
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
+}
+
+func TestBasic_CopyToWrongBlobType(t *testing.T) {
+	btypes := []common.BlobType{
+		common.EBlobType.BlockBlob(),
+		common.EBlobType.PageBlob(),
+		common.EBlobType.AppendBlob(),
+	}
+
+	for _, dst := range btypes {
+		for _, src := range btypes {
+			if dst == src {
+				continue
+			}
+
+			RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob(), common.EFromTo.LocalBlob()), eValidate.Auto(), params{
+				recursive:              true,
+				blobType:               src.String(),
+				stripTopDir:            true,
+				disableParallelTesting: true, // todo: why do append blobs _specifically_ fail when this is done in parallel?
+			}, &hooks{
+				beforeRunJob: func(h hookHelper) {
+					h.CreateFile(f("test.txt", with{blobType: dst}), false)
+				},
+				afterValidation: func(h hookHelper) {
+					props := h.GetDestination().getAllProperties(h.GetAsserter())
+					bprops, ok := props["test.txt"]
+					h.GetAsserter().Assert(ok, equals(), true)
+					if ok {
+						h.GetAsserter().Assert(bprops.blobType, equals(), dst)
+					}
+				},
+			}, testFiles{
+				defaultSize: "1k",
+
+				shouldFail: []interface{}{
+					f("test.txt", with{blobType: src}),
+				},
+			}, EAccountType.Standard(), src.String()+"-"+dst.String())
+		}
+	}
 }

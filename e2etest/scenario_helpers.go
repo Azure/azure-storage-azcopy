@@ -352,7 +352,6 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 			continue // no real folders in blob
 		}
 		ad := blobResourceAdapter{b}
-		blob := options.containerURL.NewBlockBlobURL(b.name)
 		reader, sourceData := getRandomDataAndReader(b.creationProperties.sizeBytes(c, options.defaultSize))
 
 		// Setting content MD5
@@ -370,17 +369,44 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 
 		headers := ad.toHeaders()
 		headers.ContentMD5 = contentMD5[:]
-		cResp, err := blob.Upload(ctx,
-			reader,
-			headers,
-			ad.toMetadata(),
-			azblob.BlobAccessConditions{},
-			azblob.DefaultAccessTier,
-			tags,
-			common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo),
-		)
-		c.AssertNoErr(err)
-		c.Assert(cResp.StatusCode(), equals(), 201)
+
+		var err error
+
+		switch b.creationProperties.blobType {
+		case common.EBlobType.BlockBlob(), common.EBlobType.Detect():
+			bb := options.containerURL.NewBlockBlobURL(b.name)
+
+			cResp, err := bb.Upload(ctx,
+				reader,
+				headers,
+				ad.toMetadata(),
+				azblob.BlobAccessConditions{},
+				azblob.DefaultAccessTier,
+				tags,
+				common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo),
+			)
+
+			c.AssertNoErr(err)
+			c.Assert(cResp.StatusCode(), equals(), 201)
+		case common.EBlobType.PageBlob():
+			pb := options.containerURL.NewPageBlobURL(b.name)
+			cResp, err := pb.Create(ctx, reader.Size(), 0, headers, ad.toMetadata(), azblob.BlobAccessConditions{}, azblob.DefaultPremiumBlobAccessTier, tags, common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo))
+			c.AssertNoErr(err)
+			c.Assert(cResp.StatusCode(), equals(), 201)
+
+			pbUpResp, err := pb.UploadPages(ctx, 0, reader, azblob.PageBlobAccessConditions{}, nil, common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo))
+			c.AssertNoErr(err)
+			c.Assert(pbUpResp.StatusCode(), equals(), 201)
+		case common.EBlobType.AppendBlob():
+			ab := options.containerURL.NewAppendBlobURL(b.name)
+			cResp, err := ab.Create(ctx, headers, ad.toMetadata(), azblob.BlobAccessConditions{}, tags, common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo))
+			c.AssertNoErr(err)
+			c.Assert(cResp.StatusCode(), equals(), 201)
+
+			abUpResp, err := ab.AppendBlock(ctx, reader, azblob.AppendBlobAccessConditions{}, nil, common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo))
+			c.AssertNoErr(err)
+			c.Assert(abUpResp.StatusCode(), equals(), 201)
+		}
 
 		if b.creationProperties.adlsPermissionsACL != nil {
 			bfsURLParts := azbfs.NewBfsURLParts(options.rawSASURL)
@@ -438,8 +464,6 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 			}
 			md := map[string]string(blobInfo.Metadata)
 
-
-
 			props := objectProperties{
 				isFolder:           false, // no folders in Blob
 				size:               bp.ContentLength,
@@ -460,6 +484,8 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 				}
 				props.blobTags = blobTagsMap
 			}
+
+			props.blobType = common.FromAzBlobType(blobInfo.Properties.BlobType)
 
 			result[relativePath] = &props
 		}
@@ -777,10 +803,10 @@ func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile
 
 				// Set up properties
 				props := objectProperties{
-					isFolder:          true,
-					nameValueMetadata: dProps.NewMetadata(),
-					creationTime:      &creationTime,
-					lastWriteTime:     &lastWriteTime,
+					isFolder:           true,
+					nameValueMetadata:  dProps.NewMetadata(),
+					creationTime:       &creationTime,
+					lastWriteTime:      &lastWriteTime,
 					smbPermissionsSddl: &perm,
 				}
 
@@ -830,7 +856,6 @@ func (scenarioHelper) generateBFSPathsFromList(c asserter, filesystemURL azbfs.F
 		fResp, err := file.FlushData(ctx, defaultBlobFSFileSizeInBytes, nil, azbfs.BlobFSHTTPHeaders{}, false, true)
 		c.AssertNoErr(err)
 		c.Assert(fResp.StatusCode(), equals(), 200)
-
 
 	}
 }

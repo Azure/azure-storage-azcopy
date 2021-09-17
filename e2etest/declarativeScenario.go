@@ -113,9 +113,11 @@ func (s *scenario) Run() {
 	if s.a.Failed() {
 		return // no point in doing more validation
 	}
-	if s.validate == eValidate.AutoPlusContent() {
+	if s.validate&eValidate.AutoPlusContent() != 0 {
 		s.validateContent()
 	}
+
+	s.runHook(s.hs.afterValidation)
 }
 
 func (s *scenario) runHook(h hookFunc) bool {
@@ -375,7 +377,7 @@ func (s *scenario) validateSMBPermissionsByValue(expected, actual string, objNam
 	actualSDDL, err := sddl.ParseSDDL(actual)
 	s.a.AssertNoErr(err)
 
-	s.a.Assert(actualSDDL.PortableString(), equals(), expectedSDDL.PortableString(), "On object " + objName)
+	s.a.Assert(actualSDDL.PortableString(), equals(), expectedSDDL.PortableString(), "On object "+objName)
 }
 
 func (s *scenario) validateContent() {
@@ -598,4 +600,12 @@ func (s *scenario) CancelAndResume() {
 
 func (s *scenario) SkipTest() {
 	s.a.Skip("Skipping test")
+}
+
+func (s *scenario) GetAsserter() asserter {
+	return s.a
+}
+
+func (s *scenario) GetDestination() resourceManager {
+	return s.state.dest
 }

@@ -22,6 +22,7 @@ package ste
 
 import (
 	"bytes"
+	"sync/atomic"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -79,6 +80,8 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 			u.jptm.FailActiveUpload("Staging block", err)
 			return
 		}
+
+		atomic.AddInt32(&u.atomicChunksWritten, 1)
 	})
 }
 
@@ -131,6 +134,8 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 			jptm.FailActiveUpload("Uploading blob", err)
 			return
 		}
+
+		atomic.AddInt32(&u.atomicChunksWritten, 1)
 
 		if separateSetTagsRequired {
 			if _, err := u.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, u.blobTagsToApply); err != nil {

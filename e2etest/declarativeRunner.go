@@ -46,7 +46,8 @@ func RunScenarios(
 	hs *hooks,
 	fs testFiles,
 	// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
-	accountType AccountType) {
+	accountType AccountType,
+	scenarioSuffix string) {
 	// enable this if we want parents in parallel: t.Parallel()
 
 	suiteName, testName := getTestName(t)
@@ -74,8 +75,12 @@ func RunScenarios(
 			// Create unique name for generating container names
 			compactScenarioName := fmt.Sprintf("%.4s-%s-%c-%c%c", suiteName, testName, op.String()[0], fromTo.From().String()[0], fromTo.To().String()[0])
 			fullScenarioName := fmt.Sprintf("%s.%s.%s-%s", suiteName, testName, op.String(), fromTo.String())
+
 			// Sub-test name is not globally unique (it doesn't need to be) but it is more human-readable
 			subtestName := fmt.Sprintf("%s-%s", op, fromTo)
+			if scenarioSuffix != "" {
+				subtestName += "-" + scenarioSuffix
+			}
 
 			hsToUse := hooks{}
 			if hs != nil {
@@ -93,8 +98,8 @@ func RunScenarios(
 				p:                   p, // copies them, because they are a struct. This is what we need, since they may be morphed while running
 				hs:                  hsToUse,
 				fs:                  fs.DeepCopy(),
-				needResume:          operations & eOperation.Resume() != 0,
-				stripTopDir:         false, // TODO: how will we set this?
+				needResume:          operations&eOperation.Resume() != 0,
+				stripTopDir:         p.stripTopDir,
 			}
 
 			scenarios = append(scenarios, s)
@@ -107,7 +112,7 @@ func RunScenarios(
 	}
 
 	// run them in parallel if not debugging, but sequentially (for easier debugging) if a debugger is attached
-	parallel := !isLaunchedByDebugger // this only works if gops.exe is on your path. See azcopyDebugHelper.go for instructions.
+	parallel := !isLaunchedByDebugger && !p.disableParallelTesting // this only works if gops.exe is on your path. See azcopyDebugHelper.go for instructions.
 	for _, s := range scenarios {
 		sen := s // capture to separate var inside the loop, for the parallel case
 		// use t.Run to get proper sub-test support
