@@ -1,6 +1,20 @@
 
 # Change Log
 
+## Version 10.12.2
+
+### New features
+1. Added support for create with metadata, rename, setAccessControl, and list filesystem paths. ?
+2. Exported APIs needed to create a customer Enumerator. ?
+
+## Bug fixes
+1. Fix deleting blobs that are of a different type than the specified copy
+
+## Version 10.12.1
+
+### Bug fixes
+1. Fixed the problem of always receiving overwrite prompt on azure files folders.
+
 ## Version 10.12.0
 
 ### New features
