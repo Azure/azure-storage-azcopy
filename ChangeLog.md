@@ -1,6 +1,17 @@
 
 # Change Log
 
+## Version 10.12.2
+
+## Bug fixes
+1. Fix deleting blobs that are of a different type than the specified copy
+2. Fix --delete-destination on Windows download
+
+## Version 10.12.1
+
+### Bug fixes
+1. Fixed the problem of always receiving overwrite prompt on azure files folders.
+
 ## Version 10.12.0
 
 ### Bug fixes
