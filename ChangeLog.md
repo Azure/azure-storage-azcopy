@@ -14,6 +14,11 @@
 
 ## Version 10.12.0
 
+### Bug fixes
+1. Fixed the problem of always receiving overwrite prompt on azure files folders.
+
+## Version 10.12.0
+
 ### New features
 1. Added support for include and exclude regex flags, which allow pattern matching on the entire paths.
 2. Added dry run mode for copy, remove, and sync. This feature allows the user to visualize the changes before committing them.
