@@ -2,6 +2,12 @@ module github.com/nitin-deamon/azure-storage-azcopy/v10
 
 replace github.com/Azure/azure-storage-azcopy/v10/jobsAdmin => ./
 
+replace github.com/Azure/azure-storage-azcopy/v10/common => ./
+
+replace github.com/Azure/azure-storage-azcopy/v10/ste => ./
+
+replace github.com/Azure/azure-storage-azcopy/v10/cmd => ./
+
 go 1.16
 
 require (
