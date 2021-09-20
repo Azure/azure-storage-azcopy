@@ -95,14 +95,16 @@ func newSyncSourceComparator(i *objectIndexer, copyScheduler objectProcessor, di
 // note: we remove the StoredObject if it is present so that when we have finished
 // the index will contain all objects which exist at the destination but were NOT seen at the source
 func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) error {
-	destinationObjectInMap, present := f.destinationIndex.indexMap[sourceObject.relativePath]
-	if !present && f.destinationIndex.isDestinationCaseInsensitive {
-		lcRelativePath := strings.ToLower(sourceObject.relativePath)
-		destinationObjectInMap, present = f.destinationIndex.indexMap[lcRelativePath]
+	relPath := sourceObject.relativePath
+
+	if f.destinationIndex.isDestinationCaseInsensitive {
+		relPath = strings.ToLower(relPath)
 	}
 
+	destinationObjectInMap, present := f.destinationIndex.indexMap[relPath]
+
 	if present {
-		defer delete(f.destinationIndex.indexMap, sourceObject.relativePath)
+		defer delete(f.destinationIndex.indexMap, relPath)
 
 		// if destination is stale, schedule source for transfer
 		if f.disableComparison || sourceObject.isMoreRecentThan(destinationObjectInMap) {
