@@ -26,12 +26,12 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-type jobPartCreatedMsg struct {
-	totalTransfers       uint32
-	isFinalPart          bool
-	totalBytesEnumerated uint64
-	fileTransfers        uint32
-	folderTransfer       uint32
+type JobPartCreatedMsg struct {
+	TotalTransfers uint32
+	IsFinalPart    bool
+	TotalBytesEnumerated uint64
+	FileTransfers  uint32
+	FolderTransfer uint32
 }
 
 type xferDoneMsg = common.TransferDetail
@@ -39,14 +39,14 @@ type jobStatusManager struct {
 	js          common.ListJobSummaryResponse
 	respChan    chan common.ListJobSummaryResponse
 	listReq     chan bool
-	partCreated chan jobPartCreatedMsg
+	partCreated chan JobPartCreatedMsg
 	xferDone    chan xferDoneMsg
 }
 
 var jstm jobStatusManager
 
 /* These functions should not fail */
-func (jm *jobMgr) SendJobPartCreatedMsg(msg jobPartCreatedMsg) {
+func (jm *jobMgr) SendJobPartCreatedMsg(msg JobPartCreatedMsg) {
 	jstm.partCreated <- msg
 }
 
@@ -72,12 +72,12 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 	for {
 		select {
 		case msg := <-jstm.partCreated:
-			js.CompleteJobOrdered = js.CompleteJobOrdered || msg.isFinalPart
-			js.TotalTransfers += msg.totalTransfers
-			js.FileTransfers += msg.fileTransfers
-			js.FolderPropertyTransfers += msg.folderTransfer
-			js.TotalBytesEnumerated += msg.totalBytesEnumerated
-			js.TotalBytesExpected += msg.totalBytesEnumerated
+			js.CompleteJobOrdered = js.CompleteJobOrdered || msg.IsFinalPart
+			js.TotalTransfers += msg.TotalTransfers
+			js.FileTransfers += msg.FileTransfers
+			js.FolderPropertyTransfers += msg.FolderTransfer
+			js.TotalBytesEnumerated += msg.TotalBytesEnumerated
+			js.TotalBytesExpected += msg.TotalBytesEnumerated
 
 		case msg := <-jstm.xferDone:
 			msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()
