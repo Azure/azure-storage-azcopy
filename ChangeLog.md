@@ -3,12 +3,9 @@
 
 ## Version 10.12.2
 
-### New features
-1. Added support for create with metadata, rename, setAccessControl, and list filesystem paths. ?
-2. Exported APIs needed to create a customer Enumerator. ?
-
 ## Bug fixes
 1. Fix deleting blobs that are of a different type than the specified copy
+2. Fix --delete-destination on Windows download
 
 ## Version 10.12.1
 
