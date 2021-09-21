@@ -753,6 +753,9 @@ func fixupTokenJson(bytes []byte) []byte {
 
 // GetNewTokenFromMSI gets token from Azure Instance Metadata Service identity endpoint. It first checks if the VM is registered with Azure Arc. Failing that case, it checks if it is an Azure VM.
 // For details, please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview
+// Note: Currently the msiTokenHTTPClient timeout is configured for 30 secs. Should be reduced to 5 sec as IMDS endpoint is local to the machine.
+// Without this change, if some router is configured to not return "ICMP unreachable" then it will take 30 secs to timeout and fallback to ARC.
+// For now, this has been mitigated by checking Arc first, and then Azure
 // TODO: Handle the case where the VM has some process already listening to port 40342.
 func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.Token, error) {
 	// Try Arc VM
