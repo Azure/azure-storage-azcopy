@@ -736,7 +736,6 @@ func (credInfo *OAuthTokenInfo) queryIMDS(msiEndpoint string, resource string, i
 // Dated 15th Sep 2021.
 // Token JSON returned by ARC-server endpoint API currently does not set a valid integral value for "not_before" key.
 // If the token JSON already has "not_before" correctly set, this will be a no-op.
-// fixupTokenJson corrects the value of JSON field "not_before" in the Byte slice from blank to a valid value and returns the corrected Byte slice.
 func fixupTokenJson(bytes []byte) []byte {
 	byteSliceToString := string(bytes)
 	separatorString := `"not_before":"`
