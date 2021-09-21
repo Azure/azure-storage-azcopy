@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 
 	"golang.org/x/sys/windows"
 )

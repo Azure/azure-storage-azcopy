@@ -12,7 +12,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 )
 
 type JobPartPlanFileName string

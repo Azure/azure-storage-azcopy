@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/jobsAdmin"
 	"log"
 	"net/url"
 	"os"
@@ -20,7 +20,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 )
 
 type BucketToContainerNameResolver interface {

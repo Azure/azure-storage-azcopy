@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/ste"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
 )

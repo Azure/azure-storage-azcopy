@@ -23,7 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common/parallel"
 	"net/url"
 	"strings"
 	"time"
@@ -31,7 +31,7 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-file-go/azfile"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 )
 
 // allow us to iterate through a path pointing to the file endpoint

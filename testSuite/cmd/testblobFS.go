@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/azbfs"
 	"github.com/spf13/cobra"
 )
 

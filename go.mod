@@ -1,4 +1,4 @@
-module github.com/Azure/azure-storage-azcopy/v10
+module github.com/nitin-deamon/azure-storage-azcopy/v10
 
 require (
 	cloud.google.com/go v0.91.1 // indirect

@@ -24,13 +24,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/jobsAdmin"
 	"runtime"
 	"sync/atomic"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 )
 
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\

@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/azbfs"
 	chk "gopkg.in/check.v1"
 	"net/http"
 	"net/url"

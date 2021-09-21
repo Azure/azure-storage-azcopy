@@ -4,7 +4,7 @@ import (
 	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 	"google.golang.org/api/iterator"
 	"net/url"
 	"strings"

@@ -32,7 +32,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 )
 
 func (s *cmdIntegrationSuite) TestInferredStripTopDirDownload(c *chk.C) {

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/azbfs"
 	chk "gopkg.in/check.v1"
 )
 

@@ -25,7 +25,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 )
 
 // This declarative test runner adds a layer on top of e2etest/base. The added layer allows us to test in a declarative style,

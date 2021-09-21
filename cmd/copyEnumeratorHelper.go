@@ -3,11 +3,11 @@ package cmd
 import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/jobsAdmin"
 	"math/rand"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 )
 
 var EnumerationParallelism = 1

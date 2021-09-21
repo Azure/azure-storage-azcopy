@@ -29,7 +29,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 )
 
 // encapsulates the interaction with the AzCopy instance that is being tested

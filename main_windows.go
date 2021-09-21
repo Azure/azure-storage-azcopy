@@ -31,7 +31,7 @@ import (
 
 	"github.com/minio/minio-go"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 )
 
 func osModifyProcessCommand(cmd *exec.Cmd) *exec.Cmd {

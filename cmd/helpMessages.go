@@ -1,6 +1,6 @@
 package cmd
 
-import "github.com/Azure/azure-storage-azcopy/v10/common"
+import "github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 
 // ===================================== ROOT COMMAND ===================================== //
 const rootCmdShortDescription = "AzCopy is a command line tool that moves data into and out of Azure Storage."

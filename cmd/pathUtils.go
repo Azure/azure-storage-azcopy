@@ -9,8 +9,8 @@ import (
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/pkg/errors"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/azbfs"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 )
 
 // ----- LOCATION LEVEL HANDLING -----

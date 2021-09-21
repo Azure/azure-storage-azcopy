@@ -3,7 +3,7 @@
 package ste
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 	"os"
 	"strings"
 	"syscall"
@@ -12,7 +12,7 @@ import (
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"golang.org/x/sys/windows"
 
-	"github.com/Azure/azure-storage-azcopy/v10/sddl"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/sddl"
 )
 
 // This file os-triggers the ISMBPropertyBearingSourceInfoProvider and CustomLocalOpener interfaces on a local SIP.

@@ -30,8 +30,8 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/cmd"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 )
 
 // get the lifecycle manager to print messages

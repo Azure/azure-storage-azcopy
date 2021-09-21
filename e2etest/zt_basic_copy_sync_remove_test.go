@@ -23,7 +23,7 @@ package e2etest
 import (
 	"testing"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 )
 
 // ================================  Copy And Sync: Upload, Download, and S2S  =========================================

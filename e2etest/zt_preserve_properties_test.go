@@ -23,7 +23,7 @@ package e2etest
 import (
 	"testing"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 )
 
 // Purpose: Tests for preserving transferred properties, info and ACLs.  Both those possessed by the original source file/folder,

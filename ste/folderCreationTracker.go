@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 )
 
 type FolderCreationTracker common.FolderCreationTracker

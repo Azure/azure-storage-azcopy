@@ -22,8 +22,8 @@ package cmd
 
 import (
 	"context"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/azbfs"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
 	"strings"
 )

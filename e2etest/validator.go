@@ -26,7 +26,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 )
 
 type Validator struct{}

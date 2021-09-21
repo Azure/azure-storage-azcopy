@@ -24,7 +24,7 @@ import (
 	"bytes"
 	"context"
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 	"io/ioutil"
 	"net/http"
 	"strings"

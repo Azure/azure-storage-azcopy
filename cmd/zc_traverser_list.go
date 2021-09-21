@@ -26,7 +26,7 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"net/url"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 )
 
 // a meta traverser that goes through a list of paths (potentially directory entities) and scans them one by one

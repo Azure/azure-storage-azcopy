@@ -24,11 +24,11 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/jobsAdmin"
 	"io"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 )
 
 const (

@@ -28,7 +28,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
 )
 

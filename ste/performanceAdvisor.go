@@ -23,7 +23,7 @@ package ste
 import (
 	"bytes"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 	"net/http"
 	"runtime"
 	"time"

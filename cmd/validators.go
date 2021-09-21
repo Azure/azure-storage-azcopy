@@ -26,7 +26,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 )
 
 func ValidateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
