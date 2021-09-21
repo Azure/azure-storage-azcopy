@@ -731,9 +731,10 @@ func (credInfo *OAuthTokenInfo) queryIMDS(msiEndpoint string, resource string, i
 	return req, resp, err
 }
 
+// fixupTokenJson corrects the value of JSON field "not_before" in the Byte slice from blank to a valid value and returns the corrected Byte slice.
+
 // Dated 15th Sep 2021.
 // Token JSON returned by ARC-server endpoint API currently does not set a valid integral value for "not_before" key.
-// Fix will be available in future ARC versions, till then use the current time to fixup the byte slice before we pass it to json.Unmarshal().
 // If the token JSON already has "not_before" correctly set, this will be a no-op.
 // fixupTokenJson corrects the value of JSON field "not_before" in the Byte slice from blank to a valid value and returns the corrected Byte slice.
 func fixupTokenJson(bytes []byte) []byte {
@@ -751,8 +752,9 @@ func fixupTokenJson(bytes []byte) []byte {
 	return []byte(stringSlice[0] + separatorString + notBeforeTime + stringSlice[1])
 }
 
-// GetNewTokenFromMSI gets token from Azure Instance Metadata Service identity endpoint. It first checks if it is an Azure VM. Failing that case, it checks if the VM is registered with Azure Arc.
+// GetNewTokenFromMSI gets token from Azure Instance Metadata Service identity endpoint. It first checks if the VM is registered with Azure Arc. Failing that case, it checks if it is an Azure VM.
 // For details, please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview
+// TODO: Handle the case where the VM has some process already listening to port 40342.
 func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.Token, error) {
 	// Try Arc VM
 	req, resp, err := credInfo.queryIMDS(MSIEndpointArcVM, Resource, IMDSAPIVersionArcVM, ctx)
