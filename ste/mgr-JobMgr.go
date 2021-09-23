@@ -436,6 +436,44 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, e
 	return jpm
 }
 
+func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr {
+	jppfn := JobPartPlanFileName(fmt.Sprintf(JobPartPlanFileNameFormat, order.JobID.String(), 0, DataSchemaVersion))	 
+	jppfn.Create(order)  // Convert the order to a plan file
+
+	jpm := &jobPartMgr{
+		jobMgr: jm, 
+		filename: jppfn,
+		sourceSAS:        order.SourceRoot.SAS,
+		destinationSAS:   order.DestinationRoot.SAS,  
+		pacer:            jm.pacer,
+		slicePool:        jm.slicePool,
+		cacheLimiter:     jm.cacheLimiter,
+		fileCountLimiter: jm.fileCountLimiter,
+		credInfo:         order.CredentialInfo,
+	}
+	jpm.planMMF = jpm.filename.Map()
+	jm.jobPartMgrs.Set(order.PartNum, jpm)
+	jm.setFinalPartOrdered(order.PartNum, jpm.planMMF.Plan().IsFinalPart)
+	jm.setDirection(jpm.Plan().FromTo)
+	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(order.PartNum, jpm.Plan().FromTo)
+
+	jm.initMu.Lock()
+	defer jm.initMu.Unlock()
+	if jm.initState == nil {
+		var logger common.ILogger = jm
+		jm.initState = &jobMgrInitState{
+			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
+			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, jpm.Plan()),
+			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
+		}
+	}
+	jpm.jobMgrInitState = jm.initState // so jpm can use it as much as desired without locking (since the only mutation is the init in jobManager. As far as jobPartManager is concerned, the init state is read-only
+
+	jm.QueueJobParts(jpm)
+	return jpm
+}
+
+
 func (jm *jobMgr) setFinalPartOrdered(partNum PartNumber, isFinalPart bool) {
 	newVal := common.Iffint32(isFinalPart, 1, 0)
 	oldVal := atomic.SwapInt32(&jm.atomicFinalPartOrderedIndicator, newVal)

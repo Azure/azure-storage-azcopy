@@ -253,6 +253,8 @@ type jobPartMgr struct {
 	// Since sas is not persisted in JobPartPlan file, it stripped from the destination and stored in memory in JobPart Manager
 	destinationSAS string
 
+	credInfo common.CredentialInfo
+
 	// When the part is schedule to run (inprogress), the below fields are used
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
 
@@ -499,7 +501,10 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	}
 
 	fromTo := jpm.planMMF.Plan().FromTo
-	credInfo := jpm.jobMgr.getInMemoryTransitJobState().CredentialInfo
+	credInfo := jpm.credInfo
+	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
+		credInfo = jpm.jobMgr.getInMemoryTransitJobState().CredentialInfo
+	}
 	userAgent := common.UserAgent
 	if fromTo.From() == common.ELocation.S3() {
 		userAgent = common.S3ImportUserAgent
