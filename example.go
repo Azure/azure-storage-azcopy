@@ -76,7 +76,7 @@ func NewOrder(jobID common.JobID) common.CopyJobPartOrderRequest {
 	return jpo
 }
 
-func main() {
+func main1() {
 	jobID := common.NewJobID()
 	appCtx := context.TODO()
 	cpuMon := common.NewNullCpuMonitor()
