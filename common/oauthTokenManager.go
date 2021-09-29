@@ -39,6 +39,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/crypto/pkcs12"
@@ -58,6 +59,9 @@ const IMDSAPIVersionArcVM = "2019-11-01"
 const IMDSAPIVersionAzureVM = "2018-02-01"
 const MSIEndpointAzureVM = "http://169.254.169.254/metadata/identity/oauth2/token"
 const MSIEndpointArcVM = "http://127.0.0.1:40342/metadata/identity/oauth2/token"
+
+// Refer to https://docs.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2 for details
+const WSAECONNREFUSED = 10061
 
 var DefaultTokenExpiryWithinThreshold = time.Minute * 10
 
@@ -731,6 +735,17 @@ func (credInfo *OAuthTokenInfo) queryIMDS(msiEndpoint string, resource string, i
 	return req, resp, err
 }
 
+// checkIfWWWAuthenticateUnavailable checks if the key "Www-Authenticate" is unavailable in the header of an http response
+func checkIfWWWAuthenticateUnavailable(resp *http.Response) bool {
+	wwwAuthenticateExists := false
+	if resp != nil {
+		if resp.Header != nil {
+			_, wwwAuthenticateExists = resp.Header["Www-Authenticate"]
+		}
+	}
+	return !wwwAuthenticateExists
+}
+
 // fixupTokenJson corrects the value of JSON field "not_before" in the Byte slice from blank to a valid value and returns the corrected Byte slice.
 
 // Dated 15th Sep 2021.
@@ -760,11 +775,52 @@ func fixupTokenJson(bytes []byte) []byte {
 func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.Token, error) {
 	// Try Arc VM
 	req, resp, err := credInfo.queryIMDS(MSIEndpointArcVM, Resource, IMDSAPIVersionArcVM, ctx)
+	// fmt.Println(resp)
+	// fmt.Println(err)
 	if err != nil {
-		// Try Azure VM
-		req, resp, err = credInfo.queryIMDS(MSIEndpointAzureVM, Resource, IMDSAPIVersionAzureVM, ctx)
-		if err != nil {
-			return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm: %v", err)
+		// Try Azure VM since there was an error in trying Arc VM
+		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(MSIEndpointAzureVM, Resource, IMDSAPIVersionAzureVM, ctx)
+		var serr syscall.Errno
+		errorConverted := errors.As(err, &serr)
+		if errAzureVM != nil {
+			// fmt.Printf("error is a syscall.Errno value: %#v\n%#v", serr, syscall.ECONNREFUSED)
+			// fmt.Printf("%#v\n", syscall.WSAECONNREFUSED)
+			if errorConverted {
+				var econnrefusedValue int
+				if runtime.GOOS == "linux" {
+					econnrefusedValue = int(syscall.ECONNREFUSED)
+				} else if runtime.GOOS == "windows" {
+					econnrefusedValue = WSAECONNREFUSED
+				} else {
+					econnrefusedValue = -1
+				}
+				
+				if int(serr) == econnrefusedValue {
+					// If connection to Arc endpoint was refused
+					return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm: %v", errAzureVM)
+				} else if checkIfWWWAuthenticateUnavailable(resp) {
+					// If response was malformed
+					return nil, fmt.Errorf("unknown process running at the endpoint: %v", err)
+				} else {
+					// If there is some other issue
+					return nil, fmt.Errorf("failed to process request at MSI endpoint: %v", err)
+				}
+			} else if checkIfWWWAuthenticateUnavailable(resp) {
+				// If response was malformed
+				return nil, fmt.Errorf("unknown process running at the endpoint: %v", err)
+			} else {
+				// If there is some other issue
+				return nil, fmt.Errorf("failed to process request at MSI endpoint: %v", err)
+			}
+		} else {
+			req, resp = reqAzureVM, respAzureVM
+		}
+	} else if checkIfWWWAuthenticateUnavailable(resp) {
+		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(MSIEndpointAzureVM, Resource, IMDSAPIVersionAzureVM, ctx)
+		if errAzureVM != nil {
+			return nil, fmt.Errorf("please check if IMDS is running at the endpoint: %v", err)
+		} else {
+			req, resp = reqAzureVM, respAzureVM
 		}
 	} else {
 		challengeTokenPath := strings.Split(resp.Header["Www-Authenticate"][0], "=")[1]
@@ -798,6 +854,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 			return nil, fmt.Errorf("failed to query token from Arc IMDS endpoint. Please report the issue to xxx@microsoft.com: %v", err)
 		}
 	}
+
 	defer func() { // resp and Body should not be nil
 		io.Copy(ioutil.Discard, resp.Body)
 		resp.Body.Close()
