@@ -704,7 +704,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromTokenStore(ctx context.Context) (
 }
 
 // queryIMDS sends a token request to the IMDS endpoint passed by the caller. This IMDS endpoint will be different for Azure and Arc VMs.
-func (credInfo *OAuthTokenInfo) queryIMDS(msiEndpoint string, resource string, imdsAPIVersion string, ctx context.Context) (*http.Request, *http.Response, error) {
+func (credInfo *OAuthTokenInfo) queryIMDS(ctx context.Context, msiEndpoint string, resource string, imdsAPIVersion string) (*http.Request, *http.Response, error) {
 	// Prepare request to get token from Azure Instance Metadata Service identity endpoint.
 	req, err := http.NewRequest("GET", msiEndpoint, nil)
 	if err != nil {
@@ -730,23 +730,26 @@ func (credInfo *OAuthTokenInfo) queryIMDS(msiEndpoint string, resource string, i
 
 	// Set context.
 	req.WithContext(ctx)
-
-	// Send request
+	// In case of some other process (Http Server) listening at 127.0.0.1:40342 , we do not want to wait forever for it to serve request
 	msiTokenHTTPClient.Timeout = 10 * time.Second
+	// Send request
 	resp, err := msiTokenHTTPClient.Do(req)
+	// Unset the timeout back
 	msiTokenHTTPClient.Timeout = 0
 	return req, resp, err
 }
 
 // checkIfWWWAuthenticateUnavailable checks if the key "Www-Authenticate" is unavailable in the header of an http response
-func checkIfWWWAuthenticateUnavailable(resp *http.Response) bool {
+func isValidArcResponse(resp *http.Response) bool {
+	// Parameter for validity is whether "Www-Authenticaite" exists in the response header
+	// "Www-Authenticate" contains the path to the challenge token file for Arc VMs
 	wwwAuthenticateExists := false
 	if resp != nil {
 		if resp.Header != nil {
 			_, wwwAuthenticateExists = resp.Header["Www-Authenticate"]
 		}
 	}
-	return !wwwAuthenticateExists
+	return wwwAuthenticateExists
 }
 
 // fixupTokenJson corrects the value of JSON field "not_before" in the Byte slice from blank to a valid value and returns the corrected Byte slice.
@@ -780,29 +783,23 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 	if err != nil {
 		// Try Azure VM since there was an error in trying Arc VM
 		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(MSIEndpointAzureVM, Resource, IMDSAPIVersionAzureVM, ctx)
-		var serr syscall.Errno
-		errorConverted := errors.As(err, &serr)
 		if errAzureVM != nil {
-			if errorConverted {
-				var econnrefusedValue int
+			var serr syscall.Errno
+			if errors.As(err, &serr) {
+				econnrefusedValue := -1
 				if runtime.GOOS == "linux" {
 					econnrefusedValue = int(syscall.ECONNREFUSED)
 				} else if runtime.GOOS == "windows" {
 					econnrefusedValue = WSAECONNREFUSED
-				} else {
-					econnrefusedValue = -1
 				}
 				if int(serr) == econnrefusedValue {
 					// If connection to Arc endpoint was refused
 					return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm: %v", errAzureVM)
-				} else if checkIfWWWAuthenticateUnavailable(resp) {
+				} else if !isValidArcResponse(resp) {
 					// If response was malformed
-					return nil, fmt.Errorf("unknown process running at the endpoint: %v", err)
-				} else {
-					// If there is some other issue
-					return nil, fmt.Errorf("failed to process request at MSI endpoint: %v", err)
+					return nil, fmt.Errorf("invalid response received from Arc IMDS endpoint (%s), probably some unknown process listening: %v", MSIEndpointArcVM, err)
 				}
-			} else if checkIfWWWAuthenticateUnavailable(resp) {
+			} else if !isValidArcResponse(resp) {
 				// If response was malformed
 				return nil, fmt.Errorf("unknown process running at the endpoint: %v", err)
 			} else {
@@ -810,16 +807,21 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 				return nil, fmt.Errorf("failed to process request at MSI endpoint: %v", err)
 			}
 		} else {
+			// Azure VM IMDS endpoint ok!
 			req, resp = reqAzureVM, respAzureVM
 		}
-	} else if checkIfWWWAuthenticateUnavailable(resp) {
+	} else if !isValidArcResponse(resp) {
+		// Not valid response from ARC IMDS endpoint. Perhaps some other process listening on it. Try Azure IMDS endpoint as fallback option.
 		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(MSIEndpointAzureVM, Resource, IMDSAPIVersionAzureVM, ctx)
 		if errAzureVM != nil {
-			return nil, fmt.Errorf("please check if IMDS is running at the endpoint: %v", err)
+			// Neither Arc nor Azure VM IMDS endpoint available. Can't use MSI.
+			return nil, fmt.Errorf("invalid response received from Arc IMDS endpoint (%s), probably some unknown process listening: %v", MSIEndpointArcVM, err)
 		} else {
+			// Azure VM IMDS endpoint ok!
 			req, resp = reqAzureVM, respAzureVM
 		}
 	} else {
+		// Valid response received from ARC IMDS endpoint. Proceed with step #2.
 		challengeTokenPath := strings.Split(resp.Header["Www-Authenticate"][0], "=")[1]
 		// Open the file.
 		challengeTokenFile, fileErr := os.Open(challengeTokenPath)
