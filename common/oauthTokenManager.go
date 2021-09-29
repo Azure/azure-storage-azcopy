@@ -678,6 +678,8 @@ func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*adal.Token, error
 
 var msiTokenHTTPClient = newAzcopyHTTPClient()
 
+// var msiTokenHTTPClientWithHTTPTimeout = &msiTokenHTTPClient{Timeout: 10 * time.Second,}
+
 // Single instance token store credential cache shared by entire azcopy process.
 var tokenStoreCredCache = NewCredCacheInternalIntegration(CredCacheOptions{
 	KeyName:     "azcopy/aadtoken/" + strconv.Itoa(os.Getpid()),
@@ -730,8 +732,10 @@ func (credInfo *OAuthTokenInfo) queryIMDS(msiEndpoint string, resource string, i
 	req.WithContext(ctx)
 
 	// Send request
+	msiTokenHTTPClient.Timeout = 10 * time.Second
 	resp, err := msiTokenHTTPClient.Do(req)
-
+	msiTokenHTTPClient.Timeout = 0
+	
 	return req, resp, err
 }
 
