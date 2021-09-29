@@ -89,6 +89,7 @@ type rawCopyCmdArgs struct {
 	recursive         bool
 	followSymlinks    bool
 	autoDecompress    bool
+	autoCompress      bool
 	// forceWrite flag is used to define the User behavior
 	// to overwrite the existing blobs or not.
 	forceWrite      string
@@ -336,6 +337,11 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		return cooked, errors.New("automatic decompression is only supported for downloads from Blob and Azure Files") // as at Sept 2019, our ADLS Gen 2 Swagger does not include content-encoding for directory (path) listings so we can't support it there
 	}
 	cooked.autoDecompress = raw.autoDecompress
+
+	if raw.autoCompress && !fromTo.IsUpload() {
+		return cooked, errors.New("automatic compression is only supported for uploads to Blob/ADLS Gen2 and Azure Files")
+	}
+	cooked.autoCompress = raw.autoCompress
 
 	// cooked.StripTopDir is effectively a workaround for the lack of wildcards in remote sources.
 	// Local, however, still supports wildcards, and thus needs its top directory stripped whenever a wildcard is used.
@@ -1033,6 +1039,7 @@ type CookedCopyCmdArgs struct {
 	ForceWrite         common.OverwriteOption // says whether we should try to overwrite
 	ForceIfReadOnly    bool                   // says whether we should _force_ any overwrites (triggered by forceWrite) to work on Azure Files objects that are set to read-only
 	autoDecompress     bool
+	autoCompress       bool
 
 	// options from flags
 	blockSize int64
@@ -1325,6 +1332,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		ForceWrite:      cca.ForceWrite,
 		ForceIfReadOnly: cca.ForceIfReadOnly,
 		AutoDecompress:  cca.autoDecompress,
+		AutoCompress:    cca.autoCompress,
 		Priority:        common.EJobPriority.Normal(),
 		LogLevel:        cca.LogVerbosity,
 		ExcludeBlobType: cca.excludeBlobType,
@@ -1817,6 +1825,7 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude these files when copying. This option supports wildcard characters (*)")
 	cpCmd.PersistentFlags().StringVar(&raw.forceWrite, "overwrite", "true", "Overwrite the conflicting files and blobs at the destination if this flag is set to true. (default 'true') Possible values include 'true', 'false', 'prompt', and 'ifSourceNewer'. For destinations that support folders, conflicting folder-level properties will be overwritten this flag is 'true' or if a positive response is provided to the prompt.")
 	cpCmd.PersistentFlags().BoolVar(&raw.autoDecompress, "decompress", false, "Automatically decompress files when downloading, if their content-encoding indicates that they are compressed. The supported content-encoding values are 'gzip' and 'deflate'. File extensions of '.gz'/'.gzip' or '.zz' aren't necessary, but will be removed if present.")
+	cpCmd.PersistentFlags().BoolVar(&raw.autoCompress, "compress", false, "Automatically compress files using gzip when uploading. The blob content-encoding header will be set to 'gzip', while the file extension will not be changed.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Look into sub-directories recursively when uploading from local file system.")
 	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS. Piping: BlobPipe, PipeBlob")
 	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "", "Optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from the container "+

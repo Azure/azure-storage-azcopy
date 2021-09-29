@@ -31,6 +31,7 @@ type IJobPartMgr interface {
 	GetOverwriteOption() common.OverwriteOption
 	GetForceIfReadOnly() bool
 	AutoDecompress() bool
+	AutoCompress() bool
 	ScheduleChunks(chunkFunc chunkFunc)
 	RescheduleTransfer(jptm IJobPartTransferMgr)
 	BlobTypeOverride() common.BlobType
@@ -686,6 +687,10 @@ func (jpm *jobPartMgr) GetForceIfReadOnly() bool {
 
 func (jpm *jobPartMgr) AutoDecompress() bool {
 	return jpm.Plan().AutoDecompress
+}
+
+func (jpm *jobPartMgr) AutoCompress() bool {
+	return jpm.Plan().AutoCompress
 }
 
 func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byte) (headers common.ResourceHTTPHeaders,

@@ -39,6 +39,7 @@ type IJobPartTransferMgr interface {
 	GetOverwriteOption() common.OverwriteOption
 	GetForceIfReadOnly() bool
 	ShouldDecompress() bool
+	ShouldCompress() bool
 	GetSourceCompressionType() (common.CompressionType, error)
 	ReportChunkDone(id common.ChunkID) (lastChunk bool, chunksDone uint32)
 	TransferStatusIgnoringCancellation() common.TransferStatus
@@ -234,6 +235,10 @@ func (jptm *jobPartTransferMgr) ShouldDecompress() bool {
 func (jptm *jobPartTransferMgr) GetSourceCompressionType() (common.CompressionType, error) {
 	encoding := jptm.Info().SrcHTTPHeaders.ContentEncoding
 	return common.GetCompressionType(encoding)
+}
+
+func (jptm *jobPartTransferMgr) ShouldCompress() bool {
+	return jptm.jobPartMgr.AutoCompress()
 }
 
 func (jptm *jobPartTransferMgr) Info() TransferInfo {

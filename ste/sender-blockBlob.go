@@ -138,6 +138,12 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
 	cpkToApply := common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
 
+	offset := uint32(0)
+	if jptm.ShouldCompress() {
+		offset = 1
+	}
+	blockIDs := make([]string, numChunks+offset)
+
 	return &blockBlobSenderBase{
 		jptm:             jptm,
 		sip:              srcInfoProvider,
@@ -145,7 +151,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		chunkSize:        chunkSize,
 		numChunks:        numChunks,
 		pacer:            pacer,
-		blockIDs:         make([]string, numChunks),
+		blockIDs:         blockIDs,
 		headersToApply:   props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply:  props.SrcMetadata.ToAzBlobMetadata(),
 		blobTagsToApply:  props.SrcBlobTags.ToAzBlobTagsMap(),
@@ -184,6 +190,19 @@ func (s *blockBlobSenderBase) Epilogue() {
 	blockIDs := s.blockIDs
 	s.blockIDs = nil // so we know for sure that only this routine has access after we release the lock (nothing else should need it now, since we're in the epilogue. Nil-ing here is just being defensive)
 	s.muBlockIDs.Unlock()
+
+	// shorten the block ID list as if we compressed the file, there's a good chance that not all blocks are actually occupied
+	if jptm.ShouldCompress() {
+		lastValidID := len(blockIDs)
+		for i, id := range blockIDs {
+			if id == "" {
+				lastValidID = i
+				break
+			}
+		}
+		blockIDs = blockIDs[0:lastValidID]
+	}
+
 	shouldPutBlockList := getPutListNeed(&s.atomicPutListIndicator)
 	if shouldPutBlockList == putListNeedUnknown && !jptm.WasCanceled() {
 		panic(errors.New("'put list' need flag was never set"))

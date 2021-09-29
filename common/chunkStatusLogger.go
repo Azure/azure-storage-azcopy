@@ -100,6 +100,10 @@ func (id ChunkID) Length() int64 {
 	return id.length
 }
 
+func (id *ChunkID) SetLength(newLength int64) {
+	id.length = newLength
+}
+
 var EWaitReason = WaitReason{0, ""}
 
 // WaitReason identifies the one thing that a given chunk is waiting on, at a given moment.

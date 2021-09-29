@@ -378,13 +378,24 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 		defer close(md5Channel)
 	}
 
-	chunkIDCount := int32(0)
-	for startIndex := int64(0); startIndex < srcSize || isDummyChunkInEmptyFile(startIndex, srcSize); startIndex += int64(chunkSize) {
+	var compressor *common.CompressingReader
+	if jptm.ShouldCompress() {
+		compressor = common.NewCompressingReader(srcFile, srcSize)
+		defer func() {
+			closeErr := compressor.Close()
+			if closeErr != nil {
+				jptm.Log(pipeline.LogError, fmt.Sprintf("Error closing compressor for %s due to err: %s", srcPath, closeErr))
+			}
+		}()
+	}
 
-		adjustedChunkSize := int64(chunkSize)
+	chunkIDCount := int32(0)
+	for startIndex := int64(0); startIndex < srcSize || isDummyChunkInEmptyFile(startIndex, srcSize) || compressor != nil; startIndex += chunkSize {
+
+		adjustedChunkSize := chunkSize
 
 		// compute actual size of the chunk
-		if startIndex+int64(chunkSize) > srcSize {
+		if startIndex+chunkSize > srcSize && compressor == nil {
 			adjustedChunkSize = srcSize - startIndex
 		}
 
@@ -400,7 +411,7 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 				// Furthermore, this prevents prefetchErr changing from under us.
 				if prefetchErr == nil {
 					// create reader and prefetch the data into it
-					chunkReader = createPopulatedChunkReader(jptm, sourceFileFactory, id, adjustedChunkSize, srcFile)
+					chunkReader = createPopulatedChunkReader(jptm, sourceFileFactory, id, adjustedChunkSize, compressor)
 
 					// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
 					prefetchErr = chunkReader.BlockingPrefetch(srcFile, false)
@@ -409,6 +420,11 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 						//     the chunkReader will repeat the read from disk. So there is an essential dependency
 						//     between the hashing and our change detection logic.
 						common.DocumentationForDependencyOnChangeDetection() // <-- read the documentation here ***
+
+						// update the length in case we are compressing, since we won't know the real length of the block until we get the compressed data
+						if compressor != nil {
+							id.SetLength(chunkReader.Length())
+						}
 
 						chunkReader.WriteBufferTo(md5Hasher)
 						ps = chunkReader.GetPrologueState()
@@ -419,7 +435,7 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 			}
 		}
 
-		// If this is the the very first chunk, do special init steps
+		// If this is the very first chunk, do special init steps
 		if startIndex == 0 {
 			// Run prologue before first chunk is scheduled.
 			// If file is not local, we'll get no leading bytes, but we still run the prologue in case
@@ -435,8 +451,14 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 		isWholeFile := numChunks == 1
 		var cf chunkFunc
 		if srcInfoProvider.IsLocal() {
-			if prefetchErr == nil {
+			if jptm.ShouldCompress() && id.Length() != chunkSize {
 				cf = s.(uploader).GenerateUploadFunc(id, chunkIDCount, chunkReader, isWholeFile)
+				jptm.SetNumberOfChunks(uint32(chunkIDCount) + 1)
+				jptm.ScheduleChunks(cf)
+				break
+			} else if prefetchErr == nil {
+				cf = s.(uploader).GenerateUploadFunc(id, chunkIDCount, chunkReader, isWholeFile)
+				jptm.ScheduleChunks(cf)
 			} else {
 				if chunkReader != nil {
 					_ = chunkReader.Close()
@@ -445,17 +467,18 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 				// Our jptm logic currently requires us to schedule every chunk, even if we know there's an error,
 				// so we schedule a func that will just fail with the given error
 				cf = createSendToRemoteChunkFunc(jptm, id, func() { jptm.FailActiveSend("chunk data read", prefetchErr) })
+				jptm.ScheduleChunks(cf)
 			}
 		} else {
 			cf = s.(s2sCopier).GenerateCopyFunc(id, chunkIDCount, adjustedChunkSize, isWholeFile)
+			jptm.ScheduleChunks(cf)
 		}
-		jptm.ScheduleChunks(cf)
 
 		chunkIDCount++
 	}
 
 	// sanity check to verify the number of chunks scheduled
-	if chunkIDCount != int32(numChunks) {
+	if compressor == nil && chunkIDCount != int32(numChunks) {
 		panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, chunkIDCount, srcPath, srcSize))
 	}
 
@@ -469,7 +492,7 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 // of the file read later (when doing a retry)
 // BTW, the reader we create here just works with a single chuck. (That's in contrast with downloads, where we have
 // to use an object that encompasses the whole file, so that it can put the chunks back into order. We don't have that requirement here.)
-func createPopulatedChunkReader(jptm IJobPartTransferMgr, sourceFileFactory common.ChunkReaderSourceFactory, id common.ChunkID, adjustedChunkSize int64, srcFile common.CloseableReaderAt) common.SingleChunkReader {
+func createPopulatedChunkReader(jptm IJobPartTransferMgr, sourceFileFactory common.ChunkReaderSourceFactory, id common.ChunkID, adjustedChunkSize int64, compressor *common.CompressingReader) common.SingleChunkReader {
 	chunkReader := common.NewSingleChunkReader(jptm.Context(),
 		sourceFileFactory,
 		id,
@@ -477,7 +500,8 @@ func createPopulatedChunkReader(jptm IJobPartTransferMgr, sourceFileFactory comm
 		jptm.ChunkStatusLogger(),
 		jptm,
 		jptm.SlicePool(),
-		jptm.CacheLimiter())
+		jptm.CacheLimiter(),
+		compressor)
 
 	return chunkReader
 }
@@ -521,7 +545,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 	//  or should we redefine epilogue to be success-path only, and only call it in that case?
 	s.Epilogue() // Perform service-specific cleanup before jptm cleanup. Some services may actually require setup to make the file actually appear.
 
-	if jptm.IsLive() && info.DestLengthValidation {
+	if jptm.IsLive() && info.DestLengthValidation && !jptm.ShouldCompress() {
 		_, isS2SCopier := s.(s2sCopier)
 		shouldCheckLength := true
 		destLength, err := s.GetDestinationLength()
