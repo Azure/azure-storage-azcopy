@@ -58,7 +58,7 @@ const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
 const IMDSAPIVersionArcVM = "2019-11-01"
 const IMDSAPIVersionAzureVM = "2018-02-01"
 const MSIEndpointAzureVM = "http://169.254.169.254/metadata/identity/oauth2/token"
-const MSIEndpointArcVM = "http://127.0.0.1:40342/metadata/identity/oauth2/token"
+const MSIEndpointArcVM = "http://localhost:40343/metadata/identity/oauth2/token"
 
 // Refer to https://docs.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2 for details
 const WSAECONNREFUSED = 10061
@@ -812,7 +812,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(ctx, MSIEndpointAzureVM, Resource, IMDSAPIVersionAzureVM)
 		if errAzureVM != nil {
 			// Neither Arc nor Azure VM IMDS endpoint available. Can't use MSI.
-			return nil, fmt.Errorf("invalid response received from Arc IMDS endpoint (%s), probably some unknown process listening: %v", MSIEndpointArcVM, err)
+			return nil, fmt.Errorf("invalid response received from Arc IMDS endpoint (%s), probably some unknown process listening. If this an Azure VM, please check whether MSI is enabled, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm: %v", MSIEndpointArcVM, errAzureVM)
 		} else {
 			// Azure VM IMDS endpoint ok!
 			req, resp = reqAzureVM, respAzureVM
