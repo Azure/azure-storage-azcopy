@@ -774,20 +774,15 @@ func fixupTokenJson(bytes []byte) []byte {
 // Note: Currently the msiTokenHTTPClient timeout is configured for 30 secs. Should be reduced to 5 sec as IMDS endpoint is local to the machine.
 // Without this change, if some router is configured to not return "ICMP unreachable" then it will take 30 secs to timeout and fallback to ARC.
 // For now, this has been mitigated by checking Arc first, and then Azure
-// TODO: Handle the case where the VM has some process already listening to port 40342.
 func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.Token, error) {
 	// Try Arc VM
 	req, resp, err := credInfo.queryIMDS(MSIEndpointArcVM, Resource, IMDSAPIVersionArcVM, ctx)
-	// fmt.Println(resp)
-	// fmt.Println(err)
 	if err != nil {
 		// Try Azure VM since there was an error in trying Arc VM
 		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(MSIEndpointAzureVM, Resource, IMDSAPIVersionAzureVM, ctx)
 		var serr syscall.Errno
 		errorConverted := errors.As(err, &serr)
 		if errAzureVM != nil {
-			// fmt.Printf("error is a syscall.Errno value: %#v\n%#v", serr, syscall.ECONNREFUSED)
-			// fmt.Printf("%#v\n", syscall.WSAECONNREFUSED)
 			if errorConverted {
 				var econnrefusedValue int
 				if runtime.GOOS == "linux" {
