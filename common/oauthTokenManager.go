@@ -88,8 +88,8 @@ func newAzcopyHTTPClient() *http.Client {
 			Proxy: GlobalProxyLookup,
 			// We use Dial instead of DialContext as DialContext has been reported to cause slower performance.
 			Dial /*Context*/ : (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
+				Timeout:   5 * time.Second,
+				KeepAlive: 5 * time.Second,
 				DualStack: true,
 			}).Dial, /*Context*/
 			MaxIdleConns:           0, // No limit
