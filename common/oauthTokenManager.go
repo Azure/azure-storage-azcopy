@@ -735,7 +735,6 @@ func (credInfo *OAuthTokenInfo) queryIMDS(msiEndpoint string, resource string, i
 	msiTokenHTTPClient.Timeout = 10 * time.Second
 	resp, err := msiTokenHTTPClient.Do(req)
 	msiTokenHTTPClient.Timeout = 0
-	
 	return req, resp, err
 }
 
@@ -798,7 +797,6 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 				} else {
 					econnrefusedValue = -1
 				}
-				
 				if int(serr) == econnrefusedValue {
 					// If connection to Arc endpoint was refused
 					return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm: %v", errAzureVM)
