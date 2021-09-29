@@ -30,7 +30,7 @@ import (
 	"sync/atomic"
 )
 
-type decompressingWriterSuite struct{}
+type compressionSuite struct{}
 
 type closeableBuffer struct {
 	atomicCloseWasCalled int32
@@ -46,9 +46,9 @@ func (c *closeableBuffer) closeWasCalled() bool {
 	return atomic.LoadInt32(&c.atomicCloseWasCalled) == 1
 }
 
-var _ = chk.Suite(&decompressingWriterSuite{})
+var _ = chk.Suite(&compressionSuite{})
 
-func (d *decompressingWriterSuite) TestDecompressingWriter_SuccessCases(c *chk.C) {
+func (d *compressionSuite) TestDecompressingWriter_SuccessCases(c *chk.C) {
 	cases := []struct {
 		desc            string
 		tp              CompressionType
@@ -90,7 +90,7 @@ func (d *decompressingWriterSuite) TestDecompressingWriter_SuccessCases(c *chk.C
 	}
 }
 
-func (d *decompressingWriterSuite) TestDecompressingWriter_EarlyClose(c *chk.C) {
+func (d *compressionSuite) TestDecompressingWriter_EarlyClose(c *chk.C) {
 
 	cases := []CompressionType{
 		ECompressionType.GZip(),
@@ -118,7 +118,7 @@ func (d *decompressingWriterSuite) TestDecompressingWriter_EarlyClose(c *chk.C) 
 	}
 }
 
-func (d *decompressingWriterSuite) getTestData(c *chk.C, tp CompressionType, originalSize int) (original []byte, compressed []byte) {
+func (d *compressionSuite) getTestData(c *chk.C, tp CompressionType, originalSize int) (original []byte, compressed []byte) {
 	// we have original uncompressed data
 	originalData := d.genCompressibleTestData(originalSize)
 	// and from that we have original compressed data
@@ -136,14 +136,14 @@ func (d *decompressingWriterSuite) getTestData(c *chk.C, tp CompressionType, ori
 }
 
 /* Manual sanity check of compressible data gen
-func (d *decompressingWriterSuite) TestDecompressingWriter_GenTestData(c *chk.C) {
+func (d *compressionSuite) TestDecompressingWriter_GenTestData(c *chk.C) {
 	f, _ := os.Create("<yourfoldergoeshere>\\testGen4373462.dat")
 	dat := d.genCompressibleTestData(20 * 1024)
 	f.Write(dat)
 	f.Close()
 }*/
 
-func (d *decompressingWriterSuite) genCompressibleTestData(size int) []byte {
+func (d *compressionSuite) genCompressibleTestData(size int) []byte {
 	phrases := make([][]byte, rand.Intn(50)+1)
 	for i := range phrases {
 		phrases[i] = make([]byte, rand.Intn(100)+1)

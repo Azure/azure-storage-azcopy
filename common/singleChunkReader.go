@@ -155,9 +155,12 @@ type singleChunkReader struct {
 	muClose *sync.Mutex
 
 	isClosed bool
+
+	// if present, it indicates that the source file is being compressed, read from the compressor instead of fileReader
+	compressor *CompressingReader
 }
 
-func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFactory, chunkId ChunkID, length int64, chunkLogger ChunkStatusLogger, generalLogger ILogger, slicePool ByteSlicePooler, cacheLimiter CacheLimiter) SingleChunkReader {
+func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFactory, chunkId ChunkID, length int64, chunkLogger ChunkStatusLogger, generalLogger ILogger, slicePool ByteSlicePooler, cacheLimiter CacheLimiter, compressor *CompressingReader) SingleChunkReader {
 	if length <= 0 {
 		return &emptyChunkReader{}
 	}
@@ -172,6 +175,7 @@ func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFa
 		sourceFactory: sourceFactory,
 		chunkId:       chunkId,
 		length:        length,
+		compressor:    compressor,
 	}
 }
 
@@ -190,7 +194,7 @@ func (cr *singleChunkReader) HasPrefetchedEntirelyZeros() bool {
 	defer cr.unuse()
 
 	if cr.buffer == nil {
-		return false // not prefetched (and, to simply error handling in the caller, we don't call retryBlockingPrefetchIfNecessary here)
+		return false // not prefetched (and, to simplify error handling in the caller, we don't call retryBlockingPrefetchIfNecessary here)
 	}
 
 	for _, b := range cr.buffer {
@@ -207,6 +211,9 @@ func (cr *singleChunkReader) HasPrefetchedEntirelyZeros() bool {
 	//       and (c) we would want to check whether it really did offer meaningful real-world performance gain, before introducing use of unsafe.
 }
 
+// BlockingPrefetch fetches data from the file and buffers it in memory
+// if no compressor is present, read from the fileReader, and drop the content from memory as soon as it's read once
+// if a compressor is present, read from it instead of fileReader, and keep the content until Close is called
 func (cr *singleChunkReader) BlockingPrefetch(fileReader io.ReaderAt, isRetry bool) error {
 	cr.use()
 	defer cr.unuse()
@@ -216,7 +223,7 @@ func (cr *singleChunkReader) BlockingPrefetch(fileReader io.ReaderAt, isRetry bo
 
 // Prefetch the data in this chunk, using a file reader that is provided to us.
 // (Allowing the caller to provide the reader to us allows a sequential read approach, since caller can control the order sequentially (in the initial, non-retry, scenario)
-// We use io.ReaderAt, rather than io.Reader, just for maintainablity/ensuring correctness. (Since just using Reader requires the caller to
+// We use io.ReaderAt, rather than io.Reader, just for maintainability/ensuring correctness. (Since just using Reader requires the caller to
 // follow certain assumptions about positioning the file pointer at the right place before calling us, but using ReaderAt does not).
 func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bool) error {
 	if cr.buffer != nil {
@@ -225,7 +232,7 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 
 	// Block until we successfully add cr.length bytes to the app's current RAM allocation.
 	// Must use "relaxed" RAM limit IFF this is a retry.  Else, we can, in theory, get deadlock with all active goroutines blocked
-	// here doing retries, but no RAM _will_ become available because its
+	// here doing retries, but no RAM _will_ become available because it's
 	// all used by queued chunkfuncs (that can't be processed because all goroutines are active).
 	cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.RAMToSchedule())
 	err := cr.cacheLimiter.WaitUntilAdd(cr.ctx, cr.length, func() bool { return isRetry })
@@ -240,7 +247,14 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 	// read WITHOUT holding the "close" lock.  While we don't have the lock, we mutate ONLY local variables, no instance state.
 	// (Don't release the other lock, muMaster, since that's unnecessary would make it harder to reason about behaviour - e.g. is something other than Close happening?)
 	cr.muClose.Unlock()
-	n, readErr := fileReader.ReadAt(targetBuffer, cr.chunkId.OffsetInFile())
+	var readErr error
+	var n int
+	if cr.compressor == nil {
+		n, readErr = fileReader.ReadAt(targetBuffer, cr.chunkId.OffsetInFile())
+	} else {
+		n, readErr = io.ReadFull(cr.compressor, targetBuffer)
+		cr.length = int64(n)
+	}
 	cr.muClose.Lock()
 
 	// now that we have the lock again, see if any error means we can't continue
@@ -254,7 +268,7 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 		}
 	}
 	// return the revised error, if any
-	if readErr != nil {
+	if readErr != nil && (cr.compressor == nil || (cr.compressor != nil && readErr != io.ErrUnexpectedEOF)) {
 		cr.returnSlice(targetBuffer)
 		return readErr
 	}
@@ -321,7 +335,8 @@ func (cr *singleChunkReader) Read(p []byte) (n int, err error) {
 	// This is a normal read, so free the prefetch buffer when hit EOF (i.e. end of this chunk).
 	// We do so on the assumption that if we've read to the end we don't need the prefetched data any longer.
 	// (If later, there's a retry that forces seek back to start and re-read, we'll automatically trigger a re-fetch at that time)
-	return cr.doRead(p, true)
+	// An exception is when a compressor is present, then we do want to keep the buffer, since compression only happens once and we cannot go back
+	return cr.doRead(p, cr.compressor == nil)
 }
 
 func (cr *singleChunkReader) doRead(p []byte, freeBufferOnEof bool) (n int, err error) {
@@ -347,12 +362,12 @@ func (cr *singleChunkReader) doRead(p []byte, freeBufferOnEof bool) (n int, err 
 	if cr.positionInChunk >= cr.length {
 		panic("unexpected EOF")
 	}
-	if cr.length != int64(len(cr.buffer)) {
-		panic("unexpected buffer length discrepancy")
-	}
+	//if cr.length != int64(len(cr.buffer)) {
+	//	panic("unexpected buffer length discrepancy")
+	//}
 
 	// Copy the data across
-	bytesCopied := copy(p, cr.buffer[cr.positionInChunk:])
+	bytesCopied := copy(p, cr.buffer[cr.positionInChunk:cr.length])
 	cr.positionInChunk += int64(bytesCopied)
 
 	// check for EOF
@@ -419,6 +434,11 @@ func (cr *singleChunkReader) Close() error {
 // (else we would have to re-read the start of the file later, and that breaks our rule to use sequential
 // reads as much as possible)
 func (cr *singleChunkReader) GetPrologueState() PrologueState {
+	// cut it short as we don't need to infer content type for compressed files
+	if cr.compressor != nil {
+		return PrologueState{}
+	}
+
 	cr.use()
 	// can't defer unuse here. See explicit calls (plural) below
 

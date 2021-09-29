@@ -40,7 +40,7 @@ var decompressingWriterBufferPool = NewMultiSizeSlicePool(decompressingWriterCop
 // that is written to it, before passing the decompressed data on to a final destination.
 // This decompressor is intended to work with compressed data wrapped in either the ZLib headers or the slightly larger
 // Gzip headers. Both of those formats compress a single file (often a .tar archive in the case of Gzip).
-// So there is no need to to expand the decompressed info out into multiple files (as we would have to do,
+// So there is no need to expand the decompressed info out into multiple files (as we would have to do,
 // if we were to support "zip" compression). See https://stackoverflow.com/a/20765054
 func NewDecompressingWriter(destination io.WriteCloser, ct CompressionType) io.WriteCloser {
 	preader, pwriter := io.Pipe()

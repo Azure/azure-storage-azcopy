@@ -125,6 +125,7 @@ type CopyJobPartOrderRequest struct {
 	ForceWrite      OverwriteOption // to determine if the existing needs to be overwritten or not. If set to true, existing blobs are overwritten
 	ForceIfReadOnly bool            // Supplements ForceWrite with addition setting for Azure Files objects with read-only attribute
 	AutoDecompress  bool            // if true, source data with encodings that represent compression are automatically decompressed when downloading
+	AutoCompress    bool            // if true, source data will be compressed automatically before uploading
 	Priority        JobPriority     // priority of the task
 	FromTo          FromTo
 	Fpo             FolderPropertyOption // passed in from front-end to ensure that front-end and STE agree on the desired behaviour for the job
