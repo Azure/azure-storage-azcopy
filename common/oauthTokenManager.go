@@ -88,8 +88,8 @@ func newAzcopyHTTPClient() *http.Client {
 			Proxy: GlobalProxyLookup,
 			// We use Dial instead of DialContext as DialContext has been reported to cause slower performance.
 			Dial /*Context*/ : (&net.Dialer{
-				Timeout:   5 * time.Second,
-				KeepAlive: 5 * time.Second,
+				Timeout:   10 * time.Second,
+				KeepAlive: 10 * time.Second,
 				DualStack: true,
 			}).Dial, /*Context*/
 			MaxIdleConns:           0, // No limit
@@ -678,8 +678,6 @@ func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*adal.Token, error
 
 var msiTokenHTTPClient = newAzcopyHTTPClient()
 
-// var msiTokenHTTPClientWithHTTPTimeout = &msiTokenHTTPClient{Timeout: 10 * time.Second,}
-
 // Single instance token store credential cache shared by entire azcopy process.
 var tokenStoreCredCache = NewCredCacheInternalIntegration(CredCacheOptions{
 	KeyName:     "azcopy/aadtoken/" + strconv.Itoa(os.Getpid()),
@@ -739,7 +737,7 @@ func (credInfo *OAuthTokenInfo) queryIMDS(ctx context.Context, msiEndpoint strin
 	return req, resp, err
 }
 
-// checkIfWWWAuthenticateUnavailable checks if the key "Www-Authenticate" is unavailable in the header of an http response
+// isValidArcResponse checks if the key "Www-Authenticate" is unavailable in the header of an http response
 func isValidArcResponse(resp *http.Response) bool {
 	// Parameter for validity is whether "Www-Authenticaite" exists in the response header
 	// "Www-Authenticate" contains the path to the challenge token file for Arc VMs
@@ -779,10 +777,10 @@ func fixupTokenJson(bytes []byte) []byte {
 // For now, this has been mitigated by checking Arc first, and then Azure
 func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.Token, error) {
 	// Try Arc VM
-	req, resp, err := credInfo.queryIMDS(MSIEndpointArcVM, Resource, IMDSAPIVersionArcVM, ctx)
+	req, resp, err := credInfo.queryIMDS(ctx, MSIEndpointArcVM, Resource, IMDSAPIVersionArcVM)
 	if err != nil {
 		// Try Azure VM since there was an error in trying Arc VM
-		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(MSIEndpointAzureVM, Resource, IMDSAPIVersionAzureVM, ctx)
+		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(ctx, MSIEndpointAzureVM, Resource, IMDSAPIVersionAzureVM)
 		if errAzureVM != nil {
 			var serr syscall.Errno
 			if errors.As(err, &serr) {
@@ -795,24 +793,23 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 				if int(serr) == econnrefusedValue {
 					// If connection to Arc endpoint was refused
 					return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm: %v", errAzureVM)
-				} else if !isValidArcResponse(resp) {
-					// If response was malformed
-					return nil, fmt.Errorf("invalid response received from Arc IMDS endpoint (%s), probably some unknown process listening: %v", MSIEndpointArcVM, err)
+				} else {
+					// A syscall error other than ECONNREFUSED, implies we could not get the HTTP response
+					return nil, fmt.Errorf("error communicating with Arc IMDS endpoint (%s): %v", MSIEndpointArcVM, err)
 				}
-			} else if !isValidArcResponse(resp) {
-				// If response was malformed
-				return nil, fmt.Errorf("unknown process running at the endpoint: %v", err)
 			} else {
-				// If there is some other issue
-				return nil, fmt.Errorf("failed to process request at MSI endpoint: %v", err)
+				// queryIMDS failed, but not with a syscall error
+				// 1. Either it is an HTTP error, or
+				// 2. The HTTP request timed out
+				return nil, fmt.Errorf("invalid response received from Arc IMDS endpoint (%s), probably some unknown process listening: %v", MSIEndpointArcVM, err)
 			}
 		} else {
-			// Azure VM IMDS endpoint ok!
+			// Arc IMDS failed with error, but Azure IMDS succeeded
 			req, resp = reqAzureVM, respAzureVM
 		}
 	} else if !isValidArcResponse(resp) {
 		// Not valid response from ARC IMDS endpoint. Perhaps some other process listening on it. Try Azure IMDS endpoint as fallback option.
-		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(MSIEndpointAzureVM, Resource, IMDSAPIVersionAzureVM, ctx)
+		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(ctx, MSIEndpointAzureVM, Resource, IMDSAPIVersionAzureVM)
 		if errAzureVM != nil {
 			// Neither Arc nor Azure VM IMDS endpoint available. Can't use MSI.
 			return nil, fmt.Errorf("invalid response received from Arc IMDS endpoint (%s), probably some unknown process listening: %v", MSIEndpointArcVM, err)
@@ -821,7 +818,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 			req, resp = reqAzureVM, respAzureVM
 		}
 	} else {
-		// Valid response received from ARC IMDS endpoint. Proceed with step #2.
+		// Valid response received from ARC IMDS endpoint. Proceed with the next step.
 		challengeTokenPath := strings.Split(resp.Header["Www-Authenticate"][0], "=")[1]
 		// Open the file.
 		challengeTokenFile, fileErr := os.Open(challengeTokenPath)
