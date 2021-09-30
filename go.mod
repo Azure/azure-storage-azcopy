@@ -13,19 +13,16 @@ require (
 	github.com/form3tech-oss/jwt-go v3.2.5+incompatible // indirect
 	github.com/go-ini/ini v1.62.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
+	github.com/google/uuid v1.3.0
 	github.com/hillu/go-ntdll v0.0.0-20210404124636-a6f426aa8d92
-	github.com/google/uuid v1.3.0 // indirect
-	github.com/jiacfan/keychain v0.0.0-20180920053336-f2c902a3d807
-	github.com/jiacfan/keyctl v0.3.1
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/mattn/go-ieproxy v0.0.1
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.2.1
-	github.com/stretchr/objx v0.3.0 // indirect
-	github.com/stretchr/testify v1.7.0 // indirect
-	golang.org/x/mod v0.4.2 // indirect
+	github.com/wastore/keychain v0.0.0-20180920053336-f2c902a3d807
+	github.com/wastore/keyctl v0.3.1
 	golang.org/x/crypto v0.0.0-20210812204632-0ba0e8f03122
 	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d // indirect
 	golang.org/x/oauth2 v0.0.0-20210810183815-faf39c7919d5
