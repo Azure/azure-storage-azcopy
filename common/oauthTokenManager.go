@@ -847,7 +847,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 
 		resp, err = msiTokenHTTPClient.Do(req)
 		if err != nil {
-			return nil, fmt.Errorf("failed to query token from Arc IMDS endpoint. Please report the issue to xxx@microsoft.com: %v", err)
+			return nil, fmt.Errorf("failed to query token from Arc IMDS endpoint: %v", err)
 		}
 	}
 
