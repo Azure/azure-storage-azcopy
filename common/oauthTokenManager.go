@@ -58,7 +58,7 @@ const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
 const IMDSAPIVersionArcVM = "2019-11-01"
 const IMDSAPIVersionAzureVM = "2018-02-01"
 const MSIEndpointAzureVM = "http://169.254.169.254/metadata/identity/oauth2/token"
-const MSIEndpointArcVM = "http://localhost:40343/metadata/identity/oauth2/token"
+const MSIEndpointArcVM = "http://localhost:40342/metadata/identity/oauth2/token"
 
 // Refer to https://docs.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2 for details
 const WSAECONNREFUSED = 10061
