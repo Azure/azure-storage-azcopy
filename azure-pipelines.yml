@@ -90,9 +90,13 @@ jobs:
       # Running E2E Tests on Linux - ARM64
       - script: |
           set -e
+          sudo apt-get update
+          sudo apt-get install qemu binfmt-support qemu-user-static
+          update-binfmts --display
           GOARCH=arm64 GOOS=linux go build -o azcopy_linux_arm64
           export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_linux_arm64
-          go test -timeout 20m -race -short -cover ./e2etest
+          GOARCH=arm64 go test -c -o test.arm64 ./e2etest
+          ./test.arm64
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
@@ -118,26 +122,6 @@ jobs:
           CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
           AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/azcopy_windows_amd64.exe
         displayName: 'E2E Test Windows - AMD64'
-        condition: eq(variables.type, 'windows')
-
-      # Running E2E Tests on Windows - ARM64
-      - script: |
-          set GOARCH=arm
-          set GOARM=7
-          go tool dist install -v pkg/runtime
-          go install -v -a std
-          go build -o $(System.DefaultWorkingDirectory)/azcopy_windows_v7_arm.exe
-          echo 'starting E2E tests on windows - ARM64'
-          go test -timeout 30m -cover -v ./e2etest
-        env:
-          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
-          AZCOPY_E2E_ACCOUNT_KEY_HNS: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
-          AZCOPY_E2E_ACCOUNT_NAME_HNS: $(AZCOPY_E2E_ACCOUNT_NAME_HNS)
-          CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
-          CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
-          AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/azcopy_windows_v7_arm.exe
-        displayName: 'E2E Test Windows - ARM64'
         condition: eq(variables.type, 'windows')
 
       # Running E2E Tests on Mac
