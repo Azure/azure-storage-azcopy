@@ -23,7 +23,6 @@ package jobsAdmin
 import (
 	"context"
 	"fmt"
-	"github.com/nitin-deamon/azure-storage-azcopy/v10/ste"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -33,6 +32,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/ste"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
@@ -73,6 +74,7 @@ var JobsAdmin interface {
 	// JobMgr returns the specified JobID's JobMgr
 	JobMgr(jobID common.JobID) (ste.IJobMgr, bool)
 	JobMgrEnsureExists(jobID common.JobID, level common.LogLevel, commandString string) ste.IJobMgr
+	JobMgrCreateWithLogger(jobID common.JobID, level common.LogLevel, commandString string, logger common.ILoggerResetable) ste.IJobMgr
 
 	// AddJobPartMgr associates the specified JobPartMgr with the Jobs Administrator
 	//AddJobPartMgr(appContext context.Context, planFile JobPartPlanFileName) IJobPartMgr
@@ -96,7 +98,6 @@ var JobsAdmin interface {
 	CurrentMainPoolSize() int
 
 	TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32, fromTo common.FromTo, dir common.TransferDirection, p *ste.PipelineNetworkStats) []common.PerformanceAdvice
-
 }
 
 func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {
@@ -143,7 +144,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 	}
 	// create new context with the defaultService api version set as value to serviceAPIVersionOverride in the app context.
 	ja.appCtx = context.WithValue(ja.appCtx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	ja.jobLogger = common.AzcopyCurrentJobLogger
+	ja.JobLogger = common.AzcopyCurrentJobLogger
 
 	// create concurrency tuner...
 	// ... but don't spin up the main pool. That is done when
@@ -242,19 +243,20 @@ type jobsAdmin struct {
 	logger                             common.ILoggerCloser
 	jobIDToJobMgr                      jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
 	// Other global state can be stored in more fields here...
-	logDir                      string // Where log files are stored
-	planDir                     string // Initialize to directory where Job Part Plans are stored
-	appCtx                      context.Context
-	pacer                       ste.PacerAdmin
-	slicePool                   common.ByteSlicePooler
-	cacheLimiter                common.CacheLimiter
-	fileCountLimiter            common.CacheLimiter
-	concurrencyTuner   ste.ConcurrencyTuner
-	commandLineMbpsCap float64
+	logDir                  string // Where log files are stored
+	planDir                 string // Initialize to directory where Job Part Plans are stored
+	appCtx                  context.Context
+	pacer                   ste.PacerAdmin
+	slicePool               common.ByteSlicePooler
+	cacheLimiter            common.CacheLimiter
+	fileCountLimiter        common.CacheLimiter
+	concurrencyTuner        ste.ConcurrencyTuner
+	commandLineMbpsCap      float64
 	provideBenchmarkResults bool
 	cpuMonitor              common.CPUMonitor
-	jobLogger               common.ILoggerResetable
+	JobLogger               common.ILoggerResetable
 }
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func (ja *jobsAdmin) NewJobPartPlanFileName(jobID common.JobID, partNumber common.PartNumber) ste.JobPartPlanFileName {
@@ -293,13 +295,25 @@ func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
 		func() ste.IJobMgr {
 			// Return existing or new IJobMgr to caller
-			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, ja.jobLogger)
+			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, ja.JobLogger)
+		})
+}
+
+// Same as JobMgrEnsureExists but with addition parameter of user logger.
+func (ja *jobsAdmin) JobMgrCreateWithLogger(jobID common.JobID,
+	level common.LogLevel, commandString string, logger common.ILoggerResetable) ste.IJobMgr {
+
+	return ja.jobIDToJobMgr.EnsureExists(jobID,
+		func() ste.IJobMgr {
+			// Return existing or new IJobMgr to caller
+			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, logger)
 		})
 }
 
 func (ja *jobsAdmin) BytesOverWire() int64 {
 	return ja.pacer.GetTotalTraffic()
 }
+
 /*
 func (ja *jobsAdmin) AddSuccessfulBytesInActiveFiles(n int64) {
 	atomic.AddInt64(&ja.atomicSuccessfulBytesInActiveFiles, n)
@@ -453,7 +467,7 @@ func (ja *jobsAdmin) LogToJobLog(msg string, level pipeline.LogLevel) {
 	if level <= pipeline.LogWarning {
 		prefix = fmt.Sprintf("%s: ", common.LogLevel(level)) // so readers can find serious ones, but information ones still look uncluttered without INFO:
 	}
-	ja.jobLogger.Log(pipeline.LogWarning, prefix+msg) // use LogError here, so that it forces these to get logged, even if user is running at warning level instead of Info.  They won't have "warning" prefix, if Info level was passed in to MessagesForJobLog
+	ja.JobLogger.Log(pipeline.LogWarning, prefix+msg) // use LogError here, so that it forces these to get logged, even if user is running at warning level instead of Info.  They won't have "warning" prefix, if Info level was passed in to MessagesForJobLog
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -490,6 +504,7 @@ func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint3
 	a := ste.NewPerformanceAdvisor(p, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency, dir, averageBytesPerFile, isToAzureFiles)
 	return a.GetAdvice()
 }
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // The jobIDToJobMgr maps each JobID to its JobMgr
