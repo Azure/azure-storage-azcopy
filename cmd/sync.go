@@ -85,7 +85,7 @@ type rawSyncCmdArgs struct {
 	// Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data
 	cpkScopeInfo string
 	// dry run mode bool
-	dryrun              bool
+	dryrun bool
 }
 
 func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -246,9 +246,6 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, nil, "preserve-smb-info"); err != nil {
 		return cooked, err
 	}
-	if cooked.fromTo == common.EFromTo.BlobBlob() && cooked.preservePermissions.IsTruthy() {
-		cooked.isHNSToHNS = true // override HNS settings, since if a user is tx'ing blob->blob and copying permissions, it's DEFINITELY going to be HNS (since perms don't exist w/o HNS).
-	}
 
 	isUserPersistingPermissions := raw.preserveSMBPermissions || raw.preservePermissions
 	if cooked.preserveSMBInfo && !isUserPersistingPermissions {
@@ -263,6 +260,9 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	//	return cooked, err
 	//}
 	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions, raw.preserveOwner, cooked.fromTo)
+	if cooked.fromTo == common.EFromTo.BlobBlob() && cooked.preservePermissions.IsTruthy() {
+		cooked.isHNSToHNS = true // override HNS settings, since if a user is tx'ing blob->blob and copying permissions, it's DEFINITELY going to be HNS (since perms don't exist w/o HNS).
+	}
 
 	cooked.putMd5 = raw.putMd5
 	if err = validatePutMd5(cooked.putMd5, cooked.fromTo); err != nil {
@@ -346,7 +346,7 @@ type cookedSyncCmdArgs struct {
 
 	source         common.ResourceString
 	destination    common.ResourceString
-        fromTo         common.FromTo
+	fromTo         common.FromTo
 	credentialInfo common.CredentialInfo
 	isHNSToHNS     bool // Because DFS sources and destinations are obscured, this is necessary for folder property transfers on ADLS Gen 2.
 
