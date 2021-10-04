@@ -74,8 +74,8 @@ jobs:
       # Running E2E Tests on Linux - ARM64
       - script: |
           set -e
-          apt get
-          apt install qemu binfmt-support qemu-user-static
+          apt-get update
+          apt-get install qemu binfmt-support qemu-user-static
           update-binfmts --display
           GOARCH=arm64 GOOS=linux go build -o azcopy_linux_arm64
           export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_linux_arm64
