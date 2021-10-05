@@ -633,7 +633,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	isUserPersistingPermissions := raw.preservePermissions || raw.preserveSMBPermissions
 	if cooked.preserveSMBInfo && !isUserPersistingPermissions {
-		glcm.Info("Please note: the preserve-permissions flag is set to false, thus AzCopy will not copy SMB ACLs between the source and destination.")
+		glcm.Info("Please note: the preserve-permissions flag is set to false, thus AzCopy will not copy SMB ACLs between the source and destination. To learn more: https://aka.ms/AzCopyandAzureFiles.")
 	}
 
 	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions, cooked.FromTo, &cooked.ForceWrite, PreservePermissionsFlag); err != nil {
