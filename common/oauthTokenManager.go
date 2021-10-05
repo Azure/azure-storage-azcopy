@@ -58,7 +58,7 @@ const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
 const IMDSAPIVersionArcVM = "2019-11-01"
 const IMDSAPIVersionAzureVM = "2018-02-01"
 const MSIEndpointAzureVM = "http://169.254.169.254/metadata/identity/oauth2/token"
-const MSIEndpointArcVM = "http://localhost:40342/metadata/identity/oauth2/token"
+const MSIEndpointArcVM = "http://127.0.0.1:40342/metadata/identity/oauth2/token"
 
 // Refer to https://docs.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2 for details
 const WSAECONNREFUSED = 10061
@@ -739,14 +739,13 @@ func (credInfo *OAuthTokenInfo) queryIMDS(ctx context.Context, msiEndpoint strin
 
 // isValidArcResponse checks if the key "Www-Authenticate" is unavailable in the header of an http response
 func isValidArcResponse(resp *http.Response) bool {
-	// Parameter for validity is whether "Www-Authenticaite" exists in the response header
-	// "Www-Authenticate" contains the path to the challenge token file for Arc VMs
 	wwwAuthenticateExists := false
-	if resp != nil {
-		if resp.Header != nil {
-			_, wwwAuthenticateExists = resp.Header["Www-Authenticate"]
-		}
+	if resp != nil && resp.Header != nil {
+		// Parameter for validity is whether "Www-Authenticate" exists in the response header
+		// "Www-Authenticate" contains the path to the challenge token file for Arc VMs
+		_, wwwAuthenticateExists = resp.Header["Www-Authenticate"]
 	}
+
 	return wwwAuthenticateExists
 }
 
@@ -785,50 +784,52 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 			var serr syscall.Errno
 			if errors.As(errArcVM, &serr) {
 				econnrefusedValue := -1
-				if runtime.GOOS == "linux" {
+				switch runtime.GOOS {
+				case "linux":
 					econnrefusedValue = int(syscall.ECONNREFUSED)
-				} else if runtime.GOOS == "windows" {
+				case "windows":
 					econnrefusedValue = WSAECONNREFUSED
 				}
 
 				if int(serr) == econnrefusedValue {
 					// If connection to Arc endpoint was refused
 					return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm: %v", errAzureVM)
-				} else {
-					// A syscall error other than ECONNREFUSED, implies we could not get the HTTP response
-					return nil, fmt.Errorf("error communicating with Arc IMDS endpoint (%s): %v", MSIEndpointArcVM, errArcVM)
 				}
-			} else {
-				// queryIMDS failed, but not with a syscall error
-				// 1. Either it is an HTTP error, or
-				// 2. The HTTP request timed out
-				return nil, fmt.Errorf("invalid response received from Arc IMDS endpoint (%s), probably some unknown process listening: %v", MSIEndpointArcVM, errArcVM)
+
+				// A syscall error other than ECONNREFUSED, implies we could not get the HTTP response
+				return nil, fmt.Errorf("error communicating with Arc IMDS endpoint (%s): %v", MSIEndpointArcVM, errArcVM)
 			}
-		} else {
-			// Arc IMDS failed with error, but Azure IMDS succeeded
-			req, resp = reqAzureVM, respAzureVM
+
+			// queryIMDS failed, but not with a syscall error
+			// 1. Either it is an HTTP error, or
+			// 2. The HTTP request timed out
+			return nil, fmt.Errorf("invalid response received from Arc IMDS endpoint (%s), probably some unknown process listening: %v", MSIEndpointArcVM, errArcVM)
 		}
+
+		// Arc IMDS failed with error, but Azure IMDS succeeded
+		req, resp = reqAzureVM, respAzureVM
 	} else if !isValidArcResponse(resp) {
 		// Not valid response from ARC IMDS endpoint. Perhaps some other process listening on it. Try Azure IMDS endpoint as fallback option.
 		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(ctx, MSIEndpointAzureVM, Resource, IMDSAPIVersionAzureVM)
 		if errAzureVM != nil {
 			// Neither Arc nor Azure VM IMDS endpoint available. Can't use MSI.
 			return nil, fmt.Errorf("invalid response received from Arc IMDS endpoint (%s), probably some unknown process listening. If this an Azure VM, please check whether MSI is enabled, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm: %v", MSIEndpointArcVM, errAzureVM)
-		} else {
-			// Azure VM IMDS endpoint ok!
-			req, resp = reqAzureVM, respAzureVM
 		}
+
+		// Azure VM IMDS endpoint ok!
+		req, resp = reqAzureVM, respAzureVM
 	} else {
 		// Valid response received from ARC IMDS endpoint. Proceed with the next step.
 		challengeTokenPath := strings.Split(resp.Header["Www-Authenticate"][0], "=")[1]
 		// Open the file.
 		challengeTokenFile, fileErr := os.Open(challengeTokenPath)
 		if os.IsPermission(fileErr) {
-			if runtime.GOOS == "linux" {
+			switch runtime.GOOS {
+			case "linux":
 				return nil, fmt.Errorf("permission level inadequate to read Arc challenge token file %s. Make sure you are running AzCopy as a user who is a member of the \"himds\" group or is superuser.", challengeTokenPath)
-			} else if runtime.GOOS == "windows" {
+			case "windows":
 				return nil, fmt.Errorf("permission level inadequate to read Arc challenge token file %s. Make sure you are running AzCopy as a user who is a member of the \"local Administrators\" group or the \"Hybrid Agent Extension Applications\" group.", challengeTokenPath)
-			} else {
+			default:
 				return nil, fmt.Errorf("error occurred while opening file %s in unsupported GOOS %s: %v", challengeTokenPath, runtime.GOOS, fileErr)
 			}
 		} else if fileErr != nil {
