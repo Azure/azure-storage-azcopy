@@ -772,36 +772,37 @@ func fixupTokenJson(bytes []byte) []byte {
 
 // GetNewTokenFromMSI gets token from Azure Instance Metadata Service identity endpoint. It first checks if the VM is registered with Azure Arc. Failing that case, it checks if it is an Azure VM.
 // For details, please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview
-// Note: Currently the msiTokenHTTPClient timeout is configured for 30 secs. Should be reduced to 5 sec as IMDS endpoint is local to the machine.
-// Without this change, if some router is configured to not return "ICMP unreachable" then it will take 30 secs to timeout and fallback to ARC.
-// For now, this has been mitigated by checking Arc first, and then Azure
+// Note: The msiTokenHTTPClient timeout is has been reduced from 30 sec to 10 sec as IMDS endpoint is local to the machine.
+// Without this change, if some router is configured to not return "ICMP unreachable" then it will take 30 secs to timeout and increase the response time.
+// We are additionally checking Arc first, and then Azure VM because Arc endpoint is local so as to further reduce the response time of the Azure VM IMDS endpoint.
 func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.Token, error) {
 	// Try Arc VM
-	req, resp, err := credInfo.queryIMDS(ctx, MSIEndpointArcVM, Resource, IMDSAPIVersionArcVM)
-	if err != nil {
+	req, resp, errArcVM := credInfo.queryIMDS(ctx, MSIEndpointArcVM, Resource, IMDSAPIVersionArcVM)
+	if errArcVM != nil {
 		// Try Azure VM since there was an error in trying Arc VM
 		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(ctx, MSIEndpointAzureVM, Resource, IMDSAPIVersionAzureVM)
 		if errAzureVM != nil {
 			var serr syscall.Errno
-			if errors.As(err, &serr) {
+			if errors.As(errArcVM, &serr) {
 				econnrefusedValue := -1
 				if runtime.GOOS == "linux" {
 					econnrefusedValue = int(syscall.ECONNREFUSED)
 				} else if runtime.GOOS == "windows" {
 					econnrefusedValue = WSAECONNREFUSED
 				}
+
 				if int(serr) == econnrefusedValue {
 					// If connection to Arc endpoint was refused
 					return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm: %v", errAzureVM)
 				} else {
 					// A syscall error other than ECONNREFUSED, implies we could not get the HTTP response
-					return nil, fmt.Errorf("error communicating with Arc IMDS endpoint (%s): %v", MSIEndpointArcVM, err)
+					return nil, fmt.Errorf("error communicating with Arc IMDS endpoint (%s): %v", MSIEndpointArcVM, errArcVM)
 				}
 			} else {
 				// queryIMDS failed, but not with a syscall error
 				// 1. Either it is an HTTP error, or
 				// 2. The HTTP request timed out
-				return nil, fmt.Errorf("invalid response received from Arc IMDS endpoint (%s), probably some unknown process listening: %v", MSIEndpointArcVM, err)
+				return nil, fmt.Errorf("invalid response received from Arc IMDS endpoint (%s), probably some unknown process listening: %v", MSIEndpointArcVM, errArcVM)
 			}
 		} else {
 			// Arc IMDS failed with error, but Azure IMDS succeeded
@@ -845,9 +846,9 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 
 		req.Header.Set("Authorization", "Basic "+challengeToken)
 
-		resp, err = msiTokenHTTPClient.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("failed to query token from Arc IMDS endpoint: %v", err)
+		resp, errArcVM = msiTokenHTTPClient.Do(req)
+		if errArcVM != nil {
+			return nil, fmt.Errorf("failed to query token from Arc IMDS endpoint: %v", errArcVM)
 		}
 	}
 
