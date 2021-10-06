@@ -97,12 +97,10 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 		info := jptm.Info()
 		u, _ := url.Parse(info.Source)
 		srcBlobURL := azblob.NewBlobURL(*u, srcPipeline)
-		isNewStyleImpExp := isInManagedDiskImportExportAccount(*u)
-		isOldStyleDiskExport := isInLegacyDiskExportAccount(*u)
 
 		// set access conditions, to protect against inconsistencies from changes-while-being-read
 		accessConditions := azblob.BlobAccessConditions{ModifiedAccessConditions: azblob.ModifiedAccessConditions{IfUnmodifiedSince: jptm.LastModifiedTime()}}
-		if isNewStyleImpExp || isOldStyleDiskExport {
+		if isInManagedDiskImportExportAccount(*u) {
 			// no access conditions (and therefore no if-modified checks) are supported on managed disk import/export (md-impexp)
 			// They are also unsupported on old "md-" style export URLs on the new (2019) large size disks.
 			// And if fact you can't have an md- URL in existence if the blob is mounted as a disk, so it won't be getting changed anyway, so we just treat all md-disks the same
