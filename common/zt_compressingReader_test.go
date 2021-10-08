@@ -22,11 +22,9 @@ package common
 
 import (
 	"bytes"
-	"compress/gzip"
 	chk "gopkg.in/check.v1"
 	"io"
 	"math/rand"
-	"os"
 	"sync/atomic"
 )
 
@@ -46,14 +44,13 @@ func (c *closeableReaderAt) closeWasCalled() bool {
 
 func (d *compressionSuite) TestCompressingReader_SuccessCases(c *chk.C) {
 	cases := []struct {
-		desc             string
-		rawDataSize      int
-		incomingReadSize int
+		desc        string
+		rawDataSize int
 	}{
-		// we use random read sizes in some cases, so that over time we'll test a wide variety of sizes
-		{"big gzip", 50 * 1024 * 1024, rand.Intn(1024*1024) + 1},
-		{"sml gzip", 1024, rand.Intn(1024*1024) + 1},
-		{"1 byte gzip", 1234, 1},
+		{"big gzip", rand.Intn(50*1024*1024) + 50*1024*1024},
+		{"medium gzip", rand.Intn(1024*1024) + 1024*1024},
+		{"sml gzip", rand.Intn(1024) + 1024},
+		{"0 byte gzip", 0},
 	}
 
 	for _, cs := range cases {
@@ -64,10 +61,6 @@ func (d *compressionSuite) TestCompressingReader_SuccessCases(c *chk.C) {
 		// we compress using a compressing reader
 		closeableSourceData := &closeableReaderAt{ReaderAt: bytes.NewReader(originalData)}
 		compReader := NewCompressingReader(closeableSourceData, int64(cs.rawDataSize))
-		//copyBuf := make([]byte, cs.incomingReadSize)
-
-		//result := &bytes.Buffer{}
-		//_, err := io.Copy(result, compReader) // retrieve compressed data from compReader
 		result := make([]byte, len(compressedData)*2)
 		n, err := io.ReadFull(compReader, result) // retrieve compressed data from compReader
 		c.Assert(err, chk.Equals, io.ErrUnexpectedEOF)
@@ -108,41 +101,41 @@ func (d *compressionSuite) TestCompressingReader_EarlyClose(c *chk.C) {
 	c.Assert(closeableSourceData.closeWasCalled(), chk.Equals, true)
 }
 
-func (d *compressionSuite) TestCompressingReader_File(c *chk.C) {
-	f, err := os.Open("/Users/devexp/work/go/azure-storage-azcopy/temp_50MB_file.txt")
-	c.Assert(err, chk.IsNil)
-
-	compBuf := &bytes.Buffer{}
-	comp := gzip.NewWriter(compBuf)
-	_, err = io.Copy(comp, f)
-	// write into buf by way of comp
-	c.Assert(err, chk.IsNil)
-	c.Assert(comp.Close(), chk.IsNil)
-	compressedData := compBuf.Bytes()
-
-	// when:
-	// we compress using a compressing reader
-	fi, err := f.Stat()
-	if err != nil {
-		// Could not obtain stat, handle error
-	}
-	closeableSourceData := &closeableReaderAt{ReaderAt: f}
-	compReader := NewCompressingReader(closeableSourceData, fi.Size())
-	//copyBuf := make([]byte, cs.incomingReadSize)
-
-	//result := &bytes.Buffer{}
-	//_, err := io.Copy(result, compReader) // retrieve compressed data from compReader
-	result := make([]byte, len(compressedData)*2)
-	n, err := io.ReadFull(compReader, result) // retrieve compressed data from compReader
-	c.Assert(err, chk.Equals, io.ErrUnexpectedEOF)
-	err = compReader.Close()
-	c.Assert(err, chk.IsNil)
-
-	// then:
-	// the data is correctly compressed
-	c.Assert(n, chk.Equals, len(compressedData))
-	dataWritten := result[0:len(compressedData)]
-	c.Assert(dataWritten, chk.DeepEquals, compressedData)
-	// the src is closed
-	c.Assert(closeableSourceData.closeWasCalled(), chk.Equals, true)
-}
+//func (d *compressionSuite) TestCompressingReader_File(c *chk.C) {
+//	f, err := os.Open("/Users/devexp/work/go/azure-storage-azcopy/temp_50MB_file.txt")
+//	c.Assert(err, chk.IsNil)
+//
+//	compBuf := &bytes.Buffer{}
+//	comp := gzip.NewWriter(compBuf)
+//	_, err = io.Copy(comp, f)
+//	// write into buf by way of comp
+//	c.Assert(err, chk.IsNil)
+//	c.Assert(comp.Close(), chk.IsNil)
+//	compressedData := compBuf.Bytes()
+//
+//	// when:
+//	// we compress using a compressing reader
+//	fi, err := f.Stat()
+//	if err != nil {
+//		// Could not obtain stat, handle error
+//	}
+//	closeableSourceData := &closeableReaderAt{ReaderAt: f}
+//	compReader := NewCompressingReader(closeableSourceData, fi.Size())
+//	//copyBuf := make([]byte, cs.incomingReadSize)
+//
+//	//result := &bytes.Buffer{}
+//	//_, err := io.Copy(result, compReader) // retrieve compressed data from compReader
+//	result := make([]byte, len(compressedData)*2)
+//	n, err := io.ReadFull(compReader, result) // retrieve compressed data from compReader
+//	c.Assert(err, chk.Equals, io.ErrUnexpectedEOF)
+//	err = compReader.Close()
+//	c.Assert(err, chk.IsNil)
+//
+//	// then:
+//	// the data is correctly compressed
+//	c.Assert(n, chk.Equals, len(compressedData))
+//	dataWritten := result[0:len(compressedData)]
+//	c.Assert(dataWritten, chk.DeepEquals, compressedData)
+//	// the src is closed
+//	c.Assert(closeableSourceData.closeWasCalled(), chk.Equals, true)
+//}
