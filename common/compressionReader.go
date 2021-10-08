@@ -86,13 +86,6 @@ func (c *CompressingReader) worker(sourceFile CloseableReaderAt, resultWriter *i
 
 				writtenSoFar += m
 			}
-
-			//// TODO is it necessary to flush all the time? decide before merging
-			flushErr := compressor.Flush()
-			if flushErr != nil {
-				err = flushErr
-				return
-			}
 		}
 
 		if readErr != nil && readErr != io.EOF {
