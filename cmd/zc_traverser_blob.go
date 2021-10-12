@@ -234,13 +234,13 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 
 					if t.includeDirectoryStubs {
 						// try to get properties on the directory itself, since it's not listed in BlobItems
-						fblobURL := containerURL.NewBlobURL(strings.TrimSuffix(currentDirPath+virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING))
+						fblobURL := containerURL.NewBlobURL(strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING))
 						resp, err := fblobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 						if err == nil {
 							storedObject := newStoredObject(
 								preprocessor,
-								getObjectNameOnly(strings.TrimSuffix(currentDirPath+virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)),
-								strings.TrimSuffix(currentDirPath+virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING),
+								getObjectNameOnly(strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)),
+								strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING),
 								common.EEntityType.File(), // folder stubs are treated like files in in the serial lister as well
 								resp.LastModified(),
 								resp.ContentLength(),
