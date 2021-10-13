@@ -40,6 +40,7 @@ type rawSyncCmdArgs struct {
 	src       string
 	dst       string
 	recursive bool
+	fromTo    string
 
 	// options from flags
 	blockSizeMB           float64
@@ -152,7 +153,11 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	cooked.isHNSToHNS = srcHNS && dstHNS
 
-	cooked.fromTo = inferFromTo(raw.src, raw.dst)
+	cooked.fromTo, err = ValidateFromTo(raw.src, raw.dst, raw.fromTo)
+	if err != nil {
+		return cooked, err
+	}
+
 	switch cooked.fromTo {
 	case common.EFromTo.Unknown():
 		return cooked, fmt.Errorf("Unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
@@ -724,6 +729,7 @@ func init() {
 
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", true, "True by default, look into sub-directories recursively when syncing between directories. (default true).")
+	syncCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalFile, FileLocal, BlobFile, FileBlob, etc.")
 
 	// TODO: enable for copy with IfSourceNewer
 	// smb info/permissions can be persisted in the scenario of File -> File
