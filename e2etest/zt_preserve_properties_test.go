@@ -38,7 +38,7 @@ func TestProperties_NameValueMetadataIsPreservedS2S(t *testing.T) {
 			f("filea", with{nameValueMetadata: map[string]string{"foo": "abc", "bar": "def"}}),
 			folder("fold1", with{nameValueMetadata: map[string]string{"other": "xyz"}}),
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestProperties_NameValueMetadataCanBeUploaded(t *testing.T) {
@@ -53,7 +53,7 @@ func TestProperties_NameValueMetadataCanBeUploaded(t *testing.T) {
 			folder("", verifyOnly{with{nameValueMetadata: expectedMap}}), // root folder
 			f("filea", verifyOnly{with{nameValueMetadata: expectedMap}}),
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestProperties_HNSACLs(t *testing.T) {
@@ -64,7 +64,13 @@ func TestProperties_HNSACLs(t *testing.T) {
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
 			folder(""),
-			f("filea", with{adlsPermissionsACL: "user::rwx,group::rwx,other::--x"}),
+			f("filea", with{adlsPermissionsACL: "user::rwx,group::rwx,other::r--"}),
+			folder("a", with{adlsPermissionsACL: "user::rwx,group::rwx,other::-w-"}),
+			f("a/fileb", with{adlsPermissionsACL: "user::rwx,group::rwx,other::--x"}),
+			folder("a/b", with{adlsPermissionsACL: "user::rwx,group::rwx,other::rw-"}),
+			f("a/b/filec", with{adlsPermissionsACL: "user::rwx,group::rwx,other::r-x"}),
+			folder("d", with{adlsPermissionsACL: "user::rwx,group::rwx,other::-wx"}),
+			f("d/filed", with{adlsPermissionsACL: "user::rwx,group::rwx,other::rwx"}),
 		},
-	}, EAccountType.HierarchicalNamespaceEnabled())
+	}, EAccountType.HierarchicalNamespaceEnabled(), "")
 }

@@ -232,6 +232,16 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	}
 	eof += int64(bytesWritten)
 
+	// ensure 8 byte alignment so that Atomic fields of JobPartPlanTransfer can actually be accessed atomically
+	paddingLen := ((eof + 7) & ^7) - eof
+	if paddingLen != 0 {
+		bytesWritten, err := file.Write(make([]byte, paddingLen))
+		if err != nil {
+			panic(err)
+		}
+		eof += int64(bytesWritten)
+	}
+
 	// srcDstStringsOffset points to after the header & all the transfers; this is where the src/dst strings go for each transfer
 	srcDstStringsOffset := make([]int64, jpph.NumTransfers)
 

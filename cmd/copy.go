@@ -633,7 +633,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	isUserPersistingPermissions := raw.preservePermissions || raw.preserveSMBPermissions
 	if cooked.preserveSMBInfo && !isUserPersistingPermissions {
-		glcm.Info("Please note: the preserve-permissions flag is set to false, thus AzCopy will not copy SMB ACLs between the source and destination.")
+		glcm.Info("Please note: the preserve-permissions flag is set to false, thus AzCopy will not copy SMB ACLs between the source and destination. To learn more: https://aka.ms/AzCopyandAzureFiles.")
 	}
 
 	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions, cooked.FromTo, &cooked.ForceWrite, PreservePermissionsFlag); err != nil {
@@ -1287,6 +1287,10 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 // dispatches the job order (in parts) to the storage engine
 func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	// Make AUTO default for Azure Files since Azure Files throttles too easily.
+	if ste.JobsAdmin != nil && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.File()) {
+		ste.JobsAdmin.SetConcurrencySettingsToAuto()
+	}
 
 	// Note: credential info here is only used by remove at the moment.
 	// TODO: Get the entirety of remove into the new copyEnumeratorInit script so we can remove this

@@ -102,6 +102,11 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			/* Display stats */
 			js.Timestamp = time.Now().UTC()
 			jstm.respChan <- *js
+
+			// Reset the lists so that they don't keep accumulating and take up excessive memory
+			// There is no need to keep sending the same items over and over again
+			js.FailedTransfers = []common.TransferDetail{}
+			js.SkippedTransfers = []common.TransferDetail{}
 		}
 	}
 }

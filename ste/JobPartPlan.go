@@ -103,9 +103,11 @@ func (jpph *JobPartPlanHeader) Transfer(transferIndex uint32) *JobPartPlanTransf
 		panic(errors.New("requesting a transfer index greater than what is available"))
 	}
 
-	// (Job Part Plan's file address) + (header size) --> beginning of transfers in file
+	// (Job Part Plan's file address) + (header size) + (padding to 8 bytes) --> beginning of transfers in file
 	// Add (transfer size) * (transfer index)
-	return (*JobPartPlanTransfer)(unsafe.Pointer((uintptr(unsafe.Pointer(jpph)) + unsafe.Sizeof(*jpph) + uintptr(jpph.CommandStringLength)) + (unsafe.Sizeof(JobPartPlanTransfer{}) * uintptr(transferIndex))))
+	transfersOffset := unsafe.Sizeof(*jpph) + uintptr(jpph.CommandStringLength)
+	transfersOffset = (transfersOffset + 7) & ^uintptr(7)
+	return (*JobPartPlanTransfer)(unsafe.Pointer((uintptr(unsafe.Pointer(jpph)) + transfersOffset) + (unsafe.Sizeof(JobPartPlanTransfer{}) * uintptr(transferIndex))))
 }
 
 // CommandString returns the command string given by user when job was created

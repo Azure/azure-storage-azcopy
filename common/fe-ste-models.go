@@ -591,6 +591,19 @@ func (bt *BlobType) Parse(s string) error {
 	return err
 }
 
+func FromAzBlobType(bt azblob.BlobType) BlobType {
+	switch bt {
+	case azblob.BlobBlockBlob:
+		return EBlobType.BlockBlob()
+	case azblob.BlobPageBlob:
+		return EBlobType.PageBlob()
+	case azblob.BlobAppendBlob:
+		return EBlobType.AppendBlob()
+	default:
+		return EBlobType.Detect()
+	}
+}
+
 // ToAzBlobType returns the equivalent azblob.BlobType for given string.
 func (bt *BlobType) ToAzBlobType() azblob.BlobType {
 	blobType := bt.String()

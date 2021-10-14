@@ -71,7 +71,7 @@ func TestFilter_IncludePath(t *testing.T) {
 			"sub/subsub/fileb",
 			"sub/subsub/filec",
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 // TestFilter_IncludeAfter test the include-after parameter
@@ -104,7 +104,7 @@ func TestFilter_IncludeAfter(t *testing.T) {
 		shouldTransfer: []interface{}{
 			"fileb",
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestFilter_IncludePattern(t *testing.T) {
@@ -128,7 +128,7 @@ func TestFilter_IncludePattern(t *testing.T) {
 			"subdir/file7_A_mid_B",
 			"file8", // Exact match
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestFilter_ExcludePath(t *testing.T) {
@@ -155,7 +155,7 @@ func TestFilter_ExcludePath(t *testing.T) {
 			"subL1/sub/subL2/fileA", // exclude path should be contiguous
 			"sub/subL1/subL2/fileB",
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestFilter_ExcludePattern(t *testing.T) {
@@ -179,7 +179,7 @@ func TestFilter_ExcludePattern(t *testing.T) {
 			"sample.txt",
 			"subdir/sample.txt",
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 // Generally, each filter test should target one filter.  We did once have a bug though, where combining
@@ -258,5 +258,5 @@ func TestFilter_CombineCommonFilters(t *testing.T) {
 			"donkey/seal/fox.txt",
 			"frog.txt",
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }

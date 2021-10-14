@@ -603,7 +603,8 @@ func resurrectJobSummary(jm IJobMgr) common.ListJobSummaryResponse {
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.NotStarted(),
 				common.ETransferStatus.FolderCreated(),
-				common.ETransferStatus.Started():
+				common.ETransferStatus.Started(),
+				common.ETransferStatus.Cancelled():
 				js.TotalBytesExpected += uint64(jppt.SourceSize)
 			case common.ETransferStatus.Success():
 				js.TransfersCompleted++

@@ -54,7 +54,7 @@ func TestClient_ProvidedScopeUpload(t *testing.T) {
 			f("folder2/file5", verifyOnlyProps),
 			f("file6", verifyOnlyProps),
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestClient_ProvidedScopeS2S(t *testing.T) {
@@ -75,7 +75,7 @@ func TestClient_ProvidedScopeS2S(t *testing.T) {
 			f("folder2/file5", verifyOnlyProps),
 			f("file6", verifyOnlyProps),
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestClient_ProvidedScopeDownload(t *testing.T) {
@@ -90,7 +90,7 @@ func TestClient_ProvidedScopeDownload(t *testing.T) {
 			folder(""),
 			f("file1", verifyOnlyProps),
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestClient_ProvidedKeyUpload(t *testing.T) {
@@ -111,7 +111,7 @@ func TestClient_ProvidedKeyUpload(t *testing.T) {
 			f("folder2/file5", verifyOnlyProps),
 			f("file6", verifyOnlyProps),
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestClient_ProvidedKeyS2S(t *testing.T) {
@@ -131,7 +131,7 @@ func TestClient_ProvidedKeyS2S(t *testing.T) {
 			f("folder2/file5", verifyOnlyProps),
 			f("file6", verifyOnlyProps),
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }
 
 func TestClient_ProvidedKeyDownload(t *testing.T) {
@@ -146,5 +146,5 @@ func TestClient_ProvidedKeyDownload(t *testing.T) {
 			folder("dir"),
 			f("dir/file2", verifyOnlyProps),
 		},
-	}, EAccountType.Standard())
+	}, EAccountType.Standard(), "")
 }

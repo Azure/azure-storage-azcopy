@@ -40,6 +40,7 @@ type rawSyncCmdArgs struct {
 	src       string
 	dst       string
 	recursive bool
+	fromTo    string
 
 	// options from flags
 	blockSizeMB           float64
@@ -85,7 +86,7 @@ type rawSyncCmdArgs struct {
 	// Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data
 	cpkScopeInfo string
 	// dry run mode bool
-	dryrun              bool
+	dryrun bool
 }
 
 func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -152,7 +153,11 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	cooked.isHNSToHNS = srcHNS && dstHNS
 
-	cooked.fromTo = inferFromTo(raw.src, raw.dst)
+	cooked.fromTo, err = ValidateFromTo(raw.src, raw.dst, raw.fromTo)
+	if err != nil {
+		return cooked, err
+	}
+
 	switch cooked.fromTo {
 	case common.EFromTo.Unknown():
 		return cooked, fmt.Errorf("Unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
@@ -246,13 +251,10 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, nil, "preserve-smb-info"); err != nil {
 		return cooked, err
 	}
-	if cooked.fromTo == common.EFromTo.BlobBlob() && cooked.preservePermissions.IsTruthy() {
-		cooked.isHNSToHNS = true // override HNS settings, since if a user is tx'ing blob->blob and copying permissions, it's DEFINITELY going to be HNS (since perms don't exist w/o HNS).
-	}
 
 	isUserPersistingPermissions := raw.preserveSMBPermissions || raw.preservePermissions
 	if cooked.preserveSMBInfo && !isUserPersistingPermissions {
-		glcm.Info("Please note: the preserve-permissions flag is set to false, thus AzCopy will not copy SMB ACLs between the source and destination.")
+		glcm.Info("Please note: the preserve-permissions flag is set to false, thus AzCopy will not copy SMB ACLs between the source and destination. To learn more: https://aka.ms/AzCopyandAzureFiles.")
 	}
 
 	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions, cooked.fromTo, nil, PreservePermissionsFlag); err != nil {
@@ -263,6 +265,9 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	//	return cooked, err
 	//}
 	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions, raw.preserveOwner, cooked.fromTo)
+	if cooked.fromTo == common.EFromTo.BlobBlob() && cooked.preservePermissions.IsTruthy() {
+		cooked.isHNSToHNS = true // override HNS settings, since if a user is tx'ing blob->blob and copying permissions, it's DEFINITELY going to be HNS (since perms don't exist w/o HNS).
+	}
 
 	cooked.putMd5 = raw.putMd5
 	if err = validatePutMd5(cooked.putMd5, cooked.fromTo); err != nil {
@@ -346,7 +351,7 @@ type cookedSyncCmdArgs struct {
 
 	source         common.ResourceString
 	destination    common.ResourceString
-        fromTo         common.FromTo
+	fromTo         common.FromTo
 	credentialInfo common.CredentialInfo
 	isHNSToHNS     bool // Because DFS sources and destinations are obscured, this is necessary for folder property transfers on ADLS Gen 2.
 
@@ -724,6 +729,7 @@ func init() {
 
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", true, "True by default, look into sub-directories recursively when syncing between directories. (default true).")
+	syncCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalFile, FileLocal, BlobFile, FileBlob, etc.")
 
 	// TODO: enable for copy with IfSourceNewer
 	// smb info/permissions can be persisted in the scenario of File -> File

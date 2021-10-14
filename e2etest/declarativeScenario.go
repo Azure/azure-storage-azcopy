@@ -114,9 +114,11 @@ func (s *scenario) Run() {
 	if s.a.Failed() {
 		return // no point in doing more validation
 	}
-	if s.validate == eValidate.AutoPlusContent() {
+	if s.validate&eValidate.AutoPlusContent() != 0 {
 		s.validateContent()
 	}
+
+	s.runHook(s.hs.afterValidation)
 }
 
 func (s *scenario) runHook(h hookFunc) bool {
@@ -272,7 +274,7 @@ func (s *scenario) validateTransferStates() {
 		actualTransfers, err := s.state.result.GetTransferList(statusToTest)
 		s.a.AssertNoErr(err)
 
-		Validator{}.ValidateCopyTransfersAreScheduled(s.a, isSrcEncoded, isDstEncoded, srcRoot, dstRoot, expectedTransfers, actualTransfers, statusToTest)
+		Validator{}.ValidateCopyTransfersAreScheduled(s.a, isSrcEncoded, isDstEncoded, srcRoot, dstRoot, expectedTransfers, actualTransfers, statusToTest, s.FromTo())
 		// TODO: how are we going to validate folder transfers????
 	}
 
@@ -285,9 +287,10 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 	dstRoot = s.state.dest.getParam(false, false, "")
 
 	// do we expect folder transfers
-	expectFolders = s.fromTo.From().IsFolderAware() &&
+	expectFolders = (s.fromTo.From().IsFolderAware() &&
 		s.fromTo.To().IsFolderAware() &&
-		s.p.allowsFolderTransfers()
+		s.p.allowsFolderTransfers()) ||
+		(s.p.preserveSMBPermissions && s.FromTo() == common.EFromTo.BlobBlob())
 	expectRootFolder := expectFolders
 
 	// compute dest, taking into account our stripToDir rules
@@ -357,7 +360,7 @@ func (s *scenario) validateProperties() {
 		}
 
 		// validate all the different things
-		s.validateMetadata(expected.nameValueMetadata, actual.nameValueMetadata)
+		s.validateMetadata(expected.nameValueMetadata, actual.nameValueMetadata, expected.isFolder)
 		s.validateBlobTags(expected.blobTags, actual.blobTags)
 		s.validateContentHeaders(expected.contentHeaders, actual.contentHeaders)
 		s.validateCreateTime(expected.creationTime, actual.creationTime)
@@ -415,7 +418,12 @@ func (s *scenario) validateContent() {
 
 //// Individual property validation routines
 
-func (s *scenario) validateMetadata(expected, actual map[string]string) {
+func (s *scenario) validateMetadata(expected, actual map[string]string, isFolder bool) {
+	if isFolder { // hdi_isfolder is service-relevant metadata, not something we'd be testing for. This can pop up when specifying a folder() on blob.
+		delete(expected, "hdi_isfolder")
+		delete(actual, "hdi_isfolder")
+	}
+
 	s.a.Assert(len(expected), equals(), len(actual), "Both should have same number of metadata entries")
 	for key := range expected {
 		exValue := expected[key]
@@ -605,4 +613,12 @@ func (s *scenario) CancelAndResume() {
 
 func (s *scenario) SkipTest() {
 	s.a.Skip("Skipping test")
+}
+
+func (s *scenario) GetAsserter() asserter {
+	return s.a
+}
+
+func (s *scenario) GetDestination() resourceManager {
+	return s.state.dest
 }

@@ -135,7 +135,9 @@ func (r *resourceLocal) cleanup(_ asserter) {
 }
 
 func (r *resourceLocal) getParam(stripTopDir bool, withSas bool, withFile string) string {
-	assertNoStripTopDir(stripTopDir)
+	if stripTopDir {
+		return path.Join(r.dirPath, "*")
+	}
 
 	if withFile != "" {
 		p := path.Join(r.dirPath, withFile)
