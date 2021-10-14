@@ -135,21 +135,20 @@ func (r *resourceLocal) cleanup(_ asserter) {
 }
 
 func (r *resourceLocal) getParam(stripTopDir bool, withSas bool, withFile string) string {
-	if stripTopDir {
-		return path.Join(r.dirPath, "*")
-	}
+	if !stripTopDir {
+		if withFile != "" {
+			p := path.Join(r.dirPath, withFile)
 
-	if withFile != "" {
-		p := path.Join(r.dirPath, withFile)
+			if runtime.GOOS == "windows" {
+				p = strings.ReplaceAll(p, "/", "\\")
+			}
 
-		if runtime.GOOS == "windows" {
-			p = strings.ReplaceAll(p, "/", "\\")
+			return p
 		}
 
-		return p
+		return r.dirPath
 	}
-
-	return r.dirPath
+	return path.Join(r.dirPath, "*")
 }
 
 func (r *resourceLocal) getSAS() string {
@@ -234,7 +233,6 @@ func (r *resourceBlobContainer) cleanup(a asserter) {
 }
 
 func (r *resourceBlobContainer) getParam(stripTopDir bool, withSas bool, withFile string) string {
-	assertNoStripTopDir(stripTopDir)
 	var uri url.URL
 	if withSas {
 		uri = *r.rawSasURL
