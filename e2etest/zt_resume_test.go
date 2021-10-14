@@ -92,7 +92,7 @@ func TestResume_PublicSource_BlobTarget(t *testing.T) {
 				f("a.txt"),
 			},
 		},
-		EAccountType.Standard(),
+		EAccountType.Standard(), "",
 	)
 }
 
@@ -115,6 +115,6 @@ func TestResume_PublicSource_ContainerTarget(t *testing.T) {
 				f("a.txt"),
 			},
 		},
-		EAccountType.Standard(),
+		EAccountType.Standard(), "",
 	)
 }
