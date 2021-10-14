@@ -28,9 +28,11 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/hillu/go-ntdll"
 	"golang.org/x/sys/windows"
 )
 
@@ -86,8 +88,27 @@ func (osScenarioHelper) getFileAttrs(c asserter, filepath string) *uint32 {
 }
 
 func (osScenarioHelper) getFileSDDLString(c asserter, filepath string) *string {
-	sd, err := windows.GetNamedSecurityInfo(filepath, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.GROUP_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
+	srcPtr, err := syscall.UTF16PtrFromString(filepath)
 	c.AssertNoErr(err)
+	// custom open call, because must specify FILE_FLAG_BACKUP_SEMANTICS to make --backup mode work properly (i.e. our use of SeBackupPrivilege)
+	fd, err := windows.CreateFile(srcPtr,
+		windows.GENERIC_READ, windows.FILE_SHARE_READ, nil,
+		windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+	c.AssertNoErr(err)
+
+	buf := make([]byte, 512)
+	bufLen := uint32(len(buf))
+	status := ntdll.CallWithExpandingBuffer(func() ntdll.NtStatus {
+		return ntdll.NtQuerySecurityObject(
+			ntdll.Handle(fd),
+			windows.OWNER_SECURITY_INFORMATION|windows.GROUP_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION,
+			(*ntdll.SecurityDescriptor)(unsafe.Pointer(&buf[0])),
+			uint32(len(buf)),
+			&bufLen)
+	}, &buf, &bufLen)
+
+	c.Assert(status, equals(), ntdll.STATUS_SUCCESS)
+	sd := (*windows.SECURITY_DESCRIPTOR)(unsafe.Pointer(&buf[0])) // ntdll.SecurityDescriptor is equivalent
 	ret := sd.String()
 
 	return &ret

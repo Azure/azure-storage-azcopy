@@ -14,7 +14,7 @@ require (
 	github.com/go-ini/ini v1.62.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 	github.com/google/uuid v1.3.0
-	github.com/hillu/go-ntdll v0.0.0-20210404124636-a6f426aa8d92
+	github.com/hillu/go-ntdll v0.0.0-20211013113251-9d1dd10a143d
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/mattn/go-ieproxy v0.0.1
 	github.com/minio/minio-go v6.0.14+incompatible
@@ -27,7 +27,7 @@ require (
 	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d // indirect
 	golang.org/x/oauth2 v0.0.0-20210810183815-faf39c7919d5
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20210809222454-d867a43fc93e
+	golang.org/x/sys v0.0.0-20211013075003-97ac67df715c
 	golang.org/x/text v0.3.7 // indirect
 	google.golang.org/api v0.53.0
 	google.golang.org/grpc v1.40.0 // indirect
