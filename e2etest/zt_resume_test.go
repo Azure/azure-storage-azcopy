@@ -113,6 +113,8 @@ func TestResume_PublicSource_ContainerTarget(t *testing.T) {
 
 			shouldTransfer: []interface{}{
 				f("a.txt"),
+				folder("foo"),
+				f("foo/bar.txt"),
 			},
 		},
 		EAccountType.Standard(), "",
