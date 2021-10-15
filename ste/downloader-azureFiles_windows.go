@@ -4,7 +4,6 @@ package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -13,6 +12,8 @@ import (
 	"unsafe"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/hillu/go-ntdll"
 
 	"golang.org/x/sys/windows"
 )
@@ -144,24 +145,8 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 		securityInfoFlags |= windows.PROTECTED_DACL_SECURITY_INFORMATION
 	}
 
-	var owner *windows.SID = nil
-	var group *windows.SID = nil
-
 	if txInfo.PreserveSMBPermissions == common.EPreservePermissionsOption.OwnershipAndACLs() {
 		securityInfoFlags |= windows.OWNER_SECURITY_INFORMATION | windows.GROUP_SECURITY_INFORMATION
-		owner, _, err = sd.Owner()
-		if err != nil {
-			return fmt.Errorf("reading owner property of SDDL: %s", err)
-		}
-		group, _, err = sd.Group()
-		if err != nil {
-			return fmt.Errorf("reading group property of SDDL: %s", err)
-		}
-	}
-
-	dacl, _, err := sd.DACL()
-	if err != nil {
-		return fmt.Errorf("reading DACL property of SDDL: %s", err)
 	}
 
 	// Then let's set the security info.
@@ -176,20 +161,18 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 	//   So it's safe to leave it here for now.
 	globalSetAclMu.Lock()
 	defer globalSetAclMu.Unlock()
-	err = windows.SetNamedSecurityInfo(txInfo.Destination,
-		windows.SE_FILE_OBJECT,
-		securityInfoFlags,
-		owner,
-		group,
-		dacl,
-		nil,
+	status := ntdll.NtSetSecurityObject(
+		ntdll.Handle(0),
+		ntdll.SecurityInformationT(securityInfoFlags),
+		// unsafe but actually safe conversion
+		(*ntdll.SecurityDescriptor)(unsafe.Pointer(sd)),
 	)
 
-	if err != nil {
+	if status != ntdll.STATUS_SUCCESS {
 		return fmt.Errorf("permissions could not be restored. It may help to add --%s=false to the AzCopy command line (so that ACLS will be preserved but ownership will not). "+
 			" Or, if you want to preserve ownership, then run from a elevated command prompt or from an account in the Backup Operators group, and set the '%s' flag."+
-			" Error message was: %w",
-			common.PreserveOwnerFlagName, common.BackupModeFlagName, err)
+			" NT status was: %s",
+			common.PreserveOwnerFlagName, common.BackupModeFlagName, status)
 	}
 
 	return err
