@@ -24,6 +24,8 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"runtime"
+	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -79,7 +81,7 @@ type resourceManager interface {
 	cleanup(a asserter)
 
 	// gets the azCopy command line param that represents the resource.  withSas is ignored when not applicable
-	getParam(stripTopDir bool, withSas bool) string
+	getParam(stripTopDir bool, withSas bool, withFile string) string
 
 	getSAS() string
 
@@ -132,12 +134,21 @@ func (r *resourceLocal) cleanup(_ asserter) {
 	}
 }
 
-func (r *resourceLocal) getParam(stripTopDir bool, _ bool) string {
+func (r *resourceLocal) getParam(stripTopDir bool, withSas bool, withFile string) string {
 	if !stripTopDir {
+		if withFile != "" {
+			p := path.Join(r.dirPath, withFile)
+
+			if runtime.GOOS == "windows" {
+				p = strings.ReplaceAll(p, "/", "\\")
+			}
+
+			return p
+		}
+
 		return r.dirPath
-	} else {
-		return path.Join(r.dirPath, "*")
 	}
+	return path.Join(r.dirPath, "*")
 }
 
 func (r *resourceLocal) getSAS() string {
@@ -173,7 +184,7 @@ type resourceBlobContainer struct {
 }
 
 func (r *resourceBlobContainer) createLocation(a asserter, s *scenario) {
-	cu, _, rawSasURL := TestResourceFactory{}.CreateNewContainer(a, r.accountType)
+	cu, _, rawSasURL := TestResourceFactory{}.CreateNewContainer(a, s.GetTestFiles().sourcePublic, r.accountType)
 	r.containerURL = &cu
 	r.rawSasURL = &rawSasURL
 	if s.GetModifiableParameters().relativeSourcePath != "" {
@@ -221,14 +232,23 @@ func (r *resourceBlobContainer) cleanup(a asserter) {
 	}
 }
 
-func (r *resourceBlobContainer) getParam(stripTopDir bool, useSas bool) string {
-	// stripTopDir is automatic on a container level, todo: if we target folder level
-	// assertNoStripTopDir(stripTopDir)
-	if useSas {
-		return r.rawSasURL.String()
+func (r *resourceBlobContainer) getParam(stripTopDir bool, withSas bool, withFile string) string {
+	var uri url.URL
+	if withSas {
+		uri = *r.rawSasURL
 	} else {
-		return r.containerURL.String()
+		uri = r.containerURL.URL()
 	}
+
+	if withFile != "" {
+		bURLParts := azblob.NewBlobURLParts(uri)
+
+		bURLParts.BlobName = withFile
+
+		uri = bURLParts.URL()
+	}
+
+	return uri.String()
 }
 
 func (r *resourceBlobContainer) getSAS() string {
@@ -298,19 +318,25 @@ func (r *resourceAzureFileShare) cleanup(a asserter) {
 	}
 }
 
-func (r *resourceAzureFileShare) getParam(stripTopDir bool, useSas bool) string {
+func (r *resourceAzureFileShare) getParam(stripTopDir bool, withSas bool, withFile string) string {
 	assertNoStripTopDir(stripTopDir)
 	var param url.URL
-	if useSas {
+	if withSas {
 		param = *r.rawSasURL
 	} else {
 		param = r.shareURL.URL()
 	}
 
 	// append the snapshot ID if present
-	if r.snapshotID != "" {
+	if r.snapshotID != "" || withFile != "" {
 		parts := azfile.NewFileURLParts(param)
-		parts.ShareSnapshot = r.snapshotID
+		if r.snapshotID != "" {
+			parts.ShareSnapshot = r.snapshotID
+		}
+
+		if withFile != "" {
+			parts.DirectoryOrFilePath = withFile
+		}
 		param = parts.URL()
 	}
 
@@ -367,7 +393,7 @@ func (r *resourceDummy) createFile(a asserter, o *testObject, s *scenario, isSou
 func (r *resourceDummy) cleanup(_ asserter) {
 }
 
-func (r *resourceDummy) getParam(stripTopDir bool, _ bool) string {
+func (r *resourceDummy) getParam(stripTopDir bool, withSas bool, withFile string) string {
 	assertNoStripTopDir(stripTopDir)
 	return ""
 }
