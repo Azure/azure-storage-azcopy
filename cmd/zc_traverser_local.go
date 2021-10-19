@@ -29,6 +29,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
@@ -305,6 +306,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 
 	if err != nil {
+		azcopyScanningLogger.Log(pipeline.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
 		return fmt.Errorf("cannot scan the path %s, please verify that it is a valid", t.fullPath)
 	}
 
