@@ -148,6 +148,12 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
 	s.copyJobTemplate.Transfers.List = append(s.copyJobTemplate.Transfers.List, copyTransfer)
+	s.copyJobTemplate.Transfers.TotalSizeInBytes += uint64(copyTransfer.SourceSize)
+	if copyTransfer.EntityType == common.EEntityType.File() {
+		s.copyJobTemplate.Transfers.FileTransferCount++
+	} else {
+		s.copyJobTemplate.Transfers.FolderTransferCount++
+	}
 
 	return nil
 }

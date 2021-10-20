@@ -54,7 +54,7 @@ func (Validator) ValidateRemoveTransfer(c asserter, isSrcEncoded bool, isDstEnco
 	// TODO: Think of how to validate files in case of remove
 }
 func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool, isDstEncoded bool,
-	sourcePrefix string, destinationPrefix string, expectedTransfers []*testObject, actualTransfers []common.TransferDetail, statusToTest common.TransferStatus) {
+	sourcePrefix string, destinationPrefix string, expectedTransfers []*testObject, actualTransfers []common.TransferDetail, statusToTest common.TransferStatus, fromTo common.FromTo) {
 
 	sourcePrefix = makeSlashesComparable(sourcePrefix)
 	destinationPrefix = makeSlashesComparable(destinationPrefix)
@@ -82,7 +82,7 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 		return s + "/"
 	}
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers, func(to *testObject) string {
-		if to.isFolder() {
+		if to.isFolder() && fromTo != common.EFromTo.BlobBlob() { // Blob has no concept of folders, except in ADLSG2. However, internally, they're treated as blobs anyway.
 			return addFolderSuffix(to.name)
 		} else {
 			return to.name

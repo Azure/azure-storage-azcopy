@@ -3,11 +3,12 @@
 package ste
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"golang.org/x/sys/windows"

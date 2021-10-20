@@ -108,6 +108,8 @@ var JobsAdmin interface {
 	CurrentMainPoolSize() int
 
 	RequestTuneSlowly()
+
+	SetConcurrencySettingsToAuto()
 }
 
 func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {
@@ -682,6 +684,16 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
 		jm.AddJobPart(partNum, planFile, mmf, EMPTY_SAS_STRING, EMPTY_SAS_STRING, false)
 	}
+}
+
+func (ja *jobsAdmin) SetConcurrencySettingsToAuto() {
+	// Setting initial pool size to 4 and max pool size to 3,000
+	ja.concurrency.InitialMainPoolSize = 4
+	ja.concurrency.MaxMainPoolSize = &ConfiguredInt{3000, false, common.EEnvironmentVariable.ConcurrencyValue().Name, "auto-tuning limit"}
+
+	// recreate the concurrency tuner.
+	// Tuner isn't called until the first job part is scheduled for transfer, so it is safe to update it before that.
+	ja.concurrencyTuner = ja.createConcurrencyTuner()
 }
 
 // TODO: I think something is wrong here: I think delete and cleanup should be merged together.
