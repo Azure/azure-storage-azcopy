@@ -17,6 +17,11 @@ import (
 
 type JobPartPlanFileName string
 
+func (jppfn *JobPartPlanFileName) Exists() bool {
+	_, err := os.Stat(jppfn.GetJobPartPlanPath())
+	return err == nil
+}
+
 func (jppfn *JobPartPlanFileName) GetJobPartPlanPath() string {
 	return fmt.Sprintf("%s%s%s", JobsAdmin.AppPathFolder(), common.AZCOPY_PATH_SEPARATOR_STRING, string(*jppfn))
 }
@@ -70,6 +75,10 @@ func (jpfn JobPartPlanFileName) Map() *JobPartPlanMMF {
 
 // createJobPartPlanFile creates the memory map JobPartPlanHeader using the given JobPartOrder and JobPartPlanBlobData
 func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
+	if jpfn.Exists() {
+		return // This is *probably* for a cleanup job.
+	}
+
 	// Validate that the passed-in strings can fit in their respective fields
 	if len(order.SourceRoot.Value) > len(JobPartPlanHeader{}.SourceRoot) {
 		panic(fmt.Errorf("source root string is too large: %q", order.SourceRoot))
