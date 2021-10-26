@@ -21,7 +21,10 @@
 package cmd
 
 import (
+	"io/fs"
 	"os"
+	"path/filepath"
+	"time"
 
 	chk "gopkg.in/check.v1"
 )
@@ -163,5 +166,54 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeAndExcludeAttrFlags(c *ch
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		validateUploadTransfersAreScheduled(c, "", "", commonFileList, mockedRPC)
+	})
+}
+
+// mouthfull of a test name, but this ensures that case insensitivity doesn't cause the unintended deletion of files
+func (s *cmdIntegrationSuite) TestSyncDownloadWithDeleteDestinationOnCaseInsensitiveFS(c *chk.C) {
+	bsu := getBSU()
+
+	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
+	fileList := []string{"FileWithCaps", "FiLeTwO", "FoOBaRBaZ"}
+
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, fileList, "Hello, World!")
+
+	// let the local files be in the future; we don't want to do _anything_ to them; not delete nor download.
+	time.Sleep(time.Second * 5)
+
+	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, fileList)
+
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
+	raw.recursive = true
+	raw.deleteDestination = "true"
+
+	runSyncAndVerify(c, raw, func(err error) {
+		// It should not have deleted them
+		seenFiles := make(map[string]bool)
+		filepath.Walk(dstDirName, func(path string, info fs.FileInfo, err error) error {
+			if path == dstDirName {
+				return nil
+			}
+
+			seenFiles[filepath.Base(path)] = true
+			return nil
+		})
+
+		c.Assert(len(seenFiles), chk.Equals, len(fileList))
+		for _, v := range fileList {
+			c.Assert(seenFiles[v], chk.Equals, true)
+		}
+
+		// It should not have downloaded them
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
 	})
 }

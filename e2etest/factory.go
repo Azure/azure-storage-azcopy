@@ -34,6 +34,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/google/uuid"
 )
 
 // provide convenient methods to get access to test resources such as accounts, containers/shares, directories
@@ -154,11 +155,11 @@ func (TestResourceFactory) GetBlobURLWithSAS(c asserter, accountType AccountType
 	return blobURLWithSAS
 }
 
-func (TestResourceFactory) CreateNewContainer(c asserter, accountType AccountType) (container azblob.ContainerURL, name string, rawURL url.URL) {
+func (TestResourceFactory) CreateNewContainer(c asserter, publicAccess azblob.PublicAccessType, accountType AccountType) (container azblob.ContainerURL, name string, rawURL url.URL) {
 	name = TestResourceNameGenerator{}.GenerateContainerName(c)
 	container = TestResourceFactory{}.GetBlobServiceURL(accountType).NewContainerURL(name)
 
-	cResp, err := container.Create(context.Background(), nil, azblob.PublicAccessNone)
+	cResp, err := container.Create(context.Background(), nil, publicAccess)
 	c.AssertNoErr(err)
 	c.Assert(cResp.StatusCode(), equals(), 201)
 	return container, name, TestResourceFactory{}.GetContainerURLWithSAS(c, accountType, name).URL()
@@ -266,7 +267,8 @@ func generateName(c asserter, prefix string, maxLen int) string {
 }
 
 func (TestResourceNameGenerator) GenerateContainerName(c asserter) string {
-	return generateName(c, containerPrefix, 63)
+	// return generateName(c, containerPrefix, 63)
+	return uuid.New().String()
 }
 
 func (TestResourceNameGenerator) generateBlobName(c asserter) string {

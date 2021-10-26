@@ -28,6 +28,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -57,6 +58,7 @@ type blockBlobSenderBase struct {
 	blobTagsToApply azblob.BlobTagsMap
 	cpkToApply      azblob.ClientProvidedKeyOptions
 
+	atomicChunksWritten    int32
 	atomicPutListIndicator int32
 	muBlockIDs             *sync.Mutex
 }
@@ -246,7 +248,7 @@ func (s *blockBlobSenderBase) Cleanup() {
 	jptm := s.jptm
 
 	// Cleanup
-	if jptm.IsDeadInflight() {
+	if jptm.IsDeadInflight() && atomic.LoadInt32(&s.atomicChunksWritten) != 0 {
 		// there is a possibility that some uncommitted blocks will be there
 		// Delete the uncommitted blobs
 		deletionContext, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)

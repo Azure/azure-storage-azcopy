@@ -51,11 +51,10 @@ func (f *nullFolderTracker) StopTracking(folder string) {
 	// noop (because we don't track anything)
 }
 
-
 type jpptFolderTracker struct {
-	plan *JobPartPlanHeader
-	mu *sync.Mutex
-	contents map[string]uint32
+	plan                   *JobPartPlanHeader
+	mu                     *sync.Mutex
+	contents               map[string]uint32
 	unregisteredButCreated map[string]struct{}
 }
 
@@ -132,6 +131,9 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 }
 
 func (f *jpptFolderTracker) StopTracking(folder string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	// no-op, because tracking is now handled by jppt, anyway.
 	if _, ok := f.contents[folder]; ok {
 		delete(f.contents, folder)

@@ -61,100 +61,71 @@ func TestProperties_SMBPermissionsSDDLPreserved(t *testing.T) {
 		t.Error(err)
 	}
 
-	RunScenarios(
-		t,
-		eOperation.Copy(),
-		// FileLocal isn't supported in the test suite, because it requires SeBackupPrivilege for accurate testing
-		// Anybody know how to get that going on Azure pipelines? Or just hand a UAC escalation prompt off to the suite runner so it can be tested locally?
-		eTestFromTo.Other(
-			common.EFromTo.LocalFile(),
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(
+		common.EFromTo.LocalFile(),
 		// common.EFromTo.FileFile(), // TODO: finish inquiring with Jason Shay about this wonkiness. Context: Auto-inherit bit is getting flipped on S2S unrelated to azcopy
-		),
-		eValidate.Auto(),
-		params{
-			recursive:              true,
-			preserveSMBInfo:        true,
-			preserveSMBPermissions: true,
+	), eValidate.Auto(), params{
+		recursive:              true,
+		preserveSMBInfo:        true,
+		preserveSMBPermissions: true,
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder("", with{smbPermissionsSddl: rootSDDL}),
+			f("file1", with{smbPermissionsSddl: fileSDDL}),
+			f("file2.txt", with{smbPermissionsSddl: fileSDDL}),
+			folder("fldr1", with{smbPermissionsSddl: folderSDDL}),
+			f("fldr1/file3.txt", with{smbPermissionsSddl: fileSDDL}),
 		},
-		nil,
-		testFiles{
-			defaultSize: "1K",
-			shouldTransfer: []interface{}{
-				folder("", with{smbPermissionsSddl: rootSDDL}),
-				f("file1", with{smbPermissionsSddl: fileSDDL}),
-				f("file2.txt", with{smbPermissionsSddl: fileSDDL}),
-				folder("fldr1", with{smbPermissionsSddl: folderSDDL}),
-				f("fldr1/file3.txt", with{smbPermissionsSddl: fileSDDL}),
-			},
-		},
-		EAccountType.Standard(),
-	)
+	}, EAccountType.Standard(), "")
 }
 
 // TODO: add some tests (or modify the above) to make assertions about case preservation (or not) in metadata
 //    See https://github.com/Azure/azure-storage-azcopy/issues/113 (which incidentally, I'm not observing in the tests above, for reasons unknown)
 //
 func TestProperties_SMBDates(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileLocal()), // these are the only pairs where we preserve last write time AND creation time
-		eValidate.Auto(),
-		params{
-			recursive:       true,
-			preserveSMBInfo: true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileLocal()), eValidate.Auto(), params{
+		recursive:       true,
+		preserveSMBInfo: true,
+	}, &hooks{
+		beforeRunJob: func(h hookHelper) {
+			// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
+			// So that when validating, our validation can be sure that the right datetime has ended up in the right
+			// field
+			time.Sleep(5 * time.Second)
+			h.CreateFiles(h.GetTestFiles(), true, true, false)
+			// And pause again, so that that the write times at the destination wont' just _automatically_ match the source times
+			// (due to there being < 1 sec delay between creation and completion of copy). With this delay, we know they only match
+			// if AzCopy really did preserve them
+			time.Sleep(10 * time.Second) // we are assuming here, that the clock skew between source and dest is less than 10 secs
 		},
-		&hooks{
-			beforeRunJob: func(h hookHelper) {
-				// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
-				// So that when validating, our validation can be sure that the right datetime has ended up in the right
-				// field
-				time.Sleep(5 * time.Second)
-				h.CreateFiles(h.GetTestFiles(), true, true, false)
-				// And pause again, so that that the write times at the destination wont' just _automatically_ match the source times
-				// (due to there being < 1 sec delay between creation and completion of copy). With this delay, we know they only match
-				// if AzCopy really did preserve them
-				time.Sleep(10 * time.Second) // we are assuming here, that the clock skew between source and dest is less than 10 secs
-			},
+	}, testFiles{
+		defaultSize: "1K",
+		// no need to set specific dates on these. Instead, we just mess with the write times in
+		// beforeRunJob
+		// TODO: is that what we really want, or do we want to set write times here?
+		shouldTransfer: []interface{}{
+			folder(""),
+			"filea",
+			folder("fold1"),
+			"fold1/fileb",
 		},
-		testFiles{
-			defaultSize: "1K",
-			// no need to set specific dates on these. Instead, we just mess with the write times in
-			// beforeRunJob
-			// TODO: is that what we really want, or do we want to set write times here?
-			shouldTransfer: []interface{}{
-				folder(""),
-				"filea",
-				folder("fold1"),
-				"fold1/fileb",
-			},
-		},
-		EAccountType.Standard(),
-	)
+	}, EAccountType.Standard(), "")
 }
 
 func TestProperties_SMBFlags(t *testing.T) {
-	RunScenarios(
-		t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileFile(), common.EFromTo.FileLocal()),
-		eValidate.Auto(),
-		params{
-			recursive:       true,
-			preserveSMBInfo: true,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileFile(), common.EFromTo.FileLocal()), eValidate.Auto(), params{
+		recursive:       true,
+		preserveSMBInfo: true,
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder("", with{smbAttributes: 2}), // hidden
+			f("file1.txt", with{smbAttributes: 2}),
+			folder("fldr1", with{smbAttributes: 2}),
+			f("fldr1/file2.txt", with{smbAttributes: 2}),
 		},
-		nil,
-		testFiles{
-			defaultSize: "1K",
-			shouldTransfer: []interface{}{
-				folder("", with{smbAttributes: 2}), // hidden
-				f("file1.txt", with{smbAttributes: 2}),
-				folder("fldr1", with{smbAttributes: 2}),
-				f("fldr1/file2.txt", with{smbAttributes: 2}),
-			},
-		},
-		EAccountType.Standard(),
-	)
+	}, EAccountType.Standard(), "")
 }
 
 func TestProperties_SMBPermsAndFlagsWithIncludeAfter(t *testing.T) {
@@ -168,46 +139,37 @@ func TestProperties_SMBPermsAndFlagsWithIncludeAfter(t *testing.T) {
 		f("fold1/fileb", with{smbAttributes: 2}),
 	}
 
-	RunScenarios(
-		t,
-		eOperation.Copy(),
-		eTestFromTo.Other(common.EFromTo.FileLocal()), // these are the only pairs where we preserve last write time AND creation time
-		eValidate.Auto(),
-		params{
-			recursive:              true,
-			preserveSMBInfo:        true, // this wasn't compatible with time-sensitive filtering prior.
-			// includeAfter: SET LATER
-		},
-		&hooks{
-			beforeRunJob: func(h hookHelper) {
-				// Pause for a includeAfter time
-				time.Sleep(5 * time.Second)
-				h.GetModifiableParameters().includeAfter = time.Now().Format(azfile.ISO8601)
-				// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
-				// So that when validating, our validation can be sure that the right datetime has ended up in the right
-				// field
-				time.Sleep(5 * time.Second)
-				h.CreateFiles(testFiles{
-					defaultSize:    "1K",
-					shouldTransfer: recreateFiles,
-				}, true, true, false)
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.FileLocal()), eValidate.Auto(), params{
+		recursive:       true,
+		preserveSMBInfo: true, // this wasn't compatible with time-sensitive filtering prior.
+		// includeAfter: SET LATER
+	}, &hooks{
+		beforeRunJob: func(h hookHelper) {
+			// Pause for a includeAfter time
+			time.Sleep(5 * time.Second)
+			h.GetModifiableParameters().includeAfter = time.Now().Format(azfile.ISO8601)
+			// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
+			// So that when validating, our validation can be sure that the right datetime has ended up in the right
+			// field
+			time.Sleep(5 * time.Second)
+			h.CreateFiles(testFiles{
+				defaultSize:    "1K",
+				shouldTransfer: recreateFiles,
+			}, true, true, false)
 
-				// And pause again, so that that the write times at the destination wont' just _automatically_ match the source times
-				// (due to there being < 1 sec delay between creation and completion of copy). With this delay, we know they only match
-				// if AzCopy really did preserve them
-				time.Sleep(10 * time.Second) // we are assuming here, that the clock skew between source and dest is less than 10 secs
-			},
+			// And pause again, so that that the write times at the destination wont' just _automatically_ match the source times
+			// (due to there being < 1 sec delay between creation and completion of copy). With this delay, we know they only match
+			// if AzCopy really did preserve them
+			time.Sleep(10 * time.Second) // we are assuming here, that the clock skew between source and dest is less than 10 secs
 		},
-		testFiles{
-			defaultSize: "1K",
-			// no need to set specific dates on these. Instead, we just mess with the write times in
-			// beforeRunJob
-			// TODO: is that what we really want, or do we want to set write times here?
-			shouldTransfer: recreateFiles,
-			shouldIgnore: skippedFiles,
-		},
-		EAccountType.Standard(),
-	)
+	}, testFiles{
+		defaultSize: "1K",
+		// no need to set specific dates on these. Instead, we just mess with the write times in
+		// beforeRunJob
+		// TODO: is that what we really want, or do we want to set write times here?
+		shouldTransfer: recreateFiles,
+		shouldIgnore:   skippedFiles,
+	}, EAccountType.Standard(), "")
 }
 
 // TODO: Sync test for modern LMT getting
@@ -224,40 +186,31 @@ func TestProperties_SMBPermsAndFlagsWithSync(t *testing.T) {
 		f("fold1/fileb", with{smbAttributes: 2}),
 	}
 
-	RunScenarios(
-		t,
-		eOperation.Sync(),
-		eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileLocal()), // these are the only pairs where we preserve last write time AND creation time
-		eValidate.Auto(),
-		params{
-			recursive:              true,
-			preserveSMBInfo:        true, // this wasn't compatible with time-sensitive filtering prior.
-		},
-		&hooks{
-			beforeRunJob: func(h hookHelper) {
-				// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
-				// So that when validating, our validation can be sure that the right datetime has ended up in the right
-				// field
-				time.Sleep(5 * time.Second)
-				h.CreateFiles(testFiles{
-					defaultSize:    "1K",
-					shouldTransfer: recreateFiles,
-				}, false, false, true)
+	RunScenarios(t, eOperation.Sync(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileLocal()), eValidate.Auto(), params{
+		recursive:       true,
+		preserveSMBInfo: true, // this wasn't compatible with time-sensitive filtering prior.
+	}, &hooks{
+		beforeRunJob: func(h hookHelper) {
+			// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
+			// So that when validating, our validation can be sure that the right datetime has ended up in the right
+			// field
+			time.Sleep(5 * time.Second)
+			h.CreateFiles(testFiles{
+				defaultSize:    "1K",
+				shouldTransfer: recreateFiles,
+			}, false, false, true)
 
-				// And pause again, so that that the write times at the destination wont' just _automatically_ match the source times
-				// (due to there being < 1 sec delay between creation and completion of copy). With this delay, we know they only match
-				// if AzCopy really did preserve them
-				time.Sleep(10 * time.Second) // we are assuming here, that the clock skew between source and dest is less than 10 secs
-			},
+			// And pause again, so that that the write times at the destination wont' just _automatically_ match the source times
+			// (due to there being < 1 sec delay between creation and completion of copy). With this delay, we know they only match
+			// if AzCopy really did preserve them
+			time.Sleep(10 * time.Second) // we are assuming here, that the clock skew between source and dest is less than 10 secs
 		},
-		testFiles{
-			defaultSize: "1K",
-			// no need to set specific dates on these. Instead, we just mess with the write times in
-			// beforeRunJob
-			// TODO: is that what we really want, or do we want to set write times here?
-			shouldTransfer: transferredFiles,
-			shouldIgnore:   recreateFiles,
-		},
-		EAccountType.Standard(),
-	)
+	}, testFiles{
+		defaultSize: "1K",
+		// no need to set specific dates on these. Instead, we just mess with the write times in
+		// beforeRunJob
+		// TODO: is that what we really want, or do we want to set write times here?
+		shouldTransfer: transferredFiles,
+		shouldIgnore:   recreateFiles,
+	}, EAccountType.Standard(), "")
 }

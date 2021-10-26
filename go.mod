@@ -15,14 +15,14 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 	github.com/google/uuid v1.3.0
 	github.com/hillu/go-ntdll v0.0.0-20210404124636-a6f426aa8d92
-	github.com/jiacfan/keychain v0.0.0-20180920053336-f2c902a3d807
-	github.com/jiacfan/keyctl v0.3.1
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/mattn/go-ieproxy v0.0.1
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.2.1
+	github.com/wastore/keychain v0.0.0-20180920053336-f2c902a3d807
+	github.com/wastore/keyctl v0.3.1
 	github.com/stretchr/objx v0.3.0 // indirect
 	github.com/stretchr/testify v1.7.0 // indirect
 	golang.org/x/crypto v0.0.0-20210812204632-0ba0e8f03122
