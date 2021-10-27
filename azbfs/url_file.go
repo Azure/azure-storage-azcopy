@@ -227,7 +227,6 @@ func (f FileURL) Rename(ctx context.Context, options RenameFileOptions) (FileURL
 	urlParts := NewBfsURLParts(f.fileClient.URL())
 	urlParts.FileSystemName = *fileSystemName
 	urlParts.DirectoryOrFilePath = options.DestinationPath
-
 	renameSource := "/" + f.fileSystemName + "/" + f.path + "?" + urlParts.SAS.Encode()
 
 	destinationFileURL := NewFileURL(urlParts.URL(), f.fileClient.Pipeline())
