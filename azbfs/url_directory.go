@@ -174,11 +174,10 @@ func (d DirectoryURL) Rename(ctx context.Context, options RenameDirectoryOptions
 		fileSystemName = &d.filesystem
 	}
 
-	renameSource := "/" + d.filesystem + "/" + d.pathParameter
-
 	urlParts := NewBfsURLParts(d.directoryClient.URL())
 	urlParts.FileSystemName = *fileSystemName
 	urlParts.DirectoryOrFilePath = options.DestinationPath
+	renameSource := "/" + d.filesystem + "/" + d.pathParameter + "?" + urlParts.SAS.Encode()
 
 	destinationDirectoryURL := NewDirectoryURL(urlParts.URL(), d.directoryClient.Pipeline())
 
