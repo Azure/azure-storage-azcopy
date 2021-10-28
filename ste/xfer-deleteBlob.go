@@ -1,6 +1,7 @@
 package ste
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -62,7 +63,9 @@ func doDeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	// we still count this delete operation as successful since we accomplished the desired outcome
 	err := error(nil)
 	if jptm.PermanentDeleteOption().ToPermanentDeleteOptionType() == azblob.BlobDeletePermanent {
-		_, err = srcBlobURL.PermanentDelete(jptm.Context(), jptm.DeleteSnapshotsOption().ToDeleteSnapshotsOptionType(), azblob.BlobAccessConditions{})
+		// Change service version before performing permanent delete
+		ctx := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+		_, err = srcBlobURL.PermanentDelete(ctx, jptm.DeleteSnapshotsOption().ToDeleteSnapshotsOptionType(), azblob.BlobAccessConditions{})
 	} else {
 		_, err = srcBlobURL.Delete(jptm.Context(), jptm.DeleteSnapshotsOption().ToDeleteSnapshotsOptionType(), azblob.BlobAccessConditions{})
 	}

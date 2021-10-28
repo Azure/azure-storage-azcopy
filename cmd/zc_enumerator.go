@@ -314,10 +314,20 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 
 	var includeDeleted bool
 	var includeSnapshot bool
-	if permanentDeleteOption == common.PermanentDeleteOption(1) {
+	var includeVersion bool
+	switch permanentDeleteOption {
+	case common.PermanentDeleteOption(0):
 		includeDeleted = true
 		includeSnapshot = true
+	case common.PermanentDeleteOption(1):
+		includeDeleted = true
+		includeVersion = true
+	case common.PermanentDeleteOption(2):
+		includeDeleted = true
+		includeSnapshot = true
+		includeVersion = true
 	}
+
 	// Clean up the resource if it's a local path
 	if location == common.ELocation.Local() {
 		resource = common.ResourceString{Value: cleanLocalPath(resource.ValueLocal())}
@@ -415,7 +425,7 @@ func initResourceTraverser(resource common.ResourceString, location common.Locat
 		} else if listOfVersionIds != nil {
 			output = newBlobVersionsTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
-			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot)
+			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion)
 		}
 	case common.ELocation.File():
 		resourceURL, err := resource.FullURL()

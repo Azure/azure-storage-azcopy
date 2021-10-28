@@ -369,8 +369,13 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 		}
 	}
 
-	if cca.permanentDeleteOption == common.PermanentDeleteOption(1) {
-		filters = append(filters, &softDeletedSnapshotFilter{isIncluded: true})
+	switch cca.permanentDeleteOption {
+	case common.PermanentDeleteOption(0):
+		filters = append(filters, &softDeletedSnapshotFilter{deleteSnapshots: true})
+	case common.PermanentDeleteOption(1):
+		filters = append(filters, &softDeletedSnapshotFilter{deleteVersions: true})
+	case common.PermanentDeleteOption(2):
+		filters = append(filters, &softDeletedSnapshotFilter{deleteSnapshots: true, deleteVersions: true})
 	}
 
 	return filters

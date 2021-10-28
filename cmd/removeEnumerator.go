@@ -59,7 +59,7 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	includeFilters := buildIncludeFilters(cca.includePatterns)
 	excludeFilters := buildExcludeFilters(cca.excludePatterns, false)
 	excludePathFilters := buildExcludeFilters(cca.excludePathPatterns, true)
-	includeSoftDelete := buildIncludeSoftDeletedSnapshot(cca.permanentDeleteOption)
+	includeSoftDelete := buildIncludeSoftDeleted(cca.permanentDeleteOption)
 
 	// set up the filters in the right order
 	filters := append(includeFilters, excludeFilters...)

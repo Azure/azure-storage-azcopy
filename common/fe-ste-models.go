@@ -152,12 +152,12 @@ var EPermanentDeleteOption = PermanentDeleteOption(0)
 
 type PermanentDeleteOption uint8
 
-func (PermanentDeleteOption) None() PermanentDeleteOption      { return PermanentDeleteOption(0) }
-func (PermanentDeleteOption) Permanent() PermanentDeleteOption { return PermanentDeleteOption(1) }
-
-func (p PermanentDeleteOption) String() string {
-	return enum.StringInt(p, reflect.TypeOf(p))
+func (PermanentDeleteOption) Snapshots() PermanentDeleteOption { return PermanentDeleteOption(0) }
+func (PermanentDeleteOption) Versions() PermanentDeleteOption  { return PermanentDeleteOption(1) }
+func (PermanentDeleteOption) SnapshotsAndVersions() PermanentDeleteOption {
+	return PermanentDeleteOption(2)
 }
+func (PermanentDeleteOption) None() PermanentDeleteOption { return PermanentDeleteOption(3) }
 
 func (p *PermanentDeleteOption) Parse(s string) error {
 	// allow empty to mean "None"
@@ -166,19 +166,23 @@ func (p *PermanentDeleteOption) Parse(s string) error {
 		return nil
 	}
 
-	val, err := enum.ParseInt(reflect.TypeOf(p), s, true, true)
+	val, err := enum.Parse(reflect.TypeOf(p), s, true)
 	if err == nil {
 		*p = val.(PermanentDeleteOption)
 	}
 	return err
 }
 
+func (p PermanentDeleteOption) String() string {
+	return enum.StringInt(p, reflect.TypeOf(p))
+}
+
 func (p PermanentDeleteOption) ToPermanentDeleteOptionType() azblob.BlobDeleteType {
 	if p == EPermanentDeleteOption.None() {
 		return azblob.BlobDeleteNone
+	} else {
+		return azblob.BlobDeletePermanent
 	}
-
-	return azblob.BlobDeleteType(strings.ToLower(p.String()))
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

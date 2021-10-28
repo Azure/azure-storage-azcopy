@@ -363,7 +363,8 @@ func (_ includeBeforeDateFilter) FormatAsUTC(t time.Time) string {
 }
 
 type softDeletedSnapshotFilter struct {
-	isIncluded bool
+	deleteSnapshots bool
+	deleteVersions  bool
 }
 
 func (s *softDeletedSnapshotFilter) doesSupportThisOS() (msg string, supported bool) {
@@ -376,16 +377,34 @@ func (s *softDeletedSnapshotFilter) appliesOnlyToFiles() bool {
 	return false
 }
 func (s *softDeletedSnapshotFilter) doesPass(storedObject storedObject) bool {
-	if storedObject.blobDeleted && storedObject.blobSnapshotID != "" {
-		return true
+	if s.deleteVersions && s.deleteSnapshots {
+		if storedObject.blobDeleted && (storedObject.blobVersionID != "" || storedObject.blobSnapshotID != "") {
+			return true
+		}
+		return false
+	} else if s.deleteSnapshots {
+		if storedObject.blobDeleted && storedObject.blobSnapshotID != "" {
+			return true
+		}
+		return false
+	} else if s.deleteVersions {
+		if storedObject.blobDeleted && storedObject.blobVersionID != "" {
+			return true
+		}
+		return false
 	}
 	return false
 }
 
-func buildIncludeSoftDeletedSnapshot(permanentDeleteOption common.PermanentDeleteOption) []objectFilter {
+func buildIncludeSoftDeleted(permanentDeleteOption common.PermanentDeleteOption) []objectFilter {
 	filters := make([]objectFilter, 0)
-	if permanentDeleteOption == common.PermanentDeleteOption(1) {
-		filters = append(filters, &softDeletedSnapshotFilter{isIncluded: true})
+	switch permanentDeleteOption {
+	case common.PermanentDeleteOption(0):
+		filters = append(filters, &softDeletedSnapshotFilter{deleteSnapshots: true})
+	case common.PermanentDeleteOption(1):
+		filters = append(filters, &softDeletedSnapshotFilter{deleteVersions: true})
+	case common.PermanentDeleteOption(2):
+		filters = append(filters, &softDeletedSnapshotFilter{deleteSnapshots: true, deleteVersions: true})
 	}
 	return filters
 }

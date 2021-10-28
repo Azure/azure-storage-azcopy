@@ -58,6 +58,8 @@ type blobTraverser struct {
 	includeDeleted bool
 
 	includeSnapshot bool
+
+	includeVersion bool
 }
 
 func (t *blobTraverser) isDirectory(isSource bool) bool {
@@ -155,42 +157,38 @@ func (t *blobTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			azcopyScanningLogger.Log(pipeline.LogDebug, "Detected the root as a blob.")
 		}
 
-		if isBlob && t.includeDeleted && t.includeSnapshot {
-			// do something?
-		} else {
-			storedObject := newStoredObject(
-				preprocessor,
-				getObjectNameOnly(strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
-				"",
-				common.EEntityType.File(),
-				blobProperties.LastModified(),
-				blobProperties.ContentLength(),
-				blobProperties,
-				blobPropertiesResponseAdapter{blobProperties},
-				common.FromAzBlobMetadataToCommonMetadata(blobProperties.NewMetadata()), // .NewMetadata() seems odd to call, but it does actually retrieve the metadata from the blob properties.
-				blobUrlParts.ContainerName,
-			)
+		storedObject := newStoredObject(
+			preprocessor,
+			getObjectNameOnly(strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
+			"",
+			common.EEntityType.File(),
+			blobProperties.LastModified(),
+			blobProperties.ContentLength(),
+			blobProperties,
+			blobPropertiesResponseAdapter{blobProperties},
+			common.FromAzBlobMetadataToCommonMetadata(blobProperties.NewMetadata()), // .NewMetadata() seems odd to call, but it does actually retrieve the metadata from the blob properties.
+			blobUrlParts.ContainerName,
+		)
 
-			if t.s2sPreserveSourceTags {
-				blobTagsMap, err := t.getBlobTags()
-				if err != nil {
-					panic("Couldn't fetch blob tags due to error: " + err.Error())
-				}
-				if len(blobTagsMap) > 0 {
-					storedObject.blobTags = blobTagsMap
-				}
+		if t.s2sPreserveSourceTags {
+			blobTagsMap, err := t.getBlobTags()
+			if err != nil {
+				panic("Couldn't fetch blob tags due to error: " + err.Error())
 			}
-			if t.incrementEnumerationCounter != nil {
-				t.incrementEnumerationCounter(common.EEntityType.File())
+			if len(blobTagsMap) > 0 {
+				storedObject.blobTags = blobTagsMap
 			}
+		}
+		if t.incrementEnumerationCounter != nil {
+			t.incrementEnumerationCounter(common.EEntityType.File())
+		}
 
-			err := processIfPassedFilters(filters, storedObject, processor)
-			_, err = getProcessingError(err)
+		err := processIfPassedFilters(filters, storedObject, processor)
+		_, err = getProcessingError(err)
 
-			// short-circuit if we don't have anything else to scan
-			if isBlob || err != nil {
-				return err
-			}
+		// short-circuit if we don't have anything else to scan and permanent delete is not on
+		if !t.includeDeleted && isBlob || err != nil {
+			return err
 		}
 	}
 
@@ -228,7 +226,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 
 		for marker := (azblob.Marker{}); marker.NotDone(); {
 			lResp, err := containerURL.ListBlobsHierarchySegment(t.ctx, marker, "/", azblob.ListBlobsSegmentOptions{Prefix: currentDirPath,
-				Details: azblob.BlobListingDetails{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot}})
+				Details: azblob.BlobListingDetails{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion}})
 			if err != nil {
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
@@ -329,7 +327,9 @@ func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 
 	object.blobSnapshotID = blobInfo.Snapshot
 	object.blobDeleted = blobInfo.Deleted
-
+	if blobInfo.VersionID != nil {
+		object.blobVersionID = *blobInfo.VersionID
+	}
 	return object
 }
 
@@ -348,7 +348,7 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 		// Passing tags = true in the list call will save additional GetTags call
 		// TODO optimize for the case where recursive is off
 		listBlob, err := containerURL.ListBlobsFlatSegment(t.ctx, marker,
-			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix + extraSearchPrefix, Details: azblob.BlobListingDetails{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot}})
+			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix + extraSearchPrefix, Details: azblob.BlobListingDetails{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion}})
 		if err != nil {
 			return fmt.Errorf("cannot list blobs. Failed with error %s", err.Error())
 		}
@@ -394,7 +394,7 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 	return nil
 }
 
-func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot bool) (t *blobTraverser) {
+func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool) (t *blobTraverser) {
 	if strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning())) == "false" &&
 		includeSnapshot && includeDeleted {
 		panic("Cannot delete soft-deleted snapshots with parallel listing. Disable hierarchical scanning by setting AZCOPY_DISABLE_HIERARCHICAL_SCAN to true.")
@@ -411,6 +411,7 @@ func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 		cpkOptions:                  cpkOptions,
 		includeDeleted:              includeDeleted,
 		includeSnapshot:             includeSnapshot,
+		includeVersion:              includeVersion,
 	}
 
 	if strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning())) == "true" {

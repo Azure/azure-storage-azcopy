@@ -162,7 +162,7 @@ type rawCopyCmdArgs struct {
 	// Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data
 	cpkScopeInfo string
 
-	// Optional flag that permanently deletes soft-deleted snapshots
+	// Optional flag that permanently deletes soft-deleted snapshots/versions
 	permanentDeleteOption string
 }
 
