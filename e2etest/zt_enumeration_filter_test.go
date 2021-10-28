@@ -94,7 +94,7 @@ func TestFilter_IncludeAfter(t *testing.T) {
 
 			// re-create the "shouldTransfer" files, after our includeAfter time.
 			fs := h.GetTestFiles().cloneShouldTransfers()
-			h.CreateFiles(fs, true)
+			h.CreateFiles(fs, true, true, false)
 		},
 	}, testFiles{
 		defaultSize: "1K",
@@ -104,31 +104,7 @@ func TestFilter_IncludeAfter(t *testing.T) {
 		shouldTransfer: []interface{}{
 			"fileb",
 		},
-	})
-}
-
-func TestFilter_IncludePattern(t *testing.T) {
-
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllSourcesToOneDest(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
-		recursive:      true,
-		includePattern: "*.txt;2020*;*mid*;file8", // *pre*in*post*",
-	}, nil, testFiles{
-		defaultSize: "1K",
-		shouldIgnore: []interface{}{
-			"A2020log",
-			"A2020log.txte",
-		},
-		shouldTransfer: []interface{}{
-			folder("subdir"),
-			"2020_file1",
-			"file2.txt",
-			"file3_mid_txt",
-			"subdir/2020_file5", // because recursive=true and patterns are matched in subdirectories as well.
-			"subdir/file6.txt",
-			"subdir/file7_A_mid_B",
-			"file8", // Exact match
-		},
-	})
+	}, EAccountType.Standard(), "")
 }
 
 func TestFilter_RemoveFile(t *testing.T) {
@@ -146,7 +122,7 @@ func TestFilter_RemoveFile(t *testing.T) {
 }
 
 func TestFilter_IncludePattern(t *testing.T) {
-  RunScenarios(t, eOperation.Copy(), eTestFromTo.AllSourcesToOneDest(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllSourcesToOneDest(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:      true,
 		includePattern: "*.txt;2020*;*mid*;file8", // *pre*in*post*",
 	}, nil, testFiles{
@@ -183,7 +159,7 @@ func TestFilter_RemoveFolder(t *testing.T) {
 			"folder2/file21.txt",
 			"folder2/file22.txt",
 		},
-	})
+	}, EAccountType.Standard(), "")
 }
 
 func TestFilter_RemoveContainer(t *testing.T) {
@@ -198,7 +174,7 @@ func TestFilter_RemoveContainer(t *testing.T) {
 			"folder1/file11.txt",
 			"folder1/file12.txt",
 		},
-	})
+	}, EAccountType.Standard(), "")
 }
 
 func TestFilter_ExcludePath(t *testing.T) {

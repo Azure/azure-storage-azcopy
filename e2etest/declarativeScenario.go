@@ -184,8 +184,8 @@ func (s *scenario) runAzCopy() {
 	// run AzCopy
 	result, wasClean, err := r.ExecuteAzCopyCommand(
 		s.operation,
-		s.state.source.getParam(s.stripTopDir, s.credTypes[0] == common.ECredentialType.Anonymous()),
-		s.state.dest.getParam(false, s.credTypes[1] == common.ECredentialType.Anonymous()),
+		s.state.source.getParam(s.stripTopDir, s.credTypes[0] == common.ECredentialType.Anonymous(), ""),
+		s.state.dest.getParam(false, s.credTypes[1] == common.ECredentialType.Anonymous(), ""),
 		s.credTypes[0] == common.ECredentialType.OAuthToken() || s.credTypes[1] == common.ECredentialType.OAuthToken(), // needsOAuth
 		afterStart, s.chToStdin)
 
@@ -233,6 +233,7 @@ func (s *scenario) resumeAzCopy() {
 		eOperation.Resume(),
 		s.state.result.jobID.String(),
 		"",
+		false,
 		afterStart,
 		s.chToStdin,
 	)

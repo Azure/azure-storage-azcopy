@@ -33,15 +33,15 @@ import (
 // In particular, it lets one test cover a range of different source/dest types, and even cover both sync and copy.
 // See first test in zt_enumeration for an annotated example.
 
-var validCredTypesPerLocation = map[common.Location][]common.CredentialType {
+var validCredTypesPerLocation = map[common.Location][]common.CredentialType{
 	common.ELocation.Unknown(): {common.ECredentialType.Unknown()},
-	common.ELocation.File(): {common.ECredentialType.Anonymous()},
-	common.ELocation.Blob(): {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
-	common.ELocation.BlobFS(): {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()}, // todo: currently, account key auth isn't even supported in e2e tests.
-	common.ELocation.Local(): {common.ECredentialType.Anonymous()},
-	common.ELocation.Pipe(): {common.ECredentialType.Anonymous()},
-	common.ELocation.S3(): {common.ECredentialType.S3AccessKey()},
-	common.ELocation.GCP(): {common.ECredentialType.GoogleAppCredentials()},
+	common.ELocation.File():    {common.ECredentialType.Anonymous()},
+	common.ELocation.Blob():    {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
+	common.ELocation.BlobFS():  {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()}, // todo: currently, account key auth isn't even supported in e2e tests.
+	common.ELocation.Local():   {common.ECredentialType.Anonymous()},
+	common.ELocation.Pipe():    {common.ECredentialType.Anonymous()},
+	common.ELocation.S3():      {common.ECredentialType.S3AccessKey()},
+	common.ELocation.GCP():     {common.ECredentialType.GoogleAppCredentials()},
 }
 
 var allCredentialTypes []common.CredentialType = nil
@@ -60,7 +60,7 @@ func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredential
 			toSearch = requestedCredentialTypesDst
 		}
 
-		for _,v  := range toSearch {
+		for _, v := range toSearch {
 			if v == cType {
 				return true
 			}
@@ -94,7 +94,7 @@ func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredential
 
 // RunScenarios is the key entry point for declarative testing.
 // It constructs and executes scenarios (subtest in Go-speak), according to its parameters, and checks their results
-func 	RunScenarios(
+func RunScenarios(
 	t *testing.T,
 	operations Operation,
 	testFromTo TestFromTo,
@@ -131,12 +131,12 @@ func 	RunScenarios(
 		seenFromTos := make(map[common.FromTo]bool)
 
 		for _, fromTo := range testFromTo.getValues(op) {
-      // dedupe the scenarios
+			// dedupe the scenarios
 			if _, ok := seenFromTos[fromTo]; ok {
 				continue
 			}
 			seenFromTos[fromTo] = true
-      
+
 			credentialTypes := getValidCredCombinationsForFromTo(fromTo, requestedCredentialTypesSrc, requestedCredentialTypesDst)
 
 			scenarioList := make([]scenario, 0)
@@ -170,7 +170,7 @@ func 	RunScenarios(
 				scenarioList = append(scenarioList, s)
 			}
 
-			scenarios = append(scenarios, scenarioList...)
+			scenarios = append(scenarios, scenarioList)
 		}
 	}
 
@@ -184,7 +184,7 @@ func 	RunScenarios(
 	for _, s := range scenarios {
 		// use t.Run to get proper sub-test support
 		t.Run(s[0].subtestName, func(t *testing.T) {
-			for _,s := range s {
+			for _, s := range s {
 				sen := s // capture to separate var inside the loop, for the parallel case
 				credNames := fmt.Sprintf("%s-%s", s.credTypes[0].String(), s.credTypes[1].String())
 
@@ -200,12 +200,12 @@ func 	RunScenarios(
 					}
 					sen.Run()
 				})
-			}
 
-			if hs != nil {
-				sen.runHook(hs.beforeTestRun)
+				if hs != nil {
+					sen.runHook(hs.beforeTestRun)
+				}
+				sen.Run()
 			}
-			sen.Run()
 		})
 	}
 }
