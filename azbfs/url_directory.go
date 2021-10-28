@@ -181,8 +181,8 @@ func (d DirectoryURL) Rename(ctx context.Context, options RenameDirectoryOptions
 	renameSource := "/" + d.filesystem + "/" + d.pathParameter + "?" + urlParts.SAS.Encode()
 
 	// if we're changing our source SAS to a new SAS in the rename
-	if options.DestinationSas != "" {
-		urlParts.SAS = GetSasQueryParams(options.DestinationSas)
+	if options.DestinationSas != nil {
+		urlParts.SAS = GetSasQueryParams(*options.DestinationSas)
 	}
 	destinationDirectoryURL := NewDirectoryURL(urlParts.URL(), d.directoryClient.Pipeline())
 

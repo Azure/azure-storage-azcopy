@@ -18,5 +18,5 @@ type RenameDirectoryOptions struct {
 	// The destination path for the directory.
 	DestinationPath string
 	// The new SAS for a destination Directory
-	DestinationSas string
+	DestinationSas *string
 }
