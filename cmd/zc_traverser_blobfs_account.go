@@ -27,7 +27,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 )
 
 // We don't allow S2S from BlobFS, but what this gives us is the ability for users to download entire accounts at once.
@@ -41,10 +41,10 @@ type BlobFSAccountTraverser struct {
 	cachedFileSystems []string
 
 	// a generic function to notify that a new stored object has been enumerated
-	incrementEnumerationCounter func()
+	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func (t *BlobFSAccountTraverser) isDirectory(isSource bool) bool {
+func (t *BlobFSAccountTraverser) IsDirectory(isSource bool) bool {
 	return true // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
@@ -69,7 +69,7 @@ func (t *BlobFSAccountTraverser) listContainers() ([]string, error) {
 				} else {
 					// realistically this should never ever happen
 					// but on the off-chance that it does, should we panic?
-					LogStdoutAndJobLog("filesystem listing returned nil filesystem name")
+					WarnStdoutAndScanningLog("filesystem listing returned nil filesystem name")
 					continue
 				}
 
@@ -99,7 +99,7 @@ func (t *BlobFSAccountTraverser) listContainers() ([]string, error) {
 	}
 }
 
-func (t *BlobFSAccountTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) error {
+func (t *BlobFSAccountTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 	// listContainers will return the cached filesystem list if filesystems have already been listed by this traverser.
 	fsList, err := t.listContainers()
 
@@ -109,10 +109,10 @@ func (t *BlobFSAccountTraverser) traverse(preprocessor objectMorpher, processor 
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
-		err = fileSystemTraverser.traverse(preprocessorForThisChild, processor, filters)
+		err = fileSystemTraverser.Traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
-			LogStdoutAndJobLog(fmt.Sprintf("failed to list files in filesystem %s: %s", v, err))
+			WarnStdoutAndScanningLog(fmt.Sprintf("failed to list files in filesystem %s: %s", v, err))
 			continue
 		}
 	}
@@ -120,7 +120,7 @@ func (t *BlobFSAccountTraverser) traverse(preprocessor objectMorpher, processor 
 	return nil
 }
 
-func newBlobFSAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, incrementEnumerationCounter func()) (t *BlobFSAccountTraverser) {
+func newBlobFSAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, incrementEnumerationCounter enumerationCounterFunc) (t *BlobFSAccountTraverser) {
 	bfsURLParts := azbfs.NewBfsURLParts(*rawURL)
 	fsPattern := bfsURLParts.FileSystemName
 

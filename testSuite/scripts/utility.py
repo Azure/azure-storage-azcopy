@@ -33,7 +33,10 @@ class Command(object):
             if len(self.args) == 1:
                 self.add_flags("put-md5", "true")  # this is an upload
             else:
-                self.add_flags("check-md5", "FailIfDifferentOrMissing")
+                if "s3" in self.args[0]:
+                    self.add_flags("check-md5", "FailIfDifferent")
+                else:
+                    self.add_flags("check-md5", "FailIfDifferentOrMissing")
         if ct == "create":
             if len(self.args) == 1:
                 self.add_flags("generate-md5", "true") # We want to generate an MD5 on the way up.
@@ -129,6 +132,15 @@ def clean_test_s3_account(account):
         return False
     return True
 
+def clean_test_gcp_account(account):
+    if 'GCP_TESTS_OFF' in os.environ and os.environ['GCP_TESTS_OFF'] != "":
+        return True
+    result = Command("clean").add_arguments(account).add_flags("serviceType", "GCP").add_flags("resourceType", "Account").execute_azcopy_clean()
+    if not result:
+        print("error cleaning the GCP account.")
+        return False
+    return True
+
 def clean_test_file_account(account):
     result = Command("clean").add_arguments(account).add_flags("serviceType", "File").add_flags("resourceType", "Account").execute_azcopy_clean()
     if not result:
@@ -154,7 +166,7 @@ def clean_test_filesystem(fileSystemURLStr):
 
 # initialize_test_suite initializes the setup for executing test cases.
 def initialize_test_suite(test_dir_path, container_sas, container_oauth, container_oauth_validate, share_sas_url, premium_container_sas, filesystem_url, filesystem_sas_url,
-                          s2s_src_blob_account_url, s2s_src_file_account_url, s2s_src_s3_service_url, s2s_dst_blob_account_url, azcopy_exec_location, test_suite_exec_location):
+                          s2s_src_blob_account_url, s2s_src_file_account_url, s2s_src_s3_service_url, s2s_src_gcp_service_url, s2s_dst_blob_account_url, azcopy_exec_location, test_suite_exec_location):
     # test_directory_path is global variable holding the location of test directory to execute all the test cases.
     # contents are created, copied, uploaded and downloaded to and from this test directory only
     global test_directory_path
@@ -192,6 +204,7 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
     global test_s2s_dst_blob_account_url
     global test_s2s_src_file_account_url
     global test_s2s_src_s3_service_url
+    global test_s2s_src_gcp_service_url
 
     # creating a test_directory in the location given by user.
     # this directory will be used to created and download all the test files.
@@ -225,59 +238,43 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
         return False
 
     test_directory_path = new_dir_path
-
-    # set the filesystem url
     test_bfs_account_url = filesystem_url
     test_bfs_sas_account_url = filesystem_sas_url
-    # test_bfs_sas_account_url is the same place as test_bfs_sas_account_url in CI
-    if not clean_test_filesystem(test_bfs_account_url):
-        print("failed to clean test filesystem.")
-    if not (test_bfs_account_url.endswith("/") and test_bfs_account_url.endwith("\\")):
+    if not (test_bfs_account_url.endswith("/") and test_bfs_account_url.endswith("\\")):
         test_bfs_account_url = test_bfs_account_url + "/"
-
-    # cleaning the test container provided
-    # all blob inside the container will be deleted.
     test_container_url = container_sas
-    if not clean_test_container(test_container_url):
-        print("failed to clean test blob container.")
-
     test_oauth_container_url = container_oauth
     if not (test_oauth_container_url.endswith("/") and test_oauth_container_url.endwith("\\")):
         test_oauth_container_url = test_oauth_container_url + "/"
+    test_oauth_container_validate_sas_url = container_oauth_validate
+    test_premium_account_contaier_url = premium_container_sas
+    test_s2s_src_blob_account_url = s2s_src_blob_account_url
+    test_s2s_src_file_account_url = s2s_src_file_account_url
+    test_s2s_dst_blob_account_url = s2s_dst_blob_account_url
+    test_s2s_src_s3_service_url = s2s_src_s3_service_url
+    test_s2s_src_gcp_service_url = s2s_src_gcp_service_url
+    test_share_url = share_sas_url
+
+    if not clean_test_filesystem(test_bfs_account_url.rstrip("/").rstrip("\\")):  # rstrip because clean fails if trailing /
+        print("failed to clean test filesystem.")
+    if not clean_test_container(test_container_url):
+        print("failed to clean test blob container.")
     if not clean_test_container(test_oauth_container_url):
         print("failed to clean OAuth test blob container.")
-    
-    # No need to do cleanup on oauth validation URL.
-    # Removed this cleanup step because we use a container SAS.
-    # Therefore, we'd delete the container successfully with the container level SAS
-    # and just not be able to re-make it with the container SAS
-    test_oauth_container_validate_sas_url = container_oauth_validate
     if not clean_test_container(test_oauth_container_url):
         print("failed to clean OAuth container.")
-
-    test_premium_account_contaier_url = premium_container_sas
     if not clean_test_container(test_premium_account_contaier_url):
         print("failed to clean premium container.")
-
-    test_s2s_src_blob_account_url = s2s_src_blob_account_url
     if not clean_test_blob_account(test_s2s_src_blob_account_url):
         print("failed to clean s2s blob source account.")
-
-    test_s2s_src_file_account_url = s2s_src_file_account_url
     if not clean_test_file_account(test_s2s_src_file_account_url):
         print("failed to clean s2s file source account.")
-
-    test_s2s_dst_blob_account_url = s2s_dst_blob_account_url
     if not clean_test_blob_account(test_s2s_dst_blob_account_url):
         print("failed to clean s2s blob destination account.")
-
-    test_s2s_src_s3_service_url = s2s_src_s3_service_url
     if not clean_test_s3_account(test_s2s_src_s3_service_url):
         print("failed to clean s3 account.")
-
-    # cleaning the test share provided
-    # all files and directories inside the share will be deleted.
-    test_share_url = share_sas_url
+    if not clean_test_gcp_account(test_s2s_src_gcp_service_url):
+        print("failed to clean GCS account")
     if not clean_test_share(test_share_url):
         print("failed to clean test share.")
 
@@ -534,7 +531,7 @@ def execute_azcopy_command(command):
     cmnd = azspath + " " + command
 
     try:
-        # executing the command with timeout to set 3 minutes / 180 sec.
+        # executing the command with timeout to set 3 minutes / 360 sec.
         subprocess.check_output(
             cmnd, stderr=subprocess.STDOUT, shell=True, timeout=360,
             universal_newlines=True)
@@ -572,9 +569,9 @@ def execute_azcopy_command_get_output(command):
     cmnd = azspath + " " + command
     output = ""
     try:
-        # executing the command with timeout set to 4 minutes / 240 sec.
+        # executing the command with timeout set to 6 minutes / 360 sec.
         output = subprocess.check_output(
-            cmnd, stderr=subprocess.STDOUT, shell=True, timeout=240,
+            cmnd, stderr=subprocess.STDOUT, shell=True, timeout=360,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
         # print("command failed with error code ", exec.returncode, " and message " + exec.output)
@@ -590,9 +587,9 @@ def verify_operation(command):
     test_suite_path = os.path.join(test_directory_path, test_suite_executable_name)
     command = test_suite_path + " " + command
     try:
-        # executing the command with timeout set to 4 minutes / 240 sec.
+        # executing the command with timeout set to 6 minutes / 360 sec.
         subprocess.check_output(
-            command, stderr=subprocess.STDOUT, shell=True, timeout=240,
+            command, stderr=subprocess.STDOUT, shell=True, timeout=360,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
         # print("command failed with error code ", exec.returncode, " and message " + exec.output)
@@ -606,7 +603,7 @@ def verify_operation_get_output(command):
     test_suite_path = os.path.join(test_directory_path, test_suite_executable_name)
     command = test_suite_path + " " + command
     try:
-        # executing the command with timeout set to 3 minutes / 180 sec.
+        # executing the command with timeout set to 10 minutes / 600 sec.
         output = subprocess.check_output(
             command, stderr=subprocess.STDOUT, shell=True, timeout=600,
             universal_newlines=True)
@@ -716,9 +713,9 @@ def parseAzcopyOutput(s):
         # If the line is empty, then continue
         if line == "":
             continue
-        elif line is '}':
+        elif line == '}':
             count = count + 1
-        elif line is "{":
+        elif line == "{":
             count = count - 1
         if count >= 0:
             if len(output) > 0:

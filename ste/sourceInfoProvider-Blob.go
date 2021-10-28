@@ -21,7 +21,11 @@
 package ste
 
 import (
+	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
@@ -32,32 +36,52 @@ type blobSourceInfoProvider struct {
 }
 
 func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
-	b, err := newDefaultRemoteSourceInfoProvider(jptm)
+	base, err := newDefaultRemoteSourceInfoProvider(jptm)
 	if err != nil {
 		return nil, err
 	}
 
-	base := b.(*defaultRemoteSourceInfoProvider)
-
 	return &blobSourceInfoProvider{defaultRemoteSourceInfoProvider: *base}, nil
+}
+
+// AccessControl should ONLY get called when we know for a fact it is a blobFS->blobFS tranfser.
+// It *assumes* that the source is actually a HNS account.
+func (p *blobSourceInfoProvider) AccessControl() (azbfs.BlobFSAccessControl, error) {
+	presignedURL, err := p.PreSignedSourceURL()
+	if err != nil {
+		return azbfs.BlobFSAccessControl{}, err
+	}
+
+	bURLParts := azblob.NewBlobURLParts(*presignedURL)
+	bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".blob", ".dfs")
+	bURLParts.BlobName = strings.TrimSuffix(bURLParts.BlobName, "/") // BlobFS doesn't handle folders correctly like this.
+	// todo: jank, and violates the principle of interfaces
+	fURL := azbfs.NewFileURL(bURLParts.URL(), p.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondarySourceProviderPipeline)
+
+	return fURL.GetAccessControl(p.jptm.Context())
 }
 
 func (p *blobSourceInfoProvider) BlobTier() azblob.AccessTierType {
 	return p.transferInfo.S2SSrcBlobTier
-}
+} 
 
 func (p *blobSourceInfoProvider) BlobType() azblob.BlobType {
 	return p.transferInfo.SrcBlobType
 }
 
-func (p *blobSourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
+func (p *blobSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
 	presignedURL, err := p.PreSignedSourceURL()
 	if err != nil {
 		return time.Time{}, err
 	}
 
 	blobURL := azblob.NewBlobURL(*presignedURL, p.jptm.SourceProviderPipeline())
-	properties, err := blobURL.GetProperties(p.jptm.Context(), azblob.BlobAccessConditions{})
+	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
+	if p.jptm.IsSourceEncrypted() {
+		clientProvidedKey = common.ToClientProvidedKeyOptions(p.jptm.CpkInfo(), p.jptm.CpkScopeInfo())
+	}
+
+	properties, err := blobURL.GetProperties(p.jptm.Context(), azblob.BlobAccessConditions{}, clientProvidedKey)
 	if err != nil {
 		return time.Time{}, err
 	}

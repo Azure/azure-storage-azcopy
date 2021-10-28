@@ -32,22 +32,44 @@ type EnvironmentVariable struct {
 }
 
 // This array needs to be updated when a new public environment variable is added
+// Things are here, rather than in command line parameters for one of two reasons:
+// 1. They are optional and obscure (e.g. performance tuning parameters) or
+// 2. They are authentication secrets, which we do not accept on the command line
 var VisibleEnvironmentVariables = []EnvironmentVariable{
-	EEnvironmentVariable.ConcurrencyValue(),
-	EEnvironmentVariable.TransferInitiationPoolSize(),
 	EEnvironmentVariable.LogLocation(),
 	EEnvironmentVariable.JobPlanLocation(),
+	EEnvironmentVariable.ConcurrencyValue(),
+	EEnvironmentVariable.TransferInitiationPoolSize(),
+	EEnvironmentVariable.EnumerationPoolSize(),
+	EEnvironmentVariable.DisableHierarchicalScanning(),
+	EEnvironmentVariable.ParallelStatFiles(),
 	EEnvironmentVariable.BufferGB(),
 	EEnvironmentVariable.AWSAccessKeyID(),
 	EEnvironmentVariable.AWSSecretAccessKey(),
+	EEnvironmentVariable.GoogleAppCredentials(),
 	EEnvironmentVariable.ShowPerfStates(),
 	EEnvironmentVariable.PacePageBlobs(),
-	EEnvironmentVariable.DefaultServiceApiVersion(),
-	EEnvironmentVariable.ClientSecret(),
-	EEnvironmentVariable.CertificatePassword(),
 	EEnvironmentVariable.AutoTuneToCpu(),
 	EEnvironmentVariable.CacheProxyLookup(),
+	EEnvironmentVariable.DefaultServiceApiVersion(),
 	EEnvironmentVariable.UserAgentPrefix(),
+	EEnvironmentVariable.AWSAccessKeyID(),
+	EEnvironmentVariable.AWSSecretAccessKey(),
+	EEnvironmentVariable.ClientSecret(),
+	EEnvironmentVariable.CertificatePassword(),
+	EEnvironmentVariable.AutoLoginType(),
+	EEnvironmentVariable.TenantID(),
+	EEnvironmentVariable.AADEndpoint(),
+	EEnvironmentVariable.ApplicationID(),
+	EEnvironmentVariable.CertificatePath(),
+	EEnvironmentVariable.ManagedIdentityClientID(),
+	EEnvironmentVariable.ManagedIdentityObjectID(),
+	EEnvironmentVariable.ManagedIdentityResourceString(),
+	EEnvironmentVariable.RequestTryTimeout(),
+	EEnvironmentVariable.CPKEncryptionKey(),
+	EEnvironmentVariable.CPKEncryptionKeySHA256(),
+	EEnvironmentVariable.DisableSyslog(),
+	EEnvironmentVariable.MimeMapping(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
@@ -59,6 +81,35 @@ func (EnvironmentVariable) UserDir() EnvironmentVariable {
 	}
 }
 
+func (EnvironmentVariable) AutoLoginType() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_AUTO_LOGIN_TYPE",
+		Description: "Specify the credential type to access Azure Resource without invoking the login command and using the OS secret store, available values SPN, MSI and DEVICE - sequentially for Service Principal, Managed Service Identity and Device workflow.",
+	}
+}
+
+func (EnvironmentVariable) TenantID() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_TENANT_ID",
+		Description: "The Azure Active Directory tenant ID to use for OAuth device interactive login. This variable is only used for auto login, please use the command line flag instead when invoking the login command.",
+	}
+}
+
+func (EnvironmentVariable) AADEndpoint() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_ACTIVE_DIRECTORY_ENDPOINT",
+		Description: "The Azure Active Directory endpoint to use. This variable is only used for auto login, please use the command line flag instead when invoking the login command.",
+	}
+}
+
+func (EnvironmentVariable) ApplicationID() EnvironmentVariable {
+	// Used for auto-login.
+	return EnvironmentVariable{
+		Name:        "AZCOPY_SPA_APPLICATION_ID",
+		Description: "The Azure Active Directory application ID used for Service Principal authentication. This variable is only used for auto login, please use the command line flag instead when invoking the login command.",
+	}
+}
+
 func (EnvironmentVariable) ClientSecret() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_SPA_CLIENT_SECRET",
@@ -67,11 +118,40 @@ func (EnvironmentVariable) ClientSecret() EnvironmentVariable {
 	}
 }
 
+func (EnvironmentVariable) CertificatePath() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_SPA_CERT_PATH",
+		Description: "The path of the certificate used for Service Principal authentication. This variable is only used for auto login, please use the command line flag instead when invoking the login command.",
+	}
+}
+
 func (EnvironmentVariable) CertificatePassword() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_SPA_CERT_PASSWORD",
 		Description: "The password used to decrypt the certificate used for Service Principal authentication.",
 		Hidden:      true,
+	}
+}
+
+// For MSI login
+func (EnvironmentVariable) ManagedIdentityClientID() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_MSI_CLIENT_ID",
+		Description: "Client ID for User-assigned identity. This variable is only used for auto login, please use the command line flag instead when invoking the login command.",
+	}
+}
+
+func (EnvironmentVariable) ManagedIdentityObjectID() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_MSI_OBJECT_ID",
+		Description: "Object ID for user-assigned identity. This variable is only used for auto login, please use the command line flag instead when invoking the login command.",
+	}
+}
+
+func (EnvironmentVariable) ManagedIdentityResourceString() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_MSI_RESOURCE_STRING",
+		Description: "Resource String for user-assigned identity. This variable is only used for auto login, please use the command line flag instead when invoking the login command.",
 	}
 }
 
@@ -94,6 +174,30 @@ func (EnvironmentVariable) TransferInitiationPoolSize() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_CONCURRENT_FILES",
 		Description: "Overrides the (approximate) number of files that are in progress at any one time, by controlling how many files we concurrently initiate transfers for.",
+	}
+}
+
+const azCopyConcurrentScan = "AZCOPY_CONCURRENT_SCAN"
+
+func (EnvironmentVariable) EnumerationPoolSize() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        azCopyConcurrentScan,
+		Description: "Controls the (max) degree of parallelism used during scanning. Only affects parallelized enumerators, which include Azure Files/Blobs, and local file systems.",
+	}
+}
+
+func (EnvironmentVariable) DisableHierarchicalScanning() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_DISABLE_HIERARCHICAL_SCAN",
+		Description: "Applies only when Azure Blobs is the source. Concurrent scanning is faster but employs the hierarchical listing API, which can result in more IOs/cost. Specify 'true' to sacrifice performance but save on cost.",
+	}
+}
+
+func (EnvironmentVariable) ParallelStatFiles() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_PARALLEL_STAT_FILES",
+		Description:  "Causes AzCopy to look up file properties on parallel 'threads' when scanning the local file system.  The threads are drawn from the pool defined by " + azCopyConcurrentScan + ".  Setting this to true may improve scanning performance on Linux.  Not needed or recommended on Windows.",
+		DefaultValue: "false", // we are defaulting to false even on Linux, because it does create more load, in terms of file system IOPS, and we don't yet have a large enough variety of real-world test cases to justify the default being true
 	}
 }
 
@@ -182,9 +286,23 @@ func (EnvironmentVariable) AWSSecretAccessKey() EnvironmentVariable {
 	}
 }
 
-// AwsSessionToken is temporaily internally reserved, and not exposed to users.
+// AwsSessionToken is temporarily internally reserved, and not exposed to users.
 func (EnvironmentVariable) AwsSessionToken() EnvironmentVariable {
 	return EnvironmentVariable{Name: "AWS_SESSION_TOKEN"}
+}
+
+func (EnvironmentVariable) GoogleAppCredentials() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "GOOGLE_APPLICATION_CREDENTIALS",
+		Description: "The application credentials required to access GCP resources for service to service copy.",
+	}
+}
+
+func (EnvironmentVariable) GoogleCloudProject() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "GOOGLE_CLOUD_PROJECT",
+		Description: "Project ID required for service level traversals in Google Cloud Storage",
+	}
 }
 
 // OAuthTokenInfo is only used for internal integration.
@@ -200,7 +318,7 @@ func (EnvironmentVariable) CredentialType() EnvironmentVariable {
 func (EnvironmentVariable) DefaultServiceApiVersion() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:         "AZCOPY_DEFAULT_SERVICE_API_VERSION",
-		DefaultValue: "2018-03-28",
+		DefaultValue: "2019-12-12",
 		Description:  "Overrides the service API version so that AzCopy could accommodate custom environments such as Azure Stack.",
 	}
 }
@@ -209,5 +327,37 @@ func (EnvironmentVariable) UserAgentPrefix() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_USER_AGENT_PREFIX",
 		Description: "Add a prefix to the default AzCopy User Agent, which is used for telemetry purposes. A space is automatically inserted.",
+	}
+}
+
+func (EnvironmentVariable) RequestTryTimeout() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_REQUEST_TRY_TIMEOUT",
+		Description: "Set time (in minutes) for how long AzCopy should try to upload files for each request before AzCopy times out.",
+	}
+}
+
+func (EnvironmentVariable) CPKEncryptionKey() EnvironmentVariable {
+	return EnvironmentVariable{Name: "CPK_ENCRYPTION_KEY", Hidden: true}
+}
+
+func (EnvironmentVariable) CPKEncryptionKeySHA256() EnvironmentVariable {
+	return EnvironmentVariable{Name: "CPK_ENCRYPTION_KEY_SHA256", Hidden: false}
+}
+
+func (EnvironmentVariable) DisableSyslog() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_DISABLE_SYSLOG",
+		DefaultValue: "false",
+		Description: "Disables logging in Syslog or Windows Event Logger. By default we log to these channels. " +
+			"However, to reduce the noise in Syslog/Windows Event Log, consider setting this environment variable to true.",
+	}
+}
+
+func (EnvironmentVariable) MimeMapping() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_CONTENT_TYPE_MAP",
+		DefaultValue: "",
+		Description:  "Location of the file to override default OS mime mapping",
 	}
 }

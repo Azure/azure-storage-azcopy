@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"crypto/md5"
 	"fmt"
@@ -15,7 +16,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	minio "github.com/minio/minio-go"
@@ -53,6 +54,7 @@ func init() {
 	cacheControl := ""
 	contentMD5 := ""
 	location := ""
+	tier := azblob.DefaultAccessTier
 
 	createCmd := &cobra.Command{
 		Use:     "create",
@@ -98,7 +100,7 @@ func init() {
 							ContentLanguage:    contentLanguage,
 							ContentMD5:         md5,
 							CacheControl:       cacheControl,
-						})
+						}, tier)
 				default:
 					panic(fmt.Errorf("not implemented %v", resourceType))
 				}
@@ -143,6 +145,20 @@ func init() {
 						})
 				default:
 					panic(fmt.Errorf("not implemented %v", resourceType))
+				}
+			case EServiceType.GCP():
+				switch resourceType {
+				case EResourceType.Bucket():
+					createGCPBucket(resourceURL)
+				case EResourceType.SingleFile():
+					createGCPObject(resourceURL, blobSize, gcpUtils.ObjectAttrsToUpdate{
+						ContentType:        contentType,
+						ContentDisposition: contentDisposition,
+						ContentEncoding:    contentEncoding,
+						ContentLanguage:    contentLanguage,
+						CacheControl:       cacheControl,
+						Metadata:           getS3Metadata(metaData),
+					})
 				}
 			case EServiceType.BlobFS():
 				panic(fmt.Errorf("not implemented %v", serviceType))
@@ -229,7 +245,7 @@ func createContainer(container string) {
 	}
 }
 
-func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobHTTPHeaders azblob.BlobHTTPHeaders) {
+func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobHTTPHeaders azblob.BlobHTTPHeaders, tier azblob.AccessTierType) {
 	url, err := url.Parse(blobURL)
 	if err != nil {
 		fmt.Println("error parsing the blob sas ", err)
@@ -240,7 +256,7 @@ func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobH
 
 	randomString := createStringWithRandomChars(int(blobSize))
 	if blobHTTPHeaders.ContentType == "" {
-		blobHTTPHeaders.ContentType = http.DetectContentType([]byte(randomString))
+		blobHTTPHeaders.ContentType = strings.Split(http.DetectContentType([]byte(randomString)), ";")[0]
 	}
 
 	// Generate a content MD5 for the new blob if requested
@@ -255,7 +271,10 @@ func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobH
 		strings.NewReader(randomString),
 		blobHTTPHeaders,
 		metadata,
-		azblob.BlobAccessConditions{})
+		azblob.BlobAccessConditions{},
+		tier,
+		nil,
+		azblob.ClientProvidedKeyOptions{})
 	if err != nil {
 		fmt.Println(fmt.Sprintf("error uploading the blob %v", err))
 		os.Exit(1)
@@ -292,7 +311,7 @@ func createShareOrDirectory(shareOrDirectoryURLStr string) {
 
 	dirURL := azfile.NewDirectoryURL(*u, p) // i.e. root directory, in share's case
 	if !isShare {
-		_, err := dirURL.Create(context.Background(), azfile.Metadata{})
+		_, err := dirURL.Create(context.Background(), azfile.Metadata{}, azfile.SMBProperties{})
 		if ignoreStorageConflictStatus(err) != nil {
 			fmt.Println("fail to create directory, ", err)
 			os.Exit(1)
@@ -320,7 +339,7 @@ func createFile(fileURLStr string, fileSize uint32, metadata azfile.Metadata, fi
 
 	randomString := createStringWithRandomChars(int(fileSize))
 	if fileHTTPHeaders.ContentType == "" {
-		fileHTTPHeaders.ContentType = http.DetectContentType([]byte(randomString))
+		fileHTTPHeaders.ContentType = strings.Split(http.DetectContentType([]byte(randomString)), ";")[0]
 	}
 
 	// Generate a content MD5 for the new blob if requested
@@ -367,6 +386,36 @@ func createBucket(bucketURLStr string) {
 	}
 }
 
+func createGCPBucket(bucketURLStr string) {
+	u, err := url.Parse(bucketURLStr)
+
+	if err != nil {
+		fmt.Println("fail to parse the bucket URL, ", err)
+		os.Exit(1)
+	}
+
+	gcpURLParts, err := common.NewGCPURLParts(*u)
+	if err != nil {
+		fmt.Println("new GCP URL parts, ", err)
+		os.Exit(1)
+	}
+
+	gcpClient, err := createGCPClientWithGCSSDK()
+	if err != nil {
+		fmt.Println("Failed to create GCS Client: ", err)
+	}
+	bkt := gcpClient.Bucket(gcpURLParts.BucketName)
+	err = bkt.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
+	if err != nil {
+		bkt := gcpClient.Bucket(gcpURLParts.BucketName)
+		_, err := bkt.Attrs(context.Background())
+		if err == nil {
+			fmt.Println("fail to create bucket, ", err)
+			os.Exit(1)
+		}
+	}
+}
+
 func createObject(objectURLStr string, objectSize uint32, o minio.PutObjectOptions) {
 	u, err := url.Parse(objectURLStr)
 	if err != nil {
@@ -386,11 +435,44 @@ func createObject(objectURLStr string, objectSize uint32, o minio.PutObjectOptio
 
 	randomString := createStringWithRandomChars(int(objectSize))
 	if o.ContentType == "" {
-		o.ContentType = http.DetectContentType([]byte(randomString))
+		o.ContentType = strings.Split(http.DetectContentType([]byte(randomString)), ";")[0]
 	}
 
 	_, err = s3Client.PutObject(s3URLParts.BucketName, s3URLParts.ObjectKey, bytes.NewReader([]byte(randomString)), int64(objectSize), o)
 
+	if err != nil {
+		fmt.Println("fail to upload file to S3 object, ", err)
+		os.Exit(1)
+	}
+}
+
+func createGCPObject(objectURLStr string, objectSize uint32, o gcpUtils.ObjectAttrsToUpdate) {
+	u, err := url.Parse(objectURLStr)
+	if err != nil {
+		fmt.Println("fail to parse the object URL, ", err)
+		os.Exit(1)
+	}
+
+	gcpURLParts, err := common.NewGCPURLParts(*u)
+	if err != nil {
+		fmt.Println("new GCP URL parts, ", err)
+		os.Exit(1)
+	}
+
+	gcpClient, err := createGCPClientWithGCSSDK()
+
+	randomString := createStringWithRandomChars(int(objectSize))
+	if o.ContentType == "" {
+		o.ContentType = http.DetectContentType([]byte(randomString))
+	}
+
+	obj := gcpClient.Bucket(gcpURLParts.BucketName).Object(gcpURLParts.ObjectKey)
+	wc := obj.NewWriter(context.Background())
+	reader := strings.NewReader(randomString)
+	_, err = io.Copy(wc, reader)
+	err = wc.Close()
+
+	_, err = obj.Update(context.Background(), o)
 	if err != nil {
 		fmt.Println("fail to upload file to S3 object, ", err)
 		os.Exit(1)

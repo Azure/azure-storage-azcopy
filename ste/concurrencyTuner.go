@@ -21,7 +21,7 @@
 package ste
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"sync"
 	"sync/atomic"
 )

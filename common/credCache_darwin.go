@@ -25,7 +25,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/jiacfan/keychain" // forked and customized from github.com/keybase/go-keychain, todo: make a release to ensure stability
+	"github.com/wastore/keychain" // forked and customized from github.com/keybase/go-keychain, todo: make a release to ensure stability
 )
 
 // For SSH environment, user need unlock login keychain once, to enable AzCopy to Add/Update/Retrieve/Delete key.

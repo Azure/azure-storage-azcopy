@@ -23,61 +23,63 @@ package cmd
 import (
 	"context"
 	"errors"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/spf13/cobra"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/spf13/cobra"
 )
 
+var loginCmdArg = loginCmdArgs{tenantID: common.DefaultTenantID}
+
+var lgCmd = &cobra.Command{
+	Use:        "login",
+	SuggestFor: []string{"login"},
+	Short:      loginCmdShortDescription,
+	Long:       loginCmdLongDescription,
+	Example:    loginCmdExample,
+	Args: func(cmd *cobra.Command, args []string) error {
+		return nil
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		loginCmdArg.certPass = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
+		loginCmdArg.clientSecret = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
+		loginCmdArg.persistToken = true
+
+		if loginCmdArg.certPass != "" || loginCmdArg.clientSecret != "" {
+			glcm.Info(environmentVariableNotice)
+		}
+
+		err := loginCmdArg.process()
+		if err != nil {
+			// the errors from adal contains \r\n in the body, get rid of them to make the error easier to look at
+			prettyErr := strings.Replace(err.Error(), `\r\n`, "\n", -1)
+			prettyErr += "\n\nNOTE: If your credential was created in the last 5 minutes, please wait a few minutes and try again."
+			glcm.Error("Failed to perform login command: \n" + prettyErr)
+		}
+		return nil
+	},
+}
+
 func init() {
-	loginCmdArgs := loginCmdArgs{tenantID: common.DefaultTenantID}
-
-	// lgCmd represents the login command
-	lgCmd := &cobra.Command{
-		Use:        "login",
-		SuggestFor: []string{"login"},
-		Short:      loginCmdShortDescription,
-		Long:       loginCmdLongDescription,
-		Example:    loginCmdExample,
-		Args: func(cmd *cobra.Command, args []string) error {
-			return nil
-		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			loginCmdArgs.certPass = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
-			loginCmdArgs.clientSecret = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
-
-			if loginCmdArgs.certPass != "" || loginCmdArgs.clientSecret != "" {
-				glcm.Info(environmentVariableNotice)
-			}
-
-			err := loginCmdArgs.process()
-			if err != nil {
-				// the errors from adal contains \r\n in the body, get rid of them to make the error easier to look at
-				prettyErr := strings.Replace(err.Error(), `\r\n`, "\n", -1)
-				prettyErr += "\n\nNOTE: If your credential was created in the last 5 minutes, please wait a few minutes and try again."
-				glcm.Error("Failed to perform login command: \n" + prettyErr)
-			}
-			return nil
-		},
-	}
 
 	rootCmd.AddCommand(lgCmd)
 
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.tenantID, "tenant-id", "", "The Azure Active Directory tenant ID to use for OAuth device interactive login.")
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.aadEndpoint, "aad-endpoint", "", "The Azure Active Directory endpoint to use. The default ("+common.DefaultActiveDirectoryEndpoint+") is correct for the public Azure cloud. Set this parameter when authenticating in a national cloud. Not needed for Managed Service Identity")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArg.tenantID, "tenant-id", "", "The Azure Active Directory tenant ID to use for OAuth device interactive login.")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArg.aadEndpoint, "aad-endpoint", "", "The Azure Active Directory endpoint to use. The default ("+common.DefaultActiveDirectoryEndpoint+") is correct for the public Azure cloud. Set this parameter when authenticating in a national cloud. Not needed for Managed Service Identity")
 	// Use identity which aligns to Azure powershell and CLI.
-	lgCmd.PersistentFlags().BoolVar(&loginCmdArgs.identity, "identity", false, "Log in using virtual machine's identity, also known as managed service identity (MSI).")
+	lgCmd.PersistentFlags().BoolVar(&loginCmdArg.identity, "identity", false, "Log in using virtual machine's identity, also known as managed service identity (MSI).")
 	// Use SPN certificate to log in.
-	lgCmd.PersistentFlags().BoolVar(&loginCmdArgs.servicePrincipal, "service-principal", false, "Log in via Service Principal Name (SPN) by using a certificate or a secret. The client secret or certificate password must be placed in the appropriate environment variable. Type AzCopy env to see names and descriptions of environment variables.")
+	lgCmd.PersistentFlags().BoolVar(&loginCmdArg.servicePrincipal, "service-principal", false, "Log in via Service Principal Name (SPN) by using a certificate or a secret. The client secret or certificate password must be placed in the appropriate environment variable. Type AzCopy env to see names and descriptions of environment variables.")
 	// Client ID of user-assigned identity.
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityClientID, "identity-client-id", "", "Client ID of user-assigned identity.")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArg.identityClientID, "identity-client-id", "", "Client ID of user-assigned identity.")
 	// Object ID of user-assigned identity.
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityObjectID, "identity-object-id", "", "Object ID of user-assigned identity.")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArg.identityObjectID, "identity-object-id", "", "Object ID of user-assigned identity.")
 	// Resource ID of user-assigned identity.
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityResourceID, "identity-resource-id", "", "Resource ID of user-assigned identity.")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArg.identityResourceID, "identity-resource-id", "", "Resource ID of user-assigned identity.")
 
 	//login with SPN
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.applicationID, "application-id", "", "Application ID of user-assigned identity. Required for service principal auth.")
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.certPath, "certificate-path", "", "Path to certificate for SPN authentication. Required for certificate-based service principal auth.")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArg.applicationID, "application-id", "", "Application ID of user-assigned identity. Required for service principal auth.")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArg.certPath, "certificate-path", "", "Path to certificate for SPN authentication. Required for certificate-based service principal auth.")
 }
 
 type loginCmdArgs struct {
@@ -95,11 +97,12 @@ type loginCmdArgs struct {
 	identityObjectID   string
 	identityResourceID string
 
-	//Requried to sign in with a SPN (Service Principal Name)
+	//Required to sign in with a SPN (Service Principal Name)
 	applicationID string
 	certPath      string
 	certPass      string
 	clientSecret  string
+	persistToken  bool
 }
 
 type argValidity struct {
@@ -163,13 +166,13 @@ func (lca loginCmdArgs) process() error {
 	case lca.servicePrincipal:
 
 		if lca.certPath != "" {
-			if _, err := uotm.CertLogin(lca.tenantID, lca.aadEndpoint, lca.certPath, lca.certPass, lca.applicationID, true); err != nil {
+			if _, err := uotm.CertLogin(lca.tenantID, lca.aadEndpoint, lca.certPath, lca.certPass, lca.applicationID, lca.persistToken); err != nil {
 				return err
 			}
 
 			glcm.Info("SPN Auth via cert succeeded.")
 		} else {
-			if _, err := uotm.SecretLogin(lca.tenantID, lca.aadEndpoint, lca.clientSecret, lca.applicationID, true); err != nil {
+			if _, err := uotm.SecretLogin(lca.tenantID, lca.aadEndpoint, lca.clientSecret, lca.applicationID, lca.persistToken); err != nil {
 				return err
 			}
 
@@ -180,13 +183,13 @@ func (lca loginCmdArgs) process() error {
 			ClientID: lca.identityClientID,
 			ObjectID: lca.identityObjectID,
 			MSIResID: lca.identityResourceID,
-		}, true); err != nil {
+		}, lca.persistToken); err != nil {
 			return err
 		}
 		// For MSI login, info success message to user.
 		glcm.Info("Login with identity succeeded.")
 	default:
-		if _, err := uotm.UserLogin(lca.tenantID, lca.aadEndpoint, true); err != nil {
+		if _, err := uotm.UserLogin(lca.tenantID, lca.aadEndpoint, lca.persistToken); err != nil {
 			return err
 		}
 		// User fulfills login in browser, and there would be message in browser indicating whether login fulfilled successfully.

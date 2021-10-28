@@ -23,16 +23,16 @@ package common
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"math"
+	"os"
 	"reflect"
 	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	"fmt"
-
-	"os"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -209,9 +209,10 @@ var EOverwriteOption = OverwriteOption(0)
 
 type OverwriteOption uint8
 
-func (OverwriteOption) True() OverwriteOption   { return OverwriteOption(0) }
-func (OverwriteOption) False() OverwriteOption  { return OverwriteOption(1) }
-func (OverwriteOption) Prompt() OverwriteOption { return OverwriteOption(2) }
+func (OverwriteOption) True() OverwriteOption          { return OverwriteOption(0) }
+func (OverwriteOption) False() OverwriteOption         { return OverwriteOption(1) }
+func (OverwriteOption) Prompt() OverwriteOption        { return OverwriteOption(2) }
+func (OverwriteOption) IfSourceNewer() OverwriteOption { return OverwriteOption(3) }
 
 func (o *OverwriteOption) Parse(s string) error {
 	val, err := enum.Parse(reflect.TypeOf(o), s, true)
@@ -253,6 +254,13 @@ type ExitCode uint32
 
 func (ExitCode) Success() ExitCode { return ExitCode(0) }
 func (ExitCode) Error() ExitCode   { return ExitCode(1) }
+
+// note: if AzCopy exits due to a panic, we don't directly control what the exit code will be. The Go runtime seems to be
+// hard-coded to give an exit code of 2 in that case, but there is discussion of changing it to 1, so it may become
+// impossible to tell from exit code alone whether AzCopy panic or return EExitCode.Error.
+// See https://groups.google.com/forum/#!topic/golang-nuts/u9NgKibJsKI
+// However, fortunately, in the panic case, stderr will get the panic message;
+// whereas AFAIK we never write to stderr in normal execution of AzCopy.  So that's a suggested way to differentiate when needed.
 
 // NoExit is used as a marker, to suppress the normal exit behaviour
 func (ExitCode) NoExit() ExitCode { return ExitCode(99) }
@@ -405,9 +413,22 @@ func (Location) File() Location      { return Location(4) }
 func (Location) BlobFS() Location    { return Location(5) }
 func (Location) S3() Location        { return Location(6) }
 func (Location) Benchmark() Location { return Location(7) }
+func (Location) GCP() Location       { return Location(8) }
 
 func (l Location) String() string {
-	return enum.StringInt(uint32(l), reflect.TypeOf(l))
+	return enum.StringInt(l, reflect.TypeOf(l))
+}
+
+// AllStandardLocations returns all locations that are "normal" for testing purposes. Excludes the likes of Unknown, Benchmark and Pipe
+func (Location) AllStandardLocations() []Location {
+	return []Location{
+		ELocation.Local(),
+		ELocation.Blob(),
+		ELocation.File(),
+		ELocation.BlobFS(),
+		ELocation.S3(),
+		// TODO: ELocation.GCP
+	}
 }
 
 // fromToValue returns the fromTo enum value for given
@@ -419,7 +440,7 @@ func fromToValue(from Location, to Location) FromTo {
 
 func (l Location) IsRemote() bool {
 	switch l {
-	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3():
+	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3(), ELocation.GCP():
 		return true
 	case ELocation.Local(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
 		return false
@@ -433,6 +454,19 @@ func (l Location) IsLocal() bool {
 		return false
 	} else {
 		return !l.IsRemote()
+	}
+}
+
+// IsFolderAware returns true if the location has real folders (e.g. there's such a thing as an empty folder,
+// and folders may have properties). Folders are only virtual, and so not real, in Blob Storage.
+func (l Location) IsFolderAware() bool {
+	switch l {
+	case ELocation.BlobFS(), ELocation.File(), ELocation.Local():
+		return true
+	case ELocation.Blob(), ELocation.S3(), ELocation.GCP(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
+		return false
+	default:
+		panic("unexpected location, please specify if it is folder-aware")
 	}
 }
 
@@ -466,6 +500,7 @@ func (FromTo) FileBlob() FromTo    { return FromTo(fromToValue(ELocation.File(),
 func (FromTo) BlobFile() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.File())) }
 func (FromTo) FileFile() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.File())) }
 func (FromTo) S3Blob() FromTo      { return FromTo(fromToValue(ELocation.S3(), ELocation.Blob())) }
+func (FromTo) GCPBlob() FromTo     { return FromTo(fromToValue(ELocation.GCP(), ELocation.Blob())) }
 
 // todo: to we really want these?  Starts to look like a bit of a combinatorial explosion
 func (FromTo) BenchmarkBlob() FromTo {
@@ -522,6 +557,10 @@ func (ft *FromTo) IsUpload() bool {
 	return ft.From().IsLocal() && ft.To().IsRemote()
 }
 
+func (ft *FromTo) AreBothFolderAware() bool {
+	return ft.From().IsFolderAware() && ft.To().IsFolderAware()
+}
+
 // TODO: deletes are not covered by the above Is* routines
 
 var BenchmarkLmt = time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -552,6 +591,19 @@ func (bt *BlobType) Parse(s string) error {
 	return err
 }
 
+func FromAzBlobType(bt azblob.BlobType) BlobType {
+	switch bt {
+	case azblob.BlobBlockBlob:
+		return EBlobType.BlockBlob()
+	case azblob.BlobPageBlob:
+		return EBlobType.PageBlob()
+	case azblob.BlobAppendBlob:
+		return EBlobType.AppendBlob()
+	default:
+		return EBlobType.Detect()
+	}
+}
+
 // ToAzBlobType returns the equivalent azblob.BlobType for given string.
 func (bt *BlobType) ToAzBlobType() azblob.BlobType {
 	blobType := bt.String()
@@ -578,25 +630,33 @@ func (TransferStatus) NotStarted() TransferStatus { return TransferStatus(0) }
 
 // TODO confirm whether this is actually needed
 //   Outdated:
-//     Transfer started & at least 1 chunk has successfully been transfered.
+//     Transfer started & at least 1 chunk has successfully been transferred.
 //     Used to resume a transfer that started to avoid transferring all chunks thereby improving performance
+// Update(Jul 2020): This represents the state of transfer as soon as the file is scheduled.
 func (TransferStatus) Started() TransferStatus { return TransferStatus(1) }
 
 // Transfer successfully completed
 func (TransferStatus) Success() TransferStatus { return TransferStatus(2) }
 
-// Transfer failed due to some error. This status does represent the state when transfer is cancelled
+// Folder was created, but properties have not been persisted yet. Equivalent to Started, but never intended to be set on anything BUT folders.
+func (TransferStatus) FolderCreated() TransferStatus { return TransferStatus(3) }
+
+// Transfer failed due to some error.
 func (TransferStatus) Failed() TransferStatus { return TransferStatus(-1) }
 
 // Transfer failed due to failure while Setting blob tier.
 func (TransferStatus) BlobTierFailure() TransferStatus { return TransferStatus(-2) }
 
-func (TransferStatus) SkippedFileAlreadyExists() TransferStatus { return TransferStatus(-3) }
+func (TransferStatus) SkippedEntityAlreadyExists() TransferStatus { return TransferStatus(-3) }
 
 func (TransferStatus) SkippedBlobHasSnapshots() TransferStatus { return TransferStatus(-4) }
 
+func (TransferStatus) TierAvailabilityCheckFailure() TransferStatus { return TransferStatus(-5) }
+
+func (TransferStatus) Cancelled() TransferStatus { return TransferStatus(-6) }
+
 func (ts TransferStatus) ShouldTransfer() bool {
-	return ts == ETransferStatus.NotStarted() || ts == ETransferStatus.Started()
+	return ts == ETransferStatus.NotStarted() || ts == ETransferStatus.Started() || ts == ETransferStatus.FolderCreated()
 }
 
 // Transfer is any of the three possible state (InProgress, Completer or Failed)
@@ -641,9 +701,8 @@ type BlockBlobTier uint8
 
 func (BlockBlobTier) None() BlockBlobTier    { return BlockBlobTier(0) }
 func (BlockBlobTier) Hot() BlockBlobTier     { return BlockBlobTier(1) }
-func (BlockBlobTier) Cold() BlockBlobTier    { return BlockBlobTier(2) } // TODO: not sure why cold is here.
-func (BlockBlobTier) Cool() BlockBlobTier    { return BlockBlobTier(3) }
-func (BlockBlobTier) Archive() BlockBlobTier { return BlockBlobTier(4) }
+func (BlockBlobTier) Cool() BlockBlobTier    { return BlockBlobTier(2) }
+func (BlockBlobTier) Archive() BlockBlobTier { return BlockBlobTier(3) }
 
 func (bbt BlockBlobTier) String() string {
 	return enum.StringInt(bbt, reflect.TypeOf(bbt))
@@ -726,11 +785,13 @@ var ECredentialType = CredentialType(0)
 // CredentialType defines the different types of credentials
 type CredentialType uint8
 
-func (CredentialType) Unknown() CredentialType     { return CredentialType(0) }
-func (CredentialType) OAuthToken() CredentialType  { return CredentialType(1) } // For Azure, OAuth
-func (CredentialType) Anonymous() CredentialType   { return CredentialType(2) } // For Azure, SAS or public.
-func (CredentialType) SharedKey() CredentialType   { return CredentialType(3) } // For Azure, SharedKey
-func (CredentialType) S3AccessKey() CredentialType { return CredentialType(4) } // For S3, AccessKeyID and SecretAccessKey
+func (CredentialType) Unknown() CredentialType              { return CredentialType(0) }
+func (CredentialType) OAuthToken() CredentialType           { return CredentialType(1) } // For Azure, OAuth
+func (CredentialType) Anonymous() CredentialType            { return CredentialType(2) } // For Azure, SAS or public.
+func (CredentialType) SharedKey() CredentialType            { return CredentialType(3) } // For Azure, SharedKey
+func (CredentialType) S3AccessKey() CredentialType          { return CredentialType(4) } // For S3, AccessKeyID and SecretAccessKey
+func (CredentialType) GoogleAppCredentials() CredentialType { return CredentialType(5) }
+func (CredentialType) S3PublicBucket() CredentialType       { return CredentialType(6) } // For S3, Anon Credentials & public bucket
 
 func (ct CredentialType) String() string {
 	return enum.StringInt(ct, reflect.TypeOf(ct))
@@ -841,12 +902,14 @@ func (i *InvalidMetadataHandleOption) UnmarshalJSON(b []byte) error {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const (
-	DefaultBlockBlobBlockSize = 8 * 1024 * 1024
-	MaxBlockBlobBlockSize     = 100 * 1024 * 1024
-	MaxAppendBlobBlockSize    = 4 * 1024 * 1024
-	DefaultPageBlobChunkSize  = 4 * 1024 * 1024
-	DefaultAzureFileChunkSize = 4 * 1024 * 1024
-	MaxNumberOfBlocksPerBlob  = 50000
+	DefaultBlockBlobBlockSize      = 8 * 1024 * 1024
+	MaxBlockBlobBlockSize          = 4000 * 1024 * 1024
+	MaxAppendBlobBlockSize         = 4 * 1024 * 1024
+	DefaultPageBlobChunkSize       = 4 * 1024 * 1024
+	DefaultAzureFileChunkSize      = 4 * 1024 * 1024
+	MaxNumberOfBlocksPerBlob       = 50000
+	BlockSizeThreshold             = 256 * 1024 * 1024
+	MinParallelChunkCountThreshold = 4 /* minimum number of chunks in parallel for AzCopy to be performant. */
 )
 
 // This struct represent a single transfer entry with source and destination details
@@ -854,6 +917,7 @@ const (
 type CopyTransfer struct {
 	Source           string
 	Destination      string
+	EntityType       EntityType
 	LastModifiedTime time.Time //represents the last modified time of source which ensures that source hasn't changed while transferring
 	SourceSize       int64     // size of the source entity in bytes.
 
@@ -867,8 +931,11 @@ type CopyTransfer struct {
 	Metadata           Metadata
 
 	// Properties for S2S blob copy
-	BlobType azblob.BlobType
-	BlobTier azblob.AccessTierType
+	BlobType      azblob.BlobType
+	BlobTier      azblob.AccessTierType
+	BlobVersionID string
+	// Blob index tags categorize data in your storage account utilizing key-value tag attributes
+	BlobTags BlobTags
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -921,7 +988,7 @@ func UnMarshalToCommonMetadata(metadataString string) (Metadata, error) {
 
 // isValidMetadataKey checks if the given string is a valid metadata key for Azure.
 // For Azure, metadata key must adhere to the naming rules for C# identifiers.
-// As testing, reserved keyworkds for C# identifiers are also valid metadata key. (e.g. this, int)
+// As testing, reserved keywords for C# identifiers are also valid metadata key. (e.g. this, int)
 // TODO: consider to use "[A-Za-z_]\w*" to replace this implementation, after ensuring the complexity is O(N).
 func isValidMetadataKey(key string) bool {
 	for i := 0; i < len(key); i++ {
@@ -968,6 +1035,40 @@ func (m Metadata) ExcludeInvalidKey() (retainedMetadata Metadata, excludedMetada
 	}
 
 	return
+}
+
+// BlobTags is a map of key-value pair
+type BlobTags map[string]string
+
+// ToAzBlobTagsMap converts BlobTagsMap to azblob's BlobTagsMap
+func (bt BlobTags) ToAzBlobTagsMap() azblob.BlobTagsMap {
+	return azblob.BlobTagsMap(bt)
+}
+
+//// FromAzBlobTagsMapToCommonBlobTags converts azblob's BlobTagsMap to common BlobTags
+//func FromAzBlobTagsMapToCommonBlobTags(azbt azblob.BlobTagsMap) BlobTags {
+//	return BlobTags(azbt)
+//}
+
+func (bt BlobTags) ToString() string {
+	lst := make([]string, 0)
+	for k, v := range bt {
+		lst = append(lst, k+"="+v)
+	}
+	return strings.Join(lst, "&")
+}
+
+func ToCommonBlobTagsMap(blobTagsString string) BlobTags {
+	if blobTagsString == "" {
+		return nil
+	}
+
+	blobTagsMap := BlobTags{}
+	for _, keyAndValue := range strings.Split(blobTagsString, "&") { // key/value pairs are separated by '&'
+		kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+		blobTagsMap[kv[0]] = kv[1]
+	}
+	return blobTagsMap
 }
 
 const metadataRenamedKeyPrefix = "rename_"
@@ -1063,6 +1164,18 @@ func (h ResourceHTTPHeaders) ToAzFileHTTPHeaders() azfile.FileHTTPHeaders {
 	}
 }
 
+// ToBlobFSHTTPHeaders converts ResourceHTTPHeaders to BlobFS Headers.
+func (h ResourceHTTPHeaders) ToBlobFSHTTPHeaders() azbfs.BlobFSHTTPHeaders {
+	return azbfs.BlobFSHTTPHeaders{
+		ContentType: h.ContentType,
+		// ContentMD5 isn't in these headers. ContentMD5 is handled separately for BlobFS
+		ContentEncoding:    h.ContentEncoding,
+		ContentLanguage:    h.ContentLanguage,
+		ContentDisposition: h.ContentDisposition,
+		CacheControl:       h.CacheControl,
+	}
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var ETransferDirection = TransferDirection(0)
@@ -1147,6 +1260,27 @@ const SizePerFileParam = "size-per-file"
 const FileCountParam = "file-count"
 const FileCountDefault = 100
 
+//BenchMarkMode enumerates values for Azcopy bench command. Valid values Upload or Download
+type BenchMarkMode uint8
+
+var EBenchMarkMode = BenchMarkMode(0)
+
+func (BenchMarkMode) Upload() BenchMarkMode { return BenchMarkMode(0) }
+
+func (BenchMarkMode) Download() BenchMarkMode { return BenchMarkMode(1) }
+
+func (bm BenchMarkMode) String() string {
+	return enum.StringInt(bm, reflect.TypeOf(bm))
+}
+
+func (bm *BenchMarkMode) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(bm), s, true, true)
+	if err == nil {
+		*bm = val.(BenchMarkMode)
+	}
+	return err
+}
+
 //////////////////////////////////////////////////////////////////////////////////////
 
 var ECompressionType = CompressionType(0)
@@ -1173,4 +1307,152 @@ func GetCompressionType(contentEncoding string) (CompressionType, error) {
 	default:
 		return ECompressionType.Unsupported(), fmt.Errorf("encoding type '%s' is not recognised as a supported encoding type for auto-decompression", contentEncoding)
 	}
+}
+
+/////////////////////////////////////////////////////////////////
+
+var EEntityType = EntityType(0)
+
+type EntityType uint8
+
+func (EntityType) File() EntityType   { return EntityType(0) }
+func (EntityType) Folder() EntityType { return EntityType(1) }
+
+func (e EntityType) String() string {
+	return enum.StringInt(e, reflect.TypeOf(e))
+}
+
+////////////////////////////////////////////////////////////////
+
+var EFolderPropertiesOption = FolderPropertyOption(0)
+
+// FolderPropertyOption controls which folders get their properties recorded in the Plan file
+type FolderPropertyOption uint8
+
+// no FPO has been selected.  Make sure the zero-like value is "unspecified" so that we detect
+// any code paths that that do not nominate any FPO
+func (FolderPropertyOption) Unspecified() FolderPropertyOption { return FolderPropertyOption(0) }
+
+func (FolderPropertyOption) NoFolders() FolderPropertyOption { return FolderPropertyOption(1) }
+func (FolderPropertyOption) AllFoldersExceptRoot() FolderPropertyOption {
+	return FolderPropertyOption(2)
+}
+func (FolderPropertyOption) AllFolders() FolderPropertyOption { return FolderPropertyOption(3) }
+
+///////////////////////////////////////////////////////////////////////
+
+var EPreservePermissionsOption = PreservePermissionsOption(0)
+
+type PreservePermissionsOption uint8
+
+func (PreservePermissionsOption) None() PreservePermissionsOption {
+	return PreservePermissionsOption(0)
+}
+func (PreservePermissionsOption) ACLsOnly() PreservePermissionsOption {
+	return PreservePermissionsOption(1)
+}
+func (PreservePermissionsOption) OwnershipAndACLs() PreservePermissionsOption {
+	return PreservePermissionsOption(2)
+}
+
+func NewPreservePermissionsOption(preserve, includeOwnership bool, fromTo FromTo) PreservePermissionsOption {
+	if preserve {
+		if fromTo.IsDownload() {
+			// downloads are the only time we respect includeOwnership
+			if includeOwnership {
+				return EPreservePermissionsOption.OwnershipAndACLs()
+			} else {
+				return EPreservePermissionsOption.ACLsOnly()
+			}
+		}
+		// for uploads and S2S, we always include ownership
+		return EPreservePermissionsOption.OwnershipAndACLs()
+	}
+
+	return EPreservePermissionsOption.None()
+}
+
+func (p PreservePermissionsOption) IsTruthy() bool {
+	switch p {
+	case EPreservePermissionsOption.ACLsOnly(),
+		EPreservePermissionsOption.OwnershipAndACLs():
+		return true
+	case EPreservePermissionsOption.None():
+		return false
+	default:
+		panic("unknown permissions option")
+	}
+}
+
+////////////////////////////////////////////////////////////////
+
+// CpkScopeInfo specifies the name of the encryption scope to use to encrypt the data provided in the request.
+// If not specified, encryption is performed with the default account encryption scope.
+// For more information, see Encryption at Rest for Azure Storage Services.
+type CpkScopeInfo struct {
+	EncryptionScope *string
+}
+
+func (csi CpkScopeInfo) Marshal() (string, error) {
+	result, err := json.Marshal(csi)
+	if err != nil {
+		return "", err
+	}
+	return string(result), nil
+}
+
+type CpkInfo struct {
+	// The algorithm used to produce the encryption key hash.
+	// Currently, the only accepted value is "AES256".
+	// Must be provided if the x-ms-encryption-key header is provided.
+	EncryptionAlgorithm *string
+
+	// Optional. Specifies the encryption key to use to encrypt the data provided in the request.
+	// If not specified, encryption is performed with the root account encryption key.
+	EncryptionKey *string
+
+	// The SHA-256 hash of the provided encryption key.
+	// Must be provided if the x-ms-encryption-key header is provided.
+	EncryptionKeySha256 *string
+}
+
+func (csi CpkInfo) Marshal() (string, error) {
+	result, err := json.Marshal(csi)
+	if err != nil {
+		return "", err
+	}
+	return string(result), nil
+}
+
+func ToClientProvidedKeyOptions(cpkInfo CpkInfo, cpkScopeInfo CpkScopeInfo) azblob.ClientProvidedKeyOptions {
+	if (cpkInfo.EncryptionKey == nil || cpkInfo.EncryptionKeySha256 == nil) && cpkScopeInfo.EncryptionScope == nil {
+		return azblob.ClientProvidedKeyOptions{}
+	}
+
+	return azblob.ClientProvidedKeyOptions{
+		EncryptionKey:       cpkInfo.EncryptionKey,
+		EncryptionAlgorithm: azblob.EncryptionAlgorithmAES256,
+		EncryptionKeySha256: cpkInfo.EncryptionKeySha256,
+		EncryptionScope:     cpkScopeInfo.EncryptionScope,
+	}
+}
+
+type CpkOptions struct {
+	// Optional flag to encrypt user data with user provided key.
+	// Key is provide in the REST request itself
+	// Provided key (EncryptionKey and EncryptionKeySHA256) and its hash will be fetched from environment variables
+	// Set EncryptionAlgorithm = "AES256" by default.
+	CpkInfo bool
+	// Key is present in AzureKeyVault and Azure KeyVault is linked with storage account.
+	// Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data
+	CpkScopeInfo string
+	// flag to check if the source is encrypted by user provided key or not.
+	// True only if user wishes to download source encrypted by user provided key
+	IsSourceEncrypted bool
+}
+
+func GetClientProvidedKey(options CpkOptions) azblob.ClientProvidedKeyOptions {
+	_cpkInfo := GetCpkInfo(options.CpkInfo)
+	_cpkScopeInfo := GetCpkScopeInfo(options.CpkScopeInfo)
+	return ToClientProvidedKeyOptions(_cpkInfo, _cpkScopeInfo)
 }

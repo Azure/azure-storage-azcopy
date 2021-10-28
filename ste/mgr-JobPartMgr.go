@@ -6,6 +6,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -13,8 +14,8 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"golang.org/x/sync/semaphore"
@@ -26,8 +27,9 @@ type IJobPartMgr interface {
 	Plan() *JobPartPlanHeader
 	ScheduleTransfers(jobCtx context.Context)
 	StartJobXfer(jptm IJobPartTransferMgr)
-	ReportTransferDone() uint32
+	ReportTransferDone(status common.TransferStatus) uint32
 	GetOverwriteOption() common.OverwriteOption
+	GetForceIfReadOnly() bool
 	AutoDecompress() bool
 	ScheduleChunks(chunkFunc chunkFunc)
 	RescheduleTransfer(jptm IJobPartTransferMgr)
@@ -49,6 +51,14 @@ type IJobPartMgr interface {
 	common.ILogger
 	SourceProviderPipeline() pipeline.Pipeline
 	getOverwritePrompter() *overwritePrompter
+	getFolderCreationTracker() FolderCreationTracker
+	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
+	FolderDeletionManager() common.FolderDeletionManager
+	CpkInfo() common.CpkInfo
+	CpkScopeInfo() common.CpkScopeInfo
+	IsSourceEncrypted() bool
+	/* Status Manager Updates */
+	SendXferDoneMsg(msg xferDoneMsg)
 }
 
 type serviceAPIVersionOverride struct{}
@@ -159,7 +169,10 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		//NewPacerPolicyFactory(p),
 		NewVersionPolicyFactory(),
-		NewRequestLogPolicyFactory(RequestLogOptions{LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold}),
+		NewRequestLogPolicyFactory(RequestLogOptions{
+			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
+			SyslogDisabled:               common.IsForceLoggingDisabled(),
+		}),
 		newXferStatsPolicyFactory(statsAcc),
 	}
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
@@ -183,7 +196,10 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 
 	f = append(f,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		NewRequestLogPolicyFactory(RequestLogOptions{LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold}),
+		NewRequestLogPolicyFactory(RequestLogOptions{
+			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
+			SyslogDisabled:               common.IsForceLoggingDisabled(),
+		}),
 		newXferStatsPolicyFactory(statsAcc))
 
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
@@ -203,7 +219,10 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		NewVersionPolicyFactory(),
-		NewRequestLogPolicyFactory(RequestLogOptions{LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold}),
+		NewRequestLogPolicyFactory(RequestLogOptions{
+			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
+			SyslogDisabled:               common.IsForceLoggingDisabled(),
+		}),
 		newXferStatsPolicyFactory(statsAcc),
 	}
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
@@ -211,11 +230,19 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Holds the status of transfers in this jptm
+type jobPartProgressInfo struct {
+	transfersCompleted int
+	transfersSkipped   int
+	transfersFailed    int
+}
+
 // jobPartMgr represents the runtime information for a Job's Part
 type jobPartMgr struct {
 	// These fields represent the part's existence
-	jobMgr   IJobMgr // Refers to this part's Job (for logging, cancelling, etc.)
-	filename JobPartPlanFileName
+	jobMgr          IJobMgr // Refers to this part's Job (for logging, cancelling, etc.)
+	jobMgrInitState *jobMgrInitState
+	filename        JobPartPlanFileName
 
 	// sourceSAS defines the sas of the source of the Job. If the source is local Location, then sas is empty.
 	// Since sas is not persisted in JobPartPlan file, it stripped from the source and stored in memory in JobPart Manager
@@ -228,9 +255,7 @@ type jobPartMgr struct {
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
 
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
-	blobHTTPHeaders   azblob.BlobHTTPHeaders
-	fileHTTPHeaders   azfile.FileHTTPHeaders
-	blobFSHTTPHeaders azbfs.BlobFSHTTPHeaders
+	httpHeaders common.ResourceHTTPHeaders
 
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
 	blockBlobTier common.BlockBlobTier
@@ -241,8 +266,9 @@ type jobPartMgr struct {
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
 	putMd5 bool
 
-	blobMetadata azblob.Metadata
-	fileMetadata azfile.Metadata
+	metadata common.Metadata
+
+	blobTags common.BlobTags
 
 	blobTypeOverride common.BlobType // User specified blob type
 
@@ -261,8 +287,12 @@ type jobPartMgr struct {
 	exclusiveDestinationMap *common.ExclusiveStringMap
 
 	pipeline pipeline.Pipeline // ordered list of Factory objects and an object implementing the HTTPSender interface
+	// Currently, this only sees use in ADLSG2->ADLSG2 ACL transfers. TODO: Remove it when we can reliably get/set ACLs on blob.
+	secondaryPipeline pipeline.Pipeline
 
 	sourceProviderPipeline pipeline.Pipeline
+	// TODO: Ditto
+	secondarySourceProviderPipeline pipeline.Pipeline
 
 	// used defensively to protect double init
 	atomicPipelinesInitedIndicator uint32
@@ -270,11 +300,24 @@ type jobPartMgr struct {
 	// numberOfTransfersDone_doNotUse represents the number of transfer of JobPartOrder
 	// which are either completed or failed
 	// numberOfTransfersDone_doNotUse determines the final cancellation of JobPartOrder
-	atomicTransfersDone uint32
+	atomicTransfersDone      uint32
+	atomicTransfersCompleted uint32
+	atomicTransfersFailed    uint32
+	atomicTransfersSkipped   uint32
+
+	cpkOptions common.CpkOptions
 }
 
 func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {
 	return jpm.jobMgr.getOverwritePrompter()
+}
+
+func (jpm *jobPartMgr) getFolderCreationTracker() FolderCreationTracker {
+	if jpm.jobMgrInitState == nil || jpm.jobMgrInitState.folderCreationTracker == nil {
+		panic("folderCreationTracker should have been initialized already")
+	}
+
+	return jpm.jobMgrInitState.folderCreationTracker
 }
 
 func (jpm *jobPartMgr) Plan() *JobPartPlanHeader { return jpm.planMMF.Plan() }
@@ -285,20 +328,22 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	// partplan file is opened and mapped when job part is added
 	//jpm.planMMF = jpm.filename.Map() // Open the job part plan file & memory-map it in
 	plan := jpm.planMMF.Plan()
+	if plan.PartNum == 0 && plan.NumTransfers == 0 {
+		/* This will wind down the transfer and report summary */
+		plan.SetJobStatus(common.EJobStatus.Completed())
+		return
+	}
+
 	// get the list of include / exclude transfers
 	includeTransfer, excludeTransfer := jpm.jobMgr.IncludeExclude()
+	if len(includeTransfer) > 0 || len(excludeTransfer) > 0 {
+		panic("List of transfers is obsolete.")
+	}
+
 	// *** Open the job part: process any job part plan-setting used by all transfers ***
 	dstData := plan.DstBlobData
 
-	jpm.blobHTTPHeaders = azblob.BlobHTTPHeaders{
-		ContentType:        string(dstData.ContentType[:dstData.ContentTypeLength]),
-		ContentEncoding:    string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
-		ContentDisposition: string(dstData.ContentDisposition[:dstData.ContentDispositionLength]),
-		ContentLanguage:    string(dstData.ContentLanguage[:dstData.ContentLanguageLength]),
-		CacheControl:       string(dstData.CacheControl[:dstData.CacheControlLength]),
-	}
-
-	jpm.blobFSHTTPHeaders = azbfs.BlobFSHTTPHeaders{
+	jpm.httpHeaders = common.ResourceHTTPHeaders{
 		ContentType:        string(dstData.ContentType[:dstData.ContentTypeLength]),
 		ContentEncoding:    string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
 		ContentDisposition: string(dstData.ContentDisposition[:dstData.ContentDispositionLength]),
@@ -309,29 +354,31 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	jpm.putMd5 = dstData.PutMd5
 	jpm.blockBlobTier = dstData.BlockBlobTier
 	jpm.pageBlobTier = dstData.PageBlobTier
-	jpm.fileHTTPHeaders = azfile.FileHTTPHeaders{
-		ContentType:        string(dstData.ContentType[:dstData.ContentTypeLength]),
-		ContentEncoding:    string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
-		ContentDisposition: string(dstData.ContentDisposition[:dstData.ContentDispositionLength]),
-		ContentLanguage:    string(dstData.ContentLanguage[:dstData.ContentLanguageLength]),
-		CacheControl:       string(dstData.CacheControl[:dstData.CacheControlLength]),
-	}
-	// For this job part, split the metadata string apart and create an azblob.Metadata out of it
+
+	// For this job part, split the metadata string apart and create an common.Metadata out of it
 	metadataString := string(dstData.Metadata[:dstData.MetadataLength])
-	jpm.blobMetadata = azblob.Metadata{}
+	jpm.metadata = common.Metadata{}
 	if len(metadataString) > 0 {
 		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
 			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-			jpm.blobMetadata[kv[0]] = kv[1]
+			jpm.metadata[kv[0]] = kv[1]
+		}
+	}
+	blobTagsStr := string(dstData.BlobTags[:dstData.BlobTagsLength])
+	jpm.blobTags = common.BlobTags{}
+	if len(blobTagsStr) > 0 {
+		for _, keyAndValue := range strings.Split(blobTagsStr, "&") { // key/value pairs are separated by '&'
+			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+			key, _ := url.QueryUnescape(kv[0])
+			value, _ := url.QueryUnescape(kv[1])
+			jpm.blobTags[key] = value
 		}
 	}
 
-	jpm.fileMetadata = azfile.Metadata{}
-	if len(metadataString) > 0 {
-		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
-			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-			jpm.fileMetadata[kv[0]] = kv[1]
-		}
+	jpm.cpkOptions = common.CpkOptions{
+		CpkInfo:           dstData.CpkInfo,
+		CpkScopeInfo:      string(dstData.CpkScopeInfo[:dstData.CpkScopeInfoLength]),
+		IsSourceEncrypted: dstData.IsSourceEncrypted,
 	}
 
 	jpm.preserveLastModifiedTime = plan.DstLocalData.PreserveLastModifiedTime
@@ -348,41 +395,29 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		jppt := plan.Transfer(t)
 		ts := jppt.TransferStatus()
 		if ts == common.ETransferStatus.Success() {
-			jpm.ReportTransferDone() // Don't schedule an already-completed/failed transfer
+			jpm.ReportTransferDone(ts) // Don't schedule an already-completed/failed transfer
 			continue
-		}
-
-		// If the list of transfer to be included is passed
-		// then check current transfer exists in the list of included transfer
-		// If it doesn't exists, skip the transfer
-		if len(includeTransfer) > 0 {
-			// Get the source string from the part plan header
-			src, _ := plan.TransferSrcDstStrings(t)
-			// If source doesn't exists, skip the transfer
-			_, ok := includeTransfer[src]
-			if !ok {
-				jpm.ReportTransferDone() // Don't schedule transfer which is not mentioned to be included
-				continue
-			}
-		}
-		// If the list of transfer to be excluded is passed
-		// then check the current transfer in the list of excluded transfer
-		// If it exists, then skip the transfer
-		if len(excludeTransfer) > 0 {
-			// Get the source string from the part plan header
-			src, _ := plan.TransferSrcDstStrings(t)
-			// If the source exists in the list of excluded transfer
-			// skip the transfer
-			_, ok := excludeTransfer[src]
-			if ok {
-				jpm.ReportTransferDone() // Don't schedule transfer which is mentioned to be excluded
-				continue
-			}
 		}
 
 		// If the transfer was failed, then while rescheduling the transfer marking it Started.
 		if ts == common.ETransferStatus.Failed() {
 			jppt.SetTransferStatus(common.ETransferStatus.Started(), true)
+		}
+
+		if _, dst, isFolder := plan.TransferSrcDstStrings(t); isFolder {
+			// register the folder!
+			if jpptFolderTracker, ok := jpm.getFolderCreationTracker().(JPPTCompatibleFolderCreationTracker); ok {
+				if plan.FromTo.To().IsRemote() {
+					uri, err := url.Parse(dst)
+					common.PanicIfErr(err)
+					uri.RawPath = ""
+					uri.RawQuery = ""
+
+					dst = uri.String()
+				}
+
+				jpptFolderTracker.RegisterPropertiesTransfer(dst, t)
+			}
 		}
 
 		// Each transfer gets its own context (so any chunk can cancel the whole transfer) based off the job's context
@@ -401,6 +436,37 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			jpm.Log(pipeline.LogInfo, fmt.Sprintf("scheduling JobID=%v, Part#=%d, Transfer#=%d, priority=%v", plan.JobID, plan.PartNum, t, plan.Priority))
 		}
 
+		// ===== TEST KNOB
+		relSrc, relDst := plan.TransferSrcDstRelatives(t)
+
+		var err error
+		if plan.FromTo.From().IsRemote() {
+			relSrc, err = url.PathUnescape(relSrc)
+		}
+		relSrc = strings.TrimPrefix(relSrc, common.AZCOPY_PATH_SEPARATOR_STRING)
+		common.PanicIfErr(err) // neither of these panics should happen, they already would have had a clean error.
+		if plan.FromTo.To().IsRemote() {
+			relDst, err = url.PathUnescape(relDst)
+		}
+		relDst = strings.TrimPrefix(relSrc, common.AZCOPY_PATH_SEPARATOR_STRING)
+		common.PanicIfErr(err)
+
+		_, srcOk := DebugSkipFiles[relSrc]
+		_, dstOk := DebugSkipFiles[relDst]
+		if srcOk || dstOk {
+			if jpm.ShouldLog(pipeline.LogInfo) {
+				jpm.Log(pipeline.LogInfo, fmt.Sprintf("Transfer %d cancelled: %s", jptm.transferIndex, relSrc))
+			}
+
+			// cancel the transfer
+			jptm.Cancel()
+			jptm.SetStatus(common.ETransferStatus.Cancelled())
+		} else {
+			if len(DebugSkipFiles) != 0 && jpm.ShouldLog(pipeline.LogInfo) {
+				jpm.Log(pipeline.LogInfo, fmt.Sprintf("Did not exclude: src: %s dst: %s", relSrc, relDst))
+			}
+		}
+		// ===== TEST KNOB
 		JobsAdmin.(*jobsAdmin).ScheduleTransfer(jpm.priority, jptm)
 
 		// This sets the atomic variable atomicAllTransfersScheduled to 1
@@ -435,6 +501,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	userAgent := common.UserAgent
 	if fromTo.From() == common.ELocation.S3() {
 		userAgent = common.S3ImportUserAgent
+	} else if fromTo.From() == common.ELocation.GCP() {
+		userAgent = common.GCPImportUserAgent
 	} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
 		userAgent = common.BenchmarkUserAgent
 	}
@@ -455,7 +523,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 		RetryDelay:    UploadRetryDelay,
 		MaxRetryDelay: UploadMaxRetryDelay}
 
-	var statsAccForSip *pipelineNetworkStats = nil // we don'nt accumulate stats on the source info provider
+	var statsAccForSip *pipelineNetworkStats = nil // we don't accumulate stats on the source info provider
 
 	// Create source info provider's pipeline for S2S copy.
 	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() {
@@ -471,8 +539,25 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.pacer,
 			jpm.jobMgr.HttpClient(),
 			statsAccForSip)
+
+		// Consider the ADLSG2->ADLSG2 ACLs case
+		if fromTo == common.EFromTo.BlobBlob() && jpm.Plan().PreservePermissions.IsTruthy() {
+			jpm.secondarySourceProviderPipeline = NewBlobFSPipeline(
+				azbfs.NewAnonymousCredential(),
+				azbfs.PipelineOptions{
+					Log: jpm.jobMgr.PipelineLogInfo(),
+					Telemetry: azbfs.TelemetryOptions{
+						Value: userAgent,
+					},
+				},
+				xferRetryOption,
+				jpm.pacer,
+				jpm.jobMgr.HttpClient(),
+				statsAccForSip)
+		}
 	}
-	if fromTo == common.EFromTo.FileBlob() || fromTo == common.EFromTo.FileFile() {
+	// Consider the file-local SDDL transfer case.
+	if fromTo == common.EFromTo.FileBlob() || fromTo == common.EFromTo.FileFile() || fromTo == common.EFromTo.FileLocal() {
 		jpm.sourceProviderPipeline = NewFilePipeline(
 			azfile.NewAnonymousCredential(),
 			azfile.PipelineOptions{
@@ -496,7 +581,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	// Create pipeline for data transfer.
 	switch fromTo {
 	case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(), common.EFromTo.BenchmarkBlob(),
-		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob():
+		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob(), common.EFromTo.GCPBlob():
 		credential := common.CreateBlobCredential(ctx, credInfo, credOption)
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 		jpm.pipeline = NewBlobPipeline(
@@ -511,6 +596,23 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.pacer,
 			jpm.jobMgr.HttpClient(),
 			jpm.jobMgr.PipelineNetworkStats())
+
+		// Consider the ADLSG2->ADLSG2 ACLs case
+		if fromTo == common.EFromTo.BlobBlob() && jpm.Plan().PreservePermissions.IsTruthy() {
+			credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
+			jpm.secondaryPipeline = NewBlobFSPipeline(
+				credential,
+				azbfs.PipelineOptions{
+					Log: jpm.jobMgr.PipelineLogInfo(),
+					Telemetry: azbfs.TelemetryOptions{
+						Value: userAgent,
+					},
+				},
+				xferRetryOption,
+				jpm.pacer,
+				jpm.jobMgr.HttpClient(),
+				statsAccForSip)
+		}
 	// Create pipeline for Azure BlobFS.
 	case common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS(), common.EFromTo.BenchmarkBlobFS():
 		credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
@@ -578,38 +680,71 @@ func (jpm *jobPartMgr) GetOverwriteOption() common.OverwriteOption {
 	return jpm.Plan().ForceWrite
 }
 
+func (jpm *jobPartMgr) GetForceIfReadOnly() bool {
+	return jpm.Plan().ForceIfReadOnly
+}
+
 func (jpm *jobPartMgr) AutoDecompress() bool {
 	return jpm.Plan().AutoDecompress
 }
 
-func (jpm *jobPartMgr) blobDstData(fullFilePath string, dataFileToXfer []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
-	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
-		return jpm.blobHTTPHeaders, jpm.blobMetadata
+func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byte) (headers common.ResourceHTTPHeaders,
+	metadata common.Metadata, blobTags common.BlobTags, cpkOptions common.CpkOptions) {
+	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType {
+		return jpm.httpHeaders, jpm.metadata, jpm.blobTags, jpm.cpkOptions
 	}
 
-	return azblob.BlobHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer), ContentLanguage: jpm.blobHTTPHeaders.ContentLanguage, ContentDisposition: jpm.blobHTTPHeaders.ContentDisposition, ContentEncoding: jpm.blobHTTPHeaders.ContentEncoding, CacheControl: jpm.blobHTTPHeaders.CacheControl}, jpm.blobMetadata
+	return common.ResourceHTTPHeaders{
+		ContentType:        jpm.inferContentType(fullFilePath, dataFileToXfer),
+		ContentLanguage:    jpm.httpHeaders.ContentLanguage,
+		ContentDisposition: jpm.httpHeaders.ContentDisposition,
+		ContentEncoding:    jpm.httpHeaders.ContentEncoding,
+		CacheControl:       jpm.httpHeaders.CacheControl,
+	}, jpm.metadata, jpm.blobTags, jpm.cpkOptions
 }
 
-func (jpm *jobPartMgr) fileDstData(fullFilePath string, dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
-	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
-		return jpm.fileHTTPHeaders, jpm.fileMetadata
-	}
-	return azfile.FileHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer), ContentLanguage: jpm.fileHTTPHeaders.ContentLanguage, ContentEncoding: jpm.fileHTTPHeaders.ContentEncoding, ContentDisposition: jpm.fileHTTPHeaders.ContentDisposition, CacheControl: jpm.fileHTTPHeaders.CacheControl}, jpm.fileMetadata
-}
+var environmentMimeMap map[string]string
 
-func (jpm *jobPartMgr) bfsDstData(fullFilePath string, dataFileToXfer []byte) (headers azbfs.BlobFSHTTPHeaders) {
-	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
-		return jpm.blobFSHTTPHeaders
-	}
-	return azbfs.BlobFSHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer), ContentLanguage: jpm.blobFSHTTPHeaders.ContentLanguage, ContentEncoding: jpm.blobFSHTTPHeaders.ContentEncoding, ContentDisposition: jpm.blobFSHTTPHeaders.ContentDisposition, CacheControl: jpm.blobFSHTTPHeaders.CacheControl}
+// TODO do we want these charset=utf-8?
+var builtinTypes = map[string]string{
+	".css":  "text/css",
+	".gif":  "image/gif",
+	".htm":  "text/html",
+	".html": "text/html",
+	".jpeg": "image/jpeg",
+	".jpg":  "image/jpeg",
+	".js":   "application/javascript",
+	".mjs":  "application/javascript",
+	".pdf":  "application/pdf",
+	".png":  "image/png",
+	".svg":  "image/svg+xml",
+	".wasm": "application/wasm",
+	".webp": "image/webp",
+	".xml":  "text/xml",
 }
 
 func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []byte) string {
-	if guessedType := mime.TypeByExtension(filepath.Ext(fullFilePath)); guessedType != "" {
-		return guessedType
+	fileExtension := filepath.Ext(fullFilePath)
+
+	if contentType, ok := environmentMimeMap[strings.ToLower(fileExtension)]; ok {
+		return contentType
+	}
+	// short-circuit for common static website files
+	// mime.TypeByExtension takes the registry into account, which is most often undesirable in practice
+	if override, ok := builtinTypes[strings.ToLower(fileExtension)]; ok {
+		return override
 	}
 
-	return http.DetectContentType(dataFileToXfer)
+	/*
+	 * Below functions return utf-8 as default charset for text files. Discard
+	 * charset if it exists, safer to omit charset instead of defaulting to
+	 * a wrong one.
+	 */
+	if guessedType := mime.TypeByExtension(fileExtension); guessedType != "" {
+		return strings.Split(guessedType, ";")[0]
+	}
+
+	return strings.Split(http.DetectContentType(dataFileToXfer), ";")[0]
 }
 
 func (jpm *jobPartMgr) BlobTypeOverride() common.BlobType {
@@ -620,12 +755,40 @@ func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlob
 	return jpm.blockBlobTier, jpm.pageBlobTier
 }
 
+func (jpm *jobPartMgr) CpkInfo() common.CpkInfo {
+	return common.GetCpkInfo(jpm.cpkOptions.CpkInfo)
+}
+
+func (jpm *jobPartMgr) CpkScopeInfo() common.CpkScopeInfo {
+	return common.GetCpkScopeInfo(jpm.cpkOptions.CpkScopeInfo)
+}
+
+func (jpm *jobPartMgr) IsSourceEncrypted() bool {
+	return jpm.cpkOptions.IsSourceEncrypted
+}
+
 func (jpm *jobPartMgr) ShouldPutMd5() bool {
 	return jpm.putMd5
 }
 
 func (jpm *jobPartMgr) SAS() (string, string) {
 	return jpm.sourceSAS, jpm.destinationSAS
+}
+
+func (jpm *jobPartMgr) SecurityInfoPersistenceManager() *securityInfoPersistenceManager {
+	if jpm.jobMgrInitState == nil || jpm.jobMgrInitState.securityInfoPersistenceManager == nil {
+		panic("SIPM should have been initialized already")
+	}
+
+	return jpm.jobMgrInitState.securityInfoPersistenceManager
+}
+
+func (jpm *jobPartMgr) FolderDeletionManager() common.FolderDeletionManager {
+	if jpm.jobMgrInitState == nil || jpm.jobMgrInitState.folderDeletionManager == nil {
+		panic("folder deletion manager should have been initialized already")
+	}
+
+	return jpm.jobMgrInitState.folderDeletionManager
 }
 
 func (jpm *jobPartMgr) localDstData() *JobPartPlanDstLocal {
@@ -636,15 +799,38 @@ func (jpm *jobPartMgr) deleteSnapshotsOption() common.DeleteSnapshotsOption {
 	return jpm.Plan().DeleteSnapshotsOption
 }
 
+func (jpm *jobPartMgr) updateJobPartProgress(status common.TransferStatus) {
+	switch status {
+	case common.ETransferStatus.Success():
+		atomic.AddUint32(&jpm.atomicTransfersCompleted, 1)
+	case common.ETransferStatus.Failed(), common.ETransferStatus.BlobTierFailure():
+		atomic.AddUint32(&jpm.atomicTransfersFailed, 1)
+	case common.ETransferStatus.SkippedEntityAlreadyExists(), common.ETransferStatus.SkippedBlobHasSnapshots():
+		atomic.AddUint32(&jpm.atomicTransfersSkipped, 1)
+	case common.ETransferStatus.Cancelled():
+	default:
+		jpm.Log(pipeline.LogError, fmt.Sprintf("Unexpected status: %v", status.String()))
+	}
+}
+
 // Call Done when a transfer has completed its epilog; this method returns the number of transfers completed so far
-func (jpm *jobPartMgr) ReportTransferDone() (transfersDone uint32) {
+func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfersDone uint32) {
 	transfersDone = atomic.AddUint32(&jpm.atomicTransfersDone, 1)
+	jpm.updateJobPartProgress(status)
+
+	//Add a safety count-check
+
 	if jpm.ShouldLog(pipeline.LogInfo) {
 		plan := jpm.Plan()
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d", plan.JobID, plan.PartNum, transfersDone, plan.NumTransfers))
 	}
 	if transfersDone == jpm.planMMF.Plan().NumTransfers {
-		jpm.jobMgr.ReportJobPartDone()
+		jppi := jobPartProgressInfo{
+			transfersCompleted: int(atomic.LoadUint32(&jpm.atomicTransfersCompleted)),
+			transfersSkipped:   int(atomic.LoadUint32(&jpm.atomicTransfersSkipped)),
+			transfersFailed:    int(atomic.LoadUint32(&jpm.atomicTransfersFailed)),
+		}
+		jpm.jobMgr.ReportJobPartDone(jppi)
 	}
 	return transfersDone
 }
@@ -653,11 +839,8 @@ func (jpm *jobPartMgr) ReportTransferDone() (transfersDone uint32) {
 func (jpm *jobPartMgr) Close() {
 	jpm.planMMF.Unmap()
 	// Clear other fields to all for GC
-	jpm.blobHTTPHeaders = azblob.BlobHTTPHeaders{}
-	jpm.blobMetadata = azblob.Metadata{}
-	jpm.fileHTTPHeaders = azfile.FileHTTPHeaders{}
-	jpm.fileMetadata = azfile.Metadata{}
-	jpm.blobFSHTTPHeaders = azbfs.BlobFSHTTPHeaders{}
+	jpm.httpHeaders = common.ResourceHTTPHeaders{}
+	jpm.metadata = common.Metadata{}
 	jpm.preserveLastModifiedTime = false
 	// TODO: Delete file?
 	/*if err := os.Remove(jpm.planFile.Name()); err != nil {
@@ -686,6 +869,11 @@ func (jpm *jobPartMgr) ChunkStatusLogger() common.ChunkStatusLogger {
 
 func (jpm *jobPartMgr) SourceProviderPipeline() pipeline.Pipeline {
 	return jpm.sourceProviderPipeline
+}
+
+/* Status update messages should not fail */
+func (jpm *jobPartMgr) SendXferDoneMsg(msg xferDoneMsg) {
+	jpm.jobMgr.SendXferDoneMsg(msg)
 }
 
 // TODO: Can we delete this method?

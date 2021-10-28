@@ -26,7 +26,7 @@ import (
 	"runtime"
 	"strconv"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // ConfiguredInt is an integer which may be optionally configured by user through an environment variable
@@ -103,6 +103,13 @@ type ConcurrencySettings struct {
 	// (i.e. creates chunkfuncs)
 	TransferInitiationPoolSize *ConfiguredInt
 
+	// EnumerationPoolSize is size of auxiliary goroutine pool used in enumerators (only some of which are in fact parallelized)
+	EnumerationPoolSize *ConfiguredInt
+
+	// ParallelStatFiles says whether file.Stat calls should be parallelized during enumeration. May help enumeration performance
+	// on Linux, but is not necessary and should not be activate on Windows.
+	ParallelStatFiles *ConfiguredBool
+
 	// MaxIdleConnections is the max number of idle TCP connections to keep open
 	MaxIdleConnections int
 
@@ -125,6 +132,7 @@ func (c ConcurrencySettings) AutoTuneMainPool() bool {
 }
 
 const defaultTransferInitiationPoolSize = 64
+const defaultEnumerationPoolSize = 16
 const concurrentFilesFloor = 32
 
 // NewConcurrencySettings gets concurrency settings by referring to the
@@ -138,9 +146,13 @@ func NewConcurrencySettings(maxFileAndSocketHandles int, requestAutoTuneGRs bool
 		InitialMainPoolSize:        initialMainPoolSize,
 		MaxMainPoolSize:            maxMainPoolSize,
 		TransferInitiationPoolSize: getTransferInitiationPoolSize(),
-		MaxOpenDownloadFiles:       getMaxOpenPayloadFiles(maxFileAndSocketHandles, maxMainPoolSize.Value),
-		CheckCpuWhenTuning:          getCheckCpuUsageWhenTuning(),
+		EnumerationPoolSize:        GetEnumerationPoolSize(),
+		ParallelStatFiles:          GetParallelStatFiles(),
+		CheckCpuWhenTuning:         getCheckCpuUsageWhenTuning(),
 	}
+
+	s.MaxOpenDownloadFiles = getMaxOpenPayloadFiles(maxFileAndSocketHandles,
+		maxMainPoolSize.Value+s.TransferInitiationPoolSize.Value+s.EnumerationPoolSize.Value)
 
 	// Set the max idle connections that we allow. If there are any more idle connections
 	// than this, they will be closed, and then will result in creation of new connections
@@ -185,7 +197,7 @@ func getMainPoolSize(numOfCPUs int, requestAutoTune bool) (initial int, max *Con
 	if requestAutoTune {
 		initialValue = 4 // deliberately start with a small initial value if we are auto-tuning.  If it's not small enough, then the auto tuning becomes
 		// sluggish since, every time it needs to tune downwards, it needs to let a lot of data (num connections * block size) get transmitted,
-		// and that is slow over very small links, e.g. 10 Mbps, and produces noticable time lag when downsizing the connection count.
+		// and that is slow over very small links, e.g. 10 Mbps, and produces noticeable time lag when downsizing the connection count.
 		// So we start small. (The alternatives, of using small chunk sizes or small file sizes just for the first 200 MB or so, were too hard to orchestrate within the existing app architecture)
 	} else if numOfCPUs <= 4 {
 		// fix the concurrency value for smaller machines
@@ -218,6 +230,26 @@ func getTransferInitiationPoolSize() *ConfiguredInt {
 	return &ConfiguredInt{defaultTransferInitiationPoolSize, false, envVar.Name, "hard-coded default"}
 }
 
+func GetEnumerationPoolSize() *ConfiguredInt {
+	envVar := common.EEnvironmentVariable.EnumerationPoolSize()
+
+	if c := tryNewConfiguredInt(envVar); c != nil {
+		return c
+	}
+
+	return &ConfiguredInt{defaultEnumerationPoolSize, false, envVar.Name, "hard-coded default"}
+
+}
+
+func GetParallelStatFiles() *ConfiguredBool {
+	envVar := common.EEnvironmentVariable.ParallelStatFiles()
+	if c := tryNewConfiguredBool(envVar); c != nil {
+		return c
+	}
+
+	return &ConfiguredBool{false, false, envVar.Name, "hard-coded default"}
+}
+
 func getCheckCpuUsageWhenTuning() *ConfiguredBool {
 	envVar := common.EEnvironmentVariable.AutoTuneToCpu()
 	if c := tryNewConfiguredBool(envVar); c != nil {
@@ -237,12 +269,8 @@ func getMaxOpenPayloadFiles(maxFileAndSocketHandles int, concurrentConnections i
 	// how many of those may be opened
 	const fileHandleAllowanceForPlanFiles = 300 // 300 plan files = 300 * common.NumOfFilesPerDispatchJobPart = 3million in total
 
-	const httpHandleAllowanceForOnGoingEnumeration = 1 // might still be scanning while we are transferring. Make this bigger if we ever do parallel scanning
-
 	// make a conservative estimate of total network and file handles known so far
-	estimateOfKnownHandles := int(float32(concurrentConnections)*1.1) +
-		fileHandleAllowanceForPlanFiles +
-		httpHandleAllowanceForOnGoingEnumeration
+	estimateOfKnownHandles := int(float32(concurrentConnections)*1.1) + fileHandleAllowanceForPlanFiles
 
 	// see what we've got left over for open files
 	concurrentFilesLimit := maxFileAndSocketHandles - estimateOfKnownHandles

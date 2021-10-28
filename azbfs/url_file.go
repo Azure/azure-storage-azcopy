@@ -3,11 +3,12 @@ package azbfs
 import (
 	"context"
 	"encoding/base64"
+	"errors"
+	"io"
+	"net/http"
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"io"
-	"net/http"
 )
 
 // A FileURL represents a URL to an Azure Storage file.
@@ -24,6 +25,14 @@ type BlobFSHTTPHeaders struct {
 	ContentLanguage    string
 	ContentDisposition string
 	CacheControl       string
+}
+
+// BlobFSAccessControl represents the set of custom headers available for defining access conditions for the content.
+type BlobFSAccessControl struct {
+	Owner 		string
+	Group 		string
+	ACL   		string // Combining ACL & Permissions = invalid for SetAccessControl.
+	Permissions string
 }
 
 // NewFileURL creates a FileURL object using the specified URL and request policy pipeline.
@@ -53,13 +62,28 @@ func (f FileURL) WithPipeline(p pipeline.Pipeline) FileURL {
 	return NewFileURL(f.fileClient.URL(), p)
 }
 
+func (f FileURL) GetParentDir() (DirectoryURL, error) {
+	d, err := removeLastSectionOfPath(f.URL())
+	if err != nil {
+		return DirectoryURL{}, err
+	}
+	return NewDirectoryURL(d, f.fileClient.p), nil
+}
+
 // Create creates a new file or replaces a file. Note that this method only initializes the file.
-// For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/create-file.
+// For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create.
 func (f FileURL) Create(ctx context.Context, headers BlobFSHTTPHeaders) (*PathCreateResponse, error) {
+	return f.CreateWithOptions(ctx, CreateFileOptions{Headers: headers})
+}
+
+// Create creates a new file or replaces a file. Note that this method only initializes the file.
+// For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create.
+func (f FileURL) CreateWithOptions(ctx context.Context, options CreateFileOptions) (*PathCreateResponse, error) {
 	return f.fileClient.Create(ctx, f.fileSystemName, f.path, PathResourceFile,
 		nil, PathRenameModeNone, nil, nil, nil, nil,
-		&headers.CacheControl, &headers.ContentType, &headers.ContentEncoding, &headers.ContentLanguage, &headers.ContentDisposition,
-		nil, nil, nil, nil, nil, nil,
+		&options.Headers.CacheControl, &options.Headers.ContentType, &options.Headers.ContentEncoding,
+		&options.Headers.ContentLanguage, &options.Headers.ContentDisposition, nil, nil, nil,
+		buildMetadataString(options.Metadata), nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil)
@@ -89,7 +113,9 @@ func (f FileURL) Download(ctx context.Context, offset int64, count int64) (*Down
 // Body constructs a stream to read data from with a resilient reader option.
 // A zero-value option means to get a raw stream.
 func (dr *DownloadResponse) Body(o RetryReaderOptions) io.ReadCloser {
-	if o.MaxRetryRequests == 0 {
+	// For internal testing, we  check if injectedError is nil.
+	// This allows us to have reader retries
+	if o.MaxRetryRequests == 0 && o.injectedError == nil {
 		return dr.Response().Body
 	}
 
@@ -129,7 +155,7 @@ func (f FileURL) GetProperties(ctx context.Context) (*PathGetPropertiesResponse,
 }
 
 // UploadRange writes bytes to a file.
-// offset indiciates the offset at which to begin writing, in bytes.
+// offset indicates the offset at which to begin writing, in bytes.
 // custom headers are not valid on this operation
 func (f FileURL) AppendData(ctx context.Context, offset int64, body io.ReadSeeker) (*PathUpdateResponse, error) {
 	if offset < 0 {
@@ -148,7 +174,7 @@ func (f FileURL) AppendData(ctx context.Context, offset int64, body io.ReadSeeke
 	//                we should investigate and report the issue
 	// Note: the "offending" code in the Go SDK is: func (t *transferWriter) shouldSendContentLength() bool
 	// That code suggests that a workaround would be to specify a Transfer-Encoding of "identity",
-	// but we haven't yet found any way to actually set that header, so that workaround does't
+	// but we haven't yet found any way to actually set that header, so that workaround doesn't
 	// seem to work. (Just setting Transfer-Encoding like a normal header doesn't seem to work.)
 	// Looks like it might actually be impossible to set
 	// the Transfer-Encoding header, because bradfitz wrote: "as a general rule of thumb, you don't get to mess
@@ -187,4 +213,70 @@ func (f FileURL) FlushData(ctx context.Context, fileSize int64, contentMd5 []byt
 		&headers.CacheControl, &headers.ContentType, &headers.ContentDisposition, &headers.ContentEncoding, &headers.ContentLanguage,
 		md5InBase64, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil, &overrideHttpVerb, nil, nil, nil, nil)
+}
+
+// Renames the file to the provided destination
+func (f FileURL) Rename(ctx context.Context, options RenameFileOptions) (FileURL, error) {
+
+	// If the destinationFileSystem is not provided, use the current filesystem
+	fileSystemName := options.DestinationFileSystem
+	if fileSystemName == nil || *fileSystemName == "" {
+		fileSystemName = &f.fileSystemName
+	}
+
+	renameSource := "/" + f.fileSystemName + "/" + f.path
+
+	urlParts := NewBfsURLParts(f.fileClient.URL())
+	urlParts.FileSystemName = *fileSystemName
+	urlParts.DirectoryOrFilePath = options.DestinationPath
+
+	destinationFileURL := NewFileURL(urlParts.URL(), f.fileClient.Pipeline())
+
+	_, err := destinationFileURL.fileClient.Create(ctx, *fileSystemName, options.DestinationPath, PathResourceNone, nil, PathRenameModeLegacy,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, &renameSource, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil)
+
+	if err != nil {
+		return FileURL{}, err
+	}
+
+	return destinationFileURL, nil
+}
+
+func (f FileURL) GetAccessControl(ctx context.Context) (BlobFSAccessControl, error) {
+	resp, err := f.fileClient.GetProperties(ctx, f.fileSystemName, f.path, PathGetPropertiesActionGetAccessControl, nil,
+		nil, nil, nil,
+		nil, nil, nil, nil, nil)
+
+	if err != nil {
+		return BlobFSAccessControl{}, err
+	}
+
+	return BlobFSAccessControl{resp.XMsOwner(), resp.XMsGroup(), resp.XMsACL(), resp.XMsPermissions()}, nil
+}
+
+func (f FileURL) SetAccessControl(ctx context.Context, permissions BlobFSAccessControl) (*PathUpdateResponse, error) {
+	// TODO: the go http client has a problem with PATCH and content-length header
+	//       we should investigate and report the issue
+	// See similar todo, with larger comments, in AppendData
+	overrideHttpVerb := "PATCH"
+
+	if permissions.ACL != "" && permissions.Permissions != "" {
+		return nil, errors.New("specifying both Permissions and ACL conflicts for SetAccessControl")
+	}
+
+	var perms, acl *string
+	if permissions.Permissions != "" {
+		perms = &permissions.Permissions
+	} else {
+		acl = &permissions.ACL
+	}
+
+	// This does not yet have support for recursive updates. But then again, we don't really need it.
+	return f.fileClient.Update(ctx, PathUpdateActionSetAccessControl, f.fileSystemName, f.path,
+		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
+		nil, nil, &permissions.Owner, &permissions.Group, perms, acl,
+		nil, nil, nil, nil, &overrideHttpVerb,
+		nil, nil, nil, nil)
 }

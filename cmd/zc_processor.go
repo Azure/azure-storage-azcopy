@@ -21,50 +21,118 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/ste"
-	"net/url"
+	"runtime"
+	"strings"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/pkg/errors"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type copyTransferProcessor struct {
 	numOfTransfersPerPart int
 	copyJobTemplate       *common.CopyJobPartOrderRequest
-	source                string
-	destination           string
-
-	// specify whether source/destination object names need to be URL encoded before dispatching
-	shouldEscapeSourceObjectName      bool
-	shouldEscapeDestinationObjectName bool
+	source                common.ResourceString
+	destination           common.ResourceString
 
 	// handles for progress tracking
 	reportFirstPartDispatched func(jobStarted bool)
 	reportFinalPartDispatched func()
 
-	preserveAccessTier bool
+	preserveAccessTier     bool
+	folderPropertiesOption common.FolderPropertyOption
+	dryrunMode             bool
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
-	source string, destination string, shouldEscapeSourceObjectName bool, shouldEscapeDestinationObjectName bool,
-	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool) *copyTransferProcessor {
+	source, destination common.ResourceString,
+	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool, dryrunMode bool) *copyTransferProcessor {
 	return &copyTransferProcessor{
-		numOfTransfersPerPart:             numOfTransfersPerPart,
-		copyJobTemplate:                   copyJobTemplate,
-		source:                            source,
-		destination:                       destination,
-		shouldEscapeSourceObjectName:      shouldEscapeSourceObjectName,
-		shouldEscapeDestinationObjectName: shouldEscapeDestinationObjectName,
-		reportFirstPartDispatched:         reportFirstPartDispatched,
-		reportFinalPartDispatched:         reportFinalPartDispatched,
-		preserveAccessTier:                preserveAccessTier,
+		numOfTransfersPerPart:     numOfTransfersPerPart,
+		copyJobTemplate:           copyJobTemplate,
+		source:                    source,
+		destination:               destination,
+		reportFirstPartDispatched: reportFirstPartDispatched,
+		reportFinalPartDispatched: reportFinalPartDispatched,
+		preserveAccessTier:        preserveAccessTier,
+		folderPropertiesOption:    copyJobTemplate.Fpo,
+		dryrunMode:                dryrunMode,
 	}
 }
 
-func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) (err error) {
-	if len(s.copyJobTemplate.Transfers) == s.numOfTransfersPerPart {
+func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) (err error) {
+
+	// Escape paths on destinations where the characters are invalid
+	// And re-encode them where the characters are valid.
+	srcRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, true)
+	dstRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, false)
+
+	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(
+		false, // sync has no --decompress option
+		srcRelativePath,
+		dstRelativePath,
+		s.preserveAccessTier,
+		s.folderPropertiesOption,
+	)
+
+	if !shouldSendToSte {
+		return nil // skip this one
+	}
+
+	if s.dryrunMode {
+		glcm.Dryrun(func(format common.OutputFormat) string {
+			if format == common.EOutputFormat.Json() {
+				jsonOutput, err := json.Marshal(copyTransfer)
+				common.PanicIfErr(err)
+				return string(jsonOutput)
+			} else {
+				// if remove then To() will equal to common.ELocation.Unknown()
+				if s.copyJobTemplate.FromTo.To() == common.ELocation.Unknown() { //remove
+					return fmt.Sprintf("DRYRUN: remove %v/%v",
+						s.copyJobTemplate.SourceRoot.Value,
+						srcRelativePath)
+				} else { //copy for sync
+					if s.copyJobTemplate.FromTo.From() == common.ELocation.Local() {
+						// formatting from local source
+						dryrunValue := fmt.Sprintf("DRYRUN: copy %v", common.ToShortPath(s.copyJobTemplate.SourceRoot.Value))
+						if runtime.GOOS == "windows" {
+							dryrunValue += "\\" + strings.ReplaceAll(srcRelativePath, "/", "\\")
+						} else { //linux and mac
+							dryrunValue += "/" + srcRelativePath
+						}
+						dryrunValue += fmt.Sprintf(" to %v/%v", strings.Trim(s.copyJobTemplate.DestinationRoot.Value, "/"), dstRelativePath)
+						return dryrunValue
+					} else if s.copyJobTemplate.FromTo.To() == common.ELocation.Local() {
+						// formatting to local source
+						dryrunValue := fmt.Sprintf("DRYRUN: copy %v/%v to %v",
+							strings.Trim(s.copyJobTemplate.SourceRoot.Value, "/"), srcRelativePath,
+							common.ToShortPath(s.copyJobTemplate.DestinationRoot.Value))
+						if runtime.GOOS == "windows" {
+							dryrunValue += "\\" + strings.ReplaceAll(dstRelativePath, "/", "\\")
+						} else { //linux and mac
+							dryrunValue += "/" + dstRelativePath
+						}
+						return dryrunValue
+					} else {
+						return fmt.Sprintf("DRYRUN: copy %v/%v to %v/%v",
+							s.copyJobTemplate.SourceRoot.Value,
+							srcRelativePath,
+							s.copyJobTemplate.DestinationRoot.Value,
+							dstRelativePath)
+					}
+				}
+			}
+		})
+		return nil
+	}
+
+	if len(s.copyJobTemplate.Transfers.List) == s.numOfTransfersPerPart {
 		resp := s.sendPartToSte()
 
 		// TODO: If we ever do launch errors outside of the final "no transfers" error, make them output nicer things here.
@@ -73,28 +141,21 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 		}
 
 		// reset the transfers buffer
-		s.copyJobTemplate.Transfers = []common.CopyTransfer{}
+		s.copyJobTemplate.Transfers = common.Transfers{}
 		s.copyJobTemplate.PartNum++
 	}
 
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
-	s.copyJobTemplate.Transfers = append(s.copyJobTemplate.Transfers, storedObject.ToNewCopyTransfer(
-		false, // sync has no --decompress option
-		s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeSourceObjectName),
-		s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeDestinationObjectName),
-		s.preserveAccessTier,
-	))
-
-	return nil
-}
-
-func (s *copyTransferProcessor) escapeIfNecessary(path string, shouldEscape bool) string {
-	if shouldEscape {
-		return url.PathEscape(path)
+	s.copyJobTemplate.Transfers.List = append(s.copyJobTemplate.Transfers.List, copyTransfer)
+	s.copyJobTemplate.Transfers.TotalSizeInBytes += uint64(copyTransfer.SourceSize)
+	if copyTransfer.EntityType == common.EEntityType.File() {
+		s.copyJobTemplate.Transfers.FileTransferCount++
+	} else {
+		s.copyJobTemplate.Transfers.FolderTransferCount++
 	}
 
-	return path
+	return nil
 }
 
 var NothingScheduledError = errors.New("no transfers were scheduled because no files matched the specified criteria")
@@ -115,7 +176,7 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 	}
 
 	if ste.JobsAdmin != nil {
-		ste.JobsAdmin.LogToJobLog(FinalPartCreatedMessage)
+		ste.JobsAdmin.LogToJobLog(FinalPartCreatedMessage, pipeline.LogInfo)
 	}
 
 	if s.reportFinalPartDispatched != nil {

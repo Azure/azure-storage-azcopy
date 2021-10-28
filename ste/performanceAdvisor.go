@@ -23,7 +23,7 @@ package ste
 import (
 	"bytes"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
 	"runtime"
 	"time"
@@ -112,7 +112,7 @@ type PerformanceAdvisor struct {
 	serverBusyPercentageOther      float32
 	iops                           int
 	mbps                           int64
-	capMbps                        int64 // 0 if no cap
+	capMbps                        float64 // 0 if no cap
 	finalConcurrencyTunerReason    string
 	finalConcurrency               int
 	azureVmCores                   int // 0 if not azure VM
@@ -126,7 +126,7 @@ type PerformanceAdvisor struct {
 	isToAzureFiles bool
 }
 
-func NewPerformanceAdvisor(stats *pipelineNetworkStats, commandLineMbpsCap int64, mbps int64, finalReason string, finalConcurrency int, dir common.TransferDirection, avgBytesPerFile int64, isToAzureFiles bool) *PerformanceAdvisor {
+func NewPerformanceAdvisor(stats *pipelineNetworkStats, commandLineMbpsCap float64, mbps int64, finalReason string, finalConcurrency int, dir common.TransferDirection, avgBytesPerFile int64, isToAzureFiles bool) *PerformanceAdvisor {
 	p := &PerformanceAdvisor{
 		capMbps:                     commandLineMbpsCap,
 		mbps:                        mbps,
@@ -242,7 +242,7 @@ func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 	const mbpsThreshold = 0.9
 	if p.capMbps > 0 && float32(p.mbps) > mbpsThreshold*float32(p.capMbps) {
 		addAdvice(EAdviceType.MbpsCapped(),
-			"Throughput has been capped at %d Mbps with a command line parameter, and the measured throughput was "+
+			"Throughput has been capped at %f Mbps with a command line parameter, and the measured throughput was "+
 				"close to the cap. "+
 				"(This message is shown by AzCopy if a command-line cap is set and the measured throughput is "+
 				"over %.0f%% of the cap.)", p.capMbps, mbpsThreshold*100)

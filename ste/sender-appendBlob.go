@@ -29,13 +29,13 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"golang.org/x/sync/semaphore"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type appendBlobSenderBase struct {
 	jptm              IJobPartTransferMgr
 	destAppendBlobURL azblob.AppendBlobURL
-	chunkSize         uint32
+	chunkSize         int64
 	numChunks         uint32
 	pacer             pacer
 	// Headers and other info that we will apply to the destination
@@ -44,6 +44,8 @@ type appendBlobSenderBase struct {
 	// the properties of the local file
 	headersToApply  azblob.BlobHTTPHeaders
 	metadataToApply azblob.Metadata
+	blobTagsToApply azblob.BlobTagsMap
+	cpkToApply      azblob.ClientProvidedKeyOptions
 
 	soleChunkFuncSemaphore *semaphore.Weighted
 }
@@ -57,7 +59,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 	chunkSize := transferInfo.BlockSize
 	// If the given chunk Size for the Job is greater than maximum append blob block size i.e 4 MB,
 	// then set chunkSize as 4 MB.
-	chunkSize = common.Iffuint32(
+	chunkSize = common.Iffint64(
 		chunkSize > common.MaxAppendBlobBlockSize,
 		common.MaxAppendBlobBlockSize,
 		chunkSize)
@@ -77,6 +79,9 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 		return nil, err
 	}
 
+	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
+	cpkToApply := common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
+
 	return &appendBlobSenderBase{
 		jptm:                   jptm,
 		destAppendBlobURL:      destAppendBlobURL,
@@ -85,10 +90,16 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 		pacer:                  pacer,
 		headersToApply:         props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply:        props.SrcMetadata.ToAzBlobMetadata(),
+		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
+		cpkToApply:             cpkToApply,
 		soleChunkFuncSemaphore: semaphore.NewWeighted(1)}, nil
 }
 
-func (s *appendBlobSenderBase) ChunkSize() uint32 {
+func (s *appendBlobSenderBase) SendableEntityType() common.EntityType {
+	return common.EEntityType.File()
+}
+
+func (s *appendBlobSenderBase) ChunkSize() int64 {
 	return s.chunkSize
 }
 
@@ -96,8 +107,8 @@ func (s *appendBlobSenderBase) NumChunks() uint32 {
 	return s.numChunks
 }
 
-func (s *appendBlobSenderBase) RemoteFileExists() (bool, error) {
-	return remoteObjectExists(s.destAppendBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}))
+func (s *appendBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
+	return remoteObjectExists(s.destAppendBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkToApply))
 }
 
 // Returns a chunk-func for sending append blob to remote
@@ -130,17 +141,27 @@ func (s *appendBlobSenderBase) generateAppendBlockToRemoteFunc(id common.ChunkID
 }
 
 func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
-	if ps.CanInferContentType() {
+	if s.jptm.ShouldInferContentType() {
 		// sometimes, specifically when reading local files, we have more info
 		// about the file type at this time than what we had before
 		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
 	}
 
-	destinationModified = true
-	_, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{})
-	if err != nil {
+	blobTags := s.blobTagsToApply
+	separateSetTagsRequired := separateSetTagsRequired(blobTags)
+	if separateSetTagsRequired || len(blobTags) == 0 {
+		blobTags = nil
+	}
+	if _, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, blobTags, s.cpkToApply); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
+	}
+	destinationModified = true
+
+	if separateSetTagsRequired {
+		if _, err := s.destAppendBlobURL.SetTags(s.jptm.Context(), nil, nil, nil, s.blobTagsToApply); err != nil {
+			s.jptm.Log(pipeline.LogWarning, err.Error())
+		}
 	}
 	return
 }
@@ -156,7 +177,7 @@ func (s *appendBlobSenderBase) Cleanup() {
 		// There is a possibility that some uncommitted blocks will be there
 		// Delete the uncommitted blobs
 		// TODO: particularly, given that this is an APPEND blob, do we really need to delete it?  But if we don't delete it,
-		//   it will still be in an ambigous situation with regard to how much has been added to it.  Probably best to delete
+		//   it will still be in an ambiguous situation with regard to how much has been added to it.  Probably best to delete
 		//   to be consistent with other
 		deletionContext, cancelFunc := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancelFunc()

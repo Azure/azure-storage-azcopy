@@ -3,15 +3,18 @@ package azbfs_test
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io"
+	"time"
+
 	//"crypto/md5"
 	//"fmt"
 	//"io/ioutil"
 	//"net/http"
 	"net/url"
 	//"strings"
-	//"time"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	chk "gopkg.in/check.v1" // go get gopkg.in/check.v1
 	"io/ioutil"
 	"net/http"
@@ -111,6 +114,38 @@ func (s *FileURLSuite) TestFileCreateDeleteNonExistingParent(c *chk.C) {
 	c.Assert(dirResp.StatusCode(), chk.Equals, http.StatusOK)
 }
 
+func (s *FileURLSuite) TestFileCreateWithMetadataDelete(c *chk.C) {
+	fsu := getBfsServiceURL()
+	fsURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fsURL)
+
+	file, _ := getFileURLFromFileSystem(c, fsURL)
+
+	metadata := make(map[string]string)
+	metadata["foo"] = "bar"
+
+	cResp, err := file.CreateWithOptions(context.Background(), azbfs.CreateFileOptions{Metadata: metadata})
+	c.Assert(err, chk.IsNil)
+	c.Assert(cResp.Response().StatusCode, chk.Equals, http.StatusCreated)
+	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
+	c.Assert(cResp.LastModified(), chk.Not(chk.Equals), "")
+	c.Assert(cResp.XMsRequestID(), chk.Not(chk.Equals), "")
+	c.Assert(cResp.XMsVersion(), chk.Not(chk.Equals), "")
+	c.Assert(cResp.Date(), chk.Not(chk.Equals), "")
+
+	getResp, err := file.GetProperties(context.Background())
+	c.Assert(err, chk.IsNil)
+	c.Assert(getResp.Response().StatusCode, chk.Equals, http.StatusOK)
+	c.Assert(getResp.XMsProperties(), chk.Not(chk.Equals), "") // Check metadata returned is not null.
+
+	delResp, err := file.Delete(context.Background())
+	c.Assert(err, chk.IsNil)
+	c.Assert(delResp.Response().StatusCode, chk.Equals, http.StatusOK)
+	c.Assert(delResp.XMsRequestID(), chk.Not(chk.Equals), "")
+	c.Assert(delResp.XMsVersion(), chk.Not(chk.Equals), "")
+	c.Assert(delResp.Date(), chk.Not(chk.Equals), "")
+}
+
 func (s *FileURLSuite) TestFileGetProperties(c *chk.C) {
 	fsu := getBfsServiceURL()
 	fileSystemURL, _ := createNewFileSystem(c, fsu)
@@ -163,6 +198,50 @@ func (s *FileURLSuite) TestFileGetProperties(c *chk.C) {
 //	c.Assert(err, chk.IsNil)
 //	c.Assert(download, chk.DeepEquals, contentD[:1024])
 //}
+
+func (s *FileURLSuite) TestUnexpectedEOFRecovery(c *chk.C) {
+	fsu := getBfsServiceURL()
+	fileSystemURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fileSystemURL)
+
+	fileURL, _ := createNewFileFromFileSystem(c, fileSystemURL)
+	defer delFile(c, fileURL)
+
+	contentR, contentD := getRandomDataAndReader(2048)
+
+	resp, err := fileURL.AppendData(context.Background(), 0, contentR)
+	c.Assert(err, chk.IsNil)
+	c.Assert(resp.StatusCode(), chk.Equals, http.StatusAccepted)
+	c.Assert(resp.XMsRequestID(), chk.Not(chk.Equals), "")
+	c.Assert(resp.XMsVersion(), chk.Not(chk.Equals), "")
+	c.Assert(resp.Date(), chk.Not(chk.Equals), "")
+
+	resp, err = fileURL.FlushData(context.Background(), 2048, nil, azbfs.BlobFSHTTPHeaders{}, false, true)
+	c.Assert(err, chk.IsNil)
+	c.Assert(resp.StatusCode(), chk.Equals, http.StatusOK)
+	c.Assert(resp.ETag(), chk.Not(chk.Equals), "")
+	c.Assert(resp.LastModified(), chk.Not(chk.Equals), "")
+	c.Assert(resp.XMsRequestID(), chk.Not(chk.Equals), "")
+	c.Assert(resp.XMsVersion(), chk.Not(chk.Equals), "")
+	c.Assert(resp.Date(), chk.Not(chk.Equals), "")
+
+	dResp, err := fileURL.Download(context.Background(), 0, 2048)
+	c.Assert(err, chk.IsNil)
+
+	// Verify that we can inject errors first.
+	reader := dResp.Body(azbfs.InjectErrorInRetryReaderOptions(errors.New("unrecoverable error")))
+
+	_, err = ioutil.ReadAll(reader)
+	c.Assert(err, chk.NotNil)
+	c.Assert(err.Error(), chk.Equals, "unrecoverable error")
+
+	// Then inject the retryable error.
+	reader = dResp.Body(azbfs.InjectErrorInRetryReaderOptions(io.ErrUnexpectedEOF))
+
+	buf, err := ioutil.ReadAll(reader)
+	c.Assert(err, chk.IsNil)
+	c.Assert(buf, chk.DeepEquals, contentD)
+}
 
 func (s *FileURLSuite) TestUploadDownloadRoundTrip(c *chk.C) {
 	fsu := getBfsServiceURL()
@@ -231,4 +310,82 @@ func (s *FileURLSuite) TestUploadDownloadRoundTrip(c *chk.C) {
 	c.Assert(err, chk.IsNil)
 	c.Assert(download[:2048], chk.DeepEquals, contentD1[:])
 	c.Assert(download[2048:], chk.DeepEquals, contentD2[:])
+}
+
+func (s *FileURLSuite) TestBlobURLPartsSASQueryTimes(c *chk.C) {
+	StartTimesInputs := []string{
+		"2020-04-20",
+		"2020-04-20T07:00Z",
+		"2020-04-20T07:15:00Z",
+		"2020-04-20T07:30:00.1234567Z",
+	}
+	StartTimesExpected := []time.Time{
+		time.Date(2020, time.April, 20, 0, 0, 0, 0, time.UTC),
+		time.Date(2020, time.April, 20, 7, 0, 0, 0, time.UTC),
+		time.Date(2020, time.April, 20, 7, 15, 0, 0, time.UTC),
+		time.Date(2020, time.April, 20, 7, 30, 0, 123456700, time.UTC),
+	}
+	ExpiryTimesInputs := []string{
+		"2020-04-21",
+		"2020-04-20T08:00Z",
+		"2020-04-20T08:15:00Z",
+		"2020-04-20T08:30:00.2345678Z",
+	}
+	ExpiryTimesExpected := []time.Time{
+		time.Date(2020, time.April, 21, 0, 0, 0, 0, time.UTC),
+		time.Date(2020, time.April, 20, 8, 0, 0, 0, time.UTC),
+		time.Date(2020, time.April, 20, 8, 15, 0, 0, time.UTC),
+		time.Date(2020, time.April, 20, 8, 30, 0, 234567800, time.UTC),
+	}
+
+	for i := 0; i < len(StartTimesInputs); i++ {
+		urlString :=
+			"https://myaccount.dfs.core.windows.net/myfilesystem/mydirectory/myfile.txt?" +
+				"se=" + url.QueryEscape(ExpiryTimesInputs[i]) + "&" +
+				"sig=NotASignature&" +
+				"sp=r&" +
+				"spr=https&" +
+				"sr=b&" +
+				"st=" + url.QueryEscape(StartTimesInputs[i]) + "&" +
+				"sv=2019-10-10"
+		url, _ := url.Parse(urlString)
+
+		parts := azbfs.NewBfsURLParts(*url)
+		c.Assert(parts.Scheme, chk.Equals, "https")
+		c.Assert(parts.Host, chk.Equals, "myaccount.dfs.core.windows.net")
+		c.Assert(parts.FileSystemName, chk.Equals, "myfilesystem")
+		c.Assert(parts.DirectoryOrFilePath, chk.Equals, "mydirectory/myfile.txt")
+
+		sas := parts.SAS
+		c.Assert(sas.StartTime(), chk.Equals, StartTimesExpected[i])
+		c.Assert(sas.ExpiryTime(), chk.Equals, ExpiryTimesExpected[i])
+
+		uResult := parts.URL()
+		c.Log(uResult.String())
+		c.Log(urlString)
+		c.Assert(uResult.String(), chk.Equals, urlString)
+	}
+}
+
+func (s *FileURLSuite) TestRenameFile(c *chk.C) {
+	fsu := getBfsServiceURL()
+	fileSystemURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fileSystemURL)
+
+	fileURL, fileName := createNewFileFromFileSystem(c, fileSystemURL)
+	fileRename := fileName + "rename"
+
+	renamedFileURL, err := fileURL.Rename(context.Background(), azbfs.RenameFileOptions{DestinationPath: fileRename})
+	c.Assert(renamedFileURL, chk.NotNil)
+	c.Assert(err, chk.IsNil)
+
+	// Check that the old file does not exist
+	getPropertiesResp, err := fileURL.GetProperties(context.Background())
+	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	c.Assert(getPropertiesResp, chk.IsNil)
+
+	// Check that the renamed file does exist
+	getPropertiesResp, err = renamedFileURL.GetProperties(context.Background())
+	c.Assert(getPropertiesResp.StatusCode(), chk.Equals, http.StatusOK)
+	c.Assert(err, chk.IsNil)
 }

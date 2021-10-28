@@ -3,23 +3,22 @@ package ste
 import (
 	"errors"
 	"reflect"
+	"sync/atomic"
 	"unsafe"
 
-	"sync/atomic"
-
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 10
+const DataSchemaVersion common.Version = 16
 
 const (
 	CustomHeaderMaxBytes = 256
 	MetadataMaxBytes     = 1000 // If > 65536, then jobPartPlanBlobData's MetadataLength field's type must change
-	BlobTierMaxBytes     = 10
+	BlobTagsMaxByte      = 4000
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -38,26 +37,34 @@ func (mmf *JobPartPlanMMF) Unmap() { (*common.MMF)(mmf).Unmap() }
 // JobPartPlanHeader represents the header of Job Part's memory-mapped file
 type JobPartPlanHeader struct {
 	// Once set, the following fields are constants; they should never be modified
-	Version               common.Version         // The version of data schema format of header; see the dataSchemaVersion constant
-	StartTime             int64                  // The start time of this part
-	JobID                 common.JobID           // Job Part's JobID
-	PartNum               common.PartNumber      // Job Part's part number (0+)
-	SourceRootLength      uint16                 // The length of the source root path
-	SourceRoot            [1000]byte             // The root directory of the source
-	DestinationRootLength uint16                 // The length of the destination root path
-	DestinationRoot       [1000]byte             // The root directory of the destination
-	IsFinalPart           bool                   // True if this is the Job's last part; else false
-	ForceWrite            common.OverwriteOption // True if the existing blobs needs to be overwritten.
-	AutoDecompress        bool                   // if true, source data with encodings that represent compression are automatically decompressed when downloading
-	Priority              common.JobPriority     // The Job Part's priority
-	TTLAfterCompletion    uint32                 // Time to live after completion is used to persists the file on disk of specified time after the completion of JobPartOrder
-	FromTo                common.FromTo          // The location of the transfer's source & destination
-	CommandStringLength   uint32
-	NumTransfers          uint32              // The number of transfers in the Job part
-	LogLevel              common.LogLevel     // This Job Part's minimal log level
-	DstBlobData           JobPartPlanDstBlob  // Additional data for blob destinations
-	DstLocalData          JobPartPlanDstLocal // Additional data for local destinations
+	Version                common.Version    // The version of data schema format of header; see the dataSchemaVersion constant
+	StartTime              int64             // The start time of this part
+	JobID                  common.JobID      // Job Part's JobID
+	PartNum                common.PartNumber // Job Part's part number (0+)
+	SourceRootLength       uint16            // The length of the source root path
+	SourceRoot             [1000]byte        // The root directory of the source
+	SourceExtraQueryLength uint16
+	SourceExtraQuery       [1000]byte // Extra query params applicable to the source
+	DestinationRootLength  uint16     // The length of the destination root path
+	DestinationRoot        [1000]byte // The root directory of the destination
+	DestExtraQueryLength   uint16
+	DestExtraQuery         [1000]byte                  // Extra query params applicable to the dest
+	IsFinalPart            bool                        // True if this is the Job's last part; else false
+	ForceWrite             common.OverwriteOption      // True if the existing blobs needs to be overwritten.
+	ForceIfReadOnly        bool                        // Supplements ForceWrite with an additional setting for Azure Files. If true, the read-only attribute will be cleared before we overwrite
+	AutoDecompress         bool                        // if true, source data with encodings that represent compression are automatically decompressed when downloading
+	Priority               common.JobPriority          // The Job Part's priority
+	TTLAfterCompletion     uint32                      // Time to live after completion is used to persists the file on disk of specified time after the completion of JobPartOrder
+	FromTo                 common.FromTo               // The location of the transfer's source & destination
+	Fpo                    common.FolderPropertyOption // option specifying how folders will be handled
+	CommandStringLength    uint32
+	NumTransfers           uint32              // The number of transfers in the Job part
+	LogLevel               common.LogLevel     // This Job Part's minimal log level
+	DstBlobData            JobPartPlanDstBlob  // Additional data for blob destinations
+	DstLocalData           JobPartPlanDstLocal // Additional data for local destinations
 
+	PreservePermissions common.PreservePermissionsOption
+	PreserveSMBInfo     bool
 	// S2SGetPropertiesInBackend represents whether to enable get S3 objects' or Azure files' properties during s2s copy in backend.
 	S2SGetPropertiesInBackend bool
 	// S2SSourceChangeValidation represents whether user wants to check if source has changed after enumerating.
@@ -96,9 +103,11 @@ func (jpph *JobPartPlanHeader) Transfer(transferIndex uint32) *JobPartPlanTransf
 		panic(errors.New("requesting a transfer index greater than what is available"))
 	}
 
-	// (Job Part Plan's file address) + (header size) --> beginning of transfers in file
+	// (Job Part Plan's file address) + (header size) + (padding to 8 bytes) --> beginning of transfers in file
 	// Add (transfer size) * (transfer index)
-	return (*JobPartPlanTransfer)(unsafe.Pointer((uintptr(unsafe.Pointer(jpph)) + unsafe.Sizeof(*jpph) + uintptr(jpph.CommandStringLength)) + (unsafe.Sizeof(JobPartPlanTransfer{}) * uintptr(transferIndex))))
+	transfersOffset := unsafe.Sizeof(*jpph) + uintptr(jpph.CommandStringLength)
+	transfersOffset = (transfersOffset + 7) & ^uintptr(7)
+	return (*JobPartPlanTransfer)(unsafe.Pointer((uintptr(unsafe.Pointer(jpph)) + transfersOffset) + (unsafe.Sizeof(JobPartPlanTransfer{}) * uintptr(transferIndex))))
 }
 
 // CommandString returns the command string given by user when job was created
@@ -111,11 +120,7 @@ func (jpph *JobPartPlanHeader) CommandString() string {
 	return string(commandSlice)
 }
 
-// TransferSrcDstDetail returns the source and destination string for a transfer at given transferIndex in JobPartOrder
-func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (source, destination string) {
-	srcRoot := string(jpph.SourceRoot[:jpph.SourceRootLength])
-	dstRoot := string(jpph.DestinationRoot[:jpph.DestinationRootLength])
-
+func (jpph *JobPartPlanHeader) TransferSrcDstRelatives(transferIndex uint32) (relSource, relDest string) {
 	jppt := jpph.Transfer(transferIndex)
 
 	srcSlice := []byte{}
@@ -132,7 +137,37 @@ func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (sour
 	sh.Cap = sh.Len
 	dstRelative := string(dstSlice)
 
-	return common.GenerateFullPath(srcRoot, srcRelative), common.GenerateFullPath(dstRoot, dstRelative)
+	return srcRelative, dstRelative
+}
+
+// TransferSrcDstDetail returns the source and destination string for a transfer at given transferIndex in JobPartOrder
+// Also indication of entity type since that's often necessary to avoid ambiguity about what the source and dest are
+func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (source, destination string, isFolder bool) {
+	srcRoot := string(jpph.SourceRoot[:jpph.SourceRootLength])
+	srcExtraQuery := string(jpph.SourceExtraQuery[:jpph.SourceExtraQueryLength])
+	dstRoot := string(jpph.DestinationRoot[:jpph.DestinationRootLength])
+	dstExtraQuery := string(jpph.DestExtraQuery[:jpph.DestExtraQueryLength])
+
+	jppt := jpph.Transfer(transferIndex)
+	isFolder = jppt.EntityType == common.EEntityType.Folder()
+
+	srcSlice := []byte{}
+	sh := (*reflect.SliceHeader)(unsafe.Pointer(&srcSlice))
+	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) // Address of Job Part Plan + this transfer's src string offset
+	sh.Len = int(jppt.SrcLength)
+	sh.Cap = sh.Len
+	srcRelative := string(srcSlice)
+
+	dstSlice := []byte{}
+	sh = (*reflect.SliceHeader)(unsafe.Pointer(&dstSlice))
+	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) + uintptr(jppt.SrcLength) // Address of Job Part Plan + this transfer's src string offset + length of this transfer's src string
+	sh.Len = int(jppt.DstLength)
+	sh.Cap = sh.Len
+	dstRelative := string(dstSlice)
+
+	return common.GenerateFullPathWithQuery(srcRoot, srcRelative, srcExtraQuery),
+		common.GenerateFullPathWithQuery(dstRoot, dstRelative, dstExtraQuery),
+		isFolder
 }
 
 func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
@@ -148,7 +183,7 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
 // TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder
 // TODO: Refactor return type to an object
 func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType, blobTier azblob.AccessTierType,
-	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption) {
+	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType, blobVersionID string, blobTags common.BlobTags) {
 	var err error
 	t := jpph.Transfer(transferIndex)
 
@@ -158,6 +193,8 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 	DestLengthValidation = jpph.DestLengthValidation
 
 	offset := t.SrcOffset + int64(t.SrcLength) + int64(t.DstLength)
+
+	entityType = t.EntityType
 
 	if t.SrcContentTypeLength != 0 {
 		h.ContentType = jpph.getString(offset, t.SrcContentTypeLength)
@@ -199,7 +236,15 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 		blobTier = azblob.AccessTierType(tmpBlobTierStr)
 		offset += int64(t.SrcBlobTierLength)
 	}
-
+	if t.SrcBlobVersionIDLength != 0 {
+		blobVersionID = jpph.getString(offset, t.SrcBlobVersionIDLength)
+		offset += int64(t.SrcBlobVersionIDLength)
+	}
+	if t.SrcBlobTagsLength != 0 {
+		blobTagsString := jpph.getString(offset, t.SrcBlobTagsLength)
+		blobTags = common.ToCommonBlobTagsMap(blobTagsString)
+		offset += int64(t.SrcBlobTagsLength)
+	}
 	return
 }
 
@@ -253,8 +298,16 @@ type JobPartPlanDstBlob struct {
 	MetadataLength uint16
 	Metadata       [MetadataMaxBytes]byte
 
+	BlobTagsLength uint16
+	BlobTags       [BlobTagsMaxByte]byte
+
+	CpkInfo            bool
+	IsSourceEncrypted  bool
+	CpkScopeInfo       [CustomHeaderMaxBytes]byte
+	CpkScopeInfoLength uint16
+
 	// Specifies the maximum size of block which determines the number of chunks and chunk size of a transfer
-	BlockSize uint32
+	BlockSize int64
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -284,6 +337,9 @@ type JobPartPlanTransfer struct {
 	DstLength int16
 	// ChunkCount represents the num of chunks a transfer is split into
 	//ChunkCount uint16	// TODO: Remove this, we need to determine it at runtime
+	// EntityType indicates whether this is a file or a folder
+	// We use a dedicated field for this because the alternative (of doing something fancy the names) was too complex and error-prone
+	EntityType common.EntityType
 	// ModifiedTime represents the last time at which source was modified before start of transfer stored as nanoseconds.
 	ModifiedTime int64
 	// SourceSize represents the actual size of the source on disk
@@ -302,6 +358,8 @@ type JobPartPlanTransfer struct {
 	SrcMetadataLength           int16
 	SrcBlobTypeLength           int16
 	SrcBlobTierLength           int16
+	SrcBlobVersionIDLength      int16
+	SrcBlobTagsLength           int16
 
 	// Any fields below this comment are NOT constants; they may change over as the transfer is processed.
 	// Care must be taken to read/write to these fields in a thread-safe way!

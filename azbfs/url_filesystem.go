@@ -74,3 +74,16 @@ func (s FileSystemURL) Delete(ctx context.Context) (*FilesystemDeleteResponse, e
 func (s FileSystemURL) GetProperties(ctx context.Context) (*FilesystemGetPropertiesResponse, error) {
 	return s.fileSystemClient.GetProperties(ctx, s.name, nil, nil, nil)
 }
+
+// ListPaths returns a list of paths in the file system.
+func (s FileSystemURL) ListPaths(ctx context.Context, options ListPathsFilesystemOptions) (*PathList, error) {
+	return s.fileSystemClient.ListPaths(ctx, options.Recursive, s.name, options.Path, options.ContinuationToken,
+		options.MaxResults, options.UpnReturned, nil, nil, nil)
+}
+func (s FileSystemURL) GetAccessControl(ctx context.Context) (BlobFSAccessControl, error) {
+	return s.NewRootDirectoryURL().GetAccessControl(ctx)
+}
+
+func (s FileSystemURL) SetAccessControl(ctx context.Context, permissions BlobFSAccessControl) (*PathUpdateResponse, error) {
+	return s.NewRootDirectoryURL().SetAccessControl(ctx, permissions)
+}

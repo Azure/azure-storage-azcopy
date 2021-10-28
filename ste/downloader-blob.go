@@ -25,7 +25,7 @@ import (
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
@@ -97,16 +97,20 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 		info := jptm.Info()
 		u, _ := url.Parse(info.Source)
 		srcBlobURL := azblob.NewBlobURL(*u, srcPipeline)
-		isNewStyleImpExp := isInManagedDiskImportExportAccount(*u)
-		isOldStyleDiskExport := isInLegacyDiskExportAccount(*u)
 
 		// set access conditions, to protect against inconsistencies from changes-while-being-read
 		accessConditions := azblob.BlobAccessConditions{ModifiedAccessConditions: azblob.ModifiedAccessConditions{IfUnmodifiedSince: jptm.LastModifiedTime()}}
-		if isNewStyleImpExp || isOldStyleDiskExport {
+		if isInManagedDiskImportExportAccount(*u) {
 			// no access conditions (and therefore no if-modified checks) are supported on managed disk import/export (md-impexp)
 			// They are also unsupported on old "md-" style export URLs on the new (2019) large size disks.
 			// And if fact you can't have an md- URL in existence if the blob is mounted as a disk, so it won't be getting changed anyway, so we just treat all md-disks the same
 			accessConditions = azblob.BlobAccessConditions{}
+		}
+
+		// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
+		clientProvidedKey := azblob.ClientProvidedKeyOptions{}
+		if jptm.IsSourceEncrypted() {
+			clientProvidedKey = common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
 		}
 
 		// At this point we create an HTTP(S) request for the desired portion of the blob, and
@@ -114,7 +118,7 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 		// The Download method encapsulates any retries that may be necessary to get to the point of receiving response headers.
 		jptm.LogChunkStatus(id, common.EWaitReason.HeaderResponse())
 		enrichedContext := withRetryNotification(jptm.Context(), bd.filePacer)
-		get, err := srcBlobURL.Download(enrichedContext, id.OffsetInFile(), length, accessConditions, false)
+		get, err := srcBlobURL.Download(enrichedContext, id.OffsetInFile(), length, accessConditions, false, clientProvidedKey)
 		if err != nil {
 			jptm.FailActiveDownload("Downloading response body", err) // cancel entire transfer because this chunk has failed
 			return

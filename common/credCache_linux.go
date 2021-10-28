@@ -23,7 +23,7 @@ package common
 import (
 	"errors"
 	"fmt"
-	"github.com/jiacfan/keyctl" // forked form "github.com/jsipprell/keyctl", todo: make a release to ensure stability
+	"github.com/wastore/keyctl" // forked form "github.com/jsipprell/keyctl", todo: make a release to ensure stability
 	"runtime"
 	"sync"
 	"syscall"

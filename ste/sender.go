@@ -22,25 +22,27 @@ package ste
 
 import (
 	"errors"
+	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
-// ISenderBase is the abstraction contains common sender behaviors.
+// sender is the abstraction that contains common sender behavior, for sending files/blobs.
 /////////////////////////////////////////////////////////////////////////////////////////////////
-type ISenderBase interface {
+type sender interface {
 	// ChunkSize returns the chunk size that should be used
-	ChunkSize() uint32
+	ChunkSize() int64
 
 	// NumChunks returns the number of chunks that will be required for the target file
 	NumChunks() uint32
 
 	// RemoteFileExists is called to see whether the file already exists at the remote location (so we know whether we'll be overwriting it)
-	RemoteFileExists() (bool, error)
+	// the lmt is returned if the file exists
+	RemoteFileExists() (bool, time.Time, error)
 
 	// Prologue is called automatically before the first chunkFunc is generated.
 	// Implementation should do any initialization that is necessary - e.g.
@@ -64,13 +66,26 @@ type ISenderBase interface {
 	GetDestinationLength() (int64, error)
 }
 
-type senderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error)
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// folderSender is a sender that also knows how to send folder property information
+/////////////////////////////////////////////////////////////////////////////////////////////////
+type folderSender interface {
+	EnsureFolderExists() error
+	SetFolderProperties() error
+	DirUrlToString() string // This is only used in folder tracking, so this should trim the SAS token.
+}
+
+type senderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error)
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// For copying folder properties, many of the ISender of the methods needed to copy one file from URL to a remote location
+/////////////////////////////////////////////////////////////////////////////////////////////////
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 // Abstraction of the methods needed to copy one file from URL to a remote location
 /////////////////////////////////////////////////////////////////////////////////////////////////
 type s2sCopier interface {
-	ISenderBase
+	sender
 
 	// GenerateCopyFunc returns a func() that will copy the specified portion of the source URL file to the remote location.
 	GenerateCopyFunc(chunkID common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc
@@ -82,7 +97,7 @@ type s2sCopierFactory func(jptm IJobPartTransferMgr, srcInfoProvider IRemoteSour
 // Abstraction of the methods needed to upload one file to a remote location
 /////////////////////////////////////////////////////////////////////////////////////////////////
 type uploader interface {
-	ISenderBase
+	sender
 
 	// GenerateUploadFunc returns a func() that will upload the specified portion of the local file to the remote location
 	// Instead of taking local file as a parameter, it takes a helper that will read from the file. That keeps details of
@@ -117,10 +132,10 @@ var errNoHash = errors.New("no hash computed")
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-func getNumChunks(fileSize int64, chunkSize uint32) uint32 {
+func getNumChunks(fileSize int64, chunkSize int64) uint32 {
 	numChunks := uint32(1) // we always map zero-size source files to ONE (empty) chunk
 	if fileSize > 0 {
-		chunkSizeI := int64(chunkSize)
+		chunkSizeI := chunkSize
 		numChunks = common.Iffuint32(
 			fileSize%chunkSizeI == 0,
 			uint32(fileSize/chunkSizeI),
@@ -167,7 +182,7 @@ func createChunkFunc(setDoneStatusOnExit bool, jptm IJobPartTransferMgr, id comm
 }
 
 // newBlobUploader detects blob type and creates a uploader manually
-func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
+func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
 	override := jptm.BlobTypeOverride()
 	intendedType := override.ToAzBlobType()
 
@@ -187,5 +202,21 @@ func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pi
 		return newAppendBlobUploader(jptm, destination, p, pacer, sip)
 	default:
 		return newBlockBlobUploader(jptm, destination, p, pacer, sip) // If no blob type was inferred, assume block blob.
+	}
+}
+
+const TagsHeaderMaxLength = 2000
+
+// If length of tags <= 2kb, pass it in the header x-ms-tags. Else do a separate SetTags call
+func separateSetTagsRequired(tagsMap azblob.BlobTagsMap) bool {
+	tagsLength := 0
+	for k, v := range tagsMap {
+		tagsLength += len(k) + len(v) + 2
+	}
+
+	if tagsLength > TagsHeaderMaxLength {
+		return true
+	} else {
+		return false
 	}
 }

@@ -28,8 +28,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/spf13/cobra"
 )
 
@@ -81,11 +81,15 @@ func (cca *resumeJobController) Cancel(lcm common.LifecycleMgr) {
 }
 
 // TODO: can we combine this with the copy one (and the sync one?)
-func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) {
+func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
 	// fetch a job status
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
+	glcmSwapOnce.Do(func() {
+		Rpc(common.ERpcCmd.GetJobLCMWrapper(), &cca.jobID, &glcm)
+	})
 	jobDone := summary.JobStatus.IsJobDone()
+	totalKnownCount = summary.TotalTransfers
 
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
 	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
@@ -103,9 +107,11 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) {
 				return string(jsonOutput)
 			} else {
 				return fmt.Sprintf(
-					"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nTotalBytesTransferred: %v\nFinal Job Status: %v\n",
+					"\n\nJob %s summary\nElapsed Time (Minutes): %v\nNumber of File Transfers: %v\nNumber of Folder Property Transfers: %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nTotalBytesTransferred: %v\nFinal Job Status: %v\n",
 					summary.JobID.String(),
 					ste.ToFixed(duration.Minutes(), 4),
+					summary.FileTransfers,
+					summary.FolderPropertyTransfers,
 					summary.TotalTransfers,
 					summary.TransfersCompleted,
 					summary.TransfersFailed,
@@ -159,6 +165,7 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) {
 				summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
 		}
 	})
+	return
 }
 
 func init() {
@@ -267,7 +274,7 @@ func (rca resumeCmdArgs) process() error {
 		return errors.New("resuming benchmark jobs is not supported")
 	}
 
-	ctx := context.TODO()
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Initialize credential info.
 	credentialInfo := common.CredentialInfo{}
 	// TODO: Replace context with root context
@@ -277,13 +284,9 @@ func (rca resumeCmdArgs) process() error {
 		destination:    getJobFromToResponse.Destination,
 		sourceSAS:      rca.SourceSAS,
 		destinationSAS: rca.DestinationSAS,
-	}); err != nil {
+	}, common.CpkOptions{}); err != nil {
 		return err
 	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		// Message user that they are using Oauth token for authentication,
-		// in case of silently using cached token without consciousness。
-		glcm.Info("Resume is using OAuth token for authentication.")
-
 		uotm := GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {

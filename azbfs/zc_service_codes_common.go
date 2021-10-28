@@ -99,6 +99,12 @@ const (
 	// ServiceCodeOutOfRangeQueryParameterValue means a query parameter specified in the request URI is outside the permissible range (400).
 	ServiceCodeOutOfRangeQueryParameterValue ServiceCodeType = "OutOfRangeQueryParameterValue"
 
+	/// ServiceCodePathAlreadyExists means that the path (e.g. when trying to create a directory) already exists
+	ServiceCodePathAlreadyExists ServiceCodeType = "PathAlreadyExists"
+
+	// ServiceCodePathNotFound means the specified path does not exist (404).
+	ServiceCodePathNotFound ServiceCodeType = "PathNotFound"
+
 	// ServiceCodeRequestBodyTooLarge means the size of the request body exceeds the maximum size permitted (413).
 	ServiceCodeRequestBodyTooLarge ServiceCodeType = "RequestBodyTooLarge"
 
@@ -116,6 +122,9 @@ const (
 
 	// ServiceCodeResourceNotFound means the specified resource does not exist (404).
 	ServiceCodeResourceNotFound ServiceCodeType = "ResourceNotFound"
+
+	// ServiceCodeSourcePathNotFound means the specified path does not exist (404).
+	ServiceCodeSourcePathNotFound ServiceCodeType = "SourcePathNotFound"
 
 	// ServiceCodeServerBusy means the server is currently unable to receive requests. Please retry your request or Ingress/egress is over the account limit or operations per second is over the account limit (503).
 	ServiceCodeServerBusy ServiceCodeType = "ServerBusy"

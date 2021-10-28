@@ -26,8 +26,8 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type blobFSDownloader struct{}
@@ -88,4 +88,9 @@ func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPi
 			return
 		}
 	})
+}
+
+func (bd *blobFSDownloader) SetFolderProperties(jptm IJobPartTransferMgr) error {
+	// no-op (BlobFS is folder aware, but we don't currently preserve properties from its folders)
+	return nil
 }

@@ -1,6 +1,6 @@
 package cmd
 
-import "github.com/Azure/azure-storage-azcopy/common"
+import "github.com/Azure/azure-storage-azcopy/v10/common"
 
 // ===================================== ROOT COMMAND ===================================== //
 const rootCmdShortDescription = "AzCopy is a command line tool that moves data into and out of Azure Storage."
@@ -28,6 +28,7 @@ Copies source data to a destination location. The supported directions are:
   - Azure Files (SAS) -> Azure Files (SAS)
   - Azure Files (SAS) -> Azure Blob (SAS or OAuth authentication)
   - AWS S3 (Access Key) -> Azure Block Blob (SAS or OAuth authentication)
+  - Google Cloud Storage (Service Account Key) -> Azure Block Blob (SAS or OAuth authentication) [Preview]
 
 Please refer to the examples for more information.
 
@@ -59,7 +60,11 @@ Upload a single file by using a SAS token:
 
 Upload a single file by using a SAS token and piping (block blobs only):
   
-  - cat "/path/to/file.txt" | azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
+  - cat "/path/to/file.txt" | azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" --from-to PipeBlob
+
+Upload a single file by using OAuth and piping (block blobs only):
+
+  - cat "/path/to/file.txt" | azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --from-to PipeBlob
 
 Upload an entire directory by using a SAS token:
   
@@ -75,6 +80,14 @@ Upload files and directories by using a SAS token and wildcard (*) characters:
 
   - azcopy cp "/path/*foo/*bar*" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
 
+Upload files and directories to Azure Storage account and set the query-string encoded tags on the blob. 
+
+	- To set tags {key = "bla bla", val = "foo"} and {key = "bla bla 2", val = "bar"}, use the following syntax :
+		- azcopy cp "/path/*foo/*bar*" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --blob-tags="bla%20bla=foo&bla%20bla%202=bar"
+	- Keys and values are URL encoded and the key-value pairs are separated by an ampersand('&')
+	- https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-index-how-to?tabs=azure-portal
+	- While setting tags on the blobs, there are additional permissions('t' for tags) in SAS without which the service will give authorization error back.
+
 Download a single file by using OAuth authentication. If you have not yet logged into AzCopy, please run the azcopy login command before you run the following command.
 
   - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]" "/path/to/file.txt"
@@ -85,7 +98,11 @@ Download a single file by using a SAS token:
 
 Download a single file by using a SAS token and then piping the output to a file (block blobs only):
   
-  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" > "/path/to/file.txt"
+  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" --from-to BlobPipe > "/path/to/file.txt"
+
+Download a single file by using OAuth and then piping the output to a file (block blobs only):
+  
+  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --from-to BlobPipe > "/path/to/file.txt"
 
 Download an entire directory by using a SAS token:
   
@@ -108,6 +125,10 @@ Download an entire storage account.
 Download a subset of containers within a storage account by using a wildcard symbol (*) in the container name.
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container*name]" "/path/to/dir" --recursive
+
+Download all the versions of a blob from Azure Storage to local directory. Ensure that source is a valid blob, destination is a local folder and versionidsFile which takes in a path to the file where each version is written on a separate line. All the specified versions will get downloaded in the destination folder specified.
+
+  - azcopy cp "https://[srcaccount].blob.core.windows.net/[containername]/[blobname]" "/path/to/dir" --list-of-versions="/another/path/to/dir/[versionidsFile]"
 
 Copy a single blob to another blob by using a SAS token.
 
@@ -146,6 +167,38 @@ Copy all buckets to Blob Storage from an Amazon Web Services (AWS) region by usi
 Copy a subset of buckets by using a wildcard symbol (*) in the bucket name. Like the previous examples, you'll need an access key and a SAS token. Make sure to set the environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for AWS S3 source.
 
   - azcopy cp "https://s3.amazonaws.com/[bucket*name]/" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
+
+Copy blobs from one blob storage to another and preserve the tags from source. To preserve tags, use the following syntax :
+  	
+  - azcopy cp "https://[account].blob.core.windows.net/[source_container]/[path/to/directory]?[SAS]" "https://[account].blob.core.windows.net/[destination_container]/[path/to/directory]?[SAS]" --s2s-preserve-blob-tags=true
+
+Transfer files and directories to Azure Storage account and set the given query-string encoded tags on the blob. 
+
+	- To set tags {key = "bla bla", val = "foo"} and {key = "bla bla 2", val = "bar"}, use the following syntax :
+		- azcopy cp "https://[account].blob.core.windows.net/[source_container]/[path/to/directory]?[SAS]" "https://[account].blob.core.windows.net/[destination_container]/[path/to/directory]?[SAS]" --blob-tags="bla%20bla=foo&bla%20bla%202=bar"
+	- Keys and values are URL encoded and the key-value pairs are separated by an ampersand('&')
+	- https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-index-how-to?tabs=azure-portal
+  - While setting tags on the blobs, there are additional permissions('t' for tags) in SAS without which the service will give authorization error back.
+
+Copy a single object to Blob Storage from Google Cloud Storage (GCS) by using a service account key and a SAS token. First, set the environment variable GOOGLE_APPLICATION_CREDENTIALS for GCS source.
+  
+  - azcopy cp "https://storage.cloud.google.com/[bucket]/[object]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
+
+Copy an entire directory to Blob Storage from Google Cloud Storage (GCS) by using a service account key and a SAS token. First, set the environment variable GOOGLE_APPLICATION_CREDENTIALS for GCS source.
+ 
+  - azcopy cp "https://storage.cloud.google.com/[bucket]/[folder]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
+
+Copy an entire bucket to Blob Storage from Google Cloud Storage (GCS) by using a service account key and a SAS token. First, set the environment variable GOOGLE_APPLICATION_CREDENTIALS for GCS source.
+ 
+  - azcopy cp "https://storage.cloud.google.com/[bucket]" "https://[destaccount].blob.core.windows.net/?[SAS]" --recursive=true
+
+Copy all buckets to Blob Storage from Google Cloud Storage (GCS) by using a service account key and a SAS token. First, set the environment variables GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_CLOUD_PROJECT=<project-id> for GCS source
+ 
+  - azcopy cp "https://storage.cloud.google.com/" "https://[destaccount].blob.core.windows.net/?[SAS]" --recursive=true
+
+Copy a subset of buckets by using a wildcard symbol (*) in the bucket name from Google Cloud Storage (GCS) by using a service account key and a SAS token for destination. First, set the environment variables GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_CLOUD_PROJECT=<project-id> for GCS source
+ 
+  - azcopy cp "https://storage.cloud.google.com/[bucket*name]/" "https://[destaccount].blob.core.windows.net/?[SAS]" --recursive=true
 `
 
 // ===================================== ENV COMMAND ===================================== //
@@ -200,7 +253,9 @@ const listCmdShortDescription = "List the entities in a given resource"
 
 const listCmdLongDescription = `List the entities in a given resource. Blob, Files, and ADLS Gen 2 containers, folders, and accounts are supported.`
 
-const listCmdExample = "azcopy list [containerURL]"
+const listCmdExample = "azcopy list [containerURL] --properties [semicolon(;) separated list of attributes " +
+	"(LastModifiedTime, VersionId, BlobType, BlobAccessTier, ContentType, ContentEncoding, LeaseState, LeaseDuration, LeaseStatus) " +
+	"enclosed in double quotes (\")]"
 
 // ===================================== LOGIN COMMAND ===================================== //
 const loginCmdShortDescription = "Log in to Azure Active Directory (AD) to access Azure Storage resources."
@@ -250,7 +305,14 @@ Set the environment variable AZCOPY_SPA_CERT_PASSWORD to the certificate's passw
 
    Please treat /path/to/my/cert as a path to a PEM or PKCS12 file-- AzCopy does not reach into the system cert store to obtain your certificate.
    --certificate-path is mandatory when doing cert-based service principal auth.
+
+Subcommand for login to check the login status of your current session.
+	- azcopy login status 
 `
+
+const loginStatusShortDescription = "Prints if you are currently logged in to your Azure Storage account."
+
+const loginStatusLongDescription = "This command will let you know if you are currently logged in to your Azure Storage account."
 
 // ===================================== LOGOUT COMMAND ===================================== //
 const logoutCmdShortDescription = "Log out to terminate access to Azure Storage resources."
@@ -286,11 +348,15 @@ Remove only the blobs inside of a virtual directory, but don't remove any subdir
 
 Remove a subset of blobs in a virtual directory (For example: remove only jpg and pdf files, or if the blob name is "exactName"):
 
-   - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --include="*.jpg;*.pdf;exactName"
+   - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --include-pattern="*.jpg;*.pdf;exactName"
 
 Remove an entire virtual directory but exclude certain blobs from the scope (For example: every blob that starts with foo or ends with bar):
 
-   - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --exclude="foo*;*bar"
+   - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --exclude-pattern="foo*;*bar"
+
+Remove specified version ids of a blob from Azure Storage. Ensure that source is a valid blob and versionidsfile which takes in a path to the file where each version is written on a separate line. All the specified versions will be removed from Azure Storage.
+
+  - azcopy rm "https://[srcaccount].blob.core.windows.net/[containername]/[blobname]" "/path/to/dir" --list-of-versions="/path/to/dir/[versionidsfile]"
 
 Remove specific blobs and virtual directories by putting their relative paths (NOT URL-encoded) in a file:
 
@@ -315,9 +381,10 @@ const syncCmdShortDescription = "Replicate source to the destination location"
 const syncCmdLongDescription = `
 The last modified times are used for comparison. The file is skipped if the last modified time in the destination is more recent. The supported pairs are:
   
-  - local <-> Azure Blob (either SAS or OAuth authentication can be used)
+  - Local <-> Azure Blob / Azure File (either SAS or OAuth authentication can be used)
   - Azure Blob <-> Azure Blob (Source must include a SAS or is publicly accessible; either SAS or OAuth authentication can be used for destination)
   - Azure File <-> Azure File (Source must include a SAS or is publicly accessible; SAS authentication should be used for destination)
+  - Azure Blob <-> Azure File
 
 The sync command differs from the copy command in several ways:
 
@@ -336,6 +403,9 @@ The built-in lookup table is small but on Unix it is augmented by the local syst
   - /etc/apache/mime.types
 
 On Windows, MIME types are extracted from the registry.
+
+Please also note that sync works off of the last modified times exclusively. So in the case of Azure File <-> Azure File,
+the header field Last-Modified is used instead of x-ms-file-change-time, which means that metadata changes at the source can also trigger a full copy.
 `
 
 const syncCmdExample = `
@@ -359,11 +429,11 @@ Sync only the files inside of a directory but not subdirectories or the files in
 
 Sync a subset of files in a directory (For example: only jpg and pdf files, or if the file name is "exactName"):
 
-   - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --include="*.jpg;*.pdf;exactName"
+   - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --include-pattern="*.jpg;*.pdf;exactName"
 
 Sync an entire directory but exclude certain files from the scope (For example: every file that starts with foo or ends with bar):
 
-   - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --exclude="foo*;*bar"
+   - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --exclude-pattern="foo*;*bar"
 
 Sync a single blob:
 
@@ -399,30 +469,41 @@ const benchCmdShortDescription = "Performs a performance benchmark"
 // TODO: document whether we delete the uploaded data
 
 const benchCmdLongDescription = `
-Runs a performance benchmark by uploading test data to a specified destination. The test data is automatically generated.
+Runs a performance benchmark by uploading or downloading test data to or from a specified destination. 
+For uploads, the test data is automatically generated.
 
-The benchmark command runs the same upload process as 'copy', except that: 
+The benchmark command runs the same process as 'copy', except that: 
 
-  - There's no source parameter.  The command requires only a destination URL. In the current release, this destination URL must refer to a blob container.
-  
-  - The payload is described by command line parameters, which control how many files are auto-generated and 
+  - Instead of requiring both source and destination parameters, benchmark takes just one. This is the 
+    blob container, Azure Files Share, or ADLS Gen 2 File System that you want to upload to or download from.
+
+  - The 'mode' parameter describes whether AzCopy should test uploads to or downloads from given target. Valid values are 'Upload'
+    and 'Download'. Default value is 'Upload'.
+
+  - For upload benchmarks, the payload is described by command line parameters, which control how many files are auto-generated and 
     how big they are. The generation process takes place entirely in memory. Disk is not used.
+
+  - For downloads, the payload consists of whichever files already exist at the source. (See example below about how to generate
+    test files if needed).
   
   - Only a few of the optional parameters that are available to the copy command are supported.
   
   - Additional diagnostics are measured and reported.
   
-  - By default, the transferred data is deleted at the end of the test run.
+  - For uploads, the default behaviour is to delete the transferred data at the end of the test run.  For downloads, the data
+    is never actually saved locally.
 
 Benchmark mode will automatically tune itself to the number of parallel TCP connections that gives 
 the maximum throughput. It will display that number at the end. To prevent auto-tuning, set the 
 AZCOPY_CONCURRENCY_VALUE environment variable to a specific number of connections. 
 
-All the usual authentication types are supported. However, the most convenient approach for benchmarking is typically
-to create an empty container with a SAS token and use SAS authentication.
+All the usual authentication types are supported. However, the most convenient approach for benchmarking upload is typically
+to create an empty container with a SAS token and use SAS authentication. (Download mode requires a set of test data to be
+present in the target container.)
+  
 `
 
-const benchCmdExample = `Run a benchmark test with default parameters (suitable for benchmarking networks up to 1 Gbps):'
+const benchCmdExample = `Run an upload benchmark with default parameters (suitable for benchmarking networks up to 1 Gbps):'
 
    - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>"
 
@@ -434,5 +515,13 @@ Same as above, but use 50,000 files, each 8 MiB in size and compute their MD5 ha
 in the copy command). The purpose of --put-md5 when benchmarking is to test whether MD5 computation affects throughput for the 
 selected file count and size:
 
-   - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 50000 --size-per-file 8M --put-md5
+   - azcopy bench --mode='Upload' "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 50000 --size-per-file 8M --put-md5
+
+Run a benchmark test that downloads existing files from a target
+
+   - azcopy bench --mode='Download' "https://[account].blob.core.windows.net/[container]?<SAS?"
+
+Run an upload that does not delete the transferred files. (These files can then serve as the payload for a download test)
+
+   - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 100 --delete-test-data=false
 `

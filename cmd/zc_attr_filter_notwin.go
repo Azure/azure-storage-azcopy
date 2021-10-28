@@ -22,22 +22,26 @@
 
 package cmd
 
-type attrFilter struct {}
+type attrFilter struct{}
 
-func (f *attrFilter) doesSupportThisOS() (msg string, supported bool) {
+func (f *attrFilter) DoesSupportThisOS() (msg string, supported bool) {
 	msg = "'include-attributes' and 'exclude-attributes' are not supported on this OS. Abort."
 	supported = false
 	return
 }
 
-func (f *attrFilter) doesPass(storedObject storedObject) bool {
+func (f *attrFilter) AppliesOnlyToFiles() bool {
+	return true
+}
+
+func (f *attrFilter) DoesPass(storedObject StoredObject) bool {
 	// ignore this option on Unix systems
 	return true
 }
 
-func buildAttrFilters(attributes []string, fullPath string, resultIfMatch bool) []objectFilter {
+func buildAttrFilters(attributes []string, fullPath string, resultIfMatch bool) []ObjectFilter {
 	// ignore this option on Unix systems
-	filters := make([]objectFilter, 0)
+	filters := make([]ObjectFilter, 0)
 	if len(attributes) > 0 {
 		filters = append(filters, &attrFilter{})
 	}

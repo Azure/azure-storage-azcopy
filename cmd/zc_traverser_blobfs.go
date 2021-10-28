@@ -29,8 +29,8 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type blobFSTraverser struct {
@@ -40,10 +40,10 @@ type blobFSTraverser struct {
 	recursive bool
 
 	// Generic function to indicate that a new stored object has been enumerated
-	incrementEnumerationCounter func()
+	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func newBlobFSTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive bool, incrementEnumerationCounter func()) (t *blobFSTraverser) {
+func newBlobFSTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive bool, incrementEnumerationCounter enumerationCounterFunc) (t *blobFSTraverser) {
 	t = &blobFSTraverser{
 		rawURL:                      rawURL,
 		p:                           p,
@@ -54,7 +54,7 @@ func newBlobFSTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Contex
 	return
 }
 
-func (t *blobFSTraverser) isDirectory(bool) bool {
+func (t *blobFSTraverser) IsDirectory(bool) bool {
 	return copyHandlerUtil{}.urlIsBFSFileSystemOrDirectory(t.ctx, t.rawURL, t.p) // This gets all the fanciness done for us.
 }
 
@@ -83,15 +83,24 @@ func (_ *blobFSTraverser) parseLMT(t string) time.Time {
 	return out
 }
 
-func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
+func (t *blobFSTraverser) getFolderProps() (p contentPropsProvider, size int64) {
+	return noContentProps, 0
+}
+
+func (t *blobFSTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
 	bfsURLParts := azbfs.NewBfsURLParts(*t.rawURL)
 
 	pathProperties, isFile, _ := t.getPropertiesIfSingleFile()
 	if isFile {
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(pipeline.LogDebug, "Detected the root as a file.")
+		}
+
 		storedObject := newStoredObject(
 			preprocessor,
 			getObjectNameOnly(bfsURLParts.DirectoryOrFilePath),
 			"",
+			common.EEntityType.File(),
 			t.parseLMT(pathProperties.LastModified()),
 			pathProperties.ContentLength(),
 			md5OnlyAdapter{md5: pathProperties.ContentMD5()}, // not supplying full props, since we can't below, and it would be inconsistent to do so here
@@ -101,12 +110,48 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 		)
 
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter()
+			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
 
-		return processIfPassedFilters(filters, storedObject, processor)
+		err := processIfPassedFilters(filters, storedObject, processor)
+		_, err = getProcessingError(err)
+		return err
 	}
 
+	// else, its not just one file
+
+	// Include the root dir in the enumeration results
+	// Our rule is that enumerators of folder-aware sources must always include the root folder's properties
+	// So include it if its a directory (which exists), or the file system root.
+	contentProps, size := t.getFolderProps()
+	if pathProperties != nil || bfsURLParts.DirectoryOrFilePath == "" {
+		rootLmt := time.Time{} // if root is filesystem (no path) then we won't have any properties to get an LMT from.  Also, we won't actually end up syncing the folder, since its not really a folder, so it's OK to use a zero-like time here
+		if pathProperties != nil {
+			rootLmt = t.parseLMT(pathProperties.LastModified())
+		}
+
+		storedObject := newStoredObject(
+			preprocessor,
+			"",
+			"", // it IS the root, so has no name within the root
+			common.EEntityType.Folder(),
+			rootLmt,
+			size,
+			contentProps,
+			noBlobProps,
+			noMetdata,
+			bfsURLParts.FileSystemName)
+		if t.incrementEnumerationCounter != nil {
+			t.incrementEnumerationCounter(common.EEntityType.Folder())
+		}
+		err = processIfPassedFilters(filters, storedObject, processor)
+		_, err = getProcessingError(err)
+		if err != nil {
+			return err
+		}
+	}
+
+	// enumerate everything inside the folder
 	dirUrl := azbfs.NewDirectoryURL(*t.rawURL, t.p)
 	marker := ""
 	searchPrefix := bfsURLParts.DirectoryOrFilePath
@@ -123,32 +168,69 @@ func (t *blobFSTraverser) traverse(preprocessor objectMorpher, processor objectP
 		}
 
 		for _, v := range dlr.Paths {
-			if v.IsDirectory == nil {
-				// TODO: if we need to get full properties and metadata, then add call here to
-				//     dirUrl.NewFileURL(storedObject.relativePath).GetProperties(t.ctx)
-				//     AND consider also supporting alternate mechanism to get the props in the backend
-				//     using s2sGetPropertiesInBackend
-				storedObject := newStoredObject(
-					preprocessor,
-					getObjectNameOnly(*v.Name),
-					strings.TrimPrefix(*v.Name, searchPrefix),
-					v.LastModifiedTime(),
-					*v.ContentLength,
-					md5OnlyAdapter{md5: t.getContentMd5(t.ctx, dirUrl, v)},
-					noBlobProps,
-					noMetdata,
-					bfsURLParts.FileSystemName,
-				)
+			var entityType common.EntityType
+			lmt := v.LastModifiedTime()
+			if v.IsDirectory == nil || *v.IsDirectory == false {
+				entityType = common.EEntityType.File()
+				contentProps = md5OnlyAdapter{md5: t.getContentMd5(t.ctx, dirUrl, v)}
+				size = *v.ContentLength
+			} else {
+				entityType = common.EEntityType.Folder()
+				contentProps, size = t.getFolderProps()
+			}
 
-				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter()
-				}
+			// TODO: if we need to get full properties and metadata, then add call here to
+			//     dirUrl.NewFileURL(StoredObject.relativePath).GetProperties(t.ctx)
+			//     AND consider also supporting alternate mechanism to get the props in the backend
+			//     using s2sGetPropertiesInBackend
+			storedObject := newStoredObject(
+				preprocessor,
+				getObjectNameOnly(*v.Name),
+				strings.TrimPrefix(*v.Name, searchPrefix),
+				entityType,
+				lmt,
+				size,
+				contentProps,
+				noBlobProps,
+				noMetdata,
+				bfsURLParts.FileSystemName,
+			)
 
-				err := processIfPassedFilters(filters, storedObject, processor)
-				if err != nil {
-					return err
+			if t.incrementEnumerationCounter != nil {
+				t.incrementEnumerationCounter(entityType)
+			}
+
+			err := processIfPassedFilters(filters, storedObject, processor)
+			_, err = getProcessingError(err)
+			if err != nil {
+				return err
+			}
+
+		}
+
+		// if debug mode is on, note down the result, this is not going to be fast
+		if azcopyScanningLogger != nil && azcopyScanningLogger.ShouldLog(pipeline.LogDebug) {
+			tokenValue := "NONE"
+			if marker != "" {
+				tokenValue = marker
+			}
+
+			var dirListBuilder strings.Builder
+			var fileListBuilder strings.Builder
+
+			for _, v := range dlr.Paths {
+				if v.IsDirectory == nil || *v.IsDirectory == false {
+					// it's a file
+					fmt.Fprintf(&fileListBuilder, " %s,", *v.Name)
+				} else {
+					// it's a directory
+					fmt.Fprintf(&dirListBuilder, " %s,", *v.Name)
 				}
 			}
+
+			msg := fmt.Sprintf("Enumerating with token %s. Sub-dirs:%s Files:%s",
+				tokenValue, dirListBuilder.String(), fileListBuilder.String())
+			azcopyScanningLogger.Log(pipeline.LogDebug, msg)
 		}
 
 		marker = dlr.XMsContinuation()

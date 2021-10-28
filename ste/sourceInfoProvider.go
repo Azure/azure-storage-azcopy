@@ -21,9 +21,13 @@
 package ste
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
+	"os"
 	"time"
+
+	"github.com/Azure/azure-storage-file-go/azfile"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
@@ -33,10 +37,13 @@ type ISourceInfoProvider interface {
 	// Properties returns source's properties.
 	Properties() (*SrcProperties, error)
 
-	// GetLastModifiedTime return source's latest last modified time.
-	GetLastModifiedTime() (time.Time, error)
+	// GetLastModifiedTime returns the source's latest last modified time.  Not used when
+	// EntityType() == Folder
+	GetFreshFileLastModifiedTime() (time.Time, error)
 
 	IsLocal() bool
+
+	EntityType() common.EntityType
 }
 
 type ILocalSourceInfoProvider interface {
@@ -71,16 +78,37 @@ type IBlobSourceInfoProvider interface {
 	BlobType() azblob.BlobType
 }
 
+type TypedSMBPropertyHolder interface {
+	FileCreationTime() time.Time
+	FileLastWriteTime() time.Time
+	FileAttributes() azfile.FileAttributeFlags
+}
+
+type ISMBPropertyBearingSourceInfoProvider interface {
+	ISourceInfoProvider
+
+	GetSDDL() (string, error)
+	GetSMBProperties() (TypedSMBPropertyHolder, error)
+}
+
+type ICustomLocalOpener interface {
+	ISourceInfoProvider
+	Open(path string) (*os.File, error)
+}
+
 type sourceInfoProviderFactory func(jptm IJobPartTransferMgr) (ISourceInfoProvider, error)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 // Default copy remote source info provider which provides info sourced from transferInfo.
+// It implements all methods of ISourceInfoProvider except for GetFreshLastModifiedTime.
+// It's never correct to implement that based on the transfer info, because the whole point is that it should
+// return FRESH (up to date) data.
 type defaultRemoteSourceInfoProvider struct {
 	jptm         IJobPartTransferMgr
 	transferInfo TransferInfo
 }
 
-func newDefaultRemoteSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
+func newDefaultRemoteSourceInfoProvider(jptm IJobPartTransferMgr) (*defaultRemoteSourceInfoProvider, error) {
 	return &defaultRemoteSourceInfoProvider{jptm: jptm, transferInfo: jptm.Info()}, nil
 }
 
@@ -97,6 +125,7 @@ func (p *defaultRemoteSourceInfoProvider) Properties() (*SrcProperties, error) {
 	return &SrcProperties{
 		SrcHTTPHeaders: p.transferInfo.SrcHTTPHeaders,
 		SrcMetadata:    p.transferInfo.SrcMetadata,
+		SrcBlobTags:    p.transferInfo.SrcBlobTags,
 	}, nil
 }
 
@@ -112,6 +141,6 @@ func (p *defaultRemoteSourceInfoProvider) RawSource() string {
 	return p.transferInfo.Source
 }
 
-func (p *defaultRemoteSourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
-	return p.jptm.LastModifiedTime(), nil
+func (p *defaultRemoteSourceInfoProvider) EntityType() common.EntityType {
+	return p.transferInfo.EntityType
 }

@@ -21,12 +21,13 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func (s *cmdIntegrationSuite) TestIncludeDirSimple(c *chk.C) {
@@ -431,5 +432,159 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithPattern(c *chk.C
 		c.Assert(mockedRPC.transfers[0].Source, chk.Equals, mockedRPC.transfers[0].Destination)
 		c.Assert(strings.HasSuffix(mockedRPC.transfers[0].Source, ".pdf"), chk.Equals, true)
 		c.Assert(strings.Contains(mockedRPC.transfers[0].Source[1:], common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeBefore_UTC(c *chk.C) {
+	s.doTestUploadDirectoryToContainerWithIncludeBefore(true, c)
+}
+
+func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeBefore_LocalTime(c *chk.C) {
+	s.doTestUploadDirectoryToContainerWithIncludeBefore(false, c)
+}
+
+func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeBefore(useUtc bool, c *chk.C) {
+	bsu := getBSU()
+
+	// set up the source directory
+	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirPath)
+
+	// add newer files, which we wish to include
+	filesToInclude := []string{"important.txt", "includeSub/amazing.txt", "includeSub/wow/amazing.txt"}
+	scenarioHelper{}.generateLocalFilesFromList(c, srcDirPath, filesToInclude)
+
+	// sleep a little longer, to give clear LMT separation between the files above and those below (should not be copied)
+	time.Sleep(1500 * time.Millisecond)
+	includeFrom := time.Now()
+	extraIgnoredFiles := []string{"ignored.txt", "includeSub/ignored.txt", "includeSub/wow/ignored.txt"}
+	scenarioHelper{}.generateLocalFilesFromList(c, srcDirPath, extraIgnoredFiles)
+
+	// set up an empty container
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultCopyRawInput(srcDirPath, rawContainerURLWithSAS.String())
+	raw.recursive = true
+	if useUtc {
+		raw.includeBefore = includeFrom.UTC().Format(time.RFC3339)
+	} else {
+		raw.includeBefore = includeFrom.Format("2006-01-02T15:04:05") // local time, no timezone
+	}
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(filesToInclude))
+
+		// validate that the right transfers were sent
+		expectedTransfers := scenarioHelper{}.shaveOffPrefix(filesToInclude, filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING)
+		validateUploadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING,
+			common.AZCOPY_PATH_SEPARATOR_STRING+filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING, expectedTransfers, mockedRPC)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeAfter_UTC(c *chk.C) {
+	s.doTestUploadDirectoryToContainerWithIncludeAfter(true, c)
+}
+
+func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeAfter_LocalTime(c *chk.C) {
+	s.doTestUploadDirectoryToContainerWithIncludeAfter(false, c)
+}
+
+func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeAfter(useUtc bool, c *chk.C) {
+	bsu := getBSU()
+
+	// set up the source with numerous files
+	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirPath)
+	scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirPath, "")
+
+	// sleep a little longer, to give clear LMT separation between the files above and those below
+	time.Sleep(1500 * time.Millisecond)
+	includeFrom := time.Now()
+
+	// add newer files, which we wish to include
+	filesToInclude := []string{"important.txt", "includeSub/amazing.txt", "includeSub/wow/amazing.txt"}
+	scenarioHelper{}.generateLocalFilesFromList(c, srcDirPath, filesToInclude)
+
+	// set up an empty container
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultCopyRawInput(srcDirPath, rawContainerURLWithSAS.String())
+	raw.recursive = true
+	if useUtc {
+		raw.includeAfter = includeFrom.UTC().Format(time.RFC3339)
+	} else {
+		raw.includeAfter = includeFrom.Format("2006-01-02T15:04:05") // local time, no timezone
+	}
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 3)
+
+		// validate that the right transfers were sent
+		expectedTransfers := scenarioHelper{}.shaveOffPrefix(filesToInclude, filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING)
+		validateUploadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING,
+			common.AZCOPY_PATH_SEPARATOR_STRING+filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING, expectedTransfers, mockedRPC)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestDisableAutoDecoding(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	// Encoded file name since Windows won't create name with invalid chars
+	srcFileName := `%3C %3E %5C %2F %3A %22 %7C %3F %2A invalidcharsfile`
+
+	// set up the source as a single file
+	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirName)
+	_, err := scenarioHelper{}.generateLocalFile(filepath.Join(srcDirName, srcFileName), defaultFileSize)
+	c.Assert(err, chk.IsNil)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// clean the RPC for the next test
+	mockedRPC.reset()
+
+	// now target the destination container, the result should be the same
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultCopyRawInput(filepath.Join(srcDirName, srcFileName), rawContainerURLWithSAS.String())
+	raw.disableAutoDecoding = true
+
+	// the file was created after the blob, so no sync should happen
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// verify explicitly since the source and destination names will be different:
+		// the source is "" since the given URL points to the blob itself
+		// the destination should be the source file name, since decoding has been disabled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Source, chk.Equals, "")
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, common.AZCOPY_PATH_SEPARATOR_STRING+url.PathEscape(srcFileName))
 	})
 }

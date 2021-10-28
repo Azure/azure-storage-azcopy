@@ -26,16 +26,16 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
+func ValidateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
 	if userSpecifiedFromTo == "" {
 		inferredFromTo := inferFromTo(src, dst)
 
 		// If user didn't explicitly specify FromTo, use what was inferred (if possible)
 		if inferredFromTo == common.EFromTo.Unknown() {
-			return common.EFromTo.Unknown(), fmt.Errorf("the inferred source/destination combination is currently not supported. Please post an issue on Github if support for this scenario is desired")
+			return common.EFromTo.Unknown(), fmt.Errorf("the inferred source/destination combination could not be identified, or is currently not supported")
 		}
 		return inferredFromTo, nil
 	}
@@ -44,27 +44,32 @@ func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 	var userFromTo common.FromTo
 	err := userFromTo.Parse(userSpecifiedFromTo)
 	if err != nil {
-		return common.EFromTo.Unknown(), fmt.Errorf("invalid --from-to value specified: %q", userSpecifiedFromTo)
+		return common.EFromTo.Unknown(), fmt.Errorf("invalid --from-to value specified: %q. "+fromToHelpText, userSpecifiedFromTo)
+
 	}
 
 	return userFromTo, nil
 }
 
+const fromToHelpText = "Valid values are two-word phases of the form BlobLocal, LocalBlob etc.  Use the word 'Blob' for Blob Storage, " +
+	"'Local' for the local file system, 'File' for Azure Files, and 'BlobFS' for ADLS Gen2. " +
+	"If you need a combination that is not supported yet, please log an issue on the AzCopy GitHub issues list."
+
 func inferFromTo(src, dst string) common.FromTo {
 	// Try to infer the 1st argument
-	srcLocation := inferArgumentLocation(src)
+	srcLocation := InferArgumentLocation(src)
 	if srcLocation == srcLocation.Unknown() {
 		glcm.Info("Cannot infer source location of " +
 			common.URLStringExtension(src).RedactSecretQueryParamForLogging() +
-			". Please specify the --from-to switch")
+			". Please specify the --from-to switch. " + fromToHelpText)
 		return common.EFromTo.Unknown()
 	}
 
-	dstLocation := inferArgumentLocation(dst)
+	dstLocation := InferArgumentLocation(dst)
 	if dstLocation == dstLocation.Unknown() {
 		glcm.Info("Cannot infer destination location of " +
 			common.URLStringExtension(dst).RedactSecretQueryParamForLogging() +
-			". Please specify the --from-to switch")
+			". Please specify the --from-to switch. " + fromToHelpText)
 		return common.EFromTo.Unknown()
 	}
 
@@ -101,13 +106,23 @@ func inferFromTo(src, dst string) common.FromTo {
 		return common.EFromTo.BenchmarkFile()
 	case srcLocation == common.ELocation.Benchmark() && dstLocation == common.ELocation.BlobFS():
 		return common.EFromTo.BenchmarkBlobFS()
+	case srcLocation == common.ELocation.GCP() && dstLocation == common.ELocation.Blob():
+		return common.EFromTo.GCPBlob()
 	}
+
+	glcm.Info("The parameters you supplied were " +
+		"Source: '" + common.URLStringExtension(src).RedactSecretQueryParamForLogging() + "' of type " + srcLocation.String() +
+		", and Destination: '" + common.URLStringExtension(dst).RedactSecretQueryParamForLogging() + "' of type " + dstLocation.String())
+	glcm.Info("Based on the parameters supplied, a valid source-destination combination could not " +
+		"automatically be found. Please check the parameters you supplied.  If they are correct, please " +
+		"specify an exact source and destination type using the --from-to switch. " + fromToHelpText)
+
 	return common.EFromTo.Unknown()
 }
 
 var IPv4Regex = regexp.MustCompile(`\d+\.\d+\.\d+\.\d+`) // simple regex
 
-func inferArgumentLocation(arg string) common.Location {
+func InferArgumentLocation(arg string) common.Location {
 	if arg == pipeLocation {
 		return common.ELocation.Pipe()
 	}
@@ -134,6 +149,10 @@ func inferArgumentLocation(arg string) common.Location {
 
 			if common.IsS3URL(*u) {
 				return common.ELocation.S3()
+			}
+
+			if common.IsGCPURL(*u) {
+				return common.ELocation.GCP()
 			}
 		}
 	}

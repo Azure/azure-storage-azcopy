@@ -25,39 +25,51 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type pageBlobSenderBase struct {
 	jptm            IJobPartTransferMgr
 	destPageBlobURL azblob.PageBlobURL
 	srcSize         int64
-	chunkSize       uint32
+	chunkSize       int64
 	numChunks       uint32
 	pacer           pacer
+
 	// Headers and other info that we will apply to the destination
 	// object. For S2S, these come from the source service.
 	// When sending local data, they are computed based on
 	// the properties of the local file
 	headersToApply  azblob.BlobHTTPHeaders
 	metadataToApply azblob.Metadata
-	destBlobTier    azblob.AccessTierType
+	blobTagsToApply azblob.BlobTagsMap
+	cpkToApply      azblob.ClientProvidedKeyOptions
+
+	destBlobTier azblob.AccessTierType
 	// filePacer is necessary because page blobs have per-blob throughput limits. The limits depend on
 	// what type of page blob it is (e.g. premium) and can be significantly lower than the blob account limit.
 	// Using a automatic pacer here lets us find the right rate for this particular page blob, at which
 	// we won't be trying to move the faster than the Service wants us to.
 	filePacer autopacer
+
+	// destPageRangeOptimizer is necessary for managed disk imports,
+	// as it helps us identify where we actually need to write all zeroes to.
+	// Previously, if a page prefetched all zeroes, we'd ignore it.
+	// In a edge-case scenario (where two different VHDs had been uploaded to the same md impexp URL),
+	// there was a potential for us to not zero out 512b segments that we'd prefetched all zeroes for.
+	// This only posed danger when there was already data in one of these segments.
+	destPageRangeOptimizer *pageRangeOptimizer
 }
 
 const (
-	managedDiskImportExportAccountPrefix = "md-impexp-"
-	legacyDiskExportPrefix               = "md-" // these don't have the impepx bit that follows
+	managedDiskImportExportAccountPrefix = "md-"
 
 	// Start high(ish), because it auto-tunes downwards faster than it auto-tunes upwards
 	pageBlobInitialBytesPerSecond = (4 * 1000 * 1000 * 1000) / 8
@@ -74,7 +86,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 	chunkSize := transferInfo.BlockSize
 	// If the given chunk Size for the Job is invalid for page blob or greater than maximum page size,
 	// then set chunkSize as maximum pageSize.
-	chunkSize = common.Iffuint32(
+	chunkSize = common.Iffint64(
 		chunkSize > common.DefaultPageBlobChunkSize || (chunkSize%azblob.PageBlobPageBytes != 0),
 		common.DefaultPageBlobChunkSize,
 		chunkSize)
@@ -89,6 +101,14 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 
 	destPageBlobURL := azblob.NewPageBlobURL(*destURL, p)
 
+	// This is only necessary if our destination is a managed disk impexp account.
+	// Read the in struct explanation if necessary.
+	var destRangeOptimizer *pageRangeOptimizer
+	if isInManagedDiskImportExportAccount(*destURL) {
+		destRangeOptimizer = newPageRangeOptimizer(destPageBlobURL,
+			context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion))
+	}
+
 	props, err := srcInfoProvider.Properties()
 	if err != nil {
 		return nil, err
@@ -102,17 +122,23 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 		destBlobTier = pageBlobTierOverride.ToAccessTierType()
 	}
 
+	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
+	cpkToApply := common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
+
 	s := &pageBlobSenderBase{
-		jptm:            jptm,
-		destPageBlobURL: destPageBlobURL,
-		srcSize:         srcSize,
-		chunkSize:       chunkSize,
-		numChunks:       numChunks,
-		pacer:           pacer,
-		headersToApply:  props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
-		metadataToApply: props.SrcMetadata.ToAzBlobMetadata(),
-		destBlobTier:    destBlobTier,
-		filePacer:       newNullAutoPacer(), // defer creation of real one to Prologue
+		jptm:                   jptm,
+		destPageBlobURL:        destPageBlobURL,
+		srcSize:                srcSize,
+		chunkSize:              chunkSize,
+		numChunks:              numChunks,
+		pacer:                  pacer,
+		headersToApply:         props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
+		metadataToApply:        props.SrcMetadata.ToAzBlobMetadata(),
+		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
+		destBlobTier:           destBlobTier,
+		filePacer:              newNullAutoPacer(), // defer creation of real one to Prologue
+		cpkToApply:             cpkToApply,
+		destPageRangeOptimizer: destRangeOptimizer,
 	}
 
 	if s.isInManagedDiskImportExportAccount() && jptm.ShouldPutMd5() {
@@ -127,20 +153,15 @@ func isInManagedDiskImportExportAccount(u url.URL) bool {
 	return strings.HasPrefix(u.Host, managedDiskImportExportAccountPrefix)
 }
 
-// "legacy" is perhaps not the best name, since these remain in use for (all?) EXports of managed disks.
-// These "legacy" ones an older mechanism than the new md-impexp path that is used for IMports as of mid 2019.
-func isInLegacyDiskExportAccount(u url.URL) bool {
-	if isInManagedDiskImportExportAccount(u) {
-		return false // it's the new-style md-impexp
-	}
-	return strings.HasPrefix(u.Host, legacyDiskExportPrefix) // md-....
-}
-
 func (s *pageBlobSenderBase) isInManagedDiskImportExportAccount() bool {
 	return isInManagedDiskImportExportAccount(s.destPageBlobURL.URL())
 }
 
-func (s *pageBlobSenderBase) ChunkSize() uint32 {
+func (s *pageBlobSenderBase) SendableEntityType() common.EntityType {
+	return common.EEntityType.File()
+}
+
+func (s *pageBlobSenderBase) ChunkSize() int64 {
 	return s.chunkSize
 }
 
@@ -148,9 +169,11 @@ func (s *pageBlobSenderBase) NumChunks() uint32 {
 	return s.numChunks
 }
 
-func (s *pageBlobSenderBase) RemoteFileExists() (bool, error) {
-	return remoteObjectExists(s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}))
+func (s *pageBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
+	return remoteObjectExists(s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkToApply))
 }
+
+var premiumPageBlobTierRegex = regexp.MustCompile(`P\d+`)
 
 func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
 
@@ -178,7 +201,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		// FileSize                : 1073742336  (equals our s.srcSize, i.e. the size of the disk file)
 		// Size                    : 1073741824
 
-		p, err := s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{})
+		p, err := s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkToApply)
 		if err != nil {
 			s.jptm.FailActiveSend("Checking size of managed disk blob", err)
 			return
@@ -190,16 +213,33 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 			return
 		}
 
+		// Next, grab the page ranges on the destination.
+		s.destPageRangeOptimizer.fetchPages()
+
 		s.jptm.Log(pipeline.LogInfo, "Blob is managed disk import/export blob, so no Create call is required") // the blob always already exists
 		return
-	} else {
-		destinationModified = true
 	}
 
-	if ps.CanInferContentType() {
+	if s.jptm.ShouldInferContentType() {
 		// sometimes, specifically when reading local files, we have more info
 		// about the file type at this time than what we had before
 		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
+	}
+
+	destBlobTier := azblob.PremiumPageBlobAccessTierType(s.destBlobTier)
+	if !ValidateTier(s.jptm, s.destBlobTier, s.destPageBlobURL.BlobURL, s.jptm.Context()) {
+		destBlobTier = azblob.DefaultPremiumBlobAccessTier
+	}
+
+	blobTags := s.blobTagsToApply
+	separateSetTagsRequired := separateSetTagsRequired(blobTags)
+	if separateSetTagsRequired || len(blobTags) == 0 {
+		blobTags = nil
+	}
+
+	// TODO: Remove this snippet once service starts supporting CPK with blob tier
+	if s.cpkToApply.EncryptionScope != nil || (s.cpkToApply.EncryptionKey != nil && s.cpkToApply.EncryptionKeySha256 != nil) {
+		destBlobTier = azblob.PremiumPageBlobAccessTierNone
 	}
 
 	if _, err := s.destPageBlobURL.Create(s.jptm.Context(),
@@ -207,31 +247,20 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		0,
 		s.headersToApply,
 		s.metadataToApply,
-		azblob.BlobAccessConditions{}); err != nil {
+		azblob.BlobAccessConditions{},
+		destBlobTier,
+		blobTags,
+		s.cpkToApply,
+	); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}
 
-	// Set tier, https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
-	if s.destBlobTier != azblob.AccessTierNone {
-		// Ensure destBlobTier is not block blob tier, i.e. not Hot, Cool and Archive.
-		// Note: When copying from page blob source, the inferred blob tier could be Hot.
-		var blockBlobTier common.BlockBlobTier
-		if err := blockBlobTier.Parse(string(s.destBlobTier)); err != nil { // i.e it's not block blob tier
-			// Set the latest service version from sdk as service version in the context.
-			ctxWithLatestServiceVersion := context.WithValue(s.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-			if _, err := s.destPageBlobURL.SetTier(ctxWithLatestServiceVersion, s.destBlobTier, azblob.LeaseAccessConditions{}); err != nil {
-				if s.jptm.Info().S2SSrcBlobTier != azblob.AccessTierNone {
-					s.jptm.LogTransferInfo(pipeline.LogError, s.jptm.Info().Source, s.jptm.Info().Destination, "Failed to replicate blob tier at destination. Try transferring with the flag --s2s-preserve-access-tier=false")
-					s2sAccessTierFailureLogStdout.Do(func() {
-						glcm := common.GetLifecycleMgr()
-						glcm.Error("One or more blobs have failed blob tier replication at the destination. Try transferring with the flag --s2s-preserve-access-tier=false")
-					})
-				}
+	destinationModified = true
 
-				s.jptm.FailActiveSendWithStatus("Setting PageBlob tier ", err, common.ETransferStatus.BlobTierFailure())
-				return
-			}
+	if separateSetTagsRequired {
+		if _, err := s.destPageBlobURL.SetTags(s.jptm.Context(), nil, nil, nil, s.blobTagsToApply); err != nil {
+			s.jptm.Log(pipeline.LogWarning, err.Error())
 		}
 	}
 

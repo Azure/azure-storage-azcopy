@@ -28,9 +28,9 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -66,15 +66,6 @@ func (util copyHandlerUtil) urlIsContainerOrVirtualDirectory(url *url.URL) bool 
 		// Otherwise, it's just a blob.
 		return strings.HasSuffix(url.Path, "/") || strings.Count(url.Path[1:], "/") <= 1
 	}
-}
-
-func (util copyHandlerUtil) appendQueryParamToUrl(url *url.URL, queryParam string) *url.URL {
-	if len(url.RawQuery) > 0 {
-		url.RawQuery += "&" + queryParam
-	} else {
-		url.RawQuery = queryParam
-	}
-	return url
 }
 
 // redactSigQueryParam checks for the signature in the given rawquery part of the url
@@ -142,7 +133,7 @@ func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, u
 
 	if err != nil {
 		if ste.JobsAdmin != nil {
-			ste.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to check if destination is a folder or a file (ADLSg2). Assuming the destination is a file: %s", err))
+			ste.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to check if destination is a folder or a file (ADLSg2). Assuming the destination is a file: %s", err), pipeline.LogWarning)
 		}
 	}
 
@@ -160,7 +151,7 @@ func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *ur
 	_, err := directoryURL.GetProperties(ctx)
 	if err != nil {
 		if ste.JobsAdmin != nil {
-			ste.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err))
+			ste.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err), pipeline.LogWarning)
 		}
 
 		return false

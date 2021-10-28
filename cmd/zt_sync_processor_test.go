@@ -25,9 +25,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Azure/azure-storage-file-go/azfile"
-
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
 )
@@ -45,7 +43,7 @@ func (s *syncProcessorSuite) TestLocalDeleter(c *chk.C) {
 
 	// construct the cooked input to simulate user input
 	cca := &cookedSyncCmdArgs{
-		destination:       dstDirName,
+		destination:       newLocalRes(dstDirName),
 		deleteDestination: common.EDeleteDestination.True(),
 	}
 
@@ -57,7 +55,7 @@ func (s *syncProcessorSuite) TestLocalDeleter(c *chk.C) {
 	c.Assert(err, chk.IsNil)
 
 	// exercise the deleter
-	err = deleter.removeImmediately(storedObject{relativePath: dstFileName})
+	err = deleter.removeImmediately(StoredObject{relativePath: dstFileName})
 	c.Assert(err, chk.IsNil)
 
 	// validate that the file no longer exists
@@ -76,15 +74,13 @@ func (s *syncProcessorSuite) TestBlobDeleter(c *chk.C) {
 
 	// validate that the blob exists
 	blobURL := containerURL.NewBlobURL(blobName)
-	_, err := blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+	_, err := blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 	c.Assert(err, chk.IsNil)
 
 	// construct the cooked input to simulate user input
 	rawContainerURL := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	parts := azblob.NewBlobURLParts(rawContainerURL)
 	cca := &cookedSyncCmdArgs{
-		destination:       containerURL.String(),
-		destinationSAS:    parts.SAS.Encode(),
+		destination:       newRemoteRes(rawContainerURL.String()),
 		credentialInfo:    common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()},
 		deleteDestination: common.EDeleteDestination.True(),
 		fromTo:            common.EFromTo.LocalBlob(),
@@ -95,11 +91,11 @@ func (s *syncProcessorSuite) TestBlobDeleter(c *chk.C) {
 	c.Assert(err, chk.IsNil)
 
 	// exercise the deleter
-	err = deleter.removeImmediately(storedObject{relativePath: blobName})
+	err = deleter.removeImmediately(StoredObject{relativePath: blobName})
 	c.Assert(err, chk.IsNil)
 
 	// validate that the blob was deleted
-	_, err = blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+	_, err = blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 	c.Assert(err, chk.NotNil)
 }
 
@@ -119,10 +115,8 @@ func (s *syncProcessorSuite) TestFileDeleter(c *chk.C) {
 
 	// construct the cooked input to simulate user input
 	rawShareSAS := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
-	parts := azfile.NewFileURLParts(rawShareSAS)
 	cca := &cookedSyncCmdArgs{
-		destination:       shareURL.String(),
-		destinationSAS:    parts.SAS.Encode(),
+		destination:       newRemoteRes(rawShareSAS.String()),
 		credentialInfo:    common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()},
 		deleteDestination: common.EDeleteDestination.True(),
 		fromTo:            common.EFromTo.FileFile(),
@@ -133,7 +127,7 @@ func (s *syncProcessorSuite) TestFileDeleter(c *chk.C) {
 	c.Assert(err, chk.IsNil)
 
 	// exercise the deleter
-	err = deleter.removeImmediately(storedObject{relativePath: fileName})
+	err = deleter.removeImmediately(StoredObject{relativePath: fileName})
 	c.Assert(err, chk.IsNil)
 
 	// validate that the file was deleted

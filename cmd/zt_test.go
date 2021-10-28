@@ -25,6 +25,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"net/url"
@@ -34,9 +35,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/ste"
-	minio "github.com/minio/minio-go"
+	gcpUtils "cloud.google.com/go/storage"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"google.golang.org/api/iterator"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/minio/minio-go"
 
 	chk "gopkg.in/check.v1"
 
@@ -82,6 +87,33 @@ func skipIfS3Disabled(c *chk.C) {
 	if isS3Disabled() {
 		c.Skip("S3 testing is disabled for this unit test suite run.")
 	}
+}
+
+// If TEST_GCP == True, we'll run GCP testcases
+func gcpTestsDisabled() bool {
+	return strings.ToLower(os.Getenv("GCP_TESTS_OFF")) != ""
+}
+
+func skipIfGCPDisabled(c *chk.C) {
+	if gcpTestsDisabled() {
+		c.Skip("GCP testing is disabled for this run")
+	}
+}
+
+func testDryrunStatements(items, messages []string) bool {
+	for _,v := range items {
+		for _,m := range messages {
+			if strings.HasSuffix(m, v) {
+				goto continueBlobs
+			}
+		}
+
+		return false
+
+		continueBlobs:
+	}
+
+	return true
 }
 
 // This function generates an entity name by concatenating the passed prefix,
@@ -274,6 +306,9 @@ func GetBFSSU() azbfs.ServiceURL {
 func createNewContainer(c *chk.C, bsu azblob.ServiceURL) (container azblob.ContainerURL, name string) {
 	container, name = getContainerURL(c, bsu)
 
+	// ignore any errors here, since it doesn't matter if this fails (if it does, it's probably because the container didn't exist)
+	_, _ = container.Delete(ctx, azblob.ContainerAccessConditions{})
+
 	cResp, err := container.Create(ctx, nil, azblob.PublicAccessNone)
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
@@ -282,6 +317,9 @@ func createNewContainer(c *chk.C, bsu azblob.ServiceURL) (container azblob.Conta
 
 func createNewFilesystem(c *chk.C, bfssu azbfs.ServiceURL) (filesystem azbfs.FileSystemURL, name string) {
 	filesystem, name = getFilesystemURL(c, bfssu)
+
+	// ditto
+	_, _ = filesystem.Delete(ctx)
 
 	cResp, err := filesystem.Create(ctx)
 	c.Assert(err, chk.IsNil)
@@ -311,7 +349,19 @@ func createNewBlockBlob(c *chk.C, container azblob.ContainerURL, prefix string) 
 	blob, name = getBlockBlobURL(c, container, prefix)
 
 	cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
-		nil, azblob.BlobAccessConditions{})
+		nil, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{})
+
+	c.Assert(err, chk.IsNil)
+	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+
+	return
+}
+
+func createNewDirectoryStub(c *chk.C, container azblob.ContainerURL, dirPath string) {
+	dir := container.NewBlockBlobURL(dirPath)
+
+	cResp, err := dir.Upload(ctx, bytes.NewReader(nil), azblob.BlobHTTPHeaders{},
+		azblob.Metadata{"hdi_isfolder": "true"}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{})
 
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
@@ -321,6 +371,8 @@ func createNewBlockBlob(c *chk.C, container azblob.ContainerURL, prefix string) 
 
 func createNewAzureShare(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
 	share, name = getShareURL(c, fsu)
+
+	//
 
 	cResp, err := share.Create(ctx, nil, 0)
 	c.Assert(err, chk.IsNil)
@@ -344,14 +396,15 @@ func createNewAzureFile(c *chk.C, share azfile.ShareURL, prefix string) (file az
 func generateParentsForAzureFile(c *chk.C, fileURL azfile.FileURL) {
 	accountName, accountKey := getAccountAndKey()
 	credential, _ := azfile.NewSharedKeyCredential(accountName, accountKey)
-	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileURL, azfile.NewPipeline(credential, azfile.PipelineOptions{}))
+	t := ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
+	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileURL, azfile.NewPipeline(credential, azfile.PipelineOptions{}), t)
 	c.Assert(err, chk.IsNil)
 }
 
 func createNewAppendBlob(c *chk.C, container azblob.ContainerURL, prefix string) (blob azblob.AppendBlobURL, name string) {
 	blob, name = getAppendBlobURL(c, container, prefix)
 
-	resp, err := blob.Create(ctx, azblob.BlobHTTPHeaders{}, nil, azblob.BlobAccessConditions{})
+	resp, err := blob.Create(ctx, azblob.BlobHTTPHeaders{}, nil, azblob.BlobAccessConditions{}, nil, azblob.ClientProvidedKeyOptions{})
 
 	c.Assert(err, chk.IsNil)
 	c.Assert(resp.StatusCode(), chk.Equals, 201)
@@ -361,7 +414,7 @@ func createNewAppendBlob(c *chk.C, container azblob.ContainerURL, prefix string)
 func createNewPageBlob(c *chk.C, container azblob.ContainerURL, prefix string) (blob azblob.PageBlobURL, name string) {
 	blob, name = getPageBlobURL(c, container, prefix)
 
-	resp, err := blob.Create(ctx, azblob.PageBlobPageBytes*10, 0, azblob.BlobHTTPHeaders{}, nil, azblob.BlobAccessConditions{})
+	resp, err := blob.Create(ctx, azblob.PageBlobPageBytes*10, 0, azblob.BlobHTTPHeaders{}, nil, azblob.BlobAccessConditions{}, azblob.DefaultPremiumBlobAccessTier, nil, azblob.ClientProvidedKeyOptions{})
 
 	c.Assert(err, chk.IsNil)
 	c.Assert(resp.StatusCode(), chk.Equals, 201)
@@ -420,6 +473,23 @@ func createS3ClientWithMinio(o createS3ResOptions) (*minio.Client, error) {
 	return s3Client, nil
 }
 
+func createGCPClientWithGCSSDK() (*gcpUtils.Client, error) {
+	jsonKey := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	if jsonKey == "" {
+		return nil, fmt.Errorf("GOOGLE_APPLICATION_CREDENTIALS should be set before creating the GCP Client")
+	}
+	projectID := os.Getenv("GOOGLE_CLOUD_PROJECT")
+	if projectID == "" {
+		return nil, fmt.Errorf("GOOGLE_CLOUD_PROJECT should be set before creating GCP Client for testing")
+	}
+	ctx := context.Background()
+	gcpClient, err := gcpUtils.NewClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return gcpClient, nil
+}
+
 func createNewBucket(c *chk.C, client *minio.Client, o createS3ResOptions) string {
 	bucketName := generateBucketName()
 	err := client.MakeBucket(bucketName, o.Location)
@@ -428,8 +498,23 @@ func createNewBucket(c *chk.C, client *minio.Client, o createS3ResOptions) strin
 	return bucketName
 }
 
+func createNewGCPBucket(c *chk.C, client *gcpUtils.Client) string {
+	bucketName := generateBucketName()
+	bkt := client.Bucket(bucketName)
+	err := bkt.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
+	c.Assert(err, chk.IsNil)
+
+	return bucketName
+}
+
 func createNewBucketWithName(c *chk.C, client *minio.Client, bucketName string, o createS3ResOptions) {
 	err := client.MakeBucket(bucketName, o.Location)
+	c.Assert(err, chk.IsNil)
+}
+
+func createNewGCPBucketWithName(c *chk.C, client *gcpUtils.Client, bucketName string) {
+	bucket := client.Bucket(bucketName)
+	err := bucket.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
 	c.Assert(err, chk.IsNil)
 }
 
@@ -443,6 +528,21 @@ func createNewObject(c *chk.C, client *minio.Client, bucketName string, prefix s
 	c.Assert(n, chk.Equals, size)
 
 	return
+}
+
+func createNewGCPObject(c *chk.C, client *gcpUtils.Client, bucketName string, prefix string) (objectKey string) {
+	objectKey = prefix + generateObjectName()
+
+	size := int64(len(objectDefaultData))
+	wc := client.Bucket(bucketName).Object(objectKey).NewWriter(context.Background())
+	reader := strings.NewReader(objectDefaultData)
+	written, err := io.Copy(wc, reader)
+	c.Assert(err, chk.IsNil)
+	c.Assert(written, chk.Equals, size)
+	err = wc.Close()
+	c.Assert(err, chk.IsNil)
+	return objectKey
+
 }
 
 func deleteBucket(c *chk.C, client *minio.Client, bucketName string, waitQuarterMinute bool) {
@@ -489,6 +589,33 @@ func deleteBucket(c *chk.C, client *minio.Client, bucketName string, waitQuarter
 	}
 }
 
+func deleteGCPBucket(c *chk.C, client *gcpUtils.Client, bucketName string, waitQuarterMinute bool) {
+	bucket := client.Bucket(bucketName)
+	ctx := context.Background()
+	it := bucket.Objects(ctx, &gcpUtils.Query{Prefix: ""})
+	for {
+		attrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err == nil {
+			err = bucket.Object(attrs.Name).Delete(nil)
+			if err != nil {
+				c.Log("Could not clear GCS Buckets.")
+				return
+			}
+		}
+	}
+	err := bucket.Delete(context.Background())
+	if err != nil {
+		c.Log(fmt.Sprintf("Failed to Delete GCS Bucket %v", bucketName))
+	}
+
+	if waitQuarterMinute {
+		time.Sleep(time.Second * 15)
+	}
+}
+
 func cleanS3Account(c *chk.C, client *minio.Client) {
 	buckets, err := client.ListBuckets()
 	if err != nil {
@@ -505,6 +632,23 @@ func cleanS3Account(c *chk.C, client *minio.Client) {
 	time.Sleep(time.Minute)
 }
 
+func cleanGCPAccount(c *chk.C, client *gcpUtils.Client) {
+	projectID := os.Getenv("GOOGLE_CLOUD_PROJECT")
+	if projectID == "" {
+		c.Log("GOOGLE_CLOUD_PROJECT env variable not set. GCP tests will not run")
+		return
+	}
+	ctx := context.Background()
+	it := client.Buckets(ctx, projectID)
+	for {
+		battrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		deleteGCPBucket(c, client, battrs.Name, false)
+	}
+}
+
 func cleanBlobAccount(c *chk.C, serviceURL azblob.ServiceURL) {
 	marker := azblob.Marker{}
 	for marker.NotDone() {
@@ -513,7 +657,16 @@ func cleanBlobAccount(c *chk.C, serviceURL azblob.ServiceURL) {
 
 		for _, v := range resp.ContainerItems {
 			_, err = serviceURL.NewContainerURL(v.Name).Delete(ctx, azblob.ContainerAccessConditions{})
-			c.Assert(err, chk.IsNil)
+
+			if err != nil {
+				if stgErr, ok := err.(azblob.StorageError); ok {
+					if stgErr.ServiceCode() == azblob.ServiceCodeContainerNotFound {
+						continue
+					}
+				}
+
+				c.Assert(err, chk.IsNil)
+			}
 		}
 
 		marker = resp.NextMarker
@@ -528,7 +681,16 @@ func cleanFileAccount(c *chk.C, serviceURL azfile.ServiceURL) {
 
 		for _, v := range resp.ShareItems {
 			_, err = serviceURL.NewShareURL(v.Name).Delete(ctx, azfile.DeleteSnapshotsOptionNone)
-			c.Assert(err, chk.IsNil)
+
+			if err != nil {
+				if stgErr, ok := err.(azfile.StorageError); ok {
+					if stgErr.ServiceCode() == azfile.ServiceCodeShareNotFound {
+						continue
+					}
+				}
+
+				c.Assert(err, chk.IsNil)
+			}
 		}
 
 		marker = resp.NextMarker
@@ -600,7 +762,7 @@ func disableSoftDelete(c *chk.C, bsu azblob.ServiceURL) {
 }
 
 func validateUpload(c *chk.C, blobURL azblob.BlockBlobURL) {
-	resp, err := blobURL.Download(ctx, 0, 0, azblob.BlobAccessConditions{}, false)
+	resp, err := blobURL.Download(ctx, 0, 0, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
 	c.Assert(err, chk.IsNil)
 	data, _ := ioutil.ReadAll(resp.Response().Body)
 	c.Assert(data, chk.HasLen, 0)
@@ -611,7 +773,7 @@ func getContainerURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential, con
 		Protocol:      azblob.SASProtocolHTTPS,
 		ExpiryTime:    time.Now().UTC().Add(48 * time.Hour),
 		ContainerName: containerName,
-		Permissions:   azblob.ContainerSASPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, List: true}.String(),
+		Permissions:   azblob.ContainerSASPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true, Tag: true}.String(),
 	}.NewSASQueryParameters(&credential)
 	c.Assert(err, chk.IsNil)
 
@@ -632,9 +794,9 @@ func getBlobServiceURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential) a
 	sasQueryParams, err := azblob.AccountSASSignatureValues{
 		Protocol:      azblob.SASProtocolHTTPS,
 		ExpiryTime:    time.Now().Add(48 * time.Hour),
-		Permissions:   azfile.AccountSASPermissions{Read: true, List: true, Write: true, Delete: true, Add: true, Create: true, Update: true, Process: true}.String(),
-		Services:      azfile.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
-		ResourceTypes: azfile.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
+		Permissions:   azblob.AccountSASPermissions{Read: true, List: true, Write: true, Delete: true, DeletePreviousVersion: true, Add: true, Create: true, Update: true, Process: true, Tag: true}.String(),
+		Services:      azblob.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
+		ResourceTypes: azblob.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
 	}.NewSASQueryParameters(&credential)
 	c.Assert(err, chk.IsNil)
 

@@ -21,7 +21,7 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
 )
 
@@ -29,11 +29,23 @@ type copyEnumeratorHelperTestSuite struct{}
 
 var _ = chk.Suite(&copyEnumeratorHelperTestSuite{})
 
+func newLocalRes(path string) common.ResourceString {
+	return common.ResourceString{Value: path}
+}
+
+func newRemoteRes(url string) common.ResourceString {
+	r, err := SplitResourceString(url, common.ELocation.Blob())
+	if err != nil {
+		panic("can't parse resource string")
+	}
+	return r
+}
+
 func (s *copyEnumeratorHelperTestSuite) TestAddTransferPathRootsTrimmed(c *chk.C) {
 	// setup
 	request := common.CopyJobPartOrderRequest{
-		SourceRoot:      "a/b/",
-		DestinationRoot: "y/z/",
+		SourceRoot:      newLocalRes("a/b/"),
+		DestinationRoot: newLocalRes("y/z/"),
 	}
 
 	transfer := common.CopyTransfer{
@@ -42,10 +54,10 @@ func (s *copyEnumeratorHelperTestSuite) TestAddTransferPathRootsTrimmed(c *chk.C
 	}
 
 	// execute
-	err := addTransfer(&request, transfer, &cookedCopyCmdArgs{})
+	err := addTransfer(&request, transfer, &CookedCopyCmdArgs{})
 
 	// assert
 	c.Assert(err, chk.IsNil)
-	c.Assert(request.Transfers[0].Source, chk.Equals, "c.txt")
-	c.Assert(request.Transfers[0].Destination, chk.Equals, "c.txt")
+	c.Assert(request.Transfers.List[0].Source, chk.Equals, "c.txt")
+	c.Assert(request.Transfers.List[0].Destination, chk.Equals, "c.txt")
 }

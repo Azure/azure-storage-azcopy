@@ -20,6 +20,8 @@
 
 package cmd
 
+import "strings"
+
 // with the help of an objectIndexer containing the source objects
 // find out the destination objects that should be transferred
 // in other words, this should be used when destination is being enumerated secondly
@@ -32,10 +34,12 @@ type syncDestinationComparator struct {
 
 	// storing the source objects
 	sourceIndex *objectIndexer
+
+	disableComparison bool
 }
 
-func newSyncDestinationComparator(i *objectIndexer, copyScheduler, cleaner objectProcessor) *syncDestinationComparator {
-	return &syncDestinationComparator{sourceIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner}
+func newSyncDestinationComparator(i *objectIndexer, copyScheduler, cleaner objectProcessor, disableComparison bool) *syncDestinationComparator {
+	return &syncDestinationComparator{sourceIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, disableComparison: disableComparison}
 }
 
 // it will only schedule transfers for destination objects that are present in the indexer but stale compared to the entry in the map
@@ -43,14 +47,17 @@ func newSyncDestinationComparator(i *objectIndexer, copyScheduler, cleaner objec
 // ex: we already know what the source contains, now we are looking at objects at the destination
 // if file x from the destination exists at the source, then we'd only transfer it if it is considered stale compared to its counterpart at the source
 // if file x does not exist at the source, then it is considered extra, and will be deleted
-func (f *syncDestinationComparator) processIfNecessary(destinationObject storedObject) error {
+func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredObject) error {
 	sourceObjectInMap, present := f.sourceIndex.indexMap[destinationObject.relativePath]
+	if !present && f.sourceIndex.isDestinationCaseInsensitive {
+		lcRelativePath := strings.ToLower(destinationObject.relativePath)
+		sourceObjectInMap, present = f.sourceIndex.indexMap[lcRelativePath]
+	}
 
 	// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
 	if present {
 		defer delete(f.sourceIndex.indexMap, destinationObject.relativePath)
-
-		if sourceObjectInMap.isMoreRecentThan(destinationObject) {
+		if f.disableComparison || sourceObjectInMap.isMoreRecentThan(destinationObject) {
 			err := f.copyTransferScheduler(sourceObjectInMap)
 			if err != nil {
 				return err
@@ -74,31 +81,37 @@ type syncSourceComparator struct {
 
 	// storing the destination objects
 	destinationIndex *objectIndexer
+
+	disableComparison bool
 }
 
-func newSyncSourceComparator(i *objectIndexer, copyScheduler objectProcessor) *syncSourceComparator {
-	return &syncSourceComparator{destinationIndex: i, copyTransferScheduler: copyScheduler}
+func newSyncSourceComparator(i *objectIndexer, copyScheduler objectProcessor, disableComparison bool) *syncSourceComparator {
+	return &syncSourceComparator{destinationIndex: i, copyTransferScheduler: copyScheduler, disableComparison: disableComparison}
 }
 
 // it will only transfer source items that are:
 //	1. not present in the map
 //  2. present but is more recent than the entry in the map
-// note: we remove the storedObject if it is present so that when we have finished
+// note: we remove the StoredObject if it is present so that when we have finished
 // the index will contain all objects which exist at the destination but were NOT seen at the source
-func (f *syncSourceComparator) processIfNecessary(sourceObject storedObject) error {
-	destinationObjectInMap, present := f.destinationIndex.indexMap[sourceObject.relativePath]
+func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) error {
+	relPath := sourceObject.relativePath
+
+	if f.destinationIndex.isDestinationCaseInsensitive {
+		relPath = strings.ToLower(relPath)
+	}
+
+	destinationObjectInMap, present := f.destinationIndex.indexMap[relPath]
 
 	if present {
-		defer delete(f.destinationIndex.indexMap, sourceObject.relativePath)
+		defer delete(f.destinationIndex.indexMap, relPath)
 
 		// if destination is stale, schedule source for transfer
-		if sourceObject.isMoreRecentThan(destinationObjectInMap) {
+		if f.disableComparison || sourceObject.isMoreRecentThan(destinationObjectInMap) {
 			return f.copyTransferScheduler(sourceObject)
-
-		} else {
-			// skip if source is more recent
-			return nil
 		}
+		// skip if source is more recent
+		return nil
 	}
 
 	// if source does not exist at the destination, then schedule it for transfer

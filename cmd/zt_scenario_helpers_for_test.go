@@ -21,20 +21,23 @@
 package cmd
 
 import (
+	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	minio "github.com/minio/minio-go"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	chk "gopkg.in/check.v1"
@@ -158,6 +161,44 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlob(c *chk.C, containerURL
 	return
 }
 
+// same as blob, but for every virtual directory, a blob with the same name is created, and it has metadata 'hdi_isfolder = true'
+func (scenarioHelper) generateCommonRemoteScenarioForWASB(c *chk.C, containerURL azblob.ContainerURL, prefix string) (blobList []string) {
+	blobList = make([]string, 50)
+
+	for i := 0; i < 10; i++ {
+		_, blobName1 := createNewBlockBlob(c, containerURL, prefix+"top")
+		_, blobName2 := createNewBlockBlob(c, containerURL, prefix+"sub1/")
+		_, blobName3 := createNewBlockBlob(c, containerURL, prefix+"sub2/")
+		_, blobName4 := createNewBlockBlob(c, containerURL, prefix+"sub1/sub3/sub5/")
+		_, blobName5 := createNewBlockBlob(c, containerURL, prefix+specialNames[i])
+
+		blobList[5*i] = blobName1
+		blobList[5*i+1] = blobName2
+		blobList[5*i+2] = blobName3
+		blobList[5*i+3] = blobName4
+		blobList[5*i+4] = blobName5
+	}
+
+	if prefix != "" {
+		rootDir := strings.TrimSuffix(prefix, "/")
+		createNewDirectoryStub(c, containerURL, rootDir)
+		blobList = append(blobList, rootDir)
+	}
+
+	createNewDirectoryStub(c, containerURL, prefix+"sub1")
+	createNewDirectoryStub(c, containerURL, prefix+"sub1/sub3")
+	createNewDirectoryStub(c, containerURL, prefix+"sub1/sub3/sub5")
+	createNewDirectoryStub(c, containerURL, prefix+"sub2")
+
+	for _, dirPath := range []string{prefix + "sub1", prefix + "sub1/sub3", prefix + "sub1/sub3/sub5", prefix + "sub2"} {
+		blobList = append(blobList, dirPath)
+	}
+
+	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
+	time.Sleep(time.Millisecond * 1050)
+	return
+}
+
 func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(c *chk.C, filesystemURL azbfs.FileSystemURL, prefix string) (pathList []string) {
 	pathList = make([]string, 50)
 
@@ -241,12 +282,21 @@ func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c *chk.C, s3Client 
 	}
 }
 
+func (s scenarioHelper) generateGCPBucketsAndObjectsFromLists(c *chk.C, client *gcpUtils.Client, bucketList []string, objectList []string) {
+	for _, bucketName := range bucketList {
+		bkt := client.Bucket(bucketName)
+		err := bkt.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
+		c.Assert(err, chk.IsNil)
+		s.generateGCPObjects(c, client, bucketName, objectList)
+	}
+}
+
 // create the demanded blobs
 func (scenarioHelper) generateBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string) {
 	for _, blobName := range blobList {
 		blob := containerURL.NewBlockBlobURL(blobName)
 		cResp, err := blob.Upload(ctx, strings.NewReader(data), azblob.BlobHTTPHeaders{},
-			nil, azblob.BlobAccessConditions{})
+			nil, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{})
 		c.Assert(err, chk.IsNil)
 		c.Assert(cResp.StatusCode(), chk.Equals, 201)
 	}
@@ -267,6 +317,9 @@ func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.Co
 			},
 			azblob.Metadata{},
 			azblob.BlobAccessConditions{},
+			azblob.DefaultPremiumBlobAccessTier,
+			nil,
+			azblob.ClientProvidedKeyOptions{},
 		)
 		c.Assert(err, chk.IsNil)
 		c.Assert(cResp.StatusCode(), chk.Equals, 201)
@@ -277,6 +330,7 @@ func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.Co
 			strings.NewReader(data),
 			azblob.PageBlobAccessConditions{},
 			nil,
+			azblob.ClientProvidedKeyOptions{},
 		)
 		c.Assert(err, chk.IsNil)
 		c.Assert(uResp.StatusCode(), chk.Equals, 201)
@@ -296,6 +350,8 @@ func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.
 			},
 			azblob.Metadata{},
 			azblob.BlobAccessConditions{},
+			nil,
+			azblob.ClientProvidedKeyOptions{},
 		)
 		c.Assert(err, chk.IsNil)
 		c.Assert(cResp.StatusCode(), chk.Equals, 201)
@@ -304,7 +360,8 @@ func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.
 		uResp, err := blob.AppendBlock(ctx,
 			strings.NewReader(data),
 			azblob.AppendBlobAccessConditions{},
-			nil)
+			nil,
+			azblob.ClientProvidedKeyOptions{})
 		c.Assert(err, chk.IsNil)
 		c.Assert(uResp.StatusCode(), chk.Equals, 201)
 	}
@@ -316,12 +373,9 @@ func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.
 func (scenarioHelper) generateBlockBlobWithAccessTier(c *chk.C, containerURL azblob.ContainerURL, blobName string, accessTier azblob.AccessTierType) {
 	blob := containerURL.NewBlockBlobURL(blobName)
 	cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
-		nil, azblob.BlobAccessConditions{})
+		nil, azblob.BlobAccessConditions{}, accessTier, nil, azblob.ClientProvidedKeyOptions{})
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
-
-	_, err = blob.SetTier(ctx, accessTier, azblob.LeaseAccessConditions{})
-	c.Assert(err, chk.IsNil)
 }
 
 // create the demanded objects
@@ -331,6 +385,19 @@ func (scenarioHelper) generateObjects(c *chk.C, client *minio.Client, bucketName
 		n, err := client.PutObjectWithContext(ctx, bucketName, objectName, strings.NewReader(objectDefaultData), size, minio.PutObjectOptions{})
 		c.Assert(err, chk.IsNil)
 		c.Assert(n, chk.Equals, size)
+	}
+}
+
+func (scenarioHelper) generateGCPObjects(c *chk.C, client *gcpUtils.Client, bucketName string, objectList []string) {
+	size := int64(len(objectDefaultData))
+	for _, objectName := range objectList {
+		wc := client.Bucket(bucketName).Object(objectName).NewWriter(context.Background())
+		reader := strings.NewReader(objectDefaultData)
+		written, err := io.Copy(wc, reader)
+		c.Assert(err, chk.IsNil)
+		c.Assert(written, chk.Equals, size)
+		err = wc.Close()
+		c.Assert(err, chk.IsNil)
 	}
 }
 
@@ -383,6 +450,36 @@ func (scenarioHelper) generateCommonRemoteScenarioForS3(c *chk.C, client *minio.
 	return
 }
 
+func (scenarioHelper) generateCommonRemoteScenarioForGCP(c *chk.C, client *gcpUtils.Client, bucketName string, prefix string, returnObjectListWithBucketName bool) []string {
+	objectList := make([]string, 50)
+	for i := 0; i < 10; i++ {
+		objectName1 := createNewGCPObject(c, client, bucketName, prefix+"top")
+		objectName2 := createNewGCPObject(c, client, bucketName, prefix+"sub1/")
+		objectName3 := createNewGCPObject(c, client, bucketName, prefix+"sub2/")
+		objectName4 := createNewGCPObject(c, client, bucketName, prefix+"sub1/sub3/sub5/")
+		objectName5 := createNewGCPObject(c, client, bucketName, prefix+specialNames[i])
+
+		// Note: common.AZCOPY_PATH_SEPARATOR_STRING is added before bucket or objectName, as in the change minimize JobPartPlan file size,
+		// transfer.Source & transfer.Destination(after trimed the SourceRoot and DestinationRoot) are with AZCOPY_PATH_SEPARATOR_STRING suffix,
+		// when user provided source & destination are without / suffix, which is the case for scenarioHelper generated URL.
+
+		bucketPath := ""
+		if returnObjectListWithBucketName {
+			bucketPath = common.AZCOPY_PATH_SEPARATOR_STRING + bucketName
+		}
+
+		objectList[5*i] = bucketPath + common.AZCOPY_PATH_SEPARATOR_STRING + objectName1
+		objectList[5*i+1] = bucketPath + common.AZCOPY_PATH_SEPARATOR_STRING + objectName2
+		objectList[5*i+2] = bucketPath + common.AZCOPY_PATH_SEPARATOR_STRING + objectName3
+		objectList[5*i+3] = bucketPath + common.AZCOPY_PATH_SEPARATOR_STRING + objectName4
+		objectList[5*i+4] = bucketPath + common.AZCOPY_PATH_SEPARATOR_STRING + objectName5
+	}
+
+	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
+	time.Sleep(time.Millisecond * 1050)
+	return objectList
+}
+
 // create the demanded azure files
 func (scenarioHelper) generateAzureFilesFromList(c *chk.C, shareURL azfile.ShareURL, fileList []string) {
 	for _, filePath := range fileList {
@@ -428,6 +525,38 @@ func (scenarioHelper) convertListToMap(list []string) map[string]int {
 	}
 
 	return lookupMap
+}
+
+func (scenarioHelper) convertMapKeysToList(m map[string]int) []string {
+	list := make([]string, len(m))
+	i := 0
+	for key := range m {
+		list[i] = key
+		i++
+	}
+	return list
+}
+
+// useful for files->files transfers, where folders are included in the transfers.
+// includeRoot should be set to true for cases where we expect the root directory to be copied across
+// (i.e. where we expect the behaviour that can be, but has not been in this case, turned off by appending /* to the source)
+func (s scenarioHelper) addFoldersToList(fileList []string, includeRoot bool) []string {
+	m := s.convertListToMap(fileList)
+	// for each file, add all its parent dirs
+	for name := range m {
+		for {
+			name = path.Dir(name)
+			if name == "." {
+				if includeRoot {
+					m[""] = 0 // don't use "."
+				}
+				break
+			} else {
+				m[name] = 0
+			}
+		}
+	}
+	return s.convertMapKeysToList(m)
 }
 
 func (scenarioHelper) shaveOffPrefix(list []string, prefix string) []string {
@@ -515,6 +644,13 @@ func (scenarioHelper) getRawS3AccountURL(c *chk.C, region string) url.URL {
 	return *fullURL
 }
 
+func (scenarioHelper) getRawGCPAccountURL(c *chk.C) url.URL {
+	rawURL := "https://storage.cloud.google.com/"
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
+	return *fullURL
+}
+
 // TODO: Possibly add virtual-hosted-style and dual stack support. Currently use path style for testing.
 func (scenarioHelper) getRawS3BucketURL(c *chk.C, region string, bucketName string) url.URL {
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s", common.IffString(region == "", "", "-"+region), bucketName)
@@ -525,12 +661,27 @@ func (scenarioHelper) getRawS3BucketURL(c *chk.C, region string, bucketName stri
 	return *fullURL
 }
 
+func (scenarioHelper) getRawGCPBucketURL(c *chk.C, bucketName string) url.URL {
+	rawURL := fmt.Sprintf("https://storage.cloud.google.com/%s", bucketName)
+	fmt.Println(rawURL)
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
+	return *fullURL
+}
+
 func (scenarioHelper) getRawS3ObjectURL(c *chk.C, region string, bucketName string, objectName string) url.URL {
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s/%s", common.IffString(region == "", "", "-"+region), bucketName, objectName)
 
 	fullURL, err := url.Parse(rawURL)
 	c.Assert(err, chk.IsNil)
 
+	return *fullURL
+}
+
+func (scenarioHelper) getRawGCPObjectURL(c *chk.C, bucketName string, objectName string) url.URL {
+	rawURL := fmt.Sprintf("https://storage.cloud.google.com/%s/%s", bucketName, objectName)
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
 	return *fullURL
 }
 
@@ -551,7 +702,7 @@ func (scenarioHelper) getRawShareURLWithSAS(c *chk.C, shareName string) url.URL 
 }
 
 func (scenarioHelper) blobExists(blobURL azblob.BlobURL) bool {
-	_, err := blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+	_, err := blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 	if err == nil {
 		return true
 	}
@@ -621,7 +772,7 @@ func validateCopyTransfersAreScheduled(c *chk.C, isSrcEncoded bool, isDstEncoded
 			if runtime.GOOS == "windows" {
 				// Decode unsafe dst characters on windows
 				pathParts := strings.Split(dstRelativeFilePath, "/")
-				invalidChars := `<>\/:"|?*` + string(0x00)
+				invalidChars := `<>\/:"|?*` + string(rune(0x00))
 
 				for _, c := range strings.Split(invalidChars, "") {
 					for k, p := range pathParts {
@@ -663,7 +814,12 @@ func validateRemoveTransfersAreScheduled(c *chk.C, isSrcEncoded bool, expectedTr
 		// look up the source from the expected transfers, make sure it exists
 		_, srcExist := lookupMap[srcRelativeFilePath]
 		c.Assert(srcExist, chk.Equals, true)
+
+		delete(lookupMap, srcRelativeFilePath)
 	}
+	//if len(lookupMap) > 0 {
+	//	panic("set breakpoint here to debug")
+	//}
 }
 
 func getDefaultSyncRawInput(src, dst string) rawSyncCmdArgs {
@@ -690,6 +846,7 @@ func getDefaultCopyRawInput(src string, dst string) rawCopyCmdArgs {
 		md5ValidationOption:            common.DefaultHashValidationOption.String(),
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
 		forceWrite:                     common.EOverwriteOption.True().String(),
+		preserveOwner:                  common.PreserveOwnerDefault,
 	}
 }
 
@@ -713,5 +870,7 @@ func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 		md5ValidationOption:            common.DefaultHashValidationOption.String(),
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
 		forceWrite:                     common.EOverwriteOption.True().String(),
+		preserveOwner:                  common.PreserveOwnerDefault,
+		includeDirectoryStubs:          true,
 	}
 }

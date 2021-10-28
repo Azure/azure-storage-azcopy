@@ -27,8 +27,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
 )
@@ -50,6 +51,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 		c.Assert(containerURL, chk.NotNil)
 
 		// set up the destination as a single file
+		time.Sleep(time.Second)
 		dstDirName := scenarioHelper{}.generateLocalDirectory(c)
 		defer os.RemoveAll(dstDirName)
 		dstFileName := blobName
@@ -72,7 +74,10 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 			c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
 		})
 
+		// Sleep a bit to offset LMTs
+		time.Sleep(5 * time.Second)
 		// recreate the blob to have a later last modified time
+		time.Sleep(time.Second)
 		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
 		mockedRPC.reset()
 
@@ -531,7 +536,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadADLSDirectoryTypeMismatch(c *chk.C
 
 	// create a single blob that represents an ADLS directory
 	_, err := containerURL.NewBlockBlobURL(blobName).Upload(context.Background(), bytes.NewReader(nil),
-		azblob.BlobHTTPHeaders{}, azblob.Metadata{"hdi_isfolder": "true"}, azblob.BlobAccessConditions{})
+		azblob.BlobHTTPHeaders{}, azblob.Metadata{"hdi_isfolder": "true"}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{})
 	c.Assert(err, chk.IsNil)
 
 	// set up interceptor
@@ -568,12 +573,12 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithADLSDirectory(c *chk.C) {
 	// create a single blob that represents the ADLS directory
 	dirBlob := containerURL.NewBlockBlobURL(adlsDirName)
 	_, err := dirBlob.Upload(context.Background(), bytes.NewReader(nil),
-		azblob.BlobHTTPHeaders{}, azblob.Metadata{"hdi_isfolder": "true"}, azblob.BlobAccessConditions{})
+		azblob.BlobHTTPHeaders{}, azblob.Metadata{"hdi_isfolder": "true"}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{})
 	c.Assert(err, chk.IsNil)
 
 	// create an extra blob that represents an empty ADLS directory, which should never be picked up
 	_, err = containerURL.NewBlockBlobURL(adlsDirName+"/neverpickup").Upload(context.Background(), bytes.NewReader(nil),
-		azblob.BlobHTTPHeaders{}, azblob.Metadata{"hdi_isfolder": "true"}, azblob.BlobAccessConditions{})
+		azblob.BlobHTTPHeaders{}, azblob.Metadata{"hdi_isfolder": "true"}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{})
 	c.Assert(err, chk.IsNil)
 
 	// set up the destination with an empty folder

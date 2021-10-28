@@ -30,12 +30,19 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 var steCtx = context.Background()
 
+// debug knob
+var DebugSkipFiles = make(map[string]bool)
+
 const EMPTY_SAS_STRING = ""
+
+type azCopyConfig struct {
+	MIMETypeMapping map[string]string
+}
 
 // round api rounds up the float number after the decimal point.
 func round(num float64) int {
@@ -49,12 +56,28 @@ func ToFixed(num float64, precision int) float64 {
 }
 
 // MainSTE initializes the Storage Transfer Engine
-func MainSTE(concurrency ConcurrencySettings, targetRateInMegaBitsPerSec int64, azcopyJobPlanFolder, azcopyLogPathFolder string, providePerfAdvice bool) error {
+func MainSTE(concurrency ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder, azcopyLogPathFolder string, providePerfAdvice bool) error {
 	// Initialize the JobsAdmin, resurrect Job plan files
 	initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec, azcopyJobPlanFolder, azcopyLogPathFolder, providePerfAdvice)
 	// No need to read the existing JobPartPlan files since Azcopy is running in process
 	//JobsAdmin.ResurrectJobParts()
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
+
+	// if we've a custom mime map
+	if path := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.MimeMapping()); path != "" {
+		data, err := ioutil.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		var config azCopyConfig
+		err = json.Unmarshal(data, &config)
+		if err != nil {
+			return err
+		}
+
+		environmentMimeMap = config.MIMETypeMapping
+	}
 
 	deserialize := func(request *http.Request, v interface{}) {
 		// TODO: Check the HTTP verb here?
@@ -85,7 +108,7 @@ func MainSTE(concurrency ConcurrencySettings, targetRateInMegaBitsPerSec int64, 
 		func(writer http.ResponseWriter, request *http.Request) {
 			//var payload common.ListRequest
 			//deserialize(request, &payload)
-			serialize(ListJobs( /*payload*/ ), writer)
+			serialize(ListJobs(common.EJobStatus.All()), writer)
 		})
 	http.HandleFunc(common.ERpcCmd.ListJobSummary().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
@@ -142,16 +165,29 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 	jppfn.Create(order)                                                                   // Convert the order to a plan file
 	jpm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString) // Get a this job part's job manager (create it if it doesn't exist)
 
-	if len(order.Transfers) == 0 && order.IsFinalPart {
-		jpm.Log(pipeline.LogError, "ERROR: No transfers were scheduled.")
-		return common.CopyJobPartOrderResponse{JobStarted: false, ErrorMsg: common.ECopyJobPartOrderErrorType.NoTransfersScheduledErr()}
+	if len(order.Transfers.List) == 0 && order.IsFinalPart {
+		/*
+		 * We set the status of this jobPart to Completed()
+		 * immediately after it is scheduled, and wind down
+		 * the transfer
+		 */
+		jpm.Log(pipeline.LogError, "No transfers were scheduled.")
 	}
 	// Get credential info from RPC request order, and set in InMemoryTransitJobState.
 	jpm.setInMemoryTransitJobState(
 		InMemoryTransitJobState{
 			credentialInfo: order.CredentialInfo,
 		})
-	jpm.AddJobPart(order.PartNum, jppfn, order.SourceSAS, order.DestinationSAS, true) // Add this part to the Job and schedule its transfers
+	// Supply no plan MMF because we don't have one, and AddJobPart will create one on its own.
+	jpm.AddJobPart(order.PartNum, jppfn, nil, order.SourceRoot.SAS, order.DestinationRoot.SAS, true) // Add this part to the Job and schedule its transfers
+
+	// Update jobPart Status with the status Manager
+	jpm.SendJobPartCreatedMsg(jobPartCreatedMsg{totalTransfers: uint32(len(order.Transfers.List)),
+		isFinalPart:          order.IsFinalPart,
+		totalBytesEnumerated: order.Transfers.TotalSizeInBytes,
+		fileTransfers:        order.Transfers.FileTransferCount,
+		folderTransfer:       order.Transfers.FolderTransferCount})
+
 	return common.CopyJobPartOrderResponse{JobStarted: true}
 }
 
@@ -280,6 +316,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 			ErrorMsg:              fmt.Sprintf("JobID=%v, Part#=0 not found", req.JobID),
 		}
 	}
+
 	// If the credential type is is Anonymous, to resume the Job destinationSAS / sourceSAS needs to be provided
 	// Depending on the FromType, sourceSAS or destinationSAS is checked.
 	if req.CredentialInfo.CredentialType == common.ECredentialType.Anonymous() {
@@ -287,7 +324,8 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		switch jpm.Plan().FromTo {
 		case common.EFromTo.LocalBlob(),
 			common.EFromTo.LocalFile(),
-			common.EFromTo.S3Blob():
+			common.EFromTo.S3Blob(),
+			common.EFromTo.GCPBlob():
 			if len(req.DestinationSAS) == 0 {
 				errorMsg = "The destination-sas switch must be provided to resume the job"
 			}
@@ -296,12 +334,29 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 			common.EFromTo.BlobTrash(),
 			common.EFromTo.FileTrash():
 			if len(req.SourceSAS) == 0 {
+				plan := jpm.Plan()
+				if plan.FromTo.From() == common.ELocation.Blob() {
+					src := string(plan.SourceRoot[:plan.SourceRootLength])
+					if common.IsSourcePublicBlob(src, steCtx) {
+						break
+					}
+				}
+
 				errorMsg = "The source-sas switch must be provided to resume the job"
 			}
 		case common.EFromTo.BlobBlob(),
 			common.EFromTo.FileBlob():
 			if len(req.SourceSAS) == 0 ||
 				len(req.DestinationSAS) == 0 {
+
+				plan := jpm.Plan()
+				if plan.FromTo.From() == common.ELocation.Blob() && len(req.DestinationSAS) != 0 {
+					src := string(plan.SourceRoot[:plan.SourceRootLength])
+					if common.IsSourcePublicBlob(src, steCtx) {
+						break
+					}
+				}
+
 				errorMsg = "Both the source-sas and destination-sas switches must be provided to resume the job"
 			}
 		}
@@ -327,6 +382,9 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 	// Resume all the failed / In Progress Transfers.
 	case common.EJobStatus.InProgress(),
 		common.EJobStatus.Completed(),
+		common.EJobStatus.CompletedWithErrors(),
+		common.EJobStatus.CompletedWithSkipped(),
+		common.EJobStatus.CompletedWithErrorsAndSkipped(),
 		common.EJobStatus.Cancelled(),
 		common.EJobStatus.Paused():
 		//go func() {
@@ -339,6 +397,11 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 			})
 
 		jpp0.SetJobStatus(common.EJobStatus.InProgress())
+
+		// Jank, force the jstm to recognize that it's also in progress
+		summaryResp := jm.ListJobSummary()
+		summaryResp.JobStatus = common.EJobStatus.InProgress()
+		jm.ResurrectSummary(summaryResp)
 
 		if jm.ShouldLog(pipeline.LogInfo) {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v resumed", req.JobID))
@@ -398,9 +461,73 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		jm, _ = JobsAdmin.JobMgr(jobID)
 	}
 
+	js := jm.ListJobSummary()
+	js.Timestamp = time.Now().UTC()
+	js.JobID = jm.JobID()
+	js.ErrorMsg = ""
+
+	part0, ok := jm.JobPartMgr(0)
+	if !ok {
+		return js
+	}
+	part0PlanStatus := part0.Plan().JobStatus()
+
+	// Add on byte count from files in flight, to get a more accurate running total
+	js.TotalBytesTransferred += JobsAdmin.SuccessfulBytesInActiveFiles()
+	if js.TotalBytesExpected == 0 {
+		// if no bytes expected, and we should avoid dividing by 0 (which results in NaN)
+		js.PercentComplete = 100
+	} else {
+		js.PercentComplete = 100 * float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected)
+	}
+
+	// This is added to let FE to continue fetching the Job Progress Summary
+	// in case of resume. In case of resume, the Job is already completely
+	// ordered so the progress summary should be fetched until all job parts
+	// are iterated and have been scheduled
+	js.CompleteJobOrdered = js.CompleteJobOrdered || jm.AllTransfersScheduled()
+
+	js.BytesOverWire = uint64(JobsAdmin.BytesOverWire())
+
+	// Get the number of active go routines performing the transfer or executing the chunk Func
+	// TODO: added for debugging purpose. remove later (is covered by GetPerfInfo now anyway)
+	js.ActiveConnections = jm.ActiveConnections()
+
+	js.PerfStrings, js.PerfConstraint = jm.GetPerfInfo()
+
+	pipeStats := jm.PipelineNetworkStats()
+	if pipeStats != nil {
+		js.AverageIOPS = pipeStats.OperationsPerSecond()
+		js.AverageE2EMilliseconds = pipeStats.AverageE2EMilliseconds()
+		js.NetworkErrorPercentage = pipeStats.NetworkErrorPercentage()
+		js.ServerBusyPercentage = pipeStats.TotalServerBusyPercentage()
+	}
+
+	// If the status is cancelled, then no need to check for completerJobOrdered
+	// since user must have provided the consent to cancel an incompleteJob if that
+	// is the case.
+	if part0PlanStatus == common.EJobStatus.Cancelled() {
+		js.JobStatus = part0PlanStatus
+		js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped, part0.Plan().FromTo)
+	} else {
+		// Job is completed if Job order is complete AND ALL transfers are completed/failed
+		// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
+		if (js.CompleteJobOrdered) && (part0PlanStatus.IsJobDone()) {
+			js.JobStatus = part0PlanStatus
+		}
+
+		if js.JobStatus.IsJobDone() {
+			js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped, part0.Plan().FromTo)
+		}
+	}
+
+	return js
+}
+
+func resurrectJobSummary(jm IJobMgr) common.ListJobSummaryResponse {
 	js := common.ListJobSummaryResponse{
 		Timestamp:          time.Now().UTC(),
-		JobID:              jobID,
+		JobID:              jm.JobID(),
 		ErrorMsg:           "",
 		JobStatus:          common.EJobStatus.InProgress(), // Default
 		CompleteJobOrdered: false,                          // default to false; returns true if ALL job parts have been ordered
@@ -413,7 +540,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	// Better to check overall status first, and see it as uncompleted on this call (and completed on the next call).
 	part0, ok := jm.JobPartMgr(0)
 	if !ok {
-		panic(fmt.Errorf("error getting the 0th part of Job %s", jobID))
+		panic(fmt.Errorf("error getting the 0th part of Job %s", jm.JobID()))
 	}
 	part0PlanStatus := part0.Plan().JobStatus()
 
@@ -428,37 +555,49 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 			// transferHeader represents the memory map transfer header of transfer at index position for given job and part number
 			jppt := jpp.Transfer(t)
 			js.TotalBytesEnumerated += uint64(jppt.SourceSize)
+
+			if jppt.EntityType == common.EEntityType.File() {
+				js.FileTransfers++
+			} else {
+				js.FolderPropertyTransfers++
+			}
+
 			// check for all completed transfer to calculate the progress percentage at the end
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.NotStarted(),
-				common.ETransferStatus.Started():
+				common.ETransferStatus.FolderCreated(),
+				common.ETransferStatus.Started(),
+				common.ETransferStatus.Cancelled():
 				js.TotalBytesExpected += uint64(jppt.SourceSize)
 			case common.ETransferStatus.Success():
 				js.TransfersCompleted++
 				js.TotalBytesTransferred += uint64(jppt.SourceSize)
 				js.TotalBytesExpected += uint64(jppt.SourceSize)
 			case common.ETransferStatus.Failed(),
+				common.ETransferStatus.TierAvailabilityCheckFailure(),
 				common.ETransferStatus.BlobTierFailure():
 				js.TransfersFailed++
 				// getting the source and destination for failed transfer at position - index
-				src, dst := jpp.TransferSrcDstStrings(t)
+				src, dst, isFolder := jpp.TransferSrcDstStrings(t)
 				// appending to list of failed transfer
 				js.FailedTransfers = append(js.FailedTransfers,
 					common.TransferDetail{
-						Src:            src,
-						Dst:            dst,
-						TransferStatus: common.ETransferStatus.Failed(),
-						ErrorCode:      jppt.ErrorCode()}) // TODO: Optimize
-			case common.ETransferStatus.SkippedFileAlreadyExists(),
+						Src:                src,
+						Dst:                dst,
+						IsFolderProperties: isFolder,
+						TransferStatus:     common.ETransferStatus.Failed(),
+						ErrorCode:          jppt.ErrorCode()}) // TODO: Optimize
+			case common.ETransferStatus.SkippedEntityAlreadyExists(),
 				common.ETransferStatus.SkippedBlobHasSnapshots():
 				js.TransfersSkipped++
 				// getting the source and destination for skipped transfer at position - index
-				src, dst := jpp.TransferSrcDstStrings(t)
+				src, dst, isFolder := jpp.TransferSrcDstStrings(t)
 				js.SkippedTransfers = append(js.SkippedTransfers,
 					common.TransferDetail{
-						Src:            src,
-						Dst:            dst,
-						TransferStatus: jppt.TransferStatus(),
+						Src:                src,
+						Dst:                dst,
+						IsFolderProperties: isFolder,
+						TransferStatus:     jppt.TransferStatus(),
 					})
 			}
 		}
@@ -505,16 +644,12 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	}
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed
 	// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
-	if (js.CompleteJobOrdered) && (part0PlanStatus == common.EJobStatus.Completed()) {
+	if (js.CompleteJobOrdered) && (part0PlanStatus.IsJobDone()) {
 		js.JobStatus = part0PlanStatus
 	}
 
-	if js.JobStatus == common.EJobStatus.Completed() {
-		js.JobStatus = js.JobStatus.EnhanceJobStatusInfo(js.TransfersSkipped > 0, js.TransfersFailed > 0,
-			js.TransfersCompleted > 0)
-
+	if js.JobStatus.IsJobDone() {
 		js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped, part0.Plan().FromTo)
-
 	}
 
 	return js
@@ -568,22 +703,37 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 				continue
 			}
 			// getting source and destination of a transfer at index index for given jobId and part number.
-			src, dst := jpp.TransferSrcDstStrings(t)
+			src, dst, isFolder := jpp.TransferSrcDstStrings(t)
 			ljt.Details = append(ljt.Details,
-				common.TransferDetail{Src: src, Dst: dst, TransferStatus: transferEntry.TransferStatus(), ErrorCode: transferEntry.ErrorCode()})
+				common.TransferDetail{Src: src, Dst: dst, IsFolderProperties: isFolder, TransferStatus: transferEntry.TransferStatus(), ErrorCode: transferEntry.ErrorCode()})
 		}
 	}
 	return ljt
 }
 
+func GetJobLCMWrapper(jobID common.JobID) common.LifecycleMgr {
+	jobmgr, found := JobsAdmin.JobMgr(jobID)
+	lcm := common.GetLifecycleMgr()
+
+	if !found {
+		return lcm
+	}
+
+	return jobLogLCMWrapper{
+		jobManager:   jobmgr,
+		LifecycleMgr: lcm,
+	}
+}
+
 // ListJobs returns the jobId of all the jobs existing in the current instance of azcopy
-func ListJobs() common.ListJobsResponse {
+func ListJobs(givenStatus common.JobStatus) common.ListJobsResponse {
 	// Resurrect all the Jobs from the existing JobPart Plan files
 	JobsAdmin.ResurrectJobParts()
 	// building the ListJobsResponse for sending response back to front-end
 	jobIds := JobsAdmin.JobIDs()
+	// Silently ignore if no JobIDs are present.
 	if len(jobIds) == 0 {
-		return common.ListJobsResponse{ErrorMessage: "no jobs exists in Azcopy history"}
+		return common.ListJobsResponse{}
 	}
 	listJobResponse := common.ListJobsResponse{JobIDDetails: []common.JobIDDetails{}}
 	for _, jobId := range jobIds {
@@ -595,9 +745,17 @@ func ListJobs() common.ListJobsResponse {
 		if !found {
 			continue
 		}
-		listJobResponse.JobIDDetails = append(listJobResponse.JobIDDetails,
-			common.JobIDDetails{JobId: jobId, CommandString: jpm.Plan().CommandString(),
-				StartTime: jpm.Plan().StartTime, JobStatus: jpm.Plan().JobStatus()})
+		if givenStatus == common.EJobStatus.All() || givenStatus == jpm.Plan().JobStatus() {
+			listJobResponse.JobIDDetails = append(listJobResponse.JobIDDetails,
+				common.JobIDDetails{JobId: jobId, CommandString: jpm.Plan().CommandString(),
+					StartTime: jpm.Plan().StartTime, JobStatus: jpm.Plan().JobStatus()})
+		}
+
+		// Close the job part managers and the log.
+		jm.(*jobMgr).jobPartMgrs.Iterate(false, func(k common.PartNumber, v IJobPartMgr) {
+			v.Close()
+		})
+		jm.CloseLog()
 	}
 	return listJobResponse
 }
@@ -616,7 +774,7 @@ func GetJobFromTo(r common.GetJobFromToRequest) common.GetJobFromToResponse {
 		jm, _ = JobsAdmin.JobMgr(r.JobID)
 	}
 
-	// Get zero'th part of the job part plan.
+	// Get zeroth part of the job part plan.
 	jp0, ok := jm.JobPartMgr(0)
 	if !ok {
 		return common.GetJobFromToResponse{
@@ -625,7 +783,7 @@ func GetJobFromTo(r common.GetJobFromToRequest) common.GetJobFromToResponse {
 	}
 
 	// Use first transfer's source/destination as represent.
-	source, destination := jp0.Plan().TransferSrcDstStrings(0)
+	source, destination, _ := jp0.Plan().TransferSrcDstStrings(0)
 	if source == "" && destination == "" {
 		return common.GetJobFromToResponse{
 			ErrorMsg: fmt.Sprintf("error getting the source/destination with JobID %v", r.JobID),

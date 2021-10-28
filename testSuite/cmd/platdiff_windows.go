@@ -4,7 +4,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // GetAzCopyAppPath returns the path of Azcopy in local appdata.

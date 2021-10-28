@@ -23,10 +23,11 @@ package ste
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	minio "github.com/minio/minio-go"
 )
 
@@ -39,6 +40,7 @@ type s3SourceInfoProvider struct {
 
 	s3Client  *minio.Client
 	s3URLPart common.S3URLParts
+	credType  common.CredentialType
 }
 
 // By default presign expires after 7 days, which is considered enough for large amounts of files transfer.
@@ -61,10 +63,15 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 		return nil, err
 	}
 
+	if os.Getenv("AWS_ACCESS_KEY_ID") == "" && os.Getenv("AWS_SECRET_ACCESS_KEY") == "" {
+		p.credType = common.ECredentialType.S3PublicBucket()
+	} else {
+		p.credType = common.ECredentialType.S3AccessKey()
+	}
 	p.s3Client, err = s3ClientFactory.GetS3Client(
 		p.jptm.Context(),
 		common.CredentialInfo{
-			CredentialType: common.ECredentialType.S3AccessKey(),
+			CredentialType: p.credType,
 			S3CredentialInfo: common.S3CredentialInfo{
 				Endpoint: p.s3URLPart.Endpoint,
 				Region:   p.s3URLPart.Region,
@@ -83,6 +90,9 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 }
 
 func (p *s3SourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
+	if p.credType == common.ECredentialType.S3PublicBucket() {
+		return p.rawSourceURL, nil
+	}
 	return p.s3Client.PresignedGetObject(p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, defaultPresignExpires, url.Values{})
 }
 
@@ -90,6 +100,7 @@ func (p *s3SourceInfoProvider) Properties() (*SrcProperties, error) {
 	srcProperties := SrcProperties{
 		SrcHTTPHeaders: p.transferInfo.SrcHTTPHeaders,
 		SrcMetadata:    p.transferInfo.SrcMetadata,
+		SrcBlobTags:    p.transferInfo.SrcBlobTags,
 	}
 
 	// Get properties in backend.
@@ -165,10 +176,14 @@ func (p *s3SourceInfoProvider) IsLocal() bool {
 	return false
 }
 
-func (p *s3SourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
+func (p *s3SourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
 	objectInfo, err := p.s3Client.StatObject(p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, minio.StatObjectOptions{})
 	if err != nil {
 		return time.Time{}, err
 	}
 	return objectInfo.LastModified, nil
+}
+
+func (p *s3SourceInfoProvider) EntityType() common.EntityType {
+	return common.EEntityType.File() // no real folders exist in S3
 }

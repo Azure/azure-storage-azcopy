@@ -23,14 +23,15 @@ package cmd
 import (
 	"context"
 	"fmt"
+	pipeline2 "github.com/Azure/azure-pipeline-go/pipeline"
 	"net/url"
 	"strings"
 
 	"errors"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
@@ -56,7 +57,7 @@ func (raw rawMakeCmdArgs) cook() (cookedMakeCmdArgs, error) {
 	// resourceLocation could be unknown at this stage, it will be handled by the caller
 	return cookedMakeCmdArgs{
 		resourceURL:      *parsedURL,
-		resourceLocation: inferArgumentLocation(raw.resourceToCreate),
+		resourceLocation: InferArgumentLocation(raw.resourceToCreate),
 		quota:            int32(raw.quota),
 	}, nil
 }
@@ -68,53 +69,22 @@ type cookedMakeCmdArgs struct {
 	quota            int32 // quota is in GB
 }
 
-// getCredentialType gets the proper credential type for make command.
-func (cma cookedMakeCmdArgs) getCredentialType(ctx context.Context) (credentialType common.CredentialType, err error) {
-	credentialType = common.ECredentialType.Unknown()
-
-	switch cma.resourceLocation {
-	case common.ELocation.BlobFS():
-		if credentialType, err = getBlobFSCredentialType(ctx, cma.resourceURL.String(), false); err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-	case common.ELocation.Blob():
-		// The resource URL cannot be public access URL, as it need delete permission.
-		credentialType, _, err = getBlobCredentialType(ctx, cma.resourceURL.String(), false, false)
-		if err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-	case common.ELocation.File():
-		return common.ECredentialType.Anonymous(), nil
-	default:
-		credentialType = common.ECredentialType.Anonymous()
-		glcm.Info(fmt.Sprintf("Use anonymous credential by default for location '%v'", cma.resourceLocation))
-	}
-
-	return credentialType, nil
-}
-
 func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	credentialInfo := common.CredentialInfo{}
-	if credentialInfo.CredentialType, err = cookedArgs.getCredentialType(ctx); err != nil {
+	resourceStringParts, err := SplitResourceString(cookedArgs.resourceURL.String(), cookedArgs.resourceLocation)
+	if err != nil {
 		return err
-	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		// Message user that they are using Oauth token for authentication,
-		// in case of silently using cached token without consciousness。
-		glcm.Info("Make is using OAuth token for authentication.")
+	}
 
-		uotm := GetUserOAuthTokenManagerInstance()
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return err
-		} else {
-			credentialInfo.OAuthTokenInfo = *tokenInfo
-		}
+	credentialInfo, _, err := GetCredentialInfoForLocation(ctx, cookedArgs.resourceLocation, resourceStringParts.Value, resourceStringParts.SAS, false, common.CpkOptions{})
+	if err != nil {
+		return err
 	}
 
 	switch cookedArgs.resourceLocation {
 	case common.ELocation.BlobFS():
-		p, err := createBlobFSPipeline(ctx, credentialInfo)
+		p, err := createBlobFSPipeline(ctx, credentialInfo, pipeline2.LogNone)
 		if err != nil {
 			return err
 		}
@@ -134,7 +104,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 			return err
 		}
 	case common.ELocation.Blob():
-		p, err := createBlobPipeline(ctx, credentialInfo)
+		p, err := createBlobPipeline(ctx, credentialInfo, pipeline2.LogNone)
 		if err != nil {
 			return err
 		}
@@ -153,7 +123,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 			return err
 		}
 	case common.ELocation.File():
-		p, err := createFilePipeline(ctx, credentialInfo)
+		p, err := createFilePipeline(ctx, credentialInfo, pipeline2.LogNone)
 		if err != nil {
 			return err
 		}

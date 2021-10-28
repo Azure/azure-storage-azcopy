@@ -34,7 +34,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // sortPlanFiles is struct that implements len, swap and less than functions
@@ -96,8 +96,11 @@ var JobsAdmin interface {
 	// returns number of bytes successfully transferred in transfers that are currently in progress
 	SuccessfulBytesInActiveFiles() uint64
 
-	MessagesForJobLog() <-chan string
-	LogToJobLog(msg string)
+	MessagesForJobLog() <-chan struct {
+		string
+		pipeline.LogLevel
+	}
+	LogToJobLog(msg string, level pipeline.LogLevel)
 
 	//DeleteJob(jobID common.JobID)
 	common.ILoggerCloser
@@ -105,9 +108,11 @@ var JobsAdmin interface {
 	CurrentMainPoolSize() int
 
 	RequestTuneSlowly()
+
+	SetConcurrencySettingsToAuto()
 }
 
-func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targetRateInMegaBitsPerSec int64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {
+func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {
 	if JobsAdmin != nil {
 		panic("initJobsAdmin was already called once")
 	}
@@ -145,8 +150,8 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 	var pacer pacerAdmin = newNullAutoPacer()
 	if targetRateInMegaBitsPerSec > 0 {
 		// use the "networking mega" (based on powers of 10, not powers of 2, since that's what mega means in networking context)
-		targetRateInBytesPerSec := targetRateInMegaBitsPerSec * 1000 * 1000 / 8
-		unusedExpectedCoarseRequestByteCount := uint32(0)
+		targetRateInBytesPerSec := int64(targetRateInMegaBitsPerSec * 1000 * 1000 / 8)
+		unusedExpectedCoarseRequestByteCount := int64(0)
 		pacer = newTokenBucketPacer(targetRateInBytesPerSec, unusedExpectedCoarseRequestByteCount)
 		// Note: as at July 2019, we don't currently have a shutdown method/event on JobsAdmin where this pacer
 		// could be shut down. But, it's global anyway, so we just leave it running until application exit.
@@ -184,7 +189,10 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 			scalebackRequestCh:  make(chan struct{}),
 			requestSlowTuneCh:   make(chan struct{}),
 		},
-		workaroundJobLoggingChannel: make(chan string, 1000), // workaround to support logging from JobsAdmin
+		workaroundJobLoggingChannel: make(chan struct {
+			string
+			pipeline.LogLevel
+		}, 1000), // workaround to support logging from JobsAdmin
 	}
 	// create new context with the defaultService api version set as value to serviceAPIVersionOverride in the app context.
 	ja.appCtx = context.WithValue(ja.appCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
@@ -215,9 +223,9 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 }
 
 // Decide on a max amount of RAM we are willing to use. This functions as a cap, and prevents excessive usage.
-// There's no measure of physical RAM in the STD library, so we guestimate conservatively, based on  CPU count (logical, not phyiscal CPUs)
+// There's no measure of physical RAM in the STD library, so we guesstimate conservatively, based on  CPU count (logical, not physical CPUs)
 // Note that, as at Feb 2019, the multiSizeSlicePooler uses additional RAM, over this level, since it includes the cache of
-// currently-unnused, re-useable slices, that is not tracked by cacheLimiter.
+// currently-unused, re-usable slices, that is not tracked by cacheLimiter.
 // Also, block sizes that are not powers of two result in extra usage over and above this limit. (E.g. 100 MB blocks each
 // count 100 MB towards this limit, but actually consume 128 MB)
 func getMaxRamForChunks() int64 {
@@ -313,7 +321,7 @@ func (ja *jobsAdmin) recordTuningCompleted(showOutput bool) {
 			common.GetLifecycleMgr().Info("*** You do not need to wait for whole job to finish.                                                  ***")
 		}
 		common.GetLifecycleMgr().Info("")
-		ja.LogToJobLog(msg)
+		ja.LogToJobLog(msg, pipeline.LogInfo)
 	}
 }
 
@@ -329,7 +337,7 @@ func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 		default:
 			msg := fmt.Sprintf("Trying %d concurrent connections (%s)", targetConcurrency, reason)
 			common.GetLifecycleMgr().Info(msg)
-			ja.LogToJobLog(msg)
+			ja.LogToJobLog(msg, pipeline.LogInfo)
 		}
 	}
 
@@ -449,11 +457,12 @@ func (ja *jobsAdmin) transferProcessor(workerID int) {
 			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo, fmt.Sprintf(" is not picked up worked %d because transfer was cancelled", workerID))
 			}
+			jptm.SetStatus(common.ETransferStatus.Cancelled())
 			jptm.ReportTransferDone()
 		} else {
 			// TODO fix preceding space
 			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, fmt.Sprintf("has worker %d which is processing TRANSFER", workerID))
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("has worker %d which is processing TRANSFER %d", workerID, jptm.(*jobPartTransferMgr).transferIndex))
 			}
 			jptm.StartJobXfer()
 		}
@@ -498,11 +507,14 @@ type jobsAdmin struct {
 	slicePool                   common.ByteSlicePooler
 	cacheLimiter                common.CacheLimiter
 	fileCountLimiter            common.CacheLimiter
-	workaroundJobLoggingChannel chan string
-	concurrencyTuner            ConcurrencyTuner
-	commandLineMbpsCap          int64
-	provideBenchmarkResults     bool
-	cpuMonitor                  common.CPUMonitor
+	workaroundJobLoggingChannel chan struct {
+		string
+		pipeline.LogLevel
+	}
+	concurrencyTuner        ConcurrencyTuner
+	commandLineMbpsCap      float64
+	provideBenchmarkResults bool
+	cpuMonitor              common.CPUMonitor
 }
 
 type CoordinatorChannels struct {
@@ -564,7 +576,7 @@ func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
 		func() IJobMgr {
 			// Return existing or new IJobMgr to caller
-			return newJobMgr(ja.concurrency, ja.logger, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir)
+			return newJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir)
 		})
 }
 
@@ -636,8 +648,13 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinat
 		}
 		mmf := planFile.Map()
 		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
-		jm.AddJobPart(partNum, planFile, sourceSAS, destinationSAS, false)
+		jm.AddJobPart(partNum, planFile, mmf, sourceSAS, destinationSAS, false)
 	}
+
+	jm, _ := ja.JobMgr(jobId)
+	js := resurrectJobSummary(jm)
+	jm.ResurrectSummary(js)
+
 	return true
 }
 
@@ -665,8 +682,18 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 		mmf := planFile.Map()
 		//todo : call the compute transfer function here for each job.
 		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
-		jm.AddJobPart(partNum, planFile, EMPTY_SAS_STRING, EMPTY_SAS_STRING, false)
+		jm.AddJobPart(partNum, planFile, mmf, EMPTY_SAS_STRING, EMPTY_SAS_STRING, false)
 	}
+}
+
+func (ja *jobsAdmin) SetConcurrencySettingsToAuto() {
+	// Setting initial pool size to 4 and max pool size to 3,000
+	ja.concurrency.InitialMainPoolSize = 4
+	ja.concurrency.MaxMainPoolSize = &ConfiguredInt{3000, false, common.EEnvironmentVariable.ConcurrencyValue().Name, "auto-tuning limit"}
+
+	// recreate the concurrency tuner.
+	// Tuner isn't called until the first job part is scheduled for transfer, so it is safe to update it before that.
+	ja.concurrencyTuner = ja.createConcurrencyTuner()
 }
 
 // TODO: I think something is wrong here: I think delete and cleanup should be merged together.
@@ -734,19 +761,25 @@ func (ja *jobsAdmin) slicePoolPruneLoop() {
 	}
 }
 
-// TODO: review or replace (or confirm to leave as is?)  Originally, JobAdmin couldn't use invidual job logs because there could
-// be several concurrent jobs running. That's not the case any more, so this is safe now, but it does't quite fit with the
+// TODO: review or replace (or confirm to leave as is?)  Originally, JobAdmin couldn't use individual job logs because there could
+// be several concurrent jobs running. That's not the case any more, so this is safe now, but it doesn't quite fit with the
 // architecture around it.
-func (ja *jobsAdmin) LogToJobLog(msg string) {
+func (ja *jobsAdmin) LogToJobLog(msg string, level pipeline.LogLevel) {
 	select {
-	case ja.workaroundJobLoggingChannel <- msg:
+	case ja.workaroundJobLoggingChannel <- struct {
+		string
+		pipeline.LogLevel
+	}{msg, level}:
 		// done, we have passed it off to get logged
 	default:
 		// channel buffer is full, have to drop this message
 	}
 }
 
-func (ja *jobsAdmin) MessagesForJobLog() <-chan string {
+func (ja *jobsAdmin) MessagesForJobLog() <-chan struct {
+	string
+	pipeline.LogLevel
+} {
 	return ja.workaroundJobLoggingChannel
 }
 

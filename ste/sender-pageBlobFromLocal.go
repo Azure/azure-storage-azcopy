@@ -24,7 +24,7 @@ import (
 	"fmt"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
@@ -34,7 +34,7 @@ type pageBlobUploader struct {
 	md5Channel chan []byte
 }
 
-func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
+func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
 	senderBase, err := newPageBlobSenderBase(jptm, destination, p, pacer, sip, azblob.AccessTierNone)
 	if err != nil {
 		return nil, err
@@ -60,11 +60,25 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 		}
 
 		if reader.HasPrefetchedEntirelyZeros() {
-			// for this destination type, there is no need to upload ranges than consist entirely of zeros
-			jptm.Log(pipeline.LogDebug,
-				fmt.Sprintf("Not uploading range from %d to %d,  all bytes are zero",
-					id.OffsetInFile(), id.OffsetInFile()+reader.Length()))
-			return
+			var destContainsData bool
+			// We check if we should actually skip this page,
+			// in the event the page blob uploader is sending to a managed disk.
+			if u.destPageRangeOptimizer != nil {
+				destContainsData = u.destPageRangeOptimizer.doesRangeContainData(
+					azblob.PageRange{
+						Start: id.OffsetInFile(),
+						End:   id.OffsetInFile() + reader.Length() - 1,
+					})
+			}
+
+			// If neither the source nor destination contain data, it's safe to skip.
+			if !destContainsData {
+				// for this destination type, there is no need to upload ranges than consist entirely of zeros
+				jptm.Log(pipeline.LogDebug,
+					fmt.Sprintf("Not uploading range from %d to %d,  all bytes are zero",
+						id.OffsetInFile(), id.OffsetInFile()+reader.Length()))
+				return
+			}
 		}
 
 		// control rate of sending (since page blobs can effectively have per-blob throughput limits)
@@ -79,7 +93,7 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
 		enrichedContext := withRetryNotification(jptm.Context(), u.filePacer)
-		_, err := u.destPageBlobURL.UploadPages(enrichedContext, id.OffsetInFile(), body, azblob.PageBlobAccessConditions{}, nil)
+		_, err := u.destPageBlobURL.UploadPages(enrichedContext, id.OffsetInFile(), body, azblob.PageBlobAccessConditions{}, nil, u.cpkToApply)
 		if err != nil {
 			jptm.FailActiveUpload("Uploading page", err)
 			return
@@ -104,7 +118,7 @@ func (u *pageBlobUploader) Epilogue() {
 }
 
 func (u *pageBlobUploader) GetDestinationLength() (int64, error) {
-	prop, err := u.destPageBlobURL.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{})
+	prop, err := u.destPageBlobURL.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{}, u.cpkToApply)
 
 	if err != nil {
 		return -1, err

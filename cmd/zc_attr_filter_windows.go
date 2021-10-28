@@ -25,7 +25,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type attrFilter struct {
@@ -34,14 +34,25 @@ type attrFilter struct {
 	isIncludeFilter bool
 }
 
-func (f *attrFilter) doesSupportThisOS() (msg string, supported bool) {
+func (f *attrFilter) DoesSupportThisOS() (msg string, supported bool) {
 	msg = ""
 	supported = true
 	return
 }
 
-func (f *attrFilter) doesPass(storedObject storedObject) bool {
-	fileName := common.GenerateFullPath(f.filePath, storedObject.relativePath)
+func (f *attrFilter) AppliesOnlyToFiles() bool {
+	return true // keep this filter consistent with include-pattern
+}
+
+func (f *attrFilter) DoesPass(storedObject StoredObject) bool {
+	fileName := ""
+	if strings.Index(f.filePath, "*") == -1 {
+		fileName = common.GenerateFullPath(f.filePath, storedObject.relativePath)
+	} else {
+		basePath := getPathBeforeFirstWildcard(f.filePath)
+		fileName = common.GenerateFullPath(basePath, storedObject.relativePath)
+	}
+
 	lpFileName, _ := syscall.UTF16PtrFromString(fileName)
 	attributes, err := syscall.GetFileAttributes(lpFileName)
 
@@ -63,10 +74,10 @@ func (f *attrFilter) doesPass(storedObject storedObject) bool {
 	return !f.isIncludeFilter
 }
 
-func buildAttrFilters(attributes []string, fullPath string, isIncludeFilter bool) []objectFilter {
+func buildAttrFilters(attributes []string, fullPath string, isIncludeFilter bool) []ObjectFilter {
 	var fileAttributes uint32
-	filters := make([]objectFilter, 0)
-	// Available attributes (NTFS) include:
+	filters := make([]ObjectFilter, 0)
+	// Available attributes (SMB) include:
 	// R = Read-only files
 	// A = Files ready for archiving
 	// S = System files

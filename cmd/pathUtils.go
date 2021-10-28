@@ -3,15 +3,14 @@ package cmd
 import (
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/pkg/errors"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // ----- LOCATION LEVEL HANDLING -----
@@ -25,7 +24,7 @@ func (LocationLevel) Object() LocationLevel    { return 2 } // An Object can be 
 
 // Uses syntax to assume the "level" of a location.
 // This is typically used to
-func determineLocationLevel(location string, locationType common.Location, source bool) (LocationLevel, error) {
+func DetermineLocationLevel(location string, locationType common.Location, source bool) (LocationLevel, error) {
 	switch locationType {
 	// In local, there's no such thing as a service.
 	// As such, we'll treat folders as containers, and files as objects.
@@ -43,7 +42,7 @@ func determineLocationLevel(location string, locationType common.Location, sourc
 			return level, nil // Return the assumption.
 		}
 
-		fi, err := os.Stat(location)
+		fi, err := common.OSStat(location)
 
 		if err != nil {
 			return level, nil // Return the assumption.
@@ -60,7 +59,8 @@ func determineLocationLevel(location string, locationType common.Location, sourc
 	case common.ELocation.Blob(),
 		common.ELocation.File(),
 		common.ELocation.BlobFS(),
-		common.ELocation.S3():
+		common.ELocation.S3(),
+		common.ELocation.GCP():
 		URL, err := url.Parse(location)
 
 		if err != nil {
@@ -97,7 +97,7 @@ func GetResourceRoot(resource string, location common.Location) (resourceBase st
 		return resource, err
 	}
 
-	// todo: reduce code-duplicateyness, maybe?
+	// todo: reduce code-delicateness, maybe?
 	switch location {
 	case common.ELocation.Unknown(),
 		common.ELocation.Benchmark(): // do nothing
@@ -165,20 +165,48 @@ func GetResourceRoot(resource string, location common.Location) (resourceBase st
 
 		s3URL := s3URLParts.URL()
 		return s3URL.String(), nil
+	case common.ELocation.GCP():
+		gcpURLParts, err := common.NewGCPURLParts(*resourceURL)
+		common.PanicIfErr(err)
+
+		if gcpURLParts.BucketName == "" || strings.Contains(gcpURLParts.BucketName, "*") {
+			if gcpURLParts.ObjectKey != "" {
+				return resource, errors.New("Cannot combine account-level traversal and specific object names")
+			}
+			gcpURLParts.BucketName = ""
+		}
+
+		gcpURL := gcpURLParts.URL()
+		return gcpURL.String(), nil
 	default:
 		panic(fmt.Sprintf("Location %s is missing from GetResourceRoot", location))
 	}
 }
 
+func SplitResourceString(raw string, loc common.Location) (common.ResourceString, error) {
+	sasless, sas, err := splitAuthTokenFromResource(raw, loc)
+	if err != nil {
+		return common.ResourceString{}, nil
+	}
+	main, query := splitQueryFromSaslessResource(sasless, loc)
+	return common.ResourceString{
+		Value:      main,
+		SAS:        sas,
+		ExtraQuery: query,
+	}, nil
+}
+
 // resourceBase will always be returned regardless of the location.
 // resourceToken will be separated and returned depending on the location.
-func SplitAuthTokenFromResource(resource string, location common.Location) (resourceBase, resourceToken string, err error) {
+func splitAuthTokenFromResource(resource string, location common.Location) (resourceBase, resourceToken string, err error) {
 	switch location {
 	case common.ELocation.Local():
 		if resource == common.Dev_Null {
 			return resource, "", nil // don't mess with the special dev-null path, at all
 		}
 		return cleanLocalPath(common.ToExtendedPath(resource)), "", nil
+	case common.ELocation.Pipe():
+		return resource, "", nil
 	case common.ELocation.S3():
 		// Encoding +s as %20 (space) is important in S3 URLs as this is unsupported in Azure (but %20 can still be used as a space in S3 URLs)
 		var baseURL *url.URL
@@ -190,6 +218,8 @@ func SplitAuthTokenFromResource(resource string, location common.Location) (reso
 
 		*baseURL = common.URLExtension{URL: *baseURL}.URLWithPlusDecodedInPath()
 		return baseURL.String(), "", nil
+	case common.ELocation.GCP():
+		return resource, "", nil
 	case common.ELocation.Benchmark(), // cover for benchmark as we generate data for that
 		common.ELocation.Unknown(): // cover for unknown as we treat that as garbage
 		// Local and S3 don't feature URL-embedded tokens
@@ -254,6 +284,33 @@ func SplitAuthTokenFromResource(resource string, location common.Location) (reso
 	}
 }
 
+// While there should be on SAS's in resource, it may have other query string elements,
+// such as a snapshot identifier, or other unparsed params. This splits those out,
+// so we can preserve them without having them get in the way of our use of
+// the resource root string. (e.g. don't want them right on the end of it, when we append stuff)
+func splitQueryFromSaslessResource(resource string, loc common.Location) (mainUrl string, queryAndFragment string) {
+	if !loc.IsRemote() {
+		return resource, "" // only remote resources have query strings
+	}
+
+	if u, err := url.Parse(resource); err == nil && u.Query().Get("sig") != "" {
+		panic("this routine can only be called after the SAS has been removed")
+		// because, for security reasons, we don't want SASs returned in queryAndFragment, since
+		// we wil persist that (but we don't want to persist SAS's)
+	}
+
+	// Work directly with a string-based format, so that we get both snapshot identifiers AND any other unparsed params
+	// (types like BlobUrlParts handle those two things in separate properties, but return them together in the query string)
+	i := strings.Index(resource, "?") // only the first ? is syntactically significant in a URL
+	if i < 0 {
+		return resource, ""
+	} else if i == len(resource)-1 {
+		return resource[:i], ""
+	} else {
+		return resource[:i], resource[i+1:]
+	}
+}
+
 // All of the below functions only really do one thing at the moment.
 // They've been separated from copyEnumeratorInit.go in order to make the code more maintainable, should we want more destinations in the future.
 func getPathBeforeFirstWildcard(path string) string {
@@ -262,21 +319,21 @@ func getPathBeforeFirstWildcard(path string) string {
 	}
 
 	firstWCIndex := strings.Index(path, "*")
-	result := consolidatePathSeparators(path[:firstWCIndex])
+	result := common.ConsolidatePathSeparators(path[:firstWCIndex])
 	lastSepIndex := strings.LastIndex(result, common.DeterminePathSeparator(path))
 	result = result[:lastSepIndex+1]
 
 	return result
 }
 
-func GetAccountRoot(path string, location common.Location) (string, error) {
+func GetAccountRoot(resource common.ResourceString, location common.Location) (string, error) {
 	switch location {
 	case common.ELocation.Local():
 		panic("attempted to get account root on local location")
 	case common.ELocation.Blob(),
 		common.ELocation.File(),
 		common.ELocation.BlobFS():
-		baseURL, err := url.Parse(path)
+		baseURL, err := resource.FullURL()
 
 		if err != nil {
 			return "", err
@@ -323,6 +380,16 @@ func GetContainerName(path string, location common.Location) (string, error) {
 		}
 
 		return s3URLParts.BucketName, nil
+	case common.ELocation.GCP():
+		baseURL, err := url.Parse(path)
+		if err != nil {
+			return "", err
+		}
+		gcpURLParts, err := common.NewGCPURLParts(*baseURL)
+		if err != nil {
+			return "", err
+		}
+		return gcpURLParts.BucketName, nil
 	default:
 		return "", fmt.Errorf("cannot get container name on location type %s", location.String())
 	}

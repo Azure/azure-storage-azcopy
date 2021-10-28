@@ -1,33 +1,37 @@
-module github.com/Azure/azure-storage-azcopy
+module github.com/Azure/azure-storage-azcopy/v10
 
 require (
-	github.com/Azure/azure-pipeline-go v0.2.1
-	github.com/Azure/azure-storage-blob-go v0.7.0
-	github.com/Azure/azure-storage-file-go v0.6.0
-	github.com/Azure/go-autorest v10.15.2+incompatible
+	cloud.google.com/go v0.91.1 // indirect
+	cloud.google.com/go/storage v1.16.0
+	github.com/Azure/azure-pipeline-go v0.2.3
+	github.com/Azure/azure-storage-blob-go v0.13.1-0.20210823171415-e7932f52ad61
+	github.com/Azure/azure-storage-file-go v0.6.1-0.20201111053559-3c1754dc00a5
+	github.com/Azure/go-autorest/autorest/adal v0.9.14
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
-	github.com/cpuguy83/go-md2man v1.0.10 // indirect
-	github.com/danieljoos/wincred v1.0.1
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
-	github.com/go-ini/ini v1.41.0 // indirect
-	github.com/inconshreveable/mousetrap v1.0.0 // indirect
-	github.com/jiacfan/keychain v0.0.0-20180920053336-f2c902a3d807
-	github.com/jiacfan/keyctl v0.3.1
-	github.com/mattn/go-ieproxy v0.0.0-20190610004146-91bb50d98149
+	github.com/cpuguy83/go-md2man/v2 v2.0.1 // indirect
+	github.com/danieljoos/wincred v1.1.1
+	github.com/form3tech-oss/jwt-go v3.2.5+incompatible // indirect
+	github.com/go-ini/ini v1.62.0 // indirect
+	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
+	github.com/google/uuid v1.3.0
+	github.com/hillu/go-ntdll v0.0.0-20210404124636-a6f426aa8d92
+	github.com/kr/pretty v0.3.0 // indirect
+	github.com/mattn/go-ieproxy v0.0.1
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
-	github.com/pkg/errors v0.8.1
-	github.com/smartystreets/goconvey v0.0.0-20190330032615-68dc04aab96a // indirect
-	github.com/spf13/cobra v0.0.3
-	github.com/spf13/pflag v1.0.2 // indirect
-	github.com/stretchr/objx v0.1.1 // indirect
-	github.com/stretchr/testify v1.3.0 // indirect
-	golang.org/x/crypto v0.0.0-20190513172903-22d7a77e9e5f
-	golang.org/x/net v0.0.0-20190522155817-f3200d17e092 // indirect
-	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
-	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127
-	gopkg.in/ini.v1 v1.42.0 // indirect
-	gopkg.in/yaml.v2 v2.2.2 // indirect
+	github.com/pkg/errors v0.9.1
+	github.com/spf13/cobra v1.2.1
+	github.com/wastore/keychain v0.0.0-20180920053336-f2c902a3d807
+	github.com/wastore/keyctl v0.3.1
+	golang.org/x/crypto v0.0.0-20210812204632-0ba0e8f03122
+	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d // indirect
+	golang.org/x/oauth2 v0.0.0-20210810183815-faf39c7919d5
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	golang.org/x/sys v0.0.0-20210809222454-d867a43fc93e
+	golang.org/x/text v0.3.7 // indirect
+	google.golang.org/api v0.53.0
+	google.golang.org/grpc v1.40.0 // indirect
+	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 )
 
-go 1.13
+go 1.16

@@ -14,8 +14,8 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
@@ -112,7 +112,7 @@ func init() {
 
 func verifyBlobType(url url.URL, ctx context.Context, p pipeline.Pipeline, intendedBlobType string) (bool, error) {
 	bURL := azblob.NewBlobURL(url, p)
-	pResp, err := bURL.GetProperties(ctx, azblob.BlobAccessConditions{})
+	pResp, err := bURL.GetProperties(ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 
 	if err != nil {
 		return false, err
@@ -186,7 +186,7 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 			// get the blob
 			size := blobInfo.Properties.ContentLength
 			get, err := containerUrl.NewBlobURL(blobInfo.Name).Download(testCtx,
-				0, *size, azblob.BlobAccessConditions{}, false)
+				0, *size, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
 
 			if err != nil {
 				fmt.Println(fmt.Sprintf("error downloading the blob %s", blobInfo.Name))
@@ -321,7 +321,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 
 	// get the blob properties and check the blob tier.
 	if azblob.AccessTierType(testBlobCmd.BlobTier) != azblob.AccessTierNone {
-		blobProperties, err := pageBlobUrl.GetProperties(testCtx, azblob.BlobAccessConditions{})
+		blobProperties, err := pageBlobUrl.GetProperties(testCtx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 		if err != nil {
 			fmt.Println(fmt.Sprintf("error getting the properties of the blob. failed with error %s", err.Error()))
 			os.Exit(1)
@@ -338,7 +338,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 		}
 	}
 
-	get, err := pageBlobUrl.Download(testCtx, 0, fileInfo.Size(), azblob.BlobAccessConditions{}, false)
+	get, err := pageBlobUrl.Download(testCtx, 0, fileInfo.Size(), azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
 	if err != nil {
 		fmt.Println("unable to get blob properties ", err.Error())
 		os.Exit(1)
@@ -377,7 +377,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 		}
 
 		if !testBlobCmd.NoGuessMimeType {
-			expectedContentType = http.DetectContentType(mmap)
+			expectedContentType = strings.Split(http.DetectContentType(mmap), ";")[0]
 		}
 
 		mmap.Unmap()
@@ -497,7 +497,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 	// check for access tier type
 	// get the blob properties and get the Access Tier Type.
 	if azblob.AccessTierType(testBlobCmd.BlobTier) != azblob.AccessTierNone {
-		blobProperties, err := blobUrl.GetProperties(testCtx, azblob.BlobAccessConditions{})
+		blobProperties, err := blobUrl.GetProperties(testCtx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 		if err != nil {
 			fmt.Println(fmt.Sprintf("error getting the blob properties. Failed with error %s", err.Error()))
 			os.Exit(1)
@@ -519,7 +519,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 		}
 	}
 
-	get, err := blobUrl.Download(testCtx, 0, fileInfo.Size(), azblob.BlobAccessConditions{}, false)
+	get, err := blobUrl.Download(testCtx, 0, fileInfo.Size(), azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
 	if err != nil {
 		fmt.Println("unable to get blob properties ", err.Error())
 		os.Exit(1)
@@ -571,7 +571,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 	if testBlobCmd.NoGuessMimeType {
 		expectedContentType = testBlobCmd.ContentType
 	} else {
-		expectedContentType = http.DetectContentType(mmap)
+		expectedContentType = strings.Split(http.DetectContentType(mmap), ";")[0]
 	}
 	if testBlobCmd.CheckContentType && !validateString(expectedContentType, get.ContentType()) {
 		fmt.Printf(
@@ -611,7 +611,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 			fmt.Println("error getting the block blob list")
 			os.Exit(1)
 		}
-		// todo only commited blocks
+		// todo only committed blocks
 		if numberOfBlocks != (len(resp.CommittedBlocks)) {
 			fmt.Println("number of blocks to be uploaded is different from the number of expected to be uploaded")
 			os.Exit(1)
@@ -666,7 +666,7 @@ func verifySingleAppendBlob(testBlobCmd TestBlobCommand) {
 
 	// get the blob properties and check the blob tier.
 	if azblob.AccessTierType(testBlobCmd.BlobTier) != azblob.AccessTierNone {
-		blobProperties, err := appendBlobURL.GetProperties(testCtx, azblob.BlobAccessConditions{})
+		blobProperties, err := appendBlobURL.GetProperties(testCtx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 		if err != nil {
 			fmt.Println(fmt.Sprintf("error getting the properties of the blob. failed with error %s", err.Error()))
 			os.Exit(1)
@@ -683,7 +683,7 @@ func verifySingleAppendBlob(testBlobCmd TestBlobCommand) {
 		}
 	}
 
-	get, err := appendBlobURL.Download(testCtx, 0, fileInfo.Size(), azblob.BlobAccessConditions{}, false)
+	get, err := appendBlobURL.Download(testCtx, 0, fileInfo.Size(), azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
 	if err != nil {
 		fmt.Println("unable to get blob properties ", err.Error())
 		os.Exit(1)
@@ -723,7 +723,7 @@ func verifySingleAppendBlob(testBlobCmd TestBlobCommand) {
 		}
 
 		if !testBlobCmd.NoGuessMimeType {
-			expectedContentType = http.DetectContentType(mmap)
+			expectedContentType = strings.Split(http.DetectContentType(mmap), ";")[0]
 		}
 
 		mmap.Unmap()

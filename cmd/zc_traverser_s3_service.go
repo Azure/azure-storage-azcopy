@@ -28,11 +28,11 @@ import (
 
 	"github.com/minio/minio-go"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // As we discussed, the general architecture is that this is going to search a list of buckets and spawn s3Traversers for each bucket.
-// This will modify the storedObject format a slight bit to add a "container" parameter.
+// This will modify the StoredObject format a slight bit to add a "container" parameter.
 
 // Enumerates an entire S3 account, looking into each matching bucket as it goes
 type s3ServiceTraverser struct {
@@ -45,10 +45,10 @@ type s3ServiceTraverser struct {
 	s3Client *minio.Client
 
 	// a generic function to notify that a new stored object has been enumerated
-	incrementEnumerationCounter func()
+	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func (t *s3ServiceTraverser) isDirectory(isSource bool) bool {
+func (t *s3ServiceTraverser) IsDirectory(isSource bool) bool {
 	return true // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
@@ -96,7 +96,7 @@ func (t *s3ServiceTraverser) listContainers() ([]string, error) {
 	}
 }
 
-func (t *s3ServiceTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) error {
+func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 	bucketList, err := t.listContainers()
 
 	if err != nil {
@@ -107,7 +107,8 @@ func (t *s3ServiceTraverser) traverse(preprocessor objectMorpher, processor obje
 		tmpS3URL := t.s3URL
 		tmpS3URL.BucketName = v
 		urlResult := tmpS3URL.URL()
-		bucketTraverser, err := newS3Traverser(&urlResult, t.ctx, true, t.getProperties, t.incrementEnumerationCounter)
+		credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
+		bucketTraverser, err := newS3Traverser(credentialInfo.CredentialType, &urlResult, t.ctx, true, t.getProperties, t.incrementEnumerationCounter)
 
 		if err != nil {
 			return err
@@ -115,21 +116,15 @@ func (t *s3ServiceTraverser) traverse(preprocessor objectMorpher, processor obje
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
-		err = bucketTraverser.traverse(preprocessorForThisChild, processor, filters)
+		err = bucketTraverser.Traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
-			// This check occurs up in listContainers.
-			// if strings.Contains(err.Error(), "301 response missing Location header") {
-			// 	LogStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q , as it's not in the region specified by source URL", v))
-			// 	continue
-			// }
-
 			if strings.Contains(err.Error(), "cannot list objects, The specified bucket does not exist") {
-				LogStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q, as it does not exist.", v))
+				WarnStdoutAndScanningLog(fmt.Sprintf("skip enumerating the bucket %q, as it does not exist.", v))
 				continue
 			}
 
-			LogStdoutAndJobLog(fmt.Sprintf("failed to list objects in bucket %s: %s", v, err))
+			WarnStdoutAndScanningLog(fmt.Sprintf("failed to list objects in bucket %s: %s", v, err))
 			continue
 		}
 	}
@@ -137,7 +132,7 @@ func (t *s3ServiceTraverser) traverse(preprocessor objectMorpher, processor obje
 	return nil
 }
 
-func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, getProperties bool, incrementEnumerationCounter func()) (t *s3ServiceTraverser, err error) {
+func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (t *s3ServiceTraverser, err error) {
 	t = &s3ServiceTraverser{ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter, getProperties: getProperties}
 
 	var s3URLParts common.S3URLParts

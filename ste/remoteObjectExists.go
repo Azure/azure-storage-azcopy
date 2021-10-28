@@ -22,6 +22,7 @@ package ste
 
 import (
 	"net/http"
+	"time"
 )
 
 // an error with an HTTP Response
@@ -29,18 +30,22 @@ type responseError interface {
 	Response() *http.Response
 }
 
+type lastModifiedTimerProvider interface {
+	LastModified() time.Time
+}
+
 // remoteObjectExists takes the error returned when trying to access a remote object, sees whether is
 // a "not found" error.  If the object exists (i.e. error is nil) it returns (true, nil).  If the
 // error is a "not found" error, it returns (false, nil). Else it returns false and the original error.
 // The initial, dummy, parameter, is to allow callers to conveniently call it with functions that return a tuple
 // - even though we only need the error.
-func remoteObjectExists(_ interface{}, errWhenAccessingRemoteObject error) (bool, error) {
+func remoteObjectExists(props lastModifiedTimerProvider, errWhenAccessingRemoteObject error) (bool, time.Time, error) {
 
 	if typedErr, ok := errWhenAccessingRemoteObject.(responseError); ok && typedErr.Response().StatusCode == http.StatusNotFound {
-		return false, nil // 404 error, so it does NOT exist
+		return false, time.Time{}, nil // 404 error, so it does NOT exist
 	} else if errWhenAccessingRemoteObject != nil {
-		return false, errWhenAccessingRemoteObject // some other error happened, so we return it
+		return false, time.Time{}, errWhenAccessingRemoteObject // some other error happened, so we return it
 	} else {
-		return true, nil // If err equals nil, the file exists
+		return true, props.LastModified(), nil // If err equals nil, the file exists
 	}
 }

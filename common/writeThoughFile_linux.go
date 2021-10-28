@@ -25,12 +25,10 @@ import (
 	"syscall"
 )
 
-func CreateFileOfSize(destinationPath string, fileSize int64) (*os.File, error) {
-	return CreateFileOfSizeWithWriteThroughOption(destinationPath, fileSize, false)
-}
+func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int64, writeThrough bool, t FolderCreationTracker, forceIfReadOnly bool) (*os.File, error) {
+	// forceIfReadOnly is not used on this OS
 
-func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int64, writeThrough bool) (*os.File, error) {
-	err := CreateParentDirectoryIfNotExist(destinationPath)
+	err := CreateParentDirectoryIfNotExist(destinationPath, t)
 	if err != nil {
 		return nil, err
 	}
@@ -45,6 +43,10 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 		return nil, err
 	}
 
+	if fileSize == 0 {
+		return f, err
+	}
+
 	err = syscall.Fallocate(int(f.Fd()), 0, 0, fileSize)
 	if err != nil {
 		// To solve the case that Fallocate cannot work well with cifs/smb3.
@@ -57,4 +59,9 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 		}
 	}
 	return f, nil
+}
+
+func SetBackupMode(enable bool, fromTo FromTo) error {
+	// n/a on this platform
+	return nil
 }

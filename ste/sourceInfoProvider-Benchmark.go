@@ -23,7 +23,7 @@ package ste
 import (
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type benchmarkSourceInfoProvider struct {
@@ -38,6 +38,7 @@ func (b benchmarkSourceInfoProvider) Properties() (*SrcProperties, error) {
 	return &SrcProperties{
 		SrcHTTPHeaders: common.ResourceHTTPHeaders{},
 		SrcMetadata:    common.Metadata{},
+		SrcBlobTags:    common.BlobTags{},
 	}, nil
 }
 
@@ -49,6 +50,10 @@ func (b benchmarkSourceInfoProvider) OpenSourceFile() (common.CloseableReaderAt,
 	return common.NewRandomDataGenerator(b.jptm.Info().SourceSize), nil
 }
 
-func (b benchmarkSourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
+func (b benchmarkSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
 	return common.BenchmarkLmt, nil
+}
+
+func (b benchmarkSourceInfoProvider) EntityType() common.EntityType {
+	return common.EEntityType.File() // no folders in benchmark
 }

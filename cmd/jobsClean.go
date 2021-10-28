@@ -25,8 +25,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func init() {
@@ -77,7 +78,8 @@ func init() {
 
 	// NOTE: we have way more job status than we normally need, only show the most common ones
 	jobsCleanCmd.PersistentFlags().StringVar(&commandLineInput.withStatus, "with-status", "All",
-		"only remove the jobs with this status, available values: Cancelled, Completed, Failed, InProgress, All")
+		"only remove the jobs with this status, available values: All, Cancelled, Failed, Completed"+
+			" CompletedWithErrors, CompletedWithSkipped, CompletedWithErrorsAndSkipped")
 }
 
 func handleCleanJobsCommand(givenStatus common.JobStatus) error {
@@ -89,7 +91,7 @@ func handleCleanJobsCommand(givenStatus common.JobStatus) error {
 
 	// we must query the jobs and find out which one to remove
 	resp := common.ListJobsResponse{}
-	Rpc(common.ERpcCmd.ListJobs(), nil, &resp)
+	Rpc(common.ERpcCmd.ListJobs(), common.EJobStatus.All(), &resp)
 
 	if resp.ErrorMessage != "" {
 		return errors.New("failed to query the list of jobs")

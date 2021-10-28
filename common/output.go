@@ -17,6 +17,7 @@ type outputMessageType uint8
 func (outputMessageType) Init() outputMessageType     { return outputMessageType(0) } // simple print, allowed to float up
 func (outputMessageType) Info() outputMessageType     { return outputMessageType(1) } // simple print, allowed to float up
 func (outputMessageType) Progress() outputMessageType { return outputMessageType(2) } // should be printed on the same line over and over again, not allowed to float up
+func (outputMessageType) Dryrun() outputMessageType   { return outputMessageType(6) } // simple print
 
 // EndOfJob used to be called Exit, but now it's not necessarily an exit, because we may have follow-up jobs
 func (outputMessageType) EndOfJob() outputMessageType { return outputMessageType(3) } // (may) exit after printing
@@ -74,15 +75,15 @@ func GetJsonStringFromTemplate(template interface{}) string {
 }
 
 // defines the general output template when the format is set to json
-type jsonOutputTemplate struct {
+type JsonOutputTemplate struct {
 	TimeStamp      time.Time
 	MessageType    string
 	MessageContent string // a simple string for INFO and ERROR, a serialized JSON for INIT, PROGRESS, EXIT
 	PromptDetails  PromptDetails
 }
 
-func newJsonOutputTemplate(messageType outputMessageType, messageContent string, promptDetails PromptDetails) *jsonOutputTemplate {
-	return &jsonOutputTemplate{TimeStamp: time.Now(), MessageType: messageType.String(),
+func newJsonOutputTemplate(messageType outputMessageType, messageContent string, promptDetails PromptDetails) *JsonOutputTemplate {
+	return &JsonOutputTemplate{TimeStamp: time.Now(), MessageType: messageType.String(),
 		MessageContent: messageContent, PromptDetails: promptDetails}
 }
 

@@ -256,6 +256,11 @@ func NewRetryPolicyFactory(o RetryOptions) pipeline.Factory {
 					// NOTE: Protocol Responder returns non-nil if REST API returns invalid status code for the invoked operation
 					if netErr, ok := err.(net.Error); ok && (netErr.Temporary() || netErr.Timeout()) {
 						action = "Retry: net.Error and Temporary() or Timeout()"
+					} else if err == io.ErrUnexpectedEOF {
+						// Some of our methods under the zz_ files do use io.Copy and other related methods that can throw an unexpectedEOF.
+						// However, we don't actually return those errors when we get them.
+						// Consider this more of a safety net.
+						action = "Retry: io.UnexpectedEOF"
 					} else {
 						action = "NoRetry: unrecognized error"
 					}

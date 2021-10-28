@@ -112,19 +112,16 @@ type jobLogger struct {
 	logger            *log.Logger       // The Job's logger
 	appLogger         ILogger
 	sanitizer         pipeline.LogSanitizer
+	logFileNameSuffix string // Used to allow more than 1 log per job, ex: front-end and back-end logs should be separate
 }
 
-func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, appLogger ILogger, logFileFolder string) ILoggerResetable {
-	if appLogger == nil {
-		panic("You must pass a appLogger when creating a JobLogger")
-	}
-
+func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, logFileFolder string, logFileNameSuffix string) ILoggerResetable {
 	return &jobLogger{
 		jobID:             jobID,
-		appLogger:         appLogger, // Panics are recorded in the job log AND in the app log
 		minimumLevelToLog: minimumLevelToLog.ToPipelineLogLevel(),
 		logFileFolder:     logFileFolder,
 		sanitizer:         NewAzCopyLogSanitizer(),
+		logFileNameSuffix: logFileNameSuffix,
 	}
 }
 
@@ -133,7 +130,7 @@ func (jl *jobLogger) OpenLog() {
 		return
 	}
 
-	file, err := os.OpenFile(path.Join(jl.logFileFolder, jl.jobID.String()+".log"),
+	file, err := os.OpenFile(path.Join(jl.logFileFolder, jl.jobID.String()+jl.logFileNameSuffix+".log"),
 		os.O_RDWR|os.O_CREATE|os.O_APPEND, DEFAULT_FILE_PERM)
 	PanicIfErr(err)
 
@@ -163,6 +160,10 @@ func (jl *jobLogger) ShouldLog(level pipeline.LogLevel) bool {
 }
 
 func (jl *jobLogger) CloseLog() {
+	if jl.minimumLevelToLog == pipeline.LogNone {
+		return
+	}
+
 	jl.logger.Println("Closing Log")
 	err := jl.file.Close()
 	PanicIfErr(err)
@@ -217,4 +218,8 @@ func NewReadLogFunc(logger ILogger, fullUrl *url.URL) func(int, error, int64, in
 			count,
 			redactedUrl))
 	}
+}
+
+func IsForceLoggingDisabled() bool {
+	return GetLifecycleMgr().IsForceLoggingDisabled()
 }

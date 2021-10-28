@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	chk "gopkg.in/check.v1"
 )
 
@@ -54,7 +54,7 @@ func getBfsServiceURL() azbfs.ServiceURL {
 // Note that this imposes a restriction on the length of test names
 func generateName(prefix string) string {
 	// These next lines up through the for loop are obtaining and walking up the stack
-	// trace to extrat the test name, which is stored in name
+	// trace to extract the test name, which is stored in name
 	pc := make([]uintptr, 10)
 	runtime.Callers(0, pc)
 	f := runtime.FuncForPC(pc[0])
@@ -129,7 +129,7 @@ func createNewFileSystem(c *chk.C, fsu azbfs.ServiceURL) (fs azbfs.FileSystemURL
 func createNewDirectoryFromFileSystem(c *chk.C, fileSystem azbfs.FileSystemURL) (dir azbfs.DirectoryURL, name string) {
 	dir, name = getDirectoryURLFromFileSystem(c, fileSystem)
 
-	cResp, err := dir.Create(ctx)
+	cResp, err := dir.Create(ctx, true)
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
 	return dir, name

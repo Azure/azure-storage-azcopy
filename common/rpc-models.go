@@ -1,7 +1,9 @@
 package common
 
 import (
+	"net/url"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -15,6 +17,7 @@ type RpcCmd string
 
 func (RpcCmd) None() RpcCmd               { return RpcCmd("--none--") }
 func (RpcCmd) CopyJobPartOrder() RpcCmd   { return RpcCmd("CopyJobPartOrder") }
+func (RpcCmd) GetJobLCMWrapper() RpcCmd   { return RpcCmd("GetJobLCMWrapper") }
 func (RpcCmd) ListJobs() RpcCmd           { return RpcCmd("ListJobs") }
 func (RpcCmd) ListJobSummary() RpcCmd     { return RpcCmd("ListJobSummary") }
 func (RpcCmd) ListSyncJobSummary() RpcCmd { return RpcCmd("ListSyncJobSummary") }
@@ -37,43 +40,126 @@ func (c *RpcCmd) Parse(s string) error {
 	return err
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// ResourceString represents a source or dest string, that can have
+// three parts: the main part, a sas, and extra query parameters that are not part of the sas.
+type ResourceString struct {
+	Value      string
+	SAS        string // SAS should NOT be persisted in the plan files (both for security reasons, and because, at the time of any resume, it may be stale anyway. Resume requests fresh SAS on command line)
+	ExtraQuery string
+}
+
+func (r ResourceString) Clone() ResourceString {
+	return r // not pointer, so copied by value
+}
+
+func (r ResourceString) CloneWithValue(newValue string) ResourceString {
+	c := r.Clone()
+	c.Value = newValue // keep the other properties intact
+	return c
+}
+
+func (r ResourceString) CloneWithConsolidatedSeparators() ResourceString {
+	c := r.Clone()
+	c.Value = ConsolidatePathSeparators(c.Value)
+	return c
+}
+
+func (r ResourceString) FullURL() (*url.URL, error) {
+	u, err := url.Parse(r.Value)
+	if err == nil {
+		r.addParamsToUrl(u, r.SAS, r.ExtraQuery)
+	}
+	return u, err
+}
+
+// to be used when the value is assumed to be a local path
+// Using this signals "Yes, I really am ignoring the SAS and ExtraQuery on purpose",
+// and will result in a panic in the case of programmer error of calling this method
+// when those fields have values
+func (r ResourceString) ValueLocal() string {
+	if r.SAS != "" || r.ExtraQuery != "" {
+		panic("resourceString is not a local resource string")
+	}
+	return r.Value
+}
+
+func (r ResourceString) addParamsToUrl(u *url.URL, sas, extraQuery string) {
+	for _, p := range []string{sas, extraQuery} {
+		if p == "" {
+			continue
+		}
+		if len(u.RawQuery) > 0 {
+			u.RawQuery += "&" + p
+		} else {
+			u.RawQuery = p
+		}
+	}
+}
+
+// Replace azcopy path separators (/) with the OS path separator
+func ConsolidatePathSeparators(path string) string {
+	pathSep := DeterminePathSeparator(path)
+
+	return strings.ReplaceAll(path, AZCOPY_PATH_SEPARATOR_STRING, pathSep)
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//Transfers describes each file/folder being transferred in a given JobPartOrder, and
+//other auxilliary details of this order.
+type Transfers struct {
+	List                []CopyTransfer
+	TotalSizeInBytes    uint64
+	FileTransferCount   uint32
+	FolderTransferCount uint32
+}
 
 // This struct represents the job info (a single part) to be sent to the storage engine
 type CopyJobPartOrderRequest struct {
-	Version        Version         // version of azcopy
-	JobID          JobID           // Guid - job identifier
-	PartNum        PartNumber      // part number of the job
-	IsFinalPart    bool            // to determine the final part for a specific job
-	ForceWrite     OverwriteOption // to determine if the existing needs to be overwritten or not. If set to true, existing blobs are overwritten
-	AutoDecompress bool            // if true, source data with encodings that represent compression are automatically decompressed when downloading
-	Priority       JobPriority     // priority of the task
-	FromTo         FromTo
+	Version         Version         // version of azcopy
+	JobID           JobID           // Guid - job identifier
+	PartNum         PartNumber      // part number of the job
+	IsFinalPart     bool            // to determine the final part for a specific job
+	ForceWrite      OverwriteOption // to determine if the existing needs to be overwritten or not. If set to true, existing blobs are overwritten
+	ForceIfReadOnly bool            // Supplements ForceWrite with addition setting for Azure Files objects with read-only attribute
+	AutoDecompress  bool            // if true, source data with encodings that represent compression are automatically decompressed when downloading
+	Priority        JobPriority     // priority of the task
+	FromTo          FromTo
+	Fpo             FolderPropertyOption // passed in from front-end to ensure that front-end and STE agree on the desired behaviour for the job
 	// list of blobTypes to exclude.
 	ExcludeBlobType []azblob.BlobType
-	SourceRoot      string
-	DestinationRoot string
-	Transfers       []CopyTransfer
-	LogLevel        LogLevel
-	BlobAttributes  BlobTransferAttributes
-	SourceSAS       string
-	DestinationSAS  string
-	// commandString hold the user given command which is logged to the Job log file
-	CommandString  string
+
+	SourceRoot      ResourceString
+	DestinationRoot ResourceString
+
+	Transfers      Transfers
+	LogLevel       LogLevel
+	BlobAttributes BlobTransferAttributes
+	CommandString  string // commandString hold the user given command which is logged to the Job log file
 	CredentialInfo CredentialInfo
 
+	PreserveSMBPermissions         PreservePermissionsOption
+	PreserveSMBInfo                bool
 	S2SGetPropertiesInBackend      bool
 	S2SSourceChangeValidation      bool
 	DestLengthValidation           bool
 	S2SInvalidMetadataHandleOption InvalidMetadataHandleOption
+	S2SPreserveBlobTags            bool
+	CpkOptions                     CpkOptions
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,
 // and used during creating Azure storage client Credential.
 type CredentialInfo struct {
-	CredentialType   CredentialType
-	OAuthTokenInfo   OAuthTokenInfo
-	S3CredentialInfo S3CredentialInfo
+	CredentialType    CredentialType
+	OAuthTokenInfo    OAuthTokenInfo
+	S3CredentialInfo  S3CredentialInfo
+	GCPCredentialInfo GCPCredentialInfo
+}
+
+type GCPCredentialInfo struct {
 }
 
 // S3CredentialInfo contains essential credential info which need to build up S3 client.
@@ -117,8 +203,9 @@ type BlobTransferAttributes struct {
 	PreserveLastModifiedTime bool                  // when downloading, tell engine to set file's timestamp to timestamp of blob
 	PutMd5                   bool                  // when uploading, should we create and PUT Content-MD5 hashes
 	MD5ValidationOption      HashValidationOption  // when downloading, how strictly should we validate MD5 hashes?
-	BlockSizeInBytes         uint32                // when uploading/downloading/copying, specify the size of each chunk
+	BlockSizeInBytes         int64                 // when uploading/downloading/copying, specify the size of each chunk
 	DeleteSnapshotsOption    DeleteSnapshotsOption // when deleting, specify what to do with the snapshots
+	BlobTagsString           string                // when user explicitly provides blob tags
 }
 
 type JobIDDetails struct {
@@ -143,13 +230,21 @@ type ListContainerResponse struct {
 type ListJobSummaryResponse struct {
 	ErrorMsg  string
 	Timestamp time.Time `json:"-"`
-	JobID     JobID     `json:"-"`
+	JobID     JobID
 	// TODO: added for debugging purpose. remove later
 	ActiveConnections int64 `json:",string"`
 	// CompleteJobOrdered determines whether the Job has been completely ordered or not
 	CompleteJobOrdered bool
 	JobStatus          JobStatus
-	TotalTransfers     uint32 `json:",string"`
+
+	TotalTransfers uint32 `json:",string"` // = FileTransfers + FolderPropertyTransfers. It also = TransfersCompleted + TransfersFailed + TransfersSkipped
+	// FileTransfers and FolderPropertyTransfers just break the total down into the two types.
+	// The name FolderPropertyTransfers is used to emphasise that is is only counting transferring the properties and existence of
+	// folders. A "folder property transfer" does not include any files that may be in the folder. Those are counted as
+	// FileTransfers.
+	FileTransfers           uint32 `json:",string"`
+	FolderPropertyTransfers uint32 `json:",string"`
+
 	TransfersCompleted uint32 `json:",string"`
 	TransfersFailed    uint32 `json:",string"`
 	TransfersSkipped   uint32 `json:",string"`
@@ -207,10 +302,12 @@ type ResumeJobRequest struct {
 
 // represents the Details and details of a single transfer
 type TransferDetail struct {
-	Src            string
-	Dst            string
-	TransferStatus TransferStatus
-	ErrorCode      int32 `json:",string"`
+	Src                string
+	Dst                string
+	IsFolderProperties bool
+	TransferStatus     TransferStatus
+	TransferSize       uint64
+	ErrorCode          int32 `json:",string"`
 }
 
 type CancelPauseResumeResponse struct {
