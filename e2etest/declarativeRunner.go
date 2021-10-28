@@ -153,7 +153,12 @@ func RunScenarios(
 					hsToUse = *hs
 				}
 
+				if scenarioSuffix != "" {
+					subtestName += "-" + scenarioSuffix
+				}
+
 				s := scenario{
+					accountType:         accountType,
 					subtestName:         subtestName,
 					compactScenarioName: compactScenarioName,
 					fullScenarioName:    fullScenarioName,
@@ -198,13 +203,13 @@ func RunScenarios(
 						fullScenarioName:    sen.fullScenarioName,
 						compactScenarioName: sen.compactScenarioName,
 					}
+
+					if hs != nil {
+						sen.runHook(hs.beforeTestRun)
+					}
+
 					sen.Run()
 				})
-
-				if hs != nil {
-					sen.runHook(hs.beforeTestRun)
-				}
-				sen.Run()
 			}
 		})
 	}
