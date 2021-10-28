@@ -24,13 +24,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"net/url"
 	"os"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -56,6 +57,9 @@ var azcopyCurrentJobID common.JobID
 // it can be thought of as an "ambient" property. That's the (weak?) justification for implementing
 // it as a global
 var cmdLineExtraSuffixesAAD string
+
+// It would be preferable if this was a local variable, since it just gets altered and shot off to the STE
+var debugSkipFiles string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -111,8 +115,8 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		enumerationParallelism = concurrencySettings.EnumerationPoolSize.Value
-		enumerationParallelStatFiles = concurrencySettings.ParallelStatFiles.Value
+	        EnumerationParallelism = concurrencySettings.EnumerationPoolSize.Value
+		EnumerationParallelStatFiles = concurrencySettings.ParallelStatFiles.Value
 
 		// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
 		// Subtract a few seconds, to ensure that this date DEFINITELY falls before the LMT of any file changed while this
@@ -120,8 +124,8 @@ var rootCmd = &cobra.Command{
 		// or after this job
 		adjustedTime := timeAtPrestart.Add(-5 * time.Second)
 		startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
-			common.IncludeBeforeFlagName, includeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
-			common.IncludeAfterFlagName, includeAfterDateFilter{}.FormatAsUTC(adjustedTime))
+			common.IncludeBeforeFlagName, IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
+			common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
 		ste.JobsAdmin.LogToJobLog(startTimeMessage, pipeline.LogInfo)
 
 		// spawn a routine to fetch and compare the local application's version against the latest version available
@@ -130,6 +134,16 @@ var rootCmd = &cobra.Command{
 		// Note: this function is necessary for non-help, non-login commands, since they don't reach the corresponding
 		// beginDetectNewVersion call in Execute (below)
 		beginDetectNewVersion()
+
+		if debugSkipFiles != "" {
+			for _, v := range strings.Split(debugSkipFiles, ";") {
+				if strings.HasPrefix(v, "/") {
+					v = strings.TrimPrefix(v, common.AZCOPY_PATH_SEPARATOR_STRING)
+				}
+
+				ste.DebugSkipFiles[v] = true
+			}
+		}
 
 		return nil
 	},
@@ -179,6 +193,7 @@ func init() {
 	// special E2E testing flags
 	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitContinue, "await-continue", false, "Used when debugging, to tell AzCopy to await `continue` on stdin before starting any work. Assists with debugging AzCopy via attach-to-process")
 	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitAllowOpenFiles, "await-open", false, "Used when debugging, to tell AzCopy to await `open` on stdin, after scanning but before opening the first file. Assists with testing cases around file modifications between scanning and usage")
+	rootCmd.PersistentFlags().StringVar(&debugSkipFiles, "debug-skip-files", "", "Used when debugging, to tell AzCopy to cancel the job midway. List of relative paths to skip in the STE.")
 
 	// reserved for partner teams
 	rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
@@ -186,6 +201,7 @@ func init() {
 	// debug-only
 	rootCmd.PersistentFlags().MarkHidden("await-continue")
 	rootCmd.PersistentFlags().MarkHidden("await-open")
+	rootCmd.PersistentFlags().MarkHidden("debug-skip-files")
 }
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where
@@ -196,7 +212,7 @@ func init() {
 func beginDetectNewVersion() chan struct{} {
 	completionChannel := make(chan struct{})
 	go func() {
-		const versionMetadataUrl = "https://aka.ms/azcopyv10-version-metadata"
+		const versionMetadataUrl = "https://azcopyvnextrelease.blob.core.windows.net/releasemetadata/latest_version.txt"
 
 		// step 0: check the Stderr before checking version
 		_, err := os.Stderr.Stat()

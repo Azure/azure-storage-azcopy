@@ -44,7 +44,7 @@ type BlobFSAccountTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func (t *BlobFSAccountTraverser) isDirectory(isSource bool) bool {
+func (t *BlobFSAccountTraverser) IsDirectory(isSource bool) bool {
 	return true // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
@@ -99,7 +99,7 @@ func (t *BlobFSAccountTraverser) listContainers() ([]string, error) {
 	}
 }
 
-func (t *BlobFSAccountTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) error {
+func (t *BlobFSAccountTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 	// listContainers will return the cached filesystem list if filesystems have already been listed by this traverser.
 	fsList, err := t.listContainers()
 
@@ -109,7 +109,7 @@ func (t *BlobFSAccountTraverser) traverse(preprocessor objectMorpher, processor 
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
-		err = fileSystemTraverser.traverse(preprocessorForThisChild, processor, filters)
+		err = fileSystemTraverser.Traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
 			WarnStdoutAndScanningLog(fmt.Sprintf("failed to list files in filesystem %s: %s", v, err))

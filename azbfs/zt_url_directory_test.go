@@ -2,9 +2,10 @@ package azbfs_test
 
 import (
 	"context"
+	"net/http"
+
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	chk "gopkg.in/check.v1"
-	"net/http"
 )
 
 type DirectoryUrlSuite struct{}
@@ -168,6 +169,38 @@ func (dus *DirectoryUrlSuite) TestReCreateDirectory(c *chk.C) {
 	c.Assert(stgErr.ServiceCode(), chk.Equals, azbfs.ServiceCodePathAlreadyExists)
 }
 
+// TestCreateMetadataDeleteDirectory test the creation of a directory with metadata
+func (dus *DirectoryUrlSuite) TestCreateMetadataDeleteDirectory(c *chk.C) {
+	// Create a file system
+	fsu := getBfsServiceURL()
+	fsURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fsURL)
+
+	// Create metadata
+	metadata := make(map[string]string)
+	metadata["foo"] = "bar"
+
+	// Create a directory url from the fileSystem Url
+	dirUrl, _ := getDirectoryURLFromFileSystem(c, fsURL)
+	cResp, err := dirUrl.CreateWithOptions(context.Background(),
+		azbfs.CreateDirectoryOptions{RecreateIfExists: true, Metadata: metadata})
+	defer deleteDirectory(c, dirUrl)
+
+	// Assert the directory create response header attributes
+	c.Assert(err, chk.IsNil)
+	c.Assert(cResp.StatusCode(), chk.Equals, http.StatusCreated)
+	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
+	c.Assert(cResp.LastModified(), chk.Not(chk.Equals), "")
+	c.Assert(cResp.XMsRequestID(), chk.Not(chk.Equals), "")
+	c.Assert(cResp.XMsVersion(), chk.Not(chk.Equals), "")
+	c.Assert(cResp.Date(), chk.Not(chk.Equals), "")
+
+	getResp, err := dirUrl.GetProperties(context.Background())
+	c.Assert(err, chk.IsNil)
+	c.Assert(getResp.Response().StatusCode, chk.Equals, http.StatusOK)
+	c.Assert(getResp.XMsProperties(), chk.Not(chk.Equals), "") // Check metadata returned is not null.
+}
+
 // TestDirectoryStructure tests creating dir, sub-dir inside dir and files
 // inside dirs and sub-dirs. Then verify the count of files / sub-dirs inside directory
 func (dus *DirectoryUrlSuite) TestDirectoryStructure(c *chk.C) {
@@ -275,4 +308,111 @@ func (dus *DirectoryUrlSuite) TestListDirectoryWithSpaces(c *chk.C) {
 	c.Assert(lresp.XMsRequestID(), chk.Not(chk.Equals), "")
 	c.Assert(lresp.XMsVersion(), chk.Not(chk.Equals), "")
 	c.Assert(lresp.Date(), chk.Not(chk.Equals), "")
+}
+
+func (s *FileURLSuite) TestRenameDirectory(c *chk.C) {
+	fsu := getBfsServiceURL()
+	fileSystemURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fileSystemURL)
+
+	dirURL, dirName := createNewDirectoryFromFileSystem(c, fileSystemURL)
+	dirRename := dirName + "rename"
+
+	renamedDirURL, err := dirURL.Rename(context.Background(), azbfs.RenameDirectoryOptions{DestinationPath: dirRename})
+	c.Assert(renamedDirURL, chk.NotNil)
+	c.Assert(err, chk.IsNil)
+
+	// Check that the old directory does not exist
+	getPropertiesResp, err := dirURL.GetProperties(context.Background())
+	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	c.Assert(getPropertiesResp, chk.IsNil)
+
+	// Check that the renamed directory does exist
+	getPropertiesResp, err = renamedDirURL.GetProperties(context.Background())
+	c.Assert(getPropertiesResp.StatusCode(), chk.Equals, http.StatusOK)
+	c.Assert(err, chk.IsNil)
+}
+
+func (s *FileURLSuite) TestRenameDirWithFile(c *chk.C) {
+	fsu := getBfsServiceURL()
+	fileSystemURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fileSystemURL)
+
+	dirURL, dirName := createNewDirectoryFromFileSystem(c, fileSystemURL)
+	fileName := "test.txt"
+	fileURL := dirURL.NewFileURL(fileName)
+	dirRename := dirName + "rename"
+
+	renamedDirURL, err := dirURL.Rename(context.Background(), azbfs.RenameDirectoryOptions{DestinationPath: dirRename})
+	c.Assert(renamedDirURL, chk.NotNil)
+	c.Assert(err, chk.IsNil)
+
+	// Check that the old directory and file do not exist
+	getPropertiesResp, err := dirURL.GetProperties(context.Background())
+	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	c.Assert(getPropertiesResp, chk.IsNil)
+	getPropertiesResp2, err := fileURL.GetProperties(context.Background())
+	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	c.Assert(getPropertiesResp2, chk.IsNil)
+
+	// Check that the renamed directory and file do exist
+	getPropertiesResp, err = renamedDirURL.GetProperties(context.Background())
+	c.Assert(getPropertiesResp.StatusCode(), chk.Equals, http.StatusOK)
+	c.Assert(err, chk.IsNil)
+	getPropertiesResp2, err = renamedDirURL.NewFileURL(fileName).GetProperties(context.Background())
+	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	c.Assert(getPropertiesResp2, chk.IsNil)
+}
+
+func (dus *DirectoryUrlSuite) TestSetACL(c *chk.C) {
+	// Create a filesystem
+	fsu := getBfsServiceURL()
+	fsURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fsURL)
+
+	// Create a directory inside the filesystem
+	dirURL := fsURL.NewDirectoryURL("test")
+	_, err := dirURL.Create(ctx, true)
+	c.Assert(err, chk.IsNil)
+
+	// Grab it's default ACLs
+	folderAccess, err := dirURL.GetAccessControl(ctx)
+	c.Assert(err, chk.IsNil)
+
+	// Modify it slightly
+	folderAccess.ACL = "user::r-x,group::r-x,other::---"
+	folderAccess.Permissions = ""
+	_, err = dirURL.SetAccessControl(ctx, folderAccess)
+	c.Assert(err, chk.IsNil)
+
+	// Compare them
+	folderAccessToValidate, err := dirURL.GetAccessControl(ctx)
+	c.Assert(err, chk.IsNil)
+	// We're checking ACLs are the same
+	folderAccessToValidate.Permissions = ""
+	c.Assert(folderAccessToValidate, chk.Equals, folderAccess)
+
+	// Create a file
+	fileUrl := dirURL.NewFileURL("foo.bar")
+	_, err = fileUrl.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	c.Assert(err, chk.IsNil)
+
+	// Grab it's default ACLs
+	fileAccess, err := fileUrl.GetAccessControl(ctx)
+	c.Assert(err, chk.IsNil)
+
+	// Modify it slightly.
+	fileAccess.ACL = "user::r-x,group::r-x,other::---"
+	fileAccess.Permissions = ""
+	_, err = fileUrl.SetAccessControl(ctx, fileAccess)
+	c.Assert(err, chk.IsNil)
+
+	// Compare them
+	fileAccessToValidate, err := fileUrl.GetAccessControl(ctx)
+	c.Assert(err, chk.IsNil)
+	// We're checking ACLs are the same
+	fileAccessToValidate.Permissions = ""
+	c.Assert(fileAccessToValidate, chk.Equals, fileAccess)
+
+	// Don't bother testing the root ACLs, since it calls into the directoryclient
 }

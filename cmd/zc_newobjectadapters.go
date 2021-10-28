@@ -97,55 +97,55 @@ func (a blobPropertiesResponseAdapter) AccessTier() azblob.AccessTierType {
 	return azblob.AccessTierType(a.BlobGetPropertiesResponse.AccessTier())
 }
 
-// blobPropertiesAdapter adapts a BlobPropertiesInternal object to both the
+// blobPropertiesAdapter adapts a BlobProperties object to both the
 // contentPropsProvider and blobPropsProvider interfaces
 type blobPropertiesAdapter struct {
-	azblob.BlobPropertiesInternal
+	BlobProperties azblob.BlobPropertiesInternal
 }
 
 func (a blobPropertiesAdapter) CacheControl() string {
-	return common.IffStringNotNil(a.BlobPropertiesInternal.CacheControl, "")
+	return common.IffStringNotNil(a.BlobProperties.CacheControl, "")
 }
 
 func (a blobPropertiesAdapter) ContentDisposition() string {
-	return common.IffStringNotNil(a.BlobPropertiesInternal.ContentDisposition, "")
+	return common.IffStringNotNil(a.BlobProperties.ContentDisposition, "")
 }
 
 func (a blobPropertiesAdapter) ContentEncoding() string {
-	return common.IffStringNotNil(a.BlobPropertiesInternal.ContentEncoding, "")
+	return common.IffStringNotNil(a.BlobProperties.ContentEncoding, "")
 }
 
 func (a blobPropertiesAdapter) ContentLanguage() string {
-	return common.IffStringNotNil(a.BlobPropertiesInternal.ContentLanguage, "")
+	return common.IffStringNotNil(a.BlobProperties.ContentLanguage, "")
 }
 
 func (a blobPropertiesAdapter) ContentType() string {
-	return common.IffStringNotNil(a.BlobPropertiesInternal.ContentType, "")
+	return common.IffStringNotNil(a.BlobProperties.ContentType, "")
 }
 
 func (a blobPropertiesAdapter) ContentMD5() []byte {
-	return a.BlobPropertiesInternal.ContentMD5
+	return a.BlobProperties.ContentMD5
 }
 
 func (a blobPropertiesAdapter) BlobType() azblob.BlobType {
-	return a.BlobPropertiesInternal.BlobType
+	return a.BlobProperties.BlobType
 }
 
 func (a blobPropertiesAdapter) AccessTier() azblob.AccessTierType {
-	return a.BlobPropertiesInternal.AccessTier
+	return a.BlobProperties.AccessTier
 }
 
 // LeaseDuration returns the value for header x-ms-lease-duration.
 func (a blobPropertiesAdapter) LeaseDuration() azblob.LeaseDurationType {
-	return a.BlobPropertiesInternal.LeaseDuration
+	return a.BlobProperties.LeaseDuration
 }
 
 // LeaseState returns the value for header x-ms-lease-state.
 func (a blobPropertiesAdapter) LeaseState() azblob.LeaseStateType {
-	return a.BlobPropertiesInternal.LeaseState
+	return a.BlobProperties.LeaseState
 }
 
 // LeaseStatus returns the value for header x-ms-lease-status.
 func (a blobPropertiesAdapter) LeaseStatus() azblob.LeaseStatusType {
-	return a.BlobPropertiesInternal.LeaseStatus
+	return a.BlobProperties.LeaseStatus
 }

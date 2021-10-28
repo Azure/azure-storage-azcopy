@@ -21,8 +21,11 @@
 package ste
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
@@ -41,9 +44,26 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 	return &blobSourceInfoProvider{defaultRemoteSourceInfoProvider: *base}, nil
 }
 
+// AccessControl should ONLY get called when we know for a fact it is a blobFS->blobFS tranfser.
+// It *assumes* that the source is actually a HNS account.
+func (p *blobSourceInfoProvider) AccessControl() (azbfs.BlobFSAccessControl, error) {
+	presignedURL, err := p.PreSignedSourceURL()
+	if err != nil {
+		return azbfs.BlobFSAccessControl{}, err
+	}
+
+	bURLParts := azblob.NewBlobURLParts(*presignedURL)
+	bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".blob", ".dfs")
+	bURLParts.BlobName = strings.TrimSuffix(bURLParts.BlobName, "/") // BlobFS doesn't handle folders correctly like this.
+	// todo: jank, and violates the principle of interfaces
+	fURL := azbfs.NewFileURL(bURLParts.URL(), p.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondarySourceProviderPipeline)
+
+	return fURL.GetAccessControl(p.jptm.Context())
+}
+
 func (p *blobSourceInfoProvider) BlobTier() azblob.AccessTierType {
 	return p.transferInfo.S2SSrcBlobTier
-}
+} 
 
 func (p *blobSourceInfoProvider) BlobType() azblob.BlobType {
 	return p.transferInfo.SrcBlobType

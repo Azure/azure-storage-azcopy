@@ -80,7 +80,7 @@ type IJobPartTransferMgr interface {
 	ChunkStatusLogger() common.ChunkStatusLogger
 	LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string)
 	GetOverwritePrompter() *overwritePrompter
-	GetFolderCreationTracker() common.FolderCreationTracker
+	GetFolderCreationTracker() FolderCreationTracker
 	common.ILogger
 	DeleteSnapshotsOption() common.DeleteSnapshotsOption
 	PermanentDeleteOption() common.PermanentDeleteOption
@@ -204,7 +204,7 @@ func (jptm *jobPartTransferMgr) GetOverwritePrompter() *overwritePrompter {
 	return jptm.jobPartMgr.getOverwritePrompter()
 }
 
-func (jptm *jobPartTransferMgr) GetFolderCreationTracker() common.FolderCreationTracker {
+func (jptm *jobPartTransferMgr) GetFolderCreationTracker() FolderCreationTracker {
 	return jptm.jobPartMgr.getFolderCreationTracker()
 }
 
@@ -351,7 +351,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		SourceSize:                     sourceSize,
 		Destination:                    dst,
 		EntityType:                     entityType,
-		PreserveSMBPermissions:         plan.PreserveSMBPermissions,
+		PreserveSMBPermissions:         plan.PreservePermissions,
 		PreserveSMBInfo:                plan.PreserveSMBInfo,
 		S2SGetPropertiesInBackend:      s2sGetPropertiesInBackend,
 		S2SSourceChangeValidation:      s2sSourceChangeValidation,

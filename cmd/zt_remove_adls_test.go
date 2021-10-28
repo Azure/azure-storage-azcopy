@@ -28,6 +28,22 @@ import (
 	"strings"
 )
 
+func createFileSystem(c *chk.C) (azbfs.ServiceURL, azbfs.FileSystemURL, string, string, azbfs.DirectoryURL) { // get service SAS for raw input
+	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
+
+	// set up the filesystem to be deleted
+	bfsServiceURL := GetBFSSU()
+	fsURL, fsName := createNewFilesystem(c, bfsServiceURL)
+
+	// set up directory + file as children of the filesystem to delete
+	dirName := generateName("dir", 0)
+	dirURL := fsURL.NewDirectoryURL(dirName)
+	_, err := dirURL.Create(ctx, true)
+	c.Assert(err, chk.IsNil)
+
+	return serviceURLWithSAS, fsURL, fsName, dirName, dirURL
+}
+
 func (s *cmdIntegrationSuite) TestRemoveFilesystem(c *chk.C) {
 	// invoke the interceptor so lifecycle manager does not shut down the tests
 	mockedRPC := interceptor{}
@@ -37,16 +53,10 @@ func (s *cmdIntegrationSuite) TestRemoveFilesystem(c *chk.C) {
 	// get service SAS for raw input
 	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
 
-	// set up the filesystem to be deleted
-	bfsServiceURL := GetBFSSU()
-	fsURL, fsName := createNewFilesystem(c, bfsServiceURL)
+	serviceURLWithSAS, fsURL, fsName, _, dirURL := createFileSystem(c)
 
-	// set up directory + file as children of the filesystem to delete
-	dirURL := fsURL.NewDirectoryURL(generateName("dir", 0))
-	_, err := dirURL.Create(ctx, true)
-	c.Assert(err, chk.IsNil)
 	fileURL := dirURL.NewFileURL(generateName("file", 0))
-	_, err = fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{})
 	c.Assert(err, chk.IsNil)
 
 	// removing the filesystem
@@ -70,18 +80,10 @@ func (s *cmdIntegrationSuite) TestRemoveDirectory(c *chk.C) {
 	// get service SAS for raw input
 	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
 
-	// set up the file system
-	bfsServiceURL := GetBFSSU()
-	fsURL, fsName := createNewFilesystem(c, bfsServiceURL)
-	defer deleteFilesystem(c, fsURL)
+	serviceURLWithSAS, _, fsName, dirName, dirURL := createFileSystem(c)
 
-	// set up the directory to be deleted
-	dirName := generateName("dir", 0)
-	dirURL := fsURL.NewDirectoryURL(dirName)
-	_, err := dirURL.Create(ctx, true)
-	c.Assert(err, chk.IsNil)
 	fileURL := dirURL.NewFileURL(generateName("file", 0))
-	_, err = fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{})
 	c.Assert(err, chk.IsNil)
 
 	// trying to remove the dir with recursive=false should fail
@@ -109,24 +111,12 @@ func (s *cmdIntegrationSuite) TestRemoveFile(c *chk.C) {
 	mockedRPC.init()
 	ctx := context.Background()
 
-	// get service SAS for raw input
-	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
-
-	// set up the file system
-	bfsServiceURL := GetBFSSU()
-	fsURL, fsName := createNewFilesystem(c, bfsServiceURL)
-	defer deleteFilesystem(c, fsURL)
-
-	// set up the parent of the file to be deleted
-	parentDirName := generateName("dir", 0)
-	parentDirURL := fsURL.NewDirectoryURL(parentDirName)
-	_, err := parentDirURL.Create(ctx, true)
-	c.Assert(err, chk.IsNil)
+	serviceURLWithSAS, _, fsName, parentDirName, parentDirURL := createFileSystem(c)
 
 	// set up the file to be deleted
 	fileName := generateName("file", 0)
 	fileURL := parentDirURL.NewFileURL(fileName)
-	_, err = fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{})
 	c.Assert(err, chk.IsNil)
 
 	// delete single file
@@ -150,19 +140,11 @@ func (s *cmdIntegrationSuite) TestRemoveListOfALDSFilesAndDirectories(c *chk.C) 
 	// get service SAS for raw input
 	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
 
-	// set up the file system
-	bfsServiceURL := GetBFSSU()
-	fsURL, fsName := createNewFilesystem(c, bfsServiceURL)
-	defer deleteFilesystem(c, fsURL)
+	serviceURLWithSAS, fsURL, fsName, parentDirName, parentDirURL := createFileSystem(c)
 
-	// set up the first file to be deleted, it sits inside top level dir
-	parentDirName := generateName("dir", 0)
-	parentDirURL := fsURL.NewDirectoryURL(parentDirName)
-	_, err := parentDirURL.Create(ctx, true)
-	c.Assert(err, chk.IsNil)
 	fileName1 := generateName("file1", 0)
 	fileURL1 := parentDirURL.NewFileURL(fileName1)
-	_, err = fileURL1.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err := fileURL1.Create(ctx, azbfs.BlobFSHTTPHeaders{})
 	c.Assert(err, chk.IsNil)
 
 	// set up the second file to be deleted, it sits at the top level
@@ -205,13 +187,7 @@ func (s *cmdIntegrationSuite) TestRemoveListOfALDSFilesWithIncludeExclude(c *chk
 	mockedRPC.init()
 	ctx := context.Background()
 
-	// get service SAS for raw input
-	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
-
-	// set up the file system
-	bfsServiceURL := GetBFSSU()
-	fsURL, fsName := createNewFilesystem(c, bfsServiceURL)
-	defer deleteFilesystem(c, fsURL)
+	serviceURLWithSAS, fsURL, fsName, _, _ := createFileSystem(c)
 
 	// set up the second file to be deleted, it sits at the top level
 	fileName := generateName("file", 0)
@@ -242,5 +218,146 @@ func (s *cmdIntegrationSuite) TestRemoveListOfALDSFilesWithIncludeExclude(c *chk
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.NotNil)
 		c.Assert(strings.Contains(err.Error(), "exclude"), chk.Equals, true)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestRemoveFilesystemWithFromTo(c *chk.C) {
+	// invoke the interceptor so lifecycle manager does not shut down the tests
+	mockedRPC := interceptor{}
+	mockedRPC.init()
+	ctx := context.Background()
+
+	serviceURLWithSAS, fsURL, fsName, _, dirURL := createFileSystem(c)
+
+	fileURL := dirURL.NewFileURL(generateName("file", 0))
+	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	c.Assert(err, chk.IsNil)
+
+	// removing the filesystem
+	fsURLWithSAS := serviceURLWithSAS.NewFileSystemURL(fsName).URL()
+	raw := getDefaultRemoveRawInput(fsURLWithSAS.String())
+	raw.fromTo = "BlobFSTrash"
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// make sure the directory does not exist anymore
+		_, err = fsURL.GetProperties(ctx)
+		c.Assert(err, chk.NotNil)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestRemoveDirectoryWithFromTo(c *chk.C) {
+	// invoke the interceptor so lifecycle manager does not shut down the tests
+	mockedRPC := interceptor{}
+	mockedRPC.init()
+	ctx := context.Background()
+
+	// get service SAS for raw input
+	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
+
+	serviceURLWithSAS, _, fsName, dirName, dirURL := createFileSystem(c)
+
+	fileURL := dirURL.NewFileURL(generateName("file", 0))
+	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	c.Assert(err, chk.IsNil)
+
+	// trying to remove the dir with recursive=false should fail
+	dirURLWithSAS := serviceURLWithSAS.NewFileSystemURL(fsName).NewDirectoryURL(dirName)
+	raw := getDefaultRemoveRawInput(dirURLWithSAS.String())
+	raw.recursive = false
+	raw.fromTo = "BlobFSTrash"
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.NotNil)
+	})
+
+	// removing the dir with recursive=true should succeed
+	raw.recursive = true
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// make sure the directory does not exist anymore
+		_, err = dirURL.GetProperties(ctx)
+		c.Assert(err, chk.NotNil)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestRemoveFileWithFromTo(c *chk.C) {
+	// invoke the interceptor so lifecycle manager does not shut down the tests
+	mockedRPC := interceptor{}
+	mockedRPC.init()
+	ctx := context.Background()
+
+	// get service SAS for raw input
+	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
+
+	serviceURLWithSAS, _, fsName, parentDirName, parentDirURL := createFileSystem(c)
+
+	// set up the file to be deleted
+	fileName := generateName("file", 0)
+	fileURL := parentDirURL.NewFileURL(fileName)
+	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	c.Assert(err, chk.IsNil)
+
+	// delete single file
+	fileURLWithSAS := serviceURLWithSAS.NewFileSystemURL(fsName).NewDirectoryURL(parentDirName).NewFileURL(fileName)
+	raw := getDefaultRemoveRawInput(fileURLWithSAS.String())
+	raw.fromTo = "BlobFSTrash"
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// make sure the file does not exist anymore
+		_, err = fileURL.GetProperties(ctx)
+		c.Assert(err, chk.NotNil)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestRemoveListOfALDSFilesAndDirectoriesWithFromTo(c *chk.C) {
+	// invoke the interceptor so lifecycle manager does not shut down the tests
+	mockedRPC := interceptor{}
+	mockedRPC.init()
+	ctx := context.Background()
+
+	// get service SAS for raw input
+	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
+
+	serviceURLWithSAS, fsURL, fsName, parentDirName, parentDirURL := createFileSystem(c)
+
+	fileName1 := generateName("file1", 0)
+	fileURL1 := parentDirURL.NewFileURL(fileName1)
+	_, err := fileURL1.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	c.Assert(err, chk.IsNil)
+
+	// set up the second file to be deleted, it sits at the top level
+	fileName2 := generateName("file2", 0)
+	fileURL2 := fsURL.NewRootDirectoryURL().NewFileURL(fileName2)
+	_, err = fileURL2.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	c.Assert(err, chk.IsNil)
+
+	// make the input for list-of-files
+	listOfFiles := []string{common.GenerateFullPath(parentDirName, fileName1), fileName2}
+
+	// add some random files that don't actually exist
+	listOfFiles = append(listOfFiles, "WUTAMIDOING")
+	listOfFiles = append(listOfFiles, "DONTKNOW")
+
+	// delete file2 and dir
+	fileURLWithSAS := serviceURLWithSAS.NewFileSystemURL(fsName)
+	raw := getDefaultRemoveRawInput(fileURLWithSAS.String())
+	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(c, listOfFiles)
+	raw.fromTo = "BlobFSTrash"
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// make sure the file1 does not exist anymore
+		_, err = fileURL1.GetProperties(ctx)
+		c.Assert(err, chk.NotNil)
+
+		// make sure the file2 does not exist anymore
+		_, err = fileURL2.GetProperties(ctx)
+		c.Assert(err, chk.NotNil)
+
+		// make sure the filesystem did not get deleted
+		_, err = fsURL.GetProperties(ctx)
+		c.Assert(err, chk.IsNil)
 	})
 }

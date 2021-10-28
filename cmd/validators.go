@@ -29,7 +29,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
+func ValidateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
 	if userSpecifiedFromTo == "" {
 		inferredFromTo := inferFromTo(src, dst)
 
@@ -57,7 +57,7 @@ const fromToHelpText = "Valid values are two-word phases of the form BlobLocal, 
 
 func inferFromTo(src, dst string) common.FromTo {
 	// Try to infer the 1st argument
-	srcLocation := inferArgumentLocation(src)
+	srcLocation := InferArgumentLocation(src)
 	if srcLocation == srcLocation.Unknown() {
 		glcm.Info("Cannot infer source location of " +
 			common.URLStringExtension(src).RedactSecretQueryParamForLogging() +
@@ -65,7 +65,7 @@ func inferFromTo(src, dst string) common.FromTo {
 		return common.EFromTo.Unknown()
 	}
 
-	dstLocation := inferArgumentLocation(dst)
+	dstLocation := InferArgumentLocation(dst)
 	if dstLocation == dstLocation.Unknown() {
 		glcm.Info("Cannot infer destination location of " +
 			common.URLStringExtension(dst).RedactSecretQueryParamForLogging() +
@@ -122,7 +122,7 @@ func inferFromTo(src, dst string) common.FromTo {
 
 var IPv4Regex = regexp.MustCompile(`\d+\.\d+\.\d+\.\d+`) // simple regex
 
-func inferArgumentLocation(arg string) common.Location {
+func InferArgumentLocation(arg string) common.Location {
 	if arg == pipeLocation {
 		return common.ELocation.Pipe()
 	}

@@ -30,6 +30,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 ///////////////
@@ -88,10 +89,12 @@ type objectProperties struct {
 	contentHeaders     *contentHeaders
 	nameValueMetadata  map[string]string
 	blobTags           common.BlobTags
+	blobType           common.BlobType
 	creationTime       *time.Time
 	lastWriteTime      *time.Time
 	smbAttributes      *uint32
 	smbPermissionsSddl *string
+	adlsPermissionsACL *string // TODO: Test owner and group; needs a good target though.
 	cpkInfo            *common.CpkInfo
 	cpkScopeInfo       *common.CpkScopeInfo
 }
@@ -154,15 +157,23 @@ func (op objectProperties) DeepCopy() objectProperties {
 	}
 
 	if op.smbPermissionsSddl != nil {
-		ret.smbPermissionsSddl = op.smbPermissionsSddl
+		val := *op.smbPermissionsSddl
+		ret.smbPermissionsSddl = &val
+	}
+
+	if op.adlsPermissionsACL != nil {
+		val := *op.adlsPermissionsACL
+		ret.adlsPermissionsACL = &val
 	}
 
 	if op.cpkInfo != nil {
-		ret.cpkInfo = op.cpkInfo
+		val := *op.cpkInfo
+		ret.cpkInfo = &val
 	}
 
 	if op.cpkScopeInfo != nil {
-		ret.cpkScopeInfo = op.cpkScopeInfo
+		val := *op.cpkScopeInfo
+		ret.cpkScopeInfo = &val
 	}
 
 	return ret
@@ -294,7 +305,9 @@ func folder(n string, properties ...withPropertyProvider) *testObject {
 // Our expectations, e.g. success or failure, are represented by whether we put each file into
 // "shouldTransfer", "shouldFail" etc.
 type testFiles struct {
-	defaultSize string // how big should the files be? Applies to those files that don't specify individual sizes. Uses the same K, M, G suffixes as benchmark mode's size-per-file
+	defaultSize  string                  // how big should the files be? Applies to those files that don't specify individual sizes. Uses the same K, M, G suffixes as benchmark mode's size-per-file
+	objectTarget string                  // should we target only a single file/folder?
+	sourcePublic azblob.PublicAccessType // should the source blob container be public? (ONLY APPLIES TO BLOB.)
 
 	// The files/folders that we expect to be transferred. Elements of the list must be strings or testObject's.
 	// A string can be used if no properties need to be specified.
@@ -315,6 +328,8 @@ type testFiles struct {
 func (tf testFiles) cloneShouldTransfers() testFiles {
 	return testFiles{
 		defaultSize:    tf.defaultSize,
+		objectTarget:   tf.objectTarget,
+		sourcePublic:   tf.sourcePublic,
 		shouldTransfer: tf.shouldTransfer,
 	}
 }
@@ -323,6 +338,8 @@ func (tf testFiles) DeepCopy() testFiles {
 	ret := testFiles{}
 	ret.defaultSize = tf.defaultSize
 
+	ret.objectTarget = tf.objectTarget
+	ret.sourcePublic = tf.sourcePublic
 	ret.shouldTransfer = tf.copyList(tf.shouldTransfer)
 	ret.shouldIgnore = tf.copyList(tf.shouldIgnore)
 	ret.shouldFail = tf.copyList(tf.shouldFail)

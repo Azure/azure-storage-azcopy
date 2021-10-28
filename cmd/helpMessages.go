@@ -305,7 +305,14 @@ Set the environment variable AZCOPY_SPA_CERT_PASSWORD to the certificate's passw
 
    Please treat /path/to/my/cert as a path to a PEM or PKCS12 file-- AzCopy does not reach into the system cert store to obtain your certificate.
    --certificate-path is mandatory when doing cert-based service principal auth.
+
+Subcommand for login to check the login status of your current session.
+	- azcopy login status 
 `
+
+const loginStatusShortDescription = "Prints if you are currently logged in to your Azure Storage account."
+
+const loginStatusLongDescription = "This command will let you know if you are currently logged in to your Azure Storage account."
 
 // ===================================== LOGOUT COMMAND ===================================== //
 const logoutCmdShortDescription = "Log out to terminate access to Azure Storage resources."
