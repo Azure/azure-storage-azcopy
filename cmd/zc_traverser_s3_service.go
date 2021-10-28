@@ -26,6 +26,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/minio/minio-go"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -76,7 +77,7 @@ func (t *s3ServiceTraverser) listContainers() ([]string, error) {
 
 				if err != nil {
 					if strings.Contains(err.Error(), "301 response missing Location header") {
-						LogStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q , as it's not in the region specified by source URL", v))
+						azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf("skip enumerating the bucket %q , as it's not in the region specified by source URL", v))
 						continue
 					}
 
