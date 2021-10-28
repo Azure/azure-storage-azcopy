@@ -294,20 +294,16 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks_ToFile(c *chk.C) {
 	symlinkTmpDir := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(symlinkTmpDir)
 	c.Assert(tmpDir, chk.Not(chk.Equals), symlinkTmpDir)
-
 	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, mainDirFilenames)
 	scenarioHelper{}.generateLocalFilesFromList(c, symlinkTmpDir, symlinkTargetFilenames)
 	trySymlink(filepath.Join(symlinkTmpDir, symlinkTargetFilenames[0]), filepath.Join(tmpDir, "iPointToTheSymlink"), c)
 	trySymlink(filepath.Join(symlinkTmpDir, symlinkTargetFilenames[0]), filepath.Join(tmpDir, "iPointToTheSameSymlink"), c)
-
 	fileCount := 0
 	c.Assert(WalkWithSymlinks(tmpDir, func(path string, fi os.FileInfo, err error) error {
 		c.Assert(err, chk.IsNil)
-
 		if fi.IsDir() {
 			return nil
 		}
-
 		fileCount++
 		if fi.Name() != "iAmANormalFile.txt" {
 			c.Assert(strings.HasPrefix(path, tmpDir), chk.Equals, true)                  // the file appears to have the location of the symlink source (not the dest)
@@ -317,7 +313,6 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks_ToFile(c *chk.C) {
 		return nil
 	},
 		true), chk.IsNil)
-
 	// 1 file is in base, 2 are pointed to by a symlink (the fact that both point to the same file is does NOT prevent us
 	// processing them both. For efficiency of dedupe algorithm, we only dedupe directories, not files).
 	c.Assert(fileCount, chk.Equals, 3)
@@ -501,7 +496,8 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
-		blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, false, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+		blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, false, false,
+			func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 		// invoke the blob traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
@@ -661,7 +657,8 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 		rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-		blobTraverser := newBlobTraverser(&rawContainerURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+		blobTraverser := newBlobTraverser(&rawContainerURLWithSAS, p, ctx, isRecursiveOn, false,
+			func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 		// invoke the local traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
@@ -822,7 +819,8 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 		rawVirDirURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, virDirName)
-		blobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+		blobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, false,
+			func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 		// invoke the local traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
@@ -930,10 +928,12 @@ func (s *genericTraverserSuite) TestSerialAndParallelBlobTraverser(c *chk.C) {
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 		rawVirDirURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, virDirName)
-		parallelBlobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+		parallelBlobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, false,
+			func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 		// construct a serial blob traverser
-		serialBlobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+		serialBlobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, false,
+			func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 		serialBlobTraverser.parallelListing = false
 
 		// invoke the parallel traversal with a dummy processor
