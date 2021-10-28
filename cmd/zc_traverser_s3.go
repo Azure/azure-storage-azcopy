@@ -64,13 +64,13 @@ func (t *s3Traverser) IsDirectory(isSource bool) bool {
 }
 
 func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
-	invalidAzureBlobName := func (objectKey string) bool {
+	invalidAzureBlobName := func(objectKey string) bool {
 		/* S3 object name is invalid if it ends with period or
 		   one of virtual directories in path ends with period.
 		   This list is not exhaustive
-		 */
+		*/
 		return strings.HasSuffix(objectKey, ".") ||
-		       strings.Contains(objectKey, "/.")
+			strings.Contains(objectKey, "./")
 	}
 	invalidNameErrorMsg := "Skipping S3 object %s, as it is not a valid Blob name. Rename the object and retry the transfer"
 	// Check if resource is a single object.
