@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"context"
 	"net/url"
+	"sync/atomic"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -68,20 +69,15 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 		setPutListNeed(&c.atomicPutListIndicator, putListNotNeeded)
 		return c.generateCreateEmptyBlob(id)
 	}
-
-	if c.NumChunks() == 1 && adjustedChunkSize <= int64(azblob.BlockBlobMaxUploadBlobBytes) &&
-		c.blockBlobSenderBase.jptm.FromTo() == common.EFromTo.GCPBlob() {
+	// Small blobs from all sources will be copied over to destination using PutBlobFromUrl with the exception of files
+	fromTo := c.blockBlobSenderBase.jptm.FromTo()
+	if c.NumChunks() == 1 && adjustedChunkSize <= int64(azblob.BlockBlobMaxUploadBlobBytes) && fromTo.From() != common.ELocation.File() {
 		/*
-		 * nakulkar: It is wrong to do this specifically for GCP sources. Why?
-		 * Because our sender is supposed to be source-agnostic, and should not
-		 * change its behaviour for individual sources, as long as the source satisfy sip
-		 * interface.
-		 * That said, GCP returns an invalid error with PutBlockFromURL which service cannot
-		 * handle. And.. this is the easisy way to fix this. For satisfaction, we'll add a TODO :P
-		 * TODO: Find a better logic.
+		 * siminsavani: FYI: For GCP, if the blob is the entirety of the file, GCP still returns
+		 * invalid error from service due to PutBlockFromUrl.
 		 */
 		setPutListNeed(&c.atomicPutListIndicator, putListNotNeeded)
-		return c.generateStartCopyBlobFromURL(id, blockIndex, adjustedChunkSize)
+		return c.generateStartPutBlobFromURL(id, blockIndex, adjustedChunkSize)
 
 	}
 	setPutListNeed(&c.atomicPutListIndicator, putListNeeded)
@@ -117,6 +113,8 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 			return
 		}
 
+		atomic.AddInt32(&c.atomicChunksWritten, 1)
+
 		if separateSetTagsRequired {
 			if _, err := c.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, c.blobTagsToApply); err != nil {
 				c.jptm.Log(pipeline.LogWarning, err.Error())
@@ -149,28 +147,55 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 			c.jptm.FailActiveSend("Staging block from URL", err)
 			return
 		}
+
+		atomic.AddInt32(&c.atomicChunksWritten, 1)
 	})
 }
 
-func (c *urlToBlockBlobCopier) generateStartCopyBlobFromURL(id common.ChunkID, blockIndex int32, adjustedChunkSize int64) chunkFunc {
+func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, blockIndex int32, adjustedChunkSize int64) chunkFunc {
 	return createSendToRemoteChunkFunc(c.jptm, id, func() {
 
 		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 
 		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
 
+		// Create blob and finish.
+		if !ValidateTier(c.jptm, c.destBlobTier, c.destBlockBlobURL.BlobURL, c.jptm.Context()) {
+			c.destBlobTier = azblob.DefaultAccessTier
+		}
+
+		blobTags := c.blobTagsToApply
+		separateSetTagsRequired := separateSetTagsRequired(blobTags)
+		if separateSetTagsRequired || len(blobTags) == 0 {
+			blobTags = nil
+		}
+
+		// TODO: Remove this snippet once service starts supporting CPK with blob tier
+		destBlobTier := c.destBlobTier
+		if c.cpkToApply.EncryptionScope != nil || (c.cpkToApply.EncryptionKey != nil && c.cpkToApply.EncryptionKeySha256 != nil) {
+			destBlobTier = azblob.AccessTierNone
+		}
+
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
 
-		_, err := c.destBlockBlobURL.CopyFromURL(ctxWithLatestServiceVersion, c.srcURL, c.metadataToApply,
-			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil, azblob.DefaultAccessTier, nil)
+		_, err := c.destBlockBlobURL.PutBlobFromURL(ctxWithLatestServiceVersion, c.headersToApply, c.srcURL, c.metadataToApply,
+			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil, nil, destBlobTier, blobTags,
+			c.cpkToApply)
 
 		if err != nil {
-			c.jptm.FailActiveSend("Copy Blob from URL", err)
+			c.jptm.FailActiveSend("Put Blob from URL", err)
 			return
 		}
 
+		atomic.AddInt32(&c.atomicChunksWritten, 1)
+
+		if separateSetTagsRequired {
+			if _, err := c.destBlockBlobURL.SetTags(c.jptm.Context(), nil, nil, nil, c.blobTagsToApply); err != nil {
+				c.jptm.Log(pipeline.LogWarning, err.Error())
+			}
+		}
 	})
 }
 

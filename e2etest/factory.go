@@ -108,7 +108,7 @@ func (TestResourceFactory) GetContainerURLWithSAS(c asserter, accountType Accoun
 		Protocol:      azblob.SASProtocolHTTPS,
 		ExpiryTime:    time.Now().UTC().Add(48 * time.Hour),
 		ContainerName: containerName,
-		Permissions:   azblob.ContainerSASPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true, Tag: true}.String(),
+		Permissions:   azblob.ContainerSASPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true, Tag: true, ModifyOwnership: true, ModifyPermissions: true}.String(),
 	}.NewSASQueryParameters(credential)
 	c.AssertNoErr(err)
 
@@ -155,12 +155,12 @@ func (TestResourceFactory) GetBlobURLWithSAS(c asserter, accountType AccountType
 	return blobURLWithSAS
 }
 
-func (TestResourceFactory) CreateNewContainer(c asserter, accountType AccountType) (container azblob.ContainerURL, name string, rawURL url.URL) {
+func (TestResourceFactory) CreateNewContainer(c asserter, publicAccess azblob.PublicAccessType, accountType AccountType) (container azblob.ContainerURL, name string, rawURL url.URL) {
 	name = TestResourceNameGenerator{}.GenerateContainerName(c)
 	container = TestResourceFactory{}.GetBlobServiceURL(accountType).NewContainerURL(name)
 
-	cResp, err := container.Create(context.Background(), nil, azblob.PublicAccessNone)
 
+	cResp, err := container.Create(context.Background(), nil, publicAccess)
 	c.AssertNoErr(err)
 	c.Assert(cResp.StatusCode(), equals(), 201)
 	return container, name, TestResourceFactory{}.GetContainerURLWithSAS(c, accountType, name).URL()
@@ -249,7 +249,7 @@ func getTestName(t *testing.T) (pseudoSuite, test string) {
 // Will truncate the end of the test name, if there is not enough room for it, followed by the time-based suffix,
 // with a non-zero maxLen.
 func generateName(c asserter, prefix string, maxLen int) string {
-	name := c.CompactScenarioName() // don't want to just use test name here, because each test contains multiple scearios with the declarative runner
+	name := c.CompactScenarioName() // don't want to just use test name here, because each test contains multiple scenarios with the declarative runner
 
 	textualPortion := fmt.Sprintf("%s-%s", prefix, strings.ToLower(name))
 	// GUIDs are less prone to overlap than times.
@@ -268,7 +268,8 @@ func generateName(c asserter, prefix string, maxLen int) string {
 }
 
 func (TestResourceNameGenerator) GenerateContainerName(c asserter) string {
-	return generateName(c, containerPrefix, 63)
+	// return generateName(c, containerPrefix, 63)
+	return uuid.New().String()
 }
 
 func (TestResourceNameGenerator) generateBlobName(c asserter) string {

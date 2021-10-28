@@ -1,6 +1,77 @@
 
 # Change Log
 
+## Version 10.13.0
+
+### New features
+1. Added Arc VM support for authorization via managed identity.
+2. Widen managed disk scenario to all md- accounts instead of just md-impexp- accounts.
+3. The concurrency is now set to AUTO for Azure Files by default to avoid throttling.
+4. Decrease the number of create directory calls for Azure Files to avoid throttling.
+5. Added the from-to flag for sync.
+
+## Bug fixes
+1. Fixed the memory usage issue with generating the list of skipped/failed transfers in JSON output.
+2. Fixed ADLS Gen2 ACL copying where intermediate folders were missed. 
+3. Fixed the S3 to Blob scenario using the login command.
+4. Fixed dry-run for dfs endpoints.
+5. Fixed incorrect percentage-done shown while resuming job.
+6. Fixed login issues on the ARM platforms.
+7. Fixed incorrect progress status for the sync command. 
+8. Fixed concurrency map access problem for folder creation tracker.
+9. Fixed resuming with a public source.
+
+## Version 10.12.2
+
+## Bug fixes
+1. Fix deleting blobs that are of a different type than the specified copy
+2. Fix --delete-destination on Windows download
+
+## Version 10.12.1
+
+### Bug fixes
+1. Fixed the problem of always receiving overwrite prompt on azure files folders.
+
+## Version 10.12.0
+
+### Bug fixes
+1. Fixed the problem of always receiving overwrite prompt on azure files folders.
+
+## Version 10.12.0
+
+### New features
+1. Added support for include and exclude regex flags, which allow pattern matching on the entire paths.
+2. Added dry run mode for copy, remove, and sync. This feature allows the user to visualize the changes before committing them.
+3. For SMB aware locations, preserve-smb-info flag is now true by default.
+4. Improved how folder lmts are obtained to allow time-based filters for folders.
+5. Added support for ACL copying between HNS enabled accounts. The preserve-smb-permissions flag is now deprecated and has been renamed to preserve-permissions.
+
+### Bug fixes
+1. Allow from-to to be set for the remove command.
+2. Fixed the problem where resume command did not honor AZCOPY_DEFAULT_SERVICE_API_VERSION.
+3. Fixed the new version check.
+4. Fixed sync issue on Windows where paths are case-insensitive.
+5. Added prompt for invalid characters when importing from S3.
+6. Fixed bug where public S3 buckets cannot be listed.
+7. Sanitize SAS tokens in JSON output for skipped and failed transfers. 
+8. Improved folder property preservation across resumes.
+
+## Version 10.11.0
+
+### New features
+1. Improved performance for copying small blobs (with size less than `256MiB`) with [Put Blob from URL](https://docs.microsoft.com/en-us/rest/api/storageservices/put-blob-from-url).
+1. Added mirror mode support in sync operation via `mirror-mode` flag. The new mode disables last-modified-time based comparisons and overwrites the conflicting files and blobs at the destination if this flag is set to true.
+1. Added flag `disable-auto-decoding` to avoid automatic decoding of URL-encoded illegal characters when uploading from Windows. These illegal characters could have encoded as a result of downloading them onto Windows which does not support them.
+1. Support custom mime type mapping via environment variable `AZCOPY_CONTENT_TYPE_MAP`.
+1. Output message on the CLI when AzCopy detects a proxy for each domain.
+1. Interpret DFS endpoints as Blob endpoint automatically when performing service-to-service copy. 
+
+### Bug fixes
+1. Tolerate enumeration errors for Azure Files and not fail the entire job when a directory is deleted/modified during scanning. 
+1. Log skipped transfers to the scanning log.
+1. Fixed pipe upload by adding missing fields such as Metadata, Blob Index Tags, Client Provided Key, Blob Access Tier, etc.
+1. Fixed issue of clean up for the benchmark command.
+
 ## Version 10.10.0
 
 ### New features

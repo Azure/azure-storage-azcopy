@@ -21,6 +21,7 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
@@ -77,21 +78,52 @@ type filesResourceAdapter struct {
 	obj *testObject
 }
 
-func (a filesResourceAdapter) toHeaders() azfile.FileHTTPHeaders {
+func (a filesResourceAdapter) toHeaders(c asserter, share azfile.ShareURL) azfile.FileHTTPHeaders {
+	headers := azfile.FileHTTPHeaders{}
+
+	if a.obj.creationProperties.smbPermissionsSddl != nil {
+		parsedSDDL, err := sddl.ParseSDDL(*a.obj.creationProperties.smbPermissionsSddl)
+		c.AssertNoErr(err, "Failed to parse SDDL")
+
+		var permKey string
+
+		if len(parsedSDDL.PortableString()) > 8000 {
+			createPermResp, err := share.CreatePermission(ctx, parsedSDDL.PortableString())
+			c.AssertNoErr(err)
+
+			permKey = createPermResp.FilePermissionKey()
+		}
+
+		var smbprops azfile.SMBProperties
+
+		if permKey != "" {
+			smbprops.PermissionKey = &permKey
+		} else {
+			perm := parsedSDDL.PortableString()
+			smbprops.PermissionString = &perm
+		}
+
+		headers.SMBProperties = smbprops
+	}
+
+	if a.obj.creationProperties.smbAttributes != nil {
+		attribs := azfile.FileAttributeFlags(*a.obj.creationProperties.smbAttributes)
+		headers.SMBProperties.FileAttributes = &attribs
+	}
+
 	props := a.obj.creationProperties.contentHeaders
 	if props == nil {
-		return azfile.FileHTTPHeaders{}
+		return headers
 	}
-	return azfile.FileHTTPHeaders{
-		ContentType:        sval(props.contentType),
-		ContentMD5:         props.contentMD5,
-		ContentEncoding:    sval(props.contentEncoding),
-		ContentLanguage:    sval(props.contentLanguage),
-		ContentDisposition: sval(props.contentDisposition),
-		CacheControl:       sval(props.cacheControl),
-		//TODO: nakulkar-msft azfile.FileHttpHeaders also includes SMB props - for attributes, times and ACLs. You'll need to
-		//   include at least some of those here, to make your SMB attribute tests pass
-	}
+
+	headers.ContentType = sval(props.contentType)
+	headers.ContentMD5 = props.contentMD5
+	headers.ContentEncoding = sval(props.contentEncoding)
+	headers.ContentLanguage = sval(props.contentLanguage)
+	headers.ContentDisposition = sval(props.contentDisposition)
+	headers.CacheControl = sval(props.cacheControl)
+
+	return headers
 }
 
 func (a filesResourceAdapter) toMetadata() azfile.Metadata {

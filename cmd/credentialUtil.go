@@ -512,7 +512,8 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 			accessKeyID := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
 			secretAccessKey := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSSecretAccessKey())
 			if accessKeyID == "" || secretAccessKey == "" {
-				return common.ECredentialType.Unknown(), false, errors.New("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables must be set before creating the S3 AccessKey credential")
+				credType = common.ECredentialType.S3PublicBucket()
+				return credType, true, nil
 			}
 			credType = common.ECredentialType.S3AccessKey()
 		case common.ELocation.GCP():
@@ -532,7 +533,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	return
 }
 
-func getCredentialInfoForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool, cpkOptions common.CpkOptions) (credInfo common.CredentialInfo, isPublic bool, err error) {
+func GetCredentialInfoForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool, cpkOptions common.CpkOptions) (credInfo common.CredentialInfo, isPublic bool, err error) {
 
 	// get the type
 	credInfo.CredentialType, isPublic, err = getCredentialTypeForLocation(ctx, location, resource, resourceSAS, isSource, cpkOptions)
@@ -546,7 +547,7 @@ func getCredentialInfoForLocation(ctx context.Context, location common.Location,
 		} else {
 			credInfo.OAuthTokenInfo = *tokenInfo
 		}
-	} else if credInfo.CredentialType == common.ECredentialType.S3AccessKey() {
+	} else if credInfo.CredentialType == common.ECredentialType.S3AccessKey() || credInfo.CredentialType == common.ECredentialType.S3PublicBucket() {
 		// nothing to do here. The extra fields for S3 are fleshed out at the time
 		// we make the S3Client
 	}

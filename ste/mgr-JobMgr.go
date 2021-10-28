@@ -179,7 +179,7 @@ func (jm *jobMgr) logConcurrencyParameters() {
 // jobMgrInitState holds one-time init structures (such as SIPM), that initialize when the first part is added.
 type jobMgrInitState struct {
 	securityInfoPersistenceManager *securityInfoPersistenceManager
-	folderCreationTracker          common.FolderCreationTracker
+	folderCreationTracker          FolderCreationTracker
 	folderDeletionManager          common.FolderDeletionManager
 }
 
@@ -227,7 +227,7 @@ type jobMgr struct {
 	overwritePrompter *overwritePrompter
 
 	// must have a single instance of this, for the whole job
-	folderCreationTracker common.FolderCreationTracker
+	folderCreationTracker FolderCreationTracker
 
 	initMu    *sync.Mutex
 	initState *jobMgrInitState
@@ -372,7 +372,7 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, e
 		var logger common.ILogger = jm
 		jm.initState = &jobMgrInitState{
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
-			folderCreationTracker:          common.NewFolderCreationTracker(jpm.Plan().Fpo),
+			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, jpm.Plan()),
 			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
 		}
 	}
@@ -514,38 +514,38 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 		isCancelling := jobStatus == common.EJobStatus.Cancelling()
 		shouldComplete := allKnownPartsDone && (haveFinalPart || isCancelling)
 		if shouldComplete {
-			break
+			partDescription := "all parts of entire Job"
+			if !haveFinalPart {
+				partDescription = "known parts of incomplete Job"
+			}
+			if shouldLog {
+				jm.Log(pipeline.LogInfo, fmt.Sprintf("%s %s successfully completed, cancelled or paused", partDescription, jm.jobID.String()))
+			}
+
+			switch part0Plan.JobStatus() {
+			case common.EJobStatus.Cancelling():
+				part0Plan.SetJobStatus(common.EJobStatus.Cancelled())
+				if shouldLog {
+					jm.Log(pipeline.LogInfo, fmt.Sprintf("%s %v successfully cancelled", partDescription, jm.jobID))
+				}
+			case common.EJobStatus.InProgress():
+				part0Plan.SetJobStatus((common.EJobStatus).EnhanceJobStatusInfo(jobProgressInfo.transfersSkipped > 0,
+					jobProgressInfo.transfersFailed > 0,
+					jobProgressInfo.transfersCompleted > 0))
+			}
+
+			// reset counters
+			atomic.StoreUint32(&jm.partsDone, 0)
+			jobProgressInfo = jobPartProgressInfo{}
+
+			// flush logs
+			jm.chunkStatusLogger.FlushLog() // TODO: remove once we sort out what will be calling CloseLog (currently nothing)
 		} //Else log and wait for next part to complete
 
 		if shouldLog {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("is part of Job which %d total number of parts done ", partsDone))
 		}
 	}
-
-	jobPart0Mgr, _ := jm.jobPartMgrs.Get(0)
-	part0Plan := jobPart0Mgr.Plan() // status of part 0 is status of job as whole.
-
-	partDescription := "all parts of entire Job"
-	if !haveFinalPart {
-		partDescription = "known parts of incomplete Job"
-	}
-	if shouldLog {
-		jm.Log(pipeline.LogInfo, fmt.Sprintf("%s %s successfully completed, cancelled or paused", partDescription, jm.jobID.String()))
-	}
-
-	switch part0Plan.JobStatus() {
-	case common.EJobStatus.Cancelling():
-		part0Plan.SetJobStatus(common.EJobStatus.Cancelled())
-		if shouldLog {
-			jm.Log(pipeline.LogInfo, fmt.Sprintf("%s %v successfully cancelled", partDescription, jm.jobID))
-		}
-	case common.EJobStatus.InProgress():
-		part0Plan.SetJobStatus((common.EJobStatus).EnhanceJobStatusInfo(jobProgressInfo.transfersSkipped > 0,
-			jobProgressInfo.transfersFailed > 0,
-			jobProgressInfo.transfersCompleted > 0))
-	}
-
-	jm.chunkStatusLogger.FlushLog() // TODO: remove once we sort out what will be calling CloseLog (currently nothing)
 }
 
 func (jm *jobMgr) getInMemoryTransitJobState() InMemoryTransitJobState {

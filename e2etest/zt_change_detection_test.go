@@ -40,33 +40,30 @@ func TestChange_DetectFileChangedDuringTransfer(t *testing.T) {
 		allCredentialTypes,
 		params{
 			recursive: true,
+	  }, &hooks{
+		beforeRunJob: func(h hookHelper) {
+			ft := h.FromTo()
+			if ft.IsS2S() && h.Operation() == eOperation.Copy() {
+				// in Copy, s2s change detection is not enabled by default.
+				// (Whereas in Sync, it is is, so we don't need to, and cannot, set it.)
+				h.GetModifiableParameters().s2sSourceChangeValidation = true
+			}
 		},
-		&hooks{
-			beforeRunJob: func(h hookHelper) {
-				ft := h.FromTo()
-				if ft.IsS2S() && h.Operation() == eOperation.Copy() {
-					// in Copy, s2s change detection is not enabled by default.
-					// (Whereas in Sync, it is is, so we don't need to, and cannot, set it.)
-					h.GetModifiableParameters().s2sSourceChangeValidation = true
-				}
-			},
-			beforeOpenFirstFile: func(h hookHelper) {
-				// Re-create the source files (over top of what AzCopy has already scanned, but has not yet started to transfer)
-				// This will give them new LMTs
-				time.Sleep(2 * time.Second) // make sure the new LMTs really will be different
-				h.CreateFiles(h.GetTestFiles(), true)
-			},
+		beforeOpenFirstFile: func(h hookHelper) {
+			// Re-create the source files (over top of what AzCopy has already scanned, but has not yet started to transfer)
+			// This will give them new LMTs
+			time.Sleep(2 * time.Second) // make sure the new LMTs really will be different
+			h.CreateFiles(h.GetTestFiles(), true, true, false)
 		},
-		testFiles{
-			defaultSize: "1k",
-			shouldTransfer: []interface{}{
-				folder(""), // the root folder should transfer between folder-aware locations
-			},
-			shouldFail: []interface{}{
-				f("filea", withError{"File modified since transfer scheduled"}),
-			},
+	}, testFiles{
+		defaultSize: "1k",
+		shouldTransfer: []interface{}{
+			folder(""), // the root folder should transfer between folder-aware locations
 		},
-	)
+		shouldFail: []interface{}{
+			f("filea", withError{"File modified since transfer scheduled"}),
+		},
+	}, EAccountType.Standard(), "")
 }
 
 // TestChange_DefaultToNoDetectionForS2S asserts that, if we DON'T ask for s2s change detection, then the detection
@@ -92,12 +89,11 @@ func TestChange_DefaultToNoDetectionForCopyS2S(t *testing.T) {
 				h.CreateFiles(h.GetTestFiles(), true)
 			},
 		},
-		testFiles{
-			defaultSize: "1k",
-			shouldTransfer: []interface{}{
-				folder(""),
-				"filea", // assert it succeeds, because the default S2S behaviour is to NOT check for changes
-			},
+	}, testFiles{
+		defaultSize: "1k",
+		shouldTransfer: []interface{}{
+			folder(""),
+			"filea", // assert it succeeds, because the default S2S behaviour is to NOT check for changes
 		},
-	)
+	}, EAccountType.Standard(), "")
 }

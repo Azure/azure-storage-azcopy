@@ -2,48 +2,124 @@ trigger:
   branches:
     include:
       - dev
-      - master
+      - main
 
 pr:
   branches:
     include:
       - dev
-      - master
+      - main
 
 jobs:
-  - job: Linux_and_Windows_Builds
+  - job: Build
+    timeoutInMinutes: 360
+    strategy:
+      matrix:
+        Ubuntu-20:
+          imageName: 'ubuntu-20.04'
+          type: 'linux'
+        MacOS:
+          imageName: 'macOS-10.15'
+          type: 'mac-os'
     pool:
-      vmImage: 'ubuntu-16.04'
+      vmImage: $(imageName)
     steps:
       - task: GoTool@0
         inputs:
-          version: '1.15'
+          version: '1.16'
       - script: |
           GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
           GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
+          GOARCH=arm64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
+
           GOARCH=amd64 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
           GOARCH=386 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
+          GOARCH=arm GOARM=7 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_v7_arm.exe"
+
           cp NOTICE.txt $(Build.ArtifactStagingDirectory)
-        displayName: 'Generate builds'
+        displayName: 'Generate Linux And Windows Build'
+        condition: eq(variables.type, 'linux')
+
+      - script: |
+          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
+        displayName: 'Generate MacOS Build'
+        condition: eq(variables.type, 'mac-os')
 
       - task: PublishBuildArtifacts@1
         displayName: 'Publish Artifacts'
         condition: succeededOrFailed()
 
-  - job: MacOS_Build
+  - job: E2E_Test
+    timeoutInMinutes: 360
+    # Creating strategies for GOOS: Windows Server 2019 /macOS X Mojave 10.15/Ubuntu 20.04
+    strategy:
+      matrix:
+        Ubuntu-20:
+          imageName: 'ubuntu-20.04'
+          type: 'linux'
+        Windows:
+          imageName: 'windows-2019'
+          type: 'windows'
+        MacOS:
+          imageName: 'macOS-10.15'
+          type: 'mac-os'
     pool:
-      vmImage: 'macOS-10.14'
+      vmImage: $(imageName)
+
     steps:
       - task: GoTool@0
         inputs:
-          version: '1.15'
-      - script: |
-          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
-        displayName: 'Generate builds'
+          version: '1.16'
 
-      - task: PublishBuildArtifacts@1
-        displayName: 'Publish Artifacts'
-        condition: succeededOrFailed()
+      # Running E2E Tests on Linux - AMD64
+      - script: |
+          set -e
+          GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
+          export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
+          go test -timeout 20m -race -short -cover ./e2etest
+        env:
+          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+          AZCOPY_E2E_ACCOUNT_KEY_HNS: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
+          AZCOPY_E2E_ACCOUNT_NAME_HNS: $(AZCOPY_E2E_ACCOUNT_NAME_HNS)
+          CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
+          CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
+        displayName: 'E2E Test Linux - AMD64'
+        condition: eq(variables.type, 'linux')
+
+      # Running E2E Tests on Windows - AMD64
+      - script: |
+          go build -o $(System.DefaultWorkingDirectory)/azcopy_windows_amd64.exe
+          go build -o $(System.DefaultWorkingDirectory)/azcopy_windows_386.exe
+          echo 'starting E2E tests on windows'
+          go test -timeout 30m -race -cover -v ./e2etest
+        env:
+          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+          AZCOPY_E2E_ACCOUNT_KEY_HNS: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
+          AZCOPY_E2E_ACCOUNT_NAME_HNS: $(AZCOPY_E2E_ACCOUNT_NAME_HNS)
+          CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
+          CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
+          AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/azcopy_windows_amd64.exe
+        displayName: 'E2E Test Windows - AMD64'
+        condition: eq(variables.type, 'windows')
+
+      # Running E2E Tests on Mac
+      - script: |
+          set -e
+          go build -o azcopy_darwin_amd64
+          echo 'starting E2E tests on mac-os'
+          export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_darwin_amd64
+          go test -timeout 30m -race -cover -v ./e2etest
+        env:
+          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+          AZCOPY_E2E_ACCOUNT_KEY_HNS: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
+          AZCOPY_E2E_ACCOUNT_NAME_HNS: $(AZCOPY_E2E_ACCOUNT_NAME_HNS)
+          CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
+          CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
+        displayName: 'E2E Test MacOs'
+        condition: eq(variables.type, 'mac-os')
 
   - job: Test_On_Ubuntu
     variables:
@@ -51,7 +127,7 @@ jobs:
     # allow maximum build time, in case we have build congestion
     timeoutInMinutes: 360
     pool:
-      vmImage: 'ubuntu-16.04'
+      vmImage: 'ubuntu-20.04'
     steps:
       - task: UsePythonVersion@0
         name: 'Set_up_Python'
@@ -60,7 +136,7 @@ jobs:
       - task: GoTool@0
         name: 'Set_up_Golang'
         inputs:
-          version: '1.15'
+          version: '1.16'
       - task: DownloadSecureFile@1
         name: ciGCSServiceAccountKey
         displayName: 'Download GCS Service Account Key'

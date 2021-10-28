@@ -53,6 +53,9 @@ func (GlobalInputManager) GetAccountAndKey(accountType AccountType) (string, str
 	case EAccountType.Standard():
 		name = os.Getenv("AZCOPY_E2E_ACCOUNT_NAME")
 		key = os.Getenv("AZCOPY_E2E_ACCOUNT_KEY")
+	case EAccountType.HierarchicalNamespaceEnabled():
+		name = os.Getenv("AZCOPY_E2E_ACCOUNT_NAME_HNS")
+		key = os.Getenv("AZCOPY_E2E_ACCOUNT_KEY_HNS")
 	default:
 		panic("Only the standard account type is supported for the moment.")
 	}

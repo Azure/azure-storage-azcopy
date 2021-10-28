@@ -152,16 +152,35 @@ type params struct {
 	s2sSourceChangeValidation bool
 	metadata                  string
 	cancelFromStdin           bool
+	backupMode                bool
 	preserveSMBPermissions    bool
 	preserveSMBInfo           bool
 	relativeSourcePath        string
 	blobTags                  string
+	blobType                  string
+	stripTopDir               bool
 	s2sPreserveBlobTags       bool
+	cpkByName                 string
+	cpkByValue                bool
+	isObjectDir               bool
+	debugSkipFiles            []string // a list of localized filepaths to skip over on the first run in the STE.
+
+	disableParallelTesting bool
+	// looks like this for a folder transfer:
+	/*
+		INFO: source: /New folder/New Text Document.txt dest: /Test/New folder/New Text Document.txt
+		INFO: source: /New Text Document.txt dest: /Test/New Text Document.txt
+	*/
+	// and this for a single file transfer to a folder:
+	/*
+		INFO: source:  dest: /New Text Document.txt
+	*/
 }
 
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level
+// TODO : Make this *actually* check with azcopy code instead of assuming azcopy's black magic.
 func (p params) allowsFolderTransfers() bool {
-	return p.includePattern+p.includeAfter+p.includeAttributes+p.excludePattern+p.excludeAttributes == ""
+	return p.includePattern+p.includeAttributes+p.excludePattern+p.excludeAttributes == ""
 }
 
 //////////////
@@ -171,9 +190,10 @@ var eOperation = Operation(0)
 type Operation uint8
 
 func (Operation) Copy() Operation        { return Operation(1) }
-func (Operation) Sync() Operation        { return Operation(2) }
-func (Operation) CopyAndSync() Operation { return eOperation.Copy() & eOperation.Sync() }
-func (Operation) Remove() Operation      { return Operation(3) }
+func (Operation) Sync() Operation        { return Operation(1 << 1) }
+func (Operation) CopyAndSync() Operation { return eOperation.Copy() | eOperation.Sync() }
+func (Operation) Remove() Operation      { return Operation(1 << 2) }
+func (Operation) Resume() Operation      { return Operation(1 << 7) } // Resume should only ever be combined with Copy or Sync, and is a mid-job cancel/resume.
 
 func (o Operation) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
@@ -181,16 +201,16 @@ func (o Operation) String() string {
 
 // getValues chops up composite values into their parts
 func (o Operation) getValues() []Operation {
-	switch o {
-	case eOperation.Copy(),
-		eOperation.Sync(),
-		eOperation.Remove():
-		return []Operation{o}
-	case eOperation.CopyAndSync():
-		return []Operation{eOperation.Copy(), eOperation.Sync()}
-	default:
-		panic("unexpected operation type")
+	out := make([]Operation, 0)
+	// separate out the bitflags
+	for idx := 0; idx < 8; idx++ {
+		opMatching := Operation(1 << idx)
+		if opMatching&o != 0 {
+			out = append(out, opMatching)
+		}
 	}
+
+	return out
 }
 
 func (o Operation) includes(item Operation) bool {
@@ -318,6 +338,23 @@ func (TestFromTo) AllRemove() TestFromTo {
 	}
 }
 
+func (TestFromTo) AllSync() TestFromTo {
+	return TestFromTo{
+		desc:      "AllSync",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(),
+			common.ELocation.File(),
+			common.ELocation.Local(),
+		},
+		tos: []common.Location{
+			common.ELocation.Blob(),
+			common.ELocation.File(),
+			common.ELocation.Local(),
+		},
+	}
+}
+
 // Other is for when you want to list one or more specific from-tos that the test should cover.
 // Generally avoid this method, because it does not automatically pick up new pairs as we add new supported
 // resource types to AzCopy.
@@ -388,7 +425,11 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 				case common.EFromTo.BlobBlob(),
 					common.EFromTo.FileFile(),
 					common.EFromTo.LocalBlob(),
-					common.EFromTo.BlobLocal():
+					common.EFromTo.BlobLocal(),
+					common.EFromTo.LocalFile(),
+					common.EFromTo.FileLocal(),
+					common.EFromTo.BlobFile(),
+					common.EFromTo.FileBlob():
 					// do nothing, these are fine
 				default:
 					continue // not supported for sync
@@ -455,13 +496,26 @@ type hookHelper interface {
 	GetTestFiles() testFiles
 
 	// CreateFiles creates the specified files (overwriting any that are already there of the same name)
-	CreateFiles(fs testFiles, atSource bool)
+	CreateFiles(fs testFiles, atSource bool, setTestFiles bool, createSourceFilesAtDest bool)
+
+	// CreateFile creates a specified file (overwriting what was already there of the same name)
+	// This is intended to be used in hook functions for pre or mid transfer adjustments.
+	CreateFile(f *testObject, atSource bool)
 
 	// CancelAndResume tells the runner to cancel the running AzCopy job (with "cancel" to stdin) and the resume the job
 	CancelAndResume()
 
-	// Create a source snapshot to use it as the source
+	// CreateSourceSnapshot Create a source snapshot to use it as the source
 	CreateSourceSnapshot()
+
+	// SkipTest skips the test
+	SkipTest()
+
+	// Assert gives access to the asserter
+	GetAsserter() asserter
+
+	// GetDestination returns the destination Resource Manager
+	GetDestination() resourceManager
 }
 
 ///////
@@ -473,11 +527,20 @@ type hookFunc func(h hookHelper)
 // NOTE: the funcs you provide here must be threadsafe, because RunScenarios works in parallel for all its scenarios
 type hooks struct {
 
+	// called before running a scenario
+	beforeTestRun hookFunc
+
 	// called after all the setup is done, and before AzCopy is actually invoked
 	beforeRunJob hookFunc
+
+	// called after the first execution, but before the resume.
+	beforeResumeHook hookFunc
 
 	// called after AzCopy has started running, but before it has started its first transfer.  Moment of call may be
 	// before, during or after AzCopy's scanning phase.  If this hook is set, AzCopy won't open its first file, to start
 	// transferring data, until this function executes.
 	beforeOpenFirstFile hookFunc
+
+	// called after AzCopy finishes running & validation of transfer states completes.
+	afterValidation hookFunc
 }

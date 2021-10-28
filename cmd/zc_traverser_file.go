@@ -46,7 +46,7 @@ type fileTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func (t *fileTraverser) isDirectory(bool) bool {
+func (t *fileTraverser) IsDirectory(bool) bool {
 	return copyHandlerUtil{}.urlIsAzureFileDirectory(t.ctx, t.rawURL, t.p) // This handles all of the fanciness for us.
 }
 
@@ -62,7 +62,7 @@ func (t *fileTraverser) getPropertiesIfSingleFile() (*azfile.FileGetPropertiesRe
 	return nil, false
 }
 
-func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
+func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
 	targetURLParts := azfile.NewFileURLParts(*t.rawURL)
 
 	// if not pointing to a share, check if we are pointing to a single file
@@ -119,7 +119,9 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 			var fullProperties azfilePropertiesAdapter
 			fullProperties, err = f.propertyGetter(t.ctx)
 			if err != nil {
-				return storedObject{}, err
+				return StoredObject{
+					relativePath: relativePath,
+				}, err
 			}
 			lmt = fullProperties.LastModified()
 			if f.entityType == common.EEntityType.File() {
@@ -147,7 +149,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		), nil
 	}
 
-	processStoredObject := func(s storedObject) error {
+	processStoredObject := func(s StoredObject) error {
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(s.entityType)
 		}
@@ -167,7 +169,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 		if err != nil {
 			return err
 		}
-		err = processStoredObject(s.(storedObject))
+		err = processStoredObject(s.(StoredObject))
 		if err != nil {
 			return err
 		}
@@ -223,7 +225,7 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 	// run the actual enumeration.
 	// First part is a parallel directory crawl
 	// Second part is parallel conversion of the directories and files to stored objects. This is necessary because the conversion to stored object may hit the network and therefore be slow if not parallelized
-	parallelism := enumerationParallelism // for Azure Files we'll run two pools of this size, one for crawl and one for transform
+	parallelism := EnumerationParallelism // for Azure Files we'll run two pools of this size, one for crawl and one for transform
 
 	workerContext, cancelWorkers := context.WithCancel(t.ctx)
 
@@ -234,16 +236,24 @@ func (t *fileTraverser) traverse(preprocessor objectMorpher, processor objectPro
 	for x := range cTransformed {
 		item, workerError := x.Item()
 		if workerError != nil {
-			cancelWorkers()
-			return workerError
+			relativePath := ""
+			if item != nil {
+				relativePath = item.(StoredObject).relativePath
+			}
+			glcm.Info("Failed to scan directory/file " + relativePath + ". Logging errors in scanning logs.")
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(pipeline.LogWarning, workerError.Error())
+			}
+			continue
 		}
-		processErr := processStoredObject(item.(storedObject))
+		processErr := processStoredObject(item.(StoredObject))
 		if processErr != nil {
 			cancelWorkers()
 			return processErr
 		}
 	}
 
+	cancelWorkers()
 	return
 }
 

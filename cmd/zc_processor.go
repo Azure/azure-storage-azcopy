@@ -21,7 +21,10 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
+	"runtime"
+	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
@@ -44,11 +47,12 @@ type copyTransferProcessor struct {
 
 	preserveAccessTier     bool
 	folderPropertiesOption common.FolderPropertyOption
+	dryrunMode             bool
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
 	source, destination common.ResourceString,
-	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool) *copyTransferProcessor {
+	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool, dryrunMode bool) *copyTransferProcessor {
 	return &copyTransferProcessor{
 		numOfTransfersPerPart:     numOfTransfersPerPart,
 		copyJobTemplate:           copyJobTemplate,
@@ -58,15 +62,16 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 		reportFinalPartDispatched: reportFinalPartDispatched,
 		preserveAccessTier:        preserveAccessTier,
 		folderPropertiesOption:    copyJobTemplate.Fpo,
+		dryrunMode:                dryrunMode,
 	}
 }
 
-func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) (err error) {
+func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) (err error) {
 
 	// Escape paths on destinations where the characters are invalid
 	// And re-encode them where the characters are valid.
-	srcRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, true)
-	dstRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false)
+	srcRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, true)
+	dstRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, false)
 
 	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(
 		false, // sync has no --decompress option
@@ -78,6 +83,53 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 
 	if !shouldSendToSte {
 		return nil // skip this one
+	}
+
+	if s.dryrunMode {
+		glcm.Dryrun(func(format common.OutputFormat) string {
+			if format == common.EOutputFormat.Json() {
+				jsonOutput, err := json.Marshal(copyTransfer)
+				common.PanicIfErr(err)
+				return string(jsonOutput)
+			} else {
+				// if remove then To() will equal to common.ELocation.Unknown()
+				if s.copyJobTemplate.FromTo.To() == common.ELocation.Unknown() { //remove
+					return fmt.Sprintf("DRYRUN: remove %v/%v",
+						s.copyJobTemplate.SourceRoot.Value,
+						srcRelativePath)
+				} else { //copy for sync
+					if s.copyJobTemplate.FromTo.From() == common.ELocation.Local() {
+						// formatting from local source
+						dryrunValue := fmt.Sprintf("DRYRUN: copy %v", common.ToShortPath(s.copyJobTemplate.SourceRoot.Value))
+						if runtime.GOOS == "windows" {
+							dryrunValue += "\\" + strings.ReplaceAll(srcRelativePath, "/", "\\")
+						} else { //linux and mac
+							dryrunValue += "/" + srcRelativePath
+						}
+						dryrunValue += fmt.Sprintf(" to %v/%v", strings.Trim(s.copyJobTemplate.DestinationRoot.Value, "/"), dstRelativePath)
+						return dryrunValue
+					} else if s.copyJobTemplate.FromTo.To() == common.ELocation.Local() {
+						// formatting to local source
+						dryrunValue := fmt.Sprintf("DRYRUN: copy %v/%v to %v",
+							strings.Trim(s.copyJobTemplate.SourceRoot.Value, "/"), srcRelativePath,
+							common.ToShortPath(s.copyJobTemplate.DestinationRoot.Value))
+						if runtime.GOOS == "windows" {
+							dryrunValue += "\\" + strings.ReplaceAll(dstRelativePath, "/", "\\")
+						} else { //linux and mac
+							dryrunValue += "/" + dstRelativePath
+						}
+						return dryrunValue
+					} else {
+						return fmt.Sprintf("DRYRUN: copy %v/%v to %v/%v",
+							s.copyJobTemplate.SourceRoot.Value,
+							srcRelativePath,
+							s.copyJobTemplate.DestinationRoot.Value,
+							dstRelativePath)
+					}
+				}
+			}
+		})
+		return nil
 	}
 
 	if len(s.copyJobTemplate.Transfers.List) == s.numOfTransfersPerPart {
@@ -96,6 +148,12 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
 	s.copyJobTemplate.Transfers.List = append(s.copyJobTemplate.Transfers.List, copyTransfer)
+	s.copyJobTemplate.Transfers.TotalSizeInBytes += uint64(copyTransfer.SourceSize)
+	if copyTransfer.EntityType == common.EEntityType.File() {
+		s.copyJobTemplate.Transfers.FileTransferCount++
+	} else {
+		s.copyJobTemplate.Transfers.FolderTransferCount++
+	}
 
 	return nil
 }

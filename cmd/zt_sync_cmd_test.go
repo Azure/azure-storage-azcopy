@@ -1,4 +1,4 @@
-// Copyright © Microsoft <wastore@microsoft.com>
+// Copyright © 2017 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,7 +18,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package e2etest
+package cmd
 
-// Purpose: Tests that are specific to the behaviour of sync (i.e. the actual syncing part of sync - deciding which files to move,
-//    and which to delete
+import (
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	chk "gopkg.in/check.v1"
+)
+
+//Test dfs endpoints are cooked to blob endpoints
+func (s *cmdIntegrationSuite) TestSyncS2SWithDFS(c *chk.C) {
+	src := "https://myaccount1.dfs.core.windows.net/container1/"
+	dst := "https://myaccount2.dfs.core.windows.net/container2/"
+
+	raw := getDefaultSyncRawInput(src, dst)
+
+	cooked, err := raw.cook()
+
+	c.Assert(err, chk.IsNil)
+	c.Assert(cooked.fromTo, chk.Equals, common.EFromTo.BlobBlob())
+}

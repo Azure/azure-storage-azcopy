@@ -23,7 +23,9 @@ package common
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"math"
+	"os"
 	"reflect"
 	"regexp"
 	"strings"
@@ -31,10 +33,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-
-	"fmt"
-
-	"os"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -593,6 +591,19 @@ func (bt *BlobType) Parse(s string) error {
 	return err
 }
 
+func FromAzBlobType(bt azblob.BlobType) BlobType {
+	switch bt {
+	case azblob.BlobBlockBlob:
+		return EBlobType.BlockBlob()
+	case azblob.BlobPageBlob:
+		return EBlobType.PageBlob()
+	case azblob.BlobAppendBlob:
+		return EBlobType.AppendBlob()
+	default:
+		return EBlobType.Detect()
+	}
+}
+
 // ToAzBlobType returns the equivalent azblob.BlobType for given string.
 func (bt *BlobType) ToAzBlobType() azblob.BlobType {
 	blobType := bt.String()
@@ -627,6 +638,9 @@ func (TransferStatus) Started() TransferStatus { return TransferStatus(1) }
 // Transfer successfully completed
 func (TransferStatus) Success() TransferStatus { return TransferStatus(2) }
 
+// Folder was created, but properties have not been persisted yet. Equivalent to Started, but never intended to be set on anything BUT folders.
+func (TransferStatus) FolderCreated() TransferStatus { return TransferStatus(3) }
+
 // Transfer failed due to some error.
 func (TransferStatus) Failed() TransferStatus { return TransferStatus(-1) }
 
@@ -642,7 +656,7 @@ func (TransferStatus) TierAvailabilityCheckFailure() TransferStatus { return Tra
 func (TransferStatus) Cancelled() TransferStatus { return TransferStatus(-6) }
 
 func (ts TransferStatus) ShouldTransfer() bool {
-	return ts == ETransferStatus.NotStarted() || ts == ETransferStatus.Started()
+	return ts == ETransferStatus.NotStarted() || ts == ETransferStatus.Started() || ts == ETransferStatus.FolderCreated()
 }
 
 // Transfer is any of the three possible state (InProgress, Completer or Failed)
@@ -777,6 +791,7 @@ func (CredentialType) Anonymous() CredentialType            { return CredentialT
 func (CredentialType) SharedKey() CredentialType            { return CredentialType(3) } // For Azure, SharedKey
 func (CredentialType) S3AccessKey() CredentialType          { return CredentialType(4) } // For S3, AccessKeyID and SecretAccessKey
 func (CredentialType) GoogleAppCredentials() CredentialType { return CredentialType(5) }
+func (CredentialType) S3PublicBucket() CredentialType       { return CredentialType(6) } // For S3, Anon Credentials & public bucket
 
 func (ct CredentialType) String() string {
 	return enum.StringInt(ct, reflect.TypeOf(ct))
@@ -1369,6 +1384,8 @@ func (p PreservePermissionsOption) IsTruthy() bool {
 	}
 }
 
+////////////////////////////////////////////////////////////////
+
 // CpkScopeInfo specifies the name of the encryption scope to use to encrypt the data provided in the request.
 // If not specified, encryption is performed with the default account encryption scope.
 // For more information, see Encryption at Rest for Azure Storage Services.
@@ -1383,18 +1400,6 @@ func (csi CpkScopeInfo) Marshal() (string, error) {
 	}
 	return string(result), nil
 }
-
-//func UnmarshalToCpkScopeInfo(cpkScopeInfoStr string) (CpkScopeInfo, error) {
-//	var result CpkScopeInfo
-//	if cpkScopeInfoStr != "" {
-//		err := json.Unmarshal([]byte(cpkScopeInfoStr), &result)
-//		if err != nil {
-//			return result, err
-//		}
-//	}
-//
-//	return result, nil
-//}
 
 type CpkInfo struct {
 	// The algorithm used to produce the encryption key hash.
@@ -1418,18 +1423,6 @@ func (csi CpkInfo) Marshal() (string, error) {
 	}
 	return string(result), nil
 }
-
-//func UnmarshalToCpkInfo(cpkInfoStr string) (CpkInfo, error) {
-//	var result CpkInfo
-//	if cpkInfoStr != "" {
-//		err := json.Unmarshal([]byte(cpkInfoStr), &result)
-//		if err != nil {
-//			return result, err
-//		}
-//	}
-//
-//	return result, nil
-//}
 
 func ToClientProvidedKeyOptions(cpkInfo CpkInfo, cpkScopeInfo CpkScopeInfo) azblob.ClientProvidedKeyOptions {
 	if (cpkInfo.EncryptionKey == nil || cpkInfo.EncryptionKeySha256 == nil) && cpkScopeInfo.EncryptionScope == nil {

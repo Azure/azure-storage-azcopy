@@ -32,7 +32,7 @@ import (
 )
 
 // As we discussed, the general architecture is that this is going to search a list of buckets and spawn s3Traversers for each bucket.
-// This will modify the storedObject format a slight bit to add a "container" parameter.
+// This will modify the StoredObject format a slight bit to add a "container" parameter.
 
 // Enumerates an entire S3 account, looking into each matching bucket as it goes
 type s3ServiceTraverser struct {
@@ -48,7 +48,7 @@ type s3ServiceTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func (t *s3ServiceTraverser) isDirectory(isSource bool) bool {
+func (t *s3ServiceTraverser) IsDirectory(isSource bool) bool {
 	return true // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
@@ -82,7 +82,7 @@ func (t *s3ServiceTraverser) listContainers() ([]string, error) {
 	}
 }
 
-func (t *s3ServiceTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) error {
+func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 	bucketList, err := t.listContainers()
 
 	if err != nil {
@@ -93,7 +93,8 @@ func (t *s3ServiceTraverser) traverse(preprocessor objectMorpher, processor obje
 		tmpS3URL := t.s3URL
 		tmpS3URL.BucketName = v
 		urlResult := tmpS3URL.URL()
-		bucketTraverser, err := newS3Traverser(&urlResult, t.ctx, true, t.getProperties, t.incrementEnumerationCounter)
+		credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
+		bucketTraverser, err := newS3Traverser(credentialInfo.CredentialType, &urlResult, t.ctx, true, t.getProperties, t.incrementEnumerationCounter)
 
 		if err != nil {
 			return err
@@ -101,20 +102,20 @@ func (t *s3ServiceTraverser) traverse(preprocessor objectMorpher, processor obje
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
-		err = bucketTraverser.traverse(preprocessorForThisChild, processor, filters)
+		err = bucketTraverser.Traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
 			if strings.Contains(err.Error(), "301 response missing Location header") {
-				WarnStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q , as it's not in the region specified by source URL", v))
+				WarnStdoutAndScanningLog(fmt.Sprintf("skip enumerating the bucket %q , as it's not in the region specified by source URL", v))
 				continue
 			}
 
 			if strings.Contains(err.Error(), "cannot list objects, The specified bucket does not exist") {
-				WarnStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q, as it does not exist.", v))
+				WarnStdoutAndScanningLog(fmt.Sprintf("skip enumerating the bucket %q, as it does not exist.", v))
 				continue
 			}
 
-			WarnStdoutAndJobLog(fmt.Sprintf("failed to list objects in bucket %s: %s", v, err))
+			WarnStdoutAndScanningLog(fmt.Sprintf("failed to list objects in bucket %s: %s", v, err))
 			continue
 		}
 	}

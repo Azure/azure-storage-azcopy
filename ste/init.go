@@ -30,13 +30,19 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 var steCtx = context.Background()
 
+// debug knob
+var DebugSkipFiles = make(map[string]bool)
+
 const EMPTY_SAS_STRING = ""
+
+type azCopyConfig struct {
+	MIMETypeMapping map[string]string
+}
 
 // round api rounds up the float number after the decimal point.
 func round(num float64) int {
@@ -56,6 +62,22 @@ func MainSTE(concurrency ConcurrencySettings, targetRateInMegaBitsPerSec float64
 	// No need to read the existing JobPartPlan files since Azcopy is running in process
 	//JobsAdmin.ResurrectJobParts()
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
+
+	// if we've a custom mime map
+	if path := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.MimeMapping()); path != "" {
+		data, err := ioutil.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		var config azCopyConfig
+		err = json.Unmarshal(data, &config)
+		if err != nil {
+			return err
+		}
+
+		environmentMimeMap = config.MIMETypeMapping
+	}
 
 	deserialize := func(request *http.Request, v interface{}) {
 		// TODO: Check the HTTP verb here?
@@ -294,6 +316,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 			ErrorMsg:              fmt.Sprintf("JobID=%v, Part#=0 not found", req.JobID),
 		}
 	}
+
 	// If the credential type is is Anonymous, to resume the Job destinationSAS / sourceSAS needs to be provided
 	// Depending on the FromType, sourceSAS or destinationSAS is checked.
 	if req.CredentialInfo.CredentialType == common.ECredentialType.Anonymous() {
@@ -311,12 +334,29 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 			common.EFromTo.BlobTrash(),
 			common.EFromTo.FileTrash():
 			if len(req.SourceSAS) == 0 {
+				plan := jpm.Plan()
+				if plan.FromTo.From() == common.ELocation.Blob() {
+					src := string(plan.SourceRoot[:plan.SourceRootLength])
+					if common.IsSourcePublicBlob(src, steCtx) {
+						break
+					}
+				}
+
 				errorMsg = "The source-sas switch must be provided to resume the job"
 			}
 		case common.EFromTo.BlobBlob(),
 			common.EFromTo.FileBlob():
 			if len(req.SourceSAS) == 0 ||
 				len(req.DestinationSAS) == 0 {
+
+				plan := jpm.Plan()
+				if plan.FromTo.From() == common.ELocation.Blob() && len(req.DestinationSAS) != 0 {
+					src := string(plan.SourceRoot[:plan.SourceRootLength])
+					if common.IsSourcePublicBlob(src, steCtx) {
+						break
+					}
+				}
+
 				errorMsg = "Both the source-sas and destination-sas switches must be provided to resume the job"
 			}
 		}
@@ -357,6 +397,11 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 			})
 
 		jpp0.SetJobStatus(common.EJobStatus.InProgress())
+
+		// Jank, force the jstm to recognize that it's also in progress
+		summaryResp := jm.ListJobSummary()
+		summaryResp.JobStatus = common.EJobStatus.InProgress()
+		jm.ResurrectSummary(summaryResp)
 
 		if jm.ShouldLog(pipeline.LogInfo) {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v resumed", req.JobID))
@@ -520,7 +565,9 @@ func resurrectJobSummary(jm IJobMgr) common.ListJobSummaryResponse {
 			// check for all completed transfer to calculate the progress percentage at the end
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.NotStarted(),
-				common.ETransferStatus.Started():
+				common.ETransferStatus.FolderCreated(),
+				common.ETransferStatus.Started(),
+				common.ETransferStatus.Cancelled():
 				js.TotalBytesExpected += uint64(jppt.SourceSize)
 			case common.ETransferStatus.Success():
 				js.TransfersCompleted++

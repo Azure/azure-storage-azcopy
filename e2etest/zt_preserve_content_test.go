@@ -31,7 +31,6 @@ import (
 // TODO; inpclude account-to-account copy
 
 func TestContent_AtBlobStorage(t *testing.T) {
-
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
@@ -40,7 +39,7 @@ func TestContent_AtBlobStorage(t *testing.T) {
 			folder(""), // root folder
 			f("filea"),
 		},
-	})
+	}, EAccountType.Standard(), "")
 }
 
 func TestContent_AtFileShare(t *testing.T) {
@@ -53,11 +52,11 @@ func TestContent_AtFileShare(t *testing.T) {
 			folder("folder1"),
 			f("folder1/filea"),
 		},
-	})
+	}, EAccountType.Standard(), "")
 }
 
 func TestContent_BlobToBlob(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "8M",
@@ -65,7 +64,7 @@ func TestContent_BlobToBlob(t *testing.T) {
 			folder(""), // root folder
 			f("filea"),
 		},
-	})
+	}, EAccountType.Standard(), "")
 }
 
 //func TestChange_ValidateFileContentAtRemote(t *testing.T) {

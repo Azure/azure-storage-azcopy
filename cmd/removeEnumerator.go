@@ -40,25 +40,25 @@ var NothingToRemoveError = errors.New("nothing found to remove")
 // and schedule delete transfers to remove them
 // TODO: Make this merge into the other copy refactor code
 // TODO: initEnumerator is significantly more verbose at this point, evaluate the impact of switching over
-func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, err error) {
-	var sourceTraverser resourceTraverser
+func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, err error) {
+	var sourceTraverser ResourceTraverser
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &cca.credentialInfo,
-		nil, cca.listOfFilesChannel, cca.recursive, false, cca.includeDirectoryStubs,
-		func(common.EntityType) {}, cca.listOfVersionIDs, false,
-		cca.logVerbosity.ToPipelineLogLevel(), cca.cpkOptions)
+	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo,
+		nil, cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs,
+		func(common.EntityType) {}, cca.ListOfVersionIDs, false,
+		cca.LogVerbosity.ToPipelineLogLevel(), cca.CpkOptions)
 
 	// report failure to create traverser
 	if err != nil {
 		return nil, err
 	}
 
-	includeFilters := buildIncludeFilters(cca.includePatterns)
-	excludeFilters := buildExcludeFilters(cca.excludePatterns, false)
-	excludePathFilters := buildExcludeFilters(cca.excludePathPatterns, true)
+	includeFilters := buildIncludeFilters(cca.IncludePatterns)
+	excludeFilters := buildExcludeFilters(cca.ExcludePatterns, false)
+	excludePathFilters := buildExcludeFilters(cca.ExcludePathPatterns, true)
 
 	// set up the filters in the right order
 	filters := append(includeFilters, excludeFilters...)
@@ -67,8 +67,12 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	// decide our folder transfer strategy
 	// (Must enumerate folders when deleting from a folder-aware location. Can't do folder deletion just based on file
 	// deletion, because that would not handle folders that were empty at the start of the job).
-	fpo, message := newFolderPropertyOption(cca.fromTo, cca.recursive, cca.stripTopDir, filters, false, false)
-	glcm.Info(message)
+	// isHNStoHNS is IGNORED here, because BlobFS locations don't take this route currently.
+	fpo, message := newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false)
+	// do not print Info message if in dry run mode
+	if !cca.dryrunMode {
+		glcm.Info(message)
+	}
 	if ste.JobsAdmin != nil {
 		ste.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
 	}
@@ -78,7 +82,9 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	finalize := func() error {
 		jobInitiated, err := transferScheduler.dispatchFinalPart()
 		if err != nil {
-			if err == NothingScheduledError {
+			if cca.dryrunMode {
+				return nil
+			} else if err == NothingScheduledError {
 				// No log file needed. Logging begins as a part of awaiting job completion.
 				return NothingToRemoveError
 			}
@@ -98,34 +104,34 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 		return nil
 	}
 
-	return newCopyEnumerator(sourceTraverser, filters, transferScheduler.scheduleCopyTransfer, finalize), nil
+	return NewCopyEnumerator(sourceTraverser, filters, transferScheduler.scheduleCopyTransfer, finalize), nil
 }
 
 // TODO move after ADLS/Blob interop goes public
 // TODO this simple remove command is only here to support the scenario temporarily
 // Ultimately, this code can be merged into the newRemoveEnumerator
-func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
+func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 	ctx := context.Background()
 
 	// return an error if the unsupported options are passed in
-	if len(cca.initModularFilters()) > 0 {
+	if len(cca.InitModularFilters()) > 0 {
 		return errors.New("filter options, such as include/exclude, are not supported for this destination")
 		// because we just ignore them and delete the root
 	}
 
 	// patterns are not supported
-	if strings.Contains(cca.source.Value, "*") {
+	if strings.Contains(cca.Source.Value, "*") {
 		return errors.New("pattern matches are not supported in this command")
 	}
 
 	// create bfs pipeline
-	p, err := createBlobFSPipeline(ctx, cca.credentialInfo, cca.logVerbosity.ToPipelineLogLevel())
+	p, err := createBlobFSPipeline(ctx, cca.credentialInfo, cca.LogVerbosity.ToPipelineLogLevel())
 	if err != nil {
 		return err
 	}
 
 	// attempt to parse the source url
-	sourceURL, err := cca.source.FullURL()
+	sourceURL, err := cca.Source.FullURL()
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
@@ -133,29 +139,31 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
 	// parse the given source URL into parts, which separates the filesystem name and directory/file path
 	urlParts := azbfs.NewBfsURLParts(*sourceURL)
 
-	if cca.listOfFilesChannel == nil {
-		successMsg, err := removeSingleBfsResource(urlParts, p, ctx, cca.recursive)
+	if cca.ListOfFilesChannel == nil {
+		successMsg, err := removeSingleBfsResource(ctx, urlParts, p, cca.Recursive, cca.dryrunMode)
 		if err != nil {
 			return err
 		}
-
-		glcm.Exit(func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
-				summary := common.ListJobSummaryResponse{
-					JobStatus:      common.EJobStatus.Completed(),
-					TotalTransfers: 1,
-					// It's not meaningful to set FileTransfers or FolderPropertyTransfers because even if its a folder, its not really folder _properties_ which is what the name is
-					TransfersCompleted: 1,
-					PercentComplete:    100,
+		if !cca.dryrunMode {
+			glcm.Exit(func(format common.OutputFormat) string {
+				if format == common.EOutputFormat.Json() {
+					summary := common.ListJobSummaryResponse{
+						JobStatus:      common.EJobStatus.Completed(),
+						TotalTransfers: 1,
+						// It's not meaningful to set FileTransfers or FolderPropertyTransfers because even if its a folder, its not really folder _properties_ which is what the name is
+						TransfersCompleted: 1,
+						PercentComplete:    100,
+					}
+					jsonOutput, err := json.Marshal(summary)
+					common.PanicIfErr(err)
+					return string(jsonOutput)
 				}
-				jsonOutput, err := json.Marshal(summary)
-				common.PanicIfErr(err)
-				return string(jsonOutput)
-			}
+				return successMsg
+			}, common.EExitCode.Success())
 
-			return successMsg
-		}, common.EExitCode.Success())
-
+		} else {
+			glcm.Exit(nil, common.EExitCode.Success())
+		}
 		// explicitly exit, since in our tests Exit might be mocked away
 		return nil
 	}
@@ -166,11 +174,11 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
 	failedTransfers := make([]common.TransferDetail, 0)
 
 	// read from the list of files channel to find out what needs to be deleted.
-	childPath, ok := <-cca.listOfFilesChannel
-	for ; ok; childPath, ok = <-cca.listOfFilesChannel {
+	childPath, ok := <-cca.ListOfFilesChannel
+	for ; ok; childPath, ok = <-cca.ListOfFilesChannel {
 		// remove the child path
 		urlParts.DirectoryOrFilePath = common.GenerateFullPath(parentPath, childPath)
-		successMessage, err := removeSingleBfsResource(urlParts, p, ctx, cca.recursive)
+		successMessage, err := removeSingleBfsResource(ctx, urlParts, p, cca.Recursive, cca.dryrunMode)
 		if err != nil {
 			// the specific error is not included in the details, since it doesn't have a field for full error message
 			failedTransfers = append(failedTransfers, common.TransferDetail{Src: childPath, TransferStatus: common.ETransferStatus.Failed()})
@@ -181,45 +189,60 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (err error) {
 		}
 	}
 
-	glcm.Exit(func(format common.OutputFormat) string {
-		if format == common.EOutputFormat.Json() {
-			status := common.EJobStatus.Completed()
-			if len(failedTransfers) > 0 {
-				status = common.EJobStatus.CompletedWithErrors()
+	if cca.dryrunMode {
+		glcm.Exit(nil, common.EExitCode.Success())
+	} else {
+		glcm.Exit(func(format common.OutputFormat) string {
+			if format == common.EOutputFormat.Json() {
+				status := common.EJobStatus.Completed()
+				if len(failedTransfers) > 0 {
+					status = common.EJobStatus.CompletedWithErrors()
 
-				// if nothing got deleted
-				if successCount == 0 {
-					status = common.EJobStatus.Failed()
+					// if nothing got deleted
+					if successCount == 0 {
+						status = common.EJobStatus.Failed()
+					}
 				}
+
+				summary := common.ListJobSummaryResponse{
+					JobStatus:          status,
+					TotalTransfers:     successCount + uint32(len(failedTransfers)),
+					TransfersCompleted: successCount,
+					TransfersFailed:    uint32(len(failedTransfers)),
+					PercentComplete:    100,
+					FailedTransfers:    failedTransfers,
+				}
+				jsonOutput, err := json.Marshal(summary)
+				common.PanicIfErr(err)
+				return string(jsonOutput)
 			}
 
-			summary := common.ListJobSummaryResponse{
-				JobStatus:          status,
-				TotalTransfers:     successCount + uint32(len(failedTransfers)),
-				TransfersCompleted: successCount,
-				TransfersFailed:    uint32(len(failedTransfers)),
-				PercentComplete:    100,
-				FailedTransfers:    failedTransfers,
-			}
-			jsonOutput, err := json.Marshal(summary)
-			common.PanicIfErr(err)
-			return string(jsonOutput)
-		}
-
-		return fmt.Sprintf("Successfully removed %v entities.", successCount)
-	}, common.EExitCode.Success())
+			return fmt.Sprintf("Successfully removed %v entities.", successCount)
+		}, common.EExitCode.Success())
+	}
 
 	return nil
 }
 
 // TODO move after ADLS/Blob interop goes public
 // TODO this simple remove command is only here to support the scenario temporarily
-func removeSingleBfsResource(urlParts azbfs.BfsURLParts, p pipeline.Pipeline, ctx context.Context, recursive bool) (successMessage string, err error) {
+func removeSingleBfsResource(ctx context.Context, urlParts azbfs.BfsURLParts, p pipeline.Pipeline, recursive bool, dryrunMode bool) (successMessage string, err error) {
 	// deleting a filesystem
 	if urlParts.DirectoryOrFilePath == "" {
 		fsURL := azbfs.NewFileSystemURL(urlParts.URL(), p)
-		_, err := fsURL.Delete(ctx)
-		return "Successfully removed the filesystem " + urlParts.FileSystemName, err
+		if !dryrunMode {
+			_, err = fsURL.Delete(ctx)
+			if err == nil {
+				return "Successfully removed the filesystem " + urlParts.FileSystemName, nil
+			}
+			return "", err
+		} else {
+			glcm.Dryrun(func(_ common.OutputFormat) string {
+				return fmt.Sprintf("DRYRUN: remove filesystem %s", urlParts.FileSystemName)
+			})
+			return "", nil
+		}
+
 	}
 
 	// we do not know if the source is a file or a directory
@@ -234,35 +257,69 @@ func removeSingleBfsResource(urlParts azbfs.BfsURLParts, p pipeline.Pipeline, ct
 	// then we should short-circuit and simply remove that file
 	if strings.EqualFold(props.XMsResourceType(), "file") {
 		fileURL := directoryURL.NewFileUrl()
-		_, err := fileURL.Delete(ctx)
 
-		if err == nil {
-			return "Successfully removed file: " + urlParts.DirectoryOrFilePath, nil
+		if !dryrunMode {
+			_, err := fileURL.Delete(ctx)
+			if err == nil {
+				return "Successfully removed file: " + urlParts.DirectoryOrFilePath, nil
+			}
+
+			return "", err
+		} else {
+			glcm.Dryrun(func(_ common.OutputFormat) string {
+				return fmt.Sprintf("DRYRUN: remove file %s", urlParts.DirectoryOrFilePath)
+			})
+			return "", nil
 		}
-
-		return "", err
 	}
 
 	// otherwise, remove the directory and follow the continuation token if necessary
 	// initialize an empty continuation marker
 	marker := ""
 
-	// remove the directory
-	// loop will continue until the marker received in the response is empty
-	for {
-		removeResp, err := directoryURL.Delete(ctx, &marker, recursive)
-		if err != nil {
-			return "", fmt.Errorf("cannot remove the given resource due to error: %s", err)
+	if !dryrunMode {
+		// remove the directory
+		// loop will continue until the marker received in the response is empty
+		for {
+			removeResp, err := directoryURL.Delete(ctx, &marker, recursive)
+			if err != nil {
+				return "", fmt.Errorf("cannot remove the given resource due to error: %s", err)
+			}
+
+			// update the continuation token for the next call
+			marker = removeResp.XMsContinuation()
+
+			// determine whether listing should be done
+			if marker == "" {
+				break
+			}
 		}
 
-		// update the continuation token for the next call
-		marker = removeResp.XMsContinuation()
+		return "Successfully removed directory: " + urlParts.DirectoryOrFilePath, nil
+	} else {
+		for {
+			listResp, err := directoryURL.ListDirectorySegment(ctx, &marker, recursive)
 
-		// determine whether listing should be done
-		if marker == "" {
-			break
+			if err != nil {
+				return "Could not list files", err
+			}
+
+			for _, v := range listResp.Paths {
+				entityType := "directory"
+				if v.IsDirectory == nil || *v.IsDirectory == false {
+					entityType = "file"
+				}
+
+				glcm.Dryrun(func(_ common.OutputFormat) string {
+					return fmt.Sprintf("DRYRUN: remove %s %s", entityType, *v.Name)
+				})
+			}
+
+			marker = listResp.XMsContinuation()
+			if marker == "" { // do-while pattern
+				break
+			}
 		}
+		return "", nil
 	}
-
-	return "Successfully removed directory: " + urlParts.DirectoryOrFilePath, nil
 }

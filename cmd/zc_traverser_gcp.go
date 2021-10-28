@@ -23,7 +23,7 @@ type gcpTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func (t *gcpTraverser) isDirectory(isSource bool) bool {
+func (t *gcpTraverser) IsDirectory(isSource bool) bool {
 	//Identify whether directory or not syntactically
 	isDirDirect := !t.gcpURLParts.IsObjectSyntactically() && (t.gcpURLParts.IsDirectorySyntactically() || t.gcpURLParts.IsBucketSyntactically())
 	if !isSource {
@@ -39,7 +39,7 @@ func (t *gcpTraverser) isDirectory(isSource bool) bool {
 	return false
 }
 
-func (t *gcpTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) error {
+func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 	//Syntactically ensure whether single object or not
 	if t.gcpURLParts.IsObjectSyntactically() && !t.gcpURLParts.IsDirectorySyntactically() && !t.gcpURLParts.IsBucketSyntactically() {
 		objectPath := strings.Split(t.gcpURLParts.ObjectKey, "/")

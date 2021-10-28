@@ -30,13 +30,15 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/sddl"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // E.g. if we have enumerationSuite/TestFooBar/Copy-LocalBlob the scenario is "Copy-LocalBlob"
 // A scenario is treated as a sub-test by our declarative test runner
 type scenario struct {
-
 	// scenario config properties
+	accountType         AccountType
 	subtestName         string
 	compactScenarioName string
 	fullScenarioName    string
@@ -71,8 +73,8 @@ func (s *scenario) Run() {
 	s.assignSourceAndDest() // what/where are they
 	s.state.source.createLocation(s.a, s)
 	s.state.dest.createLocation(s.a, s)
-	s.state.source.createFiles(s.a, s.fs, true)
-	s.state.dest.createFiles(s.a, s.fs, false)
+	s.state.source.createFiles(s.a, s, true)
+	s.state.dest.createFiles(s.a, s, false)
 	if s.a.Failed() {
 		return // setup failed. No point in running the test
 	}
@@ -90,8 +92,15 @@ func (s *scenario) Run() {
 
 	// resume if needed
 	if s.needResume {
-		// TODO: create a method something like runAzCopy, but which does a resume, based on the job id returned inside runAzCopy
-		s.a.Error("Resume support is not built yet")
+		tx, err := s.state.result.GetTransferList(common.ETransferStatus.Cancelled())
+		s.a.AssertNoErr(err, "Failed to get transfer list for Cancelled")
+		s.a.Assert(len(tx), equals(), len(s.p.debugSkipFiles), "Job cancel didn't completely work")
+
+		if !s.runHook(s.hs.beforeResumeHook) {
+			return
+		}
+
+		s.resumeAzCopy()
 	}
 	if s.a.Failed() {
 		return // resume failed. No point in running validation
@@ -106,9 +115,11 @@ func (s *scenario) Run() {
 	if s.a.Failed() {
 		return // no point in doing more validation
 	}
-	if s.validate == eValidate.AutoPlusContent() {
+	if s.validate&eValidate.AutoPlusContent() != 0 {
 		s.validateContent()
 	}
+
+	s.runHook(s.hs.afterValidation)
 }
 
 func (s *scenario) runHook(h hookFunc) bool {
@@ -129,11 +140,11 @@ func (s *scenario) assignSourceAndDest() {
 		case common.ELocation.Local():
 			return &resourceLocal{}
 		case common.ELocation.File():
-			return &resourceAzureFileShare{accountType: EAccountType.Standard()}
+			return &resourceAzureFileShare{accountType: s.accountType}
 		case common.ELocation.Blob():
 			// TODO: handle the multi-container (whole account) scenario
 			// TODO: handle wider variety of account types
-			return &resourceBlobContainer{accountType: EAccountType.Standard()}
+			return &resourceBlobContainer{accountType: s.accountType}
 		case common.ELocation.BlobFS():
 			s.a.Error("Not implementd yet for blob FS")
 			return &resourceDummy{}
@@ -194,6 +205,45 @@ func (s *scenario) runAzCopy() {
 	s.state.result = &result
 }
 
+func (s *scenario) resumeAzCopy() {
+	s.chToStdin = make(chan string) // unubuffered seems the most predictable for our usages
+	defer close(s.chToStdin)
+
+	r := newTestRunner()
+	if sas := s.state.source.getSAS(); s.GetTestFiles().sourcePublic == azblob.PublicAccessNone && sas != "" {
+		r.flags["source-sas"] = sas
+	}
+	if sas := s.state.dest.getSAS(); sas != "" {
+		r.flags["destination-sas"] = sas
+	}
+
+	// use the general-purpose "after start" mechanism, provided by execDebuggableWithOutput,
+	// for the _specific_ purpose of running beforeOpenFirstFile, if that hook exists.
+	afterStart := func() string { return "" }
+	if s.hs.beforeOpenFirstFile != nil {
+		r.SetAwaitOpenFlag() // tell AzCopy to wait for "open" on stdin before opening any files
+		afterStart = func() string {
+			time.Sleep(2 * time.Second) // give AzCopy a moment to initialize it's monitoring of stdin
+			s.hs.beforeOpenFirstFile(s)
+			return "open" // send open to AzCopy's stdin
+		}
+	}
+
+	result, wasClean, err := r.ExecuteAzCopyCommand(
+		eOperation.Resume(),
+		s.state.result.jobID.String(),
+		"",
+		afterStart,
+		s.chToStdin,
+	)
+
+	if !wasClean {
+		s.a.AssertNoErr(err, "running AzCopy")
+	}
+
+	s.state.result = &result
+}
+
 func (s *scenario) validateRemove() {
 	removedFiles := s.fs.toTestObjects(s.fs.shouldTransfer, false)
 	props := s.state.source.getAllProperties(s.a)
@@ -232,7 +282,7 @@ func (s *scenario) validateTransferStates() {
 		actualTransfers, err := s.state.result.GetTransferList(statusToTest)
 		s.a.AssertNoErr(err)
 
-		Validator{}.ValidateCopyTransfersAreScheduled(s.a, isSrcEncoded, isDstEncoded, srcRoot, dstRoot, expectedTransfers, actualTransfers, statusToTest)
+		Validator{}.ValidateCopyTransfersAreScheduled(s.a, isSrcEncoded, isDstEncoded, srcRoot, dstRoot, expectedTransfers, actualTransfers, statusToTest, s.FromTo())
 		// TODO: how are we going to validate folder transfers????
 	}
 
@@ -241,13 +291,14 @@ func (s *scenario) validateTransferStates() {
 }
 
 func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFolders bool, expectedRootFolder bool, addedDirAtDest string) {
-	srcRoot = s.state.source.getParam(false, false)
-	dstRoot = s.state.dest.getParam(false, false)
+	srcRoot = s.state.source.getParam(false, false, "")
+	dstRoot = s.state.dest.getParam(false, false, "")
 
 	// do we expect folder transfers
-	expectFolders = s.fromTo.From().IsFolderAware() &&
+	expectFolders = (s.fromTo.From().IsFolderAware() &&
 		s.fromTo.To().IsFolderAware() &&
-		s.p.allowsFolderTransfers()
+		s.p.allowsFolderTransfers()) ||
+		(s.p.preserveSMBPermissions && s.FromTo() == common.EFromTo.BlobBlob())
 	expectRootFolder := expectFolders
 
 	// compute dest, taking into account our stripToDir rules
@@ -260,10 +311,14 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 		// of that kind.
 		expectRootFolder = false
 	} else if s.fromTo.From().IsLocal() {
-		addedDirAtDest = filepath.Base(srcRoot)
+		if s.GetTestFiles().objectTarget == "" {
+			addedDirAtDest = filepath.Base(srcRoot)
+		}
 		dstRoot = fmt.Sprintf("%s%c%s", dstRoot, os.PathSeparator, addedDirAtDest)
 	} else {
-		addedDirAtDest = path.Base(srcRoot)
+		if s.GetTestFiles().objectTarget == "" {
+			addedDirAtDest = path.Base(srcRoot)
+		}
 		dstRoot = fmt.Sprintf("%s/%s", dstRoot, addedDirAtDest)
 	}
 
@@ -303,21 +358,42 @@ func (s *scenario) validateProperties() {
 			// this shouldn't happen, because we only run if validateTransferStates passed, but check anyway
 			// TODO: JohnR: need to remove the strip top dir prefix from the map (and normalize the delimiters)
 			//    since currently uploads fail here
-			s.a.Error(fmt.Sprintf("could not find expected file %s", f.name))
+			var rawPaths []string
+			for rawPath, _ := range destProps {
+				rawPaths = append(rawPaths, rawPath)
+			}
+			s.a.Error(fmt.Sprintf("could not find expected file %s in keys %v", destName, rawPaths))
+
 			return
 		}
 
 		// validate all the different things
-		s.validateMetadata(expected.nameValueMetadata, actual.nameValueMetadata)
+		s.validateMetadata(expected.nameValueMetadata, actual.nameValueMetadata, expected.isFolder)
 		s.validateBlobTags(expected.blobTags, actual.blobTags)
 		s.validateContentHeaders(expected.contentHeaders, actual.contentHeaders)
 		s.validateCreateTime(expected.creationTime, actual.creationTime)
 		s.validateLastWriteTime(expected.lastWriteTime, actual.lastWriteTime)
+		s.validateCPKByScope(expected.cpkScopeInfo, actual.cpkScopeInfo)
+		s.validateCPKByValue(expected.cpkInfo, actual.cpkInfo)
+		s.validateADLSACLs(expected.adlsPermissionsACL, actual.adlsPermissionsACL)
 		if expected.smbPermissionsSddl != nil {
-			s.a.Error("validateProperties does not yet support the properties you are using")
-			// TODO: nakulkar-msft it will be necessary to validate all of these
+			if actual.smbPermissionsSddl == nil {
+				s.a.Error("Expected a SDDL on file " + destName + ", but none was found")
+			} else {
+				s.validateSMBPermissionsByValue(*expected.smbPermissionsSddl, *actual.smbPermissionsSddl, destName)
+			}
 		}
 	}
+}
+
+func (s *scenario) validateSMBPermissionsByValue(expected, actual string, objName string) {
+	expectedSDDL, err := sddl.ParseSDDL(expected)
+	s.a.AssertNoErr(err)
+
+	actualSDDL, err := sddl.ParseSDDL(actual)
+	s.a.AssertNoErr(err)
+
+	s.a.Assert(actualSDDL.PortableString(), equals(), expectedSDDL.PortableString(), "On object "+objName)
 }
 
 func (s *scenario) validateContent() {
@@ -332,7 +408,13 @@ func (s *scenario) validateContent() {
 		if !f.isFolder() {
 			expectedContentMD5 := f.creationProperties.contentHeaders.contentMD5
 			resourceRelPath := fixSlashes(path.Join(addedDirAtDest, f.name), s.fromTo.To())
-			actualContent := s.state.dest.downloadContent(s.a, resourceRelPath)
+			actualContent := s.state.dest.downloadContent(s.a, downloadContentOptions{
+				resourceRelPath: resourceRelPath,
+				downloadBlobContentOptions: downloadBlobContentOptions{
+					cpkInfo:      common.GetCpkInfo(s.p.cpkByValue),
+					cpkScopeInfo: common.GetCpkScopeInfo(s.p.cpkByName),
+				},
+			})
 			actualContentMD5 := md5.Sum(actualContent)
 			s.a.Assert(expectedContentMD5, equals(), actualContentMD5[:], "Content MD5 validation failed")
 
@@ -344,7 +426,12 @@ func (s *scenario) validateContent() {
 
 //// Individual property validation routines
 
-func (s *scenario) validateMetadata(expected, actual map[string]string) {
+func (s *scenario) validateMetadata(expected, actual map[string]string, isFolder bool) {
+	if isFolder { // hdi_isfolder is service-relevant metadata, not something we'd be testing for. This can pop up when specifying a folder() on blob.
+		delete(expected, "hdi_isfolder")
+		delete(actual, "hdi_isfolder")
+	}
+
 	s.a.Assert(len(expected), equals(), len(actual), "Both should have same number of metadata entries")
 	for key := range expected {
 		exValue := expected[key]
@@ -354,6 +441,43 @@ func (s *scenario) validateMetadata(expected, actual map[string]string) {
 			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("Expect value for key '%s' to be '%s' but found '%s'", key, exValue, actualValue))
 		}
 	}
+}
+
+func (s *scenario) validateADLSACLs(expected, actual *string) {
+	if expected == nil && actual == nil {
+		return
+	}
+	if expected == nil || actual == nil {
+		s.a.Failed()
+		return
+	}
+
+	s.a.Assert(expected, equals(), actual, fmt.Sprintf("Expected Gen 2 ACL: %s but found: %s", *expected, *actual))
+}
+
+func (s *scenario) validateCPKByScope(expected, actual *common.CpkScopeInfo) {
+	if expected == nil && actual == nil {
+		return
+	}
+	if expected == nil || actual == nil {
+		s.a.Failed()
+		return
+	}
+	s.a.Assert(expected.EncryptionScope, equals(), actual.EncryptionScope,
+		fmt.Sprintf("Expected encryption scope is: '%v' but found: '%v'", expected.EncryptionScope, actual.EncryptionScope))
+}
+
+func (s *scenario) validateCPKByValue(expected, actual *common.CpkInfo) {
+	if expected == nil && actual == nil {
+		return
+	}
+	if expected == nil || actual == nil {
+		s.a.Failed()
+		return
+	}
+
+	s.a.Assert(expected.EncryptionKeySha256, equals(), actual.EncryptionKeySha256,
+		fmt.Sprintf("Expected encryption scope is: '%v' but found: '%v'", expected.EncryptionKeySha256, actual.EncryptionKeySha256))
 }
 
 // Validate blob tags
@@ -463,11 +587,25 @@ func (s *scenario) GetTestFiles() testFiles {
 	return s.fs
 }
 
-func (s *scenario) CreateFiles(fs testFiles, atSource bool) {
+func (s *scenario) CreateFiles(fs testFiles, atSource bool, setTestFiles bool, createSourceFilesAtDest bool) {
+	original := s.fs
+	s.fs = fs
 	if atSource {
-		s.state.source.createFiles(s.a, fs, true)
+		s.state.source.createFiles(s.a, s, true)
 	} else {
-		s.state.dest.createFiles(s.a, fs, false)
+		s.state.dest.createFiles(s.a, s, createSourceFilesAtDest)
+	}
+
+	if !setTestFiles {
+		s.fs = original
+	}
+}
+
+func (s *scenario) CreateFile(f *testObject, atSource bool) {
+	if atSource {
+		s.state.source.createFile(s.a, f, s, atSource)
+	} else {
+		s.state.dest.createFile(s.a, f, s, atSource)
 	}
 }
 
@@ -479,4 +617,16 @@ func (s *scenario) CancelAndResume() {
 	s.a.Assert(s.p.cancelFromStdin, equals(), true, "cancelFromStdin must be set in parameters, to use CancelAndResume")
 	s.needResume = true
 	s.chToStdin <- "cancel"
+}
+
+func (s *scenario) SkipTest() {
+	s.a.Skip("Skipping test")
+}
+
+func (s *scenario) GetAsserter() asserter {
+	return s.a
+}
+
+func (s *scenario) GetDestination() resourceManager {
+	return s.state.dest
 }

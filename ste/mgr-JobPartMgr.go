@@ -51,13 +51,13 @@ type IJobPartMgr interface {
 	common.ILogger
 	SourceProviderPipeline() pipeline.Pipeline
 	getOverwritePrompter() *overwritePrompter
-	getFolderCreationTracker() common.FolderCreationTracker
+	getFolderCreationTracker() FolderCreationTracker
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 	FolderDeletionManager() common.FolderDeletionManager
 	CpkInfo() common.CpkInfo
 	CpkScopeInfo() common.CpkScopeInfo
 	IsSourceEncrypted() bool
-  /* Status Manager Updates */
+	/* Status Manager Updates */
 	SendXferDoneMsg(msg xferDoneMsg)
 }
 
@@ -287,8 +287,12 @@ type jobPartMgr struct {
 	exclusiveDestinationMap *common.ExclusiveStringMap
 
 	pipeline pipeline.Pipeline // ordered list of Factory objects and an object implementing the HTTPSender interface
+	// Currently, this only sees use in ADLSG2->ADLSG2 ACL transfers. TODO: Remove it when we can reliably get/set ACLs on blob.
+	secondaryPipeline pipeline.Pipeline
 
 	sourceProviderPipeline pipeline.Pipeline
+	// TODO: Ditto
+	secondarySourceProviderPipeline pipeline.Pipeline
 
 	// used defensively to protect double init
 	atomicPipelinesInitedIndicator uint32
@@ -308,7 +312,7 @@ func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {
 	return jpm.jobMgr.getOverwritePrompter()
 }
 
-func (jpm *jobPartMgr) getFolderCreationTracker() common.FolderCreationTracker {
+func (jpm *jobPartMgr) getFolderCreationTracker() FolderCreationTracker {
 	if jpm.jobMgrInitState == nil || jpm.jobMgrInitState.folderCreationTracker == nil {
 		panic("folderCreationTracker should have been initialized already")
 	}
@@ -400,6 +404,22 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			jppt.SetTransferStatus(common.ETransferStatus.Started(), true)
 		}
 
+		if _, dst, isFolder := plan.TransferSrcDstStrings(t); isFolder {
+			// register the folder!
+			if jpptFolderTracker, ok := jpm.getFolderCreationTracker().(JPPTCompatibleFolderCreationTracker); ok {
+				if plan.FromTo.To().IsRemote() {
+					uri, err := url.Parse(dst)
+					common.PanicIfErr(err)
+					uri.RawPath = ""
+					uri.RawQuery = ""
+
+					dst = uri.String()
+				}
+
+				jpptFolderTracker.RegisterPropertiesTransfer(dst, t)
+			}
+		}
+
 		// Each transfer gets its own context (so any chunk can cancel the whole transfer) based off the job's context
 		transferCtx, transferCancel := context.WithCancel(jobCtx)
 		// Initialize a job part transfer manager
@@ -416,6 +436,37 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			jpm.Log(pipeline.LogInfo, fmt.Sprintf("scheduling JobID=%v, Part#=%d, Transfer#=%d, priority=%v", plan.JobID, plan.PartNum, t, plan.Priority))
 		}
 
+		// ===== TEST KNOB
+		relSrc, relDst := plan.TransferSrcDstRelatives(t)
+
+		var err error
+		if plan.FromTo.From().IsRemote() {
+			relSrc, err = url.PathUnescape(relSrc)
+		}
+		relSrc = strings.TrimPrefix(relSrc, common.AZCOPY_PATH_SEPARATOR_STRING)
+		common.PanicIfErr(err) // neither of these panics should happen, they already would have had a clean error.
+		if plan.FromTo.To().IsRemote() {
+			relDst, err = url.PathUnescape(relDst)
+		}
+		relDst = strings.TrimPrefix(relSrc, common.AZCOPY_PATH_SEPARATOR_STRING)
+		common.PanicIfErr(err)
+
+		_, srcOk := DebugSkipFiles[relSrc]
+		_, dstOk := DebugSkipFiles[relDst]
+		if srcOk || dstOk {
+			if jpm.ShouldLog(pipeline.LogInfo) {
+				jpm.Log(pipeline.LogInfo, fmt.Sprintf("Transfer %d cancelled: %s", jptm.transferIndex, relSrc))
+			}
+
+			// cancel the transfer
+			jptm.Cancel()
+			jptm.SetStatus(common.ETransferStatus.Cancelled())
+		} else {
+			if len(DebugSkipFiles) != 0 && jpm.ShouldLog(pipeline.LogInfo) {
+				jpm.Log(pipeline.LogInfo, fmt.Sprintf("Did not exclude: src: %s dst: %s", relSrc, relDst))
+			}
+		}
+		// ===== TEST KNOB
 		JobsAdmin.(*jobsAdmin).ScheduleTransfer(jpm.priority, jptm)
 
 		// This sets the atomic variable atomicAllTransfersScheduled to 1
@@ -488,6 +539,22 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.pacer,
 			jpm.jobMgr.HttpClient(),
 			statsAccForSip)
+
+		// Consider the ADLSG2->ADLSG2 ACLs case
+		if fromTo == common.EFromTo.BlobBlob() && jpm.Plan().PreservePermissions.IsTruthy() {
+			jpm.secondarySourceProviderPipeline = NewBlobFSPipeline(
+				azbfs.NewAnonymousCredential(),
+				azbfs.PipelineOptions{
+					Log: jpm.jobMgr.PipelineLogInfo(),
+					Telemetry: azbfs.TelemetryOptions{
+						Value: userAgent,
+					},
+				},
+				xferRetryOption,
+				jpm.pacer,
+				jpm.jobMgr.HttpClient(),
+				statsAccForSip)
+		}
 	}
 	// Consider the file-local SDDL transfer case.
 	if fromTo == common.EFromTo.FileBlob() || fromTo == common.EFromTo.FileFile() || fromTo == common.EFromTo.FileLocal() {
@@ -529,6 +596,23 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.pacer,
 			jpm.jobMgr.HttpClient(),
 			jpm.jobMgr.PipelineNetworkStats())
+
+		// Consider the ADLSG2->ADLSG2 ACLs case
+		if fromTo == common.EFromTo.BlobBlob() && jpm.Plan().PreservePermissions.IsTruthy() {
+			credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
+			jpm.secondaryPipeline = NewBlobFSPipeline(
+				credential,
+				azbfs.PipelineOptions{
+					Log: jpm.jobMgr.PipelineLogInfo(),
+					Telemetry: azbfs.TelemetryOptions{
+						Value: userAgent,
+					},
+				},
+				xferRetryOption,
+				jpm.pacer,
+				jpm.jobMgr.HttpClient(),
+				statsAccForSip)
+		}
 	// Create pipeline for Azure BlobFS.
 	case common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS(), common.EFromTo.BenchmarkBlobFS():
 		credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
@@ -619,6 +703,8 @@ func (jpm *jobPartMgr) resourceDstData(fullFilePath string, dataFileToXfer []byt
 	}, jpm.metadata, jpm.blobTags, jpm.cpkOptions
 }
 
+var environmentMimeMap map[string]string
+
 // TODO do we want these charset=utf-8?
 var builtinTypes = map[string]string{
 	".css":  "text/css",
@@ -640,6 +726,9 @@ var builtinTypes = map[string]string{
 func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []byte) string {
 	fileExtension := filepath.Ext(fullFilePath)
 
+	if contentType, ok := environmentMimeMap[strings.ToLower(fileExtension)]; ok {
+		return contentType
+	}
 	// short-circuit for common static website files
 	// mime.TypeByExtension takes the registry into account, which is most often undesirable in practice
 	if override, ok := builtinTypes[strings.ToLower(fileExtension)]; ok {

@@ -21,11 +21,13 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
@@ -1270,4 +1272,85 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromSingleAzureFileToBlobContainer(c *c
 
 		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
 	})
+}
+
+func (s *cmdIntegrationSuite) TestCopyWithDFSResource(c *chk.C) {
+	// invoke the interceptor so lifecycle manager does not shut down the tests
+	ctx := context.Background()
+
+	// get service SAS for raw input
+	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
+
+	// Set up source
+	// set up the file system
+	bfsServiceURLSource := GetBFSSU()
+	fsURLSource, fsNameSource := createNewFilesystem(c, bfsServiceURLSource)
+	defer deleteFilesystem(c, fsURLSource)
+
+	// set up the parent
+	parentDirNameSource := generateName("dir", 0)
+	parentDirURLSource := fsURLSource.NewDirectoryURL(parentDirNameSource)
+	_, err := parentDirURLSource.Create(ctx, true)
+	c.Assert(err, chk.IsNil)
+
+	// set up the file
+	fileNameSource := generateName("file", 0)
+	fileURLSource := parentDirURLSource.NewFileURL(fileNameSource)
+	_, err = fileURLSource.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	c.Assert(err, chk.IsNil)
+
+	dirURLWithSASSource := serviceURLWithSAS.NewFileSystemURL(fsNameSource).NewDirectoryURL(parentDirNameSource)
+
+	// Set up destination
+	// set up the file system
+	bfsServiceURL := GetBFSSU()
+	fsURL, fsName := createNewFilesystem(c, bfsServiceURL)
+	defer deleteFilesystem(c, fsURL)
+
+	// set up the parent
+	parentDirName := generateName("dir", 0)
+	parentDirURL := fsURL.NewDirectoryURL(parentDirName)
+	_, err = parentDirURL.Create(ctx, true)
+	c.Assert(err, chk.IsNil)
+
+	dirURLWithSAS := serviceURLWithSAS.NewFileSystemURL(fsName).NewDirectoryURL(parentDirName)
+	// =====================================
+
+	//1. Verify that copy between dfs and dfs works.
+
+	rawCopy := getDefaultRawCopyInput(dirURLWithSASSource.String(), dirURLWithSAS.String())
+	rawCopy.recursive = true
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	runCopyAndVerify(c, rawCopy, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		//c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+	})
+
+	//2. Verify Sync between dfs and dfs works.
+	mockedRPC.reset()
+	// set up the file
+	fileNameSource = generateName("file2", 0)
+	fileURLSource = parentDirURLSource.NewFileURL(fileNameSource)
+	_, err = fileURLSource.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	c.Assert(err, chk.IsNil)
+
+	rawSync := getDefaultSyncRawInput(dirURLWithSASSource.String(), dirURLWithSAS.String())
+	runSyncAndVerify(c, rawSync, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
+
+		//c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+	})
+
 }

@@ -83,8 +83,14 @@ func (t *TestRunner) SetAllFlags(p params) {
 	set("cancel-from-stdin", p.cancelFromStdin, false)
 	set("preserve-smb-info", p.preserveSMBInfo, false)
 	set("preserve-smb-permissions", p.preserveSMBPermissions, false)
+	set("backup", p.backupMode, false)
 	set("blob-tags", p.blobTags, "")
+	set("blob-type", p.blobType, "")
 	set("s2s-preserve-blob-tags", p.s2sPreserveBlobTags, false)
+	set("cpk-by-name", p.cpkByName, "")
+	set("cpk-by-value", p.cpkByValue, false)
+	set("is-object-dir", p.isObjectDir, false)
+	set("debug-skip-files", strings.Join(p.debugSkipFiles, ";"), "")
 }
 
 func (t *TestRunner) SetAwaitOpenFlag() {
@@ -187,13 +193,17 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 		verb = "sync"
 	case eOperation.Remove():
 		verb = "remove"
+	case eOperation.Resume():
+		verb = "jobs resume"
 	default:
 		panic("unsupported operation type")
 	}
 
-	args := []string{verb, src, dst}
+	args := append(strings.Split(verb, " "), src, dst)
 	if operation == eOperation.Remove() {
 		args = args[:2]
+	} else if operation == eOperation.Resume() {
+		args = args[:3]
 	}
 	args = append(args, t.computeArgs()...)
 

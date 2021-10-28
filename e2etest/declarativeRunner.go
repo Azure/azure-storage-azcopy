@@ -94,7 +94,8 @@ func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredential
 
 // RunScenarios is the key entry point for declarative testing.
 // It constructs and executes scenarios (subtest in Go-speak), according to its parameters, and checks their results
-func RunScenarios(t *testing.T,
+func 	RunScenarios(
+	t *testing.T,
 	operations Operation,
 	testFromTo TestFromTo,
 	validate Validate, // TODO: do we really want the test author to have to nominate which validation should happen?  Pros: better perf of tests. Cons: they have to tell us, and if they tell us wrong test may not test what they think it tests
@@ -109,7 +110,9 @@ func RunScenarios(t *testing.T,
 	p params,
 	hs *hooks,
 	fs testFiles,
-) {
+	// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
+	accountType AccountType,
+	scenarioSuffix string) {
 	// enable this if we want parents in parallel: t.Parallel()
 
 	suiteName, testName := getTestName(t)
@@ -121,7 +124,19 @@ func RunScenarios(t *testing.T,
 	// construct all the scenarios
 	scenarios := make([][]scenario, 0, 16)
 	for _, op := range operations.getValues() {
+		if op == eOperation.Resume() {
+			continue
+		}
+
+		seenFromTos := make(map[common.FromTo]bool)
+
 		for _, fromTo := range testFromTo.getValues(op) {
+      // dedupe the scenarios
+			if _, ok := seenFromTos[fromTo]; ok {
+				continue
+			}
+			seenFromTos[fromTo] = true
+      
 			credentialTypes := getValidCredCombinationsForFromTo(fromTo, requestedCredentialTypesSrc, requestedCredentialTypesDst)
 
 			scenarioList := make([]scenario, 0)
@@ -155,7 +170,7 @@ func RunScenarios(t *testing.T,
 				scenarioList = append(scenarioList, s)
 			}
 
-			scenarios = append(scenarios, scenarioList)
+			scenarios = append(scenarios, scenarioList...)
 		}
 	}
 
@@ -165,7 +180,7 @@ func RunScenarios(t *testing.T,
 	}
 
 	// run them in parallel if not debugging, but sequentially (for easier debugging) if a debugger is attached
-	parallel := !isLaunchedByDebugger // this only works if gops.exe is on your path. See azcopyDebugHelper.go for instructions.
+	parallel := !isLaunchedByDebugger && !p.disableParallelTesting // this only works if gops.exe is on your path. See azcopyDebugHelper.go for instructions.
 	for _, s := range scenarios {
 		// use t.Run to get proper sub-test support
 		t.Run(s[0].subtestName, func(t *testing.T) {
@@ -186,6 +201,11 @@ func RunScenarios(t *testing.T,
 					sen.Run()
 				})
 			}
+
+			if hs != nil {
+				sen.runHook(hs.beforeTestRun)
+			}
+			sen.Run()
 		})
 	}
 }

@@ -197,8 +197,8 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			PreserveLastModifiedTime: order.BlobAttributes.PreserveLastModifiedTime,
 			MD5VerificationOption:    order.BlobAttributes.MD5ValidationOption, // here because it relates to downloads (file destination)
 		},
-		PreserveSMBPermissions: order.PreserveSMBPermissions,
-		PreserveSMBInfo:        order.PreserveSMBInfo,
+		PreservePermissions: order.PreserveSMBPermissions,
+		PreserveSMBInfo:     order.PreserveSMBInfo,
 		// For S2S copy, per JobPartPlan info
 		S2SGetPropertiesInBackend:      order.S2SGetPropertiesInBackend,
 		S2SSourceChangeValidation:      order.S2SSourceChangeValidation,
@@ -231,6 +231,16 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		panic(err)
 	}
 	eof += int64(bytesWritten)
+
+	// ensure 8 byte alignment so that Atomic fields of JobPartPlanTransfer can actually be accessed atomically
+	paddingLen := ((eof + 7) & ^7) - eof
+	if paddingLen != 0 {
+		bytesWritten, err := file.Write(make([]byte, paddingLen))
+		if err != nil {
+			panic(err)
+		}
+		eof += int64(bytesWritten)
+	}
 
 	// srcDstStringsOffset points to after the header & all the transfers; this is where the src/dst strings go for each transfer
 	srcDstStringsOffset := make([]int64, jpph.NumTransfers)

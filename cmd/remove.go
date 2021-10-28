@@ -22,9 +22,9 @@ package cmd
 
 import (
 	"fmt"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
+	"strings"
 )
 
 func init() {
@@ -45,18 +45,24 @@ func init() {
 			// the resource to delete is set as the source
 			raw.src = args[0]
 
-			// infer the location of the delete
-			srcLocationType := inferArgumentLocation(raw.src)
-			if srcLocationType == common.ELocation.Blob() {
-				raw.fromTo = common.EFromTo.BlobTrash().String()
-			} else if srcLocationType == common.ELocation.File() {
-				raw.fromTo = common.EFromTo.FileTrash().String()
-			} else if srcLocationType == common.ELocation.BlobFS() {
-				raw.fromTo = common.EFromTo.BlobFSTrash().String()
-			} else {
-				return fmt.Errorf("invalid source type %s to delete. azcopy support removing blobs/files/adls gen2", srcLocationType.String())
+			srcLocationType := InferArgumentLocation(raw.src)
+			if raw.fromTo == "" {
+				switch srcLocationType {
+				case common.ELocation.Blob():
+					raw.fromTo = common.EFromTo.BlobTrash().String()
+				case common.ELocation.File():
+					raw.fromTo = common.EFromTo.FileTrash().String()
+				case common.ELocation.BlobFS():
+					raw.fromTo = common.EFromTo.BlobFSTrash().String()
+				default:
+					return fmt.Errorf("invalid source type %s to delete. azcopy support removing blobs/files/adls gen2", srcLocationType.String())
+				}
+			} else if raw.fromTo != "" {
+				err := strings.Contains(raw.fromTo, "Trash")
+				if !err {
+					return fmt.Errorf("Invalid destination. Please enter a valid destination, i.e. BlobTrash, FileTrash, BlobFSTrash")
+				}
 			}
-
 			raw.setMandatoryDefaults()
 
 			// in the case of remove, we are fairly certain that the user wants all the blobs to be removed
@@ -81,6 +87,10 @@ func init() {
 				glcm.Error("failed to perform remove command due to error: " + err.Error())
 			}
 
+			if cooked.dryrunMode {
+				glcm.Exit(nil, common.EExitCode.Success())
+			}
+
 			glcm.SurrenderControl()
 		},
 	}
@@ -98,4 +108,6 @@ func init() {
 	deleteCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "Defines the location of a file which contains the list of files and directories to be deleted. The relative paths should be delimited by line breaks, and the paths should NOT be URL-encoded.")
 	deleteCmd.PersistentFlags().StringVar(&raw.deleteSnapshotsOption, "delete-snapshots", "", "By default, the delete operation fails if a blob has snapshots. Specify 'include' to remove the root blob and all its snapshots; alternatively specify 'only' to remove only the snapshots but keep the root blob.")
 	deleteCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-versions", "", "Specifies a file where each version id is listed on a separate line. Ensure that the source must point to a single blob and all the version ids specified in the file using this flag must belong to the source blob only. Specified version ids of the given blob will get deleted from Azure Storage.")
+	deleteCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the path files that would be removed by the command. This flag does not trigger the removal of the files.")
+	deleteCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. For Example: BlobTrash, FileTrash, BlobFSTrash")
 }

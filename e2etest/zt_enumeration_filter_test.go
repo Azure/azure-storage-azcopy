@@ -71,7 +71,7 @@ func TestFilter_IncludePath(t *testing.T) {
 			"sub/subsub/fileb",
 			"sub/subsub/filec",
 		},
-	})
+	}, EAccountType.Standard(), "")
 }
 
 // TestFilter_IncludeAfter test the include-after parameter
@@ -132,7 +132,6 @@ func TestFilter_IncludePattern(t *testing.T) {
 }
 
 func TestFilter_RemoveFile(t *testing.T) {
-
 	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		relativeSourcePath: "file2.txt",
 	}, nil, testFiles{
@@ -143,11 +142,33 @@ func TestFilter_RemoveFile(t *testing.T) {
 		shouldIgnore: []interface{}{
 			"file2.txt",
 		},
-	})
+	}, EAccountType.Standard(), "")
+}
+
+func TestFilter_IncludePattern(t *testing.T) {
+  RunScenarios(t, eOperation.Copy(), eTestFromTo.AllSourcesToOneDest(), eValidate.Auto(), params{
+		recursive:      true,
+		includePattern: "*.txt;2020*;*mid*;file8", // *pre*in*post*",
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldIgnore: []interface{}{
+			"A2020log",
+			"A2020log.txte",
+		},
+		shouldTransfer: []interface{}{
+			folder("subdir"),
+			"2020_file1",
+			"file2.txt",
+			"file3_mid_txt",
+			"subdir/2020_file5", // because recursive=true and patterns are matched in subdirectories as well.
+			"subdir/file6.txt",
+			"subdir/file7_A_mid_B",
+			"file8", // Exact match
+		},
+	}, EAccountType.Standard(), "")
 }
 
 func TestFilter_RemoveFolder(t *testing.T) {
-
 	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:          true,
 		relativeSourcePath: "folder2/",
@@ -181,7 +202,6 @@ func TestFilter_RemoveContainer(t *testing.T) {
 }
 
 func TestFilter_ExcludePath(t *testing.T) {
-
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllSourcesToOneDest(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:   true,
 		excludePath: "subL1/subL2;excludeFile",
@@ -204,11 +224,10 @@ func TestFilter_ExcludePath(t *testing.T) {
 			"subL1/sub/subL2/fileA", // exclude path should be contiguous
 			"sub/subL1/subL2/fileB",
 		},
-	})
+	}, EAccountType.Standard(), "")
 }
 
 func TestFilter_ExcludePattern(t *testing.T) {
-
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllSourcesToOneDest(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:      true,
 		excludePattern: "*.log;2020*;*mid*;excludeFile",
@@ -228,7 +247,7 @@ func TestFilter_ExcludePattern(t *testing.T) {
 			"sample.txt",
 			"subdir/sample.txt",
 		},
-	})
+	}, EAccountType.Standard(), "")
 }
 
 // Generally, each filter test should target one filter.  We did once have a bug though, where combining
@@ -307,5 +326,5 @@ func TestFilter_CombineCommonFilters(t *testing.T) {
 			"donkey/seal/fox.txt",
 			"frog.txt",
 		},
-	})
+	}, EAccountType.Standard(), "")
 }

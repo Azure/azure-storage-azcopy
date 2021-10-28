@@ -166,7 +166,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		// Normal scenario, create the destination file as expected
 		// Use pseudo chunk id to allow our usual state tracking mechanism to keep count of how many
 		// file creations are running at any given instant, for perf diagnostics
-		// 
+		//
 		// We create the file to a temporary location with name .azcopy-<jobID>-<actualName> and then move it
 		// to correct name.
 		pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
@@ -356,9 +356,9 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 			//not fail the transfer.
 			if err == nil && !strings.EqualFold(info.Destination, common.Dev_Null) {
 				renameErr := os.Rename(info.getTempDownloadPath(), info.Destination)
-				if  renameErr != nil {
+				if renameErr != nil {
 					jptm.LogError(info.Destination, fmt.Sprintf(
-								  "Failed to rename. File at %s", info.getTempDownloadPath()), renameErr)
+						"Failed to rename. File at %s", info.getTempDownloadPath()), renameErr)
 				}
 			}
 		}
