@@ -146,7 +146,7 @@ func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() azblob.DeleteSnapsh
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-var EPermanentDeleteOption = PermanentDeleteOption(0)
+var EPermanentDeleteOption = PermanentDeleteOption(3) // Default to "None"
 
 type PermanentDeleteOption uint8
 
@@ -178,9 +178,8 @@ func (p PermanentDeleteOption) String() string {
 func (p PermanentDeleteOption) ToPermanentDeleteOptionType() azblob.BlobDeleteType {
 	if p == EPermanentDeleteOption.None() {
 		return azblob.BlobDeleteNone
-	} else {
-		return azblob.BlobDeletePermanent
 	}
+	return azblob.BlobDeletePermanent
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
