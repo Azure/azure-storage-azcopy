@@ -158,6 +158,7 @@ func RunScenarios(
 				}
 
 				s := scenario{
+					needResume:          (operations & eOperation.Resume()) == eOperation.Resume(),
 					accountType:         accountType,
 					subtestName:         subtestName,
 					compactScenarioName: compactScenarioName,
