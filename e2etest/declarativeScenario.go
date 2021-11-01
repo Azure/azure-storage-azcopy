@@ -181,11 +181,12 @@ func (s *scenario) runAzCopy() {
 		}
 	}
 
+	tf := s.GetTestFiles()
 	// run AzCopy
 	result, wasClean, err := r.ExecuteAzCopyCommand(
 		s.operation,
-		s.state.source.getParam(s.stripTopDir, s.credTypes[0] == common.ECredentialType.Anonymous(), ""),
-		s.state.dest.getParam(false, s.credTypes[1] == common.ECredentialType.Anonymous(), ""),
+		s.state.source.getParam(s.stripTopDir, s.credTypes[0] == common.ECredentialType.Anonymous(), tf.objectTarget),
+		s.state.dest.getParam(false, s.credTypes[1] == common.ECredentialType.Anonymous(), tf.objectTarget),
 		s.credTypes[0] == common.ECredentialType.OAuthToken() || s.credTypes[1] == common.ECredentialType.OAuthToken(), // needsOAuth
 		afterStart, s.chToStdin)
 
