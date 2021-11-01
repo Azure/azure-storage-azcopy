@@ -200,8 +200,7 @@ func TestBasic_CopyS2SDir(t *testing.T) {
 
 // ================================  Remove: File, Folder, and Container  ==============================================
 func TestBasic_CopyRemoveFile(t *testing.T) {
-
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), allCredentialTypes, anonymousAuthOnly, params{
 		relativeSourcePath: "file2.txt",
 	}, nil, testFiles{
 		defaultSize: "1K",
