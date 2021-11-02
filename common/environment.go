@@ -188,8 +188,9 @@ func (EnvironmentVariable) EnumerationPoolSize() EnvironmentVariable {
 
 func (EnvironmentVariable) DisableHierarchicalScanning() EnvironmentVariable {
 	return EnvironmentVariable{
-		Name:        "AZCOPY_DISABLE_HIERARCHICAL_SCAN",
-		Description: "Applies only when Azure Blobs is the source. Concurrent scanning is faster but employs the hierarchical listing API, which can result in more IOs/cost. Specify 'true' to sacrifice performance but save on cost.",
+		Name:         "AZCOPY_DISABLE_HIERARCHICAL_SCAN",
+		Description:  "Applies only when Azure Blobs is the source. Concurrent scanning is faster but employs the hierarchical listing API, which can result in more IOs/cost. Specify 'true' to sacrifice performance but save on cost.",
+		DefaultValue: "false",
 	}
 }
 

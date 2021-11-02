@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
@@ -433,7 +434,8 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool) (t *blobTraverser) {
 	if strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning())) == "false" &&
 		includeDeleted && (includeSnapshot || includeVersion) {
-		panic("Cannot delete soft-deleted snapshots/versions with parallel listing. Disable hierarchical scanning by setting AZCOPY_DISABLE_HIERARCHICAL_SCAN to true.")
+		os.Setenv("AZCOPY_DISABLE_HIERARCHICAL_SCAN", "true")
+		fmt.Println("AZCOPY_DISABLE_HIERARCHICAL_SCAN has been set to true to permanently delete soft-deleted snapshots/versions using parallel listing.")
 	}
 	t = &blobTraverser{
 		rawURL:                      rawURL,
