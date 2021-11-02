@@ -64,7 +64,7 @@ func doDeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	err := error(nil)
 	if jptm.PermanentDeleteOption().ToPermanentDeleteOptionType() == azblob.BlobDeletePermanent {
 		// Change service version before performing permanent delete
-		ctx := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+		ctx := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, "2020-08-04")
 		_, err = srcBlobURL.PermanentDelete(ctx, jptm.DeleteSnapshotsOption().ToDeleteSnapshotsOptionType(), azblob.BlobAccessConditions{})
 	} else {
 		_, err = srcBlobURL.Delete(jptm.Context(), jptm.DeleteSnapshotsOption().ToDeleteSnapshotsOptionType(), azblob.BlobAccessConditions{})
