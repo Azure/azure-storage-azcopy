@@ -96,6 +96,8 @@ var JobsAdmin interface {
 	CurrentMainPoolSize() int
 
 	TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32, fromTo common.FromTo, dir common.TransferDirection, p *ste.PipelineNetworkStats) []common.PerformanceAdvice
+
+	SetConcurrencySettingsToAuto()
 }
 
 func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {
@@ -382,7 +384,7 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 func (ja *jobsAdmin) SetConcurrencySettingsToAuto() {
 	// Setting initial pool size to 4 and max pool size to 3,000
 	ja.concurrency.InitialMainPoolSize = 4
-	ja.concurrency.MaxMainPoolSize = &ConfiguredInt{3000, false, common.EEnvironmentVariable.ConcurrencyValue().Name, "auto-tuning limit"}
+	ja.concurrency.MaxMainPoolSize = &ste.ConfiguredInt{3000, false, common.EEnvironmentVariable.ConcurrencyValue().Name, "auto-tuning limit"}
 
 	// recreate the concurrency tuner.
 	// Tuner isn't called until the first job part is scheduled for transfer, so it is safe to update it before that.

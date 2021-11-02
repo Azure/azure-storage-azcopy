@@ -1289,8 +1289,8 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Make AUTO default for Azure Files since Azure Files throttles too easily.
-	if ste.JobsAdmin != nil && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.File()) {
-		ste.JobsAdmin.SetConcurrencySettingsToAuto()
+	if jobsAdmin.JobsAdmin != nil && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.File()) {
+		jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
 	}
 
 	// Note: credential info here is only used by remove at the moment.
