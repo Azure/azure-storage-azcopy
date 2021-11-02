@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"time"
 
@@ -14,10 +15,11 @@ import (
 	"net/url"
 	//"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	chk "gopkg.in/check.v1" // go get gopkg.in/check.v1
 	"io/ioutil"
 	"net/http"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	chk "gopkg.in/check.v1" // go get gopkg.in/check.v1
 )
 
 type FileURLSuite struct{}
@@ -375,6 +377,48 @@ func (s *FileURLSuite) TestRenameFile(c *chk.C) {
 	fileURL, fileName := createNewFileFromFileSystem(c, fileSystemURL)
 	fileRename := fileName + "rename"
 
+	renamedFileURL, err := fileURL.Rename(context.Background(), azbfs.RenameFileOptions{DestinationPath: fileRename})
+	c.Assert(renamedFileURL, chk.NotNil)
+	c.Assert(err, chk.IsNil)
+
+	// Check that the old file does not exist
+	getPropertiesResp, err := fileURL.GetProperties(context.Background())
+	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	c.Assert(getPropertiesResp, chk.IsNil)
+
+	// Check that the renamed file does exist
+	getPropertiesResp, err = renamedFileURL.GetProperties(context.Background())
+	c.Assert(getPropertiesResp.StatusCode(), chk.Equals, http.StatusOK)
+	c.Assert(err, chk.IsNil)
+}
+
+func (s *FileURLSuite) TestRenameFileWithSas(c *chk.C) {
+	name, key := getAccountAndKey()
+	credential := azbfs.NewSharedKeyCredential(name, key)
+	sasQueryParams, err := azbfs.AccountSASSignatureValues{
+		Protocol:      azbfs.SASProtocolHTTPS,
+		ExpiryTime:    time.Now().Add(48 * time.Hour),
+		Permissions:   azbfs.AccountSASPermissions{Read: true, List: true, Write: true, Delete: true, Add: true, Create: true, Update: true, Process: true}.String(),
+		Services:      azbfs.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
+		ResourceTypes: azbfs.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
+	}.NewSASQueryParameters(credential)
+	c.Assert(err, chk.IsNil)
+
+	qp := sasQueryParams.Encode()
+	rawURL := fmt.Sprintf("https://%s.dfs.core.windows.net/?%s",
+		credential.AccountName(), qp)
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
+
+	fsu := azbfs.NewServiceURL(*fullURL, azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{}))
+
+	fileSystemURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fileSystemURL)
+
+	fileURL, fileName := createNewFileFromFileSystem(c, fileSystemURL)
+	fileRename := fileName + "rename"
+
+	fmt.Println(fileURL.String())
 	renamedFileURL, err := fileURL.Rename(context.Background(), azbfs.RenameFileOptions{DestinationPath: fileRename})
 	c.Assert(renamedFileURL, chk.NotNil)
 	c.Assert(err, chk.IsNil)
