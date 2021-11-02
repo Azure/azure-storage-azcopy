@@ -33,17 +33,17 @@ import (
 )
 
 // upload related
-const UploadMaxTries = 20
+const UploadMaxTries = 3
 const UploadRetryDelay = time.Second * 1
 const UploadMaxRetryDelay = time.Second * 60
-var UploadTryTimeout = time.Minute * 15
+var UploadTryTimeout = time.Minute * 2
 var ADLSFlushThreshold uint32 = 7500 // The # of blocks to flush at a time-- Implemented only for CI.
 
 // download related
 const MaxRetryPerDownloadBody = 5
 
 // TODO: consider to unify the retry options.
-const DownloadTryTimeout = time.Minute * 15
+const DownloadTryTimeout = time.Minute * 2
 const DownloadRetryDelay = time.Second * 1
 const DownloadMaxRetryDelay = time.Second * 60
 
