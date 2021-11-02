@@ -17,4 +17,6 @@ type RenameFileOptions struct {
 	DestinationFileSystem *string
 	// The destination path for the file.
 	DestinationPath string
+	// The new SAS for a destination file
+	DestinationSas *string
 }

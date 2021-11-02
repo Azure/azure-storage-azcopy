@@ -29,9 +29,9 @@ type BlobFSHTTPHeaders struct {
 
 // BlobFSAccessControl represents the set of custom headers available for defining access conditions for the content.
 type BlobFSAccessControl struct {
-	Owner 		string
-	Group 		string
-	ACL   		string // Combining ACL & Permissions = invalid for SetAccessControl.
+	Owner       string
+	Group       string
+	ACL         string // Combining ACL & Permissions = invalid for SetAccessControl.
 	Permissions string
 }
 
@@ -227,8 +227,13 @@ func (f FileURL) Rename(ctx context.Context, options RenameFileOptions) (FileURL
 	urlParts := NewBfsURLParts(f.fileClient.URL())
 	urlParts.FileSystemName = *fileSystemName
 	urlParts.DirectoryOrFilePath = options.DestinationPath
+	// ensure we use our source's SAS token in the x-ms-rename-source header
 	renameSource := "/" + f.fileSystemName + "/" + f.path + "?" + urlParts.SAS.Encode()
 
+	// if we're changing our source SAS to a new SAS in the rename
+	if options.DestinationSas != nil {
+		urlParts.SAS = GetSasQueryParams(*options.DestinationSas)
+	}
 	destinationFileURL := NewFileURL(urlParts.URL(), f.fileClient.Pipeline())
 
 	_, err := destinationFileURL.fileClient.Create(ctx, *fileSystemName, options.DestinationPath, PathResourceNone, nil, PathRenameModeLegacy,

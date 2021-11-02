@@ -177,8 +177,13 @@ func (d DirectoryURL) Rename(ctx context.Context, options RenameDirectoryOptions
 	urlParts := NewBfsURLParts(d.directoryClient.URL())
 	urlParts.FileSystemName = *fileSystemName
 	urlParts.DirectoryOrFilePath = options.DestinationPath
+	// ensure we use our source's SAS token in the x-ms-rename-source header
 	renameSource := "/" + d.filesystem + "/" + d.pathParameter + "?" + urlParts.SAS.Encode()
 
+	// if we're changing our source SAS to a new SAS in the rename
+	if options.DestinationSas != nil {
+		urlParts.SAS = GetSasQueryParams(*options.DestinationSas)
+	}
 	destinationDirectoryURL := NewDirectoryURL(urlParts.URL(), d.directoryClient.Pipeline())
 
 	_, err := destinationDirectoryURL.directoryClient.Create(ctx, *fileSystemName, options.DestinationPath, PathResourceNone, nil, PathRenameModeLegacy,
