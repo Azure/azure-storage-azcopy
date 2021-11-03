@@ -419,7 +419,6 @@ func (s *FileURLSuite) TestRenameFileWithSas(c *chk.C) {
 	fileURL, fileName := createNewFileFromFileSystem(c, fileSystemURL)
 	fileRename := fileName + "rename"
 
-	fmt.Println(fileURL.String())
 	renamedFileURL, err := fileURL.Rename(context.Background(), azbfs.RenameFileOptions{DestinationPath: fileRename})
 	c.Assert(renamedFileURL, chk.NotNil)
 	c.Assert(err, chk.IsNil)
@@ -472,7 +471,6 @@ func (s *FileURLSuite) TestRenameFileWithDestinationSas(c *chk.C) {
 	fileURL, fileName := createNewFileFromFileSystem(c, fileSystemURL)
 	fileRename := fileName + "rename"
 
-	fmt.Println(fileURL.String())
 	renamedFileURL, err := fileURL.Rename(
 		context.Background(), azbfs.RenameFileOptions{DestinationPath: fileRename, DestinationSas: &destQp})
 	c.Assert(renamedFileURL, chk.NotNil)
