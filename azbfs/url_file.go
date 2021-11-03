@@ -231,7 +231,7 @@ func (f FileURL) Rename(ctx context.Context, options RenameFileOptions) (FileURL
 	renameSource := "/" + f.fileSystemName + "/" + f.path + "?" + urlParts.SAS.Encode()
 
 	// if we're changing our source SAS to a new SAS in the rename
-	if options.DestinationSas != nil {
+	if options.DestinationSas != nil && *options.DestinationSas != "" {
 		urlParts.SAS = GetSasQueryParams(*options.DestinationSas)
 	}
 	destinationFileURL := NewFileURL(urlParts.URL(), f.fileClient.Pipeline())
