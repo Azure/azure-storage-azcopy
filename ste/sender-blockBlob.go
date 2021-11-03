@@ -180,6 +180,11 @@ func (s *blockBlobSenderBase) Prologue(ps common.PrologueState) (destinationModi
 	if s.jptm.ShouldInferContentType() {
 		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
 	}
+
+	if s.jptm.ShouldCompress() {
+		s.headersToApply.ContentEncoding = "gzip"
+	}
+
 	return false
 }
 
