@@ -139,6 +139,7 @@ func (a *testingAsserter) CompactScenarioName() string {
 
 type params struct {
 	recursive                 bool
+	shareRoot                 bool
 	includePath               string
 	includePattern            string
 	includeAfter              string

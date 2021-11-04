@@ -27,6 +27,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -187,7 +188,8 @@ func (s *scenario) runAzCopy() {
 	result, wasClean, err := r.ExecuteAzCopyCommand(
 		s.operation,
 		s.state.source.getParam(s.stripTopDir, srcUseSas, tf.objectTarget),
-		s.state.dest.getParam(false, useSas, tf.objectTarget),
+		// Prefer the destination target over the object target itself.
+		s.state.dest.getParam(false, useSas, common.IffString(tf.destTarget != "", tf.destTarget, tf.objectTarget)),
 		afterStart, s.chToStdin)
 
 	if !wasClean {
@@ -296,6 +298,8 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 	// compute dest, taking into account our stripToDir rules
 	addedDirAtDest = ""
 	areBothContainerLike := s.state.source.isContainerLike() && s.state.dest.isContainerLike()
+
+	tf := s.GetTestFiles()
 	if s.stripTopDir || s.operation == eOperation.Sync() || areBothContainerLike {
 		// Sync always acts like stripTopDir is true.
 		// For copies between two container-like locations, we don't expect the root directory to be transferred, regardless of stripTopDir.
@@ -303,13 +307,17 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 		// of that kind.
 		expectRootFolder = false
 	} else if s.fromTo.From().IsLocal() {
-		if s.GetTestFiles().objectTarget == "" {
+		if tf.objectTarget == "" && tf.destTarget == "" {
 			addedDirAtDest = filepath.Base(srcRoot)
+		} else if tf.destTarget != "" {
+			addedDirAtDest = tf.destTarget
 		}
 		dstRoot = fmt.Sprintf("%s%c%s", dstRoot, os.PathSeparator, addedDirAtDest)
 	} else {
-		if s.GetTestFiles().objectTarget == "" {
+		if tf.objectTarget == "" && tf.destTarget == "" {
 			addedDirAtDest = path.Base(srcRoot)
+		} else if tf.destTarget != "" {
+			addedDirAtDest = tf.destTarget
 		}
 		dstRoot = fmt.Sprintf("%s/%s", dstRoot, addedDirAtDest)
 	}
@@ -385,7 +393,7 @@ func (s *scenario) validateSMBPermissionsByValue(expected, actual string, objNam
 	actualSDDL, err := sddl.ParseSDDL(actual)
 	s.a.AssertNoErr(err)
 
-	s.a.Assert(actualSDDL.PortableString(), equals(), expectedSDDL.PortableString(), "On object "+objName)
+	s.a.Assert(strings.TrimSuffix(actualSDDL.PortableString(), "S:NO_ACCESS_CONTROL"), equals(), strings.TrimSuffix(expectedSDDL.PortableString(), "S:NO_ACCESS_CONTROL"), "On object "+objName)
 }
 
 func (s *scenario) validateContent() {

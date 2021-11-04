@@ -76,10 +76,13 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, err
 	}
 
-	// Ensure we're only copying from a directory with a trailing wildcard or recursive.
+	// Ensure we're only copying a directory under valid conditions
 	isSourceDir := traverser.IsDirectory(true)
-	if isSourceDir && !cca.Recursive && !cca.StripTopDir {
-		return nil, errors.New("cannot use directory as source without --recursive or a trailing wildcard (/*)")
+	if isSourceDir &&
+		!cca.Recursive && // Copies the folder & everything under it
+		!cca.StripTopDir && // Copies only everything under it
+		!cca.shareRoot { // Copies only the folder properties, if recursive isn't specified.
+		return nil, errors.New("cannot use directory as source without --recursive, --share-root or a trailing wildcard (/*)")
 	}
 
 	// Check if the destination is a directory so we can correctly decide where our files land
@@ -111,6 +114,10 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	if (srcLevel == ELocationLevel.Object() || cca.FromTo.From().IsLocal()) && dstLevel == ELocationLevel.Service() {
 		return nil, errors.New("cannot transfer individual files/folders to the root of a service. Add a container or directory to the destination URL")
+	}
+
+	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Service() && cca.shareRoot {
+		return nil, errors.New("cannot use share-root with a service level destination")
 	}
 
 	// When copying a container directly to a container, strip the top directory
@@ -255,8 +262,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			}
 		}
 
-		srcRelPath := cca.MakeEscapedRelativePath(true, isDestDir, object)
-		dstRelPath := cca.MakeEscapedRelativePath(false, isDestDir, object)
+		srcRelPath := cca.MakeEscapedRelativePath(true, isDestDir, cca.shareRoot, object)
+		dstRelPath := cca.MakeEscapedRelativePath(false, isDestDir, cca.shareRoot, object)
 
 		transfer, shouldSendToSte := object.ToNewCopyTransfer(
 			cca.autoDecompress && cca.FromTo.IsDownload(),
@@ -572,7 +579,7 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 	return path
 }
 
-func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool, object StoredObject) (relativePath string) {
+func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool, shareRoot bool, object StoredObject) (relativePath string) {
 	// write straight to /dev/null, do not determine a indirect path
 	if !source && cca.Destination.Value == common.Dev_Null {
 		return "" // ignore path encode rules
@@ -602,8 +609,12 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 		return pathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
 	}
 
-	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true
+	// user is renaming a folder/sharing the root
+	if object.isSourceRootFolder() && shareRoot {
+		relativePath = ""
+	}
 
+	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true
 	if object.isSourceRootFolder() {
 		relativePath = "" // otherwise we get "/" from the line below, and that breaks some clients, e.g. blobFS
 	} else {
@@ -612,7 +623,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 
 	if common.IffString(source, object.ContainerName, object.DstContainerName) != "" {
 		relativePath = `/` + common.IffString(source, object.ContainerName, object.DstContainerName) + relativePath
-	} else if !source && !cca.StripTopDir {
+	} else if !source && !cca.StripTopDir && !cca.shareRoot { // Avoid doing this where the root is shared or renamed.
 		// We ONLY need to do this adjustment to the destination.
 		// The source SAS has already been removed. No need to convert it to a URL or whatever.
 		// Save to a directory
