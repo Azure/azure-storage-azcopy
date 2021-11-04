@@ -80,6 +80,12 @@ func NewBfsURLParts(u url.URL) BfsURLParts {
 	return up
 }
 
+func GetSasQueryParams(sas string) SASQueryParameters {
+	paramsMap, _ := url.ParseQuery(sas)
+	SAS := newSASQueryParameters(paramsMap, true)
+	return SAS
+}
+
 // URL returns a URL object whose fields are initialized from the BfsURLParts fields.
 func (up BfsURLParts) URL() url.URL {
 	path := ""
