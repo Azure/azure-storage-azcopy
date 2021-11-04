@@ -189,7 +189,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		_, err = getProcessingError(err)
 
 		// short-circuit if we don't have anything else to scan and permanent delete is not on
-		if isBlob || err != nil && !t.includeDeleted {
+		if !t.includeDeleted && (isBlob || err != nil) {
 			return err
 		}
 	}
@@ -435,7 +435,7 @@ func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 	if strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning())) == "false" &&
 		includeDeleted && (includeSnapshot || includeVersion) {
 		os.Setenv("AZCOPY_DISABLE_HIERARCHICAL_SCAN", "true")
-		fmt.Println("AZCOPY_DISABLE_HIERARCHICAL_SCAN has been set to true to permanently delete soft-deleted snapshots/versions using parallel listing.")
+		fmt.Println("AZCOPY_DISABLE_HIERARCHICAL_SCAN has been set to true to permanently delete soft-deleted snapshots/versions.")
 	}
 	t = &blobTraverser{
 		rawURL:                      rawURL,
