@@ -181,6 +181,7 @@ func (d DirectoryURL) Rename(ctx context.Context, options RenameDirectoryOptions
 	renameSource := "/" + d.filesystem + "/" + d.pathParameter + "?" + urlParts.SAS.Encode()
 
 	// if we're changing our source SAS to a new SAS in the rename
+	// in the case the user wants to have limited permissions per directory: sas1 for directory1 and sas2 for directory2
 	if options.DestinationSas != nil && *options.DestinationSas != "" {
 		urlParts.SAS = GetSasQueryParams(*options.DestinationSas)
 	}
