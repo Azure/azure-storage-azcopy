@@ -80,8 +80,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	isSourceDir := traverser.IsDirectory(true)
 	if isSourceDir &&
 		!cca.Recursive && // Copies the folder & everything under it
-		!cca.StripTopDir && // Copies only everything under it
-		!cca.shareRoot { // Copies only the folder properties, if recursive isn't specified.
+		!cca.StripTopDir { // Copies only everything under it
+		// todo: dir only transfer, also todo: support syncing the root folder's acls on sync.
 		return nil, errors.New("cannot use directory as source without --recursive, --share-root or a trailing wildcard (/*)")
 	}
 
