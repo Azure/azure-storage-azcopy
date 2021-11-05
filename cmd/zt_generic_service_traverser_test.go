@@ -73,15 +73,15 @@ func (s *genericTraverserSuite) TestBlobFSServiceTraverserWithManyObjects(c *chk
 	err = blobAccountTraverser.Traverse(noPreProccessor, blobDummyProcessor.process, nil)
 	c.Assert(err, chk.IsNil)
 
-	c.Assert(len(blobDummyProcessor.record), chk.Equals, len(localIndexer.indexMap)*len(containerList))
+	c.Assert(len(blobDummyProcessor.record), chk.Equals, len(localIndexer.indexMap.items)*len(containerList))
 
 	for _, storedObject := range blobDummyProcessor.record {
-		correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
+		_, present := localIndexer.indexMap.GetObject(storedObject.relativePath)
 		_, cnamePresent := cnames[storedObject.ContainerName]
 
 		c.Assert(present, chk.Equals, true)
 		c.Assert(cnamePresent, chk.Equals, true)
-		c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
+		// checking the name is no longer required.
 	}
 }
 
@@ -227,10 +227,10 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 
 	records := append(blobDummyProcessor.record, fileDummyProcessor.record...)
 
-	localTotalCount := len(localIndexer.indexMap)
+	localTotalCount := len(localIndexer.indexMap.items)
 	localFileOnlyCount := 0
-	for _, x := range localIndexer.indexMap {
-		if x.entityType == common.EEntityType.File() {
+	for x := range localIndexer.indexMap.GetIndexes() {
+		if x.data.(limitedStoredObject).entityType == common.EEntityType.File() {
 			localFileOnlyCount++
 		}
 	}
@@ -246,12 +246,11 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 	}
 
 	for _, storedObject := range records {
-		correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
+		_, present := localIndexer.indexMap.GetObject(storedObject.relativePath)
 		_, cnamePresent := cnames[storedObject.ContainerName]
 
 		c.Assert(present, chk.Equals, true)
 		c.Assert(cnamePresent, chk.Equals, true)
-		c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
 	}
 }
 
@@ -429,10 +428,10 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 
 	records := append(blobDummyProcessor.record, fileDummyProcessor.record...)
 
-	localTotalCount := len(localIndexer.indexMap)
+	localTotalCount := len(localIndexer.indexMap.items)
 	localFileOnlyCount := 0
-	for _, x := range localIndexer.indexMap {
-		if x.entityType == common.EEntityType.File() {
+	for x := range localIndexer.indexMap.GetIndexes() {
+		if x.data.(limitedStoredObject).entityType == common.EEntityType.File() {
 			localFileOnlyCount++
 		}
 	}
@@ -450,22 +449,20 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	}
 
 	for _, storedObject := range records {
-		correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
+		_, present := localIndexer.indexMap.GetObject(storedObject.relativePath)
 		_, cnamePresent := cnames[storedObject.ContainerName]
 
 		c.Assert(present, chk.Equals, true)
 		c.Assert(cnamePresent, chk.Equals, true)
-		c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
 	}
 
 	// Test ADLSG2 separately due to different container naming
-	c.Assert(len(bfsDummyProcessor.record), chk.Equals, len(localIndexer.indexMap)*2)
+	c.Assert(len(bfsDummyProcessor.record), chk.Equals, len(localIndexer.indexMap.items)*2)
 	for _, storedObject := range bfsDummyProcessor.record {
-		correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
+		_, present := localIndexer.indexMap.GetObject(storedObject.relativePath)
 		_, cnamePresent := bfscnames[storedObject.ContainerName]
 
 		c.Assert(present, chk.Equals, true)
 		c.Assert(cnamePresent, chk.Equals, true)
-		c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
 	}
 }

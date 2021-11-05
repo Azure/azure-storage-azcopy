@@ -22,14 +22,30 @@ package cmd
 
 import (
 	"strings"
+	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-// the objectIndexer is essential for the generic sync enumerator to work
+type limitedStoredObject struct {
+	lmt        time.Time
+	entityType common.EntityType
+}
+
+func (o limitedStoredObject) ToStoredObject(p string) StoredObject {
+	return StoredObject{
+		entityType:       o.entityType,
+		lastModifiedTime: o.lmt,
+		relativePath:     p,
+	}
+}
+
+// the destIndexer is essential for the generic sync enumerator to work
 // it can serve as a:
 // 		1. objectProcessor: accumulate a lookup map with given StoredObjects
 //		2. resourceTraverser: go through the entities in the map like a traverser
-type objectIndexer struct {
-	indexMap map[string]StoredObject
+type destIndexer struct {
+	indexMap *objectTrie
 	counter  int
 
 	// isDestinationCaseInsensitive is true when the destination is case-insensitive
@@ -39,12 +55,12 @@ type objectIndexer struct {
 	isDestinationCaseInsensitive bool
 }
 
-func newObjectIndexer() *objectIndexer {
-	return &objectIndexer{indexMap: make(map[string]StoredObject)}
+func newObjectIndexer() *destIndexer {
+	return &destIndexer{indexMap: newObjectTrie(nil)}
 }
 
 // process the given stored object by indexing it using its relative path
-func (i *objectIndexer) store(storedObject StoredObject) (err error) {
+func (i *destIndexer) store(storedObject StoredObject) (err error) {
 	// TODO we might buffer too much data in memory, figure out whether we should limit the max number of files
 	// TODO previously we used 10M as the max, but it was proven to be too small for some users
 
@@ -53,17 +69,20 @@ func (i *objectIndexer) store(storedObject StoredObject) (err error) {
 	// Linux file systems, Windows, Azure Files and ADLS Gen 2 (and logically should be true of all file systems).
 	if i.isDestinationCaseInsensitive {
 		lcRelativePath := strings.ToLower(storedObject.relativePath)
-		i.indexMap[lcRelativePath] = storedObject
+		i.indexMap.PutObject(lcRelativePath, limitedStoredObject{lmt: storedObject.lastModifiedTime, entityType: storedObject.entityType})
 	} else {
-		i.indexMap[storedObject.relativePath] = storedObject
+		i.indexMap.PutObject(storedObject.relativePath, limitedStoredObject{lmt: storedObject.lastModifiedTime, entityType: storedObject.entityType})
 	}
 	i.counter += 1
 	return
 }
 
 // go through the remaining stored objects in the map to process them
-func (i *objectIndexer) traverse(processor objectProcessor, filters []ObjectFilter) (err error) {
-	for _, value := range i.indexMap {
+// this is _entirely_ used for sync delete at time of implementation (10.14.0) and uses limitedStoredObjects instead of raw stored objects.
+// most properties are not available through this path.
+func (i *destIndexer) traverse(processor objectProcessor, filters []ObjectFilter) (err error) {
+	for so := range i.indexMap.GetIndexes() {
+		value := so.data.(limitedStoredObject).ToStoredObject(so.path)
 		err = processIfPassedFilters(filters, value, processor)
 		_, err = getProcessingError(err)
 		if err != nil {

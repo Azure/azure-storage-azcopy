@@ -92,6 +92,10 @@ func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject) bool {
 	return s.lastModifiedTime.After(storedObject2.lastModifiedTime)
 }
 
+func (s *StoredObject) isMoreRecentThanTime(lmt time.Time) bool {
+	return s.lastModifiedTime.After(lmt)
+}
+
 func (s *StoredObject) isSingleSourceFile() bool {
 	return s.relativePath == "" && s.entityType == common.EEntityType.File()
 }
@@ -303,7 +307,7 @@ type enumerationCounterFunc func(entityType common.EntityType)
 // errorOnDirWOutRecursive is used by copy.
 
 func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context,
-	credential *common.CredentialInfo, followSymlinks *bool,listOfFilesChannel chan string, recursive, getProperties,
+	credential *common.CredentialInfo, followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties,
 	includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string,
 	s2sPreserveBlobTags bool, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions) (ResourceTraverser, error) {
 	var output ResourceTraverser
@@ -343,7 +347,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		}
 
 		output = newListTraverser(resource, location, credential, ctx, recursive, toFollow, getProperties,
-		listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions)
+			listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions)
 		return output, nil
 	}
 
@@ -591,7 +595,7 @@ type syncEnumerator struct {
 	secondaryTraverser ResourceTraverser
 
 	// the results from the primary traverser would be stored here
-	objectIndexer *objectIndexer
+	objectIndexer *destIndexer
 
 	// general filters apply to both the primary and secondary traverser
 	filters []ObjectFilter
@@ -605,7 +609,7 @@ type syncEnumerator struct {
 	finalize func() error
 }
 
-func newSyncEnumerator(primaryTraverser, secondaryTraverser ResourceTraverser, indexer *objectIndexer,
+func newSyncEnumerator(primaryTraverser, secondaryTraverser ResourceTraverser, indexer *destIndexer,
 	filters []ObjectFilter, comparator objectProcessor, finalize func() error) *syncEnumerator {
 	return &syncEnumerator{
 		primaryTraverser:   primaryTraverser,
