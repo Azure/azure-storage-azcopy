@@ -769,7 +769,7 @@ func (s *cmdIntegrationSuite) TestPermDeleteSnapshotsVersionsUnderContainer(c *c
 
 	list, _ := containerURL.ListBlobsFlatSegment(ctx, azblob.Marker{}, azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Deleted: true, Snapshots: true}})
 	c.Assert(list.Segment.BlobItems, chk.NotNil)
-	c.Assert(len(list.Segment.BlobItems), chk.Equals, len(blobList)+len(listOfTransfers))
+	c.Assert(len(list.Segment.BlobItems), chk.Equals, 12)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
