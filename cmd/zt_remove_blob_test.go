@@ -762,7 +762,6 @@ func (s *cmdIntegrationSuite) TestPermDeleteSnapshotsVersionsUnderContainer(c *c
 
 	// set up the container with numerous blobs
 	containerURL, containerName := createNewContainer(c, serviceURL)
-	fmt.Println(containerName)
 	defer deleteContainer(c, containerURL)
 	_, blobList, listOfTransfers := scenarioHelper{}.generateCommonRemoteScenarioForSoftDelete(c, containerURL, "")
 	c.Assert(containerURL, chk.NotNil)
@@ -770,7 +769,7 @@ func (s *cmdIntegrationSuite) TestPermDeleteSnapshotsVersionsUnderContainer(c *c
 
 	list, _ := containerURL.ListBlobsFlatSegment(ctx, azblob.Marker{}, azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Deleted: true, Snapshots: true}})
 	c.Assert(list.Segment.BlobItems, chk.NotNil)
-	c.Assert(len(list.Segment.BlobItems), chk.Equals, 8)
+	c.Assert(len(list.Segment.BlobItems), chk.Equals, len(blobList)+len(listOfTransfers))
 
 	// set up interceptor
 	mockedRPC := interceptor{}
