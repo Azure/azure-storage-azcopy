@@ -133,37 +133,43 @@ func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c *chk.C, dirPath s
 	return
 }
 
-func (scenarioHelper) generateCommonRemoteScenarioForSoftDelete(c *chk.C, containerURL azblob.ContainerURL, prefix string) (blobName1 string, blobList []azblob.BlockBlobURL, listOfTransfers []string) {
-	blobList = make([]azblob.BlockBlobURL, 3)
-	listOfTransfers = make([]string, 5)
+func (scenarioHelper) generateCommonRemoteScenarioForSoftDelete(c *chk.C, containerURL azblob.ContainerURL, prefix string) (string, []azblob.BlockBlobURL, []string) {
+	blobList := make([]azblob.BlockBlobURL, 3)
+	blobNames := make([]string, 3)
+	var listOfTransfers []string
 
 	blobURL1, blobName1 := createNewBlockBlob(c, containerURL, prefix+"top")
-	blobURL2, _ := createNewBlockBlob(c, containerURL, prefix+"sub1/")
-	blobURL3, _ := createNewBlockBlob(c, containerURL, prefix+"sub1/sub3/sub5/")
+	blobURL2, blobName2 := createNewBlockBlob(c, containerURL, prefix+"sub1/")
+	blobURL3, blobName3 := createNewBlockBlob(c, containerURL, prefix+"sub1/sub3/sub5/")
 
 	blobList[0] = blobURL1
+	blobNames[0] = blobName1
 	blobList[1] = blobURL2
+	blobNames[1] = blobName2
 	blobList[2] = blobURL3
+	blobNames[2] = blobName3
 
-	for i := 0; i < 5; i++ {
-		// Create snapshot for blob
-		snapResp, err := blobList[0].CreateSnapshot(ctx, azblob.Metadata{}, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
-		c.Assert(snapResp, chk.NotNil)
-		c.Assert(err, chk.IsNil)
+	for i := 0; i < len(blobList); i++ {
+		for j := 0; j < 3; j++ {
+			// Create snapshot for blob
+			snapResp, err := blobList[i].CreateSnapshot(ctx, azblob.Metadata{}, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+			c.Assert(snapResp, chk.NotNil)
+			c.Assert(err, chk.IsNil)
 
-		time.Sleep(time.Millisecond * 30)
+			time.Sleep(time.Millisecond * 30)
 
-		// Soft delete snapshot
-		snapshotBlob := blobList[0].WithSnapshot(snapResp.Snapshot())
-		_, err = snapshotBlob.Delete(ctx, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
-		c.Assert(err, chk.IsNil)
+			// Soft delete snapshot
+			snapshotBlob := blobList[i].WithSnapshot(snapResp.Snapshot())
+			_, err = snapshotBlob.Delete(ctx, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+			c.Assert(err, chk.IsNil)
 
-		listOfTransfers[i] = blobName1
+			listOfTransfers = append(listOfTransfers, blobNames[i])
+		}
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
 	time.Sleep(time.Millisecond * 1050)
-	return
+	return blobName1, blobList, listOfTransfers
 }
 
 func (scenarioHelper) generateCommonRemoteScenarioForBlob(c *chk.C, containerURL azblob.ContainerURL, prefix string) (blobList []string) {
@@ -847,24 +853,6 @@ func validateRemoveTransfersAreScheduled(c *chk.C, isSrcEncoded bool, expectedTr
 	//if len(lookupMap) > 0 {
 	//	panic("set breakpoint here to debug")
 	//}
-}
-
-func validateRemoveTransfersAreScheduledPermDelete(c *chk.C, isSrcEncoded bool, expectedTransfers []string, mockedRPC interceptor) {
-
-	// validate that the right number of transfers were scheduled
-	c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedTransfers))
-	fmt.Println(mockedRPC.transfers)
-	fmt.Println(expectedTransfers)
-	// validate that the right transfers were sent
-	for i := 0; i < len(mockedRPC.transfers); i++ {
-		srcRelativeFilePath := mockedRPC.transfers[i].Source
-
-		if isSrcEncoded {
-			srcRelativeFilePath, _ = url.PathUnescape(srcRelativeFilePath)
-		}
-
-		c.Assert(srcRelativeFilePath, chk.Equals, expectedTransfers[i])
-	}
 }
 
 func getDefaultSyncRawInput(src, dst string) rawSyncCmdArgs {

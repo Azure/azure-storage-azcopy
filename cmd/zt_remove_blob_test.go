@@ -728,13 +728,13 @@ func (s *cmdIntegrationSuite) TestPermDeleteSnapshotsVersionsUnderSingleBlob(c *
 	// set up the container with numerous blobs
 	containerURL, containerName := createNewContainer(c, serviceURL)
 	defer deleteContainer(c, containerURL)
-	blobName, blobList, listOfTransfers := scenarioHelper{}.generateCommonRemoteScenarioForSoftDelete(c, containerURL, "")
+	blobName, blobList, _ := scenarioHelper{}.generateCommonRemoteScenarioForSoftDelete(c, containerURL, "")
 	c.Assert(containerURL, chk.NotNil)
 	c.Assert(len(blobList), chk.Equals, 3)
 
 	list, _ := containerURL.ListBlobsFlatSegment(ctx, azblob.Marker{}, azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Deleted: true, Snapshots: true}, Prefix: blobName})
 	c.Assert(list.Segment.BlobItems, chk.NotNil)
-	c.Assert(len(list.Segment.BlobItems), chk.Equals, 6)
+	c.Assert(len(list.Segment.BlobItems), chk.Equals, 4)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -742,7 +742,7 @@ func (s *cmdIntegrationSuite) TestPermDeleteSnapshotsVersionsUnderSingleBlob(c *
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, listOfTransfers[0])
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobName)
 	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 	raw.recursive = true
 	raw.permanentDeleteOption = "snapshotsandversions"
@@ -750,7 +750,7 @@ func (s *cmdIntegrationSuite) TestPermDeleteSnapshotsVersionsUnderSingleBlob(c *
 		c.Assert(err, chk.IsNil)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(listOfTransfers))
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 3)
 	})
 }
 
@@ -786,9 +786,6 @@ func (s *cmdIntegrationSuite) TestPermDeleteSnapshotsVersionsUnderContainer(c *c
 
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(listOfTransfers))
-
-		// validate that the right transfers were sent
-		validateRemoveTransfersAreScheduledPermDelete(c, true, listOfTransfers, mockedRPC)
 	})
 }
 
