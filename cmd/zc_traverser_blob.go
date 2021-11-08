@@ -197,12 +197,6 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	// the search prefix would be foo/bar/bla
 	searchPrefix := blobUrlParts.BlobName
 
-	// append a slash if it is not already present
-	// example: foo/bar/bla becomes foo/bar/bla/ so that we only list children of the virtual directory
-	if searchPrefix != "" && !strings.HasSuffix(searchPrefix, common.AZCOPY_PATH_SEPARATOR_STRING) {
-		searchPrefix += common.AZCOPY_PATH_SEPARATOR_STRING
-	}
-
 	// as a performance optimization, get an extra prefix to do pre-filtering. It's typically the start portion of a blob name.
 	extraSearchPrefix := FilterSet(filters).GetEnumerationPreFilter(t.recursive)
 
