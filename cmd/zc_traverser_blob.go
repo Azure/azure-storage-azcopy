@@ -84,6 +84,11 @@ func (t *blobTraverser) getPropertiesIfSingleBlob() (props *azblob.BlobGetProper
 	blobUrlParts := azblob.NewBlobURLParts(*t.rawURL)
 	blobUrlParts.BlobName = strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)
 
+	if blobUrlParts.BlobName == "" {
+		// This is a container, which needs to be given a proper listing.
+		return nil, false, false, nil
+	}
+
 	// perform the check
 	blobURL := azblob.NewBlobURL(blobUrlParts.URL(), t.p)
 	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
