@@ -135,6 +135,14 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			return errors.New("this blob uses customer provided encryption keys (CPK). At the moment, AzCopy does not support CPK-encrypted blobs. " +
 				"If you wish to make use of this blob, we recommend using one of the Azure Storage SDKs")
 		}
+
+		if resp := stgErr.Response(); resp == nil {
+			return fmt.Errorf("cannot list files due to reason %s", stgErr)
+		} else {
+			if resp.StatusCode == 403 { // Some nature of auth error-- Whatever the user is pointing at, they don't have access to, regardless of whether it's a file or a dir stub.
+				return fmt.Errorf("cannot list files due to reason %s", stgErr)
+			}
+		}
 	}
 
 	// schedule the blob in two cases:
@@ -196,6 +204,12 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	// example: for a url like https://test.blob.core.windows.net/test/foo/bar/bla
 	// the search prefix would be foo/bar/bla
 	searchPrefix := blobUrlParts.BlobName
+
+	// append a slash if it is not already present
+	// example: foo/bar/bla becomes foo/bar/bla/ so that we only list children of the virtual directory
+	if searchPrefix != "" && !strings.HasSuffix(searchPrefix, common.AZCOPY_PATH_SEPARATOR_STRING) {
+		searchPrefix += common.AZCOPY_PATH_SEPARATOR_STRING
+	}
 
 	// as a performance optimization, get an extra prefix to do pre-filtering. It's typically the start portion of a blob name.
 	extraSearchPrefix := FilterSet(filters).GetEnumerationPreFilter(t.recursive)
