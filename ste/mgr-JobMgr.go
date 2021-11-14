@@ -61,6 +61,7 @@ type IJobMgr interface {
 	AllTransfersScheduled() bool
 	ConfirmAllTransfersScheduled()
 	ResetAllTransfersScheduled()
+	Reset(context.Context, string) IJobMgr
 	PipelineLogInfo() pipeline.LogOptions
 	ReportJobPartDone(jobPartProgressInfo)
 	Context() context.Context
@@ -168,7 +169,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		fileCountLimiter:             fileCountLimiter,
 		cpuMon:                       cpuMon,
 		/*Other fields remain zero-value until this job is scheduled */}
-	jm.reset(appCtx, commandString)
+	jm.Reset(appCtx, commandString)
 	jm.logJobsAdminMessages()
 	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
 	// the Channel and schedules the transfers of that JobPart.
@@ -191,7 +192,7 @@ func (jm *jobMgr) getOverwritePrompter() *overwritePrompter {
 	return jm.overwritePrompter
 }
 
-func (jm *jobMgr) reset(appCtx context.Context, commandString string) IJobMgr {
+func (jm *jobMgr) Reset(appCtx context.Context, commandString string) IJobMgr {
 	//jm.logger.OpenLog()
 	// log the user given command to the job log file.
 	// since the log file is opened in case of resume, list and many other operations
@@ -544,7 +545,7 @@ func (jm *jobMgr) IncludeExclude() (map[string]int, map[string]int) {
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
 func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
-	jm.reset(appCtx, "")
+	jm.Reset(appCtx, "")
 	// Since while creating the JobMgr, atomicAllTransfersScheduled is set to true
 	// reset it to false while resuming it
 	//jm.ResetAllTransfersScheduled()

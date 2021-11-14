@@ -840,6 +840,8 @@ func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfe
 			transfersSkipped:   int(atomic.LoadUint32(&jpm.atomicTransfersSkipped)),
 			transfersFailed:    int(atomic.LoadUint32(&jpm.atomicTransfersFailed)),
 		}
+		jpm.Plan().SetJobPartStatus(common.EJobStatus.EnhanceJobStatusInfo(jppi.transfersSkipped > 0,
+			jppi.transfersFailed > 0, jppi.transfersCompleted > 0))
 		jpm.jobMgr.ReportJobPartDone(jppi)
 	}
 	return transfersDone
