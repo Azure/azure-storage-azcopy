@@ -32,7 +32,7 @@ func NewOrder(jobID common.JobID) common.CopyJobPartOrderRequest {
 
 	srcResource, _ := cmd.SplitResourceString(src, common.ELocation.Blob())
 	dstResource, _ := cmd.SplitResourceString(dst, common.ELocation.Local())
-	
+
 	props := GetBlobProps(src)
 	t := common.CopyTransfer{
 		Source:             "",
