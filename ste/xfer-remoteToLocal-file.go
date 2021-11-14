@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -354,6 +353,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 			//Rename back to original name. At this point, we're sure the file is completely
 			//downloaded and not corrupt. Infact, post this point we should only log errors and
 			//not fail the transfer.
+			/*
 			if err == nil && !strings.EqualFold(info.Destination, common.Dev_Null) {
 				renameErr := os.Rename(info.getTempDownloadPath(), info.Destination)
 				if renameErr != nil {
@@ -361,6 +361,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 						"Failed to rename. File at %s", info.getTempDownloadPath()), renameErr)
 				}
 			}
+			*/
 		}
 	}
 
@@ -471,9 +472,11 @@ func tryDeleteFile(info TransferInfo, jptm IJobPartTransferMgr) {
 //Returns the path of temp file to be downloaded. The paths is in format
 // /actual/parent/path/.azDownload-<jobID>-<actualFileName>
 func (info *TransferInfo) getTempDownloadPath() string {
+	return info.Destination
+	/*
 	parent, fileName := filepath.Split(info.Destination)
 	fileName = fmt.Sprintf(azcopyTempDownloadPrefix, info.JobID.String()) + fileName
-	return filepath.Join(parent, fileName)
+	return filepath.Join(parent, fileName) */
 }
 
 // conforms to io.Writer and io.Closer
