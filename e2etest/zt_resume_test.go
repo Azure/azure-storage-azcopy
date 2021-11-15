@@ -59,7 +59,7 @@ func TestResume_LargeGeneric(t *testing.T) {
 		t.FailNow()
 	}
 
-	RunScenarios(t, eOperation.CopyAndSync()|eOperation.Resume(), eTestFromTo.AllSync(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.CopyAndSync()|eOperation.Resume(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:      true,
 		debugSkipFiles: toSkip,
 	}, nil, testFiles{
