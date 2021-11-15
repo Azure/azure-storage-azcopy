@@ -296,8 +296,7 @@ func TestBasic_CopyToWrongBlobType(t *testing.T) {
 					}
 				},
 			}, testFiles{
-				defaultSize:  "1k",
-				objectTarget: "test.txt",
+				defaultSize: "1k",
 
 				shouldFail: []interface{}{
 					f("test.txt", with{blobType: src}),

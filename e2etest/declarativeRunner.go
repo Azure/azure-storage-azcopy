@@ -170,7 +170,7 @@ func RunScenarios(
 					p:                   p, // copies them, because they are a struct. This is what we need, since they may be morphed while running
 					hs:                  hsToUse,
 					fs:                  fs.DeepCopy(),
-					stripTopDir:         false, // TODO: how will we set this?
+					stripTopDir:         p.stripTopDir,
 				}
 
 				scenarioList = append(scenarioList, s)
