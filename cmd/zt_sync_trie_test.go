@@ -75,6 +75,9 @@ func (*trieSuite) TestPutDeleteGet(c *chk.C) {
 	data, returned = o.GetObject("ab")
 	c.Assert(returned, chk.Equals, false)
 	c.Assert(data, chk.Equals, nil)
+
+	// try to delete something that doesn't exist.
+	o.DeleteRecursive("idontexist")
 }
 
 func (*trieSuite) TestGetName(c *chk.C) {

@@ -62,10 +62,11 @@ func (o *objectTrie) DeleteRecursive(path string) {
 	tidx := o // trie index
 	completedSearch := true
 	for _, v := range path { // Find the end of the path.
-		var ok bool
-		if tidx, ok = tidx.leaves[v]; !ok { // Only continue traversing if the path is actually present.
+		if tmpidx, ok := tidx.leaves[v]; !ok { // Only continue traversing if the path is actually present.
 			completedSearch = false
 			break // Start deletion even if we didn't find the exact index-- there _may_ be orphans for some reason.
+		} else {
+			tidx = tmpidx // Only set tidx if we find the next leaf; otherwise it's nil.
 		}
 	}
 
@@ -79,13 +80,15 @@ func (o *objectTrie) DeleteRecursive(path string) {
 		tidx = tidx.parent
 	}
 
-	// snip the entire branch
-	tidx.data = nil
-	tidx.presentButNil = false
-	if tidx.Deletable() {
-		toRemove := tidx.char
-		tidx = tidx.parent
-		delete(tidx.leaves, toRemove)
+	// snip the entire branch if it's not the root
+	if tidx != o {
+		tidx.data = nil
+		tidx.presentButNil = false
+		if tidx.Deletable() {
+			toRemove := tidx.char
+			tidx = tidx.parent // delete from the parent
+			delete(tidx.leaves, toRemove)
+		}
 	}
 }
 
