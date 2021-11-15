@@ -907,7 +907,5 @@ func (s *cmdIntegrationSuite) TestDryrunSyncBlobtoBlobJson(c *chk.C) {
 		c.Assert(errMarshal, chk.IsNil)
 		c.Check(strings.Contains(syncMessage.Source, blobsToDelete[0]), chk.Equals, true)
 		c.Check(strings.Compare(syncMessage.EntityType.String(), common.EEntityType.File().String()), chk.Equals, 0)
-		c.Check(strings.Compare(string(syncMessage.BlobType), "BlockBlob"), chk.Equals, 0)
-
 	})
 }
