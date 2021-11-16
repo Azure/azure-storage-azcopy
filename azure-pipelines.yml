@@ -189,6 +189,8 @@ jobs:
           AZCOPY_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
           AZCOPY_E2E_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
           AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
+          CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
+          CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
       - script: |
           go build -o test-validator ./testSuite/
           mkdir test-temp
