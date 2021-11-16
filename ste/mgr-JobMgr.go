@@ -141,7 +141,6 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		concurrency:                   concurrency,
 		overwritePrompter:             newOverwritePrompter(),
 		pipelineNetworkStats:          newPipelineNetworkStats(tuner), // let the stats coordinate with the concurrency tuner
-		exclusiveDestinationMapHolder: &atomic.Value{},
 		initMu:                        &sync.Mutex{},
 		jobPartProgress:               jobPartProgressCh,
 		coordinatorChannels:           CoordinatorChannels{
@@ -251,6 +250,7 @@ type jobMgrInitState struct {
 	securityInfoPersistenceManager *securityInfoPersistenceManager
 	folderCreationTracker          FolderCreationTracker
 	folderDeletionManager          common.FolderDeletionManager
+	exclusiveDestinationMapHolder  *atomic.Value
 }
 
 // jobMgr represents the runtime information for a Job
@@ -276,7 +276,6 @@ type jobMgr struct {
 	cancel               context.CancelFunc
 	pipelineNetworkStats *PipelineNetworkStats
 
-	exclusiveDestinationMapHolder *atomic.Value
 
 	// Share the same HTTP Client across all job parts, so that the we maximize re-use of
 	// its internal connection pool
@@ -414,7 +413,6 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, e
 	jm.jobPartMgrs.Set(partNum, jpm)
 	jm.setFinalPartOrdered(partNum, jpm.planMMF.Plan().IsFinalPart)
 	jm.setDirection(jpm.Plan().FromTo)
-	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(partNum, jpm.Plan().FromTo)
 
 	jm.initMu.Lock()
 	defer jm.initMu.Unlock()
@@ -424,9 +422,12 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, e
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
 			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, jpm.Plan()),
 			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
+			exclusiveDestinationMapHolder:  &atomic.Value{},
 		}
+		jm.initState.exclusiveDestinationMapHolder.Store(common.NewExclusiveStringMap(jpm.Plan().FromTo, runtime.GOOS))
 	}
 	jpm.jobMgrInitState = jm.initState // so jpm can use it as much as desired without locking (since the only mutation is the init in jobManager. As far as jobPartManager is concerned, the init state is read-only
+	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(partNum, jpm.Plan().FromTo)
 
 	if scheduleTransfers {
 		// If the schedule transfer is set to true
@@ -458,7 +459,6 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 	jm.jobPartMgrs.Set(order.PartNum, jpm)
 	jm.setFinalPartOrdered(order.PartNum, jpm.planMMF.Plan().IsFinalPart)
 	jm.setDirection(jpm.Plan().FromTo)
-	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(order.PartNum, jpm.Plan().FromTo)
 
 	jm.initMu.Lock()
 	defer jm.initMu.Unlock()
@@ -468,9 +468,12 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
 			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, jpm.Plan()),
 			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
+			exclusiveDestinationMapHolder:  &atomic.Value{},
 		}
+		jm.initState.exclusiveDestinationMapHolder.Store(common.NewExclusiveStringMap(jpm.Plan().FromTo, runtime.GOOS))
 	}
 	jpm.jobMgrInitState = jm.initState // so jpm can use it as much as desired without locking (since the only mutation is the init in jobManager. As far as jobPartManager is concerned, the init state is read-only
+	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(order.PartNum, jpm.Plan().FromTo)
 
 	jm.QueueJobParts(jpm)
 	return jpm
@@ -518,11 +521,7 @@ func (jm *jobMgr) setDirection(fromTo common.FromTo) {
 
 // can't do this at time of constructing the jobManager, because it doesn't know fromTo at that time
 func (jm *jobMgr) getExclusiveDestinationMap(partNum PartNumber, fromTo common.FromTo) *common.ExclusiveStringMap {
-	// assume that first part is ordered before any others
-	if partNum == 0 {
-		jm.exclusiveDestinationMapHolder.Store(common.NewExclusiveStringMap(fromTo, runtime.GOOS))
-	}
-	return jm.exclusiveDestinationMapHolder.Load().(*common.ExclusiveStringMap)
+	return jm.initState.exclusiveDestinationMapHolder.Load().(*common.ExclusiveStringMap)
 }
 
 func (jm *jobMgr) HttpClient() *http.Client {
