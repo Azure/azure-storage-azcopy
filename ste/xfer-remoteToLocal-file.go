@@ -250,6 +250,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		// TODO: as per comment above, currently, if there's an error here we must continue because we must schedule all chunks
 		// TODO: ... Can we refactor/improve that?
 		_ = dstWriter.WaitToScheduleChunk(jptm.Context(), id, adjustedChunkSize)
+		jptm.Log(pipeline.LogError, fmt.Sprintf("Mem Usage: %d %s", jptm.CacheLimiter().Value()/(1024*1024), info.Destination))
 
 		// create download func that is a appropriate to the remote data source
 		downloadFunc := dl.GenerateDownloadFunc(jptm, p, dstWriter, id, adjustedChunkSize, pacer)
