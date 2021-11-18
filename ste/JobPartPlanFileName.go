@@ -76,7 +76,7 @@ func (jpfn JobPartPlanFileName) Map() *JobPartPlanMMF {
 // createJobPartPlanFile creates the memory map JobPartPlanHeader using the given JobPartOrder and JobPartPlanBlobData
 func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	if jpfn.Exists() {
-		panic(fmt.Sprintf("Duplicate job created. You probably shouldn't ever see this, but if you do, try cleaning out", JobsAdmin.(*jobsAdmin).planDir))
+		panic(fmt.Sprint("Duplicate job created. You probably shouldn't ever see this, but if you do, try cleaning out", JobsAdmin.(*jobsAdmin).planDir))
 	}
 
 	// Validate that the passed-in strings can fit in their respective fields
