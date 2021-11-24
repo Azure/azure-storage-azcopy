@@ -314,13 +314,13 @@ func TestBasic_CopyWithShareRoot(t *testing.T) {
 		eTestFromTo.AllUploads(),
 		eValidate.Auto(),
 		params{
-			recursive: true,
-			shareRoot: true,
+			recursive:        true,
+			invertedAsSubdir: true,
 		},
 		nil,
 		testFiles{
 			defaultSize: "1K",
-			destTarget: "newName",
+			destTarget:  "newName",
 
 			shouldTransfer: []interface{}{
 				folder(""),

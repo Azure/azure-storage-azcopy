@@ -68,7 +68,7 @@ func (t *TestRunner) SetAllFlags(p params) {
 
 	// TODO: TODO: nakulkar-msft there will be many more to add here
 	set("recursive", p.recursive, false)
-	set("share-root", p.shareRoot, false)
+	set("as-subdir", !p.invertedAsSubdir, true)
 	set("include-path", p.includePath, "")
 	set("exclude-path", p.excludePath, "")
 	set("include-pattern", p.includePattern, "")

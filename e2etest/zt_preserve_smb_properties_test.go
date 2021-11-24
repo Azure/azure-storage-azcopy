@@ -238,7 +238,7 @@ func TestProperties_SMBWithCopyWithShareRoot(t *testing.T) {
 		eValidate.Auto(),
 		params{
 			recursive:              true,
-			shareRoot:              true,
+			invertedAsSubdir:       true,
 			preserveSMBPermissions: true,
 			preserveSMBInfo:        true,
 		},

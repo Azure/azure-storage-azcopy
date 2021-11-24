@@ -139,7 +139,7 @@ func (a *testingAsserter) CompactScenarioName() string {
 
 type params struct {
 	recursive                 bool
-	shareRoot                 bool
+	invertedAsSubdir          bool // this flag is INVERTED, because it is TRUE by default. todo: use pointers instead?
 	includePath               string
 	includePattern            string
 	includeAfter              string
