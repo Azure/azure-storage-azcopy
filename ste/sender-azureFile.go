@@ -91,7 +91,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 
 	// due to the REST parity feature added in 2019-02-02, the File APIs are no longer backward compatible
 	// so we must use the latest SDK version to stay safe
-	ctx := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azfile.ServiceVersion)
+	// TODO: Should we get rid of this one?
 
 	props, err := sip.Properties()
 	if err != nil {
@@ -112,7 +112,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		numChunks:       numChunks,
 		pipeline:        p,
 		pacer:           pacer,
-		ctx:             ctx,
+		ctx:             jptm.Context(),
 		headersToApply:  props.SrcHTTPHeaders.ToAzFileHTTPHeaders(),
 		sip:             sip,
 		metadataToApply: props.SrcMetadata.ToAzFileMetadata(),

@@ -21,7 +21,6 @@
 package ste
 
 import (
-	"context"
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -54,8 +53,7 @@ func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipelin
 		bd.filePacer = newPageBlobAutoPacer(pageBlobInitialBytesPerSecond, jptm.Info().BlockSize, false, jptm.(common.ILogger))
 
 		u, _ := url.Parse(jptm.Info().Source)
-		bd.pageRangeOptimizer = newPageRangeOptimizer(azblob.NewPageBlobURL(*u, srcPipeline),
-			context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion))
+		bd.pageRangeOptimizer = newPageRangeOptimizer(azblob.NewPageBlobURL(*u, srcPipeline), jptm.Context())
 		bd.pageRangeOptimizer.fetchPages()
 	}
 }

@@ -118,8 +118,6 @@ func BlobTierAllowed(destTier azblob.AccessTierType) bool {
 func ValidateTier(jptm IJobPartTransferMgr, blobTier azblob.AccessTierType, blobURL azblob.BlobURL, ctx context.Context) (isValid bool) {
 
 	if jptm.IsLive() && blobTier != azblob.AccessTierNone {
-		// Set the latest service version from sdk as service version in the context.
-		ctxWithLatestServiceVersion := context.WithValue(ctx, ServiceAPIVersionOverride, azblob.ServiceVersion)
 
 		// Let's check if we can confirm we'll be able to check the destination blob's account info.
 		// A SAS token, even with write-only permissions is enough. OR, OAuth with the account owner.
@@ -127,7 +125,7 @@ func ValidateTier(jptm IJobPartTransferMgr, blobTier azblob.AccessTierType, blob
 		destParts := azblob.NewBlobURLParts(blobURL.URL())
 		mustGet := destParts.SAS.Encode() != ""
 
-		prepareDestAccountInfo(blobURL, jptm, ctxWithLatestServiceVersion, mustGet)
+		prepareDestAccountInfo(blobURL, jptm, ctx, mustGet)
 		tierAvailable := BlobTierAllowed(blobTier)
 
 		if tierAvailable {

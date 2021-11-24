@@ -105,8 +105,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 	// Read the in struct explanation if necessary.
 	var destRangeOptimizer *pageRangeOptimizer
 	if isInManagedDiskImportExportAccount(*destURL) {
-		destRangeOptimizer = newPageRangeOptimizer(destPageBlobURL,
-			context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion))
+		destRangeOptimizer = newPageRangeOptimizer(destPageBlobURL, jptm.Context())
 	}
 
 	props, err := srcInfoProvider.Properties()
