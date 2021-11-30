@@ -87,8 +87,9 @@ func BlobTierAllowed(destTier azblob.AccessTierType) bool {
 		return true
 	}
 
-	// If the account is premium, Storage/StorageV2 only supports page blobs (Tiers P1-80). Block blob does not support tiering whatsoever.
-	if strings.Contains(destAccountSKU, "Premium") {
+	if strings.Contains(destAccountSKU, "Standard_RAGRS") { // Tiering is not supported for classic/standard accounts.
+		return false
+	} else if strings.Contains(destAccountSKU, "Premium") { // If the account is premium, Storage/StorageV2 only supports page blobs (Tiers P1-80). Block blob does not support tiering whatsoever.
 		// storage V1/V2
 		if destAccountKind == "StorageV2" {
 			// P1-80 possible.
