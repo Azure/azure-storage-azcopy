@@ -87,9 +87,8 @@ func BlobTierAllowed(destTier azblob.AccessTierType) bool {
 		return true
 	}
 
-	if strings.Contains(destAccountSKU, "Standard_RAGRS") { // Tiering is not supported for classic/standard accounts.
-		return false
-	} else if strings.Contains(destAccountSKU, "Premium") { // If the account is premium, Storage/StorageV2 only supports page blobs (Tiers P1-80). Block blob does not support tiering whatsoever.
+	// If the account is premium, Storage/StorageV2 only supports page blobs (Tiers P1-80). Block blob does not support tiering whatsoever.
+	if strings.Contains(destAccountSKU, "Premium") {
 		// storage V1/V2
 		if destAccountKind == "StorageV2" {
 			// P1-80 possible.
@@ -109,6 +108,9 @@ func BlobTierAllowed(destTier azblob.AccessTierType) bool {
 		// Any other storage type would have to be file storage, and we can't set tier there.
 		panic("Cannot set tier on azure files.")
 	} else {
+		if destAccountKind == "Storage" { // Tier setting not allowed on classic accounts
+			return false
+		}
 		// Standard storage account. If it's Hot, Cool, or Archive, we're A-OK.
 		// Page blobs, however, don't have an access tier on Standard accounts.
 		// However, this is also OK, because the pageblob sender code prevents us from using a standard access tier type.
