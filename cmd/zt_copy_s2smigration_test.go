@@ -89,6 +89,7 @@ func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
 		forceWrite:                     common.EOverwriteOption.True().String(),
 		preserveOwner:                  common.PreserveOwnerDefault,
+		asSubdir:                       true,
 	}
 }
 
