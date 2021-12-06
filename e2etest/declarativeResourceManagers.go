@@ -21,11 +21,15 @@
 package e2etest
 
 import (
+	"net/url"
+	"os"
+	"path"
+	"runtime"
+	"strings"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
-	"net/url"
-	"os"
 )
 
 func assertNoStripTopDir(stripTopDir bool) {
@@ -62,6 +66,9 @@ type resourceManager interface {
 	// (e.g. when test need to create files with later modification dates, they will trigger a second call to this)
 	createFiles(a asserter, s *scenario, isSource bool)
 
+	// creates a test file in the location. Same assumptions as createFiles.
+	createFile(a asserter, o *testObject, s *scenario, isSource bool)
+
 	// Gets the names and properties of all files (and, if applicable, folders) that exist.
 	// Used for verification
 	getAllProperties(a asserter) map[string]*objectProperties
@@ -74,7 +81,9 @@ type resourceManager interface {
 	cleanup(a asserter)
 
 	// gets the azCopy command line param that represents the resource.  withSas is ignored when not applicable
-	getParam(stripTopDir bool, withSas bool) string
+	getParam(stripTopDir bool, withSas bool, withFile string) string
+
+	getSAS() string
 
 	// isContainerLike returns true if the resource is a top-level cloud-based resource (e.g. a container, a File Share, etc)
 	isContainerLike() bool
@@ -109,15 +118,41 @@ func (r *resourceLocal) createFiles(a asserter, s *scenario, isSource bool) {
 	})
 }
 
+func (r *resourceLocal) createFile(a asserter, o *testObject, s *scenario, isSource bool) {
+	scenarioHelper{}.generateLocalFilesFromList(a, &generateLocalFilesFromList{
+		dirPath: r.dirPath,
+		generateFromListOptions: generateFromListOptions{
+			fs:          []*testObject{o},
+			defaultSize: s.fs.defaultSize,
+		},
+	})
+}
+
 func (r *resourceLocal) cleanup(_ asserter) {
 	if r.dirPath != "" {
 		_ = os.RemoveAll(r.dirPath)
 	}
 }
 
-func (r *resourceLocal) getParam(stripTopDir bool, _ bool) string {
-	assertNoStripTopDir(stripTopDir)
-	return r.dirPath
+func (r *resourceLocal) getParam(stripTopDir bool, withSas bool, withFile string) string {
+	if !stripTopDir {
+		if withFile != "" {
+			p := path.Join(r.dirPath, withFile)
+
+			if runtime.GOOS == "windows" {
+				p = strings.ReplaceAll(p, "/", "\\")
+			}
+
+			return p
+		}
+
+		return r.dirPath
+	}
+	return path.Join(r.dirPath, "*")
+}
+
+func (r *resourceLocal) getSAS() string {
+	return ""
 }
 
 func (r *resourceLocal) isContainerLike() bool {
@@ -149,7 +184,7 @@ type resourceBlobContainer struct {
 }
 
 func (r *resourceBlobContainer) createLocation(a asserter, s *scenario) {
-	cu, _, rawSasURL := TestResourceFactory{}.CreateNewContainer(a, r.accountType)
+	cu, _, rawSasURL := TestResourceFactory{}.CreateNewContainer(a, s.GetTestFiles().sourcePublic, r.accountType)
 	r.containerURL = &cu
 	r.rawSasURL = &rawSasURL
 	if s.GetModifiableParameters().relativeSourcePath != "" {
@@ -159,10 +194,12 @@ func (r *resourceBlobContainer) createLocation(a asserter, s *scenario) {
 
 func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bool) {
 	options := &generateBlobFromListOptions{
+		rawSASURL:    *r.rawSasURL,
 		containerURL: *r.containerURL,
 		generateFromListOptions: generateFromListOptions{
 			fs:          s.fs.allObjects(isSource),
 			defaultSize: s.fs.defaultSize,
+			accountType: s.accountType,
 		},
 	}
 	if s.fromTo.IsDownload() {
@@ -172,19 +209,50 @@ func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bo
 	scenarioHelper{}.generateBlobsFromList(a, options)
 }
 
+func (r *resourceBlobContainer) createFile(a asserter, o *testObject, s *scenario, isSource bool) {
+	options := &generateBlobFromListOptions{
+		containerURL: *r.containerURL,
+		generateFromListOptions: generateFromListOptions{
+			fs:          []*testObject{o},
+			defaultSize: s.fs.defaultSize,
+		},
+	}
+
+	if s.fromTo.IsDownload() {
+		options.cpkInfo = common.GetCpkInfo(s.p.cpkByValue)
+		options.cpkScopeInfo = common.GetCpkScopeInfo(s.p.cpkByName)
+	}
+
+	scenarioHelper{}.generateBlobsFromList(a, options)
+}
+
 func (r *resourceBlobContainer) cleanup(a asserter) {
 	if r.containerURL != nil {
 		deleteContainer(a, *r.containerURL)
 	}
 }
 
-func (r *resourceBlobContainer) getParam(stripTopDir bool, useSas bool) string {
-	assertNoStripTopDir(stripTopDir)
-	if useSas {
-		return r.rawSasURL.String()
+func (r *resourceBlobContainer) getParam(stripTopDir bool, withSas bool, withFile string) string {
+	var uri url.URL
+	if withSas {
+		uri = *r.rawSasURL
 	} else {
-		return r.containerURL.String()
+		uri = r.containerURL.URL()
 	}
+
+	if withFile != "" {
+		bURLParts := azblob.NewBlobURLParts(uri)
+
+		bURLParts.BlobName = withFile
+
+		uri = bURLParts.URL()
+	}
+
+	return uri.String()
+}
+
+func (r *resourceBlobContainer) getSAS() string {
+	return "?" + r.rawSasURL.RawQuery
 }
 
 func (r *resourceBlobContainer) isContainerLike() bool {
@@ -236,29 +304,47 @@ func (r *resourceAzureFileShare) createFiles(a asserter, s *scenario, isSource b
 	})
 }
 
+func (r *resourceAzureFileShare) createFile(a asserter, o *testObject, s *scenario, isSource bool) {
+	scenarioHelper{}.generateAzureFilesFromList(a, &generateAzureFilesFromListOptions{
+		shareURL:    *r.shareURL,
+		fileList:    []*testObject{o},
+		defaultSize: s.fs.defaultSize,
+	})
+}
+
 func (r *resourceAzureFileShare) cleanup(a asserter) {
 	if r.shareURL != nil {
 		deleteShare(a, *r.shareURL)
 	}
 }
 
-func (r *resourceAzureFileShare) getParam(stripTopDir bool, useSas bool) string {
+func (r *resourceAzureFileShare) getParam(stripTopDir bool, withSas bool, withFile string) string {
 	assertNoStripTopDir(stripTopDir)
 	var param url.URL
-	if useSas {
+	if withSas {
 		param = *r.rawSasURL
 	} else {
 		param = r.shareURL.URL()
 	}
 
 	// append the snapshot ID if present
-	if r.snapshotID != "" {
+	if r.snapshotID != "" || withFile != "" {
 		parts := azfile.NewFileURLParts(param)
-		parts.ShareSnapshot = r.snapshotID
+		if r.snapshotID != "" {
+			parts.ShareSnapshot = r.snapshotID
+		}
+
+		if withFile != "" {
+			parts.DirectoryOrFilePath = withFile
+		}
 		param = parts.URL()
 	}
 
 	return param.String()
+}
+
+func (r *resourceAzureFileShare) getSAS() string {
+	return "?" + r.rawSasURL.RawQuery
 }
 
 func (r *resourceAzureFileShare) isContainerLike() bool {
@@ -300,11 +386,19 @@ func (r *resourceDummy) createFiles(a asserter, s *scenario, isSource bool) {
 
 }
 
+func (r *resourceDummy) createFile(a asserter, o *testObject, s *scenario, isSource bool) {
+
+}
+
 func (r *resourceDummy) cleanup(_ asserter) {
 }
 
-func (r *resourceDummy) getParam(stripTopDir bool, _ bool) string {
+func (r *resourceDummy) getParam(stripTopDir bool, withSas bool, withFile string) string {
 	assertNoStripTopDir(stripTopDir)
+	return ""
+}
+
+func (r *resourceDummy) getSAS() string {
 	return ""
 }
 

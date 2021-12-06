@@ -74,10 +74,12 @@ func (i *interceptor) reset() {
 
 // this lifecycle manager substitute does not perform any action
 type mockedLifecycleManager struct {
-	infoLog     chan string
-	errorLog    chan string
-	progressLog chan string
-	exitLog     chan string
+	infoLog      chan string
+	errorLog     chan string
+	progressLog  chan string
+	exitLog      chan string
+	dryrunLog    chan string
+	outputFormat common.OutputFormat
 }
 
 func (m *mockedLifecycleManager) Progress(o common.OutputBuilder) {
@@ -90,6 +92,12 @@ func (*mockedLifecycleManager) Init(common.OutputBuilder) {}
 func (m *mockedLifecycleManager) Info(msg string) {
 	select {
 	case m.infoLog <- msg:
+	default:
+	}
+}
+func (m *mockedLifecycleManager) Dryrun(o common.OutputBuilder) {
+	select {
+	case m.dryrunLog <- o(m.outputFormat):
 	default:
 	}
 }
@@ -122,9 +130,11 @@ func (*mockedLifecycleManager) GetEnvironmentVariable(env common.EnvironmentVari
 	}
 	return value
 }
-func (*mockedLifecycleManager) SetOutputFormat(common.OutputFormat) {}
-func (*mockedLifecycleManager) EnableInputWatcher()                 {}
-func (*mockedLifecycleManager) EnableCancelFromStdIn()              {}
+func (m *mockedLifecycleManager) SetOutputFormat(format common.OutputFormat) {
+	m.outputFormat = format
+}
+func (*mockedLifecycleManager) EnableInputWatcher()    {}
+func (*mockedLifecycleManager) EnableCancelFromStdIn() {}
 func (*mockedLifecycleManager) AddUserAgentPrefix(userAgent string) string {
 	return userAgent
 }
@@ -158,10 +168,10 @@ func (*mockedLifecycleManager) GatherAllLogs(channel chan string) (result []stri
 }
 
 type dummyProcessor struct {
-	record []storedObject
+	record []StoredObject
 }
 
-func (d *dummyProcessor) process(storedObject storedObject) (err error) {
+func (d *dummyProcessor) process(storedObject StoredObject) (err error) {
 	d.record = append(d.record, storedObject)
 	return
 }

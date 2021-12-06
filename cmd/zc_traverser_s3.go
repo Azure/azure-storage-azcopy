@@ -45,7 +45,7 @@ type s3Traverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func (t *s3Traverser) isDirectory(isSource bool) bool {
+func (t *s3Traverser) IsDirectory(isSource bool) bool {
 	// Do a basic syntax check
 	isDirDirect := !t.s3URLParts.IsObjectSyntactically() && (t.s3URLParts.IsDirectorySyntactically() || t.s3URLParts.IsBucketSyntactically())
 
@@ -63,13 +63,27 @@ func (t *s3Traverser) isDirectory(isSource bool) bool {
 	return false
 }
 
-func (t *s3Traverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
+func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
+	invalidAzureBlobName := func (objectKey string) bool {
+		/* S3 object name is invalid if it ends with period or
+		   one of virtual directories in path ends with period.
+		   This list is not exhaustive
+		 */
+		return strings.HasSuffix(objectKey, ".") ||
+		       strings.Contains(objectKey, "/.")
+	}
+	invalidNameErrorMsg := "Skipping S3 object %s, as it is not a valid Blob name. Rename the object and retry the transfer"
 	// Check if resource is a single object.
 	if t.s3URLParts.IsObjectSyntactically() && !t.s3URLParts.IsDirectorySyntactically() && !t.s3URLParts.IsBucketSyntactically() {
 		objectPath := strings.Split(t.s3URLParts.ObjectKey, "/")
 		objectName := objectPath[len(objectPath)-1]
 
 		oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
+
+		if invalidAzureBlobName(t.s3URLParts.ObjectKey) {
+			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, t.s3URLParts.ObjectKey))
+			return common.EAzError.InvalidBlobName()
+		}
 
 		// If we actually got object properties, process them.
 		// Otherwise, treat it as a directory.
@@ -122,6 +136,12 @@ func (t *s3Traverser) traverse(preprocessor objectMorpher, processor objectProce
 			continue
 		}
 
+		if invalidAzureBlobName(objectInfo.Key) {
+			//Throw a warning on console and continue
+			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, objectInfo.Key))
+			continue
+		}
+
 		objectPath := strings.Split(objectInfo.Key, "/")
 		objectName := objectPath[len(objectPath)-1]
 
@@ -166,7 +186,7 @@ func (t *s3Traverser) traverse(preprocessor objectMorpher, processor objectProce
 	return
 }
 
-func newS3Traverser(rawURL *url.URL, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (t *s3Traverser, err error) {
+func newS3Traverser(credentialType common.CredentialType, rawURL *url.URL, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (t *s3Traverser, err error) {
 	t = &s3Traverser{rawURL: rawURL, ctx: ctx, recursive: recursive, getProperties: getProperties, incrementEnumerationCounter: incrementEnumerationCounter}
 
 	// initialize S3 client and URL parts
@@ -184,7 +204,7 @@ func newS3Traverser(rawURL *url.URL, ctx context.Context, recursive, getProperti
 	t.s3Client, err = common.CreateS3Client(
 		t.ctx,
 		common.CredentialInfo{
-			CredentialType: common.ECredentialType.S3AccessKey(),
+			CredentialType: credentialType,
 			S3CredentialInfo: common.S3CredentialInfo{
 				Endpoint: t.s3URLParts.Endpoint,
 				Region:   t.s3URLParts.Region,

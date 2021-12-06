@@ -69,8 +69,7 @@ type pageBlobSenderBase struct {
 }
 
 const (
-	managedDiskImportExportAccountPrefix = "md-impexp-"
-	legacyDiskExportPrefix               = "md-" // these don't have the impepx bit that follows
+	managedDiskImportExportAccountPrefix = "md-"
 
 	// Start high(ish), because it auto-tunes downwards faster than it auto-tunes upwards
 	pageBlobInitialBytesPerSecond = (4 * 1000 * 1000 * 1000) / 8
@@ -154,15 +153,6 @@ func isInManagedDiskImportExportAccount(u url.URL) bool {
 	return strings.HasPrefix(u.Host, managedDiskImportExportAccountPrefix)
 }
 
-// "legacy" is perhaps not the best name, since these remain in use for (all?) EXports of managed disks.
-// These "legacy" ones an older mechanism than the new md-impexp path that is used for IMports as of mid 2019.
-func isInLegacyDiskExportAccount(u url.URL) bool {
-	if isInManagedDiskImportExportAccount(u) {
-		return false // it's the new-style md-impexp
-	}
-	return strings.HasPrefix(u.Host, legacyDiskExportPrefix) // md-....
-}
-
 func (s *pageBlobSenderBase) isInManagedDiskImportExportAccount() bool {
 	return isInManagedDiskImportExportAccount(s.destPageBlobURL.URL())
 }
@@ -228,8 +218,6 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 
 		s.jptm.Log(pipeline.LogInfo, "Blob is managed disk import/export blob, so no Create call is required") // the blob always already exists
 		return
-	} else {
-		destinationModified = true
 	}
 
 	if s.jptm.ShouldInferContentType() {
@@ -267,6 +255,8 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}
+
+	destinationModified = true
 
 	if separateSetTagsRequired {
 		if _, err := s.destPageBlobURL.SetTags(s.jptm.Context(), nil, nil, nil, s.blobTagsToApply); err != nil {

@@ -35,8 +35,8 @@ var _ = chk.Suite(&genericProcessorSuite{})
 type processorTestSuiteHelper struct{}
 
 // return a list of sample entities
-func (processorTestSuiteHelper) getSampleObjectList() []storedObject {
-	return []storedObject{
+func (processorTestSuiteHelper) getSampleObjectList() []StoredObject {
+	return []StoredObject{
 		{name: "file1", relativePath: "file1", lastModifiedTime: time.Now()},
 		{name: "file2", relativePath: "file2", lastModifiedTime: time.Now()},
 		{name: "file3", relativePath: "sub1/file3", lastModifiedTime: time.Now()},
@@ -47,7 +47,7 @@ func (processorTestSuiteHelper) getSampleObjectList() []storedObject {
 }
 
 // given a list of entities, return the relative paths in a list, to help with validations
-func (processorTestSuiteHelper) getExpectedTransferFromStoredObjectList(storedObjectList []storedObject) []string {
+func (processorTestSuiteHelper) getExpectedTransferFromStoredObjectList(storedObjectList []StoredObject) []string {
 	expectedTransfers := make([]string, 0)
 	for _, storedObject := range storedObjectList {
 		expectedTransfers = append(expectedTransfers, storedObject.relativePath)
@@ -78,7 +78,7 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorMultipleFiles(c *chk.C)
 	for _, numOfParts := range []int{1, 3} {
 		numOfTransfersPerPart := len(sampleObjects) / numOfParts
 		copyProcessor := newCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), numOfTransfersPerPart,
-			newRemoteRes(containerURL.String()), newLocalRes(dstDirName), nil, nil, false)
+			newRemoteRes(containerURL.String()), newLocalRes(dstDirName), nil, nil, false, false)
 
 		// go through the objects and make sure they are processed without error
 		for _, storedObject := range sampleObjects {
@@ -125,7 +125,7 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorSingleFile(c *chk.C) {
 	// set up the processor
 	blobURL := containerURL.NewBlockBlobURL(blobList[0]).String()
 	copyProcessor := newCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), 2,
-		newRemoteRes(blobURL), newLocalRes(filepath.Join(dstDirName, dstFileName)), nil, nil, false)
+		newRemoteRes(blobURL), newLocalRes(filepath.Join(dstDirName, dstFileName)), nil, nil, false, false)
 
 	// exercise the copy transfer processor
 	storedObject := newStoredObject(noPreProccessor, blobList[0], "", common.EEntityType.File(), time.Now(), 0, noContentProps, noBlobProps, noMetdata, "")

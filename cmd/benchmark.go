@@ -97,11 +97,11 @@ func ParseSizeString(s string, name string) (int64, error) {
 // raw benchmark args cook into copyArgs, because the actual work
 // of a benchmark job is doing a copy. Benchmark just doesn't offer so many
 // choices in its raw args
-func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
+func (raw rawBenchmarkCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	glcm.Info(common.BenchmarkPreviewNotice)
 
-	dummyCooked := cookedCopyCmdArgs{}
+	dummyCooked := CookedCopyCmdArgs{}
 	virtualDir := "benchmark-" + azcopyCurrentJobID.String() // create unique directory name, so we won't overwrite anything
 
 	if raw.fileCount <= 0 {
@@ -161,14 +161,14 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	}
 
 	if downloadMode {
-		glcm.Info(fmt.Sprintf("Benchmarking downloads from %s.", cooked.source.Value))
+		glcm.Info(fmt.Sprintf("Benchmarking downloads from %s.", cooked.Source.Value))
 	} else {
-		glcm.Info(fmt.Sprintf("Benchmarking uploads to %s.", cooked.destination.Value))
+		glcm.Info(fmt.Sprintf("Benchmarking uploads to %s.", cooked.Destination.Value))
 	}
 
 	if !downloadMode && raw.deleteTestData {
 		// set up automatic cleanup
-		cooked.followupJobArgs, err = raw.createCleanupJobArgs(cooked.destination, raw.logVerbosity)
+		cooked.followupJobArgs, err = raw.createCleanupJobArgs(cooked.Destination, raw.logVerbosity)
 		if err != nil {
 			return dummyCooked, err
 		}
@@ -186,7 +186,7 @@ func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (stri
 
 	var result url.URL
 
-	switch inferArgumentLocation(target) {
+	switch InferArgumentLocation(target) {
 	case common.ELocation.Blob():
 		p := azblob.NewBlobURLParts(*u)
 		if p.ContainerName == "" || p.BlobName != "" {
@@ -218,7 +218,7 @@ func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (stri
 }
 
 // define a cleanup job
-func (raw rawBenchmarkCmdArgs) createCleanupJobArgs(benchmarkDest common.ResourceString, logVerbosity string) (*cookedCopyCmdArgs, error) {
+func (raw rawBenchmarkCmdArgs) createCleanupJobArgs(benchmarkDest common.ResourceString, logVerbosity string) (*CookedCopyCmdArgs, error) {
 
 	rc := rawCopyCmdArgs{}
 
@@ -227,7 +227,7 @@ func (raw rawBenchmarkCmdArgs) createCleanupJobArgs(benchmarkDest common.Resourc
 	rc.recursive = true
 	rc.logVerbosity = logVerbosity
 
-	switch inferArgumentLocation(rc.src) {
+	switch InferArgumentLocation(rc.src) {
 	case common.ELocation.Blob():
 		rc.fromTo = common.EFromTo.BlobTrash().String()
 	case common.ELocation.File():
@@ -315,7 +315,7 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			var cooked cookedCopyCmdArgs // benchmark args cook into copy args
+			var cooked CookedCopyCmdArgs // benchmark args cook into copy args
 			cooked, err := raw.cook()
 			if err != nil {
 				glcm.Error("failed to parse user input due to error: " + err.Error())

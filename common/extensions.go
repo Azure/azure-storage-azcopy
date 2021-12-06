@@ -17,7 +17,9 @@ type URLStringExtension string
 
 func (s URLStringExtension) RedactSecretQueryParamForLogging() string {
 	u, err := url.Parse(string(s))
-	if err != nil {
+
+	// no need to redact if it's a local path
+	if err != nil || u.Host == "" {
 		return string(s)
 	}
 	return URLExtension{*u}.RedactSecretQueryParamForLogging()

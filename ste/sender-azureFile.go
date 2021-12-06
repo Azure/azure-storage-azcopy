@@ -145,13 +145,6 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 
 	destinationModified = true
 
-	// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
-	err := AzureFileParentDirCreator{}.CreateParentDirToRoot(u.ctx, u.fileURL(), u.pipeline, u.jptm.GetFolderCreationTracker())
-	if err != nil {
-		jptm.FailActiveUpload("Creating parent directory", err)
-		return
-	}
-
 	if jptm.ShouldInferContentType() {
 		// sometimes, specifically when reading local files, we have more info
 		// about the file type at this time than what we had before
@@ -184,6 +177,24 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		},
 		u.fileOrDirURL,
 		u.jptm.GetForceIfReadOnly())
+
+	if strErr, ok := err.(azfile.StorageError); ok && strErr.ServiceCode() == azfile.ServiceCodeParentNotFound {
+		// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
+		jptm.Log(pipeline.LogError, fmt.Sprintf("%s: %s \n AzCopy going to create parent directories of the Azure files", strErr.ServiceCode(), strErr.Error()))
+		err = AzureFileParentDirCreator{}.CreateParentDirToRoot(u.ctx, u.fileURL(), u.pipeline, u.jptm.GetFolderCreationTracker())
+		if err != nil {
+			u.jptm.FailActiveUpload("Creating parent directory", err)
+		}
+
+		// retrying file creation
+		err = u.DoWithOverrideReadOnly(u.ctx,
+			func() (interface{}, error) {
+				return u.fileURL().Create(u.ctx, info.SourceSize, creationHeaders, u.metadataToApply)
+			},
+			u.fileOrDirURL,
+			u.jptm.GetForceIfReadOnly())
+	}
+
 	if err != nil {
 		jptm.FailActiveUpload("Creating file", err)
 		return
@@ -195,10 +206,13 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 // DoWithOverrideReadOnly performs the given action, and forces it to happen even if the target is read only.
 // NOTE that all SMB attributes (and other headers?) on the target will be lost, so only use this if you don't need them any more
 // (e.g. you are about to delete the resource, or you are going to reset the attributes/headers)
-func (*azureFileSenderBase) DoWithOverrideReadOnly(ctx context.Context, action func() (interface{}, error), targetFileOrDir URLHolder, enableForcing bool) error {
+func (u *azureFileSenderBase) DoWithOverrideReadOnly(ctx context.Context, action func() (interface{}, error), targetFileOrDir URLHolder, enableForcing bool) error {
 	// try the action
 	_, err := action()
 
+	if strErr, ok := err.(azfile.StorageError); ok && (strErr.ServiceCode() == azfile.ServiceCodeParentNotFound || strErr.ServiceCode() == azfile.ServiceCodeShareNotFound) {
+		return err
+	}
 	failedAsReadOnly := false
 	if strErr, ok := err.(azfile.StorageError); ok && strErr.ServiceCode() == azfile.ServiceCodeReadOnlyAttribute {
 		failedAsReadOnly = true
@@ -382,6 +396,9 @@ func (u *azureFileSenderBase) SetFolderProperties() error {
 
 func (u *azureFileSenderBase) DirUrlToString() string {
 	dirUrl := azfile.NewFileURLParts(u.dirURL().URL()).URL()
+	dirUrl.RawQuery = ""
+	// To avoid encoding/decoding
+	dirUrl.RawPath = ""
 	return dirUrl.String()
 }
 
@@ -420,13 +437,13 @@ func (AzureFileParentDirCreator) splitWithoutToken(str string, token rune) []str
 }
 
 // CreateParentDirToRoot creates parent directories of the Azure file if file's parent directory doesn't exist.
-func (d AzureFileParentDirCreator) CreateParentDirToRoot(ctx context.Context, fileURL azfile.FileURL, p pipeline.Pipeline, t common.FolderCreationTracker) error {
+func (d AzureFileParentDirCreator) CreateParentDirToRoot(ctx context.Context, fileURL azfile.FileURL, p pipeline.Pipeline, t FolderCreationTracker) error {
 	dirURL := d.getParentDirectoryURL(fileURL, p)
 	return d.CreateDirToRoot(ctx, dirURL, p, t)
 }
 
 // CreateDirToRoot Creates the dir (and parents as necessary) if it does not exist
-func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, dirURL azfile.DirectoryURL, p pipeline.Pipeline, t common.FolderCreationTracker) error {
+func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, dirURL azfile.DirectoryURL, p pipeline.Pipeline, t FolderCreationTracker) error {
 	dirURLExtension := common.FileURLPartsExtension{FileURLParts: azfile.NewFileURLParts(dirURL.URL())}
 	if _, err := dirURL.GetProperties(ctx); err != nil {
 		if resp, respOk := err.(pipeline.Response); respOk && resp.Response() != nil &&
@@ -448,6 +465,7 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, dirURL a
 					// Must do it here, in the routine that is shared by both the folder and the file code,
 					// because due to the parallelism of AzCopy, we don't know which will get here first, file code, or folder code.
 					dirUrl := curDirURL.URL()
+					dirUrl.RawQuery = ""
 					t.RecordCreation(dirUrl.String())
 				}
 				if verifiedErr := d.verifyAndHandleCreateErrors(err); verifiedErr != nil {

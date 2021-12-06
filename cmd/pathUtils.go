@@ -24,7 +24,7 @@ func (LocationLevel) Object() LocationLevel    { return 2 } // An Object can be 
 
 // Uses syntax to assume the "level" of a location.
 // This is typically used to
-func determineLocationLevel(location string, locationType common.Location, source bool) (LocationLevel, error) {
+func DetermineLocationLevel(location string, locationType common.Location, source bool) (LocationLevel, error) {
 	switch locationType {
 	// In local, there's no such thing as a service.
 	// As such, we'll treat folders as containers, and files as objects.

@@ -45,10 +45,12 @@ type with struct {
 
 	nameValueMetadata  map[string]string
 	blobTags           string
+	blobType           common.BlobType
 	lastWriteTime      time.Time
 	creationTime       time.Time
 	smbAttributes      uint32
 	smbPermissionsSddl string
+	adlsPermissionsACL string
 	cpkByName          string
 	cpkByValue         bool
 }
@@ -122,6 +124,10 @@ func (w with) createObjectProperties() *objectProperties {
 		populated = true
 		result.blobTags = common.ToCommonBlobTagsMap(w.blobTags)
 	}
+	if w.blobType != common.EBlobType.Detect() {
+		populated = true
+		result.blobType = w.blobType
+	}
 	if w.lastWriteTime != (time.Time{}) {
 		populated = true
 		result.lastWriteTime = &w.lastWriteTime
@@ -137,6 +143,10 @@ func (w with) createObjectProperties() *objectProperties {
 	if w.smbPermissionsSddl != "" {
 		populated = true
 		result.smbPermissionsSddl = &w.smbPermissionsSddl
+	}
+	if w.adlsPermissionsACL != "" {
+		populated = true
+		result.adlsPermissionsACL = &w.adlsPermissionsACL
 	}
 
 	if w.cpkByName != "" {

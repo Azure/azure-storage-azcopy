@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"os"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // This declarative test runner adds a layer on top of e2etest/base. The added layer allows us to test in a declarative style,
@@ -33,7 +35,7 @@ import (
 
 // RunScenarios is the key entry point for declarative testing.
 // It constructs and executes scenarios (subtest in Go-speak), according to its parameters, and checks their results
-func RunScenarios(
+func 	RunScenarios(
 	t *testing.T,
 	operations Operation,
 	testFromTo TestFromTo,
@@ -44,7 +46,8 @@ func RunScenarios(
 	hs *hooks,
 	fs testFiles,
 	// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
-) {
+	accountType AccountType,
+	scenarioSuffix string) {
 	// enable this if we want parents in parallel: t.Parallel()
 
 	suiteName, testName := getTestName(t)
@@ -56,12 +59,28 @@ func RunScenarios(
 	// construct all the scenarios
 	scenarios := make([]scenario, 0, 16)
 	for _, op := range operations.getValues() {
+		if op == eOperation.Resume() {
+			continue
+		}
+
+		seenFromTos := make(map[common.FromTo]bool)
+
 		for _, fromTo := range testFromTo.getValues(op) {
+			// dedupe the scenarios
+			if _, ok := seenFromTos[fromTo]; ok {
+				continue
+			}
+			seenFromTos[fromTo] = true
+
 			// Create unique name for generating container names
 			compactScenarioName := fmt.Sprintf("%.4s-%s-%c-%c%c", suiteName, testName, op.String()[0], fromTo.From().String()[0], fromTo.To().String()[0])
 			fullScenarioName := fmt.Sprintf("%s.%s.%s-%s", suiteName, testName, op.String(), fromTo.String())
+
 			// Sub-test name is not globally unique (it doesn't need to be) but it is more human-readable
 			subtestName := fmt.Sprintf("%s-%s", op, fromTo)
+			if scenarioSuffix != "" {
+				subtestName += "-" + scenarioSuffix
+			}
 
 			hsToUse := hooks{}
 			if hs != nil {
@@ -69,6 +88,7 @@ func RunScenarios(
 			}
 
 			s := scenario{
+				accountType:         accountType,
 				subtestName:         subtestName,
 				compactScenarioName: compactScenarioName,
 				fullScenarioName:    fullScenarioName,
@@ -78,7 +98,8 @@ func RunScenarios(
 				p:                   p, // copies them, because they are a struct. This is what we need, since they may be morphed while running
 				hs:                  hsToUse,
 				fs:                  fs.DeepCopy(),
-				stripTopDir:         false, // TODO: how will we set this?
+				needResume:          operations&eOperation.Resume() != 0,
+				stripTopDir:         p.stripTopDir,
 			}
 
 			scenarios = append(scenarios, s)
@@ -91,7 +112,7 @@ func RunScenarios(
 	}
 
 	// run them in parallel if not debugging, but sequentially (for easier debugging) if a debugger is attached
-	parallel := !isLaunchedByDebugger // this only works if gops.exe is on your path. See azcopyDebugHelper.go for instructions.
+	parallel := !isLaunchedByDebugger && !p.disableParallelTesting // this only works if gops.exe is on your path. See azcopyDebugHelper.go for instructions.
 	for _, s := range scenarios {
 		sen := s // capture to separate var inside the loop, for the parallel case
 		// use t.Run to get proper sub-test support

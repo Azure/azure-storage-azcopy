@@ -2,9 +2,11 @@ package azbfs
 
 import (
 	"context"
-	"github.com/Azure/azure-pipeline-go/pipeline"
+	"errors"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 var directoryResourceName = "directory" // constant value for the resource query parameter
@@ -69,21 +71,26 @@ func (d DirectoryURL) NewDirectoryURL(dirName string) DirectoryURL {
 
 // Create creates a new directory within a File System
 func (d DirectoryURL) Create(ctx context.Context, recreateIfExists bool) (*DirectoryCreateResponse, error) {
+	return d.CreateWithOptions(ctx, CreateDirectoryOptions{RecreateIfExists: recreateIfExists})
+}
+
+// Create creates a new directory within a File System
+func (d DirectoryURL) CreateWithOptions(ctx context.Context, options CreateDirectoryOptions) (*DirectoryCreateResponse, error) {
 	var ifNoneMatch *string
-	if recreateIfExists {
+	if options.RecreateIfExists {
 		ifNoneMatch = nil // the default ADLS Gen2 behavior, see https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create
 	} else {
 		star := "*" // see https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create
 		ifNoneMatch = &star
 	}
-	return d.doCreate(ctx, ifNoneMatch)
+	return d.doCreate(ctx, ifNoneMatch, options.Metadata)
 }
 
-func (d DirectoryURL) doCreate(ctx context.Context, ifNoneMatch *string) (*DirectoryCreateResponse, error) {
+func (d DirectoryURL) doCreate(ctx context.Context, ifNoneMatch *string, metadata map[string]string) (*DirectoryCreateResponse, error) {
 	resp, err := d.directoryClient.Create(ctx, d.filesystem, d.pathParameter, PathResourceDirectory, nil,
 		PathRenameModeNone, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil, ifNoneMatch,
+		nil, buildMetadataString(metadata), nil, nil, nil, ifNoneMatch,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, nil)
 	return (*DirectoryCreateResponse)(resp), err
@@ -156,4 +163,75 @@ func (d DirectoryURL) IsDirectory(ctx context.Context) (bool, error) {
 // This api is used when the directoryUrl is to represents a file
 func (d DirectoryURL) NewFileUrl() FileURL {
 	return NewFileURL(d.URL(), d.directoryClient.Pipeline())
+}
+
+// Renames the directory to the provided destination
+func (d DirectoryURL) Rename(ctx context.Context, options RenameDirectoryOptions) (DirectoryURL, error) {
+
+	// If the destinationFileSystem is not provided, use the current filesystem
+	fileSystemName := options.DestinationFileSystem
+	if fileSystemName == nil || *fileSystemName == "" {
+		fileSystemName = &d.filesystem
+	}
+
+	urlParts := NewBfsURLParts(d.directoryClient.URL())
+	urlParts.FileSystemName = *fileSystemName
+	urlParts.DirectoryOrFilePath = options.DestinationPath
+	// ensure we use our source's SAS token in the x-ms-rename-source header
+	renameSource := "/" + d.filesystem + "/" + d.pathParameter + "?" + urlParts.SAS.Encode()
+
+	// if we're changing our source SAS to a new SAS in the rename
+	// in the case the user wants to have limited permissions per directory: sas1 for directory1 and sas2 for directory2
+	if options.DestinationSas != nil && *options.DestinationSas != "" {
+		urlParts.SAS = GetSasQueryParams(*options.DestinationSas)
+	}
+	destinationDirectoryURL := NewDirectoryURL(urlParts.URL(), d.directoryClient.Pipeline())
+
+	_, err := destinationDirectoryURL.directoryClient.Create(ctx, *fileSystemName, options.DestinationPath, PathResourceNone, nil, PathRenameModeLegacy,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, &renameSource, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil)
+
+	if err != nil {
+		return DirectoryURL{}, err
+	}
+
+	return destinationDirectoryURL, nil
+}
+
+func (d DirectoryURL) GetAccessControl(ctx context.Context) (BlobFSAccessControl, error) {
+	resp, err := d.directoryClient.GetProperties(ctx, d.filesystem, d.pathParameter, PathGetPropertiesActionGetAccessControl, nil,
+		nil, nil, nil,
+		nil, nil, nil, nil, nil)
+
+	if err != nil {
+		return BlobFSAccessControl{}, err
+	}
+
+	return BlobFSAccessControl{resp.XMsOwner(), resp.XMsGroup(), resp.XMsACL(), resp.XMsPermissions()}, nil
+}
+
+func (d DirectoryURL) SetAccessControl(ctx context.Context, permissions BlobFSAccessControl) (*PathUpdateResponse, error) {
+	// TODO: the go http client has a problem with PATCH and content-length header
+	//       we should investigate and report the issue
+	// See similar todo, with larger comments, in AppendData
+	overrideHttpVerb := "PATCH"
+
+	if permissions.ACL != "" && permissions.Permissions != "" {
+		return nil, errors.New("specifying both Permissions and ACL conflicts for SetAccessControl")
+	}
+
+	var perms, acl *string
+	if permissions.Permissions != "" {
+		perms = &permissions.Permissions
+	} else {
+		acl = &permissions.ACL
+	}
+
+	// This does not yet have support for recursive updates. But then again, we don't really need it.
+	return d.directoryClient.Update(ctx, PathUpdateActionSetAccessControl, d.filesystem, d.pathParameter,
+		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
+		nil, nil, &permissions.Owner, &permissions.Group, perms, acl,
+		nil, nil, nil, nil, &overrideHttpVerb,
+		nil, nil, nil, nil)
 }

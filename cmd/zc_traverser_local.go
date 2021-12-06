@@ -23,13 +23,14 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
 
 type localTraverser struct {
@@ -41,7 +42,7 @@ type localTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func (t *localTraverser) isDirectory(bool) bool {
+func (t *localTraverser) IsDirectory(bool) bool {
 	if strings.HasSuffix(t.fullPath, "/") {
 		return true
 	}
@@ -164,7 +165,6 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 	}
 
 	fullPath, err = filepath.Abs(fullPath)
-
 	if err != nil {
 		return err
 	}
@@ -181,18 +181,20 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 	for len(walkQueue) > 0 {
 		queueItem := walkQueue[0]
 		walkQueue = walkQueue[1:]
-
 		// walk contents of this queueItem in parallel
 		// (for simplicity of coding, we don't parallelize across multiple queueItems)
-		parallel.Walk(queueItem.fullPath, enumerationParallelism, enumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
+		parallel.Walk(queueItem.fullPath, EnumerationParallelism, EnumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
 			if fileError != nil {
 				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError))
 				return nil
 			}
-
 			computedRelativePath := strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(queueItem.fullPath))
 			computedRelativePath = cleanLocalPath(common.GenerateFullPath(queueItem.relativeBase, computedRelativePath))
 			computedRelativePath = strings.TrimPrefix(computedRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+
+			if computedRelativePath == "." {
+				computedRelativePath = ""
+			}
 
 			if fileInfo.Mode()&os.ModeSymlink != 0 {
 				if !followSymlinks {
@@ -230,8 +232,8 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 						skipped, err := getProcessingError(err)
 
 						if !skipped { // Don't go any deeper (or record it) if we skipped it.
-							seenPaths.Record(result)
-							seenPaths.Record(slPath) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
+							seenPaths.Record(common.ToExtendedPath(result))
+							seenPaths.Record(common.ToExtendedPath(slPath)) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
 							walkQueue = append(walkQueue, walkItem{
 								fullPath:     result,
 								relativeBase: computedRelativePath,
@@ -279,7 +281,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 
 					// If the file was skipped, don't record it.
 					if !skipped {
-						seenPaths.Record(result)
+						seenPaths.Record(common.ToExtendedPath(result))
 					}
 
 					return err
@@ -299,7 +301,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 	return
 }
 
-func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectProcessor, filters []objectFilter) (err error) {
+func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 
 	if err != nil {
@@ -339,6 +341,11 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 
 				var entityType common.EntityType
 				if fileInfo.IsDir() {
+					fileInfo, err = WrapFolder(filePath, fileInfo)
+					if err != nil {
+						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get last change of target at %s: %s", filePath, err))
+					}
+
 					entityType = common.EEntityType.Folder()
 				} else {
 					entityType = common.EEntityType.File()
@@ -371,7 +378,7 @@ func (t *localTraverser) traverse(preprocessor objectMorpher, processor objectPr
 					processor)
 			}
 
-			// note: Walk includes root, so no need here to separately create storedObject for root (as we do for other folder-aware sources)
+			// note: Walk includes root, so no need here to separately create StoredObject for root (as we do for other folder-aware sources)
 			return WalkWithSymlinks(t.fullPath, processFile, t.followSymlinks)
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath

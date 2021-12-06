@@ -36,7 +36,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	minio "github.com/minio/minio-go"
+	"github.com/minio/minio-go"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -112,9 +112,13 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 		if file.isFolder() {
 			err = os.MkdirAll(filepath.Join(options.dirPath, file.name), os.ModePerm)
 			c.AssertNoErr(err)
-			//TODO: nakulkar-msft you'll need to set up things like attributes, and other relevant things from
+			// TODO: You'll need to set up things like attributes, and other relevant things from
 			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
 			//			//   by local files. E.g. not contentHeaders or metadata).
+
+			if file.creationProperties.smbPermissionsSddl != nil {
+				osScenarioHelper{}.setFileSDDLString(c, filepath.Join(options.dirPath, file.name), *file.creationProperties.smbPermissionsSddl)
+			}
 		} else {
 			sourceData, err := s.generateLocalFile(
 				filepath.Join(options.dirPath, file.name),
@@ -126,9 +130,13 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 			file.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
 
 			c.AssertNoErr(err)
-			//TODO: nakulkar-msft you'll need to set up things like attributes, and other relevant things from
+			// TODO: You'll need to set up things like attributes, and other relevant things from
 			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
 			//   by local files. E.g. not contentHeaders or metadata).
+
+			if file.creationProperties.smbPermissionsSddl != nil {
+				osScenarioHelper{}.setFileSDDLString(c, filepath.Join(options.dirPath, file.name), *file.creationProperties.smbPermissionsSddl)
+			}
 		}
 	}
 
@@ -326,9 +334,11 @@ func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c asserter, s3Clien
 type generateFromListOptions struct {
 	fs          []*testObject
 	defaultSize string
+	accountType AccountType
 }
 
 type generateBlobFromListOptions struct {
+	rawSASURL    url.URL
 	containerURL azblob.ContainerURL
 	cpkInfo      common.CpkInfo
 	cpkScopeInfo common.CpkScopeInfo
@@ -342,7 +352,6 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 			continue // no real folders in blob
 		}
 		ad := blobResourceAdapter{b}
-		blob := options.containerURL.NewBlockBlobURL(b.name)
 		reader, sourceData := getRandomDataAndReader(b.creationProperties.sizeBytes(c, options.defaultSize))
 
 		// Setting content MD5
@@ -352,19 +361,79 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 		}
 		ad.obj.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
 
+		tags := ad.toBlobTags()
+
+		if options.accountType == EAccountType.HierarchicalNamespaceEnabled() {
+			tags = nil
+		}
+
 		headers := ad.toHeaders()
 		headers.ContentMD5 = contentMD5[:]
-		cResp, err := blob.Upload(ctx,
-			reader,
-			headers,
-			ad.toMetadata(),
-			azblob.BlobAccessConditions{},
-			azblob.DefaultAccessTier,
-			ad.toBlobTags(),
-			common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo),
-		)
-		c.AssertNoErr(err)
-		c.Assert(cResp.StatusCode(), equals(), 201)
+
+		var err error
+
+		switch b.creationProperties.blobType {
+		case common.EBlobType.BlockBlob(), common.EBlobType.Detect():
+			bb := options.containerURL.NewBlockBlobURL(b.name)
+
+			cResp, err := bb.Upload(ctx,
+				reader,
+				headers,
+				ad.toMetadata(),
+				azblob.BlobAccessConditions{},
+				azblob.DefaultAccessTier,
+				tags,
+				common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo),
+			)
+
+			c.AssertNoErr(err)
+			c.Assert(cResp.StatusCode(), equals(), 201)
+		case common.EBlobType.PageBlob():
+			pb := options.containerURL.NewPageBlobURL(b.name)
+			cResp, err := pb.Create(ctx, reader.Size(), 0, headers, ad.toMetadata(), azblob.BlobAccessConditions{}, azblob.DefaultPremiumBlobAccessTier, tags, common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo))
+			c.AssertNoErr(err)
+			c.Assert(cResp.StatusCode(), equals(), 201)
+
+			pbUpResp, err := pb.UploadPages(ctx, 0, reader, azblob.PageBlobAccessConditions{}, nil, common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo))
+			c.AssertNoErr(err)
+			c.Assert(pbUpResp.StatusCode(), equals(), 201)
+		case common.EBlobType.AppendBlob():
+			ab := options.containerURL.NewAppendBlobURL(b.name)
+			cResp, err := ab.Create(ctx, headers, ad.toMetadata(), azblob.BlobAccessConditions{}, tags, common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo))
+			c.AssertNoErr(err)
+			c.Assert(cResp.StatusCode(), equals(), 201)
+
+			abUpResp, err := ab.AppendBlock(ctx, reader, azblob.AppendBlobAccessConditions{}, nil, common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo))
+			c.AssertNoErr(err)
+			c.Assert(abUpResp.StatusCode(), equals(), 201)
+		}
+
+		if b.creationProperties.adlsPermissionsACL != nil {
+			bfsURLParts := azbfs.NewBfsURLParts(options.rawSASURL)
+			bfsURLParts.Host = strings.Replace(bfsURLParts.Host, ".blob", ".dfs", 1)
+
+			bfsContainer := azbfs.NewFileSystemURL(bfsURLParts.URL(), azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{}))
+
+			var updateResp *azbfs.PathUpdateResponse
+			if b.isFolder() {
+				dirURL := bfsContainer.NewDirectoryURL(b.name)
+
+				updateResp, err = dirURL.SetAccessControl(ctx, azbfs.BlobFSAccessControl{
+					ACL: *b.creationProperties.adlsPermissionsACL,
+				})
+			} else {
+				d, f := path.Split(b.name)
+				dirURL := bfsContainer.NewDirectoryURL(d)
+				fileURL := dirURL.NewFileURL(f)
+
+				updateResp, err = fileURL.SetAccessControl(ctx, azbfs.BlobFSAccessControl{
+					ACL: *b.creationProperties.adlsPermissionsACL,
+				})
+			}
+
+			c.AssertNoErr(err)
+			c.Assert(updateResp.StatusCode(), equals(), 200)
+		}
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
@@ -396,14 +465,15 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 			md := map[string]string(blobInfo.Metadata)
 
 			props := objectProperties{
-				isFolder:          false, // no folders in Blob
-				size:              bp.ContentLength,
-				contentHeaders:    &h,
-				nameValueMetadata: md,
-				creationTime:      bp.CreationTime,
-				lastWriteTime:     &bp.LastModified,
-				cpkInfo:           &common.CpkInfo{EncryptionKeySha256: bp.CustomerProvidedKeySha256},
-				cpkScopeInfo:      &common.CpkScopeInfo{EncryptionScope: bp.EncryptionScope},
+				isFolder:           false, // no folders in Blob
+				size:               bp.ContentLength,
+				contentHeaders:     &h,
+				nameValueMetadata:  md,
+				creationTime:       bp.CreationTime,
+				lastWriteTime:      &bp.LastModified,
+				cpkInfo:            &common.CpkInfo{EncryptionKeySha256: bp.CustomerProvidedKeySha256},
+				cpkScopeInfo:       &common.CpkScopeInfo{EncryptionScope: bp.EncryptionScope},
+				adlsPermissionsACL: bp.ACL,
 				// smbAttributes and smbPermissions don't exist in blob
 			}
 
@@ -414,6 +484,8 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 				}
 				props.blobTags = blobTagsMap
 			}
+
+			props.blobType = common.FromAzBlobType(blobInfo.Properties.BlobType)
 
 			result[relativePath] = &props
 		}
@@ -584,21 +656,26 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			file := options.shareURL.NewRootDirectoryURL().NewFileURL(path.Join(f.name, "dummyChild"))
 			generateParentsForAzureFile(c, file)
 
+			dir := options.shareURL.NewRootDirectoryURL().NewDirectoryURL(f.name)
+
 			// set its metadata if any
 			if f.creationProperties.nameValueMetadata != nil {
-				dir := options.shareURL.NewRootDirectoryURL().NewDirectoryURL(f.name)
 				_, err := dir.SetMetadata(context.TODO(), ad.toMetadata())
+				c.AssertNoErr(err)
+			}
+
+			if f.creationProperties.smbPermissionsSddl != nil || f.creationProperties.smbAttributes != nil {
+				_, err := dir.SetProperties(ctx, ad.toHeaders(c, options.shareURL).SMBProperties)
 				c.AssertNoErr(err)
 			}
 
 			// set other properties
 			// TODO: do we need a SetProperties method on dir...?  Discuss with zezha-msft
-			if f.creationProperties.creationTime != nil ||
-				f.creationProperties.smbPermissionsSddl != nil ||
-				f.creationProperties.smbAttributes != nil {
+			if f.creationProperties.creationTime != nil {
 				panic("setting these properties isn't implmented yet for folders in the test harnesss")
 				// TODO: nakulkar-msft the attributes stuff will need to be implemented here before attributes can be tested on Azure Files
 			}
+
 			// TODO: I'm pretty sure we don't prserve lastWritetime or contentProperties (headers) for folders, so the above if statement doesn't test those
 			//    Is that the correct decision?
 		} else {
@@ -620,8 +697,9 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			//	f.verificationProperties.contentHeaders = &contentHeaders{}
 			//}
 			//f.verificationProperties.contentHeaders.contentMD5 = contentMD5[:]
-			headers := ad.toHeaders()
+			headers := ad.toHeaders(c, options.shareURL)
 			headers.ContentMD5 = contentMD5[:]
+
 			cResp, err := file.Create(ctx, fileSize, headers, ad.toMetadata())
 			c.AssertNoErr(err)
 			c.Assert(cResp.StatusCode(), equals(), 201)
@@ -673,7 +751,15 @@ func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile
 					contentMD5:         contentHeader.ContentMD5,
 				}
 				fileAttrs := uint32(azfile.ParseFileAttributeFlagsString(fProps.FileAttributes()))
-				filePermissions := fProps.FilePermissionKey()
+				permissionKey := fProps.FilePermissionKey()
+
+				var perm string
+				if permissionKey != "" {
+					sharePerm, err := shareURL.GetPermission(ctx, permissionKey)
+					a.AssertNoErr(err, "Failed to get permissions from key")
+
+					perm = sharePerm.Permission
+				}
 
 				props := objectProperties{
 					isFolder:           false, // no folders in Blob
@@ -683,7 +769,7 @@ func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile
 					creationTime:       &creationTime,
 					lastWriteTime:      &lastWriteTime,
 					smbAttributes:      &fileAttrs,
-					smbPermissionsSddl: &filePermissions,
+					smbPermissionsSddl: &perm,
 				}
 
 				relativePath := lResp.DirectoryPath + "/"
@@ -704,14 +790,33 @@ func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile
 				lastWriteTime, err := time.Parse(azfile.ISO8601, dProps.FileLastWriteTime())
 				a.AssertNoErr(err)
 
-				props := objectProperties{
-					isFolder:          true,
-					nameValueMetadata: dProps.NewMetadata(),
-					creationTime:      &creationTime,
-					lastWriteTime:     &lastWriteTime,
+				// Grab the permissions
+				permKey := dProps.FilePermissionKey()
+
+				var perm string
+				if permKey != "" {
+					permResp, err := shareURL.GetPermission(ctx, permKey)
+					a.AssertNoErr(err, "Failed to get permissions from key")
+
+					perm = permResp.Permission
 				}
 
-				result[dirInfo.Name] = &props
+				// Set up properties
+				props := objectProperties{
+					isFolder:           true,
+					nameValueMetadata:  dProps.NewMetadata(),
+					creationTime:       &creationTime,
+					lastWriteTime:      &lastWriteTime,
+					smbPermissionsSddl: &perm,
+				}
+
+				// get the directory name properly
+				relativePath := lResp.DirectoryPath + "/"
+				if relativePath == "/" {
+					relativePath = ""
+				}
+				result[relativePath+dirInfo.Name] = &props
+
 				dirQ = append(dirQ, dirURL)
 			}
 
@@ -751,6 +856,7 @@ func (scenarioHelper) generateBFSPathsFromList(c asserter, filesystemURL azbfs.F
 		fResp, err := file.FlushData(ctx, defaultBlobFSFileSizeInBytes, nil, azbfs.BlobFSHTTPHeaders{}, false, true)
 		c.AssertNoErr(err)
 		c.Assert(fResp.StatusCode(), equals(), 200)
+
 	}
 }
 

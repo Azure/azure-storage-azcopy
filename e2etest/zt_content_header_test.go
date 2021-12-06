@@ -29,101 +29,73 @@ var fileExtensions = []string{".exe", ".cpp", ".java", ".py", ".go", ".mp3", ".m
 
 func TestHeader_SourceLocal(t *testing.T) {
 	extensionsMap := GetContentTypeMap(fileExtensions)
-	RunScenarios(
-		t,
-		eOperation.Copy(),
-		eTestFromTo.Other(common.EFromTo.LocalBlob()),
-		eValidate.AutoPlusContent(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "1M",
+		shouldTransfer: []interface{}{
+			// folder("", ),
+			f("file1.mp3", with{contentType: extensionsMap[".mp3"]}),
+			f("file2.pdf", with{contentType: extensionsMap[".pdf"]}),
+			f("file3.exe", with{contentType: extensionsMap[".exe"]}),
+			f("file4.txt", with{contentType: extensionsMap[".txt"]}),
+			f("file5.mp4", with{contentType: extensionsMap[".mp4"]}),
+			f("file6.xlsx", with{contentType: extensionsMap[".xlsx"]}),
 		},
-		nil,
-		testFiles{
-			defaultSize: "1M",
-			shouldTransfer: []interface{}{
-				//folder("", ),
-				f("file1.mp3", with{contentType: extensionsMap[".mp3"]}),
-				f("file2.pdf", with{contentType: extensionsMap[".pdf"]}),
-				f("file3.exe", with{contentType: extensionsMap[".exe"]}),
-				f("file4.txt", with{contentType: extensionsMap[".txt"]}),
-				f("file5.mp4", with{contentType: extensionsMap[".mp4"]}),
-				f("file6.xlsx", with{contentType: extensionsMap[".xlsx"]}),
-			},
-		})
+	}, EAccountType.Standard(), "")
 }
 
 func TestHeader_SourceLocalEmptyFiles(t *testing.T) {
 	extensionsMap := GetContentTypeMap(fileExtensions)
-	RunScenarios(
-		t,
-		eOperation.Copy(),
-		eTestFromTo.Other(common.EFromTo.LocalBlob()),
-		eValidate.AutoPlusContent(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "0K",
+		shouldTransfer: []interface{}{
+			// folder("", ),
+			f("file1.mp3", with{contentType: extensionsMap[".mp3"]}),
+			f("file2.pdf", with{contentType: extensionsMap[".pdf"]}),
+			f("file3.exe", with{contentType: extensionsMap[".exe"]}),
+			f("file4.txt", with{contentType: extensionsMap[".txt"]}),
+			f("file3.mp4", with{contentType: extensionsMap[".mp4"]}),
+			f("file5.xlsx", with{contentType: extensionsMap[".xlsx"]}),
 		},
-		nil,
-		testFiles{
-			defaultSize: "0K",
-			shouldTransfer: []interface{}{
-				//folder("", ),
-				f("file1.mp3", with{contentType: extensionsMap[".mp3"]}),
-				f("file2.pdf", with{contentType: extensionsMap[".pdf"]}),
-				f("file3.exe", with{contentType: extensionsMap[".exe"]}),
-				f("file4.txt", with{contentType: extensionsMap[".txt"]}),
-				f("file3.mp4", with{contentType: extensionsMap[".mp4"]}),
-				f("file5.xlsx", with{contentType: extensionsMap[".xlsx"]}),
-			},
-		})
+	}, EAccountType.Standard(), "")
 }
 
 func TestHeader_AllS2S(t *testing.T) {
 	extensionsMap := GetContentTypeMap(fileExtensions)
-	RunScenarios(
-		t,
-		eOperation.Copy(),
-		eTestFromTo.AllS2S(),
-		eValidate.Auto(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllS2S(), eValidate.Auto(), params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			// folder("", ),
+			f("file1.mp3", with{contentType: extensionsMap[".mp3"]}),
+			f("file2.pdf", with{contentType: extensionsMap[".pdf"]}),
+			f("file3.exe", with{contentType: extensionsMap[".exe"]}),
+			f("file4.txt", with{contentType: extensionsMap[".txt"]}),
+			f("file3.mp4", with{contentType: extensionsMap[".mp4"]}),
+			f("file5.xlsx", with{contentType: extensionsMap[".xlsx"]}),
 		},
-		nil,
-		testFiles{
-			defaultSize: "1K",
-			shouldTransfer: []interface{}{
-				//folder("", ),
-				f("file1.mp3", with{contentType: extensionsMap[".mp3"]}),
-				f("file2.pdf", with{contentType: extensionsMap[".pdf"]}),
-				f("file3.exe", with{contentType: extensionsMap[".exe"]}),
-				f("file4.txt", with{contentType: extensionsMap[".txt"]}),
-				f("file3.mp4", with{contentType: extensionsMap[".mp4"]}),
-				f("file5.xlsx", with{contentType: extensionsMap[".xlsx"]}),
-			},
-		})
+	}, EAccountType.Standard(), "")
 }
 
 // TODO: AutoPlusContent is not thread-safe. Look into that.
 func TestHeader_SourceBlobEmptyBlob(t *testing.T) {
 	extensionsMap := GetContentTypeMap(fileExtensions)
-	RunScenarios(
-		t,
-		eOperation.Copy(),
-		eTestFromTo.Other(common.EFromTo.BlobBlob()),
-		eValidate.AutoPlusContent(),
-		params{
-			recursive: true,
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "0K",
+		shouldTransfer: []interface{}{
+			// folder("", ),
+			f("file1.mp3", with{contentType: extensionsMap[".mp3"]}),
+			f("file2.pdf", with{contentType: extensionsMap[".pdf"]}),
+			f("file3.exe", with{contentType: extensionsMap[".exe"]}),
+			f("file4.txt", with{contentType: extensionsMap[".txt"]}),
+			f("file3.mp4", with{contentType: extensionsMap[".mp4"]}),
+			f("file5.xlsx", with{contentType: extensionsMap[".xlsx"]}),
 		},
-		nil,
-		testFiles{
-			defaultSize: "0K",
-			shouldTransfer: []interface{}{
-				//folder("", ),
-				f("file1.mp3", with{contentType: extensionsMap[".mp3"]}),
-				f("file2.pdf", with{contentType: extensionsMap[".pdf"]}),
-				f("file3.exe", with{contentType: extensionsMap[".exe"]}),
-				f("file4.txt", with{contentType: extensionsMap[".txt"]}),
-				f("file3.mp4", with{contentType: extensionsMap[".mp4"]}),
-				f("file5.xlsx", with{contentType: extensionsMap[".xlsx"]}),
-			},
-		})
+	}, EAccountType.Standard(), "")
 }

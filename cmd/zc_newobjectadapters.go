@@ -100,7 +100,7 @@ func (a blobPropertiesResponseAdapter) AccessTier() azblob.AccessTierType {
 // blobPropertiesAdapter adapts a BlobProperties object to both the
 // contentPropsProvider and blobPropsProvider interfaces
 type blobPropertiesAdapter struct {
-	azblob.BlobProperties
+	BlobProperties azblob.BlobPropertiesInternal
 }
 
 func (a blobPropertiesAdapter) CacheControl() string {
