@@ -1213,9 +1213,10 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 		// step 4: pipe everything into Stdout
 		err = azblob.DoBatchTransfer(ctx, azblob.BatchTransferOptions{
-			TransferSize: blobSize,
-			ChunkSize:    cca.blockSize,
-			Parallelism:  uint16(concurrencyValue),
+			OperationName: "downloadBlobToWriterAt",
+			TransferSize:  blobSize,
+			ChunkSize:     cca.blockSize,
+			Parallelism:   uint16(concurrencyValue),
 			Operation: func(chunkStart int64, count int64, ctx context.Context) error {
 				dr, err := blobURL.Download(ctx, chunkStart, count, azblob.BlobAccessConditions{}, false, clientProvidedKey)
 				if err != nil {
@@ -1224,11 +1225,8 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 				body := dr.Body(azblob.RetryReaderOptions{MaxRetryRequests: ste.MaxRetryPerDownloadBody})
 
 				// step 4: pipe everything into Stdout
-				err = dstWriter.EnqueueChunk(ctx, common.ChunkID{}, cca.blockSize, os.Stdout, true)
-				if err != nil {
-					return err
-				}
-				_, err = dstWriter.Flush(ctx)
+				chunkID := common.NewChunkID(cca.source.Value, chunkStart, count)
+				err = dstWriter.EnqueueChunk(ctx, chunkID, cca.blockSize, os.Stdout, true)
 				if err != nil {
 					return err
 				}
@@ -1237,6 +1235,11 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 				return err
 			},
 		})
+
+		_, err = dstWriter.Flush(ctx)
+		if err != nil {
+			return err
+		}
 
 		if err != nil {
 			return err
@@ -1296,8 +1299,8 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 		bbAccessTier = azblob.AccessTierType(cca.blockBlobTier.String())
 	}
 	_, err = azblob.UploadStreamToBlockBlob(ctx, os.Stdin, blockBlobUrl, azblob.UploadStreamToBlockBlobOptions{
-		BufferSize: int(blockSize),
-		MaxBuffers: concurrencyValue,
+		BufferSize:  int(blockSize),
+		MaxBuffers:  concurrencyValue,
 		Metadata:    metadataMap.ToAzBlobMetadata(),
 		BlobTagsMap: blobTags.ToAzBlobTagsMap(),
 		BlobHTTPHeaders: azblob.BlobHTTPHeaders{
