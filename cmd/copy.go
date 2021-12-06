@@ -1265,7 +1265,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 				body := dr.Body(azblob.RetryReaderOptions{MaxRetryRequests: ste.MaxRetryPerDownloadBody})
 
 				// step 4: pipe everything into Stdout
-				chunkID := common.NewChunkID(cca.source.Value, chunkStart, count)
+				chunkID := common.NewChunkID(cca.Source.Value, chunkStart, count)
 				err = dstWriter.EnqueueChunk(ctx, chunkID, cca.blockSize, os.Stdout, true)
 				if err != nil {
 					return err
