@@ -43,27 +43,26 @@ type jobStatusManager struct {
 	xferDone    chan xferDoneMsg
 }
 
-var jstm jobStatusManager
-
 /* These functions should not fail */
 func (jm *jobMgr) SendJobPartCreatedMsg(msg JobPartCreatedMsg) {
-	jstm.partCreated <- msg
+	jm.jstm.partCreated <- msg
 }
 
 func (jm *jobMgr) SendXferDoneMsg(msg xferDoneMsg) {
-	jstm.xferDone <- msg
+	jm.jstm.xferDone <- msg
 }
 
 func (jm *jobMgr) ListJobSummary() common.ListJobSummaryResponse {
-	jstm.listReq <- true
-	return <-jstm.respChan
+	jm.jstm.listReq <- true
+	return <-jm.jstm.respChan
 }
 
 func (jm *jobMgr) ResurrectSummary(js common.ListJobSummaryResponse) {
-	jstm.js = js
+	jm.jstm.js = js
 }
 
 func (jm *jobMgr) handleStatusUpdateMessage() {
+	jstm := jm.jstm
 	js := &jstm.js
 	js.JobID = jm.jobID
 	js.CompleteJobOrdered = false
