@@ -129,6 +129,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	
 	/* Create book-keeping channels */
 	jobPartProgressCh := make(chan jobPartProgressInfo)
+	var jstm jobStatusManager
 	jstm.respChan = make(chan common.ListJobSummaryResponse)
 	jstm.listReq = make(chan bool)
 	jstm.partCreated = make(chan JobPartCreatedMsg, 100)
@@ -167,6 +168,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		cacheLimiter:                 cacheLimiter,
 		fileCountLimiter:             fileCountLimiter,
 		cpuMon:                       cpuMon,
+		jstm:                         &jstm,
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.Reset(appCtx, commandString)
 	jm.logJobsAdminMessages()
@@ -311,6 +313,7 @@ type jobMgr struct {
 	slicePool           common.ByteSlicePooler
 	cacheLimiter        common.CacheLimiter
 	fileCountLimiter    common.CacheLimiter
+	jstm                *jobStatusManager
 
 	/* Pool sizer related stuff */
 	atomicCurrentMainPoolSize          int32 // align 64 bit integers for 32 bit arch
