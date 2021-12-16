@@ -166,6 +166,7 @@ type params struct {
 	cpkByValue                bool
 	isObjectDir               bool
 	debugSkipFiles            []string // a list of localized filepaths to skip over on the first run in the STE.
+	s2sPreserveAccessTier     bool
 
 	disableParallelTesting bool
 	// looks like this for a folder transfer:

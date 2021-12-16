@@ -43,16 +43,17 @@ type with struct {
 	contentType        string
 	contentMD5         []byte
 
-	nameValueMetadata  map[string]string
-	blobTags           string
-	blobType           common.BlobType
-	lastWriteTime      time.Time
-	creationTime       time.Time
-	smbAttributes      uint32
-	smbPermissionsSddl string
-	adlsPermissionsACL string
-	cpkByName          string
-	cpkByValue         bool
+	nameValueMetadata     map[string]string
+	blobTags              string
+	blobType              common.BlobType
+	lastWriteTime         time.Time
+	creationTime          time.Time
+	smbAttributes         uint32
+	smbPermissionsSddl    string
+	adlsPermissionsACL    string
+	cpkByName             string
+	cpkByValue            bool
+	s2sPreserveAccessTier string
 }
 
 func (with) appliesToCreation() bool {
@@ -159,6 +160,11 @@ func (w with) createObjectProperties() *objectProperties {
 		populated = true
 		cpkInfo := common.GetCpkInfo(w.cpkByValue)
 		result.cpkInfo = &cpkInfo
+	}
+
+	if w.s2sPreserveAccessTier != "" {
+		populated = true
+		result.s2sPreserveAccessTier = w.s2sPreserveAccessTier
 	}
 
 	if populated {

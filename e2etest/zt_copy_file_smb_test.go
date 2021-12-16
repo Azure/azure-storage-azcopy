@@ -22,5 +22,5 @@ func TestSMB_FromShareSnapshot(t *testing.T) {
 			folder("folder1"),
 			f("folder1/filea"),
 		},
-	}, EAccountType.Standard(), "")
+	}, false, EAccountType.Standard(), "")
 }
