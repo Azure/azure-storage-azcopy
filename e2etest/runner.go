@@ -91,6 +91,7 @@ func (t *TestRunner) SetAllFlags(p params) {
 	set("cpk-by-value", p.cpkByValue, false)
 	set("is-object-dir", p.isObjectDir, false)
 	set("debug-skip-files", strings.Join(p.debugSkipFiles, ";"), "")
+	set("s2s-preserve-access-tier", p.s2sPreserveAccessTier, true)
 }
 
 func (t *TestRunner) SetAwaitOpenFlag() {

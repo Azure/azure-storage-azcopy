@@ -44,6 +44,9 @@ func (GlobalInputManager) GetAccountAndKey(accountType AccountType) (string, str
 	case EAccountType.HierarchicalNamespaceEnabled():
 		name = os.Getenv("AZCOPY_E2E_ACCOUNT_NAME_HNS")
 		key = os.Getenv("AZCOPY_E2E_ACCOUNT_KEY_HNS")
+	case EAccountType.Classic():
+		name = os.Getenv("AZCOPY_E2E_CLASSIC_ACCOUNT_NAME")
+		key = os.Getenv("AZCOPY_E2E_CLASSIC_ACCOUNT_KEY")
 	default:
 		panic("Only the standard account type is supported for the moment.")
 	}
@@ -89,6 +92,7 @@ type AccountType uint8
 func (AccountType) Standard() AccountType                     { return AccountType(0) }
 func (AccountType) Premium() AccountType                      { return AccountType(1) }
 func (AccountType) HierarchicalNamespaceEnabled() AccountType { return AccountType(2) }
+func (AccountType) Classic() AccountType                      { return AccountType(3) }
 
 func (o AccountType) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))

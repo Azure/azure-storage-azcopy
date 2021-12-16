@@ -38,7 +38,7 @@ func TestProperties_NameValueMetadataIsPreservedS2S(t *testing.T) {
 			f("filea", with{nameValueMetadata: map[string]string{"foo": "abc", "bar": "def"}}),
 			folder("fold1", with{nameValueMetadata: map[string]string{"other": "xyz"}}),
 		},
-	}, EAccountType.Standard(), "")
+	}, false, EAccountType.Standard(), "")
 }
 
 func TestProperties_NameValueMetadataCanBeUploaded(t *testing.T) {
@@ -53,7 +53,7 @@ func TestProperties_NameValueMetadataCanBeUploaded(t *testing.T) {
 			folder("", verifyOnly{with{nameValueMetadata: expectedMap}}), // root folder
 			f("filea", verifyOnly{with{nameValueMetadata: expectedMap}}),
 		},
-	}, EAccountType.Standard(), "")
+	}, false, EAccountType.Standard(), "")
 }
 
 func TestProperties_HNSACLs(t *testing.T) {
@@ -72,5 +72,5 @@ func TestProperties_HNSACLs(t *testing.T) {
 			folder("d", with{adlsPermissionsACL: "user::rwx,group::rwx,other::-wx"}),
 			f("d/filed", with{adlsPermissionsACL: "user::rwx,group::rwx,other::rwx"}),
 		},
-	}, EAccountType.HierarchicalNamespaceEnabled(), "")
+	}, false, EAccountType.HierarchicalNamespaceEnabled(), "")
 }

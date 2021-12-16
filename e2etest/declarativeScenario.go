@@ -39,6 +39,7 @@ import (
 type scenario struct {
 	// scenario config properties
 	accountType         AccountType
+	destAccountType     AccountType
 	subtestName         string
 	compactScenarioName string
 	fullScenarioName    string
@@ -52,10 +53,11 @@ type scenario struct {
 	stripTopDir bool // TODO: figure out how we'll control and use this
 
 	// internal declarative runner state
-	a          asserter
-	state      scenarioState // TODO: does this really need to be a separate struct?
-	needResume bool
-	chToStdin  chan string
+	a           asserter
+	state       scenarioState // TODO: does this really need to be a separate struct?
+	needResume  bool
+	chToStdin   chan string
+	isSourceAcc bool
 }
 
 type scenarioState struct {
@@ -133,7 +135,7 @@ func (s *scenario) runHook(h hookFunc) bool {
 }
 
 func (s *scenario) assignSourceAndDest() {
-	createTestResource := func(loc common.Location) resourceManager {
+	createTestResource := func(loc common.Location, isSourceAcc bool) resourceManager {
 		// TODO: handle account to account (multi-container) scenarios
 		switch loc {
 		case common.ELocation.Local():
@@ -143,7 +145,11 @@ func (s *scenario) assignSourceAndDest() {
 		case common.ELocation.Blob():
 			// TODO: handle the multi-container (whole account) scenario
 			// TODO: handle wider variety of account types
-			return &resourceBlobContainer{accountType: s.accountType}
+			if isSourceAcc {
+				return &resourceBlobContainer{accountType: s.accountType}
+			} else {
+				return &resourceBlobContainer{accountType: s.destAccountType}
+			}
 		case common.ELocation.BlobFS():
 			s.a.Error("Not implementd yet for blob FS")
 			return &resourceDummy{}
@@ -157,8 +163,8 @@ func (s *scenario) assignSourceAndDest() {
 		}
 	}
 
-	s.state.source = createTestResource(s.fromTo.From())
-	s.state.dest = createTestResource(s.fromTo.To())
+	s.state.source = createTestResource(s.fromTo.From(), true)
+	s.state.dest = createTestResource(s.fromTo.To(), s.isSourceAcc)
 }
 
 func (s *scenario) runAzCopy() {
