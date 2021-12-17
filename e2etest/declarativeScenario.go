@@ -173,7 +173,7 @@ func (s *scenario) runAzCopy() {
 	defer close(s.chToStdin)
 
 	r := newTestRunner()
-	r.SetAllFlags(s.p)
+	r.SetAllFlags(s.p, s.operation)
 
 	// use the general-purpose "after start" mechanism, provided by execDebuggableWithOutput,
 	// for the _specific_ purpose of running beforeOpenFirstFile, if that hook exists.
