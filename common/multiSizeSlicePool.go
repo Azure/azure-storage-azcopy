@@ -149,7 +149,7 @@ func getMaxSliceCountInPool(slotIndex int) int {
 
 var allocatedMem = int64(0)
 var allocatedMemLifetime = int64(0)
-var pruned = make([]int64, 20, 20)
+var pruned = make([]int64, 200, 200)
 
 func convertToMB(b int64) int64 {
 	return b / (1024 * 1024)
