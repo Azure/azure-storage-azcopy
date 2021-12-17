@@ -148,6 +148,12 @@ func getMaxSliceCountInPool(slotIndex int) int {
 }
 
 var allocatedMem = int64(0)
+var allocatedMemLifetime = int64(0)
+var pruned = make([]int64, 20, 20)
+
+func convertToMB(b int64) int64 {
+	return b / (1024 * 1024)
+}
 
 // RentSlice borrows a slice from the pool (or creates a new one if none of suitable capacity is available)
 // Note that the returned slice may contain non-zero data - i.e. old data from the previous time it was used.
@@ -177,7 +183,8 @@ func (mp *multiSizeSlicePool) RentSlice(desiredSize int64) []byte {
 
 	// make a new slice if nothing pooled
 	atomic.AddInt64(&allocatedMem, desiredSize)
-	fmt.Printf("Creating new slice of size %d and capacity %d. AllocatedMemorySofar %d\n", desiredSize, maxCapInSlot, allocatedMem)
+	atomic.AddInt64(&allocatedMemLifetime, desiredSize)
+	fmt.Printf("Creating new slice of size %d and capacity %d. AllocatedMemorySofar %d AllocatedMemoryLifeTime %d\n", convertToMB(desiredSize), convertToMB(int64(maxCapInSlot)), convertToMB(allocatedMem), convertToMB(allocatedMemLifetime))
 	return make([]byte, desiredSize, maxCapInSlot)
 }
 
@@ -208,10 +215,13 @@ func (mp *multiSizeSlicePool) Prune() {
 			// With repeated calls of Prune, this will gradually drain idle pools.
 			// But, since Prune is not called very often,
 			// it won't have much adverse impact on active pools.
-
 			poolGoingToBeDestroyed := mp.poolsBySize[index].Get()
-			atomic.AddInt64(&allocatedMem, int64(-len(poolGoingToBeDestroyed)))
-			fmt.Printf("Pruning pool of size %d. AllocatedMemorySofar %d\n", len(poolGoingToBeDestroyed), allocatedMem)
+			if poolGoingToBeDestroyed != nil && len(poolGoingToBeDestroyed) > 0 {
+				lenPoolInMB := len(poolGoingToBeDestroyed) / (4 * 1024 * 1024)
+				atomic.AddInt64(&pruned[lenPoolInMB], 1)
+				atomic.AddInt64(&allocatedMem, int64(-len(poolGoingToBeDestroyed)))
+				fmt.Printf("pruned[%d]=%d | Pruning pool of size %d. AllocatedMemorySofar %d\n", lenPoolInMB, pruned[lenPoolInMB], convertToMB(int64(len(poolGoingToBeDestroyed))), convertToMB(allocatedMem))
+			}
 			_ = poolGoingToBeDestroyed
 		}
 	}
