@@ -160,7 +160,7 @@ func convertToMB(b int64) int64 {
 // That's safe IFF you are going to do the likes of io.ReadFull to read into it, since you know that all of the
 // old bytes will be overwritten in that case.
 func (mp *multiSizeSlicePool) RentSlice(desiredSize int64) []byte {
-	slotIndex, maxCapInSlot := getSlotInfo(desiredSize)
+	slotIndex, maxCapInSlot := 23, 8388608// getSlotInfo(desiredSize)
 
 	// get the pool that most closely corresponds to the desired size
 	pool := mp.poolsBySize[slotIndex]
@@ -208,6 +208,7 @@ func (mp *multiSizeSlicePool) ReturnSlice(slice []byte) {
 // Hence the pruning, so that we don't need to set the fixed limits that low.  With pruning, the count will (gradually)
 // come down only when the slot is IDLE.
 func (mp *multiSizeSlicePool) Prune() {
+	/*
 	for index := 0; index < len(mp.poolsBySize); index++ {
 		shouldPrune := !holdsSmallSlices(index)
 		if shouldPrune {
@@ -225,4 +226,5 @@ func (mp *multiSizeSlicePool) Prune() {
 			_ = poolGoingToBeDestroyed
 		}
 	}
+	*/
 }
