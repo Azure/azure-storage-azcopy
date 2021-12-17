@@ -21,7 +21,9 @@
 package common
 
 import (
+	"fmt"
 	"math/bits"
+	"sync/atomic"
 )
 
 // A pool of byte slices
@@ -145,6 +147,8 @@ func getMaxSliceCountInPool(slotIndex int) int {
 	}
 }
 
+var allocatedMem = int64(0)
+
 // RentSlice borrows a slice from the pool (or creates a new one if none of suitable capacity is available)
 // Note that the returned slice may contain non-zero data - i.e. old data from the previous time it was used.
 // That's safe IFF you are going to do the likes of io.ReadFull to read into it, since you know that all of the
@@ -172,6 +176,8 @@ func (mp *multiSizeSlicePool) RentSlice(desiredSize int64) []byte {
 	}
 
 	// make a new slice if nothing pooled
+	atomic.AddInt64(&allocatedMem, desiredSize)
+	fmt.Printf("Creating new slice of size %d and capacity %d. AllocatedMemorySofar %d\n", desiredSize, maxCapInSlot, allocatedMem)
 	return make([]byte, desiredSize, maxCapInSlot)
 }
 
@@ -202,7 +208,11 @@ func (mp *multiSizeSlicePool) Prune() {
 			// With repeated calls of Prune, this will gradually drain idle pools.
 			// But, since Prune is not called very often,
 			// it won't have much adverse impact on active pools.
-			_ = mp.poolsBySize[index].Get()
+
+			poolGoingToBeDestroyed := mp.poolsBySize[index].Get()
+			atomic.AddInt64(&allocatedMem, int64(-len(poolGoingToBeDestroyed)))
+			fmt.Printf("Pruning pool of size %d. AllocatedMemorySofar %d\n", len(poolGoingToBeDestroyed), allocatedMem)
+			_ = poolGoingToBeDestroyed
 		}
 	}
 }
