@@ -104,8 +104,8 @@ func (s *FileURLSuite) TestFileCreateWithPermissions(c *chk.C) {
 	defer delFile(c, file)
 
 	getResp, err := file.GetAccessControl(context.Background())
-	c.Assert(getResp.Permissions, chk.Equals, "rwxrwxrwx")
 	c.Assert(err, chk.IsNil)
+	c.Assert(getResp.Permissions, chk.Equals, "rwxrwxrwx")
 }
 
 func (s *FileURLSuite) TestFileCreateDeleteNonExistingParent(c *chk.C) {
