@@ -72,18 +72,18 @@ func (f FileURL) GetParentDir() (DirectoryURL, error) {
 
 // Create creates a new file or replaces a file. Note that this method only initializes the file.
 // For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create.
-func (f FileURL) Create(ctx context.Context, headers BlobFSHTTPHeaders) (*PathCreateResponse, error) {
-	return f.CreateWithOptions(ctx, CreateFileOptions{Headers: headers})
+func (f FileURL) Create(ctx context.Context, headers BlobFSHTTPHeaders, permissions BlobFSAccessControl) (*PathCreateResponse, error) {
+	return f.CreateWithOptions(ctx, CreateFileOptions{Headers: headers}, permissions)
 }
 
 // Create creates a new file or replaces a file. Note that this method only initializes the file.
 // For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create.
-func (f FileURL) CreateWithOptions(ctx context.Context, options CreateFileOptions) (*PathCreateResponse, error) {
+func (f FileURL) CreateWithOptions(ctx context.Context, options CreateFileOptions, permissions BlobFSAccessControl) (*PathCreateResponse, error) {
 	return f.fileClient.Create(ctx, f.fileSystemName, f.path, PathResourceFile,
 		nil, PathRenameModeNone, nil, nil, nil, nil,
 		&options.Headers.CacheControl, &options.Headers.ContentType, &options.Headers.ContentEncoding,
 		&options.Headers.ContentLanguage, &options.Headers.ContentDisposition, nil, nil, nil,
-		buildMetadataString(options.Metadata), nil, nil,
+		buildMetadataString(options.Metadata), &permissions.Permissions, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil)

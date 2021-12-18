@@ -155,7 +155,7 @@ func (u *blobFSSenderBase) Prologue(state common.PrologueState) (destinationModi
 	}
 
 	// Create file with the source size
-	_, err = u.fileURL().Create(u.jptm.Context(), *u.creationTimeHeaders) // "create" actually calls "create path", so if we didn't need to track folder creation, we could just let this call create the folder as needed
+	_, err = u.fileURL().Create(u.jptm.Context(), *u.creationTimeHeaders, azbfs.BlobFSAccessControl{}) // "create" actually calls "create path", so if we didn't need to track folder creation, we could just let this call create the folder as needed
 	if err != nil {
 		u.jptm.FailActiveUpload("Creating file", err)
 		return
