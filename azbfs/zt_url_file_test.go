@@ -92,6 +92,22 @@ func (s *FileURLSuite) TestFileCreateDelete(c *chk.C) {
 	c.Assert(delResp.Date(), chk.Not(chk.Equals), "")
 }
 
+func (s *FileURLSuite) TestFileCreateWithPermissions(c *chk.C) {
+	fsu := getBfsServiceURL()
+	fsURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fsURL)
+
+	// Create and delete file in root directory.
+	file, _ := getFileURLFromFileSystem(c, fsURL)
+
+	_, err := file.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{Permissions: "0777"})
+	defer delFile(c, file)
+
+	getResp, err := file.GetAccessControl(context.Background())
+	c.Assert(getResp.Permissions, chk.Equals, "rwxrwxrwx")
+	c.Assert(err, chk.IsNil)
+}
+
 func (s *FileURLSuite) TestFileCreateDeleteNonExistingParent(c *chk.C) {
 	fsu := getBfsServiceURL()
 	fsURL, _ := createNewFileSystem(c, fsu)
