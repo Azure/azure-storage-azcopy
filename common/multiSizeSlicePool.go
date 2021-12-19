@@ -149,7 +149,7 @@ func getMaxSliceCountInPool(slotIndex int) int {
 
 var allocatedMem = int64(0)
 var allocatedMemLifetime = int64(0)
-var pruned = make([]int64, 200, 200)
+var pruned = make([]int64, 1024, 1024)
 
 func convertToMB(b int64) int64 {
 	return b / (1024 * 1024)
@@ -160,7 +160,7 @@ func convertToMB(b int64) int64 {
 // That's safe IFF you are going to do the likes of io.ReadFull to read into it, since you know that all of the
 // old bytes will be overwritten in that case.
 func (mp *multiSizeSlicePool) RentSlice(desiredSize int64) []byte {
-	slotIndex, maxCapInSlot := 23, 8388608// getSlotInfo(desiredSize)
+	slotIndex, maxCapInSlot := getSlotInfo(desiredSize)
 
 	// get the pool that most closely corresponds to the desired size
 	pool := mp.poolsBySize[slotIndex]
@@ -182,13 +182,14 @@ func (mp *multiSizeSlicePool) RentSlice(desiredSize int64) []byte {
 	}
 
 	// make a new slice if nothing pooled
-	atomic.AddInt64(&allocatedMem, desiredSize)
-	atomic.AddInt64(&allocatedMemLifetime, desiredSize)
-	fmt.Printf("Creating new slice of size %d and capacity %d. AllocatedMemorySofar %d AllocatedMemoryLifeTime %d\n", convertToMB(desiredSize), convertToMB(int64(maxCapInSlot)), convertToMB(allocatedMem), convertToMB(allocatedMemLifetime))
+	atomic.AddInt64(&allocatedMem, int64(maxCapInSlot))
+	atomic.AddInt64(&allocatedMemLifetime, int64(maxCapInSlot))
+
+	lcm.Info(fmt.Sprintf("{NewSlice[%d]} | DesiredSize: %d, CurrentTotal: %d, CumulativeTotal: %d", convertToMB(int64(maxCapInSlot)), convertToMB(desiredSize), convertToMB(allocatedMem), convertToMB(allocatedMemLifetime)))
 	return make([]byte, desiredSize, maxCapInSlot)
 }
 
-// returns the slice to its pool
+// ReturnSlice returns the slice to its pool
 func (mp *multiSizeSlicePool) ReturnSlice(slice []byte) {
 	slotIndex, _ := getSlotInfo(int64(cap(slice))) // be sure to use capacity, not length, here
 
@@ -208,7 +209,6 @@ func (mp *multiSizeSlicePool) ReturnSlice(slice []byte) {
 // Hence the pruning, so that we don't need to set the fixed limits that low.  With pruning, the count will (gradually)
 // come down only when the slot is IDLE.
 func (mp *multiSizeSlicePool) Prune() {
-	/*
 	for index := 0; index < len(mp.poolsBySize); index++ {
 		shouldPrune := !holdsSmallSlices(index)
 		if shouldPrune {
@@ -218,13 +218,12 @@ func (mp *multiSizeSlicePool) Prune() {
 			// it won't have much adverse impact on active pools.
 			poolGoingToBeDestroyed := mp.poolsBySize[index].Get()
 			if poolGoingToBeDestroyed != nil && len(poolGoingToBeDestroyed) > 0 {
-				lenPoolInMB := len(poolGoingToBeDestroyed) / (4 * 1024 * 1024)
+				lenPoolInMB := len(poolGoingToBeDestroyed) / (1024 * 1024)
 				atomic.AddInt64(&pruned[lenPoolInMB], 1)
 				atomic.AddInt64(&allocatedMem, int64(-len(poolGoingToBeDestroyed)))
-				fmt.Printf("pruned[%d]=%d | Pruning pool of size %d. AllocatedMemorySofar %d\n", lenPoolInMB, pruned[lenPoolInMB], convertToMB(int64(len(poolGoingToBeDestroyed))), convertToMB(allocatedMem))
+				lcm.Info(fmt.Sprintf("{Pruned[%d]=%d} | CurrentTotal: %d, CumulativeTotal: %d", lenPoolInMB, pruned[lenPoolInMB], convertToMB(allocatedMem), convertToMB(allocatedMemLifetime)))
 			}
 			_ = poolGoingToBeDestroyed
 		}
 	}
-	*/
 }

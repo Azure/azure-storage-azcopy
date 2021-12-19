@@ -304,9 +304,11 @@ func (w *chunkedFileWriter) setStatusForContiguousAvailableChunks(unsavedChunksB
 // Saves one chunk to its destination
 func (w *chunkedFileWriter) saveOneChunk(chunk fileChunk, md5Hasher hash.Hash) error {
 	defer func() {
+		// return the slice first before telling the cache limiter
+		// so that another chunk does not try to get the slice until it's returned
+		w.slicePool.ReturnSlice(chunk.data)
 		w.cacheLimiter.Remove(int64(len(chunk.data))) // remove this from the tally of scheduled-but-unsaved bytes
 		atomic.AddInt32(&w.activeChunkCount, -1)
-		w.slicePool.ReturnSlice(chunk.data)
 		w.chunkLogger.LogChunkStatus(chunk.id, EWaitReason.ChunkDone()) // this chunk is all finished
 	}()
 

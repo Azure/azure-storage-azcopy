@@ -746,7 +746,7 @@ func (ja *jobsAdmin) CurrentMainPoolSize() int {
 
 func (ja *jobsAdmin) slicePoolPruneLoop() {
 	// if something in the pool has been unused for this long, we probably don't need it
-	const pruneInterval = 5 * time.Second
+	const pruneInterval = 10 * time.Second
 
 	ticker := time.NewTicker(pruneInterval)
 	defer ticker.Stop()
