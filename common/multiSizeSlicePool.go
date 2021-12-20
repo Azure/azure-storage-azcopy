@@ -21,15 +21,19 @@
 package common
 
 import (
+	"context"
 	"fmt"
 	"math/bits"
+	"math/rand"
+	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // A pool of byte slices
 // Like sync.Pool, but strongly-typed to byte slices
 type ByteSlicePooler interface {
-	RentSlice(desiredLength int64) []byte
+	RentSlice(desiredLength int64, ctx context.Context, useRelaxedLimit Predicate) ([]byte, error)
 	ReturnSlice(slice []byte)
 	Prune()
 }
@@ -82,17 +86,22 @@ type multiSizeSlicePool struct {
 	// It is safe for multiple readers to read this, once we have populated it
 	// See https://groups.google.com/forum/#!topic/golang-nuts/nL8z96SXcDs
 	poolsBySize []*simpleSlicePool
+
+	// let the slice pool watch for memory pressure, so that it never oversteps the limit
+	cacheLimiter CacheLimiter
+
+	mu sync.Mutex
 }
 
 // Create new slice pool capable of pooling slices up to maxSliceLength in size
-func NewMultiSizeSlicePool(maxSliceLength int64) ByteSlicePooler {
+func NewMultiSizeSlicePool(maxSliceLength int64, limiter CacheLimiter) ByteSlicePooler {
 	maxSlotIndex, _ := getSlotInfo(maxSliceLength)
 	poolsBySize := make([]*simpleSlicePool, maxSlotIndex+1)
 	for i := 0; i <= maxSlotIndex; i++ {
 		maxCount := getMaxSliceCountInPool(i)
 		poolsBySize[i] = newSimpleSlicePool(maxCount)
 	}
-	return &multiSizeSlicePool{poolsBySize: poolsBySize}
+	return &multiSizeSlicePool{poolsBySize: poolsBySize, cacheLimiter: limiter}
 }
 
 var indexOf32KSlot, _ = getSlotInfo(32 * 1024)
@@ -159,34 +168,56 @@ func convertToMB(b int64) int64 {
 // Note that the returned slice may contain non-zero data - i.e. old data from the previous time it was used.
 // That's safe IFF you are going to do the likes of io.ReadFull to read into it, since you know that all of the
 // old bytes will be overwritten in that case.
-func (mp *multiSizeSlicePool) RentSlice(desiredSize int64) []byte {
+func (mp *multiSizeSlicePool) RentSlice(desiredSize int64, ctx context.Context, useRelaxedLimit Predicate) ([]byte, error) {
 	slotIndex, maxCapInSlot := getSlotInfo(desiredSize)
 
 	// get the pool that most closely corresponds to the desired size
 	pool := mp.poolsBySize[slotIndex]
 
-	// try to get a pooled slice
-	if typedSlice := pool.Get(); typedSlice != nil {
-		// clear out the entire slice up to the capacity
-		// a zero-ing-out loop written in the right form in Go, will be automatically turned into a call to memclr,
-		// which is an optimized Go runtime routine written in assembler
-		// more info here: https://github.com/golang/go/commit/f03c9202c43e0abb130669852082117ca50aa9b1
-		typedSlice = typedSlice[0:maxCapInSlot]
-		for i := range typedSlice {
-			typedSlice[i] = 0
+	// TODO too much contention in this block (specifically TryAdd) results in deadlock
+	// TODO figure out more permanent fix after the experiments
+	mp.mu.Lock()
+	defer mp.mu.Unlock()
+	for {
+		// try to get a pooled slice
+		if typedSlice := pool.Get(); typedSlice != nil {
+			// clear out the entire slice up to the capacity
+			// a zero-ing-out loop written in the right form in Go, will be automatically turned into a call to memclr,
+			// which is an optimized Go runtime routine written in assembler
+			// more info here: https://github.com/golang/go/commit/f03c9202c43e0abb130669852082117ca50aa9b1
+			typedSlice = typedSlice[0:maxCapInSlot]
+			for i := range typedSlice {
+				typedSlice[i] = 0
+			}
+
+			// here we set len to the exact desired size that was requested
+			typedSlice = typedSlice[0:desiredSize]
+			return typedSlice, nil
 		}
 
-		// here we set len to the exact desired size that was requested
-		typedSlice = typedSlice[0:desiredSize]
-		return typedSlice
+		// Proceed if there's room in the cache
+		// always wait until we can allocate the bytes before going ahead
+		if mp.cacheLimiter != nil {
+
+			canMakeNewSlice := mp.cacheLimiter.TryAdd(int64(maxCapInSlot), useRelaxedLimit())
+
+			if !canMakeNewSlice {
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(time.Duration(2 * float32(time.Second) * rand.Float32())):
+					continue
+				}
+			}
+		}
+
+		// make a new slice if nothing pooled
+		atomic.AddInt64(&allocatedMem, int64(maxCapInSlot))
+		atomic.AddInt64(&allocatedMemLifetime, int64(maxCapInSlot))
+		lcm.Info(fmt.Sprintf("{NewSlice[%d]} | DesiredSize: %d, CurrentTotal: %d, CumulativeTotal: %d", convertToMB(int64(maxCapInSlot)), convertToMB(desiredSize), convertToMB(allocatedMem), convertToMB(allocatedMemLifetime)))
+
+		return make([]byte, desiredSize, maxCapInSlot), nil
 	}
-
-	// make a new slice if nothing pooled
-	atomic.AddInt64(&allocatedMem, int64(maxCapInSlot))
-	atomic.AddInt64(&allocatedMemLifetime, int64(maxCapInSlot))
-
-	lcm.Info(fmt.Sprintf("{NewSlice[%d]} | DesiredSize: %d, CurrentTotal: %d, CumulativeTotal: %d", convertToMB(int64(maxCapInSlot)), convertToMB(desiredSize), convertToMB(allocatedMem), convertToMB(allocatedMemLifetime)))
-	return make([]byte, desiredSize, maxCapInSlot)
 }
 
 // ReturnSlice returns the slice to its pool
@@ -222,6 +253,10 @@ func (mp *multiSizeSlicePool) Prune() {
 				atomic.AddInt64(&pruned[lenPoolInMB], 1)
 				atomic.AddInt64(&allocatedMem, int64(-len(poolGoingToBeDestroyed)))
 				lcm.Info(fmt.Sprintf("{Pruned[%d]=%d} | CurrentTotal: %d, CumulativeTotal: %d", lenPoolInMB, pruned[lenPoolInMB], convertToMB(allocatedMem), convertToMB(allocatedMemLifetime)))
+
+				if mp.cacheLimiter != nil {
+					mp.cacheLimiter.Remove(int64(len(poolGoingToBeDestroyed)))
+				}
 			}
 			_ = poolGoingToBeDestroyed
 		}

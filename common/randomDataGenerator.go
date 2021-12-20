@@ -21,6 +21,7 @@
 package common
 
 import (
+	"context"
 	"errors"
 	"io"
 	"math"
@@ -32,13 +33,17 @@ const (
 	randomSliceLength = 1024 * 1024
 )
 
-var randomDataBytePool = NewMultiSizeSlicePool(randomSliceLength)
+var randomDataBytePool = NewMultiSizeSlicePool(randomSliceLength, nil)
 
 func NewRandomDataGenerator(length int64) *randomDataGenerator {
+	randBytes, _ := randomDataBytePool.RentSlice(randomSliceLength, context.Background(), func() bool {
+		return true
+	})
+
 	r := &randomDataGenerator{
 		length:    length,
 		randGen:   rand.New(rand.NewSource(rand.Int63())), // create new rand source, seeded from global one, so that after seeding we never lock the global one
-		randBytes: randomDataBytePool.RentSlice(randomSliceLength),
+		randBytes: randBytes,
 		randMu:    &sync.Mutex{}}
 
 	if r.couldBeNewSlice(r.randBytes) {

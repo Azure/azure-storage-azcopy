@@ -235,7 +235,10 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 
 	// prepare to read
 	cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.DiskIO())
-	targetBuffer := cr.slicePool.RentSlice(cr.length)
+	targetBuffer, err := cr.slicePool.RentSlice(cr.length, cr.ctx, func() bool { return isRetry })
+	if err != nil {
+		return err
+	}
 
 	// read WITHOUT holding the "close" lock.  While we don't have the lock, we mutate ONLY local variables, no instance state.
 	// (Don't release the other lock, muMaster, since that's unnecessary would make it harder to reason about behaviour - e.g. is something other than Close happening?)
@@ -380,7 +383,6 @@ func (cr *singleChunkReader) closeBuffer() {
 
 func (cr *singleChunkReader) returnSlice(slice []byte) {
 	cr.slicePool.ReturnSlice(slice)
-	cr.cacheLimiter.Remove(int64(len(slice)))
 }
 
 func (cr *singleChunkReader) Length() int64 {

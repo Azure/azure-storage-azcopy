@@ -157,6 +157,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 		// could be shut down. But, it's global anyway, so we just leave it running until application exit.
 	}
 
+	bufferCacheLimiter := common.NewCacheLimiter(maxRamBytesToUse)
 	ja := &jobsAdmin{
 		concurrency:             concurrency,
 		logger:                  common.NewAppLogger(pipeline.LogInfo, azcopyLogPathFolder),
@@ -164,8 +165,8 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 		logDir:                  azcopyLogPathFolder,
 		planDir:                 azcopyJobPlanFolder,
 		pacer:                   pacer,
-		slicePool:               common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
-		cacheLimiter:            common.NewCacheLimiter(maxRamBytesToUse),
+		slicePool:               common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize, bufferCacheLimiter),
+		cacheLimiter:            bufferCacheLimiter,
 		fileCountLimiter:        common.NewCacheLimiter(int64(concurrency.MaxOpenDownloadFiles)),
 		cpuMonitor:              cpuMon,
 		appCtx:                  appCtx,

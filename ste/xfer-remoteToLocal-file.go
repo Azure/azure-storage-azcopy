@@ -246,12 +246,6 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 
 		id := common.NewChunkID(info.Destination, startIndex, adjustedChunkSize) // TODO: stop using adjustedChunkSize, below, and use the size that's in the ID
 
-		// Wait until its OK to schedule it
-		// To prevent excessive RAM consumption, we have a limit on the amount of scheduled-but-not-yet-saved data
-		// TODO: as per comment above, currently, if there's an error here we must continue because we must schedule all chunks
-		// TODO: ... Can we refactor/improve that?
-		_ = dstWriter.WaitToScheduleChunk(jptm.Context(), id, adjustedChunkSize)
-
 		// create download func that is a appropriate to the remote data source
 		downloadFunc := dl.GenerateDownloadFunc(jptm, p, dstWriter, id, adjustedChunkSize, pacer)
 

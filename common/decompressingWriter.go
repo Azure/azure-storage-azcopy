@@ -23,6 +23,7 @@ package common
 import (
 	"compress/gzip"
 	"compress/zlib"
+	"context"
 	"errors"
 	"io"
 	"time"
@@ -34,7 +35,7 @@ type decompressingWriter struct {
 }
 
 const decompressingWriterCopyBufferSize = 256 * 1024 // 1/4 the size that we usually write to disk with (elsewhere in codebase). 1/4 to try to keep mem usage a bit lower, without going so small as to compromise perf
-var decompressingWriterBufferPool = NewMultiSizeSlicePool(decompressingWriterCopyBufferSize)
+var decompressingWriterBufferPool = NewMultiSizeSlicePool(decompressingWriterCopyBufferSize, nil)
 
 // NewDecompressingWriter returns a WriteCloser which decompresses the data
 // that is written to it, before passing the decompressed data on to a final destination.
@@ -88,7 +89,13 @@ func (d decompressingWriter) worker(tp CompressionType, preader *io.PipeReader, 
 
 	// Now read from the pipe, decompressing as we go, until
 	// reach EOF on the pipe (or encounter an error)
-	b := decompressingWriterBufferPool.RentSlice(decompressingWriterCopyBufferSize)
+	b, err := decompressingWriterBufferPool.RentSlice(decompressingWriterCopyBufferSize, context.Background(), func() bool {
+		return true
+	})
+	if err != nil {
+		return
+	}
+
 	_, err = io.CopyBuffer(destination, dec, b) // returns err==nil if hits EOF, as per docs
 	decompressingWriterBufferPool.ReturnSlice(b)
 

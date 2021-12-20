@@ -33,11 +33,6 @@ import (
 
 // Used to write all the chunks to a disk file
 type ChunkedFileWriter interface {
-
-	// WaitToScheduleChunk blocks until enough RAM is available to handle the given chunk, then it
-	// "reserves" that amount of RAM in the CacheLimiter and returns.
-	WaitToScheduleChunk(ctx context.Context, id ChunkID, chunkSize int64) error
-
 	// EnqueueChunk hands the given chunkContents over to the ChunkedFileWriter, to be written to disk.
 	// Because ChunkedFileWriter writes sequentially, the actual time of writing is not known to the caller.
 	// All the caller knows, is that responsibility for writing the chunk has been passed to the ChunkedFileWriter.
@@ -126,23 +121,7 @@ var ChunkWriterAlreadyFailed = errors.New("chunk Writer already failed")
 
 const maxDesirableActiveChunks = 20 // TODO: can we find a sensible way to remove the hard-coded count threshold here?
 
-// Waits until we have enough RAM, within our pre-determined allocation, to accommodate the chunk.
-// After any necessary wait, it updates the count of scheduled-but-unsaved bytes
-// Note: we considered tracking only received-but-unsaved-bytes (i.e. increment the count at time of making the
-// request to the remote data source) but decided it was simpler and no less effective to increment the count
-// at the time of scheduling the chunk (which is when this routine should be called).
-// Is here, as method of this struct, for symmetry with the point where we remove it's count
-// from the cache limiter, which is also in this struct.
-func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, id ChunkID, chunkSize int64) error {
-	w.chunkLogger.LogChunkStatus(id, EWaitReason.RAMToSchedule())
-	err := w.cacheLimiter.WaitUntilAdd(ctx, chunkSize, w.shouldUseRelaxedRamThreshold)
-	if err == nil {
-		atomic.AddInt32(&w.activeChunkCount, 1)
-	}
-	return err
-}
-
-// Threadsafe method to enqueue a new chunk for processing
+// Thread-safe method to enqueue a new chunk for processing
 func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, id ChunkID, chunkSize int64, chunkContents io.Reader, retryable bool) error {
 
 	readDone := make(chan struct{})
@@ -157,9 +136,15 @@ func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, id ChunkID, chunkS
 	}
 
 	// read into a buffer
-	buffer := w.slicePool.RentSlice(chunkSize)
+	w.chunkLogger.LogChunkStatus(id, EWaitReason.RAMToSchedule())
+	buffer, err := w.slicePool.RentSlice(chunkSize, ctx, w.shouldUseRelaxedRamThreshold)
+	if err != nil {
+		return err
+	}
+	atomic.AddInt32(&w.activeChunkCount, 1)
+
 	readStart := time.Now()
-	_, err := io.ReadFull(chunkContents, buffer)
+	_, err = io.ReadFull(chunkContents, buffer)
 	close(readDone)
 	if err != nil {
 		return err
@@ -304,11 +289,8 @@ func (w *chunkedFileWriter) setStatusForContiguousAvailableChunks(unsavedChunksB
 // Saves one chunk to its destination
 func (w *chunkedFileWriter) saveOneChunk(chunk fileChunk, md5Hasher hash.Hash) error {
 	defer func() {
-		// return the slice first before telling the cache limiter
-		// so that another chunk does not try to get the slice until it's returned
-		w.slicePool.ReturnSlice(chunk.data)
-		w.cacheLimiter.Remove(int64(len(chunk.data))) // remove this from the tally of scheduled-but-unsaved bytes
 		atomic.AddInt32(&w.activeChunkCount, -1)
+		w.slicePool.ReturnSlice(chunk.data)
 		w.chunkLogger.LogChunkStatus(chunk.id, EWaitReason.ChunkDone()) // this chunk is all finished
 	}()
 
