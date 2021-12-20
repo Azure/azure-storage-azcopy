@@ -100,12 +100,12 @@ func (s *FileURLSuite) TestFileCreateWithPermissions(c *chk.C) {
 	// Create and delete file in root directory.
 	file, _ := getFileURLFromFileSystem(c, fsURL)
 
-	_, err := file.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{Permissions: "0777"})
+	_, err := file.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{Permissions: "0444"})
 	defer delFile(c, file)
 
 	getResp, err := file.GetAccessControl(context.Background())
 	c.Assert(err, chk.IsNil)
-	c.Assert(getResp.Permissions, chk.Equals, "rwxrwxrwx")
+	c.Assert(getResp.Permissions, chk.Equals, "r--r-----")
 }
 
 func (s *FileURLSuite) TestFileCreateDeleteNonExistingParent(c *chk.C) {
