@@ -42,7 +42,7 @@ var decompressingWriterBufferPool = NewMultiSizeSlicePool(decompressingWriterCop
 // Gzip headers. Both of those formats compress a single file (often a .tar archive in the case of Gzip).
 // So there is no need to to expand the decompressed info out into multiple files (as we would have to do,
 // if we were to support "zip" compression). See https://stackoverflow.com/a/20765054
-func NewDecompressingWriter(destination io.WriteCloser, ct CompressionType) io.WriteCloser {
+func NewDecompressingWriter(destination io.WriteCloser, ct CompressionType) WriteSyncCloser {
 	preader, pwriter := io.Pipe()
 
 	d := &decompressingWriter{
@@ -114,6 +114,11 @@ func (d decompressingWriter) Write(p []byte) (n int, err error) {
 	}
 
 	return n, writeErr
+}
+
+func (d decompressingWriter) Sync() error {
+	// TODO no-op for now
+	return nil
 }
 
 func (d decompressingWriter) Close() error {

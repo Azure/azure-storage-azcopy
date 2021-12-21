@@ -361,3 +361,11 @@ func (EnvironmentVariable) MimeMapping() EnvironmentVariable {
 		Description:  "Location of the file to override default OS mime mapping",
 	}
 }
+
+func (EnvironmentVariable) FlushInterval() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_FLUSH_INTERVAL",
+		DefaultValue: "",
+		Description:  "When downloading, flush every x chunks where x=AZCOPY_FLUSH_INTERVAL.",
+	}
+}
