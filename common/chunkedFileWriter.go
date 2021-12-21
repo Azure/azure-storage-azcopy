@@ -24,9 +24,13 @@ import (
 	"context"
 	"crypto/md5"
 	"errors"
+	"fmt"
 	"hash"
 	"io"
+	"log"
 	"math"
+	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -63,7 +67,10 @@ type chunkedFileWriter struct {
 	totalReceivedChunkCount       int32
 
 	// the file we are writing to (type as interface to somewhat abstract away io.File - e.g. for unit testing)
-	file io.WriteCloser
+	file WriteSyncCloser
+
+	// specify how often we flush to disk (calling fsync)
+	flushInterval int64
 
 	// pool of byte slices (to avoid constant GC)
 	slicePool ByteSlicePooler
@@ -100,11 +107,31 @@ type fileChunk struct {
 	data []byte
 }
 
-func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheLimiter CacheLimiter, chunkLogger ChunkStatusLogger, file io.WriteCloser, numChunks uint32, maxBodyRetries int, md5ValidationOption HashValidationOption, sourceMd5Exists bool) ChunkedFileWriter {
+type WriteSyncCloser interface {
+	io.WriteCloser
+	Sync() error
+}
+
+var flushPrintOnce sync.Once
+
+func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheLimiter CacheLimiter, chunkLogger ChunkStatusLogger, file WriteSyncCloser, numChunks uint32, maxBodyRetries int, md5ValidationOption HashValidationOption, sourceMd5Exists bool) ChunkedFileWriter {
 	// Set max size for buffered channel. The upper limit here is believed to be generous, given worker routine drains it constantly.
 	// Use num chunks in file if lower than the upper limit, to prevent allocating RAM for lots of large channel buffers when dealing with
 	// very large numbers of very small files.
 	chanBufferSize := int(math.Min(float64(numChunks), 1000))
+
+	flushInterval := int64(0)
+	err := error(nil)
+	if rawValue := lcm.GetEnvironmentVariable(EEnvironmentVariable.FlushInterval()); rawValue != "" {
+		flushInterval, err = strconv.ParseInt(rawValue, 10, 64)
+		if err != nil {
+			log.Fatalf("error parsing the flush interval")
+		}
+	}
+
+	flushPrintOnce.Do(func() {
+		lcm.Info(fmt.Sprintf("DEBUG: flushing every %d chunks", flushInterval))
+	})
 
 	w := &chunkedFileWriter{
 		file:                    file,
@@ -117,6 +144,7 @@ func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheL
 		maxRetryPerDownloadBody: maxBodyRetries,
 		md5ValidationOption:     md5ValidationOption,
 		sourceMd5Exists:         sourceMd5Exists,
+		flushInterval:           flushInterval,
 	}
 	go w.workerRoutine(ctx)
 	return w
@@ -258,6 +286,8 @@ func (w *chunkedFileWriter) workerRoutine(ctx context.Context) {
 // Hashes and saves available chunks that are sequential from nextOffsetToSave. Stops and returns as soon as it hits
 // a gap (i.e. the position of a chunk that hasn't arrived yet)
 func (w *chunkedFileWriter) sequentiallyProcessAvailableChunks(unsavedChunksByFileOffset map[int64]fileChunk, nextOffsetToSave *int64, md5Hasher hash.Hash, ctx context.Context) error {
+	chunkCount := int64(0)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -268,7 +298,12 @@ func (w *chunkedFileWriter) sequentiallyProcessAvailableChunks(unsavedChunksByFi
 		// Look for next chunk in sequence
 		nextChunkInSequence, exists := unsavedChunksByFileOffset[*nextOffsetToSave]
 		if !exists {
-			return nil //its not there yet. That's OK.
+			// we hit a gap, flush everything we've written so far
+			if w.flushInterval != 0 && chunkCount != 0 {
+				return w.file.Sync()
+			}
+
+			return nil
 		}
 		delete(unsavedChunksByFileOffset, *nextOffsetToSave)      // remove it
 		*nextOffsetToSave += int64(len(nextChunkInSequence.data)) // update immediately so we won't forget!
@@ -277,6 +312,12 @@ func (w *chunkedFileWriter) sequentiallyProcessAvailableChunks(unsavedChunksByFi
 		err := w.saveOneChunk(nextChunkInSequence, md5Hasher)
 		if err != nil {
 			return err
+		}
+
+		chunkCount += 1
+		if chunkCount == w.flushInterval {
+			_ = w.file.Sync() // ignore error
+			chunkCount = 0
 		}
 	}
 }
