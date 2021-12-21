@@ -157,7 +157,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		return
 	}
 
-	var dstFile io.WriteCloser
+	var dstFile common.WriteSyncCloser
 	if strings.EqualFold(info.Destination, common.Dev_Null) {
 		// the user wants to discard the downloaded data
 		dstFile = devNullWriter{}
@@ -269,7 +269,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 
 }
 
-func createDestinationFile(jptm IJobPartTransferMgr, destination string, size int64, writeThrough bool) (file io.WriteCloser, err error) {
+func createDestinationFile(jptm IJobPartTransferMgr, destination string, size int64, writeThrough bool) (file common.WriteSyncCloser, err error) {
 	ct := common.ECompressionType.None()
 	if jptm.ShouldDecompress() {
 		size = 0                                  // we don't know what the final size will be, so we can't pre-size it
@@ -282,7 +282,7 @@ func createDestinationFile(jptm IJobPartTransferMgr, destination string, size in
 		// and we still need to set size to zero here, so relying on enumeration more wouldn't simply this code much, if at all.
 	}
 
-	var dstFile io.WriteCloser
+	var dstFile common.WriteSyncCloser
 	dstFile, err = common.CreateFileOfSizeWithWriteThroughOption(destination, size, writeThrough, jptm.GetFolderCreationTracker(), jptm.GetForceIfReadOnly())
 	if err != nil {
 		return nil, err
@@ -489,5 +489,9 @@ func (devNullWriter) Write(p []byte) (n int, err error) {
 }
 
 func (devNullWriter) Close() error {
+	return nil
+}
+
+func (devNullWriter) Sync() error {
 	return nil
 }
