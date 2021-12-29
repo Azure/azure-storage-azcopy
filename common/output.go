@@ -27,6 +27,7 @@ func (outputMessageType) EndOfJob() outputMessageType { return outputMessageType
 
 func (outputMessageType) Error() outputMessageType  { return outputMessageType(4) } // indicate fatal error, exit right after
 func (outputMessageType) Prompt() outputMessageType { return outputMessageType(5) } // ask the user a question after erasing the progress
+func (outputMessageType) Stderr() outputMessageType { return outputMessageType(6) }
 
 func (o outputMessageType) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))

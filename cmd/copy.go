@@ -1197,6 +1197,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
 	if err != nil {
+		glcm.Stderr(err.Error())
 		return fmt.Errorf("fatal: cannot parse source blob URL due to error: %s", err.Error())
 	}
 
@@ -1227,7 +1228,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 		}
 
 		// Prepare and do parallel download.
-		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion) //TODO: is this correct
+		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		sourceMd5Exists := len(props.ContentMD5()) > 0
 
 		maxTotalGB := float32(16) // Even 6 is enough at 10 Gbps with standard 8MB chunk size, but we need allow extra here to help if larger blob block sizes are selected by user, since then we need more memory to get enough chunks to have enough network-level concurrency
@@ -1260,14 +1261,16 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 			Operation: func(chunkStart int64, count int64, ctx context.Context) error {
 				dr, err := blobURL.Download(ctx, chunkStart, count, azblob.BlobAccessConditions{}, false, clientProvidedKey)
 				if err != nil {
+					glcm.Stderr(err.Error())
 					return err
 				}
 				body := dr.Body(azblob.RetryReaderOptions{MaxRetryRequests: ste.MaxRetryPerDownloadBody})
 
 				// step 4: pipe everything into Stdout
 				chunkID := common.NewChunkID(cca.Source.Value, chunkStart, count)
-				err = dstWriter.EnqueueChunk(ctx, chunkID, cca.blockSize, os.Stdout, true)
+				err = dstWriter.EnqueueChunk(ctx, chunkID, count, os.Stdout, true)
 				if err != nil {
+					glcm.Stderr(err.Error())
 					return err
 				}
 
@@ -1276,19 +1279,21 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 			},
 		})
 
+		// err from DoBatchTransfer
+		if err != nil {
+			glcm.Stderr(err.Error())
+			return err
+		}
+
+		// flush out dstWriter
 		_, err = dstWriter.Flush(ctx)
 		if err != nil {
+			glcm.Stderr(err.Error())
 			return err
 		}
-
-		if err != nil {
-			return err
-		}
-
 	} else {
 		return nil
 	}
-
 	return nil
 }
 
@@ -1302,7 +1307,6 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 
 	// GetCredentialInfoForLocation populates oauth token fields... so, it's very easy.
 	credInfo, _, err := GetCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, false, cca.CpkOptions)
-
 	if err != nil {
 		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
 	}
@@ -1318,7 +1322,12 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	if err != nil {
 		return fmt.Errorf("fatal: cannot parse destination blob URL due to error: %s", err.Error())
 	}
-
+	// make sure that the destination has blob name
+	blobURLParts := azblob.NewBlobURLParts(*u)
+	if blobURLParts.BlobName != "" {
+		glcm.Stderr("When transferring from Pipe to Blob, blob name must be provided.")
+		return fmt.Errorf("%s", "fatal: blob name not provided while trying to transfer from Pipe to Blob.")
+	}
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel, extract concurrency value from AZCOPY_CONCURRENCY_VALUE
 	concurrencyValue, err := strconv.Atoi(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()))
 	if err != nil || concurrencyValue <= 0 {
@@ -1353,6 +1362,9 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 		BlobAccessTier:           bbAccessTier,
 		ClientProvidedKeyOptions: common.GetClientProvidedKey(cca.CpkOptions),
 	})
+	if err != nil {
+		glcm.Stderr(err.Error())
+	}
 
 	return err
 }

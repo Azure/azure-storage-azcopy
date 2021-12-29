@@ -68,6 +68,7 @@ type LifecycleMgr interface {
 	RegisterCloseFunc(func())
 	SetForceLogging()
 	IsForceLoggingDisabled() bool
+	Stderr(string)
 }
 
 func GetLifecycleMgr() LifecycleMgr {
@@ -298,6 +299,17 @@ func (lcm *lifecycleMgr) Error(msg string) {
 	lcm.SurrenderControl()
 }
 
+func (lcm *lifecycleMgr) Stderr(msg string) {
+
+	msg = lcm.logSanitizer.SanitizeLogMessage(msg)
+
+	lcm.msgQueue <- outputMessage{
+		msgContent: msg,
+		msgType:    eOutputMessageType.Stderr(),
+		exitCode:   EExitCode.Error(),
+	}
+}
+
 func (lcm *lifecycleMgr) Exit(o OutputBuilder, applicationExitCode ExitCode) {
 	if applicationExitCode != EExitCode.NoExit() {
 		// Check if need to do memory profiling, and do memory profiling accordingly before azcopy exits.
@@ -407,7 +419,8 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 			lcm.closeFunc()
 			os.Exit(int(msgToOutput.exitCode))
 		}
-
+	case eOutputMessageType.Stderr():
+		fmt.Fprintf(os.Stderr, "%s", msgToOutput.msgContent)
 	case eOutputMessageType.Progress():
 		fmt.Print("\r")                   // return carriage back to start
 		fmt.Print(msgToOutput.msgContent) // print new progress
