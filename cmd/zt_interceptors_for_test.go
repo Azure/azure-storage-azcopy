@@ -116,6 +116,13 @@ func (m *mockedLifecycleManager) Error(msg string) {
 	default:
 	}
 }
+
+func (m *mockedLifecycleManager) Stderr(msg string) {
+	select {
+	case m.errorLog <- msg:
+	default:
+	}
+}
 func (*mockedLifecycleManager) SurrenderControl()                               {}
 func (*mockedLifecycleManager) RegisterCloseFunc(func())                        {}
 func (mockedLifecycleManager) AllowReinitiateProgressReporting()                {}
