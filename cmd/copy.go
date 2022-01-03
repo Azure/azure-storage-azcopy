@@ -123,7 +123,7 @@ type rawCopyCmdArgs struct {
 	preserveSMBPermissions bool
 	preservePermissions    bool // Separate flag so that we don't get funkiness with two "flags" targeting the same boolean
 	preserveOwner          bool // works in conjunction with preserveSmbPermissions
-	// Opt-in "rename" flag.
+	// Default true; false indicates that the destination is the target directory, rather than something we'd put a directory under (e.g. a container)
 	asSubdir bool
 	// Opt-in flag to persist additional SMB properties to Azure Files. Named ...info instead of ...properties
 	// because the latter was similar enough to preserveSMBPermissions to induce user error
