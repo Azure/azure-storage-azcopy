@@ -1,6 +1,26 @@
 
 # Change Log
 
+## Version 10.13.0
+
+### New features
+1. Added Arc VM support for authorization via managed identity.
+2. Widen managed disk scenario to all md- accounts instead of just md-impexp- accounts.
+3. The concurrency is now set to AUTO for Azure Files by default to avoid throttling.
+4. Decrease the number of create directory calls for Azure Files to avoid throttling.
+5. Added the from-to flag for sync.
+
+## Bug fixes
+1. Fixed the memory usage issue with generating the list of skipped/failed transfers in JSON output.
+2. Fixed ADLS Gen2 ACL copying where intermediate folders were missed. 
+3. Fixed the S3 to Blob scenario using the login command.
+4. Fixed dry-run for dfs endpoints.
+5. Fixed incorrect percentage-done shown while resuming job.
+6. Fixed login issues on the ARM platforms.
+7. Fixed incorrect progress status for the sync command. 
+8. Fixed concurrency map access problem for folder creation tracker.
+9. Fixed resuming with a public source.
+
 ## Version 10.12.2
 
 ## Bug fixes

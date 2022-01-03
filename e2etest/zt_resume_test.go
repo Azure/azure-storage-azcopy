@@ -3,6 +3,8 @@ package e2etest
 import (
 	"testing"
 
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/google/uuid"
 )
 
@@ -65,4 +67,56 @@ func TestResume_LargeGeneric(t *testing.T) {
 
 		shouldTransfer: allFiles,
 	}, EAccountType.Standard(), "")
+}
+
+func TestResume_PublicSource_BlobTarget(t *testing.T) {
+	RunScenarios(
+		t,
+		// copy only instead of sync because single file sync is not entirely compatible with the test suite
+		// the destination file must exist for sync to happen (so, a copy must happen first)
+		// in addition,
+		eOperation.Copy()|eOperation.Resume(),
+		eTestFromTo.Other(common.EFromTo.BlobBlob(), common.EFromTo.BlobLocal()),
+		eValidate.Auto(),
+		params{
+			recursive:      true,
+			debugSkipFiles: []string{";"}, // skip the only file is ;
+		},
+		nil,
+		testFiles{
+			defaultSize:  "1K",
+			sourcePublic: azblob.PublicAccessBlob,
+			objectTarget: "a.txt",
+
+			shouldTransfer: []interface{}{
+				f("a.txt"),
+			},
+		},
+		EAccountType.Standard(), "",
+	)
+}
+
+func TestResume_PublicSource_ContainerTarget(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.CopyAndSync()|eOperation.Resume(),
+		eTestFromTo.Other(common.EFromTo.BlobBlob(), common.EFromTo.BlobLocal()),
+		eValidate.Auto(),
+		params{
+			recursive:      true,
+			debugSkipFiles: []string{"a.txt"}, // skip the only file is ;
+		},
+		nil,
+		testFiles{
+			defaultSize:  "1K",
+			sourcePublic: azblob.PublicAccessContainer,
+
+			shouldTransfer: []interface{}{
+				f("a.txt"),
+				folder("foo"),
+				f("foo/bar.txt"),
+			},
+		},
+		EAccountType.Standard(), "",
+	)
 }

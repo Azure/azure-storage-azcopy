@@ -14,6 +14,8 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/hillu/go-ntdll"
 
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"golang.org/x/sys/windows"
 
