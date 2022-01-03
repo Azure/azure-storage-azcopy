@@ -278,7 +278,7 @@ func (s *pageBlobSenderBase) Cleanup() {
 		if s.isInManagedDiskImportExportAccount() {
 			// no deletion is possible. User just has to upload it again.
 		} else {
-			deletionContext, cancelFunc := context.WithTimeout(context.Background(), 30*time.Second)
+			deletionContext, cancelFunc := context.WithTimeout(context.WithValue(context.Background(), ServiceAPIVersionOverride, DefaultServiceApiVersion), 30*time.Second)
 			defer cancelFunc()
 			_, err := s.destPageBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 			if err != nil {

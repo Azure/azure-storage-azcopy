@@ -251,7 +251,7 @@ func (s *blockBlobSenderBase) Cleanup() {
 	if jptm.IsDeadInflight() && atomic.LoadInt32(&s.atomicChunksWritten) != 0 {
 		// there is a possibility that some uncommitted blocks will be there
 		// Delete the uncommitted blobs
-		deletionContext, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
+		deletionContext, cancelFn := context.WithTimeout(context.WithValue(context.Background(), ServiceAPIVersionOverride, DefaultServiceApiVersion), 30*time.Second)
 		defer cancelFn()
 		if jptm.WasCanceled() {
 			// If we cancelled, and the only blocks that exist are uncommitted, then clean them up.
