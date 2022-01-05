@@ -21,16 +21,16 @@ jobs:
     pool:
       vmImage: $(imageName)
     steps:
-      - task: Powershell@2
+      - task: GoTool@0
         displayName: 'Golang Lint Check'
         continueOnError: true
         env:
           GO111MODULE: 'on'
         inputs:
-          pwsh: true
+          version: '1.16'
 
       - script: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.43.0
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.43.0
           golangci-lint --version 
           golangci-lint run common
         displayName: 'Install GoLintCLI and dependencies.'
