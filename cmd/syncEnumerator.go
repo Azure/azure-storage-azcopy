@@ -90,8 +90,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 
 	// verify that the traversers are targeting the same type of resources
 	if sourceTraverser.IsDirectory(true) != destinationTraverser.IsDirectory(true) {
-		return nil, errors.New("sync must happen between source and destination of the same type," +
-			" e.g. either file <-> file, or directory/container <-> directory/container")
+		return nil, errors.New("trying to sync between different resource types (either file <-> directory or directory <-> file) which is not allowed." +
+			"sync must happen between source and destination of the same type, e.g. either file <-> file or directory <-> directory")
 	}
 
 	// set up the filters in the right order
