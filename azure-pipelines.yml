@@ -35,8 +35,8 @@ jobs:
           golangci-lint --version 
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.43.0
           echo 'Installation complete' 
-          golangci-lint --version 
-          golangci-lint run common
+          ./bin/golangci-lint --version 
+          ./bin/golangci-lint run common
         displayName: 'Install GoLintCLI and dependencies.'
         workingDirectory: $(System.DefaultWorkingDirectory)
 
