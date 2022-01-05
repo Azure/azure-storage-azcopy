@@ -11,6 +11,24 @@ pr:
       - main
 
 jobs:
+  - job: Lint_Check
+    timeoutInMinutes: 30
+    steps:
+      - task: Powershell@2
+        displayName: 'Golang Lint Check'
+        continueOnError: true
+        env:
+          GO111MODULE: 'on'
+        inputs:
+          pwsh: true
+
+      - script: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.43.0
+          golangci-lint --version 
+          golangci-lint run common
+      displayName: 'Install GoLintCLI and dependencies.'
+      workingDirectory: $(System.DefaultWorkingDirectory)
+
   - job: Build
     timeoutInMinutes: 360
     strategy:
