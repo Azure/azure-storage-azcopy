@@ -78,7 +78,7 @@ func TestProperties_SMBPermissionsSDDLPreserved(t *testing.T) {
 			folder("fldr1", with{smbPermissionsSddl: folderSDDL}),
 			f("fldr1/file3.txt", with{smbPermissionsSddl: fileSDDL}),
 		},
-	}, false, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 // TODO: add some tests (or modify the above) to make assertions about case preservation (or not) in metadata
@@ -111,7 +111,7 @@ func TestProperties_SMBDates(t *testing.T) {
 			folder("fold1"),
 			"fold1/fileb",
 		},
-	}, false, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestProperties_SMBFlags(t *testing.T) {
@@ -126,7 +126,7 @@ func TestProperties_SMBFlags(t *testing.T) {
 			folder("fldr1", with{smbAttributes: 2}),
 			f("fldr1/file2.txt", with{smbAttributes: 2}),
 		},
-	}, false, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestProperties_SMBPermsAndFlagsWithIncludeAfter(t *testing.T) {
@@ -170,7 +170,7 @@ func TestProperties_SMBPermsAndFlagsWithIncludeAfter(t *testing.T) {
 		// TODO: is that what we really want, or do we want to set write times here?
 		shouldTransfer: recreateFiles,
 		shouldIgnore:   skippedFiles,
-	}, false, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 // TODO: Sync test for modern LMT getting
@@ -213,5 +213,5 @@ func TestProperties_SMBPermsAndFlagsWithSync(t *testing.T) {
 		// TODO: is that what we really want, or do we want to set write times here?
 		shouldTransfer: transferredFiles,
 		shouldIgnore:   recreateFiles,
-	}, false, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }

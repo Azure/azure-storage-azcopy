@@ -40,5 +40,5 @@ func TestEnumeration_DirectoryStubsAreNotDownloaded(t *testing.T) {
 			folder("dir"),
 			"dir/fileb",
 		},
-	}, false, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
