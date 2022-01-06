@@ -1268,7 +1268,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 				// step 4: pipe everything into Stdout
 				chunkID := common.NewChunkID(cca.Source.Value, chunkStart, count)
-				err = dstWriter.EnqueueChunk(ctx, chunkID, count, os.Stdout, true)
+				err = dstWriter.EnqueueChunk(ctx, chunkID, count, body, true)
 				if err != nil {
 					glcm.Stderr(err.Error())
 					return err
