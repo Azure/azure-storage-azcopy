@@ -42,7 +42,7 @@ func TestHeader_SourceLocal(t *testing.T) {
 			f("file5.mp4", with{contentType: extensionsMap[".mp4"]}),
 			f("file6.xlsx", with{contentType: extensionsMap[".xlsx"]}),
 		},
-	}, false, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestHeader_SourceLocalEmptyFiles(t *testing.T) {
@@ -60,7 +60,7 @@ func TestHeader_SourceLocalEmptyFiles(t *testing.T) {
 			f("file3.mp4", with{contentType: extensionsMap[".mp4"]}),
 			f("file5.xlsx", with{contentType: extensionsMap[".xlsx"]}),
 		},
-	}, false, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestHeader_AllS2S(t *testing.T) {
@@ -78,7 +78,7 @@ func TestHeader_AllS2S(t *testing.T) {
 			f("file3.mp4", with{contentType: extensionsMap[".mp4"]}),
 			f("file5.xlsx", with{contentType: extensionsMap[".xlsx"]}),
 		},
-	}, false, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 // TODO: AutoPlusContent is not thread-safe. Look into that.
@@ -97,5 +97,5 @@ func TestHeader_SourceBlobEmptyBlob(t *testing.T) {
 			f("file3.mp4", with{contentType: extensionsMap[".mp4"]}),
 			f("file5.xlsx", with{contentType: extensionsMap[".xlsx"]}),
 		},
-	}, false, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }

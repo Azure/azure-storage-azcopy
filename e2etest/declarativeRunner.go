@@ -46,7 +46,7 @@ func RunScenarios(
 	hs *hooks,
 	fs testFiles,
 	// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
-	destIsClassic bool,
+	destAccountType AccountType,
 	accountType AccountType,
 	scenarioSuffix string) {
 	// enable this if we want parents in parallel: t.Parallel()
@@ -89,10 +89,8 @@ func RunScenarios(
 			}
 
 			// Handles destination being different account type
-			destAccountType := accountType
 			isSourceAcc := true
-			if destIsClassic {
-				destAccountType = EAccountType.Classic()
+			if destAccountType != accountType {
 				isSourceAcc = false
 			}
 			s := scenario{

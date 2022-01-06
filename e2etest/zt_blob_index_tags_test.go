@@ -36,7 +36,7 @@ func TestTags_SetTagsSingleBlob(t *testing.T) {
 		shouldTransfer: []interface{}{
 			f("file1.txt", with{blobTags: blobTagsStr}),
 		},
-	}, false, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestTags_SetTagsSpecialCharactersSingleBlob(t *testing.T) {
@@ -49,7 +49,7 @@ func TestTags_SetTagsSpecialCharactersSingleBlob(t *testing.T) {
 			// folder("", ),
 			f("file1.txt", with{blobTags: "bla_bla=foo+-foo&bla/bla/2=bar"}),
 		},
-	}, false, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestTags_SetTagsMultipleBlobs(t *testing.T) {
@@ -65,7 +65,7 @@ func TestTags_SetTagsMultipleBlobs(t *testing.T) {
 			f("file1.txt", with{blobTags: blobTagsStr}),
 			f("fdlr1/file2.txt", with{blobTags: blobTagsStr}),
 		},
-	}, false, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 // ================================  Copy: Preserve Tags ========================================================
@@ -80,7 +80,7 @@ func TestTags_PreserveTagsSingleBlob(t *testing.T) {
 			f("file1.txt", with{blobTags: "foo/-foo=bar:bar&baz=blah&YeAr=2020"}),
 			f("file2.txt", with{blobTags: "very long string with 127 characters to check the maximum limit of key very long string with 127 characters to check the maxi=very long string with 250 characters to check the maximum limit of val very long string with 250 characters to check the maximum limit of val very long string with 250 characters to check the maximum limit of val very long string with 250 character"}),
 		},
-	}, false, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestTags_PreserveTagsSpecialCharactersSingleBlob(t *testing.T) {
@@ -93,7 +93,7 @@ func TestTags_PreserveTagsSpecialCharactersSingleBlob(t *testing.T) {
 			// folder("", ),
 			f("file1.txt", with{blobTags: "foo/-foo=bar:bar&baz=blah&YeAr=2020"}),
 		},
-	}, false, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestTags_PreserveTagsMultipleBlobs(t *testing.T) {
@@ -108,7 +108,7 @@ func TestTags_PreserveTagsMultipleBlobs(t *testing.T) {
 			f("file1.txt", with{blobTags: "foo=bar&baz=blah&YeAr=2020"}),
 			f("fdlr1/file2.txt", with{blobTags: "temp123=321pmet&zab=halb&rAeY=0202"}),
 		},
-	}, false, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestTags_PreserveTagsSpecialCharactersMultipleBlobs(t *testing.T) {
@@ -123,7 +123,7 @@ func TestTags_PreserveTagsSpecialCharactersMultipleBlobs(t *testing.T) {
 			f("file1.txt", with{blobTags: "bla_bla=foo+-foo&bla/ :bla/2=bar"}),
 			f("fdlr1/file2.txt", with{blobTags: "foo/-foo=bar:bar&baz=blah&YeAr=2020"}),
 		},
-	}, false, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 // ================================  Sync: Preserve Tags ========================================================
@@ -143,5 +143,5 @@ func TestTags_PreserveTagsSpecialCharactersDuringSync(t *testing.T) {
 			f("fdlr2/file2.exe", with{blobTags: "++--..//::=____"}),
 			f("fdlr2/file2.pdf", with{blobTags: "a=b&c=d&e=f&g=h&i=j&a1=b1&c1=d1&e1=f1&g1=h1&i1=j1"}),
 		},
-	}, false, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }

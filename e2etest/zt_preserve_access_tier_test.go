@@ -36,7 +36,7 @@ func TestTier_V2ToClassicAccount(t *testing.T) {
 			folder(""), // root folder
 			f("filea", with{s2sPreserveAccessTier: "Hot"}),
 		},
-	}, true, EAccountType.Standard(), "")
+	}, EAccountType.Classic(), EAccountType.Standard(), "")
 }
 
 func TestTier_V2ToClassicAccountNoPreserve(t *testing.T) {
@@ -50,5 +50,5 @@ func TestTier_V2ToClassicAccountNoPreserve(t *testing.T) {
 			folder(""), // root folder
 			f("filea", with{s2sPreserveAccessTier: "Hot"}),
 		},
-	}, true, EAccountType.Standard(), "")
+	}, EAccountType.Classic(), EAccountType.Standard(), "")
 }

@@ -22,7 +22,7 @@ func TestResume_FolderState(t *testing.T) {
 			folder("a", with{smbAttributes: 2}),
 			f("a/b"),
 		},
-	}, false, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestResume_NoCreateFolder(t *testing.T) {
@@ -51,5 +51,5 @@ func TestResume_NoCreateFolder(t *testing.T) {
 		shouldSkip: []interface{}{
 			folder("a", with{smbAttributes: 2}),
 		},
-	}, false, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
