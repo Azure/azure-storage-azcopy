@@ -30,7 +30,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/minio/minio-go/pkg/credentials"
 	chk "gopkg.in/check.v1"
-	"io/ioutil"
 	"math/rand"
 	"mime"
 	"net/url"
@@ -40,7 +39,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	minio "github.com/minio/minio-go"
+	"github.com/minio/minio-go"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -50,9 +49,6 @@ var ctx = context.Background()
 
 const (
 	blockBlobDefaultData = "AzCopy Random Test Data"
-	//512 bytes of alphanumeric random data
-	pageBlobDefaultData   = "lEYvPHhS2c9T7DDNtM7f0gccgbqe7DMYByLj7d1XS6jV5Y0Cuiz5i86e5llkBwzCahnR4n1MUvfpniNBxgRgJ4oNk8oaIlCevtsPaCZgOMpKdPohp7yYTfawiz8MtHlTwM8OmfgngbH2BNiqtSFEx9GArvkwkVF0dPoG6RRBug0BqHiWyMd0mZifrBTneG13bqKg7A8EjRmBHIqCMGoxOYo1ufojJjYKiv8dfBYGib4pNpfrcxlEWrMKEPcgs3YG3AGg2lIKrMVs7yWnSzwqeEnl9oMFjdwc7XB2e7y2IH1JLt8CzaYgW6qvaPzhFXWbUkIJ6KznQAaKExJt9my625REjn8G4WT5tfo82J2gpdJNAveaF1O09Irjb93Yg07CfeSOrUBo4WwORrfJ60O4nc3MWWvHT2CsJ4b3MtjtVR0nb084SQpRycXPSF9rMympZrwmP0mutBYCVOEWDjsaLOQJoHo2UOiBD2sM5rm4N5mqt0mEInyGO8pKnV7NKn0N"
-	appendBlobDefaultData = "AzCopy Random Append Test Data"
 
 	bucketPrefix      = "s3bucket"
 	objectPrefix      = "s3object"
@@ -90,6 +86,7 @@ func generateBucketName(c asserter) string {
 	return generateName(c, bucketPrefix, 63)
 }
 
+//nolint
 func generateBucketNameWithCustomizedPrefix(c asserter, customizedPrefix string) string {
 	return generateName(c, customizedPrefix, 63)
 }
@@ -170,6 +167,7 @@ func getAzureFileURL(c asserter, shareURL azfile.ShareURL, prefix string) (fileU
 	return
 }
 
+//nolint
 func getReaderToRandomBytes(n int) *bytes.Reader {
 	r, _ := getRandomDataAndReader(n)
 	return r
@@ -178,11 +176,12 @@ func getReaderToRandomBytes(n int) *bytes.Reader {
 // todo: consider whether to replace with common.NewRandomDataGenerator, which is
 //    believed to be faster
 func getRandomDataAndReader(n int) (*bytes.Reader, []byte) {
-	data := make([]byte, n, n)
+	data := make([]byte, n)
 	rand.Read(data)
 	return bytes.NewReader(data), data
 }
 
+//nolint
 func createNewContainer(c asserter, bsu azblob.ServiceURL) (container azblob.ContainerURL, name string) {
 	container, name = getContainerURL(c, bsu)
 
@@ -192,6 +191,7 @@ func createNewContainer(c asserter, bsu azblob.ServiceURL) (container azblob.Con
 	return container, name
 }
 
+//nolint
 func createNewFilesystem(c asserter, bfssu azbfs.ServiceURL) (filesystem azbfs.FileSystemURL, name string) {
 	filesystem, name = getFilesystemURL(c, bfssu)
 
@@ -231,6 +231,7 @@ func createNewBlockBlob(c asserter, container azblob.ContainerURL, prefix string
 	return
 }
 
+//nolint
 func createNewAzureShare(c asserter, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
 	share, name = getShareURL(c, fsu)
 
@@ -264,6 +265,7 @@ func generateParentsForAzureFile(c asserter, fileURL azfile.FileURL) {
 	c.AssertNoErr(err)
 }
 
+//nolint
 func createNewAppendBlob(c asserter, container azblob.ContainerURL, prefix string) (blob azblob.AppendBlobURL, name string) {
 	blob, name = getAppendBlobURL(c, container, prefix)
 
@@ -274,6 +276,7 @@ func createNewAppendBlob(c asserter, container azblob.ContainerURL, prefix strin
 	return
 }
 
+//nolint
 func createNewPageBlob(c asserter, container azblob.ContainerURL, prefix string) (blob azblob.PageBlobURL, name string) {
 	blob, name = getPageBlobURL(c, container, prefix)
 
@@ -290,37 +293,20 @@ func deleteContainer(c asserter, container azblob.ContainerURL) {
 	c.Assert(resp.StatusCode(), equals(), 202)
 }
 
+//nolint
 func deleteFilesystem(c asserter, filesystem azbfs.FileSystemURL) {
 	resp, err := filesystem.Delete(ctx)
 	c.AssertNoErr(err)
 	c.Assert(resp.StatusCode(), equals(), 202)
 }
 
-func validateStorageError(c asserter, err error, code azblob.ServiceCodeType) {
-	serr, _ := err.(azblob.StorageError)
-	c.Assert(serr.ServiceCode(), equals(), code)
-}
-
-func getRelativeTimeGMT(amount time.Duration) time.Time {
-	currentTime := time.Now().In(time.FixedZone("GMT", 0))
-	currentTime = currentTime.Add(amount * time.Second)
-	return currentTime
-}
-
-func generateCurrentTimeWithModerateResolution() time.Time {
-	highResolutionTime := time.Now().UTC()
-	return time.Date(highResolutionTime.Year(), highResolutionTime.Month(), highResolutionTime.Day(), highResolutionTime.Hour(), highResolutionTime.Minute(),
-		highResolutionTime.Second(), 0, highResolutionTime.Location())
-}
-
 type createS3ResOptions struct {
 	Location string
 }
 
-func createS3ClientWithMinio(o createS3ResOptions) (*minio.Client, error) {
-	if isS3Disabled() {
-		return nil, errors.New("s3 testing is disabled")
-	}
+//nolint
+func createS3ClientWithMinio(c asserter, o createS3ResOptions) (*minio.Client, error) {
+	skipIfS3Disabled(c)
 
 	accessKeyID := os.Getenv("AWS_ACCESS_KEY_ID")
 	secretAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
@@ -337,6 +323,7 @@ func createS3ClientWithMinio(o createS3ResOptions) (*minio.Client, error) {
 	return s3Client, nil
 }
 
+//nolint
 func createNewBucket(c asserter, client *minio.Client, o createS3ResOptions) string {
 	bucketName := generateBucketName(c)
 	err := client.MakeBucket(bucketName, o.Location)
@@ -345,6 +332,7 @@ func createNewBucket(c asserter, client *minio.Client, o createS3ResOptions) str
 	return bucketName
 }
 
+//nolint
 func createNewBucketWithName(c asserter, client *minio.Client, bucketName string, o createS3ResOptions) {
 	err := client.MakeBucket(bucketName, o.Location)
 	c.AssertNoErr(err)
@@ -363,6 +351,7 @@ func createNewObject(c asserter, client *minio.Client, bucketName string, prefix
 }
 
 func deleteBucket(c asserter, client *minio.Client, bucketName string, waitQuarterMinute bool) {
+	_ = c
 	// If we error out in this function, simply just skip over deleting the bucket.
 	// Some of our buckets have become "ghost" buckets in the past.
 	// Ghost buckets show up in list calls but can't actually be interacted with.
@@ -406,6 +395,7 @@ func deleteBucket(c asserter, client *minio.Client, bucketName string, waitQuart
 	}
 }
 
+//nolint
 func cleanS3Account(c asserter, client *minio.Client) {
 	buckets, err := client.ListBuckets()
 	if err != nil {
@@ -422,6 +412,7 @@ func cleanS3Account(c asserter, client *minio.Client) {
 	time.Sleep(time.Minute)
 }
 
+//nolint
 func cleanBlobAccount(c asserter, serviceURL azblob.ServiceURL) {
 	marker := azblob.Marker{}
 	for marker.NotDone() {
@@ -437,6 +428,7 @@ func cleanBlobAccount(c asserter, serviceURL azblob.ServiceURL) {
 	}
 }
 
+//nolint
 func cleanFileAccount(c asserter, serviceURL azfile.ServiceURL) {
 	marker := azfile.Marker{}
 	for marker.NotDone() {
@@ -464,22 +456,6 @@ func getGenericCredentialForFile(accountType string) (*azfile.SharedKeyCredentia
 	return azfile.NewSharedKeyCredential(accountName, accountKey)
 }
 
-func getAlternateFSU() (azfile.ServiceURL, error) {
-	secondaryAccountName, secondaryAccountKey := os.Getenv("SECONDARY_ACCOUNT_NAME"), os.Getenv("SECONDARY_ACCOUNT_KEY")
-	if secondaryAccountName == "" || secondaryAccountKey == "" {
-		return azfile.ServiceURL{}, errors.New("SECONDARY_ACCOUNT_NAME and/or SECONDARY_ACCOUNT_KEY environment variables not specified.")
-	}
-	fsURL, _ := url.Parse("https://" + secondaryAccountName + ".file.core.windows.net/")
-
-	credential, err := azfile.NewSharedKeyCredential(secondaryAccountName, secondaryAccountKey)
-	if err != nil {
-		return azfile.ServiceURL{}, err
-	}
-	pipeline := azfile.NewPipeline(credential, azfile.PipelineOptions{ /*Log: pipeline.NewLogWrapper(pipeline.LogInfo, log.New(os.Stderr, "", log.LstdFlags))*/ })
-
-	return azfile.NewServiceURL(*fsURL, pipeline), nil
-}
-
 func deleteShare(c asserter, share azfile.ShareURL) {
 	_, err := share.Delete(ctx, azfile.DeleteSnapshotsOptionInclude)
 	c.AssertNoErr(err)
@@ -490,6 +466,7 @@ func deleteShare(c asserter, share azfile.ShareURL) {
 // those changes not being reflected yet, we will wait 30 seconds and try the test again. If it fails this time for any reason,
 // we fail the test. It is the responsibility of the the testImplFunc to determine which error string indicates the test should be retried.
 // There can only be one such string. All errors that cannot be due to this detail should be asserted and not returned as an error string.
+//nolint
 func runTestRequiringServiceProperties(c asserter, bsu azblob.ServiceURL, code string,
 	enableServicePropertyFunc func(asserter, azblob.ServiceURL),
 	testImplFunc func(asserter, azblob.ServiceURL) error,
@@ -503,24 +480,6 @@ func runTestRequiringServiceProperties(c asserter, bsu azblob.ServiceURL, code s
 		err = testImplFunc(c, bsu)
 		c.AssertNoErr(err)
 	}
-}
-
-func enableSoftDelete(c asserter, bsu azblob.ServiceURL) {
-	days := int32(1)
-	_, err := bsu.SetProperties(ctx, azblob.StorageServiceProperties{DeleteRetentionPolicy: &azblob.RetentionPolicy{Enabled: true, Days: &days}})
-	c.AssertNoErr(err)
-}
-
-func disableSoftDelete(c asserter, bsu azblob.ServiceURL) {
-	_, err := bsu.SetProperties(ctx, azblob.StorageServiceProperties{DeleteRetentionPolicy: &azblob.RetentionPolicy{Enabled: false}})
-	c.AssertNoErr(err)
-}
-
-func validateUpload(c asserter, blobURL azblob.BlockBlobURL) {
-	resp, err := blobURL.Download(ctx, 0, 0, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
-	c.AssertNoErr(err)
-	data, _ := ioutil.ReadAll(resp.Response().Body)
-	c.Assert(len(data), equals(), 0)
 }
 
 func getContainerURLWithSAS(c asserter, credential azblob.SharedKeyCredential, containerName string) azblob.ContainerURL {
@@ -631,16 +590,12 @@ func getAdlsServiceURLWithSAS(c asserter, credential azbfs.SharedKeyCredential) 
 }
 
 // check.v1 style "StringContains" checker
-
+//nolint
 type stringContainsChecker struct {
 	*chk.CheckerInfo
 }
 
-var StringContains = &stringContainsChecker{
-	&chk.CheckerInfo{Name: "StringContains", Params: []string{"obtained", "expected to find"}},
-}
-
-func (checker *stringContainsChecker) Check(params []interface{}, names []string) (result bool, error string) {
+func (checker *stringContainsChecker) Check(params []interface{}, _ []string) (result bool, error string) {
 	if len(params) < 2 {
 		return false, "StringContains requires two parameters"
 	} // Ignore extra parameters
@@ -663,7 +618,7 @@ func (checker *stringContainsChecker) Check(params []interface{}, names []string
 
 func GetContentTypeMap(fileExtensions []string) map[string]string {
 
-	extensionsMap := make(map[string]string, 0)
+	extensionsMap := make(map[string]string)
 	for _, ext := range fileExtensions {
 		if guessedType := mime.TypeByExtension(ext); guessedType != "" {
 			extensionsMap[ext] = strings.Split(guessedType, ";")[0]

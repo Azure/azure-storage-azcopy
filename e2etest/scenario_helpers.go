@@ -312,6 +312,7 @@ func (s scenarioHelper) generateFileSharesAndFilesFromLists(c asserter, serviceU
 	}
 }
 
+//nolint
 func (s scenarioHelper) generateFilesystemsAndFilesFromLists(c asserter, serviceURL azbfs.ServiceURL, fsList []string, fileList []string, data string) {
 	for _, filesystemName := range fsList {
 		fsURL := serviceURL.NewFileSystemURL(filesystemName)
@@ -322,6 +323,7 @@ func (s scenarioHelper) generateFilesystemsAndFilesFromLists(c asserter, service
 	}
 }
 
+//nolint
 func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c asserter, s3Client *minio.Client, bucketList []string, objectList []string, data string) {
 	for _, bucketName := range bucketList {
 		err := s3Client.MakeBucket(bucketName, "")
@@ -836,6 +838,7 @@ func (s scenarioHelper) downloadFileContent(a asserter, options downloadContentO
 	defer retryReader.Close() // The client must close the response body when finished with it
 
 	destData, err := ioutil.ReadAll(retryReader)
+	a.AssertNoErr(err)
 	downloadResp.Body(azfile.RetryReaderOptions{})
 	return destData
 }
@@ -989,20 +992,4 @@ func (scenarioHelper) getRawShareURLWithSAS(c asserter, shareName string) url.UR
 	c.AssertNoErr(err)
 	shareURLWithSAS := getShareURLWithSAS(c, *credential, shareName)
 	return shareURLWithSAS.URL()
-}
-
-//func (scenarioHelper) blobExists(blobURL azblob.BlobURL) bool {
-//	_, err := blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
-//	if err == nil {
-//		return true
-//	}
-//	return false
-//}
-
-func (scenarioHelper) containerExists(containerURL azblob.ContainerURL) bool {
-	_, err := containerURL.GetProperties(context.Background(), azblob.LeaseAccessConditions{})
-	if err == nil {
-		return true
-	}
-	return false
 }
