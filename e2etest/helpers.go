@@ -64,24 +64,29 @@ const (
 )
 
 // if S3_TESTS_OFF is set at all, S3 tests are disabled.
+//nolint
 func isS3Disabled() bool {
 	return strings.ToLower(os.Getenv("S3_TESTS_OFF")) != ""
 }
 
+//nolint
 func skipIfS3Disabled(c asserter) {
 	if isS3Disabled() {
 		c.Skip("S3 testing is disabled for this unit test suite run.")
 	}
 }
 
+//nolint
 func generateContainerName(c asserter) string {
 	return generateName(c, containerPrefix, 63)
 }
 
+//nolint
 func generateBlobName(c asserter) string {
 	return generateName(c, blobPrefix, 0)
 }
 
+//nolint
 func generateBucketName(c asserter) string {
 	return generateName(c, bucketPrefix, 63)
 }
@@ -91,18 +96,22 @@ func generateBucketNameWithCustomizedPrefix(c asserter, customizedPrefix string)
 	return generateName(c, customizedPrefix, 63)
 }
 
+//nolint
 func generateObjectName(c asserter) string {
 	return generateName(c, objectPrefix, 0)
 }
 
+//nolint
 func generateShareName(c asserter) string {
 	return generateName(c, sharePrefix, 63)
 }
 
+//nolint
 func generateFilesystemName(c asserter) string {
 	return generateName(c, blobfsPrefix, 63)
 }
 
+//nolint
 func getShareURL(c asserter, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
 	name = generateShareName(c)
 	share = fsu.NewShareURL(name)
@@ -110,14 +119,17 @@ func getShareURL(c asserter, fsu azfile.ServiceURL) (share azfile.ShareURL, name
 	return share, name
 }
 
+//nolint
 func generateAzureFileName(c asserter) string {
 	return generateName(c, azureFilePrefix, 0)
 }
 
+//nolint
 func generateBfsFileName(c asserter) string {
 	return generateName(c, blobfsPrefix, 0)
 }
 
+//nolint
 func getContainerURL(c asserter, bsu azblob.ServiceURL) (container azblob.ContainerURL, name string) {
 	name = generateContainerName(c)
 	container = bsu.NewContainerURL(name)
@@ -125,6 +137,7 @@ func getContainerURL(c asserter, bsu azblob.ServiceURL) (container azblob.Contai
 	return container, name
 }
 
+//nolint
 func getFilesystemURL(c asserter, bfssu azbfs.ServiceURL) (filesystem azbfs.FileSystemURL, name string) {
 	name = generateFilesystemName(c)
 	filesystem = bfssu.NewFileSystemURL(name)
@@ -132,6 +145,7 @@ func getFilesystemURL(c asserter, bfssu azbfs.ServiceURL) (filesystem azbfs.File
 	return
 }
 
+//nolint
 func getBlockBlobURL(c asserter, container azblob.ContainerURL, prefix string) (blob azblob.BlockBlobURL, name string) {
 	name = prefix + generateBlobName(c)
 	blob = container.NewBlockBlobURL(name)
@@ -139,6 +153,7 @@ func getBlockBlobURL(c asserter, container azblob.ContainerURL, prefix string) (
 	return blob, name
 }
 
+//nolint
 func getBfsFileURL(c asserter, filesystemURL azbfs.FileSystemURL, prefix string) (file azbfs.FileURL, name string) {
 	name = prefix + generateBfsFileName(c)
 	file = filesystemURL.NewRootDirectoryURL().NewFileURL(name)
@@ -146,6 +161,7 @@ func getBfsFileURL(c asserter, filesystemURL azbfs.FileSystemURL, prefix string)
 	return
 }
 
+//nolint
 func getAppendBlobURL(c asserter, container azblob.ContainerURL, prefix string) (blob azblob.AppendBlobURL, name string) {
 	name = generateBlobName(c)
 	blob = container.NewAppendBlobURL(prefix + name)
@@ -153,6 +169,7 @@ func getAppendBlobURL(c asserter, container azblob.ContainerURL, prefix string) 
 	return blob, name
 }
 
+//nolint
 func getPageBlobURL(c asserter, container azblob.ContainerURL, prefix string) (blob azblob.PageBlobURL, name string) {
 	name = generateBlobName(c)
 	blob = container.NewPageBlobURL(prefix + name)
@@ -160,6 +177,7 @@ func getPageBlobURL(c asserter, container azblob.ContainerURL, prefix string) (b
 	return
 }
 
+//nolint
 func getAzureFileURL(c asserter, shareURL azfile.ShareURL, prefix string) (fileURL azfile.FileURL, name string) {
 	name = prefix + generateAzureFileName(c)
 	fileURL = shareURL.NewRootDirectoryURL().NewFileURL(name)
@@ -201,6 +219,7 @@ func createNewFilesystem(c asserter, bfssu azbfs.ServiceURL) (filesystem azbfs.F
 	return
 }
 
+//nolint
 func createNewBfsFile(c asserter, filesystem azbfs.FileSystemURL, prefix string) (file azbfs.FileURL, name string) {
 	file, name = getBfsFileURL(c, filesystem, prefix)
 
@@ -219,6 +238,7 @@ func createNewBfsFile(c asserter, filesystem azbfs.FileSystemURL, prefix string)
 	return
 }
 
+//nolint
 func createNewBlockBlob(c asserter, container azblob.ContainerURL, prefix string) (blob azblob.BlockBlobURL, name string) {
 	blob, name = getBlockBlobURL(c, container, prefix)
 
@@ -241,6 +261,7 @@ func createNewAzureShare(c asserter, fsu azfile.ServiceURL) (share azfile.ShareU
 	return share, name
 }
 
+//nolint
 func createNewAzureFile(c asserter, share azfile.ShareURL, prefix string) (file azfile.FileURL, name string) {
 	file, name = getAzureFileURL(c, share, prefix)
 
@@ -287,6 +308,7 @@ func createNewPageBlob(c asserter, container azblob.ContainerURL, prefix string)
 	return
 }
 
+//nolint
 func deleteContainer(c asserter, container azblob.ContainerURL) {
 	resp, err := container.Delete(ctx, azblob.ContainerAccessConditions{})
 	c.AssertNoErr(err)
@@ -300,6 +322,7 @@ func deleteFilesystem(c asserter, filesystem azbfs.FileSystemURL) {
 	c.Assert(resp.StatusCode(), equals(), 202)
 }
 
+//nolint
 type createS3ResOptions struct {
 	Location string
 }
@@ -338,6 +361,7 @@ func createNewBucketWithName(c asserter, client *minio.Client, bucketName string
 	c.AssertNoErr(err)
 }
 
+//nolint
 func createNewObject(c asserter, client *minio.Client, bucketName string, prefix string) (objectKey string) {
 	objectKey = prefix + generateObjectName(c)
 
@@ -350,8 +374,8 @@ func createNewObject(c asserter, client *minio.Client, bucketName string, prefix
 	return
 }
 
-func deleteBucket(c asserter, client *minio.Client, bucketName string, waitQuarterMinute bool) {
-	_ = c
+//nolint
+func deleteBucket(_ asserter, client *minio.Client, bucketName string, waitQuarterMinute bool) {
 	// If we error out in this function, simply just skip over deleting the bucket.
 	// Some of our buckets have become "ghost" buckets in the past.
 	// Ghost buckets show up in list calls but can't actually be interacted with.
@@ -446,6 +470,7 @@ func cleanFileAccount(c asserter, serviceURL azfile.ServiceURL) {
 	time.Sleep(time.Minute)
 }
 
+//nolint
 func getGenericCredentialForFile(accountType string) (*azfile.SharedKeyCredential, error) {
 	accountNameEnvVar := accountType + "ACCOUNT_NAME"
 	accountKeyEnvVar := accountType + "ACCOUNT_KEY"
@@ -482,6 +507,7 @@ func runTestRequiringServiceProperties(c asserter, bsu azblob.ServiceURL, code s
 	}
 }
 
+//nolint
 func getContainerURLWithSAS(c asserter, credential azblob.SharedKeyCredential, containerName string) azblob.ContainerURL {
 	sasQueryParams, err := azblob.BlobSASSignatureValues{
 		Protocol:      azblob.SASProtocolHTTPS,
@@ -504,6 +530,7 @@ func getContainerURLWithSAS(c asserter, credential azblob.SharedKeyCredential, c
 	return azblob.NewContainerURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
 }
 
+//nolint
 func getBlobServiceURLWithSAS(c asserter, credential azblob.SharedKeyCredential) azblob.ServiceURL {
 	sasQueryParams, err := azblob.AccountSASSignatureValues{
 		Protocol:      azblob.SASProtocolHTTPS,
@@ -526,6 +553,7 @@ func getBlobServiceURLWithSAS(c asserter, credential azblob.SharedKeyCredential)
 	return azblob.NewServiceURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
 }
 
+//nolint
 func getFileServiceURLWithSAS(c asserter, credential azfile.SharedKeyCredential) azfile.ServiceURL {
 	sasQueryParams, err := azfile.AccountSASSignatureValues{
 		Protocol:      azfile.SASProtocolHTTPS,
@@ -545,6 +573,7 @@ func getFileServiceURLWithSAS(c asserter, credential azfile.SharedKeyCredential)
 	return azfile.NewServiceURL(*fullURL, azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{}))
 }
 
+//nolint
 func getShareURLWithSAS(c asserter, credential azfile.SharedKeyCredential, shareName string) azfile.ShareURL {
 	sasQueryParams, err := azfile.FileSASSignatureValues{
 		Protocol:    azfile.SASProtocolHTTPS,
@@ -567,6 +596,7 @@ func getShareURLWithSAS(c asserter, credential azfile.SharedKeyCredential, share
 	return azfile.NewShareURL(*fullURL, azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{}))
 }
 
+//nolint
 func getAdlsServiceURLWithSAS(c asserter, credential azbfs.SharedKeyCredential) azbfs.ServiceURL {
 	sasQueryParams, err := azbfs.AccountSASSignatureValues{
 		Protocol:      azbfs.SASProtocolHTTPS,
@@ -595,6 +625,8 @@ type stringContainsChecker struct {
 	*chk.CheckerInfo
 }
 
+// Check
+//nolint
 func (checker *stringContainsChecker) Check(params []interface{}, _ []string) (result bool, error string) {
 	if len(params) < 2 {
 		return false, "StringContains requires two parameters"

@@ -538,6 +538,7 @@ func (s *scenario) validateLastWriteTime(expected, actual *time.Time) {
 		expected, actual))
 }
 
+//nolint
 func (s *scenario) validateSMBAttrs(expected, actual *uint32) {
 	if expected == nil {
 		// These properties were not explicitly stated for verification

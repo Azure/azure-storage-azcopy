@@ -241,13 +241,13 @@ func getTestName(t *testing.T) (pseudoSuite, test string) {
 	return pseudoSuite, removeUnderscores(testName)
 }
 
+//nolint
 // This function generates an entity name by concatenating the passed prefix,
 // the name of the test requesting the entity name, and the minute, second, and nanoseconds of the call.
 // This should make it easy to associate the entities with their test, uniquely identify
 // them, and determine the order in which they were created.
 // Will truncate the end of the test name, if there is not enough room for it, followed by the time-based suffix,
 // with a non-zero maxLen.
-//nolint
 func generateName(c asserter, prefix string, maxLen int) string {
 	name := c.CompactScenarioName() // don't want to just use test name here, because each test contains multiple scenarios with the declarative runner
 
@@ -272,6 +272,7 @@ func (TestResourceNameGenerator) GenerateContainerName(c asserter) string {
 	return uuid.New().String()
 }
 
+//nolint
 func (TestResourceNameGenerator) generateBlobName(c asserter) string {
 	return generateName(c, blobPrefix, 0)
 }
