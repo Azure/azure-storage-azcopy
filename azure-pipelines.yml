@@ -40,9 +40,6 @@ jobs:
         workingDirectory: $(System.DefaultWorkingDirectory)
         condition: eq(variables.type, 'linux')
 
-      - task: GoTool@0
-        inputs:
-          version: '1.16'
       - script: |
           GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
           GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
