@@ -30,12 +30,13 @@ jobs:
           GO111MODULE: 'on'
         inputs:
           version: '1.16'
+
       - script: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.43.0
           echo 'Installation complete' 
           ./bin/golangci-lint --version 
           ./bin/golangci-lint run e2etest
-        displayName: 'Golang Lint Check'
+        displayName: 'Golang Lint Check - Linux'
         workingDirectory: $(System.DefaultWorkingDirectory)
         condition: eq(variables.type, 'linux')
 
