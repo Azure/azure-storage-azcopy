@@ -11,30 +11,6 @@ pr:
       - main
 
 jobs:
-  - job: Lint_Check
-#    continueOnError: true
-    timeoutInMinutes: 30
-    strategy:
-      matrix:
-        Ubuntu-20:
-          imageName: 'ubuntu-20.04'
-          type: 'linux'
-    pool:
-      vmImage: $(imageName)
-    steps:
-      - task: GoTool@0
-        env:
-          GO111MODULE: 'on'
-        inputs:
-          version: '1.16'
-
-      - script: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.43.0
-          echo 'Installation complete' 
-          ./bin/golangci-lint --version 
-          ./bin/golangci-lint run e2etest
-        displayName: 'Golang Lint Check'
-        workingDirectory: $(System.DefaultWorkingDirectory)
 
   - job: Build
     timeoutInMinutes: 360
@@ -49,6 +25,20 @@ jobs:
     pool:
       vmImage: $(imageName)
     steps:
+      - task: GoTool@0
+        env:
+          GO111MODULE: 'on'
+        inputs:
+          version: '1.16'
+      - script: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.43.0
+          echo 'Installation complete' 
+          ./bin/golangci-lint --version 
+          ./bin/golangci-lint run e2etest
+        displayName: 'Golang Lint Check'
+        workingDirectory: $(System.DefaultWorkingDirectory)
+        condition: eq(variables.type, 'linux')
+
       - task: GoTool@0
         inputs:
           version: '1.16'
