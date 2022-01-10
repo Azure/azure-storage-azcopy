@@ -1254,7 +1254,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 		// step 4: pipe everything into Stdout
 		err = azblob.DoBatchTransfer(ctx, azblob.BatchTransferOptions{
-			OperationName: "downloadBlobToWriterAt",
+			OperationName: "downloadPipeToBlob",
 			TransferSize:  blobSize,
 			ChunkSize:     cca.blockSize,
 			Parallelism:   uint16(concurrencyValue),
@@ -1273,8 +1273,6 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 					glcm.Stderr(err.Error())
 					return err
 				}
-
-				body.Close()
 				return err
 			},
 		})
