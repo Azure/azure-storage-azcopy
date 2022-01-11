@@ -1197,7 +1197,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
 	if err != nil {
-		glcm.Stderr(err.Error())
+		// glcm.Stderr(err.Error())
 		return fmt.Errorf("fatal: cannot parse source blob URL due to error: %s", err.Error())
 	}
 
@@ -1261,7 +1261,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 			Operation: func(chunkStart int64, count int64, ctx context.Context) error {
 				dr, err := blobURL.Download(ctx, chunkStart, count, azblob.BlobAccessConditions{}, false, clientProvidedKey)
 				if err != nil {
-					glcm.Stderr(err.Error())
+					// glcm.Stderr(err.Error())
 					return err
 				}
 				body := dr.Body(azblob.RetryReaderOptions{MaxRetryRequests: ste.MaxRetryPerDownloadBody})
@@ -1270,7 +1270,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 				chunkID := common.NewChunkID(cca.Source.Value, chunkStart, count)
 				err = dstWriter.EnqueueChunk(ctx, chunkID, count, body, true)
 				if err != nil {
-					glcm.Stderr(err.Error())
+					// glcm.Stderr(err.Error())
 					return err
 				}
 				return err
@@ -1279,14 +1279,14 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 		// err from DoBatchTransfer
 		if err != nil {
-			glcm.Stderr(err.Error())
+			// glcm.Stderr(err.Error())
 			return err
 		}
 
 		// flush out dstWriter
 		_, err = dstWriter.Flush(ctx)
 		if err != nil {
-			glcm.Stderr(err.Error())
+			// glcm.Stderr(err.Error())
 			return err
 		}
 	} else {
@@ -1323,7 +1323,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	// make sure that the destination has blob name
 	blobURLParts := azblob.NewBlobURLParts(*u)
 	if blobURLParts.BlobName != "" {
-		glcm.Stderr("When transferring from Pipe to Blob, blob name must be provided.")
+		// glcm.Stderr("When transferring from Pipe to Blob, blob name must be provided.")
 		return fmt.Errorf("%s", "fatal: blob name not provided while trying to transfer from Pipe to Blob.")
 	}
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel, extract concurrency value from AZCOPY_CONCURRENCY_VALUE
@@ -1360,9 +1360,9 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 		BlobAccessTier:           bbAccessTier,
 		ClientProvidedKeyOptions: common.GetClientProvidedKey(cca.CpkOptions),
 	})
-	if err != nil {
+	/*if err != nil {
 		glcm.Stderr(err.Error())
-	}
+	}*/
 
 	return err
 }
