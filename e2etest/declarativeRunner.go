@@ -94,7 +94,7 @@ func RunScenarios(
 				isSourceAcc = false
 			}
 			s := scenario{
-				accountType:         accountType,
+				srcAccountType:      accountType,
 				destAccountType:     destAccountType,
 				subtestName:         subtestName,
 				compactScenarioName: compactScenarioName,

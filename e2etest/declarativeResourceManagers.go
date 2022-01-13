@@ -200,7 +200,7 @@ func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bo
 		generateFromListOptions: generateFromListOptions{
 			fs:          s.fs.allObjects(isSource),
 			defaultSize: s.fs.defaultSize,
-			accountType: s.accountType,
+			accountType: s.srcAccountType,
 		},
 	}
 	if s.fromTo.IsDownload() {

@@ -39,7 +39,7 @@ import (
 // A scenario is treated as a sub-test by our declarative test runner
 type scenario struct {
 	// scenario config properties
-	accountType         AccountType
+	srcAccountType      AccountType
 	destAccountType     AccountType
 	subtestName         string
 	compactScenarioName string
@@ -142,12 +142,12 @@ func (s *scenario) assignSourceAndDest() {
 		case common.ELocation.Local():
 			return &resourceLocal{}
 		case common.ELocation.File():
-			return &resourceAzureFileShare{accountType: s.accountType}
+			return &resourceAzureFileShare{accountType: s.srcAccountType}
 		case common.ELocation.Blob():
 			// TODO: handle the multi-container (whole account) scenario
 			// TODO: handle wider variety of account types
 			if isSourceAcc {
-				return &resourceBlobContainer{accountType: s.accountType}
+				return &resourceBlobContainer{accountType: s.srcAccountType}
 			} else {
 				return &resourceBlobContainer{accountType: s.destAccountType}
 			}
