@@ -373,21 +373,12 @@ func (s *softDeleteFilter) AppliesOnlyToFiles() bool {
 }
 
 func (s *softDeleteFilter) DoesPass(storedObject StoredObject) bool {
-	if s.deleteVersions && s.deleteSnapshots {
-		if storedObject.blobDeleted && (storedObject.blobVersionID != "" || storedObject.blobSnapshotID != "") {
-			return true
-		}
-		return false
-	} else if s.deleteSnapshots {
-		if storedObject.blobDeleted && storedObject.blobSnapshotID != "" {
-			return true
-		}
-		return false
-	} else if s.deleteVersions {
-		if storedObject.blobDeleted && storedObject.blobVersionID != "" {
-			return true
-		}
-		return false
+	if (s.deleteVersions && s.deleteSnapshots) && storedObject.blobDeleted && (storedObject.blobVersionID != "" || storedObject.blobSnapshotID != "") {
+		return true
+	} else if s.deleteSnapshots && storedObject.blobDeleted && storedObject.blobSnapshotID != "" {
+		return true
+	} else if s.deleteVersions && storedObject.blobDeleted && storedObject.blobVersionID != "" {
+		return true
 	}
 	return false
 }
