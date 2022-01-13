@@ -796,7 +796,7 @@ func setUpAccountPermDelete(c *chk.C) azblob.ServiceURL {
 
 	sasQueryParams, err := azblob.AccountSASSignatureValues{
 		Protocol:      azblob.SASProtocolHTTPS,
-		ExpiryTime:    time.Now().UTC().Add(168 * time.Hour), // week long sas
+		ExpiryTime:    time.Now().UTC().Add(12 * time.Hour), // 12 hr long sas
 		Permissions:   azblob.AccountSASPermissions{Read: true, List: true, Write: true, Create: true, PermanentDelete: true, Delete: true, DeletePreviousVersion: true}.String(),
 		Services:      azblob.AccountSASServices{Blob: true}.String(),
 		ResourceTypes: azblob.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
@@ -806,8 +806,8 @@ func setUpAccountPermDelete(c *chk.C) azblob.ServiceURL {
 	}
 
 	qp := sasQueryParams.Encode()
-	urlToSendToSomeone := fmt.Sprintf("https://%s.blob.core.windows.net?%s", accountName, qp)
-	u, _ = url.Parse(urlToSendToSomeone)
+	accountURLWithSAS := fmt.Sprintf("https://%s.blob.core.windows.net?%s", accountName, qp)
+	u, _ = url.Parse(accountURLWithSAS)
 	serviceURL := azblob.NewServiceURL(*u, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
 	days := int32(5)
 	allowDelete := true

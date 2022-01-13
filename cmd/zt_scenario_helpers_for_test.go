@@ -150,21 +150,19 @@ func (scenarioHelper) generateCommonRemoteScenarioForSoftDelete(c *chk.C, contai
 	blobNames[2] = blobName3
 
 	for i := 0; i < len(blobList); i++ {
-		for j := 0; j < 3; j++ {
-			// Create snapshot for blob
-			snapResp, err := blobList[i].CreateSnapshot(ctx, azblob.Metadata{}, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
-			c.Assert(snapResp, chk.NotNil)
-			c.Assert(err, chk.IsNil)
+		// Create snapshot for blob
+		snapResp, err := blobList[i].CreateSnapshot(ctx, azblob.Metadata{}, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+		c.Assert(snapResp, chk.NotNil)
+		c.Assert(err, chk.IsNil)
 
-			time.Sleep(time.Millisecond * 30)
+		time.Sleep(time.Millisecond * 30)
 
-			// Soft delete snapshot
-			snapshotBlob := blobList[i].WithSnapshot(snapResp.Snapshot())
-			_, err = snapshotBlob.Delete(ctx, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
-			c.Assert(err, chk.IsNil)
+		// Soft delete snapshot
+		snapshotBlob := blobList[i].WithSnapshot(snapResp.Snapshot())
+		_, err = snapshotBlob.Delete(ctx, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+		c.Assert(err, chk.IsNil)
 
-			listOfTransfers = append(listOfTransfers, blobNames[i])
-		}
+		listOfTransfers = append(listOfTransfers, blobNames[i])
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
