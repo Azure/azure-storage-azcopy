@@ -171,7 +171,7 @@ func (u *blobFSSenderBase) Cleanup() {
 		// transfer was either failed or cancelled
 		// the file created in share needs to be deleted, since it's
 		// contents will be at an unknown stage of partial completeness
-		deletionContext, cancelFn := context.WithTimeout(context.Background(), 2*time.Minute)
+		deletionContext, cancelFn := context.WithTimeout(context.WithValue(context.Background(), ServiceAPIVersionOverride, DefaultServiceApiVersion), 2*time.Minute)
 		defer cancelFn()
 		_, err := u.fileURL().Delete(deletionContext)
 		if err != nil {
