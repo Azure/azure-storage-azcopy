@@ -21,7 +21,6 @@
 package cmd
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"fmt"
 	"io"
@@ -33,6 +32,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	gcpUtils "cloud.google.com/go/storage"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	minio "github.com/minio/minio-go"
@@ -503,7 +504,7 @@ func (scenarioHelper) generateBFSPathsFromList(c *chk.C, filesystemURL azbfs.Fil
 		file := filesystemURL.NewRootDirectoryURL().NewFileURL(path)
 
 		// Create the file
-		cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+		cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 		c.Assert(err, chk.IsNil)
 		c.Assert(cResp.StatusCode(), chk.Equals, 201)
 
