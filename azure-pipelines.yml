@@ -43,7 +43,7 @@ jobs:
       - script: |
           echo 'Running GO Vet'
           go vet 
-          displayName: 'Golang Vet - Linux'
+        displayName: 'Golang Vet - Linux'
         workingDirectory: $(System.DefaultWorkingDirectory)
 
       - script: |
