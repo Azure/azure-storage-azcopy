@@ -41,7 +41,8 @@ jobs:
         condition: eq(variables.type, 'linux')
 
       - script: |
-          go vet e2etest/
+          echo 'Running GO Vet'
+          go vet 
           displayName: 'Golang Vet - Linux'
         workingDirectory: $(System.DefaultWorkingDirectory)
 
