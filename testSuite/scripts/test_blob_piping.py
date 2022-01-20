@@ -22,11 +22,11 @@ class BlobPipingTests(unittest.TestCase):
 
         # upload 1KB file using azcopy
         destination_url = util.get_resource_sas(filename)
-        azcopy_cmd = util.Command("copy").add_arguments(destination_url).add_flags("from-to", "PipeBlob").add_flags("log-level", "DEBUG").add_flags("recursive", "true").string()
+        azcopy_cmd = util.Command("copy").add_arguments(destination_url).add_flags("from-to", "PipeBlob").add_flags("log-level", "DEBUG").string()
         self.assertTrue(execute_command_with_pipe(azcopy_cmd, source_file_to_pipe=source_file_path))
 
         # downloading the uploaded file
-        azcopy_cmd = util.Command("copy").add_arguments(destination_url).add_flags("from-to", "BlobPipe").add_flags("log-level", "DEBUG").add_flags("recursive", "true").string()
+        azcopy_cmd = util.Command("copy").add_arguments(destination_url).add_flags("from-to", "BlobPipe").add_flags("log-level", "DEBUG").string()
         destination_file_path = util.test_directory_path + "/test_1kb_blob_piping_download.txt"
         self.assertTrue(execute_command_with_pipe(azcopy_cmd, destination_file_to_pipe=destination_file_path))
 
@@ -50,11 +50,11 @@ class BlobPipingTests(unittest.TestCase):
         # TODO reviewers please note, this used to use a 4MB file, with a 1 KiB block size, but now we don't support block sizes
         #    smaller than 1 MB. I've compensated slightly by changing it to an 8 MB file
         destination_url = util.get_resource_sas(filename)
-        azcopy_cmd = util.Command("copy").add_arguments(destination_url).add_flags("block-size-mb", '1').add_flags("from-to", "PipeBlob").add_flags("log-level", "DEBUG").add_flags("recursive", "true").string()
+        azcopy_cmd = util.Command("copy").add_arguments(destination_url).add_flags("block-size-mb", '1').add_flags("from-to", "PipeBlob").add_flags("log-level", "DEBUG").string()
         self.assertTrue(execute_command_with_pipe(azcopy_cmd, source_file_to_pipe=source_file_path))
 
         # downloading the uploaded file
-        azcopy_cmd = util.Command("copy").add_arguments(destination_url).add_flags("block-size-mb", '1').add_flags("from-to", "BlobPipe").add_flags("log-level", "DEBUG").add_flags("recursive", "true").string()
+        azcopy_cmd = util.Command("copy").add_arguments(destination_url).add_flags("block-size-mb", '1').add_flags("from-to", "BlobPipe").add_flags("log-level", "DEBUG").string()
         destination_file_path = util.test_directory_path + "/test_8mb_blob_piping_download.txt"
         self.assertTrue(execute_command_with_pipe(azcopy_cmd, destination_file_to_pipe=destination_file_path))
 
