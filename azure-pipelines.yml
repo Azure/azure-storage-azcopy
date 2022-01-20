@@ -41,6 +41,11 @@ jobs:
         condition: eq(variables.type, 'linux')
 
       - script: |
+          go vet e2etest/
+          displayName: 'Golang Vet - Linux'
+        workingDirectory: $(System.DefaultWorkingDirectory)
+
+      - script: |
           GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
           GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
           GOARCH=arm64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
