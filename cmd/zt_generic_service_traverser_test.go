@@ -76,12 +76,11 @@ func (s *genericTraverserSuite) TestBlobFSServiceTraverserWithManyObjects(c *chk
 	c.Assert(len(blobDummyProcessor.record), chk.Equals, len(localIndexer.indexMap)*len(containerList))
 
 	for _, storedObject := range blobDummyProcessor.record {
-		correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
+		_, present := localIndexer.indexMap[storedObject.relativePath]
 		_, cnamePresent := cnames[storedObject.ContainerName]
 
 		c.Assert(present, chk.Equals, true)
 		c.Assert(cnamePresent, chk.Equals, true)
-		c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
 	}
 }
 
@@ -246,12 +245,11 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 	}
 
 	for _, storedObject := range records {
-		correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
+		_, present := localIndexer.indexMap[storedObject.relativePath]
 		_, cnamePresent := cnames[storedObject.ContainerName]
 
 		c.Assert(present, chk.Equals, true)
 		c.Assert(cnamePresent, chk.Equals, true)
-		c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
 	}
 }
 
@@ -450,22 +448,20 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	}
 
 	for _, storedObject := range records {
-		correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
+		_, present := localIndexer.indexMap[storedObject.relativePath]
 		_, cnamePresent := cnames[storedObject.ContainerName]
 
 		c.Assert(present, chk.Equals, true)
 		c.Assert(cnamePresent, chk.Equals, true)
-		c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
 	}
 
 	// Test ADLSG2 separately due to different container naming
 	c.Assert(len(bfsDummyProcessor.record), chk.Equals, len(localIndexer.indexMap)*2)
 	for _, storedObject := range bfsDummyProcessor.record {
-		correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
+		_, present := localIndexer.indexMap[storedObject.relativePath]
 		_, cnamePresent := bfscnames[storedObject.ContainerName]
 
 		c.Assert(present, chk.Equals, true)
 		c.Assert(cnamePresent, chk.Equals, true)
-		c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
 	}
 }

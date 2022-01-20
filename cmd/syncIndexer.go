@@ -22,14 +22,61 @@ package cmd
 
 import (
 	"strings"
+	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
+
+type limitedStoredObject struct {
+	relativeCapitalization []bool
+	lmt                    time.Time
+	entityType             common.EntityType
+}
+
+func (o limitedStoredObject) ToStoredObject(p string) StoredObject {
+	return StoredObject{
+		entityType:       o.entityType,
+		lastModifiedTime: o.lmt,
+		relativePath:     o.GetCapitalizedRelPath(p),
+	}
+}
+
+func (s *limitedStoredObject) isMoreRecentThan(storedObject2 StoredObject) bool {
+	return s.lmt.After(storedObject2.lastModifiedTime)
+}
+
+func (o *limitedStoredObject) StoreCapitalization(p string) {
+	o.relativeCapitalization = make([]bool, len(p))
+
+	for k, v := range p {
+		o.relativeCapitalization[k] = strings.ToLower(string(v)) != string(v)
+	}
+}
+
+func (o limitedStoredObject) GetCapitalizedRelPath(p string) string {
+	if o.relativeCapitalization == nil {
+		return p // it's already capitalized.
+	}
+
+	out := ""
+
+	for k, v := range p {
+		if o.relativeCapitalization[k] {
+			out += strings.ToUpper(string(v))
+		} else {
+			out += string(v)
+		}
+	}
+
+	return out
+}
 
 // the objectIndexer is essential for the generic sync enumerator to work
 // it can serve as a:
 // 		1. objectProcessor: accumulate a lookup map with given StoredObjects
 //		2. resourceTraverser: go through the entities in the map like a traverser
 type objectIndexer struct {
-	indexMap map[string]StoredObject
+	indexMap map[string]limitedStoredObject
 	counter  int
 
 	// isDestinationCaseInsensitive is true when the destination is case-insensitive
@@ -40,7 +87,7 @@ type objectIndexer struct {
 }
 
 func newObjectIndexer() *objectIndexer {
-	return &objectIndexer{indexMap: make(map[string]StoredObject)}
+	return &objectIndexer{indexMap: make(map[string]limitedStoredObject)}
 }
 
 // process the given stored object by indexing it using its relative path
@@ -53,9 +100,19 @@ func (i *objectIndexer) store(storedObject StoredObject) (err error) {
 	// Linux file systems, Windows, Azure Files and ADLS Gen 2 (and logically should be true of all file systems).
 	if i.isDestinationCaseInsensitive {
 		lcRelativePath := strings.ToLower(storedObject.relativePath)
-		i.indexMap[lcRelativePath] = storedObject
+		tmp := limitedStoredObject{
+			lmt:        storedObject.lastModifiedTime,
+			entityType: storedObject.entityType,
+		}
+
+		tmp.StoreCapitalization(storedObject.relativePath)
+
+		i.indexMap[lcRelativePath] = tmp
 	} else {
-		i.indexMap[storedObject.relativePath] = storedObject
+		i.indexMap[storedObject.relativePath] = limitedStoredObject{
+			lmt:        storedObject.lastModifiedTime,
+			entityType: storedObject.entityType,
+		}
 	}
 	i.counter += 1
 	return
@@ -63,8 +120,8 @@ func (i *objectIndexer) store(storedObject StoredObject) (err error) {
 
 // go through the remaining stored objects in the map to process them
 func (i *objectIndexer) traverse(processor objectProcessor, filters []ObjectFilter) (err error) {
-	for _, value := range i.indexMap {
-		err = processIfPassedFilters(filters, value, processor)
+	for relPath, value := range i.indexMap { // todo: can we preserve casing while
+		err = processIfPassedFilters(filters, value.ToStoredObject(relPath), processor)
 		_, err = getProcessingError(err)
 		if err != nil {
 			return

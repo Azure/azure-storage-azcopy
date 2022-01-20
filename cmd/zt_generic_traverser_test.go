@@ -741,10 +741,9 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		// if s3dummyprocessor is empty, it's A-OK because no records will be tested
 		for _, storedObject := range append(append(append(append(blobDummyProcessor.record, fileDummyProcessor.record...), bfsDummyProcessor.record...), s3DummyProcessor.record...), gcpDummyProcessor.record...) {
 			if isRecursiveOn || storedObject.entityType == common.EEntityType.File() { // folder enumeration knowingly NOT consistent when non-recursive (since the folders get stripped out by ToNewCopyTransfer when non-recursive anyway)
-				correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
+				_, present := localIndexer.indexMap[storedObject.relativePath]
 
 				c.Assert(present, chk.Equals, true)
-				c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
 
 				if !isRecursiveOn {
 					c.Assert(strings.Contains(storedObject.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
@@ -902,7 +901,6 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 				correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
 
 				c.Assert(present, chk.Equals, true)
-				c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
 				// Say, here's a good question, why do we have this last check?
 				// None of the other tests have it.
 				c.Assert(correspondingLocalFile.isMoreRecentThan(storedObject), chk.Equals, true)

@@ -22,56 +22,6 @@ package cmd
 
 import "strings"
 
-// with the help of an objectIndexer containing the source objects
-// find out the destination objects that should be transferred
-// in other words, this should be used when destination is being enumerated secondly
-type syncDestinationComparator struct {
-	// the rejected objects would be passed to the destinationCleaner
-	destinationCleaner objectProcessor
-
-	// the processor responsible for scheduling copy transfers
-	copyTransferScheduler objectProcessor
-
-	// storing the source objects
-	sourceIndex *objectIndexer
-
-	disableComparison bool
-}
-
-func newSyncDestinationComparator(i *objectIndexer, copyScheduler, cleaner objectProcessor, disableComparison bool) *syncDestinationComparator {
-	return &syncDestinationComparator{sourceIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, disableComparison: disableComparison}
-}
-
-// it will only schedule transfers for destination objects that are present in the indexer but stale compared to the entry in the map
-// if the destinationObject is not at the source, it will be passed to the destinationCleaner
-// ex: we already know what the source contains, now we are looking at objects at the destination
-// if file x from the destination exists at the source, then we'd only transfer it if it is considered stale compared to its counterpart at the source
-// if file x does not exist at the source, then it is considered extra, and will be deleted
-func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredObject) error {
-	sourceObjectInMap, present := f.sourceIndex.indexMap[destinationObject.relativePath]
-	if !present && f.sourceIndex.isDestinationCaseInsensitive {
-		lcRelativePath := strings.ToLower(destinationObject.relativePath)
-		sourceObjectInMap, present = f.sourceIndex.indexMap[lcRelativePath]
-	}
-
-	// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
-	if present {
-		defer delete(f.sourceIndex.indexMap, destinationObject.relativePath)
-		if f.disableComparison || sourceObjectInMap.isMoreRecentThan(destinationObject) {
-			err := f.copyTransferScheduler(sourceObjectInMap)
-			if err != nil {
-				return err
-			}
-		}
-	} else {
-		// purposefully ignore the error from destinationCleaner
-		// it's a tolerable error, since it just means some extra destination object might hang around a bit longer
-		_ = f.destinationCleaner(destinationObject)
-	}
-
-	return nil
-}
-
 // with the help of an objectIndexer containing the destination objects
 // filter out the source objects that should be transferred
 // in other words, this should be used when source is being enumerated secondly
@@ -107,7 +57,7 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) err
 		defer delete(f.destinationIndex.indexMap, relPath)
 
 		// if destination is stale, schedule source for transfer
-		if f.disableComparison || sourceObject.isMoreRecentThan(destinationObjectInMap) {
+		if f.disableComparison || sourceObject.isMoreRecentThan(destinationObjectInMap.ToStoredObject(relPath)) {
 			return f.copyTransferScheduler(sourceObject)
 		}
 		// skip if source is more recent
