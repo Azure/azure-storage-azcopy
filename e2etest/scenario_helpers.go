@@ -864,7 +864,7 @@ func (scenarioHelper) generateBFSPathsFromList(c asserter, filesystemURL azbfs.F
 		file := filesystemURL.NewRootDirectoryURL().NewFileURL(bfsPath)
 
 		// Create the file
-		cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+		cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 		c.AssertNoErr(err)
 		c.Assert(cResp.StatusCode(), equals(), 201)
 

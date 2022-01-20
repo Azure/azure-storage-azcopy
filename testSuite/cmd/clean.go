@@ -4,6 +4,7 @@ import (
 	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"google.golang.org/api/iterator"
 	"net/http"
 	"net/url"
@@ -161,14 +162,14 @@ func cleanContainer(container string) {
 
 	p := createBlobPipeline(*containerURLBase)
 	containerUrl := azblob.NewContainerURL(*containerURLBase, p)
-
+	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Create the container. This will fail if it's already present but this saves us the pain of a container being missing for one reason or another.
-	_, _ = containerUrl.Create(context.Background(), azblob.Metadata{}, azblob.PublicAccessNone)
+	_, _ = containerUrl.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
 
 	// perform a list blob
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
-		listBlob, err := containerUrl.ListBlobsFlatSegment(context.Background(), marker, azblob.ListBlobsSegmentOptions{})
+		listBlob, err := containerUrl.ListBlobsFlatSegment(ctx, marker, azblob.ListBlobsSegmentOptions{})
 		if err != nil {
 			fmt.Println("error listing blobs inside the container. Please check the container sas", err)
 			os.Exit(1)
@@ -176,7 +177,7 @@ func cleanContainer(container string) {
 
 		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 		for _, blobInfo := range listBlob.Segment.BlobItems {
-			_, err := containerUrl.NewBlobURL(blobInfo.Name).Delete(context.Background(), "include", azblob.BlobAccessConditions{})
+			_, err := containerUrl.NewBlobURL(blobInfo.Name).Delete(ctx, "include", azblob.BlobAccessConditions{})
 			if err != nil {
 				fmt.Println("error deleting the blob from container ", blobInfo.Name)
 				os.Exit(1)
@@ -196,8 +197,9 @@ func cleanBlob(blob string) {
 
 	p := createBlobPipeline(*blobURLBase)
 	blobUrl := azblob.NewBlobURL(*blobURLBase, p)
+	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	_, err = blobUrl.Delete(context.Background(), "include", azblob.BlobAccessConditions{})
+	_, err = blobUrl.Delete(ctx, "include", azblob.BlobAccessConditions{})
 	if err != nil {
 		fmt.Println("error deleting the blob ", err)
 		os.Exit(1)
@@ -214,11 +216,11 @@ func cleanShare(shareURLStr string) {
 
 	p := createFilePipeline(*u)
 	shareURL := azfile.NewShareURL(*u, p)
-
+	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Create the share. This will fail if it's already present but this saves us the pain of a container being missing for one reason or another.
-	_, _ = shareURL.Create(context.Background(), azfile.Metadata{}, 0)
+	_, _ = shareURL.Create(ctx, azfile.Metadata{}, 0)
 
-	_, err = shareURL.Delete(context.Background(), azfile.DeleteSnapshotsOptionInclude)
+	_, err = shareURL.Delete(ctx, azfile.DeleteSnapshotsOptionInclude)
 	if err != nil {
 		sErr, sErrOk := err.(azfile.StorageError)
 		if sErrOk && sErr.Response().StatusCode != http.StatusNotFound {
@@ -230,7 +232,7 @@ func cleanShare(shareURLStr string) {
 	// Sleep seconds to wait the share deletion got succeeded
 	time.Sleep(45 * time.Second)
 
-	_, err = shareURL.Create(context.Background(), azfile.Metadata{}, 0)
+	_, err = shareURL.Create(ctx, azfile.Metadata{}, 0)
 	if err != nil {
 		fmt.Fprintf(os.Stdout, "error creating the share for clean share, error '%v'\n", err)
 		os.Exit(1)
@@ -247,8 +249,9 @@ func cleanFile(fileURLStr string) {
 
 	p := createFilePipeline(*u)
 	fileURL := azfile.NewFileURL(*u, p)
+	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	_, err = fileURL.Delete(context.Background())
+	_, err = fileURL.Delete(ctx)
 	if err != nil {
 		fmt.Println("error deleting the file ", err)
 		os.Exit(1)
@@ -321,7 +324,7 @@ func createBlobFSPipeline(u url.URL) pipeline.Pipeline {
 }
 
 func cleanFileSystem(fsURLStr string) {
-	ctx := context.Background()
+	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	u, err := url.Parse(fsURLStr)
 
 	if err != nil {
@@ -349,7 +352,7 @@ func cleanFileSystem(fsURLStr string) {
 }
 
 func cleanBfsFile(fileURLStr string) {
-	ctx := context.Background()
+	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	u, err := url.Parse(fileURLStr)
 
 	if err != nil {
@@ -375,18 +378,18 @@ func cleanBlobAccount(resourceURL string) {
 
 	p := createBlobPipeline(*accountURLBase)
 	accountURL := azblob.NewServiceURL(*accountURLBase, p)
-
+	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// perform a list account
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
-		lResp, err := accountURL.ListContainersSegment(context.Background(), marker, azblob.ListContainersSegmentOptions{})
+		lResp, err := accountURL.ListContainersSegment(ctx, marker, azblob.ListContainersSegmentOptions{})
 		if err != nil {
 			fmt.Println("error listing containers, please check the container sas, ", err)
 			os.Exit(1)
 		}
 
 		for _, containerItem := range lResp.ContainerItems {
-			_, err := accountURL.NewContainerURL(containerItem.Name).Delete(context.Background(), azblob.ContainerAccessConditions{})
+			_, err := accountURL.NewContainerURL(containerItem.Name).Delete(ctx, azblob.ContainerAccessConditions{})
 			if err != nil {
 				fmt.Println("error deleting the container from account, ", err)
 				os.Exit(1)
@@ -406,18 +409,18 @@ func cleanFileAccount(resourceURL string) {
 
 	p := createFilePipeline(*accountURLBase)
 	accountURL := azfile.NewServiceURL(*accountURLBase, p)
-
+	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// perform a list account
 	for marker := (azfile.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
-		lResp, err := accountURL.ListSharesSegment(context.Background(), marker, azfile.ListSharesOptions{})
+		lResp, err := accountURL.ListSharesSegment(ctx, marker, azfile.ListSharesOptions{})
 		if err != nil {
 			fmt.Println("error listing shares, please check the share sas, ", err)
 			os.Exit(1)
 		}
 
 		for _, shareItem := range lResp.ShareItems {
-			_, err := accountURL.NewShareURL(shareItem.Name).Delete(context.Background(), azfile.DeleteSnapshotsOptionInclude)
+			_, err := accountURL.NewShareURL(shareItem.Name).Delete(ctx, azfile.DeleteSnapshotsOptionInclude)
 			if err != nil {
 				fmt.Println("error deleting the share from account, ", err)
 				os.Exit(1)

@@ -27,15 +27,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/minio/minio-go/pkg/credentials"
-	chk "gopkg.in/check.v1"
 	"math/rand"
 	"mime"
 	"net/url"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/minio/minio-go/pkg/credentials"
+	chk "gopkg.in/check.v1"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -224,7 +225,7 @@ func createNewBfsFile(c asserter, filesystem azbfs.FileSystemURL, prefix string)
 	file, name = getBfsFileURL(c, filesystem, prefix)
 
 	// Create the file
-	cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.AssertNoErr(err)
 	c.Assert(cResp.StatusCode(), equals(), 201)
 
