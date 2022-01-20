@@ -39,7 +39,6 @@ type CacheLimiter interface {
 	WaitUntilAdd(ctx context.Context, count int64, useRelaxedLimit Predicate) error
 	Remove(count int64)
 	Limit() int64
-	Value() int64
 }
 
 type cacheLimiter struct {
@@ -109,8 +108,4 @@ func (c *cacheLimiter) Remove(count int64) {
 
 func (c *cacheLimiter) Limit() int64 {
 	return c.limit
-}
-
-func (c *cacheLimiter) Value() int64 {
-	return c.value
 }
