@@ -300,6 +300,7 @@ func (lcm *lifecycleMgr) Error(msg string) {
 }
 
 func (lcm *lifecycleMgr) Stderr(msg string) {
+	lcm.SetOutputFormat(EOutputFormat.Text()) // Change OutputFormat to Text from None
 
 	msg = lcm.logSanitizer.SanitizeLogMessage(msg)
 
