@@ -155,7 +155,7 @@ func (u *blobFSSenderBase) Prologue(state common.PrologueState) (destinationModi
 	}
 
 	// Create file with the source size
-	_, err = u.fileURL().Create(u.jptm.Context(), *u.creationTimeHeaders) // "create" actually calls "create path", so if we didn't need to track folder creation, we could just let this call create the folder as needed
+	_, err = u.fileURL().Create(u.jptm.Context(), *u.creationTimeHeaders, azbfs.BlobFSAccessControl{}) // "create" actually calls "create path", so if we didn't need to track folder creation, we could just let this call create the folder as needed
 	if err != nil {
 		u.jptm.FailActiveUpload("Creating file", err)
 		return
@@ -171,7 +171,7 @@ func (u *blobFSSenderBase) Cleanup() {
 		// transfer was either failed or cancelled
 		// the file created in share needs to be deleted, since it's
 		// contents will be at an unknown stage of partial completeness
-		deletionContext, cancelFn := context.WithTimeout(context.Background(), 2*time.Minute)
+		deletionContext, cancelFn := context.WithTimeout(context.WithValue(context.Background(), ServiceAPIVersionOverride, DefaultServiceApiVersion), 2*time.Minute)
 		defer cancelFn()
 		_, err := u.fileURL().Delete(deletionContext)
 		if err != nil {

@@ -84,6 +84,11 @@ func (t *blobTraverser) getPropertiesIfSingleBlob() (props *azblob.BlobGetProper
 	blobUrlParts := azblob.NewBlobURLParts(*t.rawURL)
 	blobUrlParts.BlobName = strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)
 
+	if blobUrlParts.BlobName == "" {
+		// This is a container, which needs to be given a proper listing.
+		return nil, false, false, nil
+	}
+
 	// perform the check
 	blobURL := azblob.NewBlobURL(blobUrlParts.URL(), t.p)
 	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
@@ -134,6 +139,14 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		if stgErr.ServiceCode() == common.CPK_ERROR_SERVICE_CODE {
 			return errors.New("this blob uses customer provided encryption keys (CPK). At the moment, AzCopy does not support CPK-encrypted blobs. " +
 				"If you wish to make use of this blob, we recommend using one of the Azure Storage SDKs")
+		}
+
+		if resp := stgErr.Response(); resp == nil {
+			return fmt.Errorf("cannot list files due to reason %s", stgErr)
+		} else {
+			if resp.StatusCode == 403 { // Some nature of auth error-- Whatever the user is pointing at, they don't have access to, regardless of whether it's a file or a dir stub.
+				return fmt.Errorf("cannot list files due to reason %s", stgErr)
+			}
 		}
 	}
 

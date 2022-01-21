@@ -44,6 +44,7 @@ type downloadContentOptions struct {
 	downloadFileContentOptions
 }
 
+//nolint
 type downloadBlobContentOptions struct {
 	containerURL azblob.ContainerURL
 	cpkInfo      common.CpkInfo

@@ -30,28 +30,34 @@ import (
 type osScenarioHelper struct{}
 
 // set file attributes to test file
+//nolint
 func (osScenarioHelper) setAttributesForLocalFile() error {
 	panic("should never be called")
 }
 
+//nolint
 func (osScenarioHelper) setAttributesForLocalFiles(c asserter, dirPath string, fileList []string, attrList []string) {
 	panic("should never be called")
 }
 
+//nolint
 func (osScenarioHelper) getFileDates(c asserter, filePath string) (createdTime, lastWriteTime time.Time) {
 	panic("should never be called")
 }
 
+//nolint
 func (osScenarioHelper) getFileAttrs(c asserter, filepath string) *uint32 {
 	var ret uint32
 	return &ret
 }
 
+//nolint
 func (osScenarioHelper) getFileSDDLString(c asserter, filepath string) *string {
 	ret := ""
 	return &ret
 }
 
+//nolint
 func (osScenarioHelper) setFileSDDLString(c asserter, filepath string, sddldata string) {
 	panic("should never be called")
 }

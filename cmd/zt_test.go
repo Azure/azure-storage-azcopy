@@ -101,8 +101,8 @@ func skipIfGCPDisabled(c *chk.C) {
 }
 
 func testDryrunStatements(items, messages []string) bool {
-	for _,v := range items {
-		for _,m := range messages {
+	for _, v := range items {
+		for _, m := range messages {
 			if strings.HasSuffix(m, v) {
 				goto continueBlobs
 			}
@@ -110,7 +110,7 @@ func testDryrunStatements(items, messages []string) bool {
 
 		return false
 
-		continueBlobs:
+	continueBlobs:
 	}
 
 	return true
@@ -331,7 +331,7 @@ func createNewBfsFile(c *chk.C, filesystem azbfs.FileSystemURL, prefix string) (
 	file, name = getBfsFileURL(c, filesystem, prefix)
 
 	// Create the file
-	cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
 

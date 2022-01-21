@@ -11,6 +11,7 @@ pr:
       - main
 
 jobs:
+
   - job: Build
     timeoutInMinutes: 360
     strategy:
@@ -25,8 +26,26 @@ jobs:
       vmImage: $(imageName)
     steps:
       - task: GoTool@0
+        env:
+          GO111MODULE: 'on'
         inputs:
           version: '1.16'
+
+      - script: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.43.0
+          echo 'Installation complete' 
+          ./bin/golangci-lint --version 
+          ./bin/golangci-lint run e2etest
+        displayName: 'Golang Lint Check - Linux'
+        workingDirectory: $(System.DefaultWorkingDirectory)
+        condition: eq(variables.type, 'linux')
+
+      - script: |
+          echo 'Running GO Vet'
+          go vet 
+        displayName: 'Golang Vet - Linux'
+        workingDirectory: $(System.DefaultWorkingDirectory)
+
       - script: |
           GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
           GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
