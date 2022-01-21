@@ -110,5 +110,5 @@ func init() {
 	deleteCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-versions", "", "Specifies a file where each version id is listed on a separate line. Ensure that the source must point to a single blob and all the version ids specified in the file using this flag must belong to the source blob only. Specified version ids of the given blob will get deleted from Azure Storage.")
 	deleteCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the path files that would be removed by the command. This flag does not trigger the removal of the files.")
 	deleteCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. For Example: BlobTrash, FileTrash, BlobFSTrash")
-	deleteCmd.PersistentFlags().StringVar(&raw.permanentDeleteOption, "permanent-delete", "none", "Permanent-delete permanently deletes soft-deleted snapshots/versions. Specify 'snapshots', 'versions', or 'snapshotsandversions' to remove soft-deleted snapshots/versions. Possible values include 'snapshots', 'versions', 'snapshotsandversions', 'none'.")
+	deleteCmd.PersistentFlags().StringVar(&raw.permanentDeleteOption, "permanent-delete", "none", "Permanently deletes soft-deleted snapshots/versions. Possible values include 'snapshots', 'versions', 'snapshotsandversions', 'none'.")
 }

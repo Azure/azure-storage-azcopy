@@ -335,7 +335,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 	}
 
 	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, nil,
-		nil, false, false, false, common.PermanentDeleteOption(3),
+		nil, false, false, false, common.EPermanentDeleteOption.None(),
 		func(common.EntityType) {}, cca.ListOfVersionIDs, false, pipeline.LogNone, cca.CpkOptions)
 
 	if err != nil {
@@ -410,12 +410,12 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []ObjectFilter {
 	}
 
 	switch cca.permanentDeleteOption {
-	case common.PermanentDeleteOption(0):
-		filters = append(filters, &softDeleteFilter{deleteSnapshots: true})
-	case common.PermanentDeleteOption(1):
-		filters = append(filters, &softDeleteFilter{deleteVersions: true})
-	case common.PermanentDeleteOption(2):
-		filters = append(filters, &softDeleteFilter{deleteSnapshots: true, deleteVersions: true})
+	case common.EPermanentDeleteOption.Snapshots():
+		filters = append(filters, &permDeleteFilter{deleteSnapshots: true})
+	case common.EPermanentDeleteOption.Versions():
+		filters = append(filters, &permDeleteFilter{deleteVersions: true})
+	case common.EPermanentDeleteOption.SnapshotsAndVersions():
+		filters = append(filters, &permDeleteFilter{deleteSnapshots: true, deleteVersions: true})
 	}
 
 	return filters

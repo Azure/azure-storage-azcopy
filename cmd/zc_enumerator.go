@@ -316,13 +316,13 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 	var includeSnapshot bool
 	var includeVersion bool
 	switch permanentDeleteOption {
-	case common.PermanentDeleteOption(0):
+	case common.EPermanentDeleteOption.Snapshots():
 		includeDeleted = true
 		includeSnapshot = true
-	case common.PermanentDeleteOption(1):
+	case common.EPermanentDeleteOption.Versions():
 		includeDeleted = true
 		includeVersion = true
-	case common.PermanentDeleteOption(2):
+	case common.EPermanentDeleteOption.SnapshotsAndVersions():
 		includeDeleted = true
 		includeSnapshot = true
 		includeVersion = true
