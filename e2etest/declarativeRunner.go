@@ -35,7 +35,7 @@ import (
 
 // RunScenarios is the key entry point for declarative testing.
 // It constructs and executes scenarios (subtest in Go-speak), according to its parameters, and checks their results
-func 	RunScenarios(
+func RunScenarios(
 	t *testing.T,
 	operations Operation,
 	testFromTo TestFromTo,

@@ -73,7 +73,7 @@ func (s osScenarioHelper) setAttributesForLocalFiles(c asserter, dirPath string,
 func (osScenarioHelper) getFileDates(c asserter, filePath string) (createdTime, lastWriteTime time.Time) {
 	h, err := common.GetFileInformation(filePath)
 	c.AssertNoErr(err)
-	hi := ste.HandleInfo{h} // TODO: do we want to rely on AzCopy code in tests like this? It does save a little time in test framework dev
+	hi := ste.HandleInfo{ByHandleFileInformation: h} // TODO: do we want to rely on AzCopy code in tests like this? It does save a little time in test framework dev
 	return hi.FileCreationTime(), hi.FileLastWriteTime()
 }
 
@@ -112,6 +112,6 @@ func (osScenarioHelper) setFileSDDLString(c asserter, filepath string, sddldata 
 		secInfo |= windows.PROTECTED_DACL_SECURITY_INFORMATION
 	}
 
-	err = windows.SetNamedSecurityInfo(filepath, windows.SE_FILE_OBJECT, secInfo, o, g, d,nil)
+	err = windows.SetNamedSecurityInfo(filepath, windows.SE_FILE_OBJECT, secInfo, o, g, d, nil)
 	c.AssertNoErr(err)
 }

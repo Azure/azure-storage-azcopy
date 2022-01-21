@@ -320,7 +320,9 @@ func (jpm *jobPartMgr) getFolderCreationTracker() FolderCreationTracker {
 	return jpm.jobMgrInitState.folderCreationTracker
 }
 
-func (jpm *jobPartMgr) Plan() *JobPartPlanHeader { return jpm.planMMF.Plan() }
+func (jpm *jobPartMgr) Plan() *JobPartPlanHeader {
+	return jpm.planMMF.Plan()
+}
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
 func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
