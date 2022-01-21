@@ -28,6 +28,7 @@ import (
 	chk "gopkg.in/check.v1"
 	"log"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
@@ -721,6 +722,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDirWithFromTo(c *chk.C)
 
 func (s *cmdIntegrationSuite) TestPermDeleteSnapshotsVersionsUnderSingleBlob(c *chk.C) {
 	serviceURL := setUpAccountPermDelete(c)
+	os.Setenv("AZCOPY_DISABLE_HIERARCHICAL_SCAN", "true")
 
 	// From FE, 30 seconds is guaranteed to be enough.
 	time.Sleep(time.Second * 30)
@@ -756,6 +758,7 @@ func (s *cmdIntegrationSuite) TestPermDeleteSnapshotsVersionsUnderSingleBlob(c *
 
 func (s *cmdIntegrationSuite) TestPermDeleteSnapshotsVersionsUnderContainer(c *chk.C) {
 	serviceURL := setUpAccountPermDelete(c)
+	os.Setenv("AZCOPY_DISABLE_HIERARCHICAL_SCAN", "true")
 
 	// From FE, 30 seconds is guaranteed to be enough.
 	time.Sleep(time.Second * 30)
