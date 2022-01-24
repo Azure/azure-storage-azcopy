@@ -63,9 +63,8 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 
 	// due to the REST parity feature added in 2019-02-02, the File APIs are no longer backward compatible
 	// so we must use the latest SDK version to stay safe
-	ctx := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azfile.ServiceVersion)
-
-	return &fileSourceInfoProvider{defaultRemoteSourceInfoProvider: *base, ctx: ctx, cacheOnce: &sync.Once{}}, nil
+	//TODO: Should we do that?
+	return &fileSourceInfoProvider{defaultRemoteSourceInfoProvider: *base, ctx: jptm.Context(), cacheOnce: &sync.Once{}}, nil
 }
 
 func (p *fileSourceInfoProvider) getFreshProperties() (richSMBPropertyHolder, error) {

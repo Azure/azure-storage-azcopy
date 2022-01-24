@@ -241,6 +241,7 @@ func getTestName(t *testing.T) (pseudoSuite, test string) {
 	return pseudoSuite, removeUnderscores(testName)
 }
 
+//nolint
 // This function generates an entity name by concatenating the passed prefix,
 // the name of the test requesting the entity name, and the minute, second, and nanoseconds of the call.
 // This should make it easy to associate the entities with their test, uniquely identify
@@ -271,6 +272,7 @@ func (TestResourceNameGenerator) GenerateContainerName(c asserter) string {
 	return uuid.New().String()
 }
 
+//nolint
 func (TestResourceNameGenerator) generateBlobName(c asserter) string {
 	return generateName(c, blobPrefix, 0)
 }
