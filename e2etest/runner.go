@@ -92,7 +92,7 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 	set("cpk-by-value", p.cpkByValue, false)
 	set("is-object-dir", p.isObjectDir, false)
 	set("debug-skip-files", strings.Join(p.debugSkipFiles, ";"), "")
-	if o != eOperation.Remove() {
+	if o == eOperation.Copy() {
 		set("s2s-preserve-access-tier", p.s2sPreserveAccessTier, true)
 	}
 }

@@ -21,6 +21,7 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
@@ -43,17 +44,17 @@ type with struct {
 	contentType        string
 	contentMD5         []byte
 
-	nameValueMetadata     map[string]string
-	blobTags              string
-	blobType              common.BlobType
-	lastWriteTime         time.Time
-	creationTime          time.Time
-	smbAttributes         uint32
-	smbPermissionsSddl    string
-	adlsPermissionsACL    string
-	cpkByName             string
-	cpkByValue            bool
-	s2sPreserveAccessTier string
+	nameValueMetadata  map[string]string
+	blobTags           string
+	blobType           common.BlobType
+	lastWriteTime      time.Time
+	creationTime       time.Time
+	smbAttributes      uint32
+	smbPermissionsSddl string
+	adlsPermissionsACL string
+	cpkByName          string
+	cpkByValue         bool
+	accessTier         azblob.AccessTierType
 }
 
 func (with) appliesToCreation() bool {
@@ -162,9 +163,9 @@ func (w with) createObjectProperties() *objectProperties {
 		result.cpkInfo = &cpkInfo
 	}
 
-	if w.s2sPreserveAccessTier != "" {
+	if w.accessTier != "" {
 		populated = true
-		result.s2sPreserveAccessTier = w.s2sPreserveAccessTier
+		result.s2sPreserveAccessTier = w.accessTier
 	}
 
 	if populated {
