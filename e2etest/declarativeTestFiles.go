@@ -97,7 +97,7 @@ type objectProperties struct {
 	adlsPermissionsACL    *string // TODO: Test owner and group; needs a good target though.
 	cpkInfo               *common.CpkInfo
 	cpkScopeInfo          *common.CpkScopeInfo
-	s2sPreserveAccessTier string
+	s2sPreserveAccessTier azblob.AccessTierType
 }
 
 // returns op.size, if present, else defaultSize

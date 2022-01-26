@@ -342,6 +342,7 @@ type generateBlobFromListOptions struct {
 	containerURL azblob.ContainerURL
 	cpkInfo      common.CpkInfo
 	cpkScopeInfo common.CpkScopeInfo
+	accessTier   azblob.AccessTierType
 	generateFromListOptions
 }
 
@@ -381,7 +382,7 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 				headers,
 				ad.toMetadata(),
 				azblob.BlobAccessConditions{},
-				azblob.DefaultAccessTier,
+				options.accessTier,
 				tags,
 				common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo),
 			)

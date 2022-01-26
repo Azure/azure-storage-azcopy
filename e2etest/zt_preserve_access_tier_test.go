@@ -22,6 +22,7 @@ package e2etest
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"testing"
 )
 
@@ -34,7 +35,7 @@ func TestTier_V2ToClassicAccount(t *testing.T) {
 		defaultSize: "4M",
 		shouldTransfer: []interface{}{
 			folder(""), // root folder
-			f("filea", with{s2sPreserveAccessTier: "Hot"}),
+			f("filea", with{accessTier: azblob.AccessTierHot}),
 		},
 	}, EAccountType.Classic(), EAccountType.Standard(), "")
 }
@@ -48,7 +49,7 @@ func TestTier_V2ToClassicAccountNoPreserve(t *testing.T) {
 		defaultSize: "4M",
 		shouldTransfer: []interface{}{
 			folder(""), // root folder
-			f("filea", with{s2sPreserveAccessTier: "Hot"}),
+			f("filea", with{accessTier: azblob.AccessTierHot}),
 		},
 	}, EAccountType.Classic(), EAccountType.Standard(), "")
 }

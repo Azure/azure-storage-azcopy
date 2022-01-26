@@ -374,6 +374,7 @@ func (s *scenario) validateProperties() {
 		s.validateCPKByScope(expected.cpkScopeInfo, actual.cpkScopeInfo)
 		s.validateCPKByValue(expected.cpkInfo, actual.cpkInfo)
 		s.validateADLSACLs(expected.adlsPermissionsACL, actual.adlsPermissionsACL)
+		s.validateAccessTier(expected.s2sPreserveAccessTier, actual.s2sPreserveAccessTier)
 		if expected.smbPermissionsSddl != nil {
 			if actual.smbPermissionsSddl == nil {
 				s.a.Error("Expected a SDDL on file " + destName + ", but none was found")
@@ -476,6 +477,19 @@ func (s *scenario) validateCPKByValue(expected, actual *common.CpkInfo) {
 
 	s.a.Assert(expected.EncryptionKeySha256, equals(), actual.EncryptionKeySha256,
 		fmt.Sprintf("Expected encryption scope is: '%v' but found: '%v'", expected.EncryptionKeySha256, actual.EncryptionKeySha256))
+}
+
+func (s *scenario) validateAccessTier(expected, actual azblob.AccessTierType) {
+	if expected == "" && actual == "" {
+		return
+	}
+	if expected == "" || actual == "" {
+		s.a.Failed()
+		return
+	}
+
+	s.a.Assert(expected, equals(), actual,
+		fmt.Sprintf("Expected access tier is: '%v' but found: '%v'", expected, actual))
 }
 
 // Validate blob tags
