@@ -131,7 +131,7 @@ func (dus *DirectoryUrlSuite) TestCreateDirectoryAndFiles(c *chk.C) {
 
 	// Create fileUrl from directoryUrl and create file inside the directory
 	fileUrl, _ := getFileURLFromDirectory(c, dirUrl)
-	fresp, err := fileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{})
+	fresp, err := fileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	defer delFile(c, fileUrl)
 
 	c.Assert(err, chk.IsNil)
@@ -241,7 +241,7 @@ func (dus *DirectoryUrlSuite) TestDirectoryStructure(c *chk.C) {
 
 	// Create a file inside directory
 	fileUrl, _ := getFileURLFromDirectory(c, dirUrl)
-	fresp, err := fileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{})
+	fresp, err := fileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	defer delFile(c, fileUrl)
 
 	c.Assert(err, chk.IsNil)
@@ -254,7 +254,7 @@ func (dus *DirectoryUrlSuite) TestDirectoryStructure(c *chk.C) {
 
 	// create a file inside the sub-dir created above
 	subDirfileUrl, _ := getFileURLFromDirectory(c, subDirUrl)
-	fresp, err = subDirfileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{})
+	fresp, err = subDirfileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	defer delFile(c, subDirfileUrl)
 
 	c.Assert(err, chk.IsNil)
@@ -296,7 +296,7 @@ func (dus *DirectoryUrlSuite) TestListDirectoryWithSpaces(c *chk.C) {
 
 	// Create a file inside directory
 	fileUrl, _ := getFileURLFromDirectory(c, dirUrl)
-	_, err = fileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{})
+	_, err = fileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	defer delFile(c, fileUrl)
 
 	// list the directory created above.
@@ -398,7 +398,7 @@ func (dus *DirectoryUrlSuite) TestSetACL(c *chk.C) {
 
 	// Create a file
 	fileUrl := dirURL.NewFileURL("foo.bar")
-	_, err = fileUrl.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err = fileUrl.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 
 	// Grab it's default ACLs
@@ -515,4 +515,3 @@ func (s *FileURLSuite) TestRenameDirectoryWithDestinationSas(c *chk.C) {
 	c.Assert(getPropertiesResp.StatusCode(), chk.Equals, http.StatusOK)
 	c.Assert(err, chk.IsNil)
 }
-

@@ -589,6 +589,11 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 			glcm.Info("Tier is provided by user explicitly. Ignoring it because Azure Service currently does" +
 				" not support setting tier when client provided keys are involved.")
 		}
+
+		destUrl, _ := url.Parse(cooked.Destination.Value)
+		if strings.Contains(destUrl.Host, "dfs.core.windows.net") {
+			return cooked, errors.New("client provided keys (CPK) based encryption is only supported with blob endpoints (blob.core.windows.net)")
+		}
 	}
 
 	cooked.CpkOptions = cpkOptions

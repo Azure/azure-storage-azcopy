@@ -124,7 +124,7 @@ func (op objectProperties) DeepCopy() objectProperties {
 	ret.isFolder = op.isFolder
 
 	if op.size != nil {
-		val := *&op.size
+		val := op.size
 		ret.size = val
 	}
 

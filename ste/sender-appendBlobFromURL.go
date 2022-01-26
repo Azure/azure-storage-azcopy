@@ -21,7 +21,6 @@
 package ste
 
 import (
-	"context"
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -56,13 +55,10 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 	appendBlockFromURL := func() {
 		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 
-		// Set the latest service version from sdk as service version in the context, to use AppendBlockFromURL API.
-		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
-		_, err := c.destAppendBlobURL.AppendBlockFromURL(ctxWithLatestServiceVersion, c.srcURL, id.OffsetInFile(), adjustedChunkSize,
+		_, err := c.destAppendBlobURL.AppendBlockFromURL(c.jptm.Context(), c.srcURL, id.OffsetInFile(), adjustedChunkSize,
 			azblob.AppendBlobAccessConditions{
 				AppendPositionAccessConditions: azblob.AppendPositionAccessConditions{IfAppendPositionEqual: id.OffsetInFile()},
 			}, azblob.ModifiedAccessConditions{}, nil, c.cpkToApply)

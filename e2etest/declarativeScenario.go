@@ -357,7 +357,7 @@ func (s *scenario) validateProperties() {
 			// TODO: JohnR: need to remove the strip top dir prefix from the map (and normalize the delimiters)
 			//    since currently uploads fail here
 			var rawPaths []string
-			for rawPath, _ := range destProps {
+			for rawPath := range destProps {
 				rawPaths = append(rawPaths, rawPath)
 			}
 			s.a.Error(fmt.Sprintf("could not find expected file %s in keys %v", destName, rawPaths))
@@ -558,6 +558,7 @@ func (s *scenario) validateLastWriteTime(expected, actual *time.Time) {
 		expected, actual))
 }
 
+//nolint
 func (s *scenario) validateSMBAttrs(expected, actual *uint32) {
 	if expected == nil {
 		// These properties were not explicitly stated for verification

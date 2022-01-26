@@ -129,7 +129,7 @@ func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, u
 	}
 	// Need to get the resource properties and verify if it is a file or directory
 	dirURL := azbfs.NewDirectoryURL(*url, p)
-	isDir, err := dirURL.IsDirectory(context.Background())
+	isDir, err := dirURL.IsDirectory(ctx)
 
 	if err != nil {
 		if ste.JobsAdmin != nil {
