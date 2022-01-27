@@ -36,7 +36,7 @@ import (
 	gcpUtils "cloud.google.com/go/storage"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	minio "github.com/minio/minio-go"
+	"github.com/minio/minio-go"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -848,6 +848,7 @@ func getDefaultCopyRawInput(src string, dst string) rawCopyCmdArgs {
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
 		forceWrite:                     common.EOverwriteOption.True().String(),
 		preserveOwner:                  common.PreserveOwnerDefault,
+		asSubdir: true,
 	}
 }
 
