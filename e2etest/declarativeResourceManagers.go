@@ -208,9 +208,6 @@ func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bo
 		options.cpkScopeInfo = common.GetCpkScopeInfo(s.p.cpkByName)
 	}
 
-	if s.p.s2sPreserveAccessTier {
-		options.accessTier = azblob.AccessTierHot
-	}
 	scenarioHelper{}.generateBlobsFromList(a, options)
 }
 
