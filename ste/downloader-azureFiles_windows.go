@@ -12,6 +12,7 @@ import (
 	"unsafe"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/hillu/go-ntdll"
 
@@ -118,7 +119,7 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 	var securityInfoFlags windows.SECURITY_INFORMATION = windows.DACL_SECURITY_INFORMATION
 
 	// remove everything down to the if statement to return to xcopy functionality
-	// Obtain the destination root and figure out if we're at the top level of the transfer.
+	// Obtain the destination root and figure out if  we're at the top level of the transfer.
 	destRoot := a.jptm.GetDestinationRoot()
 	relPath, err := filepath.Rel(destRoot, txInfo.Destination)
 
@@ -141,6 +142,28 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 	isProtectedAtSource := (ctl & windows.SE_DACL_PROTECTED) != 0
 	isAtTransferRoot := len(splitPath) == 1
 
+	parsedSDDL, err := sddl.ParseSDDL(sddlString)
+
+	if err != nil {
+		panic(fmt.Sprintf("Sanity check; SDDL failed to parse (downloader-azureFiles_windows.go), %s", err)) // We already parsed it. This is impossible.
+	}
+
+	/*
+		via Jason Shay:
+		One exception is related to the "AI" flag.
+		If you provide a descriptor to NtSetSecurityObject with just AI (SE_DACL_AUTO_INHERITED), it will not be stored.
+		If you provide it with SE_DACL_AUTO_INHERITED AND SE_DACL_AUTO_INHERIT_REQ, then SE_DACL_AUTO_INHERITED will be stored (note the _REQ flag is never stored)
+
+		The REST API for Azure Files will see the "AI" in the SDDL, and will do the _REQ flag work in the background for you.
+	*/
+	if strings.Contains(parsedSDDL.DACL.Flags, "AI") {
+		// set the DACL auto-inherit flag, since Windows didn't pick it up for some reason...
+		err := sd.SetControl(windows.SE_DACL_AUTO_INHERITED|windows.SE_DACL_AUTO_INHERIT_REQ, windows.SE_DACL_AUTO_INHERITED|windows.SE_DACL_AUTO_INHERIT_REQ)
+		if err != nil {
+			return fmt.Errorf("tried to persist auto-inherit bit: %w", err)
+		}
+	}
+
 	if isProtectedAtSource || isAtTransferRoot || a.parentIsShareRoot(txInfo.Source) {
 		securityInfoFlags |= windows.PROTECTED_DACL_SECURITY_INFORMATION
 	}
@@ -160,9 +183,27 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 	//   BTW, testing indicates no measurable perf difference, between using the mutex and not, in the cases tested.
 	//   So it's safe to leave it here for now.
 	globalSetAclMu.Lock()
+
+	destPtr, err := syscall.UTF16PtrFromString(txInfo.Destination)
+	if err != nil {
+		return fmt.Errorf("failed convert destination string to UTF16 pointer: %w", err)
+	}
+
+	var sa windows.SecurityAttributes
+	sa.Length = uint32(unsafe.Sizeof(sa))
+	sa.InheritHandle = 1
+
+	// need WRITE_DAC and WRITE_OWNER for SDDL preservation, no need for ACCESS_SYSTEM_SECURITY, since we don't back up SACLs.
+	fd, err := windows.CreateFile(destPtr, windows.FILE_GENERIC_WRITE|windows.WRITE_DAC|windows.WRITE_OWNER, windows.FILE_SHARE_WRITE, &sa,
+		windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+	if err != nil {
+		return fmt.Errorf("attempted file open: %w", err)
+	}
+	defer windows.Close(fd)
+
 	defer globalSetAclMu.Unlock()
 	status := ntdll.NtSetSecurityObject(
-		ntdll.Handle(0),
+		ntdll.Handle(fd),
 		ntdll.SecurityInformationT(securityInfoFlags),
 		// unsafe but actually safe conversion
 		(*ntdll.SecurityDescriptor)(unsafe.Pointer(sd)),

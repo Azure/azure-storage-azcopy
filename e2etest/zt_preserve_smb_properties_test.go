@@ -56,13 +56,14 @@ func TestProperties_SMBPermissionsSDDLPreserved(t *testing.T) {
 		t.Error(err)
 	}
 
-	folderSDDL, err := AdjustSDDLToLocal(FolderSampleSDDL, SampleSDDLPlaceHolder)
-	if err != nil {
-		t.Error(err)
-	}
+	// folderSDDL, err := AdjustSDDLToLocal(FolderSampleSDDL, SampleSDDLPlaceHolder)
+	// if err != nil {
+	// 	t.Error(err)
+	// }
 
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(
-		common.EFromTo.LocalFile(),
+		// common.EFromTo.LocalFile(),
+		common.EFromTo.FileLocal(),
 		// common.EFromTo.FileFile(), // TODO: finish inquiring with Jason Shay about this wonkiness. Context: Auto-inherit bit is getting flipped on S2S unrelated to azcopy
 	), eValidate.Auto(), params{
 		recursive:              true,
@@ -73,9 +74,9 @@ func TestProperties_SMBPermissionsSDDLPreserved(t *testing.T) {
 		shouldTransfer: []interface{}{
 			folder("", with{smbPermissionsSddl: rootSDDL}),
 			f("file1", with{smbPermissionsSddl: fileSDDL}),
-			f("file2.txt", with{smbPermissionsSddl: fileSDDL}),
-			folder("fldr1", with{smbPermissionsSddl: folderSDDL}),
-			f("fldr1/file3.txt", with{smbPermissionsSddl: fileSDDL}),
+			// f("file2.txt", with{smbPermissionsSddl: fileSDDL}),
+			// folder("fldr1", with{smbPermissionsSddl: folderSDDL}),
+			// f("fldr1/file3.txt", with{smbPermissionsSddl: fileSDDL}),
 		},
 	}, EAccountType.Standard(), "")
 }

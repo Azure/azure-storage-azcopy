@@ -684,6 +684,15 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			if f.creationProperties.smbPermissionsSddl != nil || f.creationProperties.smbAttributes != nil {
 				_, err := dir.SetProperties(ctx, ad.toHeaders(c, options.shareURL).SMBProperties)
 				c.AssertNoErr(err)
+
+				prop, err := dir.GetProperties(ctx)
+				c.AssertNoErr(err)
+
+				perm, err := options.shareURL.GetPermission(ctx, prop.FilePermissionKey())
+				c.AssertNoErr(err)
+
+				c.Assert(strings.TrimSuffix(perm.Permission, "S:NO_ACCESS_CONTROL"), equals(),
+					strings.TrimSuffix(*f.creationProperties.smbPermissionsSddl, "S:NO_ACCESS_CONTROL")) // ensure preservation was accurate for sanity checks
 			}
 
 			// set other properties
@@ -720,6 +729,32 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			cResp, err := file.Create(ctx, fileSize, headers, ad.toMetadata())
 			c.AssertNoErr(err)
 			c.Assert(cResp.StatusCode(), equals(), 201)
+
+			if f.creationProperties.smbPermissionsSddl != nil || f.creationProperties.smbAttributes != nil {
+				/*
+					via Jason Shay:
+					Providing securityKey/SDDL during 'PUT File' and 'PUT Properties' can and will provide different results/semantics.
+					This is true for the REST PUT commands, as well as locally when providing a SECURITY_DESCRIPTOR in the SECURITY_ATTRIBUTES structure in the CreateFile() call.
+					In both cases of file creation (CreateFile() and REST PUT File), the actual security descriptor applied to the file can undergo some changes as compared to the input.
+
+					SetProperties() (and NtSetSecurityObject) use update semantics, so it should store what you provide it (with a couple exceptions).
+					And on the cloud share, you would need 'Set Properties' to be called as a final step, to save the final ACLs with 'update' semantics.
+
+
+				*/
+
+				_, err := file.SetHTTPHeaders(ctx, headers)
+				c.AssertNoErr(err)
+
+				prop, err := file.GetProperties(ctx)
+				c.AssertNoErr(err)
+
+				perm, err := options.shareURL.GetPermission(ctx, prop.FilePermissionKey())
+				c.AssertNoErr(err)
+
+				c.Assert(strings.TrimSuffix(perm.Permission, "S:NO_ACCESS_CONTROL"), equals(),
+					strings.TrimSuffix(*f.creationProperties.smbPermissionsSddl, "S:NO_ACCESS_CONTROL")) // ensure preservation was accurate for sanity checks
+			}
 
 			_, err = file.UploadRange(context.Background(), 0, contentR, nil)
 			if err == nil {
