@@ -306,3 +306,30 @@ func TestBasic_CopyToWrongBlobType(t *testing.T) {
 		}
 	}
 }
+
+func TestBasic_CopyWithShareRoot(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Copy(), // Sync already shares the root by default.
+		eTestFromTo.AllUploads(),
+		eValidate.Auto(),
+		params{
+			recursive:        true,
+			invertedAsSubdir: true,
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			destTarget:  "newName",
+
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("asdf.txt"),
+				folder("a"),
+				f("a/asdf.txt"),
+			},
+		},
+		EAccountType.Standard(),
+		"",
+	)
+}
