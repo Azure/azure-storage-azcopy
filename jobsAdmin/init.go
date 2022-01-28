@@ -757,7 +757,7 @@ func GetJobFromTo(r common.GetJobFromToRequest) common.GetJobFromToResponse {
 		// Search the plan files in Azcopy folder and resurrect the Job.
 		if !JobsAdmin.ResurrectJob(r.JobID, EMPTY_SAS_STRING, EMPTY_SAS_STRING) {
 			return common.GetJobFromToResponse{
-				ErrorMsg: fmt.Sprintf("no job with JobID %v exists", r.JobID),
+				ErrorMsg: fmt.Sprintf("Job with JobID %v does not exist or is invalid", r.JobID),
 			}
 		}
 		jm, _ = JobsAdmin.JobMgr(r.JobID)

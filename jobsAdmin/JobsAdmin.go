@@ -330,12 +330,12 @@ func (ja *jobsAdmin) SuccessfulBytesInActiveFiles() uint64 {
 
 func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string) bool {
 	// Search the existing plan files for the PartPlans for the given jobId
-	// only the files which have JobId has prefix and DataSchemaVersion as Suffix
+	// only the files which are not empty and have JobId has prefix and DataSchemaVersion as Suffix
 	// are include in the result
 	files := func(prefix, ext string) []os.FileInfo {
 		var files []os.FileInfo
 		filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
-			if !fileInfo.IsDir() && strings.HasPrefix(fileInfo.Name(), prefix) && strings.HasSuffix(fileInfo.Name(), ext) {
+			if !fileInfo.IsDir() && fileInfo.Size() != 0 && strings.HasPrefix(fileInfo.Name(), prefix) && strings.HasSuffix(fileInfo.Name(), ext) {
 				files = append(files, fileInfo)
 			}
 			return nil
@@ -372,7 +372,7 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 	files := func(ext string) []os.FileInfo {
 		var files []os.FileInfo
 		filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
-			if !fileInfo.IsDir() && strings.HasSuffix(fileInfo.Name(), ext) {
+			if !fileInfo.IsDir() && fileInfo.Size() != 0 && strings.HasSuffix(fileInfo.Name(), ext) {
 				files = append(files, fileInfo)
 			}
 			return nil
