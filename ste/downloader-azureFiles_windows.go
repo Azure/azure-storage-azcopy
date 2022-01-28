@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"unsafe"
 
+	"github.com/Azure/azure-storage-file-go/azfile"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -94,6 +96,12 @@ var globalSetAclMu = &sync.Mutex{}
 func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
 	// Let's start by getting our SDDL and parsing it.
 	sddlString, err := sip.GetSDDL()
+
+	// There's nothing to set.
+	if sddlString == "" {
+		return nil
+	}
+
 	// TODO: be better at handling these errors.
 	// GetSDDL will fail on a file-level SAS token.
 	if err != nil {

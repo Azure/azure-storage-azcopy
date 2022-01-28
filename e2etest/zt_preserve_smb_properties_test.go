@@ -215,3 +215,49 @@ func TestProperties_SMBPermsAndFlagsWithSync(t *testing.T) {
 		shouldIgnore:   recreateFiles,
 	}, EAccountType.Standard(), "")
 }
+
+func TestProperties_SMBWithCopyWithShareRoot(t *testing.T) {
+	fileSDDL, err := AdjustSDDLToLocal(SampleSDDL, SampleSDDLPlaceHolder)
+	if err != nil {
+		t.Error(err)
+	}
+
+	rootSDDL, err := AdjustSDDLToLocal(RootSampleSDDL, SampleSDDLPlaceHolder)
+	if err != nil {
+		t.Error(err)
+	}
+
+	folderSDDL, err := AdjustSDDLToLocal(FolderSampleSDDL, SampleSDDLPlaceHolder)
+	if err != nil {
+		t.Error(err)
+	}
+
+	RunScenarios(
+		t,
+		eOperation.Copy(), // Sync already shares the root by default.
+		eTestFromTo.Other(common.EFromTo.LocalFile()),
+		eValidate.Auto(),
+		params{
+			recursive:              true,
+			invertedAsSubdir:       true,
+			preserveSMBPermissions: true,
+			preserveSMBInfo:        true,
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			destTarget:  "newName",
+
+			shouldTransfer: []interface{}{
+				folder("", with{smbAttributes: 2, smbPermissionsSddl: rootSDDL}),
+				f("asdf.txt", with{smbAttributes: 2, smbPermissionsSddl: fileSDDL}),
+				folder("a", with{smbAttributes: 2, smbPermissionsSddl: folderSDDL}),
+				f("a/asdf.txt", with{smbAttributes: 2, smbPermissionsSddl: fileSDDL}),
+				folder("a/b", with{smbAttributes: 2, smbPermissionsSddl: folderSDDL}),
+				f("a/b/asdf.txt", with{smbAttributes: 2, smbPermissionsSddl: fileSDDL}),
+			},
+		},
+		EAccountType.Standard(),
+		"",
+	)
+}

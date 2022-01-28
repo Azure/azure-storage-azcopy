@@ -272,7 +272,13 @@ func (u *azureFileSenderBase) addPermissionsToHeaders(info TransferInfo, destUrl
 		// If we didn't do the workaround, then let's get the SDDL and put it later.
 		if u.headersToApply.PermissionKey == nil || *u.headersToApply.PermissionKey == "" {
 			pString, err := sddlSIP.GetSDDL()
-			u.headersToApply.PermissionString = &pString
+
+			// Sending "" to the service is invalid, but the service will return it sometimes (e.g. on file shares)
+			// Thus, we'll let the files SDK fill in "inherit" for us, so the service is happy.
+			if pString != "" {
+				u.headersToApply.PermissionString = &pString
+			}
+
 			if err != nil {
 				return "Getting permissions", err
 			}

@@ -307,6 +307,7 @@ func folder(n string, properties ...withPropertyProvider) *testObject {
 type testFiles struct {
 	defaultSize  string                  // how big should the files be? Applies to those files that don't specify individual sizes. Uses the same K, M, G suffixes as benchmark mode's size-per-file
 	objectTarget string                  // should we target only a single file/folder?
+	destTarget   string                  // do we want to copy under a folder or rename?
 	sourcePublic azblob.PublicAccessType // should the source blob container be public? (ONLY APPLIES TO BLOB.)
 
 	// The files/folders that we expect to be transferred. Elements of the list must be strings or testObject's.
@@ -329,6 +330,7 @@ func (tf testFiles) cloneShouldTransfers() testFiles {
 	return testFiles{
 		defaultSize:    tf.defaultSize,
 		objectTarget:   tf.objectTarget,
+		destTarget:     tf.destTarget,
 		sourcePublic:   tf.sourcePublic,
 		shouldTransfer: tf.shouldTransfer,
 	}
@@ -339,6 +341,7 @@ func (tf testFiles) DeepCopy() testFiles {
 	ret.defaultSize = tf.defaultSize
 
 	ret.objectTarget = tf.objectTarget
+	ret.destTarget = tf.destTarget
 	ret.sourcePublic = tf.sourcePublic
 	ret.shouldTransfer = tf.copyList(tf.shouldTransfer)
 	ret.shouldIgnore = tf.copyList(tf.shouldIgnore)
