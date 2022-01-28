@@ -307,7 +307,8 @@ type TransferDetail struct {
 	IsFolderProperties bool
 	TransferStatus     TransferStatus
 	TransferSize       uint64
-	ErrorCode          int32 `json:",string"`
+	ErrorCode          int32  `json:",string"`
+	ErrorMessage       string `json:",string"`
 }
 
 type CancelPauseResumeResponse struct {

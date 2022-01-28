@@ -44,6 +44,7 @@ type IJobPartTransferMgr interface {
 	TransferStatusIgnoringCancellation() common.TransferStatus
 	SetStatus(status common.TransferStatus)
 	SetErrorCode(errorCode int32)
+	SetErrorMessage(errorMessage string)
 	SetNumberOfChunks(numChunks uint32)
 	SetActionAfterLastChunk(f func())
 	ReportTransferDone() uint32
@@ -585,6 +586,16 @@ func (jptm *jobPartTransferMgr) SetErrorCode(errorCode int32) {
 	jptm.jobPartPlanTransfer.SetErrorCode(errorCode, false)
 }
 
+// ErrorMessage gets the error message of transfer for given job.
+func (jptm *jobPartTransferMgr) ErrorMessage() string {
+	return jptm.jobPartPlanTransfer.ErrorMessage()
+}
+
+// ErrorMessage updates the error message of transfer for given job.
+func (jptm *jobPartTransferMgr) SetErrorMessage(errorMessage string) {
+	jptm.jobPartPlanTransfer.SetErrorMessage(errorMessage, false)
+}
+
 // TODO: Can we kill this method?
 /*func (jptm *jobPartTransferMgr) ChunksDone() uint32 {
 	return atomic.LoadUint32(&jptm.atomicChunksDone)
@@ -744,6 +755,7 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 		fullMsg := fmt.Sprintf("%s. When %s. X-Ms-Request-Id: %s\n", msg, descriptionOfWhereErrorOccurred, requestID) // trailing \n to separate it better from any later, unrelated, log lines
 		jptm.logTransferError(typ, jptm.Info().Source, jptm.Info().Destination, fullMsg, status)
 		jptm.SetStatus(failureStatus)
+		jptm.SetErrorMessage(fullMsg)
 		jptm.SetErrorCode(int32(status)) // TODO: what are the rules about when this needs to be set, and doesn't need to be (e.g. for earlier failures)?
 		// If the status code was 403, it means there was an authentication error and we exit.
 		// User can resume the job if completely ordered with a new sas.
@@ -752,7 +764,7 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 			// display a clear message
 			common.GetLifecycleMgr().Info(fmt.Sprintf("Authentication failed, it is either not correct, or expired, or does not have the correct permission %s", err.Error()))
 			// and use the normal cancelling mechanism so that we can exit in a clean and controlled way
-			jptm.jobPartMgr.(*jobPartMgr).jobMgr.CancelPauseJobOrder(common.EJobStatus.Cancelling())
+			jptm.jobPartMgr.(*jobPartMgr).jobMgr.CancelPauseJobOrder(common.EJobStatus.Failed())
 			// TODO: this results in the final job output line being: Final Job Status: Cancelled
 			//     That's not ideal, because it would be better if it said Final Job Status: Failed
 			//     However, we don't have any way to distinguish "user cancelled after some failed files" from
@@ -891,6 +903,7 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 		TransferStatus:     jptm.jobPartPlanTransfer.TransferStatus(),
 		TransferSize:       uint64(jptm.Info().SourceSize),
 		ErrorCode:          jptm.ErrorCode(),
+		ErrorMessage:       jptm.ErrorMessage(),
 	})
 
 	return jptm.jobPartMgr.ReportTransferDone(jptm.jobPartPlanTransfer.TransferStatus())

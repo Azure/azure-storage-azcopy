@@ -16,9 +16,10 @@ import (
 const DataSchemaVersion common.Version = 16
 
 const (
-	CustomHeaderMaxBytes = 256
-	MetadataMaxBytes     = 1000 // If > 65536, then jobPartPlanBlobData's MetadataLength field's type must change
-	BlobTagsMaxByte      = 4000
+	CustomHeaderMaxBytes  = 256
+	MetadataMaxBytes      = 1000 // If > 65536, then jobPartPlanBlobData's MetadataLength field's type must change
+	BlobTagsMaxByte       = 4000
+	MaxErrorMessageLength = 1000
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -370,6 +371,10 @@ type JobPartPlanTransfer struct {
 	// atomicErrorCode has a default value (0) which means either there was no error or transfer failed because some non storageError.
 	// atomicErrorCode should not be directly accessed anywhere except by transferStatus and setTransferStatus
 	atomicErrorCode int32
+
+	// errorMessageLength represents the length of the error message for failed transfers.
+	errorMessageLength int32
+	errorMessage       [MaxErrorMessageLength]byte
 }
 
 // TransferStatus returns the transfer's status
@@ -397,6 +402,31 @@ func (jppt *JobPartPlanTransfer) SetTransferStatus(status common.TransferStatus,
 // ErrorCode returns the transfer's errorCode.
 func (jppt *JobPartPlanTransfer) ErrorCode() int32 {
 	return atomic.LoadInt32(&jppt.atomicErrorCode)
+}
+
+// ErrorMessage returns the transfer's error message.
+func (jppt *JobPartPlanTransfer) ErrorMessage() string {
+	return string(jppt.errorMessage[:atomic.LoadInt32(&jppt.errorMessageLength)])
+}
+
+// SetErrorMessage sets the error message if transfer failed.
+// overWrite flags if set to true overWrites the errorMessage.
+// If overWrite flag is set to false, then errorMessage won't be overwritten.
+func (jppt *JobPartPlanTransfer) SetErrorMessage(errorMessage string, overwrite bool) {
+	savedErrorMessageLength := atomic.LoadInt32(&jppt.errorMessageLength)
+	currentErrorMessageLength := int32(len(errorMessage))
+
+	// Make sure error message does not exceed max length.
+	if currentErrorMessageLength > MaxErrorMessageLength {
+		currentErrorMessageLength = MaxErrorMessageLength
+	}
+
+	// Overwrite, if this is the first error or caller wants this new errorMessage to overwrite the existing one.
+	if (savedErrorMessageLength == 0) || overwrite {
+		if atomic.CompareAndSwapInt32(&jppt.errorMessageLength, savedErrorMessageLength, currentErrorMessageLength) {
+			copy(jppt.errorMessage[:], []byte(errorMessage[:currentErrorMessageLength]))
+		}
+	}
 }
 
 // SetErrorCode sets the error code of the error if transfer failed.
