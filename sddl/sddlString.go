@@ -1,23 +1,3 @@
-// Copyright © Microsoft <wastore@microsoft.com>
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package sddl
 
 import (
@@ -27,15 +7,6 @@ import (
 	"sort"
 	"strings"
 )
-
-var translateSID = OSTranslateSID // this layer of indirection is to support unit testing. TODO: it's ugly to set a global to test. Do something better one day
-
-func IffInt(condition bool, tVal, fVal int) int {
-	if condition {
-		return tVal
-	}
-	return fVal
-}
 
 // Owner and group SIDs need replacement
 type SDDLString struct {
@@ -311,128 +282,108 @@ func (s *SDDLString) setACLFlags(flags string, aclType rune) error {
 	return nil
 }
 
-func ParseSDDL(input string) (sddl SDDLString, err error) {
-	scope := 0                     // if scope is 1, we're in an ACE string, if scope is 2, we're in a resource attribute.
-	inString := false              // If a quotation mark was found, we've entered a string and should ignore all characters except another quotation mark.
-	elementStart := make([]int, 0) // This is the start of the element we're currently analyzing. If the array has more than one element, we're probably under a lower scope.
-	awaitingACLFlags := false      // If this is true, a ACL section was just entered, and we're awaiting our first ACE string
-	var elementType rune           // We need to keep track of which section of the SDDL string we're in.
-	for k, v := range input {
-		switch {
-		case inString: // ignore characters within a string-- except for the end of a string, and escaped quotes
-			if v == '"' && input[k-1] != '\\' {
-				inString = false
-			}
-		case v == '"':
-			inString = true
-		case v == '(': // this comes before scope == 1 because ACE strings can be multi-leveled. We only care about the bottom level.
-			scope++
-			if scope == 1 { // only do this if we're in the base of an ACE string-- We don't care about the metadata as much.
-				if awaitingACLFlags {
-					err := sddl.setACLFlags(input[elementStart[0]:k], elementType)
+func (s SDDLString) Compare(other SDDLString) bool {
+	matching := true
 
-					if err != nil {
-						return sddl, err
-					}
+	s, _ = ParseSDDL(s.PortableString())
+	o, _ := ParseSDDL(other.PortableString())
 
-					awaitingACLFlags = false
-				}
-				elementStart = append(elementStart, k+1) // raise the element start scope
-				err := sddl.startACL(elementType)
+	matching = matching && (s.OwnerSID == o.OwnerSID) // Compare owners
+	matching = matching && (s.GroupSID == o.GroupSID)
 
-				if err != nil {
-					return sddl, err
-				}
-			}
-		case v == ')':
-			// (...,...,...,(...))
-			scope--
-			if scope == 0 {
-				err := sddl.putACLElement(input[elementStart[1]:k], elementType)
+	// compare flags
+	matching = matching && compareFlags(strings.TrimSuffix(s.DACL.Flags, "NO_ACCESS_CONTROL"), strings.TrimSuffix(o.DACL.Flags, "NO_ACCESS_CONTROL"))
+	matching = matching && compareFlags(strings.TrimSuffix(s.SACL.Flags, "NO_ACCESS_CONTROL"), strings.TrimSuffix(o.SACL.Flags, "NO_ACCESS_CONTROL"))
 
-				if err != nil {
-					return sddl, err
-				}
+	// compare ACEs
+	matching = matching && compareACEs(s.DACL.ACLEntries, o.DACL.ACLEntries)
+	matching = matching && compareACEs(s.SACL.ACLEntries, o.SACL.ACLEntries)
 
-				elementStart = elementStart[:1] // lower the element start scope
-			}
-		case scope == 1: // We're at the top level of an ACE string
-			switch v {
-			case ';':
-				// moving to the next element
-				err := sddl.putACLElement(input[elementStart[1]:k], elementType)
-
-				if err != nil {
-					return sddl, err
-				}
-
-				elementStart[1] = k + 1 // move onto the next bit of the element scope
-			}
-		case scope == 0: // We're at the top level of a SDDL string
-			if k == len(input)-1 || v == ':' { // If we end the string OR start a new section
-				if elementType != 0x00 {
-					switch elementType {
-					case 'O':
-						// you are here:
-						//       V
-						// O:...G:
-						//      ^
-						//      k-1
-						// string separations in go happen [x:y).
-						sddl.OwnerSID = strings.TrimSpace(input[elementStart[0]:IffInt(k == len(input)-1, len(input), k-1)])
-					case 'G':
-						sddl.GroupSID = strings.TrimSpace(input[elementStart[0]:IffInt(k == len(input)-1, len(input), k-1)])
-					case 'D', 'S': // These are both parsed WHILE they happen, UNLESS we're awaiting flags.
-						if awaitingACLFlags {
-							err := sddl.setACLFlags(strings.TrimSpace(input[elementStart[0]:IffInt(k == len(input)-1, len(input), k-1)]), elementType)
-
-							if err != nil {
-								return sddl, err
-							}
-						}
-					default:
-						return sddl, fmt.Errorf("%s is an invalid SDDL section", string(elementType))
-					}
-				}
-
-				if v == ':' {
-					// set element type to last character
-					elementType = rune(input[k-1])
-
-					// await ACL flags
-					if elementType == 'D' || elementType == 'S' {
-						awaitingACLFlags = true
-					}
-
-					// set element start to next character
-					if len(elementStart) == 0 { // start the list if it's empty
-						elementStart = append(elementStart, k+1)
-					} else if len(elementStart) > 1 {
-						return sddl, errors.New("elementStart too long for starting a new part of a SDDL")
-					} else { // assign the new element start
-						elementStart[0] = k + 1
-					}
-				}
-			}
-		}
-	}
-
-	if scope > 0 || inString {
-		return sddl, errors.New("string or scope not fully exited")
-	}
-
-	if err == nil {
-		if !sanityCheckSDDLParse(input, sddl) {
-			return sddl, errors.New("SDDL parsing sanity check failed")
-		}
-	}
-
-	return
+	return matching
 }
 
-var sddlWhitespaceRegex = regexp.MustCompile(`[\x09-\x0D ]`)
+func compareFlags(a, b string) bool {
+	a = strings.ToUpper(a)
+	b = strings.ToUpper(b)
 
-func sanityCheckSDDLParse(original string, parsed SDDLString) bool {
-	return sddlWhitespaceRegex.ReplaceAllString(original, "") ==
-		sddlWhitespaceRegex.ReplaceAllString(parsed.String(), "")
+	if len(a) != len(b) {
+		// obvious indicator
+		return false
+	}
+
+	aEntries := make(map[string]bool)
+
+	if len(a)%2 != 0 {
+		// this only happens with P (protected). It could also happen with A or D, but we don't use this function for ACE type.
+		aidx := strings.IndexByte(a, 'P')
+		bidx := strings.IndexByte(b, 'P')
+
+		a = a[:aidx] + a[aidx+1:]
+		b = b[:bidx] + b[bidx+1:]
+	}
+
+	for i := 0; i < len(a); i += 2 { // flags, outside of NO_ACCESS_CONTROL (which should be trimmed before hitting this) are pairs of two upper-case letters.
+		aEntries[a[i:i+2]] = true
+	}
+
+	for i := 0; i < len(b); i += 2 {
+		str := b[i : i+2]
+
+		if ok := aEntries[str]; ok {
+			delete(aEntries, str)
+		} else {
+			return false
+		}
+	}
+
+	if len(aEntries) > 0 {
+		return false
+	}
+
+	return true
+}
+
+func compareACEs(a, b []ACLEntry) bool {
+	if len(a) != len(b) {
+		// obvious indicator
+		return false
+	}
+
+	aMismatches := make([]ACLEntry, len(a))
+	copy(aMismatches, a)
+
+	for _, bACE := range b {
+		foundMatch := false
+
+		for k, aACE := range aMismatches {
+			aceMatch := true
+
+			if len(aACE.Sections) != len(bACE.Sections) {
+				continue // not a match, for sure
+			}
+
+			aceMatch = aceMatch && (aACE.Sections[0] == bACE.Sections[0])           // match ace type
+			aceMatch = aceMatch && compareFlags(aACE.Sections[1], bACE.Sections[1]) // compare ace flags
+			aceMatch = aceMatch && compareFlags(aACE.Sections[2], bACE.Sections[2]) // compare rights
+			aceMatch = aceMatch && aACE.Sections[3] == bACE.Sections[3]             // compare object guid
+			aceMatch = aceMatch && aACE.Sections[4] == bACE.Sections[4]             // compare inherit object guid
+			aceMatch = aceMatch && aACE.Sections[5] == bACE.Sections[5]             // compare SID
+			if len(aACE.Sections) == 7 {
+				aceMatch = aceMatch && aACE.Sections[6] == bACE.Sections[6] // compare resource attribute (in a naive way, since we don't use them in tests.)
+			}
+
+			if aceMatch {
+				// delete matches.
+				aMismatches = append(aMismatches[:k], aMismatches[k+1:]...)
+				foundMatch = true
+				break
+			}
+		}
+
+		if !foundMatch {
+			return false
+		}
+	}
+
+	return true
 }

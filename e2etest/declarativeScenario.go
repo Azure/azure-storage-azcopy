@@ -27,7 +27,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -386,8 +385,7 @@ func (s *scenario) validateSMBPermissionsByValue(expected, actual string, objNam
 	actualSDDL, err := sddl.ParseSDDL(actual)
 	s.a.AssertNoErr(err)
 
-	s.a.Assert(strings.TrimSuffix(actualSDDL.PortableString(), "S:NO_ACCESS_CONTROL"), equals(),
-		strings.TrimSuffix(expectedSDDL.PortableString(), "S:NO_ACCESS_CONTROL"), "On object "+objName)
+	s.a.Assert(expectedSDDL.Compare(actualSDDL), equals(), true)
 }
 
 func (s *scenario) validateContent() {

@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"github.com/minio/minio-go"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -691,8 +692,10 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 				perm, err := options.shareURL.GetPermission(ctx, prop.FilePermissionKey())
 				c.AssertNoErr(err)
 
-				c.Assert(strings.TrimSuffix(perm.Permission, "S:NO_ACCESS_CONTROL"), equals(),
-					strings.TrimSuffix(*f.creationProperties.smbPermissionsSddl, "S:NO_ACCESS_CONTROL")) // ensure preservation was accurate for sanity checks
+				dest, _ := sddl.ParseSDDL(perm.Permission)
+				source, _ := sddl.ParseSDDL(*f.creationProperties.smbPermissionsSddl)
+
+				c.Assert(dest.Compare(source), equals(), true)
 			}
 
 			// set other properties
@@ -752,8 +755,10 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 				perm, err := options.shareURL.GetPermission(ctx, prop.FilePermissionKey())
 				c.AssertNoErr(err)
 
-				c.Assert(strings.TrimSuffix(perm.Permission, "S:NO_ACCESS_CONTROL"), equals(),
-					strings.TrimSuffix(*f.creationProperties.smbPermissionsSddl, "S:NO_ACCESS_CONTROL")) // ensure preservation was accurate for sanity checks
+				dest, _ := sddl.ParseSDDL(perm.Permission)
+				source, _ := sddl.ParseSDDL(*f.creationProperties.smbPermissionsSddl)
+
+				c.Assert(dest.Compare(source), equals(), true)
 			}
 
 			_, err = file.UploadRange(context.Background(), 0, contentR, nil)
