@@ -207,7 +207,9 @@ func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bo
 		options.cpkInfo = common.GetCpkInfo(s.p.cpkByValue)
 		options.cpkScopeInfo = common.GetCpkScopeInfo(s.p.cpkByName)
 	}
-
+	if isSource {
+		options.accessTier = s.p.accessTier
+	}
 	scenarioHelper{}.generateBlobsFromList(a, options)
 }
 

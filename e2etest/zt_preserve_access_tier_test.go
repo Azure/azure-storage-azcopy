@@ -31,11 +31,12 @@ func TestTier_V2ToClassicAccount(t *testing.T) {
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
 		recursive:             true,
 		s2sPreserveAccessTier: true,
+		accessTier:            azblob.AccessTierHot,
 	}, nil, testFiles{
 		defaultSize: "4M",
 		shouldTransfer: []interface{}{
 			folder(""), // root folder
-			f("filea", with{accessTier: azblob.AccessTierHot}),
+			f("filea"),
 		},
 	}, EAccountType.Classic(), EAccountType.Standard(), "")
 }
@@ -45,11 +46,42 @@ func TestTier_V2ToClassicAccountNoPreserve(t *testing.T) {
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
 		recursive:             true,
 		s2sPreserveAccessTier: false,
+		accessTier:            azblob.AccessTierHot,
 	}, nil, testFiles{
 		defaultSize: "4M",
 		shouldTransfer: []interface{}{
 			folder(""), // root folder
-			f("filea", with{accessTier: azblob.AccessTierHot}),
+			f("filea"),
+		},
+	}, EAccountType.Classic(), EAccountType.Standard(), "")
+}
+
+func TestTier_V2ToClassicAccountCool(t *testing.T) {
+
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
+		recursive:             true,
+		s2sPreserveAccessTier: true,
+		accessTier:            azblob.AccessTierCool,
+	}, nil, testFiles{
+		defaultSize: "4M",
+		shouldTransfer: []interface{}{
+			folder(""), // root folder
+			f("filea"),
+		},
+	}, EAccountType.Classic(), EAccountType.Standard(), "")
+}
+
+func TestTier_V2ToClassicAccountNoPreserveCool(t *testing.T) {
+
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
+		recursive:             true,
+		s2sPreserveAccessTier: false,
+		accessTier:            azblob.AccessTierCool,
+	}, nil, testFiles{
+		defaultSize: "4M",
+		shouldTransfer: []interface{}{
+			folder(""), // root folder
+			f("filea"),
 		},
 	}, EAccountType.Classic(), EAccountType.Standard(), "")
 }

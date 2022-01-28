@@ -388,6 +388,10 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 		case common.EBlobType.BlockBlob(), common.EBlobType.Detect():
 			bb := options.containerURL.NewBlockBlobURL(b.name)
 
+			if options.accessTier == "" {
+				options.accessTier = azblob.DefaultAccessTier
+			}
+
 			cResp, err := bb.Upload(ctx,
 				reader,
 				headers,
