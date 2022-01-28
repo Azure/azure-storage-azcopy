@@ -21,7 +21,6 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
@@ -54,7 +53,6 @@ type with struct {
 	adlsPermissionsACL string
 	cpkByName          string
 	cpkByValue         bool
-	accessTier         azblob.AccessTierType
 }
 
 func (with) appliesToCreation() bool {
@@ -161,11 +159,6 @@ func (w with) createObjectProperties() *objectProperties {
 		populated = true
 		cpkInfo := common.GetCpkInfo(w.cpkByValue)
 		result.cpkInfo = &cpkInfo
-	}
-
-	if w.accessTier != "" {
-		populated = true
-		result.s2sPreserveAccessTier = w.accessTier
 	}
 
 	if populated {

@@ -84,20 +84,19 @@ func (h *contentHeaders) String() string {
 // This is exposed to the declarativeResourceManagers, to create/check the objects.
 // All field are pointers or interfaces to make them nil-able. Nil means "unspecified".
 type objectProperties struct {
-	isFolder              bool // if false, the object is a file
-	size                  *int64
-	contentHeaders        *contentHeaders
-	nameValueMetadata     map[string]string
-	blobTags              common.BlobTags
-	blobType              common.BlobType
-	creationTime          *time.Time
-	lastWriteTime         *time.Time
-	smbAttributes         *uint32
-	smbPermissionsSddl    *string
-	adlsPermissionsACL    *string // TODO: Test owner and group; needs a good target though.
-	cpkInfo               *common.CpkInfo
-	cpkScopeInfo          *common.CpkScopeInfo
-	s2sPreserveAccessTier azblob.AccessTierType
+	isFolder           bool // if false, the object is a file
+	size               *int64
+	contentHeaders     *contentHeaders
+	nameValueMetadata  map[string]string
+	blobTags           common.BlobTags
+	blobType           common.BlobType
+	creationTime       *time.Time
+	lastWriteTime      *time.Time
+	smbAttributes      *uint32
+	smbPermissionsSddl *string
+	adlsPermissionsACL *string // TODO: Test owner and group; needs a good target though.
+	cpkInfo            *common.CpkInfo
+	cpkScopeInfo       *common.CpkScopeInfo
 }
 
 // returns op.size, if present, else defaultSize
