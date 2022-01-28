@@ -312,7 +312,11 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 				 * we can have 4 blocks in core, waiting for a disk or n/w operation. Any higher block size would *sort of*
 				 * serialize n/w and disk operations, and is better avoided.
 				 */
-				blockSize = sourceSize / common.MaxNumberOfBlocksPerBlob
+				if (sourceSize % common.MaxNumberOfBlocksPerBlob == 0) {
+					blockSize = sourceSize/common.MaxNumberOfBlocksPerBlob
+				} else {
+					blockSize = sourceSize/common.MaxNumberOfBlocksPerBlob +1
+				}
 				break
 			}
 		}
