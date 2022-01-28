@@ -34,7 +34,7 @@ func TestBasic_CopyUploadSingleBlob(t *testing.T) {
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
 			folder(""),
-			f("file1.txt"),
+			f("filea.txt"),
 		},
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
@@ -46,7 +46,7 @@ func TestBasic_CopyUploadEmptyBlob(t *testing.T) {
 		defaultSize: "0K",
 		shouldTransfer: []interface{}{
 			folder(""),
-			f("file1.txt"),
+			f("filea.txt"),
 		},
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
