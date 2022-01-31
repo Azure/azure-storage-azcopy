@@ -686,16 +686,18 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 				_, err := dir.SetProperties(ctx, ad.toHeaders(c, options.shareURL).SMBProperties)
 				c.AssertNoErr(err)
 
-				prop, err := dir.GetProperties(ctx)
-				c.AssertNoErr(err)
+				if f.creationProperties.smbPermissionsSddl != nil {
+					prop, err := dir.GetProperties(ctx)
+					c.AssertNoErr(err)
 
-				perm, err := options.shareURL.GetPermission(ctx, prop.FilePermissionKey())
-				c.AssertNoErr(err)
+					perm, err := options.shareURL.GetPermission(ctx, prop.FilePermissionKey())
+					c.AssertNoErr(err)
 
-				dest, _ := sddl.ParseSDDL(perm.Permission)
-				source, _ := sddl.ParseSDDL(*f.creationProperties.smbPermissionsSddl)
+					dest, _ := sddl.ParseSDDL(perm.Permission)
+					source, _ := sddl.ParseSDDL(*f.creationProperties.smbPermissionsSddl)
 
-				c.Assert(dest.Compare(source), equals(), true)
+					c.Assert(dest.Compare(source), equals(), true)
+				}
 			}
 
 			// set other properties
@@ -749,16 +751,18 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 				_, err := file.SetHTTPHeaders(ctx, headers)
 				c.AssertNoErr(err)
 
-				prop, err := file.GetProperties(ctx)
-				c.AssertNoErr(err)
+				if f.creationProperties.smbPermissionsSddl != nil {
+					prop, err := file.GetProperties(ctx)
+					c.AssertNoErr(err)
 
-				perm, err := options.shareURL.GetPermission(ctx, prop.FilePermissionKey())
-				c.AssertNoErr(err)
+					perm, err := options.shareURL.GetPermission(ctx, prop.FilePermissionKey())
+					c.AssertNoErr(err)
 
-				dest, _ := sddl.ParseSDDL(perm.Permission)
-				source, _ := sddl.ParseSDDL(*f.creationProperties.smbPermissionsSddl)
+					dest, _ := sddl.ParseSDDL(perm.Permission)
+					source, _ := sddl.ParseSDDL(*f.creationProperties.smbPermissionsSddl)
 
-				c.Assert(dest.Compare(source), equals(), true)
+					c.Assert(dest.Compare(source), equals(), true)
+				}
 			}
 
 			_, err = file.UploadRange(context.Background(), 0, contentR, nil)
