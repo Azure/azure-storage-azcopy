@@ -258,6 +258,7 @@ func TestProperties_SMBWithCopyWithShareRoot(t *testing.T) {
 			},
 		},
 		EAccountType.Standard(),
+		EAccountType.Standard(),
 		"",
 	)
 }
