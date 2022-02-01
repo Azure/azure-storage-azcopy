@@ -23,7 +23,8 @@ import (
 
 // This file os-triggers the ISMBPropertyBearingSourceInfoProvider and CustomLocalOpener interfaces on a local SIP.
 
-func (f localFileSourceInfoProvider) GetHandle(path string) (ntdll.Handle, error) {
+// getHandle obtains a windows file handle with generic read permissions & backup semantics
+func (f localFileSourceInfoProvider) getHandle(path string) (ntdll.Handle, error) {
 	srcPtr, err := syscall.UTF16PtrFromString(path)
 	if err != nil {
 		return 0, err
@@ -40,7 +41,7 @@ func (f localFileSourceInfoProvider) GetHandle(path string) (ntdll.Handle, error
 }
 
 func (f localFileSourceInfoProvider) Open(path string) (*os.File, error) {
-	fd, err := f.GetHandle(path)
+	fd, err := f.getHandle(path)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +56,7 @@ func (f localFileSourceInfoProvider) Open(path string) (*os.File, error) {
 
 func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	// We only need Owner, Group, and DACLs for azure files.
-	fd, err := f.GetHandle(f.jptm.Info().Source)
+	fd, err := f.getHandle(f.jptm.Info().Source)
 	if err != nil {
 		return "", err
 	}
