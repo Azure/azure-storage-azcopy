@@ -12,7 +12,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-const SampleSDDL = "O:<placeholder>G:<placeholder>D:AI(A;ID;FA;;;SY)(A;ID;FA;;;BA)(A;ID;FA;;;<placeholder>)S:NO_ACCESS_CONTROL"
+const SampleSDDL = "O:<placeholder>G:<placeholder>D:AI(A;ID;FA;;;SY)(A;ID;FA;;;BA)(A;ID;FA;;;<placeholder>)(D;;FX;;;SY)S:NO_ACCESS_CONTROL"
 const RootSampleSDDL = "O:<placeholder>G:<placeholder>D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;<placeholder>)S:NO_ACCESS_CONTROL"
 const FolderSampleSDDL = "O:<placeholder>G:<placeholder>D:AI(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)(A;OICIID;FA;;;<placeholder>)S:NO_ACCESS_CONTROL"
 const SampleSDDLPlaceHolder = "<placeholder>"
@@ -63,7 +63,8 @@ func TestProperties_SMBPermissionsSDDLPreserved(t *testing.T) {
 
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(
 		common.EFromTo.LocalFile(),
-		// common.EFromTo.FileFile(), // TODO: finish inquiring with Jason Shay about this wonkiness. Context: Auto-inherit bit is getting flipped on S2S unrelated to azcopy
+		common.EFromTo.FileLocal(),
+		common.EFromTo.FileFile(),
 	), eValidate.Auto(), params{
 		recursive:              true,
 		preserveSMBInfo:        true,

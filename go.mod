@@ -14,7 +14,7 @@ require (
 	github.com/golang-jwt/jwt/v4 v4.2.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 	github.com/google/uuid v1.3.0
-	github.com/hillu/go-ntdll v0.0.0-20211217090901-0dd7663bb804
+	github.com/hillu/go-ntdll v0.0.0-20211013113251-9d1dd10a143d
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/mattn/go-ieproxy v0.0.1
 	github.com/minio/minio-go v6.0.14+incompatible
