@@ -330,6 +330,7 @@ func TestBasic_CopyWithShareRoot(t *testing.T) {
 			},
 		},
 		EAccountType.Standard(),
+		EAccountType.Standard(),
 		"",
 	)
 }
