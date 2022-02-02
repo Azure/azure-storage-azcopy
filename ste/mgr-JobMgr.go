@@ -98,9 +98,12 @@ type IJobMgr interface {
 	SuccessfulBytesInActiveFiles() uint64
 	CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.CancelPauseResumeResponse
 
+
+	ChangeLogLevel(pipeline.LogLevel)
 	// Cleanup Functions
 	DeferredCleanupJobMgr()
 	CleanupJobStatusMgr()
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -199,6 +202,12 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	go jm.handleStatusUpdateMessage()
 
 	return &jm
+}
+
+func (jm *jobMgr) ChangeLogLevel(level pipeline.LogLevel) {
+	if jm.logger != nil {
+		jm.logger.ChangeLogLevel(level)
+	}
 }
 
 func (jm *jobMgr) getOverwritePrompter() *overwritePrompter {
