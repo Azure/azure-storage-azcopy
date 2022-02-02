@@ -206,6 +206,22 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 	// step 5b: create destination writer
 	chunkLogger := jptm.ChunkStatusLogger()
 	sourceMd5Exists := len(info.SrcHTTPHeaders.ContentMD5) > 0
+
+	getFlushInterval := func (chunkSize int64) int {
+		flushSize := int(2) //Default to 2GiB
+		GB := 1024 * 1024 * 1024
+		initPoolSize := int(defaultTransferInitiationPoolSize) //No of files parallely being downloaded
+	
+		if c := tryNewConfiguredInt(common.EEnvironmentVariable.FlushBufferSizeGB()); c != nil {
+			flushSize = c.Value
+		}
+		if c := tryNewConfiguredInt(common.EEnvironmentVariable.TransferInitiationPoolSize()); c != nil {
+			initPoolSize = c.Value
+		}
+		
+		return (flushSize * GB)/(initPoolSize * int(chunkSize))
+	}
+	
 	dstWriter := common.NewChunkedFileWriter(
 		jptm.Context(),
 		jptm.SlicePool(),
@@ -215,7 +231,8 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		numChunks,
 		MaxRetryPerDownloadBody,
 		jptm.MD5ValidationOption(),
-		sourceMd5Exists)
+		sourceMd5Exists, 
+		getFlushInterval(downloadChunkSize))
 
 	// step 5c: run prologue in downloader (here it can, for example, create things that will require cleanup in the epilogue)
 	//common.GetLifecycleMgr().E2EAwaitAllowOpenFiles()
@@ -250,7 +267,6 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		// TODO: as per comment above, currently, if there's an error here we must continue because we must schedule all chunks
 		// TODO: ... Can we refactor/improve that?
 		_ = dstWriter.WaitToScheduleChunk(jptm.Context(), id, adjustedChunkSize)
-		jptm.Log(pipeline.LogError, fmt.Sprintf("Mem Usage: %d %s", jptm.CacheLimiter().Value()/(1024*1024), info.Destination))
 
 		// create download func that is a appropriate to the remote data source
 		downloadFunc := dl.GenerateDownloadFunc(jptm, p, dstWriter, id, adjustedChunkSize, pacer)

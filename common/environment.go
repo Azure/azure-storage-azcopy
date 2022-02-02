@@ -362,10 +362,10 @@ func (EnvironmentVariable) MimeMapping() EnvironmentVariable {
 	}
 }
 
-func (EnvironmentVariable) FlushInterval() EnvironmentVariable {
+func (EnvironmentVariable) FlushBufferSizeGB() EnvironmentVariable {
 	return EnvironmentVariable{
-		Name:         "AZCOPY_FLUSH_INTERVAL",
+		Name:         "AZCOPY_FLUSH_BUFFER_SIZE_GB",
 		DefaultValue: "",
-		Description:  "When downloading, flush every x chunks where x=AZCOPY_FLUSH_INTERVAL.",
+		Description:  "When downloading, maximum size of downloaded chunks before flushing",
 	}
 }

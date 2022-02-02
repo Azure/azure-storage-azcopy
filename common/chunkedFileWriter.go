@@ -24,12 +24,9 @@ import (
 	"context"
 	"crypto/md5"
 	"errors"
-	"fmt"
 	"hash"
 	"io"
-	"log"
 	"math"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -114,24 +111,11 @@ type WriteSyncCloser interface {
 
 var flushPrintOnce sync.Once
 
-func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheLimiter CacheLimiter, chunkLogger ChunkStatusLogger, file WriteSyncCloser, numChunks uint32, maxBodyRetries int, md5ValidationOption HashValidationOption, sourceMd5Exists bool) ChunkedFileWriter {
+func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheLimiter CacheLimiter, chunkLogger ChunkStatusLogger, file WriteSyncCloser, numChunks uint32, maxBodyRetries int, md5ValidationOption HashValidationOption, sourceMd5Exists bool, flushInterval int) ChunkedFileWriter {
 	// Set max size for buffered channel. The upper limit here is believed to be generous, given worker routine drains it constantly.
 	// Use num chunks in file if lower than the upper limit, to prevent allocating RAM for lots of large channel buffers when dealing with
 	// very large numbers of very small files.
 	chanBufferSize := int(math.Min(float64(numChunks), 1000))
-
-	flushInterval := int64(0)
-	err := error(nil)
-	if rawValue := lcm.GetEnvironmentVariable(EEnvironmentVariable.FlushInterval()); rawValue != "" {
-		flushInterval, err = strconv.ParseInt(rawValue, 10, 64)
-		if err != nil {
-			log.Fatalf("error parsing the flush interval")
-		}
-	}
-
-	flushPrintOnce.Do(func() {
-		lcm.Info(fmt.Sprintf("DEBUG: flushing every %d chunks", flushInterval))
-	})
 
 	w := &chunkedFileWriter{
 		file:                    file,
@@ -144,7 +128,7 @@ func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheL
 		maxRetryPerDownloadBody: maxBodyRetries,
 		md5ValidationOption:     md5ValidationOption,
 		sourceMd5Exists:         sourceMd5Exists,
-		flushInterval:           flushInterval,
+		flushInterval:           int64(flushInterval),
 	}
 	go w.workerRoutine(ctx)
 	return w
