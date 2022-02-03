@@ -32,6 +32,7 @@ import (
 // We test all pairs here because change detection depends on both the source info provider and the xfer-... code.
 // The latter differs between upload and download.
 func TestChange_DetectFileChangedDuringTransfer(t *testing.T) {
+	t.Skip("Skipping tests")
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllPairs(), eValidate.Auto(), params{
 		recursive: true,
 	}, &hooks{
