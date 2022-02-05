@@ -79,6 +79,9 @@ var JobsAdmin interface {
 	// JobMgrCleanUp do the JobMgr cleanup.
 	JobMgrCleanUp(jobId common.JobID)
 
+	// ChangeLogLevel change the log level for specific job.
+	ChangeLogLevel(level pipeline.LogLevel, jobId common.JobID) error
+
 	// AddJobPartMgr associates the specified JobPartMgr with the Jobs Administrator
 	//AddJobPartMgr(appContext context.Context, planFile JobPartPlanFileName) IJobPartMgr
 	/*ScheduleTransfer(jptm IJobPartTransferMgr)*/
