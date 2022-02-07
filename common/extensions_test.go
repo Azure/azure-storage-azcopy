@@ -84,3 +84,52 @@ func (*extensionsTestSuite) TestURLWithPlusDecodedInPath(c *chk.C) {
 		c.Assert(extension.String(), chk.Equals, v.expectedResult)
 	}
 }
+
+func (*extensionsTestSuite) TestRedaction(c *chk.C) {
+
+	// must make sure that-
+	//1. the signature is redacted if present
+	//2. the capitalization of the rest of the string should not be affected
+	//3. the order of the rest of the string should not be affected
+	//4. no param should be left out
+
+	redactionTests := map[string]string{
+		// BLOCKID present, at first place
+		"blockid=OTUwNjAzN2EtZmEzNy1hNDQyLTZkZTQtMTM1N2I4OWM5ODZk&comp=block&se=2022-02-18T08%3A05%3A00Z&sig=v3OJqyjQiU0OkJRu5m%2FznjGp14PC7xBIj0oIzUTBRaA%3D&sp=racwdxlt&sr=c&st=2022-02-03T08%3A05%3A38Z&sv=2020-10-02&timeout=901": "blockid=OTUwNjAzN2EtZmEzNy1hNDQyLTZkZTQtMTM1N2I4OWM5ODZk&comp=block&se=2022-02-18T08%3A05%3A00Z&sig=REDACTED&sp=racwdxlt&sr=c&st=2022-02-03T08%3A05%3A38Z&sv=2020-10-02&timeout=901",
+
+		// BLOCKID present, not at first place -> url.encode automatically sorts them out in alphabetic order
+		"comp=block&blockid=OTUwNjAzN2EtZmEzNy1hNDQyLTZkZTQtMTM1N2I4OWM5ODZk&se=2022-02-18T08%3A05%3A00Z&sig=v3OJqyjQiU0OkJRu5m%2FznjGp14PC7xBIj0oIzUTBRaA%3D&sp=racwdxlt&sr=c&st=2022-02-03T08%3A05%3A38Z&sv=2020-10-02&timeout=901": "blockid=OTUwNjAzN2EtZmEzNy1hNDQyLTZkZTQtMTM1N2I4OWM5ODZk&comp=block&se=2022-02-18T08%3A05%3A00Z&sig=REDACTED&sp=racwdxlt&sr=c&st=2022-02-03T08%3A05%3A38Z&sv=2020-10-02&timeout=901",
+
+		// BLOCKID not present
+		"se=2022-02-18T08%3A05%3A00Z&sig=v3OJqyjQiU0OkJRu5m%2FznjGp14PC7xBIj0oIzUTBRaA%3D&sp=racwdxlt&sr=c&st=2022-02-03T08%3A05%3A38Z&sv=2020-10-02": "se=2022-02-18T08%3A05%3A00Z&sig=REDACTED&sp=racwdxlt&sr=c&st=2022-02-03T08%3A05%3A38Z&sv=2020-10-02",
+	}
+
+	for input, expectedOutput := range redactionTests {
+		//input = strings.ToLower(input)
+		//expectedOutput = strings.ToLower(expectedOutput)
+		queryKeyNeedRedact := "sig"
+		expectedOutputParams := make([]string, 0)
+		for _, param := range strings.Split(expectedOutput, "&") {
+			expectedOutputParams = append(expectedOutputParams, param)
+		}
+
+		_, actualOutput := RedactSecretQueryParam(input, queryKeyNeedRedact)
+		actualOutputParams := make([]string, 0)
+		for _, param := range strings.Split(actualOutput, "&") {
+			actualOutputParams = append(actualOutputParams, param)
+		}
+
+		c.Assert(len(expectedOutputParams), chk.Equals, len(actualOutputParams))
+
+		for i := range expectedOutputParams {
+			expParam, expValue := strings.Split(expectedOutputParams[i], "=")[0], strings.Split(expectedOutputParams[i], "=")[1]
+			actParam, actValue := strings.Split(actualOutputParams[i], "=")[0], strings.Split(actualOutputParams[i], "=")[1]
+
+			c.Assert(expParam, chk.Equals, actParam)
+			c.Assert(expValue, chk.Equals, actValue)
+			if expParam == "sig" {
+				c.Assert(actValue, chk.Equals, "REDACTED")
+			}
+		}
+	}
+}
