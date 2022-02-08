@@ -122,7 +122,8 @@ func (*extensionsTestSuite) TestRedaction(c *chk.C) {
 		}
 
 		c.Assert(len(expectedOutputParams), chk.Equals, len(actualOutputParams))
-
+		
+		var sigfound bool = false
 		for i := range expectedOutputParams {
 			expParam, expValue := strings.Split(expectedOutputParams[i], "=")[0], strings.Split(expectedOutputParams[i], "=")[1]
 			actParam, actValue := strings.Split(actualOutputParams[i], "=")[0], strings.Split(actualOutputParams[i], "=")[1]
@@ -131,8 +132,12 @@ func (*extensionsTestSuite) TestRedaction(c *chk.C) {
 			c.Assert(expValue, chk.Equals, actValue)
 			if expParam == "sig" {
 				c.Assert(isRedacted, chk.Equals, true)
+				sigfound = true
 				c.Assert(actValue, chk.Equals, "REDACTED")
 			}
+		}
+		if !sigfound {
+			c.Assert(isRedacted, chk.Equals, false)
 		}
 	}
 }
