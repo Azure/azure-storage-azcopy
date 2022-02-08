@@ -70,32 +70,15 @@ const SigAzure = azbfs.SigAzure
 const SigXAmzForAws = azbfs.SigXAmzForAws
 
 func RedactSecretQueryParam(rawQuery, queryKeyNeedRedact string) (bool, string) {
-	// make a dictionary of all the params map[param]value
-	copyQuery := rawQuery
-	originalDict := map[string]string{}
-	for _, param := range strings.Split(copyQuery, "&") {
-		originalDict[strings.Split(param, "=")[0]] = strings.Split(param, "=")[1]
+	values, _ := url.ParseQuery(rawQuery)
+	sigFound := false
+	for param := range values {
+		if strings.EqualFold(strings.ToLower(param), queryKeyNeedRedact) {
+			sigFound = true
+			values[param] = []string{"REDACTED"}
+		}
 	}
 
-	rawQuery = strings.ToLower(rawQuery) // lowercase the string, so we can look for ?[queryKeyNeedRedact] and &[queryKeyNeedRedact]=
-	sigFound := strings.Contains(rawQuery, "?"+queryKeyNeedRedact+"=")
-	if !sigFound {
-		sigFound = strings.Contains(rawQuery, "&"+queryKeyNeedRedact+"=")
-		if !sigFound {
-			return sigFound, copyQuery // [?|&][queryKeyNeedRedact]= not found; return the original query (no memory allocation)
-		}
-	}
-	// [?|&][queryKeyNeedRedact]= found, redact its value
-	values, _ := url.ParseQuery(copyQuery)
-	for name := range values {
-		if strings.EqualFold(name, queryKeyNeedRedact) {
-			values[name] = []string{"REDACTED"}
-		} else {
-			if name != "se" && name != "st" {
-				values[name] = []string{originalDict[name]}
-			}
-		}
-	}
 	return sigFound, values.Encode()
 }
 
