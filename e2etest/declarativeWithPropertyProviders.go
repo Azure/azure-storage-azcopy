@@ -225,22 +225,27 @@ func (withDirStubMetadata) createObjectProperties() *objectProperties {
 // It allows you to say what the error should be
 // TODO: as at 1 July 2020, we are not actually validating these.  Should we? It could be nice.  If we don't,
 //   remove this type and its usages, and the expectedFailureProvider interface
+//nolint
 type withError struct {
 	msg string
 }
 
+//nolint
 func (withError) appliesToCreation() bool {
 	return false
 }
 
+//nolint
 func (withError) appliesToVerification() bool {
 	return false
 }
 
+//nolint
 func (withError) createObjectProperties() *objectProperties {
 	return nil // implementing withPropertyProvider is just to trick the type system into letting us pass this to f() and folder(). Our implementation doesn't DO anything
 }
 
+//nolint
 func (w withError) expectedFailure() string {
 	return w.msg
 }
