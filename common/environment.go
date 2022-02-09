@@ -369,3 +369,11 @@ func (EnvironmentVariable) FlushBufferSizeGB() EnvironmentVariable {
 		Description:  "When downloading, maximum size of downloaded chunks before flushing",
 	}
 }
+
+func (EnvironmentVariable) DownloadToTempPath() EnvironmentVariable {
+	return EnvironmentVariable {
+		Name:        "AZCOPY_DOWNLOAD_TO_TEMP_PATH",
+		DefaultValue: "true",
+		Description: "Configures azcopy to download to a temp path before actual download. Allowed values are true/false",
+	}
+}
