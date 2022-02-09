@@ -34,6 +34,8 @@ type pacer interface {
 	// RequestTrafficAllocation blocks until the caller is allowed to process byteCount bytes.
 	RequestTrafficAllocation(ctx context.Context, byteCount int64) error
 
+	UpdateTargetBytesPerSecond(newTarget int64)
+
 	// UndoRequest reverses a previous request to process n bytes.  Is used when
 	// the caller did not need all of the allocation they previously requested
 	// e.g. when they asked for enough for a big buffer, but never filled it, they would
@@ -69,6 +71,7 @@ type tokenBucketPacer struct {
 	atomicGrandTotal           int64
 	atomicWaitCount            int64
 	expectedBytesPerRequest    int64
+	newTargetBytesPerSecond    chan int64
 	done                       chan struct{}
 }
 
@@ -129,12 +132,21 @@ func (p *tokenBucketPacer) Close() error {
 
 func (p *tokenBucketPacer) pacerBody() {
 	lastTime := time.Now()
+
+	lastTargetUpdateTime := time.Now()
+	newTarget := p.targetBytesPerSecond()
 	for {
 
 		select {
 		case <-p.done:
 			return
+		case newTarget = <- p.newTargetBytesPerSecond:
 		default:
+		}
+
+		/*check if we have to update target rate */
+		if newTarget != p.targetBytesPerSecond() && time.Since(lastTargetUpdateTime) >= deadBandDuration {
+			p.setTargetBytesPerSecond(newTarget)
 		}
 
 		currentTarget := atomic.LoadInt64(&p.atomicTargetBytesPerSecond)
@@ -169,6 +181,10 @@ func (p *tokenBucketPacer) targetBytesPerSecond() int64 {
 
 func (p *tokenBucketPacer) setTargetBytesPerSecond(value int64) {
 	atomic.StoreInt64(&p.atomicTargetBytesPerSecond, value)
+}
+
+func (p *tokenBucketPacer) UpdateTargetBytesPerSecond(value int64) {
+	p.newTargetBytesPerSecond <- value
 }
 
 func (p *tokenBucketPacer) GetTotalTraffic() int64 {
