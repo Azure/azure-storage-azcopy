@@ -2,7 +2,7 @@ package common
 
 import (
 	"net/url"
-
+	"strings"
 	chk "gopkg.in/check.v1"
 )
 
