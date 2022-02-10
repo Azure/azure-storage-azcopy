@@ -90,7 +90,7 @@ func (*extensionsTestSuite) TestRedaction(c *chk.C) {
 	// must make sure that-
 	//1. the signature is redacted if present
 	//2. the capitalization of the rest of the string should not be affected
-	//3. the order of the rest of the string should not be affected
+	//3. the order of the rest of the string doesn't matter
 	//4. no param should be left out
 	//5. function returns true if "sig" is present
 
