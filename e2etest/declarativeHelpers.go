@@ -21,6 +21,7 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"reflect"
 	"strings"
 	"testing"
@@ -166,6 +167,8 @@ type params struct {
 	cpkByValue                bool
 	isObjectDir               bool
 	debugSkipFiles            []string // a list of localized filepaths to skip over on the first run in the STE.
+	s2sPreserveAccessTier     bool
+	accessTier                azblob.AccessTierType
 
 	disableParallelTesting bool
 	// looks like this for a folder transfer:

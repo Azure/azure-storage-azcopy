@@ -108,6 +108,9 @@ func BlobTierAllowed(destTier azblob.AccessTierType) bool {
 		// Any other storage type would have to be file storage, and we can't set tier there.
 		panic("Cannot set tier on azure files.")
 	} else {
+		if destAccountKind == "Storage" { // Tier setting not allowed on classic accounts
+			return false
+		}
 		// Standard storage account. If it's Hot, Cool, or Archive, we're A-OK.
 		// Page blobs, however, don't have an access tier on Standard accounts.
 		// However, this is also OK, because the pageblob sender code prevents us from using a standard access tier type.
