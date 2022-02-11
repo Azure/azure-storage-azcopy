@@ -69,7 +69,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo,
 		&cca.FollowSymlinks, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties,
-		cca.IncludeDirectoryStubs, func(common.EntityType) {}, cca.ListOfVersionIDs,
+		cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs,
 		cca.S2sPreserveBlobTags, cca.LogVerbosity.ToPipelineLogLevel(), cca.CpkOptions)
 
 	if err != nil {
@@ -342,7 +342,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 	}
 
 	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, nil,
-		nil, false, false, false,
+		nil, false, false, false, common.EPermanentDeleteOption.None(),
 		func(common.EntityType) {}, cca.ListOfVersionIDs, false, pipeline.LogNone, cca.CpkOptions)
 
 	if err != nil {
@@ -414,6 +414,15 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []ObjectFilter {
 		if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(cca.Recursive); prefixFilter != "" {
 			ste.JobsAdmin.LogToJobLog("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, pipeline.LogInfo) // "May be used" because we don't know here which enumerators will use it
 		}
+	}
+
+	switch cca.permanentDeleteOption {
+	case common.EPermanentDeleteOption.Snapshots():
+		filters = append(filters, &permDeleteFilter{deleteSnapshots: true})
+	case common.EPermanentDeleteOption.Versions():
+		filters = append(filters, &permDeleteFilter{deleteVersions: true})
+	case common.EPermanentDeleteOption.SnapshotsAndVersions():
+		filters = append(filters, &permDeleteFilter{deleteSnapshots: true, deleteVersions: true})
 	}
 
 	return filters

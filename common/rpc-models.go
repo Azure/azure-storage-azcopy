@@ -206,6 +206,7 @@ type BlobTransferAttributes struct {
 	BlockSizeInBytes         int64                 // when uploading/downloading/copying, specify the size of each chunk
 	DeleteSnapshotsOption    DeleteSnapshotsOption // when deleting, specify what to do with the snapshots
 	BlobTagsString           string                // when user explicitly provides blob tags
+	PermanentDeleteOption    PermanentDeleteOption // Permanently deletes soft-deleted snapshots when indicated by user
 }
 
 type JobIDDetails struct {

@@ -134,12 +134,45 @@ func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c *chk.C, dirPath s
 	return
 }
 
-// make 50 blobs with random names
-// 10 of them at the top level
-// 10 of them in sub dir "sub1"
-// 10 of them in sub dir "sub2"
-// 10 of them in deeper sub dir "sub1/sub3/sub5"
-// 10 of them with special characters
+func (scenarioHelper) generateCommonRemoteScenarioForSoftDelete(c *chk.C, containerURL azblob.ContainerURL, prefix string) (string, []azblob.BlockBlobURL, []string) {
+	blobList := make([]azblob.BlockBlobURL, 3)
+	blobNames := make([]string, 3)
+	var listOfTransfers []string
+
+	blobURL1, blobName1 := createNewBlockBlob(c, containerURL, prefix+"top")
+	blobURL2, blobName2 := createNewBlockBlob(c, containerURL, prefix+"sub1/")
+	blobURL3, blobName3 := createNewBlockBlob(c, containerURL, prefix+"sub1/sub3/sub5/")
+
+	blobList[0] = blobURL1
+	blobNames[0] = blobName1
+	blobList[1] = blobURL2
+	blobNames[1] = blobName2
+	blobList[2] = blobURL3
+	blobNames[2] = blobName3
+
+	for i := 0; i < len(blobList); i++ {
+		for j := 0; j < 3; j++ { // create 3 soft-deleted snapshots for each blob
+			// Create snapshot for blob
+			snapResp, err := blobList[i].CreateSnapshot(ctx, azblob.Metadata{}, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+			c.Assert(snapResp, chk.NotNil)
+			c.Assert(err, chk.IsNil)
+
+			time.Sleep(time.Millisecond * 30)
+
+			// Soft delete snapshot
+			snapshotBlob := blobList[i].WithSnapshot(snapResp.Snapshot())
+			_, err = snapshotBlob.Delete(ctx, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+			c.Assert(err, chk.IsNil)
+
+			listOfTransfers = append(listOfTransfers, blobNames[i])
+		}
+	}
+
+	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
+	time.Sleep(time.Millisecond * 1050)
+	return blobName1, blobList, listOfTransfers
+}
+
 func (scenarioHelper) generateCommonRemoteScenarioForBlob(c *chk.C, containerURL azblob.ContainerURL, prefix string) (blobList []string) {
 	blobList = make([]string, 50)
 

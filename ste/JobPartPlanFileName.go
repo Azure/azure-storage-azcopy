@@ -215,6 +215,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		DestLengthValidation:           order.DestLengthValidation,
 		atomicJobStatus:                common.EJobStatus.InProgress(), // We default to InProgress
 		DeleteSnapshotsOption:          order.BlobAttributes.DeleteSnapshotsOption,
+		PermanentDeleteOption:          order.BlobAttributes.PermanentDeleteOption,
 	}
 
 	// Copy any strings into their respective fields
@@ -306,6 +307,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			SrcBlobTypeLength:           int16(len(order.Transfers.List[t].BlobType)),
 			SrcBlobTierLength:           int16(len(order.Transfers.List[t].BlobTier)),
 			SrcBlobVersionIDLength:      int16(len(order.Transfers.List[t].BlobVersionID)),
+			SrcBlobSnapshotIDLength:     int16(len(order.Transfers.List[t].BlobSnapshotID)),
 			SrcBlobTagsLength:           int16(srcBlobTagsLength),
 
 			atomicTransferStatus: common.ETransferStatus.Started(), // Default
@@ -319,7 +321,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		currentSrcStringOffset += int64(jppt.SrcLength + jppt.DstLength + jppt.SrcContentTypeLength +
 			jppt.SrcContentEncodingLength + jppt.SrcContentLanguageLength + jppt.SrcContentDispositionLength +
 			jppt.SrcCacheControlLength + jppt.SrcContentMD5Length + jppt.SrcMetadataLength +
-			jppt.SrcBlobTypeLength + jppt.SrcBlobTierLength + jppt.SrcBlobVersionIDLength + jppt.SrcBlobTagsLength)
+			jppt.SrcBlobTypeLength + jppt.SrcBlobTierLength + jppt.SrcBlobVersionIDLength + jppt.SrcBlobSnapshotIDLength + jppt.SrcBlobTagsLength)
 	}
 
 	// All the transfers were written; now write each transfer's src/dst strings
@@ -390,6 +392,11 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		}
 		if len(order.Transfers.List[t].BlobVersionID) != 0 {
 			bytesWritten, err = file.WriteString(order.Transfers.List[t].BlobVersionID)
+			common.PanicIfErr(err)
+			eof += int64(bytesWritten)
+		}
+		if len(order.Transfers.List[t].BlobSnapshotID) != 0 {
+			bytesWritten, err = file.WriteString(order.Transfers.List[t].BlobSnapshotID)
 			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}
