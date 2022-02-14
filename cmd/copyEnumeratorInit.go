@@ -657,8 +657,10 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 				panic("unexpected inescapable rootDir name")
 			}
 		}
-
-		relativePath = "/" + rootDir + relativePath
+		
+		if object.size != 0 {
+			relativePath = "/" + rootDir + relativePath
+		}
 	}
 
 	return pathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
