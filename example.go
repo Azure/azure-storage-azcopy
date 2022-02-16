@@ -93,7 +93,7 @@ func main1() {
 	common.AzcopyJobPlanFolder = "C:\\Users\\nakulkar\\ste1"
 
 	//======================================================================================================
-	 jm := ste.NewJobMgr(concurrencySettings, jobID, appCtx, cpuMon, level, "NOCMD", "C:\\Users\\nakulkar\\ste1\\", &tuner, pacer, slicePool, cacheLimiter, fileCountLimiter, logger)
+	 jm := ste.NewJobMgr(concurrencySettings, jobID, appCtx, cpuMon, level, "NOCMD", "C:\\Users\\nakulkar\\ste1\\", &tuner, pacer, slicePool, cacheLimiter, fileCountLimiter, logger, false)
 	//go statusMgr()
 
 	 order := NewOrder(jobID) 
