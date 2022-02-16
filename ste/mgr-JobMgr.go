@@ -97,6 +97,7 @@ type IJobMgr interface {
 	AddSuccessfulBytesInActiveFiles(n int64)
 	SuccessfulBytesInActiveFiles() uint64
 	CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.CancelPauseResumeResponse
+	IsDaemon() bool
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -104,7 +105,7 @@ type IJobMgr interface {
 func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel,
 	       commandString string, logFileFolder string, tuner ConcurrencyTuner,
 	       pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
-	       jobLogger common.ILoggerResetable) IJobMgr {
+	       jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
 	const channelSize = 100000
 	// PartsChannelSize defines the number of JobParts which can be placed into the
 	// parts channel. Any JobPart which comes from FE and partChannel is full,
@@ -168,6 +169,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		fileCountLimiter:             fileCountLimiter,
 		cpuMon:                       cpuMon,
 		jstm:                         &jstm,
+		isDaemon:                     daemonMode,
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
 	jm.logJobsAdminMessages()
@@ -317,6 +319,8 @@ type jobMgr struct {
 	/* Pool sizer related stuff */
 	atomicCurrentMainPoolSize          int32 // align 64 bit integers for 32 bit arch
 	atomicSuccessfulBytesInActiveFiles int64
+
+	isDaemon bool /* is it running as service */
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1004,7 +1008,10 @@ func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.
 	}
 	return jr
 }
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+func (jm *jobMgr) IsDaemon() bool {
+	return jm.isDaemon
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
