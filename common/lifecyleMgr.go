@@ -68,6 +68,7 @@ type LifecycleMgr interface {
 	RegisterCloseFunc(func())
 	SetForceLogging()
 	IsForceLoggingDisabled() bool
+	ReportAllJobPartsDone()
 }
 
 func GetLifecycleMgr() LifecycleMgr {
@@ -79,6 +80,7 @@ type lifecycleMgr struct {
 	msgQueue              chan outputMessage
 	progressCache         string // useful for keeping job progress on the last line
 	cancelChannel         chan os.Signal
+	doneChannel           chan bool
 	e2eContinueChannel    chan struct{}
 	e2eAllowOpenChannel   chan struct{}
 	waitEverCalled        int32
@@ -484,6 +486,8 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 	go func() {
 		const progressFrequencyThreshold = 1000000
 		var oldCount, newCount uint32
+		wait := 2 * time.Second
+		lastFetchTime := time.Now().Add(-wait) // So that we start fetching time immediately
 
 		// cancelChannel will be notified when os receives os.Interrupt and os.Kill signals
 		signal.Notify(lcm.cancelChannel, os.Interrupt, os.Kill)
@@ -501,11 +505,16 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 			case <-lcm.cancelChannel:
 				doCancel()
 				continue // to exit on next pass through loop
+			case <-lcm.doneChannel:
+					newCount = jc.ReportProgressOrExit(lcm)
+					lastFetchTime = time.Now()
 			default:
-				newCount = jc.ReportProgressOrExit(lcm)
+				if time.Since(lastFetchTime) >= wait {
+					newCount = jc.ReportProgressOrExit(lcm)
+					lastFetchTime = time.Now()
+				}
 			}
 
-			wait := 2 * time.Second
 			if newCount >= progressFrequencyThreshold && !cancelCalled {
 				// report less on progress  - to save on the CPU costs of doing so and because, if there are this many files,
 				// its going to be a long job anyway, so no need to report so often
@@ -513,13 +522,6 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 				if oldCount < progressFrequencyThreshold {
 					lcm.Info(fmt.Sprintf("Reducing progress output frequency to %v, because there are over %d files", wait, progressFrequencyThreshold))
 				}
-			}
-
-			// wait a bit before fetching job status again, as fetching has costs associated with it on the backend
-			select {
-			case <-lcm.cancelChannel:
-				doCancel()
-			case <-time.After(wait):
 			}
 
 			oldCount = newCount
@@ -588,6 +590,10 @@ func (lcm *lifecycleMgr) SetForceLogging() {
 
 func (lcm *lifecycleMgr) IsForceLoggingDisabled() bool {
 	return lcm.disableSyslog
+}
+
+func (lcm *lifecycleMgr) ReportAllJobPartsDone() {
+	lcm.doneChannel <- true
 }
 
 // captures the common logic of exiting if there's an expected error

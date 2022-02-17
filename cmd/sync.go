@@ -558,6 +558,22 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		return
 	}
 
+	lcm.Progress(func(format common.OutputFormat) string {
+		if format == common.EOutputFormat.Json() {
+			return cca.getJsonOfSyncJobSummary(summary)
+		}
+
+		// indicate whether constrained by disk or not
+		perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, false)
+
+		return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v%s",
+			summary.PercentComplete,
+			summary.TransfersCompleted,
+			summary.TransfersFailed,
+			summary.TotalTransfers-summary.TransfersCompleted-summary.TransfersFailed,
+			summary.TotalTransfers, perfString, ste.ToFixed(throughput, 4), diskString)
+	})
+
 	if jobDone {
 		exitCode := common.EExitCode.Success()
 		if summary.TransfersFailed > 0 {
@@ -610,22 +626,6 @@ Final Job Status: %v%s%s
 			return output
 		}, exitCode)
 	}
-
-	lcm.Progress(func(format common.OutputFormat) string {
-		if format == common.EOutputFormat.Json() {
-			return cca.getJsonOfSyncJobSummary(summary)
-		}
-
-		// indicate whether constrained by disk or not
-		perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, false)
-
-		return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v%s",
-			summary.PercentComplete,
-			summary.TransfersCompleted,
-			summary.TransfersFailed,
-			summary.TotalTransfers-summary.TransfersCompleted-summary.TransfersFailed,
-			summary.TotalTransfers, perfString, ste.ToFixed(throughput, 4), diskString)
-	})
 
 	return
 }
