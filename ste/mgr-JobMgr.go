@@ -637,6 +637,9 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 
 			// flush logs
 			jm.chunkStatusLogger.FlushLog() // TODO: remove once we sort out what will be calling CloseLog (currently nothing)
+			if allKnownPartsDone {
+				common.GetLifecycleMgr().ReportAllJobPartsDone()
+			}
 		} //Else log and wait for next part to complete
 
 		if shouldLog {
