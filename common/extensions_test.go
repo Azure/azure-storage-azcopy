@@ -2,7 +2,7 @@ package common
 
 import (
 	"net/url"
-
+	"strings"
 	chk "gopkg.in/check.v1"
 )
 
@@ -82,5 +82,62 @@ func (*extensionsTestSuite) TestURLWithPlusDecodedInPath(c *chk.C) {
 		c.Assert(extension.Path, chk.Equals, v.expectedPath)
 		c.Assert(extension.RawPath, chk.Equals, v.expectedRawPath)
 		c.Assert(extension.String(), chk.Equals, v.expectedResult)
+	}
+}
+
+func (*extensionsTestSuite) TestRedaction(c *chk.C) {
+
+	// must make sure that-
+	//1. the signature is redacted if present
+	//2. the capitalization of the rest of the string should not be affected
+	//3. the order of the rest of the string doesn't matter
+	//4. no param should be left out
+	//5. function returns true if "sig" is present
+
+	redactionTests := map[string]string{
+		// BLOCKID present, at first place
+		"blockid=OTUwNjAzN2EtZmEzNy1hNDQyLTZkZTQtMTM1N2I4OWM5ODZk&comp=block&se=2022-02-18T08%3A05%3A00Z&sig=v3OJqyjQiU0OkJRGp14PC7xBIj0oIzUTBRaA%3D&sp=racwdxlt&sr=c&st=2022-02-03T08%3A05%3A38Z&sv=2020-10-02&timeout=901": "blockid=OTUwNjAzN2EtZmEzNy1hNDQyLTZkZTQtMTM1N2I4OWM5ODZk&comp=block&se=2022-02-18T08%3A05%3A00Z&sig=REDACTED&sp=racwdxlt&sr=c&st=2022-02-03T08%3A05%3A38Z&sv=2020-10-02&timeout=901",
+
+		// BLOCKID present, not at first place -> url.encode automatically sorts them out in alphabetic order
+		"comp=block&blockid=OTUwNjAzN2EtZmEzNy1hNDQyLTZkZTQtMTM1N2I4OWM5ODZk&se=2022-02-18T08%3A05%3A00Z&sig=v3OJqyjQiU0OkJRGp14PC7xBIj0oIzUTBRaA%3D&sp=racwdxlt&sr=c&st=2022-02-03T08%3A05%3A38Z&sv=2020-10-02&timeout=901": "blockid=OTUwNjAzN2EtZmEzNy1hNDQyLTZkZTQtMTM1N2I4OWM5ODZk&comp=block&se=2022-02-18T08%3A05%3A00Z&sig=REDACTED&sp=racwdxlt&sr=c&st=2022-02-03T08%3A05%3A38Z&sv=2020-10-02&timeout=901",
+
+		// BLOCKID not present
+		"se=2022-02-18T08%3A05%3A00Z&sig=v3OJqyjQiU0OkJRu5m%2FznjUTBRaA%3D&sp=racwdxlt&sr=c&st=2022-02-03T08%3A05%3A38Z&sv=2020-10-02": "se=2022-02-18T08%3A05%3A00Z&sig=REDACTED&sp=racwdxlt&sr=c&st=2022-02-03T08%3A05%3A38Z&sv=2020-10-02",
+
+		// Param with no value
+		"se=2022-02-18T08%3A05%3A00Z&sig=v3OJqyjQiU0Ok%2FznjUTBRaA%3D&sp=racwdxlt&sr=&st=2022-02-03T08%3A05%3A38Z&sv=2020-10-02": "se=2022-02-18T08%3A05%3A00Z&sig=REDACTED&sp=racwdxlt&sr=&st=2022-02-03T08%3A05%3A38Z&sv=2020-10-02",
+	}
+
+	for input, expectedOutput := range redactionTests {
+		queryKeyNeedRedact := "sig"
+		expectedOutputParams := make([]string, 0)
+		for _, param := range strings.Split(expectedOutput, "&") {
+			expectedOutputParams = append(expectedOutputParams, param)
+		}
+
+		isRedacted, actualOutput := RedactSecretQueryParam(input, queryKeyNeedRedact)
+		actualOutputParams := make([]string, 0)
+		for _, param := range strings.Split(actualOutput, "&") {
+			actualOutputParams = append(actualOutputParams, param)
+		}
+
+		c.Assert(len(expectedOutputParams), chk.Equals, len(actualOutputParams))
+		
+		var sigfound bool = false
+		for i := range expectedOutputParams {
+			expParam, expValue := strings.Split(expectedOutputParams[i], "=")[0], strings.Split(expectedOutputParams[i], "=")[1]
+			actParam, actValue := strings.Split(actualOutputParams[i], "=")[0], strings.Split(actualOutputParams[i], "=")[1]
+
+			c.Assert(expParam, chk.Equals, actParam)
+			c.Assert(expValue, chk.Equals, actValue)
+			if expParam == "sig" {
+				c.Assert(isRedacted, chk.Equals, true)
+				sigfound = true
+				c.Assert(actValue, chk.Equals, "REDACTED")
+			}
+		}
+		if !sigfound {
+			c.Assert(isRedacted, chk.Equals, false)
+		}
 	}
 }
