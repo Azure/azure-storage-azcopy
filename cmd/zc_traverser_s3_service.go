@@ -64,14 +64,13 @@ func (t *s3ServiceTraverser) WriteHTTPTraceToLogs() {
 	// We can dump the buffer to logfile in one go as well, but we're doing it 1 by 1
 	// 1. Size of buffer stays in control and doesn't grow huge
 	// 2. We want to write trace log before the error log to make sense of what is happening
-	if t.outputStream != nil && ste.JobsAdmin != nil {
+	if t.outputStream != nil {
 		traceLog := (*t.outputStream).String()
-		if len(traceLog) == 0 {
-			return
-		} else {
+		if len(traceLog) > 0 {
 			t.outputStream.Reset()
-			strings.ReplaceAll(traceLog, "\n\n", "\n")
-			ste.JobsAdmin.LogToJobLog(traceLog, t.logLevel)
+			if ste.JobsAdmin != nil {
+				ste.JobsAdmin.LogToJobLog(strings.ReplaceAll(traceLog, "\n\n", "\n"), t.logLevel)
+			}
 		}
 	}
 }
@@ -144,7 +143,8 @@ func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor obje
 			continue
 		}
 	}
-
+	t.WriteHTTPTraceToLogs()
+	t.s3Client.TraceOff()
 	return nil
 }
 
