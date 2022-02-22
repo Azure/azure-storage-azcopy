@@ -29,7 +29,7 @@ jobs:
         env:
           GO111MODULE: 'on'
         inputs:
-          version: '1.16'
+          version: '1.16.14'
 
       - script: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.43.0
@@ -88,7 +88,7 @@ jobs:
     steps:
       - task: GoTool@0
         inputs:
-          version: '1.16'
+          version: '1.16.14'
 
       # Running E2E Tests on Linux - AMD64
       - script: |
@@ -161,7 +161,7 @@ jobs:
       - task: GoTool@0
         name: 'Set_up_Golang'
         inputs:
-          version: '1.16'
+          version: '1.16.14'
       - task: DownloadSecureFile@1
         name: ciGCSServiceAccountKey
         displayName: 'Download GCS Service Account Key'
