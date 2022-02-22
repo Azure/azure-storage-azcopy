@@ -1,6 +1,31 @@
 
 # Change Log
 
+## Version 10.14.0
+
+### New features
+1. Feature to [permanently delete](https://docs.microsoft.com/en-us/rest/api/storageservices/delete-blob#remarks) soft-deleted
+   snapshots/versions of the blobs has been added (preview). `--permanent-delete=none/snapshots/version/snapshotsandversions`.
+2. Feature to preserve properties and ACLs when copying to Azure file share root directory.
+3. Pinned all APIs to use the default service version `2020-04-08` and let users decide the service version via
+   `AZCOPY_DEFAULT_SERVICE_API_VERSION` environment variable.
+
+### Bug fixes
+1. Fixed issue in which AzCopy failed to copy to classic blob container with `preserve blob access tier`.
+2. Fixed [issue 1630](https://github.com/Azure/azure-storage-azcopy/issues/1630) : AzCopy created extra empty
+   directories at destination while performing S2S transfer from one ADLS Gen2 account to another ADLS Gen2 account.
+3. Changed the way we were using to obtain and set ACLs to ensure accuracy.
+4. Clarify error message for `azcopy sync` when source or destination cannot be detected.
+5. Report error when client provided key(CPK) encryption is applied to DFS endpoint.
+6. Fixed [issue 1596](https://github.com/Azure/azure-storage-azcopy/issues/1596) : AzCopy failed to transfer files (with '/.' in their names)
+   from AWS S3 to Azure blob storage.
+7. Fixed [issue 1474](https://github.com/Azure/azure-storage-azcopy/issues/1474) : AzCopy panicked when trying to re-create an already open plan file.
+8. Improved handling of Auth error against single file.
+9. Fixed [issue 1640](https://github.com/Azure/azure-storage-azcopy/issues/1640) : Recursive copy from GCS bucket to Azure container failed 
+   with `FileIgnored` error when using `--exclude-path`.
+10. Fixed [issue 1655](https://github.com/Azure/azure-storage-azcopy/issues/1655) : AzCopy panicked when using `--include-before` flag.
+11. Fixed [issue 1609](https://github.com/Azure/azure-storage-azcopy/issues/1609) : `blockid` converted to lower case in AzCopy logs.
+
 ## Version 10.13.0
 
 ### New features
