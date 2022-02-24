@@ -931,6 +931,9 @@ func (s *cmdIntegrationSuite) TestDryrunCopyGCPtoBlob(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestS2SCopyWithDirSAS(c *chk.C) {
+	// TODO: Remove skip when FE bug is resolved
+	c.Skip("Operations with Dir SAS currently fails due to incorrect handling of sdd in FE")
+
 	bsu := getBSU()
 	vdirName := "vdir1"
 
@@ -980,6 +983,9 @@ func (s *cmdIntegrationSuite) TestS2SCopyWithDirSAS(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestDownloadBlobVirtualDirectoryDirSAS(c *chk.C) {
+	// TODO: Remove skip when FE bug is resolved
+	c.Skip("Operations with Dir SAS currently fails due to incorrect handling of sdd in FE")
+
 	bsu := getBSU()
 	vdirName := "vdir1"
 
