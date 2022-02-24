@@ -790,6 +790,29 @@ func getContainerURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential, con
 	return azblob.NewContainerURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
 }
 
+func getContainerURLWithDirSAS(c *chk.C, credential azblob.SharedKeyCredential, containerName string) azblob.ContainerURL {
+	sasQueryParams, err := azblob.BlobSASSignatureValues{
+		Directory:     "1",
+		Protocol:      azblob.SASProtocolHTTPS,
+		ExpiryTime:    time.Now().UTC().Add(48 * time.Hour),
+		ContainerName: containerName,
+		Permissions:   azblob.ContainerSASPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true, Tag: true}.String(),
+	}.NewSASQueryParameters(&credential)
+	c.Assert(err, chk.IsNil)
+
+	// construct the url from scratch
+	qp := sasQueryParams.Encode()
+	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/%s?%s",
+		credential.AccountName(), containerName, qp)
+
+	// convert the raw url and validate it was parsed successfully
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
+
+	// TODO perhaps we need a global default pipeline
+	return azblob.NewContainerURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
+}
+
 func getBlobServiceURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential) azblob.ServiceURL {
 	sasQueryParams, err := azblob.AccountSASSignatureValues{
 		Protocol:      azblob.SASProtocolHTTPS,

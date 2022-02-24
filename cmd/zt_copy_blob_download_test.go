@@ -929,3 +929,68 @@ func (s *cmdIntegrationSuite) TestDryrunCopyGCPtoBlob(c *chk.C) {
 		c.Check(testDryrunStatements(blobsToInclude, msg), chk.Equals, true)
 	})
 }
+
+func (s *cmdIntegrationSuite) TestS2SCopyWithDirSAS(c *chk.C) {
+	bsu := getBSU()
+	vdirName := "vdir1"
+
+	// set up src container
+	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, srcContainerURL)
+	_ = scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, srcContainerURL, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
+	c.Assert(srcContainerURL, chk.NotNil)
+
+	// set up the destination
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, dstContainerURL)
+	c.Assert(dstContainerURL, chk.NotNil)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithDirSAS(c, srcContainerName)
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithDirSAS(c, dstContainerName)
+	raw := getDefaultCopyRawInput(rawContainerURLWithSAS.String(), rawDstContainerURLWithSAS.String())
+	raw.recursive = true
+
+	// Operations with Dir SAS fail due to incorrect handling of sdd in FE
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.NotNil)
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestDownloadBlobVirtualDirectoryDirSAS(c *chk.C) {
+	bsu := getBSU()
+	vdirName := "vdir1"
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
+	defer deleteContainer(c, containerURL)
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// set up the destination with an empty folder
+	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawBlobURLWithDirSAS(c, containerName, vdirName)
+	raw := getDefaultCopyRawInput(rawContainerURLWithSAS.String(), dstDirName)
+	raw.recursive = true
+
+	// Operations with Dir SAS fail due to incorrect handling of sdd in FE
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.NotNil)
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+	})
+}
