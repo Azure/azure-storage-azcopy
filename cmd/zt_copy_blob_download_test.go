@@ -937,7 +937,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyWithDirSAS(c *chk.C) {
 	// set up src container
 	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
 	defer deleteContainer(c, srcContainerURL)
-	_ = scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, srcContainerURL, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, srcContainerURL, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
 	c.Assert(srcContainerURL, chk.NotNil)
 
 	// set up the destination
@@ -956,7 +956,23 @@ func (s *cmdIntegrationSuite) TestS2SCopyWithDirSAS(c *chk.C) {
 	raw := getDefaultCopyRawInput(rawContainerURLWithSAS.String(), rawDstContainerURLWithSAS.String())
 	raw.recursive = true
 
-	// Operations with Dir SAS fail due to incorrect handling of sdd in FE
+	// Operations with Dir SAS currently fails due to incorrect handling of sdd in FE
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
+
+		// validate that the right transfers were sent
+		expectedTransfers := scenarioHelper{}.shaveOffPrefix(blobList, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
+		validateDownloadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING,
+			common.AZCOPY_PATH_SEPARATOR_STRING+vdirName+common.AZCOPY_PATH_SEPARATOR_STRING, expectedTransfers, mockedRPC)
+	})
+
+	// turn off recursive, this time nothing should be transferred
+	raw.recursive = false
+	mockedRPC.reset()
+
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.NotNil)
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
@@ -988,7 +1004,23 @@ func (s *cmdIntegrationSuite) TestDownloadBlobVirtualDirectoryDirSAS(c *chk.C) {
 	raw := getDefaultCopyRawInput(rawContainerURLWithSAS.String(), dstDirName)
 	raw.recursive = true
 
-	// Operations with Dir SAS fail due to incorrect handling of sdd in FE
+	// Operations with Dir SAS currently fails due to incorrect handling of sdd in FE
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
+
+		// validate that the right transfers were sent
+		expectedTransfers := scenarioHelper{}.shaveOffPrefix(blobList, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
+		validateDownloadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING,
+			common.AZCOPY_PATH_SEPARATOR_STRING+vdirName+common.AZCOPY_PATH_SEPARATOR_STRING, expectedTransfers, mockedRPC)
+	})
+
+	// turn off recursive, this time nothing should be transferred
+	raw.recursive = false
+	mockedRPC.reset()
+
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.NotNil)
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)

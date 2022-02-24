@@ -401,7 +401,7 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToVirtualDirectoryWithDirSAS(c 
 	// set up the source with numerous files
 	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(srcDirPath)
-	_ = scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirPath, "")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirPath, "")
 
 	// set up an empty container
 	containerURL, containerName := createNewContainer(c, bsu)
@@ -417,7 +417,23 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToVirtualDirectoryWithDirSAS(c 
 	raw := getDefaultCopyRawInput(srcDirPath, rawContainerURLWithSAS.String())
 	raw.recursive = true
 
-	// Operations with Dir SAS fail due to incorrect handling of sdd in FE
+	// Operations with Dir SAS currently fails due to incorrect handling of sdd in FE
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(fileList))
+
+		// validate that the right transfers were sent
+		expectedTransfers := scenarioHelper{}.shaveOffPrefix(fileList, filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING)
+		validateUploadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING,
+			common.AZCOPY_PATH_SEPARATOR_STRING+filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING, expectedTransfers, mockedRPC)
+	})
+
+	// turn off recursive, this time nothing should be transferred
+	raw.recursive = false
+	mockedRPC.reset()
+
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.NotNil)
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
