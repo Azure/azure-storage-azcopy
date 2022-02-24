@@ -25,7 +25,7 @@
    with `FileIgnored` error when using `--exclude-path`.
 10. Fixed [issue 1655](https://github.com/Azure/azure-storage-azcopy/issues/1655) : AzCopy panicked when using `--include-before` flag.
 11. Fixed [issue 1609](https://github.com/Azure/azure-storage-azcopy/issues/1609) : `blockid` converted to lower case in AzCopy logs.
-12. Fixed [issue 1643](https://github.com/Azure/azure-storage-azcopy/issues/1643), [issue 1661](https://github.com/Azure/azure-storage-azcopy/issues/1661) : Updated Golang version to `1.17.7` to fix security vulnerabilities in Golang packages. 
+12. Fixed [issue 1643](https://github.com/Azure/azure-storage-azcopy/issues/1643), [issue 1661](https://github.com/Azure/azure-storage-azcopy/issues/1661) : Updated Golang version to `1.16.10` to fix security vulnerabilities in Golang packages. 
 
 ## Version 10.13.0
 
