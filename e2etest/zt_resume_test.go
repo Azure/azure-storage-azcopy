@@ -25,7 +25,7 @@ func TestResume_Generic(t *testing.T) {
 			f("filec"),
 			f("filed"),
 		},
-	}, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func GenerateLargeResumeScenario() (debugSkipFiles []string, allFiles []interface{}, err error) {
@@ -66,7 +66,7 @@ func TestResume_LargeGeneric(t *testing.T) {
 		defaultSize: "1K",
 
 		shouldTransfer: allFiles,
-	}, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestResume_PublicSource_BlobTarget(t *testing.T) {
@@ -92,7 +92,7 @@ func TestResume_PublicSource_BlobTarget(t *testing.T) {
 				f("a.txt"),
 			},
 		},
-		EAccountType.Standard(), "",
+		EAccountType.Standard(), EAccountType.Standard(), "",
 	)
 }
 
@@ -117,6 +117,6 @@ func TestResume_PublicSource_ContainerTarget(t *testing.T) {
 				f("foo/bar.txt"),
 			},
 		},
-		EAccountType.Standard(), "",
+		EAccountType.Standard(), EAccountType.Standard(), "",
 	)
 }

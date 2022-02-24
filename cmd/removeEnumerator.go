@@ -48,7 +48,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	// Include-path is handled by ListOfFilesChannel.
 	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo,
 		nil, cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs,
-		func(common.EntityType) {}, cca.ListOfVersionIDs, false,
+		cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false,
 		cca.LogVerbosity.ToPipelineLogLevel(), cca.CpkOptions)
 
 	// report failure to create traverser
@@ -59,10 +59,12 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	includeFilters := buildIncludeFilters(cca.IncludePatterns)
 	excludeFilters := buildExcludeFilters(cca.ExcludePatterns, false)
 	excludePathFilters := buildExcludeFilters(cca.ExcludePathPatterns, true)
+	includeSoftDelete := buildIncludeSoftDeleted(cca.permanentDeleteOption)
 
 	// set up the filters in the right order
 	filters := append(includeFilters, excludeFilters...)
 	filters = append(filters, excludePathFilters...)
+	filters = append(filters, includeSoftDelete...)
 
 	// decide our folder transfer strategy
 	// (Must enumerate folders when deleting from a folder-aware location. Can't do folder deletion just based on file
@@ -111,7 +113,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 // TODO this simple remove command is only here to support the scenario temporarily
 // Ultimately, this code can be merged into the newRemoveEnumerator
 func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
-	ctx := context.Background()
+	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// return an error if the unsupported options are passed in
 	if len(cca.InitModularFilters()) > 0 {

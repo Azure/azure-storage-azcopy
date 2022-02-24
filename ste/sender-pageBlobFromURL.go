@@ -52,8 +52,7 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipe
 			destBlobTier = blobSrcInfoProvider.BlobTier()
 
 			// capture the necessary info so that we can perform optimizations later
-			pageRangeOptimizer = newPageRangeOptimizer(azblob.NewPageBlobURL(*srcURL, p),
-				context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion))
+			pageRangeOptimizer = newPageRangeOptimizer(azblob.NewPageBlobURL(*srcURL, p), jptm.Context())
 		}
 	}
 
@@ -112,7 +111,7 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		// set the latest service version from sdk as service version in the context, to use UploadPagesFromURL API.
 		// AND enrich the context for 503 (ServerBusy) detection
 		enrichedContext := withRetryNotification(
-			context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion),
+			c.jptm.Context(),
 			c.filePacer)
 
 		// upload the page (including application of global pacing. We don't have a separate wait reason for global pacing

@@ -38,7 +38,8 @@ import (
 // A scenario is treated as a sub-test by our declarative test runner
 type scenario struct {
 	// scenario config properties
-	accountType         AccountType
+	srcAccountType      AccountType
+	destAccountType     AccountType
 	subtestName         string
 	compactScenarioName string
 	fullScenarioName    string
@@ -52,10 +53,11 @@ type scenario struct {
 	stripTopDir bool // TODO: figure out how we'll control and use this
 
 	// internal declarative runner state
-	a          asserter
-	state      scenarioState // TODO: does this really need to be a separate struct?
-	needResume bool
-	chToStdin  chan string
+	a           asserter
+	state       scenarioState // TODO: does this really need to be a separate struct?
+	needResume  bool
+	chToStdin   chan string
+	isSourceAcc bool
 }
 
 type scenarioState struct {
@@ -133,17 +135,21 @@ func (s *scenario) runHook(h hookFunc) bool {
 }
 
 func (s *scenario) assignSourceAndDest() {
-	createTestResource := func(loc common.Location) resourceManager {
+	createTestResource := func(loc common.Location, isSourceAcc bool) resourceManager {
 		// TODO: handle account to account (multi-container) scenarios
 		switch loc {
 		case common.ELocation.Local():
 			return &resourceLocal{}
 		case common.ELocation.File():
-			return &resourceAzureFileShare{accountType: s.accountType}
+			return &resourceAzureFileShare{accountType: s.srcAccountType}
 		case common.ELocation.Blob():
 			// TODO: handle the multi-container (whole account) scenario
 			// TODO: handle wider variety of account types
-			return &resourceBlobContainer{accountType: s.accountType}
+			if isSourceAcc {
+				return &resourceBlobContainer{accountType: s.srcAccountType}
+			} else {
+				return &resourceBlobContainer{accountType: s.destAccountType}
+			}
 		case common.ELocation.BlobFS():
 			s.a.Error("Not implementd yet for blob FS")
 			return &resourceDummy{}
@@ -157,8 +163,8 @@ func (s *scenario) assignSourceAndDest() {
 		}
 	}
 
-	s.state.source = createTestResource(s.fromTo.From())
-	s.state.dest = createTestResource(s.fromTo.To())
+	s.state.source = createTestResource(s.fromTo.From(), true)
+	s.state.dest = createTestResource(s.fromTo.To(), s.isSourceAcc)
 }
 
 func (s *scenario) runAzCopy() {
@@ -166,7 +172,7 @@ func (s *scenario) runAzCopy() {
 	defer close(s.chToStdin)
 
 	r := newTestRunner()
-	r.SetAllFlags(s.p)
+	r.SetAllFlags(s.p, s.operation)
 
 	// use the general-purpose "after start" mechanism, provided by execDebuggableWithOutput,
 	// for the _specific_ purpose of running beforeOpenFirstFile, if that hook exists.
@@ -187,7 +193,8 @@ func (s *scenario) runAzCopy() {
 	result, wasClean, err := r.ExecuteAzCopyCommand(
 		s.operation,
 		s.state.source.getParam(s.stripTopDir, srcUseSas, tf.objectTarget),
-		s.state.dest.getParam(false, useSas, tf.objectTarget),
+		// Prefer the destination target over the object target itself.
+		s.state.dest.getParam(false, useSas, common.IffString(tf.destTarget != "", tf.destTarget, tf.objectTarget)),
 		afterStart, s.chToStdin)
 
 	if !wasClean {
@@ -296,6 +303,8 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 	// compute dest, taking into account our stripToDir rules
 	addedDirAtDest = ""
 	areBothContainerLike := s.state.source.isContainerLike() && s.state.dest.isContainerLike()
+
+	tf := s.GetTestFiles()
 	if s.stripTopDir || s.operation == eOperation.Sync() || areBothContainerLike {
 		// Sync always acts like stripTopDir is true.
 		// For copies between two container-like locations, we don't expect the root directory to be transferred, regardless of stripTopDir.
@@ -303,13 +312,17 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 		// of that kind.
 		expectRootFolder = false
 	} else if s.fromTo.From().IsLocal() {
-		if s.GetTestFiles().objectTarget == "" {
+		if tf.objectTarget == "" && tf.destTarget == "" {
 			addedDirAtDest = filepath.Base(srcRoot)
+		} else if tf.destTarget != "" {
+			addedDirAtDest = tf.destTarget
 		}
 		dstRoot = fmt.Sprintf("%s%c%s", dstRoot, os.PathSeparator, addedDirAtDest)
 	} else {
-		if s.GetTestFiles().objectTarget == "" {
+		if tf.objectTarget == "" && tf.destTarget == "" {
 			addedDirAtDest = path.Base(srcRoot)
+		} else if tf.destTarget != "" {
+			addedDirAtDest = tf.destTarget
 		}
 		dstRoot = fmt.Sprintf("%s/%s", dstRoot, addedDirAtDest)
 	}
@@ -351,7 +364,7 @@ func (s *scenario) validateProperties() {
 			// TODO: JohnR: need to remove the strip top dir prefix from the map (and normalize the delimiters)
 			//    since currently uploads fail here
 			var rawPaths []string
-			for rawPath, _ := range destProps {
+			for rawPath := range destProps {
 				rawPaths = append(rawPaths, rawPath)
 			}
 			s.a.Error(fmt.Sprintf("could not find expected file %s in keys %v", destName, rawPaths))
@@ -385,7 +398,7 @@ func (s *scenario) validateSMBPermissionsByValue(expected, actual string, objNam
 	actualSDDL, err := sddl.ParseSDDL(actual)
 	s.a.AssertNoErr(err)
 
-	s.a.Assert(actualSDDL.PortableString(), equals(), expectedSDDL.PortableString(), "On object "+objName)
+	s.a.Assert(expectedSDDL.Compare(actualSDDL), equals(), true)
 }
 
 func (s *scenario) validateContent() {
@@ -538,6 +551,7 @@ func (s *scenario) validateLastWriteTime(expected, actual *time.Time) {
 		expected, actual))
 }
 
+//nolint
 func (s *scenario) validateSMBAttrs(expected, actual *uint32) {
 	if expected == nil {
 		// These properties were not explicitly stated for verification

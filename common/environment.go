@@ -318,7 +318,7 @@ func (EnvironmentVariable) CredentialType() EnvironmentVariable {
 func (EnvironmentVariable) DefaultServiceApiVersion() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:         "AZCOPY_DEFAULT_SERVICE_API_VERSION",
-		DefaultValue: "2019-12-12",
+		DefaultValue: "2020-04-08",
 		Description:  "Overrides the service API version so that AzCopy could accommodate custom environments such as Azure Stack.",
 	}
 }

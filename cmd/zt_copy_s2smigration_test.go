@@ -89,6 +89,7 @@ func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
 		forceWrite:                     common.EOverwriteOption.True().String(),
 		preserveOwner:                  common.PreserveOwnerDefault,
+		asSubdir:                       true,
 	}
 }
 
@@ -1296,7 +1297,7 @@ func (s *cmdIntegrationSuite) TestCopyWithDFSResource(c *chk.C) {
 	// set up the file
 	fileNameSource := generateName("file", 0)
 	fileURLSource := parentDirURLSource.NewFileURL(fileNameSource)
-	_, err = fileURLSource.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err = fileURLSource.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 
 	dirURLWithSASSource := serviceURLWithSAS.NewFileSystemURL(fsNameSource).NewDirectoryURL(parentDirNameSource)
@@ -1340,7 +1341,7 @@ func (s *cmdIntegrationSuite) TestCopyWithDFSResource(c *chk.C) {
 	// set up the file
 	fileNameSource = generateName("file2", 0)
 	fileURLSource = parentDirURLSource.NewFileURL(fileNameSource)
-	_, err = fileURLSource.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err = fileURLSource.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 
 	rawSync := getDefaultSyncRawInput(dirURLWithSASSource.String(), dirURLWithSAS.String())

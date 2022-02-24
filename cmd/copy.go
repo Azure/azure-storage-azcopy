@@ -123,6 +123,8 @@ type rawCopyCmdArgs struct {
 	preserveSMBPermissions bool
 	preservePermissions    bool // Separate flag so that we don't get funkiness with two "flags" targeting the same boolean
 	preserveOwner          bool // works in conjunction with preserveSmbPermissions
+	// Default true; false indicates that the destination is the target directory, rather than something we'd put a directory under (e.g. a container)
+	asSubdir bool
 	// Opt-in flag to persist additional SMB properties to Azure Files. Named ...info instead of ...properties
 	// because the latter was similar enough to preserveSMBPermissions to induce user error
 	preserveSMBInfo bool
@@ -164,6 +166,9 @@ type rawCopyCmdArgs struct {
 	// Key is present in AzureKeyVault and Azure KeyVault is linked with storage account.
 	// Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data
 	cpkScopeInfo string
+
+	// Optional flag that permanently deletes soft-deleted snapshots/versions
+	permanentDeleteOption string
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -589,6 +594,11 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 			glcm.Info("Tier is provided by user explicitly. Ignoring it because Azure Service currently does" +
 				" not support setting tier when client provided keys are involved.")
 		}
+
+		destUrl, _ := url.Parse(cooked.Destination.Value)
+		if strings.Contains(destUrl.Host, "dfs.core.windows.net") {
+			return cooked, errors.New("client provided keys (CPK) based encryption is only supported with blob endpoints (blob.core.windows.net)")
+		}
 	}
 
 	cooked.CpkOptions = cpkOptions
@@ -647,6 +657,9 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		cooked.isHNStoHNS = true // override HNS settings, since if a user is tx'ing blob->blob and copying permissions, it's DEFINITELY going to be HNS (since perms don't exist w/o HNS).
 	}
 
+	// --as-subdir is OK on all sources and destinations, but additional verification has to be done down the line. (e.g. https://account.blob.core.windows.net is not a valid root)
+	cooked.asSubdir = raw.asSubdir
+
 	cooked.IncludeDirectoryStubs = raw.includeDirectoryStubs || (cooked.isHNStoHNS && cooked.preservePermissions.IsTruthy())
 
 	if err = crossValidateSymlinksAndPermissions(cooked.FollowSymlinks, cooked.preservePermissions.IsTruthy()); err != nil {
@@ -655,6 +668,12 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	cooked.backupMode = raw.backupMode
 	if err = validateBackupMode(cooked.backupMode, cooked.FromTo); err != nil {
+		return cooked, err
+	}
+
+	// Make sure the given input is the one of the enums given by the blob SDK
+	err = cooked.permanentDeleteOption.Parse(raw.permanentDeleteOption)
+	if err != nil {
 		return cooked, err
 	}
 
@@ -1088,6 +1107,9 @@ type CookedCopyCmdArgs struct {
 	// Whether to enable Windows special privileges
 	backupMode bool
 
+	// Whether to rename/share the root
+	asSubdir bool
+
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
 	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
 	// to preserve full properties AzCopy needs to send one additional request per object/file.
@@ -1124,6 +1146,9 @@ type CookedCopyCmdArgs struct {
 	dryrunMode bool
 
 	CpkOptions common.CpkOptions
+
+	// Optional flag that permanently deletes soft deleted blobs
+	permanentDeleteOption common.PermanentDeleteOption
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {
@@ -1841,6 +1866,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "Prevents AzCopy from detecting the content-type based on the extension or content of the file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files). For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
+	cpCmd.PersistentFlags().BoolVar(&raw.asSubdir, "as-subdir", true, "True by default. Places folder sources as subdirectories under the destination.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault, "Only has an effect in downloads, and only when --preserve-smb-permissions is used. If true (the default), the file Owner and Group are preserved in downloads. If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group will be based on the user running AzCopy")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", true, "For SMB-aware locations, flag will be set to true by default. Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
 	cpCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")

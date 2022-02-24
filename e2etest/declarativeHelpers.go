@@ -21,6 +21,7 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"reflect"
 	"strings"
 	"testing"
@@ -51,6 +52,7 @@ func equals() comparison {
 	return comparison{true}
 }
 
+//nolint
 func notEquals() comparison {
 	return comparison{false}
 }
@@ -139,6 +141,7 @@ func (a *testingAsserter) CompactScenarioName() string {
 
 type params struct {
 	recursive                 bool
+	invertedAsSubdir          bool // this flag is INVERTED, because it is TRUE by default. todo: use pointers instead?
 	includePath               string
 	includePattern            string
 	includeAfter              string
@@ -164,6 +167,8 @@ type params struct {
 	cpkByValue                bool
 	isObjectDir               bool
 	debugSkipFiles            []string // a list of localized filepaths to skip over on the first run in the STE.
+	s2sPreserveAccessTier     bool
+	accessTier                azblob.AccessTierType
 
 	disableParallelTesting bool
 	// looks like this for a folder transfer:

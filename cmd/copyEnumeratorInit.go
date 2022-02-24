@@ -59,7 +59,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// If source change validation is enabled on files to remote, turn it on (consider a separate flag entirely?)
 	getRemoteProperties := cca.ForceWrite == common.EOverwriteOption.IfSourceNewer() ||
 		(cca.FromTo.From() == common.ELocation.File() && !cca.FromTo.To().IsRemote()) || // If download, we still need LMT and MD5 from files.
-		(cca.FromTo.From() == common.ELocation.File() && cca.FromTo.To().IsRemote() && (cca.s2sSourceChangeValidation || cca.IncludeAfter != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise if we are using includeAfter, which requires LMTs.
+		(cca.FromTo.From() == common.ELocation.File() && cca.FromTo.To().IsRemote() && (cca.s2sSourceChangeValidation || cca.IncludeAfter != nil || cca.IncludeBefore != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise, if we are using includeAfter or includeBefore, which require LMTs.
 		(cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() && cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
 	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
 	jobPartOrder.S2SSourceChangeValidation = cca.s2sSourceChangeValidation
@@ -69,16 +69,19 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo,
 		&cca.FollowSymlinks, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties,
-		cca.IncludeDirectoryStubs, func(common.EntityType) {}, cca.ListOfVersionIDs,
+		cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs,
 		cca.S2sPreserveBlobTags, cca.LogVerbosity.ToPipelineLogLevel(), cca.CpkOptions)
 
 	if err != nil {
 		return nil, err
 	}
 
-	// Ensure we're only copying from a directory with a trailing wildcard or recursive.
+	// Ensure we're only copying a directory under valid conditions
 	isSourceDir := traverser.IsDirectory(true)
-	if isSourceDir && !cca.Recursive && !cca.StripTopDir {
+	if isSourceDir &&
+		!cca.Recursive && // Copies the folder & everything under it
+		!cca.StripTopDir { // Copies only everything under it
+		// todo: dir only transfer, also todo: support syncing the root folder's acls on sync.
 		return nil, errors.New("cannot use directory as source without --recursive or a trailing wildcard (/*)")
 	}
 
@@ -111,6 +114,10 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	if (srcLevel == ELocationLevel.Object() || cca.FromTo.From().IsLocal()) && dstLevel == ELocationLevel.Service() {
 		return nil, errors.New("cannot transfer individual files/folders to the root of a service. Add a container or directory to the destination URL")
+	}
+
+	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Service() && !cca.asSubdir {
+		return nil, errors.New("cannot use --as-subdir=false with a service level destination")
 	}
 
 	// When copying a container directly to a container, strip the top directory
@@ -255,8 +262,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			}
 		}
 
-		srcRelPath := cca.MakeEscapedRelativePath(true, isDestDir, object)
-		dstRelPath := cca.MakeEscapedRelativePath(false, isDestDir, object)
+		srcRelPath := cca.MakeEscapedRelativePath(true, isDestDir, cca.asSubdir, object)
+		dstRelPath := cca.MakeEscapedRelativePath(false, isDestDir, cca.asSubdir, object)
 
 		transfer, shouldSendToSte := object.ToNewCopyTransfer(
 			cca.autoDecompress && cca.FromTo.IsDownload(),
@@ -335,7 +342,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 	}
 
 	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, nil,
-		nil, false, false, false,
+		nil, false, false, false, common.EPermanentDeleteOption.None(),
 		func(common.EntityType) {}, cca.ListOfVersionIDs, false, pipeline.LogNone, cca.CpkOptions)
 
 	if err != nil {
@@ -407,6 +414,15 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []ObjectFilter {
 		if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(cca.Recursive); prefixFilter != "" {
 			ste.JobsAdmin.LogToJobLog("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, pipeline.LogInfo) // "May be used" because we don't know here which enumerators will use it
 		}
+	}
+
+	switch cca.permanentDeleteOption {
+	case common.EPermanentDeleteOption.Snapshots():
+		filters = append(filters, &permDeleteFilter{deleteSnapshots: true})
+	case common.EPermanentDeleteOption.Versions():
+		filters = append(filters, &permDeleteFilter{deleteVersions: true})
+	case common.EPermanentDeleteOption.SnapshotsAndVersions():
+		filters = append(filters, &permDeleteFilter{deleteSnapshots: true, deleteVersions: true})
 	}
 
 	return filters
@@ -572,7 +588,7 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 	return path
 }
 
-func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool, object StoredObject) (relativePath string) {
+func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool, asSubdir bool, object StoredObject) (relativePath string) {
 	// write straight to /dev/null, do not determine a indirect path
 	if !source && cca.Destination.Value == common.Dev_Null {
 		return "" // ignore path encode rules
@@ -602,8 +618,12 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 		return pathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
 	}
 
-	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true
+	// user is not placing the source as a subdir
+	if object.isSourceRootFolder() && !asSubdir {
+		relativePath = ""
+	}
 
+	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true
 	if object.isSourceRootFolder() {
 		relativePath = "" // otherwise we get "/" from the line below, and that breaks some clients, e.g. blobFS
 	} else {
@@ -612,7 +632,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 
 	if common.IffString(source, object.ContainerName, object.DstContainerName) != "" {
 		relativePath = `/` + common.IffString(source, object.ContainerName, object.DstContainerName) + relativePath
-	} else if !source && !cca.StripTopDir {
+	} else if !source && !cca.StripTopDir && cca.asSubdir { // Avoid doing this where the root is shared or renamed.
 		// We ONLY need to do this adjustment to the destination.
 		// The source SAS has already been removed. No need to convert it to a URL or whatever.
 		// Save to a directory
@@ -637,7 +657,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 				panic("unexpected inescapable rootDir name")
 			}
 		}
-
+		
 		relativePath = "/" + rootDir + relativePath
 	}
 
