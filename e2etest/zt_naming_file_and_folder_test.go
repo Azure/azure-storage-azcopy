@@ -42,5 +42,5 @@ func TestNaming_ShareFileFoldersSpecialChar(t *testing.T) {
 	}, nil, testFiles{
 		defaultSize:    "1K",
 		shouldTransfer: transfers,
-	}, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }

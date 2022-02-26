@@ -3,10 +3,15 @@
 package ste
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"syscall"
 	"time"
+	"unsafe"
+
+	"github.com/hillu/go-ntdll"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 
@@ -18,15 +23,25 @@ import (
 
 // This file os-triggers the ISMBPropertyBearingSourceInfoProvider and CustomLocalOpener interfaces on a local SIP.
 
-func (f localFileSourceInfoProvider) Open(path string) (*os.File, error) {
+// getHandle obtains a windows file handle with generic read permissions & backup semantics
+func (f localFileSourceInfoProvider) getHandle(path string) (ntdll.Handle, error) {
 	srcPtr, err := syscall.UTF16PtrFromString(path)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	// custom open call, because must specify FILE_FLAG_BACKUP_SEMANTICS to make --backup mode work properly (i.e. our use of SeBackupPrivilege)
 	fd, err := windows.CreateFile(srcPtr,
 		windows.GENERIC_READ, windows.FILE_SHARE_READ, nil,
 		windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+	if err != nil {
+		return 0, err
+	}
+
+	return ntdll.Handle(fd), err
+}
+
+func (f localFileSourceInfoProvider) Open(path string) (*os.File, error) {
+	fd, err := f.getHandle(path)
 	if err != nil {
 		return nil, err
 	}
@@ -41,12 +56,26 @@ func (f localFileSourceInfoProvider) Open(path string) (*os.File, error) {
 
 func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	// We only need Owner, Group, and DACLs for azure files.
-	sd, err := windows.GetNamedSecurityInfo(f.jptm.Info().Source, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.GROUP_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
-
+	fd, err := f.getHandle(f.jptm.Info().Source)
 	if err != nil {
 		return "", err
 	}
+	buf := make([]byte, 512)
+	bufLen := uint32(len(buf))
+	status := ntdll.CallWithExpandingBuffer(func() ntdll.NtStatus {
+		return ntdll.NtQuerySecurityObject(
+			fd,
+			windows.OWNER_SECURITY_INFORMATION|windows.GROUP_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION,
+			(*ntdll.SecurityDescriptor)(unsafe.Pointer(&buf[0])),
+			uint32(len(buf)),
+			&bufLen)
+	}, &buf, &bufLen)
 
+	if status != ntdll.STATUS_SUCCESS {
+		return "", errors.New(fmt.Sprint("failed to query security object", f.jptm.Info().Source, "ntstatus:", status))
+	}
+
+	sd := (*windows.SECURITY_DESCRIPTOR)(unsafe.Pointer(&buf[0])) // ntdll.SecurityDescriptor is equivalent
 	fSDDL, err := sddl.ParseSDDL(sd.String())
 
 	if err != nil {

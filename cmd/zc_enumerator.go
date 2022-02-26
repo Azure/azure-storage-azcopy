@@ -78,9 +78,11 @@ type StoredObject struct {
 	// access tier, only included by blob traverser.
 	blobAccessTier azblob.AccessTierType
 	// metadata, included in S2S transfers
-	Metadata      common.Metadata
-	blobVersionID string
-	blobTags      common.BlobTags
+	Metadata       common.Metadata
+	blobVersionID  string
+	blobTags       common.BlobTags
+	blobSnapshotID string
+	blobDeleted    bool
 
 	// Lease information
 	leaseState    azblob.LeaseStateType
@@ -168,6 +170,7 @@ func (s *StoredObject) ToNewCopyTransfer(
 		BlobType:           s.blobType,
 		BlobVersionID:      s.blobVersionID,
 		BlobTags:           s.blobTags,
+		BlobSnapshotID:     s.blobSnapshotID,
 	}
 
 	if preserveBlobTier {
@@ -303,11 +306,27 @@ type enumerationCounterFunc func(entityType common.EntityType)
 // errorOnDirWOutRecursive is used by copy.
 
 func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context,
-	credential *common.CredentialInfo, followSymlinks *bool,listOfFilesChannel chan string, recursive, getProperties,
-	includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string,
+	credential *common.CredentialInfo, followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties,
+	includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string,
 	s2sPreserveBlobTags bool, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions) (ResourceTraverser, error) {
 	var output ResourceTraverser
 	var p *pipeline.Pipeline
+
+	var includeDeleted bool
+	var includeSnapshot bool
+	var includeVersion bool
+	switch permanentDeleteOption {
+	case common.EPermanentDeleteOption.Snapshots():
+		includeDeleted = true
+		includeSnapshot = true
+	case common.EPermanentDeleteOption.Versions():
+		includeDeleted = true
+		includeVersion = true
+	case common.EPermanentDeleteOption.SnapshotsAndVersions():
+		includeDeleted = true
+		includeSnapshot = true
+		includeVersion = true
+	}
 
 	// Clean up the resource if it's a local path
 	if location == common.ELocation.Local() {
@@ -343,7 +362,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		}
 
 		output = newListTraverser(resource, location, credential, ctx, recursive, toFollow, getProperties,
-		listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions)
+			listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions)
 		return output, nil
 	}
 
@@ -406,7 +425,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		} else if listOfVersionIds != nil {
 			output = newBlobVersionsTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
-			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions)
+			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion)
 		}
 	case common.ELocation.File():
 		resourceURL, err := resource.FullURL()

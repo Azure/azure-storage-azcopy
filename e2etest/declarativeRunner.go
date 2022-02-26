@@ -35,17 +35,18 @@ import (
 
 // RunScenarios is the key entry point for declarative testing.
 // It constructs and executes scenarios (subtest in Go-speak), according to its parameters, and checks their results
-func 	RunScenarios(
+func RunScenarios(
 	t *testing.T,
 	operations Operation,
 	testFromTo TestFromTo,
 	validate Validate, // TODO: do we really want the test author to have to nominate which validation should happen?  Pros: better perf of tests. Cons: they have to tell us, and if they tell us wrong test may not test what they think it tests
 	/*_ interface{}, // TODO if we want it??, blockBLobsOnly or specifc/all blob types
-	_ interface{}, // TODO if we want it??, default auth type only, or specific/all auth types*/
+	  _ interface{}, // TODO if we want it??, default auth type only, or specific/all auth types*/
 	p params,
 	hs *hooks,
 	fs testFiles,
 	// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
+	destAccountType AccountType,
 	accountType AccountType,
 	scenarioSuffix string) {
 	// enable this if we want parents in parallel: t.Parallel()
@@ -87,8 +88,14 @@ func 	RunScenarios(
 				hsToUse = *hs
 			}
 
+			// Handles destination being different account type
+			isSourceAcc := true
+			if destAccountType != accountType {
+				isSourceAcc = false
+			}
 			s := scenario{
-				accountType:         accountType,
+				srcAccountType:      accountType,
+				destAccountType:     destAccountType,
 				subtestName:         subtestName,
 				compactScenarioName: compactScenarioName,
 				fullScenarioName:    fullScenarioName,
@@ -100,6 +107,7 @@ func 	RunScenarios(
 				fs:                  fs.DeepCopy(),
 				needResume:          operations&eOperation.Resume() != 0,
 				stripTopDir:         p.stripTopDir,
+				isSourceAcc:         isSourceAcc,
 			}
 
 			scenarios = append(scenarios, s)

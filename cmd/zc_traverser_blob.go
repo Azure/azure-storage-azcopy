@@ -55,6 +55,12 @@ type blobTraverser struct {
 	s2sPreserveSourceTags bool
 
 	cpkOptions common.CpkOptions
+
+	includeDeleted bool
+
+	includeSnapshot bool
+
+	includeVersion bool
 }
 
 func (t *blobTraverser) IsDirectory(isSource bool) bool {
@@ -83,6 +89,11 @@ func (t *blobTraverser) getPropertiesIfSingleBlob() (props *azblob.BlobGetProper
 	// so that we can detect the directory stub in case there is one
 	blobUrlParts := azblob.NewBlobURLParts(*t.rawURL)
 	blobUrlParts.BlobName = strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)
+
+	if blobUrlParts.BlobName == "" {
+		// This is a container, which needs to be given a proper listing.
+		return nil, false, false, nil
+	}
 
 	// perform the check
 	blobURL := azblob.NewBlobURL(blobUrlParts.URL(), t.p)
@@ -135,6 +146,14 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			return errors.New("this blob uses customer provided encryption keys (CPK). At the moment, AzCopy does not support CPK-encrypted blobs. " +
 				"If you wish to make use of this blob, we recommend using one of the Azure Storage SDKs")
 		}
+
+		if resp := stgErr.Response(); resp == nil {
+			return fmt.Errorf("cannot list files due to reason %s", stgErr)
+		} else {
+			if resp.StatusCode == 403 { // Some nature of auth error-- Whatever the user is pointing at, they don't have access to, regardless of whether it's a file or a dir stub.
+				return fmt.Errorf("cannot list files due to reason %s", stgErr)
+			}
+		}
 	}
 
 	// schedule the blob in two cases:
@@ -174,7 +193,6 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				storedObject.blobTags = blobTagsMap
 			}
 		}
-
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
@@ -182,8 +200,8 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		err := processIfPassedFilters(filters, storedObject, processor)
 		_, err = getProcessingError(err)
 
-		// short-circuit if we don't have anything else to scan
-		if isBlob || err != nil {
+		// short-circuit if we don't have anything else to scan and permanent delete is not on
+		if !t.includeDeleted && (isBlob || err != nil) {
 			return err
 		}
 	}
@@ -199,7 +217,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 	// append a slash if it is not already present
 	// example: foo/bar/bla becomes foo/bar/bla/ so that we only list children of the virtual directory
-	if searchPrefix != "" && !strings.HasSuffix(searchPrefix, common.AZCOPY_PATH_SEPARATOR_STRING) {
+	if searchPrefix != "" && !strings.HasSuffix(searchPrefix, common.AZCOPY_PATH_SEPARATOR_STRING) && !t.includeSnapshot && !t.includeDeleted {
 		searchPrefix += common.AZCOPY_PATH_SEPARATOR_STRING
 	}
 
@@ -222,7 +240,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 
 		for marker := (azblob.Marker{}); marker.NotDone(); {
 			lResp, err := containerURL.ListBlobsHierarchySegment(t.ctx, marker, "/", azblob.ListBlobsSegmentOptions{Prefix: currentDirPath,
-				Details: azblob.BlobListingDetails{Metadata: true, Tags: t.s2sPreserveSourceTags}})
+				Details: azblob.BlobListingDetails{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion}})
 			if err != nil {
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
@@ -236,11 +254,13 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 						// try to get properties on the directory itself, since it's not listed in BlobItems
 						fblobURL := containerURL.NewBlobURL(strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING))
 						resp, err := fblobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+						folderRelativePath := strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
+						folderRelativePath = strings.TrimPrefix(folderRelativePath, searchPrefix)
 						if err == nil {
 							storedObject := newStoredObject(
 								preprocessor,
 								getObjectNameOnly(strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)),
-								strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING),
+								folderRelativePath,
 								common.EEntityType.File(), // folder stubs are treated like files in in the serial lister as well
 								resp.LastModified(),
 								resp.ContentLength(),
@@ -343,7 +363,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 
 func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, blobInfo azblob.BlobItemInternal, relativePath string, containerName string) StoredObject {
 	adapter := blobPropertiesAdapter{blobInfo.Properties}
-	return newStoredObject(
+	object := newStoredObject(
 		preprocessor,
 		getObjectNameOnly(blobInfo.Name),
 		relativePath,
@@ -355,6 +375,13 @@ func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 		common.FromAzBlobMetadataToCommonMetadata(blobInfo.Metadata),
 		containerName,
 	)
+
+	object.blobSnapshotID = blobInfo.Snapshot
+	object.blobDeleted = blobInfo.Deleted
+	if blobInfo.VersionID != nil {
+		object.blobVersionID = *blobInfo.VersionID
+	}
+	return object
 }
 
 func (t *blobTraverser) doesBlobRepresentAFolder(metadata azblob.Metadata) bool {
@@ -372,7 +399,7 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 		// Passing tags = true in the list call will save additional GetTags call
 		// TODO optimize for the case where recursive is off
 		listBlob, err := containerURL.ListBlobsFlatSegment(t.ctx, marker,
-			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix + extraSearchPrefix, Details: azblob.BlobListingDetails{Metadata: true, Tags: t.s2sPreserveSourceTags}})
+			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix + extraSearchPrefix, Details: azblob.BlobListingDetails{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion}})
 		if err != nil {
 			return fmt.Errorf("cannot list blobs. Failed with error %s", err.Error())
 		}
@@ -418,7 +445,7 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 	return nil
 }
 
-func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions) (t *blobTraverser) {
+func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool) (t *blobTraverser) {
 	t = &blobTraverser{
 		rawURL:                      rawURL,
 		p:                           p,
@@ -429,9 +456,20 @@ func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 		parallelListing:             true,
 		s2sPreserveSourceTags:       s2sPreserveSourceTags,
 		cpkOptions:                  cpkOptions,
+		includeDeleted:              includeDeleted,
+		includeSnapshot:             includeSnapshot,
+		includeVersion:              includeVersion,
 	}
 
-	if strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning())) == "true" {
+	disableHierarchicalScanning := strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))
+
+	// disableHierarchicalScanning should be true for permanent delete
+	if (disableHierarchicalScanning == "false" || disableHierarchicalScanning == "") && includeDeleted && (includeSnapshot || includeVersion) {
+		t.parallelListing = false
+		fmt.Println("AZCOPY_DISABLE_HIERARCHICAL_SCAN has been set to true to permanently delete soft-deleted snapshots/versions.")
+	}
+
+	if disableHierarchicalScanning == "true" {
 		// TODO log to frontend log that parallel listing was disabled, once the frontend log PR is merged
 		t.parallelListing = false
 	}

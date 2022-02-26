@@ -179,7 +179,7 @@ func (s *appendBlobSenderBase) Cleanup() {
 		// TODO: particularly, given that this is an APPEND blob, do we really need to delete it?  But if we don't delete it,
 		//   it will still be in an ambiguous situation with regard to how much has been added to it.  Probably best to delete
 		//   to be consistent with other
-		deletionContext, cancelFunc := context.WithTimeout(context.Background(), 30*time.Second)
+		deletionContext, cancelFunc := context.WithTimeout(context.WithValue(context.Background(), ServiceAPIVersionOverride, DefaultServiceApiVersion), 30*time.Second)
 		defer cancelFunc()
 		_, err := s.destAppendBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 		if err != nil {

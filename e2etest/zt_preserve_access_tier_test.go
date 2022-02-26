@@ -22,76 +22,66 @@ package e2etest
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"testing"
 )
 
-// Purpose: Tests for preserving the content of transferred files. (Including use of MD5 hashes to allow error detection)
+func TestTier_V2ToClassicAccount(t *testing.T) {
 
-// TODO: include decopression
-// TODO; inpclude account-to-account copy
-
-func TestContent_AtBlobStorage(t *testing.T) {
-
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), params{
-		recursive: true,
-	}, nil, testFiles{
-		defaultSize: "4M",
-		shouldTransfer: []interface{}{
-			folder(""), // root folder
-			f("filea"),
-		},
-	}, EAccountType.Standard(), EAccountType.Standard(), "")
-}
-
-func TestContent_AtFileShare(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalFile()), eValidate.AutoPlusContent(), params{
-		recursive: true,
-	}, nil, testFiles{
-		defaultSize: "4M",
-		shouldTransfer: []interface{}{
-			folder(""), // root folder
-			folder("folder1"),
-			f("folder1/filea"),
-		},
-	}, EAccountType.Standard(), EAccountType.Standard(), "")
-}
-
-func TestContent_BlobToBlob(t *testing.T) {
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
-		recursive: true,
+		recursive:             true,
+		s2sPreserveAccessTier: true,
+		accessTier:            azblob.AccessTierHot,
 	}, nil, testFiles{
-		defaultSize: "8M",
+		defaultSize: "4M",
 		shouldTransfer: []interface{}{
 			folder(""), // root folder
 			f("filea"),
 		},
-	}, EAccountType.Standard(), EAccountType.Standard(), "")
+	}, EAccountType.Classic(), EAccountType.Standard(), "")
 }
 
-//func TestChange_ValidateFileContentAtRemote(t *testing.T) {
-//	RunScenarios(
-//		t,
-//		eOperation.Copy(),
-//		eTestFromTo.AllUploads(),
-//		eValidate.Auto(),
-//		params{
-//			recursive: true,
-//		},
-//		nil,
-//		testFiles{
-//			defaultSize: "1K",
-//			shouldTransfer: []interface{}{
-//				"file1",
-//				"folder1/file2",
-//				"folder1/file3",
-//			},
-//		})
-//}
-//
-//func TestChange_ValidateFileContentAtLocal(t *testing.T) {
-//
-//}
-//
-//func TestChange_ValidateFileContentAfterS2STransfer(t *testing.T) {
-//
-//}
+func TestTier_V2ToClassicAccountNoPreserve(t *testing.T) {
+
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
+		recursive:             true,
+		s2sPreserveAccessTier: false,
+		accessTier:            azblob.AccessTierHot,
+	}, nil, testFiles{
+		defaultSize: "4M",
+		shouldTransfer: []interface{}{
+			folder(""), // root folder
+			f("filea"),
+		},
+	}, EAccountType.Classic(), EAccountType.Standard(), "")
+}
+
+func TestTier_V2ToClassicAccountCool(t *testing.T) {
+
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
+		recursive:             true,
+		s2sPreserveAccessTier: true,
+		accessTier:            azblob.AccessTierCool,
+	}, nil, testFiles{
+		defaultSize: "4M",
+		shouldTransfer: []interface{}{
+			folder(""), // root folder
+			f("filea"),
+		},
+	}, EAccountType.Classic(), EAccountType.Standard(), "")
+}
+
+func TestTier_V2ToClassicAccountNoPreserveCool(t *testing.T) {
+
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
+		recursive:             true,
+		s2sPreserveAccessTier: false,
+		accessTier:            azblob.AccessTierCool,
+	}, nil, testFiles{
+		defaultSize: "4M",
+		shouldTransfer: []interface{}{
+			folder(""), // root folder
+			f("filea"),
+		},
+	}, EAccountType.Classic(), EAccountType.Standard(), "")
+}
