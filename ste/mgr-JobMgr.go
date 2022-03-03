@@ -87,6 +87,7 @@ type IJobMgr interface {
 	SendXferDoneMsg(msg xferDoneMsg)
 	ListJobSummary() common.ListJobSummaryResponse
 	ResurrectSummary(js common.ListJobSummaryResponse)
+	MinimumLevelToLog() pipeline.LogLevel
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -240,6 +241,10 @@ type jobMgr struct {
 func (jm *jobMgr) Progress() (uint64, uint64) {
 	return atomic.LoadUint64(&jm.atomicNumberOfBytesCovered),
 		atomic.LoadUint64(&jm.atomicTotalBytesToXfer)
+}
+
+func (jm *jobMgr) MinimumLevelToLog() pipeline.LogLevel {
+	return jm.logger.MinimumLogLevel()
 }
 
 //func (jm *jobMgr) Throughput() XferThroughput { return jm.throughput }

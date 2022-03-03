@@ -21,11 +21,9 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"net/url"
 	"strings"
 	"sync"
@@ -44,9 +42,7 @@ type s3Traverser struct {
 	s3URLParts s3URLPartsExtension
 	s3Client   *minio.Client
 
-	logLevel     pipeline.LogLevel
-	outputStream *bytes.Buffer
-
+	logLevel pipeline.LogLevel
 	// A generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
 }
@@ -69,24 +65,6 @@ func (t *s3Traverser) IsDirectory(isSource bool) bool {
 	return false
 }
 
-func (t *s3Traverser) WriteHTTPTraceToLogs() {
-	// if outputStream is not nil that means we're tracing the HTTP Request (to and from S3).
-	// In that case, S3Client must be pushing the trace in outputStream buffer directly.
-	// We'll read the buffer, send the data to the log file and reset the buffer for next HTTP Trace.
-	// We can dump the buffer to logfile in one go as well, but we're doing it 1 by 1
-	// 1. Size of buffer stays in control and doesn't grow huge
-	// 2. We want to write trace log before the error log to make sense of what is happening
-	if t.outputStream != nil {
-		traceLog := (*t.outputStream).String()
-		if len(traceLog) > 0 {
-			t.outputStream.Reset()
-			if ste.JobsAdmin != nil {
-				ste.JobsAdmin.LogToJobLog(strings.ReplaceAll(traceLog, "\n\n", "\n"), t.logLevel)
-			}
-		}
-	}
-}
-
 func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
 	invalidAzureBlobName := func(objectKey string) bool {
 		/* S3 object name is invalid if it ends with period or
@@ -103,7 +81,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		objectName := objectPath[len(objectPath)-1]
 
 		oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
-		t.WriteHTTPTraceToLogs()
 		if invalidAzureBlobName(t.s3URLParts.ObjectKey) {
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, t.s3URLParts.ObjectKey))
 			return common.EAzError.InvalidBlobName()
@@ -151,7 +128,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 
 	// It's a bucket or virtual directory.
 	for objectInfo := range t.s3Client.ListObjectsV2(t.s3URLParts.BucketName, searchPrefix, t.recursive, t.ctx.Done()) {
-		t.WriteHTTPTraceToLogs()
 		if objectInfo.Err != nil {
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
 		}
@@ -183,7 +159,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		oie := common.ObjectInfoExtension{ObjectInfo: minio.ObjectInfo{}}
 		if t.getProperties {
 			oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
-			t.WriteHTTPTraceToLogs()
 			if err != nil {
 				return err
 			}
@@ -209,7 +184,6 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			return
 		}
 	}
-	t.WriteHTTPTraceToLogs()
 	t.s3Client.TraceOff()
 	return
 }
@@ -217,7 +191,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 func newS3Traverser(credentialType common.CredentialType, rawURL *url.URL, ctx context.Context, recursive, getProperties bool,
 	incrementEnumerationCounter enumerationCounterFunc, logLevel pipeline.LogLevel) (t *s3Traverser, err error) {
 	t = &s3Traverser{rawURL: rawURL, ctx: ctx, recursive: recursive, getProperties: getProperties,
-		incrementEnumerationCounter: incrementEnumerationCounter, logLevel: logLevel, outputStream: nil}
+		incrementEnumerationCounter: incrementEnumerationCounter, logLevel: logLevel}
 
 	// initialize S3 client and URL parts
 	var s3URLParts common.S3URLParts
@@ -245,8 +219,7 @@ func newS3Traverser(credentialType common.CredentialType, rawURL *url.URL, ctx c
 		})
 
 	if t.logLevel == pipeline.LogDebug {
-		t.outputStream = new(bytes.Buffer)
-		t.s3Client.TraceOn(t.outputStream)
+		t.s3Client.TraceOn(common.NewS3HTTPTraceLogger(azcopyScanningLogger, t.logLevel))
 	}
 
 	return

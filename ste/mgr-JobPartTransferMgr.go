@@ -91,6 +91,7 @@ type IJobPartTransferMgr interface {
 	CpkInfo() common.CpkInfo
 	CpkScopeInfo() common.CpkScopeInfo
 	IsSourceEncrypted() bool
+	MinimumLevelToLevel() pipeline.LogLevel
 }
 
 type TransferInfo struct {
@@ -933,4 +934,8 @@ func (jptm *jobPartTransferMgr) ShouldInferContentType() bool {
 	// For local files, even if the file size is 0B, we try to infer the content based on file extension
 	fromTo := jptm.FromTo()
 	return fromTo.From() == common.ELocation.Local()
+}
+
+func (jptm *jobPartTransferMgr) MinimumLevelToLevel() pipeline.LogLevel {
+	return jptm.jobPartMgr.MinimumLevelToLog()
 }

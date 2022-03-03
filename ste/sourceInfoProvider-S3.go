@@ -82,6 +82,9 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 			LogError: func(str string) { p.jptm.Log(pipeline.LogError, str) },
 			Panic:    func(err error) { panic(err) },
 		})
+	if jptm.MinimumLevelToLevel() == pipeline.LogDebug {
+		p.s3Client.TraceOn(common.NewS3HTTPTraceLogger(jptm, jptm.MinimumLevelToLevel()))
+	}
 	if err != nil {
 		return nil, err
 	}

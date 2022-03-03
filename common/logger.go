@@ -223,3 +223,21 @@ func NewReadLogFunc(logger ILogger, fullUrl *url.URL) func(int, error, int64, in
 func IsForceLoggingDisabled() bool {
 	return GetLifecycleMgr().IsForceLoggingDisabled()
 }
+
+type S3HTTPTraceLogger struct {
+	logger   ILogger
+	logLevel pipeline.LogLevel
+}
+
+func NewS3HTTPTraceLogger(logger ILogger, level pipeline.LogLevel) S3HTTPTraceLogger {
+	return S3HTTPTraceLogger{
+		logger:   logger,
+		logLevel: level,
+	}
+}
+
+func (e S3HTTPTraceLogger) Write(msg []byte) (n int, err error) {
+	toPrint := string(msg)
+	e.logger.Log(e.logLevel, toPrint)
+	return len(toPrint), nil
+}

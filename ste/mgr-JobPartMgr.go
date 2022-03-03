@@ -59,6 +59,7 @@ type IJobPartMgr interface {
 	IsSourceEncrypted() bool
 	/* Status Manager Updates */
 	SendXferDoneMsg(msg xferDoneMsg)
+	MinimumLevelToLog() pipeline.LogLevel
 }
 
 type serviceAPIVersionOverride struct{}
@@ -893,3 +894,7 @@ func (jpm *jobPartMgr) SendXferDoneMsg(msg xferDoneMsg) {
 //func (jppi *jobPartPlanInfo) setNumberOfTransfersDone(val uint32) {
 //	atomic.StoreUint32(&jPartPlanInfo.numberOfTransfersDone_doNotUse, val)
 //}
+
+func (jpm *jobPartMgr) MinimumLevelToLog() pipeline.LogLevel {
+	return jpm.jobMgr.MinimumLevelToLog()
+}
