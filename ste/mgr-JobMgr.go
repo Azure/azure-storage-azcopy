@@ -102,6 +102,8 @@ type IJobMgr interface {
 	// Cleanup Functions
 	DeferredCleanupJobMgr()
 	CleanupJobStatusMgr()
+
+	ProcessMsg()
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -138,6 +140,8 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	jstm.partCreated = make(chan JobPartCreatedMsg, 100)
 	jstm.xferDone = make(chan xferDoneMsg, 1000)
 	jstm.done = make(chan struct{}, 1)
+	jstm.processMsg = make(chan struct{})
+	jstm.doneProcessMsg = make(chan struct{})
 	// Different logger for each job.
 
 	jobLogger := common.NewJobLogger(jobID, common.ELogLevel.Debug(), logFileFolder, "" /* logFileNameSuffix */)
@@ -702,6 +706,12 @@ func (jm *jobMgr) DeferredCleanupJobMgr() {
 	time.Sleep(60 * time.Second)
 
 	jm.logger.CloseLog()
+}
+
+func (jm *jobMgr) ProcessMsg() {
+	jm.jstm.processMsg <- struct{}{}
+	close(jm.jstm.xferDone)
+	<-jm.jstm.doneProcessMsg
 }
 
 func (jm *jobMgr) ChunkStatusLogger() common.ChunkStatusLogger {

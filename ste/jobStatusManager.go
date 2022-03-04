@@ -38,12 +38,14 @@ type JobPartCreatedMsg struct {
 
 type xferDoneMsg = common.TransferDetail
 type jobStatusManager struct {
-	js          common.ListJobSummaryResponse
-	respChan    chan common.ListJobSummaryResponse
-	listReq     chan bool
-	partCreated chan JobPartCreatedMsg
-	xferDone    chan xferDoneMsg
-	done        chan struct{}
+	js             common.ListJobSummaryResponse
+	respChan       chan common.ListJobSummaryResponse
+	listReq        chan bool
+	partCreated    chan JobPartCreatedMsg
+	xferDone       chan xferDoneMsg
+	done           chan struct{}
+	processMsg     chan struct{}
+	doneProcessMsg chan struct{}
 }
 
 /* These functions should not fail */
@@ -78,41 +80,70 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 
 	for {
 		select {
-		case msg := <-jstm.partCreated:
-			js.CompleteJobOrdered = js.CompleteJobOrdered || msg.IsFinalPart
-			js.TotalTransfers += msg.TotalTransfers
-			js.FileTransfers += msg.FileTransfers
-			js.FolderPropertyTransfers += msg.FolderTransfer
-			js.TotalBytesEnumerated += msg.TotalBytesEnumerated
-			js.TotalBytesExpected += msg.TotalBytesEnumerated
+		// processMsg is high priority channel, used to process any messages lying on xferDone channel.
+		case <-jstm.processMsg:
+			jm.Log(pipeline.LogError, fmt.Sprintf("len: %v, cap: %v", len(jstm.xferDone), cap(jstm.xferDone)))
+			for msg := range jstm.xferDone {
+				msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()
+				msg.Dst = common.URLStringExtension(msg.Dst).RedactSecretQueryParamForLogging()
 
-		case msg := <-jstm.xferDone:
-			msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()
-			msg.Dst = common.URLStringExtension(msg.Dst).RedactSecretQueryParamForLogging()
-
-			switch msg.TransferStatus {
-			case common.ETransferStatus.Success():
-				js.TransfersCompleted++
-				js.TotalBytesTransferred += msg.TransferSize
-			case common.ETransferStatus.Failed(),
-				common.ETransferStatus.TierAvailabilityCheckFailure(),
-				common.ETransferStatus.BlobTierFailure():
-				js.TransfersFailed++
-				js.FailedTransfers = append(js.FailedTransfers, msg)
-			case common.ETransferStatus.SkippedEntityAlreadyExists(),
-				common.ETransferStatus.SkippedBlobHasSnapshots():
-				js.TransfersSkipped++
-				js.SkippedTransfers = append(js.SkippedTransfers, msg)
+				switch msg.TransferStatus {
+				case common.ETransferStatus.Success():
+					js.TransfersCompleted++
+					js.TotalBytesTransferred += msg.TransferSize
+				case common.ETransferStatus.Failed(),
+					common.ETransferStatus.TierAvailabilityCheckFailure(),
+					common.ETransferStatus.BlobTierFailure():
+					js.TransfersFailed++
+					js.FailedTransfers = append(js.FailedTransfers, msg)
+				case common.ETransferStatus.SkippedEntityAlreadyExists(),
+					common.ETransferStatus.SkippedBlobHasSnapshots():
+					js.TransfersSkipped++
+					js.SkippedTransfers = append(js.SkippedTransfers, msg)
+				}
 			}
+			jstm.doneProcessMsg <- struct{}{}
+		default:
+			select {
+			case msg := <-jstm.partCreated:
+				js.CompleteJobOrdered = js.CompleteJobOrdered || msg.IsFinalPart
+				js.TotalTransfers += msg.TotalTransfers
+				js.FileTransfers += msg.FileTransfers
+				js.FolderPropertyTransfers += msg.FolderTransfer
+				js.TotalBytesEnumerated += msg.TotalBytesEnumerated
+				js.TotalBytesExpected += msg.TotalBytesEnumerated
 
-		case <-jstm.listReq:
-			/* Display stats */
-			js.Timestamp = time.Now().UTC()
-			jstm.respChan <- *js
+			case msg := <-jstm.xferDone:
+				msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()
+				msg.Dst = common.URLStringExtension(msg.Dst).RedactSecretQueryParamForLogging()
 
-		case <-jstm.done:
-			fmt.Println("Cleanup JobStatusmgr")
-			return
+				switch msg.TransferStatus {
+				case common.ETransferStatus.Success():
+					js.TransfersCompleted++
+					js.TotalBytesTransferred += msg.TransferSize
+				case common.ETransferStatus.Failed(),
+					common.ETransferStatus.TierAvailabilityCheckFailure(),
+					common.ETransferStatus.BlobTierFailure():
+					js.TransfersFailed++
+					js.FailedTransfers = append(js.FailedTransfers, msg)
+				case common.ETransferStatus.SkippedEntityAlreadyExists(),
+					common.ETransferStatus.SkippedBlobHasSnapshots():
+					js.TransfersSkipped++
+					js.SkippedTransfers = append(js.SkippedTransfers, msg)
+				}
+
+			case <-jstm.listReq:
+				/* Display stats */
+				js.Timestamp = time.Now().UTC()
+				jstm.respChan <- *js
+
+			case <-jstm.done:
+				fmt.Println("Cleanup JobStatusmgr")
+				return
+			// This default is required to come out of this select and process message if any on high priority processMsg channel.
+			default:
+				time.Sleep(100 * time.Millisecond)
+			}
 		}
 	}
 }
