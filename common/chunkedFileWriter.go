@@ -95,6 +95,8 @@ type chunkedFileWriter struct {
 	sourceMd5Exists bool
 
 	currentReservedCapacity int64
+
+	err error //This field should be set only by workerRoutine
 }
 
 type fileChunk struct {
@@ -169,9 +171,9 @@ func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, id ChunkID, chunkS
 			return //We've successfully queued, the worker will now takeover
 		}
 		w.cacheLimiter.Remove(chunkSize) // remove this from the tally of scheduled-but-unsaved bytes
+		atomic.AddInt64(&w.currentReservedCapacity, -chunkSize)
 		w.slicePool.ReturnSlice(buffer)
 		atomic.AddInt32(&w.activeChunkCount, -1)
-		atomic.AddInt64(&w.currentReservedCapacity, -chunkSize)
 		w.chunkLogger.LogChunkStatus(id, EWaitReason.ChunkDone()) // this chunk is all finished
 	}()
 	
@@ -189,17 +191,14 @@ func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, id ChunkID, chunkS
 	// enqueue it
 	w.chunkLogger.LogChunkStatus(id, EWaitReason.Sorting())
 	select {
-	case err = <-w.failureError:
+	case <-w.failureError:
+		err = w.err
 		if err != nil {
 			return err
 		}
 		return ChunkWriterAlreadyFailed // channel returned nil because it was closed and empty
-	case <-ctx.Done():
-		err = ctx.Err()
-		return err
 	case w.newUnorderedChunks <- fileChunk{id: id, data: buffer}:
-		err = nil
-		return nil
+		return
 	}
 }
 
@@ -227,13 +226,11 @@ func (w *chunkedFileWriter) Flush(ctx context.Context) ([]byte, error) {
 
 	// wait until all written to disk
 	select {
-	case err := <-w.failureError:
-		if err != nil {
-			return nil, err
+	case <-w.failureError:
+		if w.err != nil {
+			return nil, w.err
 		}
 		return nil, ChunkWriterAlreadyFailed // channel returned nil because it was closed and empty
-	case <-ctx.Done():
-		return nil, ctx.Err()
 	case md5AtCompletion := <-w.successMd5:
 		return md5AtCompletion, nil
 	}
@@ -261,11 +258,13 @@ func (w *chunkedFileWriter) workerRoutine(ctx context.Context) {
 		//cleanup stuff if we abruptly quit
 		for _, chunk := range unsavedChunksByFileOffset {
 			w.cacheLimiter.Remove(int64(chunk.id.length)) // remove this from the tally of scheduled-but-unsaved bytes
+			atomic.AddInt64(&w.currentReservedCapacity, -chunk.id.length)
 			w.slicePool.ReturnSlice(chunk.data)
 			atomic.AddInt32(&w.activeChunkCount, -1)
-			atomic.AddInt64(&w.currentReservedCapacity, -chunk.id.length)
 			w.chunkLogger.LogChunkStatus(chunk.id, EWaitReason.ChunkDone()) // this chunk is all finished
 		}
+		close(w.failureError) // must close because many goroutines may be calling the public methods, and all need to be able to tell there's been an error, even tho only one will get the actual error
+		unsavedChunksByFileOffset = nil
 	}()
 
 	for {
@@ -283,7 +282,7 @@ func (w *chunkedFileWriter) workerRoutine(ctx context.Context) {
 				return
 			}
 		case <-ctx.Done(): // If cancelled out in the middle of enqueuing chunks OR processing chunks, they will both cleanly cancel out and we'll get back to here.
-			w.failureError <- ctx.Err()
+			w.err = ctx.Err()
 			return
 		}
 
@@ -295,8 +294,7 @@ func (w *chunkedFileWriter) workerRoutine(ctx context.Context) {
 		w.setStatusForContiguousAvailableChunks(unsavedChunksByFileOffset, nextOffsetToSave, ctx) // update states of those that have all their prior ones already here
 		err := w.sequentiallyProcessAvailableChunks(unsavedChunksByFileOffset, &nextOffsetToSave, md5Hasher, ctx)
 		if err != nil {
-			w.failureError <- err
-			close(w.failureError) // must close because many goroutines may be calling the public methods, and all need to be able to tell there's been an error, even tho only one will get the actual error
+			w.err = err
 			return                // no point in processing any more after a failure
 		}
 	}
