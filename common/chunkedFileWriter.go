@@ -84,7 +84,7 @@ type chunkedFileWriter struct {
 
 	// used for completion
 	successMd5   chan []byte
-	failureError chan error
+	chunkWriterDone chan bool
 
 	// controls body-read retries. Public so value can be shared with retryReader
 	maxRetryPerDownloadBody int
@@ -116,7 +116,7 @@ func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheL
 		cacheLimiter:            cacheLimiter,
 		chunkLogger:             chunkLogger,
 		successMd5:              make(chan []byte),
-		failureError:            make(chan error, 1),
+		chunkWriterDone:         make(chan bool, 1),
 		newUnorderedChunks:      make(chan fileChunk, chanBufferSize),
 		maxRetryPerDownloadBody: maxBodyRetries,
 		md5ValidationOption:     md5ValidationOption,
@@ -191,7 +191,7 @@ func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, id ChunkID, chunkS
 	// enqueue it
 	w.chunkLogger.LogChunkStatus(id, EWaitReason.Sorting())
 	select {
-	case <-w.failureError:
+	case <-w.chunkWriterDone:
 		err = w.err
 		if err != nil {
 			return err
@@ -226,7 +226,7 @@ func (w *chunkedFileWriter) Flush(ctx context.Context) ([]byte, error) {
 
 	// wait until all written to disk
 	select {
-	case <-w.failureError:
+	case <-w.chunkWriterDone:
 		if w.err != nil {
 			return nil, w.err
 		}
@@ -263,7 +263,7 @@ func (w *chunkedFileWriter) workerRoutine(ctx context.Context) {
 			atomic.AddInt32(&w.activeChunkCount, -1)
 			w.chunkLogger.LogChunkStatus(chunk.id, EWaitReason.ChunkDone()) // this chunk is all finished
 		}
-		close(w.failureError) // must close because many goroutines may be calling the public methods, and all need to be able to tell there's been an error, even tho only one will get the actual error
+		close(w.chunkWriterDone) // must close because many goroutines may be calling the public methods, and all need to be able to tell there's been an error, even tho only one will get the actual error
 		unsavedChunksByFileOffset = nil
 	}()
 
