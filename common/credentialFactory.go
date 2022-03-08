@@ -21,7 +21,6 @@
 package common
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"errors"
 	"fmt"
@@ -30,6 +29,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	gcpUtils "cloud.google.com/go/storage"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -94,7 +95,7 @@ func (o CredentialOpOptions) cancel() {
 func CreateBlobCredential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) azblob.Credential {
 	credential := azblob.NewAnonymousCredential()
 
-	if credInfo.CredentialType == ECredentialType.OAuthToken() {
+	if credInfo.CredentialType.IsAzureOAuth() {
 		if credInfo.OAuthTokenInfo.IsEmpty() {
 			options.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
 		}

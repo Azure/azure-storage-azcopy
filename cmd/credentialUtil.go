@@ -143,9 +143,11 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 	}
 
 	sas := azblob.NewBlobURLParts(*resourceURL).SAS
+	isMDAccount := strings.HasPrefix(resourceURL.Host, "md-")
+	canBePublic = canBePublic && !isMDAccount // MD accounts cannot be public.
 
 	// If SAS existed, return anonymous credential type.
-	if isSASExisted := sas.Signature() != ""; isSASExisted || standaloneSAS {
+	if isSASExisted := sas.Signature() != ""; !isMDAccount && (isSASExisted || standaloneSAS) {
 		return common.ECredentialType.Anonymous(), false, nil
 	}
 
@@ -205,6 +207,7 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 
 	// If SAS token doesn't exist, it could be using OAuth token or the resource is public.
 	if !oAuthTokenExists() { // no oauth token found, then directly return anonymous credential
+		// MD accounts will auto-fail without a request due to the update of the "canBePublic" flag earlier
 		isPublicResource := checkPublic()
 
 		// No forms of auth are present.no SAS token or OAuth token is present and the resource is not public
@@ -373,6 +376,7 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 		// these auth types don't pick up anything from environment vars, so they are not the focus of this routine
 		return nil
 	case common.ECredentialType.OAuthToken(),
+		common.ECredentialType.MDOAuthToken(),
 		common.ECredentialType.SharedKey():
 		// Files doesn't currently support OAuth, but it's a valid azure endpoint anyway, so it'll pass the check.
 		if resourceType != common.ELocation.Blob() && resourceType != common.ELocation.BlobFS() && resourceType != common.ELocation.File() {
@@ -462,6 +466,8 @@ func logAuthType(ct common.CredentialType, location common.Location, isSource bo
 	name := ct.String()
 	if ct == common.ECredentialType.OAuthToken() {
 		name = "Azure AD" // clarify the name to something users will recognize
+	} else if ct == common.ECredentialType.MDOAuthToken() {
+		name = "Azure AD (Managed Disk)"
 	}
 	message := fmt.Sprintf("Authenticating to %s using %s", resource, name)
 	if _, exists := authMessagesAlreadyLogged.Load(message); !exists {
@@ -480,7 +486,15 @@ func getCredentialTypeForLocation(ctx context.Context, location common.Location,
 }
 
 func doGetCredentialTypeForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool, getForcedCredType func() common.CredentialType, cpkOptions common.CpkOptions) (credType common.CredentialType, isPublic bool, err error) {
-	if resourceSAS != "" {
+	mdAccount := false
+	if location == common.ELocation.Blob() {
+		uri, _ := url.Parse(resource)
+		if strings.HasPrefix(uri.Host, "md-") {
+			mdAccount = true
+		}
+	}
+
+	if resourceSAS != "" && !mdAccount {
 		credType = common.ECredentialType.Anonymous()
 	} else if credType = getForcedCredType(); credType == common.ECredentialType.Unknown() || location == common.ELocation.S3() || location == common.ELocation.GCP() {
 		switch location {
@@ -531,6 +545,11 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		}
 	}
 
+	// We may not always use the OAuth token on Managed Disks. As such, we should change to the type indicating the potential for use.
+	if mdAccount && credType == common.ECredentialType.OAuthToken() {
+		credType = common.ECredentialType.MDOAuthToken()
+	}
+
 	if err = checkAuthSafeForTarget(credType, resource, cmdLineExtraSuffixesAAD, location); err != nil {
 		return common.ECredentialType.Unknown(), false, err
 	}
@@ -545,7 +564,7 @@ func GetCredentialInfoForLocation(ctx context.Context, location common.Location,
 	credInfo.CredentialType, isPublic, err = getCredentialTypeForLocation(ctx, location, resource, resourceSAS, isSource, cpkOptions)
 
 	// flesh out the rest of the fields, for those types that require it
-	if credInfo.CredentialType == common.ECredentialType.OAuthToken() {
+	if credInfo.CredentialType.IsAzureOAuth() {
 		uotm := GetUserOAuthTokenManagerInstance()
 
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
@@ -594,10 +613,15 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // pipeline factory methods
 // ==============================================================================================
 func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
-	credential := common.CreateBlobCredential(ctx, credInfo, common.CredentialOpOptions{
-		// LogInfo:  glcm.Info, //Comment out for debugging
+	credential := pipeline.Factory(common.CreateBlobCredential(ctx, credInfo, common.CredentialOpOptions{
+		//LogInfo:  glcm.Info, //Comment out for debugging
 		LogError: glcm.Info,
-	})
+	}))
+
+	// Wrap the OAuth token in a tester factory
+	if credInfo.CredentialType == common.ECredentialType.MDOAuthToken() {
+		credential = ste.NewMDOAuthCredentialWrapper(credential.(azblob.Credential))
+	}
 
 	logOption := pipeline.LogOptions{}
 	if azcopyScanningLogger != nil {
