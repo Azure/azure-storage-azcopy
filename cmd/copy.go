@@ -66,7 +66,7 @@ type rawCopyCmdArgs struct {
 	src    string
 	dst    string
 	fromTo string
-	//blobUrlForRedirection string
+	// blobUrlForRedirection string
 
 	// new include/exclude only apply to file names
 	// implemented for remove (and sync) only
@@ -1763,7 +1763,7 @@ func init() {
 	cpCmd := &cobra.Command{
 		Use:        "copy [source] [destination]",
 		Aliases:    []string{"cp", "c"},
-		SuggestFor: []string{"cpy", "cy", "mv"}, //TODO why does message appear twice on the console
+		SuggestFor: []string{"cpy", "cy", "mv"}, // TODO why does message appear twice on the console
 		Short:      copyCmdShortDescription,
 		Long:       copyCmdLongDescription,
 		Example:    copyCmdExample,

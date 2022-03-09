@@ -28,7 +28,7 @@ type IJobPartTransferMgr interface {
 	BlobTypeOverride() common.BlobType
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	JobHasLowFileCount() bool
-	//ScheduleChunk(chunkFunc chunkFunc)
+	// ScheduleChunk(chunkFunc chunkFunc)
 	Context() context.Context
 	SlicePool() common.ByteSlicePooler
 	CacheLimiter() common.CacheLimiter
@@ -91,6 +91,7 @@ type IJobPartTransferMgr interface {
 	CpkInfo() common.CpkInfo
 	CpkScopeInfo() common.CpkScopeInfo
 	IsSourceEncrypted() bool
+	GetS2SSourceBlobTokenCredential() azblob.TokenCredential
 }
 
 type TransferInfo struct {
@@ -127,7 +128,7 @@ func (i TransferInfo) IsFolderPropertiesTransfer() bool {
 // The main reason is that preserving folder LMTs at download time is very difficult, because it requires us to keep track of when the
 // last file has been saved in each folder OR just do all the folders at the very end.
 // This is because if we modify the contents of a folder after setting its LMT, then the LMT will change because Windows and Linux
-//(and presumably MacOS) automatically update the folder LMT when the contents are changed.
+// (and presumably MacOS) automatically update the folder LMT when the contents are changed.
 // The possible solutions to this problem may become difficult on very large jobs (e.g. 10s or hundreds of millions of files,
 // with millions of directories).
 // The secondary reason is that folder LMT's don't actually tell the user anything particularly useful. Specifically,
@@ -154,7 +155,7 @@ type SrcProperties struct {
 	SrcBlobTags    common.BlobTags
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 type chunkFunc func(int)
 
@@ -198,6 +199,23 @@ type jobPartTransferMgr struct {
 		@Parteek removed 3/23 morning, as jeff ad equivalent
 		// transfer chunks are put into this channel and execution engine takes chunk out of this channel.
 		chunkChannel chan<- ChunkMsg*/
+}
+
+func (jptm *jobPartTransferMgr) GetS2SSourceBlobTokenCredential() azblob.TokenCredential {
+	jpm := jptm.jobPartMgr.(*jobPartMgr)
+	credOption := common.CredentialOpOptions{
+		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
+		LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
+		Panic:    jpm.Panic,
+		CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
+		Cancel:   jpm.jobMgr.Cancel,
+	}
+
+	if jpm.jobMgr.getInMemoryTransitJobState().S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
+		return common.CreateBlobCredential(jptm.Context(), jptm.jobPartMgr.(*jobPartMgr).jobMgr.getInMemoryTransitJobState().credentialInfo, credOption).(azblob.TokenCredential)
+	} else {
+		return nil
+	}
 }
 
 func (jptm *jobPartTransferMgr) GetOverwritePrompter() *overwritePrompter {
@@ -899,7 +917,7 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 		panic("cannot report the same transfer done twice")
 	}
 
-	//Update Status Manager
+	// Update Status Manager
 	jptm.jobPartMgr.SendXferDoneMsg(xferDoneMsg{Src: jptm.Info().Source,
 		Dst:                jptm.Info().Destination,
 		IsFolderProperties: jptm.Info().IsFolderPropertiesTransfer(),

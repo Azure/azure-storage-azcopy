@@ -1,5 +1,9 @@
 module github.com/Azure/azure-storage-azcopy/v10
 
+replace (
+	github.com/Azure/azure-storage-blob-go => C:\Users\adreed\go\src\github.com\Azure\azure-storage-blob-go
+)
+
 require (
 	cloud.google.com/go/iam v0.3.0 // indirect
 	cloud.google.com/go/storage v1.21.0

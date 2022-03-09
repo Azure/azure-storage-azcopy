@@ -45,13 +45,15 @@ type PartNumber = common.PartNumber
 // i.e. different jobs could have different OAuth tokens requested from FE, and these jobs can run at same time in STE.
 // This can be optimized if FE would no more be another module vs STE module.
 type InMemoryTransitJobState struct {
-	credentialInfo common.CredentialInfo
+	credentialInfo          common.CredentialInfo // Credential info, to be used on both ends
+	PrimaryCredentialType   common.CredentialType // Primary credential type, used in all situations.
+	S2SSourceCredentialType common.CredentialType // Secondary credential type
 }
 
 type IJobMgr interface {
 	JobID() common.JobID
 	JobPartMgr(partNum PartNumber) (IJobPartMgr, bool)
-	//Throughput() XferThroughput
+	// Throughput() XferThroughput
 	// If existingPlanMMF is nil, a new MMF is opened.
 	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF, sourceSAS string,
 		destinationSAS string, scheduleTransfers bool) IJobPartMgr
@@ -73,7 +75,7 @@ type IJobMgr interface {
 	ActiveConnections() int64
 	GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint)
 	TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32, fromTo common.FromTo) []common.PerformanceAdvice
-	//Close()
+	// Close()
 	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
 	setInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
 	ChunkStatusLogger() common.ChunkStatusLogger
@@ -89,7 +91,7 @@ type IJobMgr interface {
 	ResurrectSummary(js common.ListJobSummaryResponse)
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func newJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel, commandString string, logFileFolder string) IJobMgr {
 	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
@@ -215,7 +217,7 @@ type jobMgr struct {
 	jobPartMgrs jobPartToJobPartMgr // The map of part #s to JobPartMgrs
 	// partsDone keep the count of completed part of the Job.
 	partsDone uint32
-	//throughput  common.CountPerSecond // TODO: Set LastCheckedTime to now
+	// throughput  common.CountPerSecond // TODO: Set LastCheckedTime to now
 
 	inMemoryTransitJobState InMemoryTransitJobState
 	// list of transfer mentioned to include only then while resuming the job
@@ -235,14 +237,14 @@ type jobMgr struct {
 	jobPartProgress chan jobPartProgressInfo
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func (jm *jobMgr) Progress() (uint64, uint64) {
 	return atomic.LoadUint64(&jm.atomicNumberOfBytesCovered),
 		atomic.LoadUint64(&jm.atomicTotalBytesToXfer)
 }
 
-//func (jm *jobMgr) Throughput() XferThroughput { return jm.throughput }
+// func (jm *jobMgr) Throughput() XferThroughput { return jm.throughput }
 
 // JobID returns the JobID that this jobMgr managers
 func (jm *jobMgr) JobID() common.JobID { return jm.jobID }
@@ -383,7 +385,7 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, e
 		// Instead of the scheduling the Transfer for given JobPart
 		// JobPart is put into the partChannel
 		// from where it is picked up and scheduled
-		//jpm.ScheduleTransfers(jm.ctx, make(map[string]int), make(map[string]int))
+		// jpm.ScheduleTransfers(jm.ctx, make(map[string]int), make(map[string]int))
 		JobsAdmin.QueueJobParts(jpm)
 	}
 	return jpm
@@ -462,10 +464,10 @@ func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 	jm.reset(appCtx, "")
 	// Since while creating the JobMgr, atomicAllTransfersScheduled is set to true
 	// reset it to false while resuming it
-	//jm.ResetAllTransfersScheduled()
+	// jm.ResetAllTransfersScheduled()
 	jm.jobPartMgrs.Iterate(false, func(p common.PartNumber, jpm IJobPartMgr) {
 		JobsAdmin.QueueJobParts(jpm)
-		//jpm.ScheduleTransfers(jm.ctx, includeTransfer, excludeTransfer)
+		// jpm.ScheduleTransfers(jm.ctx, includeTransfer, excludeTransfer)
 	})
 }
 
@@ -540,7 +542,7 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 
 			// flush logs
 			jm.chunkStatusLogger.FlushLog() // TODO: remove once we sort out what will be calling CloseLog (currently nothing)
-		} //Else log and wait for next part to complete
+		} // Else log and wait for next part to complete
 
 		if shouldLog {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("is part of Job which %d total number of parts done ", partsDone))
@@ -595,12 +597,12 @@ func (jm *jobMgr) logJobsAdminMessages() {
 }
 
 // PartsDone returns the number of the Job's parts that are either completed or failed
-//func (jm *jobMgr) PartsDone() uint32 { return atomic.LoadUint32(&jm.partsDone) }
+// func (jm *jobMgr) PartsDone() uint32 { return atomic.LoadUint32(&jm.partsDone) }
 
 // SetPartsDone sets the number of Job's parts that are done (completed or failed)
-//func (jm *jobMgr) SetPartsDone(partsDone uint32) { atomic.StoreUint32(&jm.partsDone, partsDone) }
+// func (jm *jobMgr) SetPartsDone(partsDone uint32) { atomic.StoreUint32(&jm.partsDone, partsDone) }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 type jobPartToJobPartMgr struct {
 	nocopy common.NoCopy
@@ -654,14 +656,14 @@ func (m *jobPartToJobPartMgr) Iterate(readonly bool, f func(k common.PartNumber,
 	locker.Unlock()
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // ThroughputState struct holds the attribute to monitor the through of an existing JobOrder
-//type XferThroughput struct {
+// type XferThroughput struct {
 //	lastCheckedTime  time.Time
 //	lastCheckedBytes int64
 //	currentBytes     int64
-//}
+// }
 
 // getLastCheckedTime api returns the lastCheckedTime of ThroughputState instance in thread-safe manner
 /*func (t *XferThroughput) LastCheckedTime() time.Time { return t.lastCheckedTime }
