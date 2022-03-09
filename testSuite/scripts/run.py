@@ -17,7 +17,6 @@ from test_blobfs_upload_SAS import *
 from test_autodetect_blob_type import *
 from test_file_sync import *
 from test_file_copy import *
-from test_clfsload import *
 from test_google_cloud_storage_copy import *
 import glob, os
 import configparser
@@ -212,8 +211,7 @@ def main():
     print("Smoke tests starting...")
     init()
 
-    test_class_to_run = [LoadUserScenario,
-                         BlobPipingTests,
+    test_class_to_run = [BlobPipingTests,
                          File_Service_2_Service_Copy_User_Scenario,
                          Blob_Sync_User_Scenario,
                          File_Sync_User_Scenario,
