@@ -383,8 +383,7 @@ func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 	} else if t.includeDeleted && t.includeVersion && blobInfo.VersionID != nil {
 		object.blobVersionID = *blobInfo.VersionID
 	}
-}
-return object
+	return object
 }
 
 func (t *blobTraverser) doesBlobRepresentAFolder(metadata azblob.Metadata) bool {
