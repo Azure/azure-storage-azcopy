@@ -23,7 +23,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"net/url"
 	"strings"
 
@@ -45,7 +44,6 @@ type s3ServiceTraverser struct {
 	s3URL    s3URLPartsExtension
 	s3Client *minio.Client
 
-	logLevel pipeline.LogLevel
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
 }
@@ -96,7 +94,7 @@ func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor obje
 		tmpS3URL.BucketName = v
 		urlResult := tmpS3URL.URL()
 		credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
-		bucketTraverser, err := newS3Traverser(credentialInfo.CredentialType, &urlResult, t.ctx, true, t.getProperties, t.incrementEnumerationCounter, t.logLevel)
+		bucketTraverser, err := newS3Traverser(credentialInfo.CredentialType, &urlResult, t.ctx, true, t.getProperties, t.incrementEnumerationCounter)
 
 		if err != nil {
 			return err
@@ -126,8 +124,8 @@ func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor obje
 	return nil
 }
 
-func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, logLevel pipeline.LogLevel) (t *s3ServiceTraverser, err error) {
-	t = &s3ServiceTraverser{ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter, getProperties: getProperties, logLevel: logLevel}
+func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (t *s3ServiceTraverser, err error) {
+	t = &s3ServiceTraverser{ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter, getProperties: getProperties}
 
 	var s3URLParts common.S3URLParts
 	s3URLParts, err = common.NewS3URLParts(*rawURL)

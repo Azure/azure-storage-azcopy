@@ -501,13 +501,13 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output, err = newS3ServiceTraverser(resourceURL, *ctx, getProperties, incrementEnumerationCounter, logLevel)
+			output, err = newS3ServiceTraverser(resourceURL, *ctx, getProperties, incrementEnumerationCounter)
 
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			output, err = newS3Traverser(credential.CredentialType, resourceURL, *ctx, recursive, getProperties, incrementEnumerationCounter, logLevel)
+			output, err = newS3Traverser(credential.CredentialType, resourceURL, *ctx, recursive, getProperties, incrementEnumerationCounter)
 
 			if err != nil {
 				return nil, err

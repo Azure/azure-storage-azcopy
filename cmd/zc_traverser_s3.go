@@ -23,7 +23,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"net/url"
 	"strings"
 	"sync"
@@ -42,7 +41,6 @@ type s3Traverser struct {
 	s3URLParts s3URLPartsExtension
 	s3Client   *minio.Client
 
-	logLevel pipeline.LogLevel
 	// A generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
 }
@@ -184,14 +182,13 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			return
 		}
 	}
-	t.s3Client.TraceOff()
 	return
 }
 
 func newS3Traverser(credentialType common.CredentialType, rawURL *url.URL, ctx context.Context, recursive, getProperties bool,
-	incrementEnumerationCounter enumerationCounterFunc, logLevel pipeline.LogLevel) (t *s3Traverser, err error) {
+	incrementEnumerationCounter enumerationCounterFunc) (t *s3Traverser, err error) {
 	t = &s3Traverser{rawURL: rawURL, ctx: ctx, recursive: recursive, getProperties: getProperties,
-		incrementEnumerationCounter: incrementEnumerationCounter, logLevel: logLevel}
+		incrementEnumerationCounter: incrementEnumerationCounter}
 
 	// initialize S3 client and URL parts
 	var s3URLParts common.S3URLParts
