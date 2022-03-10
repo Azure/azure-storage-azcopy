@@ -341,9 +341,12 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 
 				var entityType common.EntityType
 				if fileInfo.IsDir() {
-					fileInfo, err = WrapFolder(filePath, fileInfo)
+					newFileInfo, err := WrapFolder(filePath, fileInfo)
 					if err != nil {
 						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get last change of target at %s: %s", filePath, err))
+					} else {
+						// fileInfo becomes nil in case we fail to wrap folder.
+						fileInfo = newFileInfo
 					}
 
 					entityType = common.EEntityType.Folder()
