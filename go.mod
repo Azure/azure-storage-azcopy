@@ -16,7 +16,6 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/hillu/go-ntdll v0.0.0-20220217145204-be7b5318100d
 	github.com/kr/pretty v0.3.0 // indirect
-  github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/mattn/go-ieproxy v0.0.3
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/pkg/errors v0.9.1

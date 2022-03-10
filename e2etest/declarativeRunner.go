@@ -99,7 +99,7 @@ func RunScenarios(
 	operations Operation,
 	testFromTo TestFromTo,
 	validate Validate, // TODO: do we really want the test author to have to nominate which validation should happen?  Pros: better perf of tests. Cons: they have to tell us, and if they tell us wrong test may not test what they think it tests
-	//_ interface{}, // TODO if we want it??, blockBLobsOnly or specifc/all blob types
+	// _ interface{}, // TODO if we want it??, blockBLobsOnly or specifc/all blob types
 
 	// It would be a pain to list out every combo by hand,
 	// In addition to the fact that not every credential type is sensible.
@@ -148,7 +148,7 @@ func RunScenarios(
 				fullScenarioName := fmt.Sprintf("%s.%s.%s-%s", suiteName, testName, op.String(), fromTo.String())
 				// Sub-test name is not globally unique (it doesn't need to be) but it is more human-readable
 				subtestName := fmt.Sprintf("%s-%s", op, fromTo)
-        
+
 				hsToUse := hooks{}
 				if hs != nil {
 					hsToUse = *hs
@@ -157,30 +157,32 @@ func RunScenarios(
 				if scenarioSuffix != "" {
 					subtestName += "-" + scenarioSuffix
 				}
-        
-        // Handles destination being different account type
-        isSourceAcc := true
-        if destAccountType != accountType {
-          isSourceAcc = false
-        }
+
+				// Handles destination being different account type
+				isSourceAcc := true
+				if destAccountType != accountType {
+					isSourceAcc = false
+				}
 
 				s := scenario{
 					srcAccountType:      accountType,
-				  destAccountType:     destAccountType,
-				  subtestName:         subtestName,
-				  compactScenarioName: compactScenarioName,
-				  fullScenarioName:    fullScenarioName,
-				  operation:           op,
-				  fromTo:              fromTo,
-          credTypes:           credTypes,
-				  validate:            validate,
-				  p:                   p, // copies them, because they are a struct. This is what we need, since they may be morphed while running
-				  hs:                  hsToUse,
-				  fs:                  fs.DeepCopy(),
-				  needResume:          operations&eOperation.Resume() != 0,
-				  stripTopDir:         p.stripTopDir,
-				  isSourceAcc:         isSourceAcc,
+					destAccountType:     destAccountType,
+					subtestName:         subtestName,
+					compactScenarioName: compactScenarioName,
+					fullScenarioName:    fullScenarioName,
+					operation:           op,
+					fromTo:              fromTo,
+					credTypes:           credTypes,
+					validate:            validate,
+					p:                   p, // copies them, because they are a struct. This is what we need, since they may be morphed while running
+					hs:                  hsToUse,
+					fs:                  fs.DeepCopy(),
+					needResume:          operations&eOperation.Resume() != 0,
+					stripTopDir:         p.stripTopDir,
+					isSourceAcc:         isSourceAcc,
 				}
+
+				scenarioList = append(scenarioList, s)
 			}
 
 			scenarios = append(scenarios, scenarioList)

@@ -312,6 +312,8 @@ func TestBasic_CopyWithShareRoot(t *testing.T) {
 		eOperation.Copy(), // Sync already shares the root by default.
 		eTestFromTo.AllUploads(),
 		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
 		params{
 			recursive:        true,
 			invertedAsSubdir: true,

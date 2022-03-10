@@ -118,7 +118,7 @@ func TestFilter_RemoveFile(t *testing.T) {
 		shouldIgnore: []interface{}{
 			"file2.txt",
 		},
-	}, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestFilter_IncludePattern(t *testing.T) {
@@ -159,7 +159,7 @@ func TestFilter_RemoveFolder(t *testing.T) {
 			"folder2/file21.txt",
 			"folder2/file22.txt",
 		},
-	}, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestFilter_RemoveContainer(t *testing.T) {
@@ -174,7 +174,7 @@ func TestFilter_RemoveContainer(t *testing.T) {
 			"folder1/file11.txt",
 			"folder1/file12.txt",
 		},
-	}, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestFilter_ExcludePath(t *testing.T) {
