@@ -205,22 +205,15 @@ func newS3Traverser(credentialType common.CredentialType, rawURL *url.URL, ctx c
 
 	showS3UrlTypeWarning(s3URLParts)
 
-	t.s3Client, err = common.CreateS3Client(
-		t.ctx,
-		common.CredentialInfo{
-			CredentialType: credentialType,
-			S3CredentialInfo: common.S3CredentialInfo{
-				Endpoint: t.s3URLParts.Endpoint,
-				Region:   t.s3URLParts.Region,
-			},
+	t.s3Client, err = common.CreateS3Client(t.ctx, common.CredentialInfo{
+		CredentialType: credentialType,
+		S3CredentialInfo: common.S3CredentialInfo{
+			Endpoint: t.s3URLParts.Endpoint,
+			Region:   t.s3URLParts.Region,
 		},
-		common.CredentialOpOptions{
-			LogError: glcm.Error,
-		})
-
-	if t.logLevel == pipeline.LogDebug {
-		t.s3Client.TraceOn(common.NewS3HTTPTraceLogger(azcopyScanningLogger, t.logLevel))
-	}
+	}, common.CredentialOpOptions{
+		LogError: glcm.Error,
+	}, azcopyScanningLogger)
 
 	return
 }
