@@ -146,6 +146,43 @@ func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() azblob.DeleteSnapsh
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+var EPermanentDeleteOption = PermanentDeleteOption(3) // Default to "None"
+
+type PermanentDeleteOption uint8
+
+func (PermanentDeleteOption) Snapshots() PermanentDeleteOption { return PermanentDeleteOption(0) }
+func (PermanentDeleteOption) Versions() PermanentDeleteOption  { return PermanentDeleteOption(1) }
+func (PermanentDeleteOption) SnapshotsAndVersions() PermanentDeleteOption {
+	return PermanentDeleteOption(2)
+}
+func (PermanentDeleteOption) None() PermanentDeleteOption { return PermanentDeleteOption(3) }
+
+func (p *PermanentDeleteOption) Parse(s string) error {
+	// allow empty to mean "None"
+	if s == "" {
+		*p = EPermanentDeleteOption.None()
+		return nil
+	}
+
+	val, err := enum.Parse(reflect.TypeOf(p), s, true)
+	if err == nil {
+		*p = val.(PermanentDeleteOption)
+	}
+	return err
+}
+
+func (p PermanentDeleteOption) String() string {
+	return enum.StringInt(p, reflect.TypeOf(p))
+}
+
+func (p PermanentDeleteOption) ToPermanentDeleteOptionType() azblob.BlobDeleteType {
+	if p == EPermanentDeleteOption.None() {
+		return azblob.BlobDeleteNone
+	}
+	return azblob.BlobDeletePermanent
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 type DeleteDestination uint32
 
@@ -936,6 +973,8 @@ type CopyTransfer struct {
 	BlobVersionID string
 	// Blob index tags categorize data in your storage account utilizing key-value tag attributes
 	BlobTags BlobTags
+
+	BlobSnapshotID string
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

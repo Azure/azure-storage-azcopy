@@ -44,6 +44,7 @@ type downloadContentOptions struct {
 	downloadFileContentOptions
 }
 
+//nolint
 type downloadBlobContentOptions struct {
 	containerURL azblob.ContainerURL
 	cpkInfo      common.CpkInfo
@@ -199,12 +200,15 @@ func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bo
 		generateFromListOptions: generateFromListOptions{
 			fs:          s.fs.allObjects(isSource),
 			defaultSize: s.fs.defaultSize,
-			accountType: s.accountType,
+			accountType: s.srcAccountType,
 		},
 	}
 	if s.fromTo.IsDownload() {
 		options.cpkInfo = common.GetCpkInfo(s.p.cpkByValue)
 		options.cpkScopeInfo = common.GetCpkScopeInfo(s.p.cpkByName)
+	}
+	if isSource {
+		options.accessTier = s.p.accessTier
 	}
 	scenarioHelper{}.generateBlobsFromList(a, options)
 }

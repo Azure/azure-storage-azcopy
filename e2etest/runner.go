@@ -52,7 +52,7 @@ var isLaunchedByDebugger = func() bool {
 	return false
 }()
 
-func (t *TestRunner) SetAllFlags(p params) {
+func (t *TestRunner) SetAllFlags(p params, o Operation) {
 	set := func(key string, value interface{}, dflt interface{}, formats ...string) {
 		if value == dflt {
 			return // nothing to do. The flag is not supposed to be set
@@ -68,6 +68,7 @@ func (t *TestRunner) SetAllFlags(p params) {
 
 	// TODO: TODO: nakulkar-msft there will be many more to add here
 	set("recursive", p.recursive, false)
+	set("as-subdir", !p.invertedAsSubdir, true)
 	set("include-path", p.includePath, "")
 	set("exclude-path", p.excludePath, "")
 	set("include-pattern", p.includePattern, "")
@@ -91,6 +92,9 @@ func (t *TestRunner) SetAllFlags(p params) {
 	set("cpk-by-value", p.cpkByValue, false)
 	set("is-object-dir", p.isObjectDir, false)
 	set("debug-skip-files", strings.Join(p.debugSkipFiles, ";"), "")
+	if o == eOperation.Copy() {
+		set("s2s-preserve-access-tier", p.s2sPreserveAccessTier, true)
+	}
 }
 
 func (t *TestRunner) SetAwaitOpenFlag() {

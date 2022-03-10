@@ -81,6 +81,11 @@ func init() {
 			if err != nil {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 			}
+
+			if cooked.permanentDeleteOption != common.EPermanentDeleteOption.None() {
+				glcm.Info("Permanent delete is a PREVIEW feature and soft-deleted snapshots/versions will be deleted PERMANENTLY. Please proceed with caution.")
+			}
+
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
@@ -110,4 +115,5 @@ func init() {
 	deleteCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-versions", "", "Specifies a file where each version id is listed on a separate line. Ensure that the source must point to a single blob and all the version ids specified in the file using this flag must belong to the source blob only. Specified version ids of the given blob will get deleted from Azure Storage.")
 	deleteCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the path files that would be removed by the command. This flag does not trigger the removal of the files.")
 	deleteCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. For Example: BlobTrash, FileTrash, BlobFSTrash")
+	deleteCmd.PersistentFlags().StringVar(&raw.permanentDeleteOption, "permanent-delete", "none", "This is a preview feature that PERMANENTLY deletes soft-deleted snapshots/versions. Possible values include 'snapshots', 'versions', 'snapshotsandversions', 'none'.")
 }

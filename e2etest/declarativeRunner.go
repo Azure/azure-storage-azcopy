@@ -111,6 +111,7 @@ func RunScenarios(
 	hs *hooks,
 	fs testFiles,
 	// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
+	destAccountType AccountType,
 	accountType AccountType,
 	scenarioSuffix string) {
 	// enable this if we want parents in parallel: t.Parallel()
@@ -147,7 +148,7 @@ func RunScenarios(
 				fullScenarioName := fmt.Sprintf("%s.%s.%s-%s", suiteName, testName, op.String(), fromTo.String())
 				// Sub-test name is not globally unique (it doesn't need to be) but it is more human-readable
 				subtestName := fmt.Sprintf("%s-%s", op, fromTo)
-
+        
 				hsToUse := hooks{}
 				if hs != nil {
 					hsToUse = *hs
@@ -156,24 +157,30 @@ func RunScenarios(
 				if scenarioSuffix != "" {
 					subtestName += "-" + scenarioSuffix
 				}
+        
+        // Handles destination being different account type
+        isSourceAcc := true
+        if destAccountType != accountType {
+          isSourceAcc = false
+        }
 
 				s := scenario{
-					needResume:          (operations & eOperation.Resume()) == eOperation.Resume(),
-					accountType:         accountType,
-					subtestName:         subtestName,
-					compactScenarioName: compactScenarioName,
-					fullScenarioName:    fullScenarioName,
-					operation:           op,
-					fromTo:              fromTo,
-					credTypes:           credTypes,
-					validate:            validate,
-					p:                   p, // copies them, because they are a struct. This is what we need, since they may be morphed while running
-					hs:                  hsToUse,
-					fs:                  fs.DeepCopy(),
-					stripTopDir:         p.stripTopDir,
+					srcAccountType:      accountType,
+				  destAccountType:     destAccountType,
+				  subtestName:         subtestName,
+				  compactScenarioName: compactScenarioName,
+				  fullScenarioName:    fullScenarioName,
+				  operation:           op,
+				  fromTo:              fromTo,
+          credTypes:           credTypes,
+				  validate:            validate,
+				  p:                   p, // copies them, because they are a struct. This is what we need, since they may be morphed while running
+				  hs:                  hsToUse,
+				  fs:                  fs.DeepCopy(),
+				  needResume:          operations&eOperation.Resume() != 0,
+				  stripTopDir:         p.stripTopDir,
+				  isSourceAcc:         isSourceAcc,
 				}
-
-				scenarioList = append(scenarioList, s)
 			}
 
 			scenarios = append(scenarios, scenarioList)

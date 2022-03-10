@@ -63,7 +63,7 @@ func TestChange_DetectFileChangedDuringTransfer(t *testing.T) {
 		shouldFail: []interface{}{
 			f("filea", withError{"File modified since transfer scheduled"}),
 		},
-	}, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 // TestChange_DefaultToNoDetectionForS2S asserts that, if we DON'T ask for s2s change detection, then the detection
@@ -95,5 +95,5 @@ func TestChange_DefaultToNoDetectionForCopyS2S(t *testing.T) {
 				folder(""),
 				"filea", // assert it succeeds, because the default S2S behaviour is to NOT check for changes
 			},
-		}, EAccountType.Standard(), "")
+	  }, EAccountType.Standard(), EAccountType.Standard(), "")
 }

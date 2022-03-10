@@ -22,10 +22,15 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
+	"log"
 	"net/url"
+	"os"
 	"strings"
+	"time"
 )
 
 func (s *cmdIntegrationSuite) TestRemoveSingleBlob(c *chk.C) {
@@ -713,4 +718,102 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDirWithFromTo(c *chk.C)
 			c.Assert(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
 		}
 	})
+}
+
+func (s *cmdIntegrationSuite) TestPermDeleteSnapshotsVersionsUnderSingleBlob(c *chk.C) {
+	serviceURL := setUpAccountPermDelete(c)
+	os.Setenv("AZCOPY_DISABLE_HIERARCHICAL_SCAN", "true")
+	
+	time.Sleep(time.Second * 10)
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, serviceURL)
+	defer deleteContainer(c, containerURL)
+	blobName, blobList, _ := scenarioHelper{}.generateCommonRemoteScenarioForSoftDelete(c, containerURL, "")
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobList), chk.Equals, 3)
+
+	list, _ := containerURL.ListBlobsFlatSegment(ctx, azblob.Marker{}, azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Deleted: true, Snapshots: true}, Prefix: blobName})
+	c.Assert(list.Segment.BlobItems, chk.NotNil)
+	c.Assert(len(list.Segment.BlobItems), chk.Equals, 4)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobName)
+	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
+	raw.recursive = true
+	raw.permanentDeleteOption = "snapshotsandversions"
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 3)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestPermDeleteSnapshotsVersionsUnderContainer(c *chk.C) {
+	serviceURL := setUpAccountPermDelete(c)
+	os.Setenv("AZCOPY_DISABLE_HIERARCHICAL_SCAN", "true")
+
+	time.Sleep(time.Second * 10)
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, serviceURL)
+	defer deleteContainer(c, containerURL)
+	_, blobList, listOfTransfers := scenarioHelper{}.generateCommonRemoteScenarioForSoftDelete(c, containerURL, "")
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobList), chk.Equals, 3)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String())
+	raw.recursive = true
+	raw.permanentDeleteOption = "snapshotsandversions"
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(listOfTransfers))
+	})
+}
+
+func setUpAccountPermDelete(c *chk.C) azblob.ServiceURL {
+	accountName, accountKey := getAccountAndKey()
+	u, _ := url.Parse(fmt.Sprintf("https://%s.blob.core.windows.net/", accountName))
+
+	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
+	if err != nil {
+		panic(err)
+	}
+
+	sasQueryParams, err := azblob.AccountSASSignatureValues{
+		Protocol:      azblob.SASProtocolHTTPS,
+		ExpiryTime:    time.Now().UTC().Add(12 * time.Hour), // 12 hr long sas
+		Permissions:   azblob.AccountSASPermissions{Read: true, List: true, Write: true, Create: true, PermanentDelete: true, Delete: true, DeletePreviousVersion: true}.String(),
+		Services:      azblob.AccountSASServices{Blob: true}.String(),
+		ResourceTypes: azblob.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
+	}.NewSASQueryParameters(credential)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	qp := sasQueryParams.Encode()
+	accountURLWithSAS := fmt.Sprintf("https://%s.blob.core.windows.net?%s", accountName, qp)
+	u, _ = url.Parse(accountURLWithSAS)
+	serviceURL := azblob.NewServiceURL(*u, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
+	days := int32(5)
+	allowDelete := true
+	_, err = serviceURL.SetProperties(ctx, azblob.StorageServiceProperties{DeleteRetentionPolicy: &azblob.RetentionPolicy{Enabled: true, Days: &days, AllowPermanentDelete: &allowDelete}})
+	c.Assert(err, chk.IsNil)
+
+	return serviceURL
 }

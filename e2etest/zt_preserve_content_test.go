@@ -40,7 +40,7 @@ func TestContent_AtBlobStorage(t *testing.T) {
 			folder(""), // root folder
 			f("filea"),
 		},
-	}, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestContent_AtFileShare(t *testing.T) {
@@ -53,7 +53,7 @@ func TestContent_AtFileShare(t *testing.T) {
 			folder("folder1"),
 			f("folder1/filea"),
 		},
-	}, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestContent_BlobToBlob(t *testing.T) {
@@ -65,7 +65,7 @@ func TestContent_BlobToBlob(t *testing.T) {
 			folder(""), // root folder
 			f("filea"),
 		},
-	}, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 //func TestChange_ValidateFileContentAtRemote(t *testing.T) {
