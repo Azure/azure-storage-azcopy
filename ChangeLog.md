@@ -1,6 +1,12 @@
 
 # Change Log
 
+## Version 10.14.1
+
+### Bug fixes
+1. Fixed issue #1625 where a panic occurs during sync scanning. 
+2. Fixed remove issue when account has versioning enabled. 
+
 ## Version 10.14.0
 
 ### New features
