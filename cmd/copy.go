@@ -1443,6 +1443,14 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// case common.EFromTo.FileBlob():
 	// 	e := copyFileToNEnumerator(jobPartOrder)
 	// 	err = e.enumerate(cca)
+
+	case common.EFromTo.BlobNone(), common.EFromTo.FileNone():
+		e, createErr := setPropertiesEnumerator(cca)
+		if createErr != nil {
+			return createErr
+		}
+		e.enumerate()
+
 	default:
 		return fmt.Errorf("copy direction %v is not supported\n", cca.FromTo)
 	}
