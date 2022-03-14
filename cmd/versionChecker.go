@@ -22,8 +22,11 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Version struct {
@@ -104,4 +107,38 @@ func (v Version) OlderThan(v2 Version) bool {
 // detect if version v is newer than v2
 func (v Version) NewerThan(v2 Version) bool {
 	return v.compare(v2) == 1
+}
+
+func (v Version) CacheNewerVersion(v2 Version, filePath string) {
+	if v.OlderThan(v2) {
+		executablePathSegments := strings.Split(strings.Replace(os.Args[0], "\\", "/", -1), "/")
+		executableName := executablePathSegments[len(executablePathSegments)-1]
+
+		// output in info mode instead of stderr, as it was crashing CI jobs of some people
+		glcm.Info(executableName + ": A newer version " + v2.original + " is available to download\n")
+
+		expiry := time.Now().Add(24 * time.Hour).Format(versionFileTimeFormat)
+		if err := os.WriteFile(filePath, []byte(v2.original+","+expiry), 0666); err != nil {
+			fmt.Println(err)
+		}
+	}
+}
+
+func ValidateCachedVersion(filePath string) (*Version, error) {
+	// Check the locally cached file to get the version.
+	data, err := os.ReadFile(filePath)
+	if err == nil {
+		// If the data is fresh, don't make the call and return right away
+		versionAndExpiry := strings.Split(fmt.Sprintf("%s", data), ",")
+		if len(versionAndExpiry) == 2 {
+			version, err := NewVersion(versionAndExpiry[0])
+			if err == nil {
+				expiry, err := time.Parse(versionFileTimeFormat, versionAndExpiry[1])
+				if err == nil && expiry.After(time.Now()) {
+					return version, nil
+				}
+			}
+		}
+	}
+	return nil, errors.New("failed to fetch or validate the cached version")
 }

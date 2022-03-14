@@ -21,7 +21,6 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net/url"
@@ -115,7 +114,7 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-	        EnumerationParallelism = concurrencySettings.EnumerationPoolSize.Value
+		EnumerationParallelism = concurrencySettings.EnumerationPoolSize.Value
 		EnumerationParallelStatFiles = concurrencySettings.ParallelStatFiles.Value
 
 		// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
@@ -204,6 +203,8 @@ func init() {
 	rootCmd.PersistentFlags().MarkHidden("debug-skip-files")
 }
 
+const versionFileTimeFormat = "2006-01-02T15:04:05Z"
+
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where
 // aka.ms is not resolvable to a reachable IP address). In such cases, this routine will run for ever, and the caller should
 // just give up on it.
@@ -212,7 +213,7 @@ func init() {
 func beginDetectNewVersion() chan struct{} {
 	completionChannel := make(chan struct{})
 	go func() {
-		const versionMetadataUrl = "https://azcopyvnextrelease.blob.core.windows.net/releasemetadata/latest_version.txt"
+		const versionMetadataUrl = "https://azurestrgmohitfrance.blob.core.windows.net/testcont/latest_version.txt"
 
 		// step 0: check the Stderr before checking version
 		_, err := os.Stderr.Stat()
@@ -220,7 +221,18 @@ func beginDetectNewVersion() chan struct{} {
 			return
 		}
 
-		// step 1: initialize pipeline
+		// Step 1: Fetch & validate the cached version and if it is updated, we'll return without making REST call.
+		versionFileName := "/latest_version.txt"
+		if runtime.GOOS == "windows" {
+			versionFileName = "\\latest_version.txt"
+		}
+		filePath := azcopyAppPathFolder + versionFileName
+		_, err = ValidateCachedVersion(filePath)
+		if err == nil {
+			return
+		}
+
+		// Step 2: initialize pipeline
 		p, err := createBlobPipeline(context.TODO(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, pipeline.LogNone)
 		if err != nil {
 			return
@@ -232,42 +244,27 @@ func beginDetectNewVersion() chan struct{} {
 			return
 		}
 
-		// step 3: start download
+		// Step 3: Get properties of the blob.
 		blobURL := azblob.NewBlobURL(*u, p)
-		blobStream, err := blobURL.Download(context.TODO(), 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
+		getPropResp, err := blobURL.GetProperties(context.TODO(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 		if err != nil {
 			return
 		}
 
-		blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: ste.MaxRetryPerDownloadBody})
-		defer blobBody.Close()
-
-		// step 4: read newest version str
-		buf := new(bytes.Buffer)
-		n, err := buf.ReadFrom(blobBody)
-		if n == 0 || err != nil {
-			return
-		}
-		// only take the first line, in case the version metadata file is upgraded in the future
-		remoteVersion := strings.Split(buf.String(), "\n")[0]
-
-		// step 5: compare remote version to local version to see if there's a newer AzCopy
+		// Step 4: compare remote version to local version to see if there's a newer AzCopy
 		v1, err := NewVersion(common.AzcopyVersion)
 		if err != nil {
 			return
 		}
-		v2, err := NewVersion(remoteVersion)
+
+		metadata := getPropResp.NewMetadata()
+		v2, err := NewVersion(metadata["latest_version"])
 		if err != nil {
 			return
 		}
 
-		if v1.OlderThan(*v2) {
-			executablePathSegments := strings.Split(strings.Replace(os.Args[0], "\\", "/", -1), "/")
-			executableName := executablePathSegments[len(executablePathSegments)-1]
-
-			// output in info mode instead of stderr, as it was crashing CI jobs of some people
-			glcm.Info(executableName + ": A newer version " + remoteVersion + " is available to download\n")
-		}
+		// Step 5: Persist the new version in the local
+		v1.CacheNewerVersion(*v2, filePath)
 
 		// let caller know we have finished, if they want to know
 		close(completionChannel)
