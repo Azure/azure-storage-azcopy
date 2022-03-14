@@ -221,7 +221,8 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 	case common.ELocation.GCP():
 		return resource, "", nil
 	case common.ELocation.Benchmark(), // cover for benchmark as we generate data for that
-		common.ELocation.Unknown(): // cover for unknown as we treat that as garbage
+		common.ELocation.Unknown(),
+		common.ELocation.None(): // cover for unknown as we treat that as garbage
 		// Local and S3 don't feature URL-embedded tokens
 		return resource, "", nil
 
@@ -279,6 +280,7 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 		bfsURL := bfsURLParts.URL() // Can't call .String() on .URL() because Go can't take the pointer of a function's return
 		resourceBase = bfsURL.String()
 		return
+
 	default:
 		panic(fmt.Sprintf("One or more location(s) may be missing from SplitAuthTokenFromResource. Location: %s", location))
 	}
