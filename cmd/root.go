@@ -213,7 +213,7 @@ const versionFileTimeFormat = "2006-01-02T15:04:05Z"
 func beginDetectNewVersion() chan struct{} {
 	completionChannel := make(chan struct{})
 	go func() {
-		const versionMetadataUrl = "https://azurestrgmohitfrance.blob.core.windows.net/testcont/latest_version.txt"
+		const versionMetadataUrl = "https://azcopyvnextrelease.blob.core.windows.net/releasemetadata/latest_version.txt"
 
 		// step 0: check the Stderr before checking version
 		_, err := os.Stderr.Stat()
