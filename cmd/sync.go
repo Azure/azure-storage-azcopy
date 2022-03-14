@@ -87,6 +87,8 @@ type rawSyncCmdArgs struct {
 	cpkScopeInfo string
 	// dry run mode bool
 	dryrun bool
+
+	CheckLength bool
 }
 
 func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -274,6 +276,12 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		return cooked, err
 	}
 
+	cooked.CheckLength = raw.CheckLength
+	// length of devnull will be 0, thus this will always fail unless downloading an empty file
+	if cooked.destination.Value == common.Dev_Null {
+		cooked.CheckLength = false
+	}
+
 	err = cooked.md5ValidationOption.Parse(raw.md5ValidationOption)
 	if err != nil {
 		return cooked, err
@@ -411,6 +419,8 @@ type cookedSyncCmdArgs struct {
 	mirrorMode bool
 
 	dryrunMode bool
+
+	CheckLength bool
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -782,4 +792,5 @@ func init() {
 	// Deprecate the old persist-smb-permissions flag
 	syncCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files, or ADLS Gen 2 to ADLS Gen 2). For Hierarchical Namespace accounts, you will need a container SAS or OAuth token with Modify Ownership and Modify Permissions permissions. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
+	syncCmd.PersistentFlags().BoolVar(&raw.CheckLength, "check-length", true, "Check the length of a file on the destination after the transfer. If there is a mismatch between source and destination, the transfer is marked as failed.")
 }
