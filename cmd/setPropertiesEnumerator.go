@@ -1,0 +1,98 @@
+// Copyright © 2017 Microsoft <wastore@microsoft.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+package cmd
+
+import (
+	"context"
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
+)
+
+// provides an enumerator that lists a given resource and schedules setProperties on them
+
+func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, err error) {
+	var sourceTraverser ResourceTraverser
+
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+
+	// Include-path is handled by ListOfFilesChannel.
+	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo,
+		nil, cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs,
+		cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false,
+		cca.LogVerbosity.ToPipelineLogLevel(), cca.CpkOptions)
+
+	// report failure to create traverser
+	if err != nil {
+		return nil, err
+	}
+
+	includeFilters := buildIncludeFilters(cca.IncludePatterns)
+	excludeFilters := buildExcludeFilters(cca.ExcludePatterns, false)
+	excludePathFilters := buildExcludeFilters(cca.ExcludePathPatterns, true)
+	includeSoftDelete := buildIncludeSoftDeleted(cca.permanentDeleteOption)
+
+	// set up the filters in the right order
+	filters := append(includeFilters, excludeFilters...)
+	filters = append(filters, excludePathFilters...)
+	filters = append(filters, includeSoftDelete...)
+
+	// decide our folder transfer strategy
+	// (Must enumerate folders when deleting from a folder-aware location. Can't do folder deletion just based on file
+	// deletion, because that would not handle folders that were empty at the start of the job).
+	// isHNStoHNS is IGNORED here, because BlobFS locations don't take this route currently.
+	fpo, message := newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false)
+	// do not print Info message if in dry run mode
+	if !cca.dryrunMode {
+		glcm.Info(message)
+	}
+	if ste.JobsAdmin != nil {
+		ste.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
+	}
+
+	transferScheduler := setPropertiesTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo)
+
+	finalize := func() error {
+		jobInitiated, err := transferScheduler.dispatchFinalPart()
+		if err != nil {
+			if cca.dryrunMode {
+				return nil
+			} else if err == NothingScheduledError {
+				// No log file needed. Logging begins as a part of awaiting job completion.
+				return NothingToRemoveError
+			}
+
+			return err
+		}
+
+		// TODO: this appears to be obsolete due to the above err == NothingScheduledError. Review/discuss.
+		if !jobInitiated {
+			if cca.isCleanupJob {
+				glcm.Error("Cleanup completed (nothing needed to be deleted)")
+			} else {
+				glcm.Error("Nothing to delete. Please verify that recursive flag is set properly if targeting a directory.")
+			}
+		}
+
+		return nil
+	}
+	return NewCopyEnumerator(sourceTraverser, filters, transferScheduler.scheduleCopyTransfer, finalize), nil
+}
