@@ -126,7 +126,7 @@ func (s *scenario) Run() {
 
 func (s *scenario) runHook(h hookFunc) bool {
 	if h == nil {
-		return true //nothing to do. So "successful"
+		return true // nothing to do. So "successful"
 	}
 
 	// run the hook, passing ourself in as the implementation of hookHelper interface
@@ -200,14 +200,14 @@ func (s *scenario) runAzCopy() {
 		s.a.AssertNoErr(err, "running AzCopy")
 	}
 
-	// // Generally, a cancellation is done when auth fails.
-	// if result.finalStatus.JobStatus == common.EJobStatus.Cancelled() {
-	// 	for _,v := range result.finalStatus.FailedTransfers {
-	// 		if v.ErrorCode == 403 {
-	// 			s.a.Error("authorization failed, perhaps SPN auth or the SAS token is bad?")
-	// 		}
-	// 	}
-	// }
+	// Generally, a cancellation is done when auth fails.
+	if result.finalStatus.JobStatus == common.EJobStatus.Cancelled() {
+		for _, v := range result.finalStatus.FailedTransfers {
+			if v.ErrorCode == 403 {
+				s.a.Error("authorization failed, perhaps SPN auth or the SAS token is bad?")
+			}
+		}
+	}
 
 	s.state.result = &result
 }
@@ -438,7 +438,7 @@ func (s *scenario) validateContent() {
 	}
 }
 
-//// Individual property validation routines
+// // Individual property validation routines
 
 func (s *scenario) validateMetadata(expected, actual map[string]string, isFolder bool) {
 	if isFolder { // hdi_isfolder is service-relevant metadata, not something we'd be testing for. This can pop up when specifying a folder() on blob.
@@ -560,7 +560,7 @@ func (s *scenario) validateLastWriteTime(expected, actual *time.Time) {
 		expected, actual))
 }
 
-//nolint
+// nolint
 func (s *scenario) validateSMBAttrs(expected, actual *uint32) {
 	if expected == nil {
 		// These properties were not explicitly stated for verification
@@ -584,7 +584,7 @@ func (s *scenario) cleanup() {
 	}
 }
 
-/// support the hookHelper functions. These are use by our hooks to modify the state, or resources, of the running test
+// / support the hookHelper functions. These are use by our hooks to modify the state, or resources, of the running test
 
 func (s *scenario) FromTo() common.FromTo {
 	return s.fromTo

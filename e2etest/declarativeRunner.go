@@ -72,7 +72,7 @@ func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredential
 	// determine source types
 	var sourceTypes []common.CredentialType
 	if fromTo.IsS2S() {
-		// source must always be anonymous-- no exceptions until UDK is introduced.
+		// source must always be anonymous-- no exceptions until OAuth over S2S is introduced.
 		sourceTypes = []common.CredentialType{common.ECredentialType.Anonymous()}
 	} else {
 		sourceTypes = validCredTypesPerLocation[fromTo.From()]
@@ -99,18 +99,18 @@ func RunScenarios(
 	operations Operation,
 	testFromTo TestFromTo,
 	validate Validate, // TODO: do we really want the test author to have to nominate which validation should happen?  Pros: better perf of tests. Cons: they have to tell us, and if they tell us wrong test may not test what they think it tests
-	// _ interface{}, // TODO if we want it??, blockBLobsOnly or specifc/all blob types
+// _ interface{}, // TODO if we want it??, blockBLobsOnly or specifc/all blob types
 
-	// It would be a pain to list out every combo by hand,
-	// In addition to the fact that not every credential type is sensible.
-	// Thus, the E2E framework takes in a requested set of credential types, and applies them where sensible.
-	// This allows you to make tests use OAuth only, SAS only, etc.
+// It would be a pain to list out every combo by hand,
+// In addition to the fact that not every credential type is sensible.
+// Thus, the E2E framework takes in a requested set of credential types, and applies them where sensible.
+// This allows you to make tests use OAuth only, SAS only, etc.
 	requestedCredentialTypesSrc []common.CredentialType,
 	requestedCredentialTypesDst []common.CredentialType,
 	p params,
 	hs *hooks,
 	fs testFiles,
-	// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
+// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
 	destAccountType AccountType,
 	accountType AccountType,
 	scenarioSuffix string) {
@@ -123,7 +123,7 @@ func RunScenarios(
 	}
 
 	// construct all the scenarios
-	scenarios := make([][]scenario, 0, 16)
+	scenarios := make([]scenario, 0)
 	for _, op := range operations.getValues() {
 		if op == eOperation.Resume() {
 			continue
@@ -139,8 +139,6 @@ func RunScenarios(
 			seenFromTos[fromTo] = true
 
 			credentialTypes := getValidCredCombinationsForFromTo(fromTo, requestedCredentialTypesSrc, requestedCredentialTypesDst)
-
-			scenarioList := make([]scenario, 0)
 
 			for _, credTypes := range credentialTypes {
 				// Create unique name for generating container names
@@ -182,10 +180,8 @@ func RunScenarios(
 					isSourceAcc:         isSourceAcc,
 				}
 
-				scenarioList = append(scenarioList, s)
+				scenarios = append(scenarios, s)
 			}
-
-			scenarios = append(scenarios, scenarioList)
 		}
 	}
 
@@ -198,29 +194,27 @@ func RunScenarios(
 	parallel := !isLaunchedByDebugger && !p.disableParallelTesting // this only works if gops.exe is on your path. See azcopyDebugHelper.go for instructions.
 	for _, s := range scenarios {
 		// use t.Run to get proper sub-test support
-		t.Run(s[0].subtestName, func(t *testing.T) {
-			for _, s := range s {
-				sen := s // capture to separate var inside the loop, for the parallel case
-				credNames := fmt.Sprintf("%s-%s", s.credTypes[0].String(), s.credTypes[1].String())
+		t.Run(s.subtestName, func(t *testing.T) {
+			sen := s // capture to separate var inside the loop, for the parallel case
+			credNames := fmt.Sprintf("%s-%s", s.credTypes[0].String(), s.credTypes[1].String())
 
-				t.Run(credNames, func(t *testing.T) {
-					if parallel {
-						t.Parallel() // tell testing that it can run stuff in parallel with us
-					}
-					// set asserter now (and only now), since before this point we don't have the right "t"
-					sen.a = &testingAsserter{
-						t:                   t,
-						fullScenarioName:    sen.fullScenarioName,
-						compactScenarioName: sen.compactScenarioName,
-					}
+			t.Run(credNames, func(t *testing.T) {
+				if parallel {
+					t.Parallel() // tell testing that it can run stuff in parallel with us
+				}
+				// set asserter now (and only now), since before this point we don't have the right "t"
+				sen.a = &testingAsserter{
+					t:                   t,
+					fullScenarioName:    sen.fullScenarioName,
+					compactScenarioName: sen.compactScenarioName,
+				}
 
-					if hs != nil {
-						sen.runHook(hs.beforeTestRun)
-					}
+				if hs != nil {
+					sen.runHook(hs.beforeTestRun)
+				}
 
-					sen.Run()
-				})
-			}
+				sen.Run()
+			})
 		})
 	}
 }
