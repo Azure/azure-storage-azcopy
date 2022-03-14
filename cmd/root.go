@@ -213,10 +213,15 @@ const versionFileTimeFormat = "2006-01-02T15:04:05Z"
 func beginDetectNewVersion() chan struct{} {
 	completionChannel := make(chan struct{})
 	go func() {
+		v1, err := NewVersion(common.AzcopyVersion)
+		if err != nil {
+			return
+		}
+
 		const versionMetadataUrl = "https://azcopyvnextrelease.blob.core.windows.net/releasemetadata/latest_version.txt"
 
 		// step 0: check the Stderr before checking version
-		_, err := os.Stderr.Stat()
+		_, err = os.Stderr.Stat()
 		if err != nil {
 			return
 		}
@@ -227,8 +232,15 @@ func beginDetectNewVersion() chan struct{} {
 			versionFileName = "\\latest_version.txt"
 		}
 		filePath := azcopyAppPathFolder + versionFileName
-		_, err = ValidateCachedVersion(filePath)
+		v2, err := ValidateCachedVersion(filePath)
 		if err == nil {
+			if v1.OlderThan(*v2) {
+				executablePathSegments := strings.Split(strings.Replace(os.Args[0], "\\", "/", -1), "/")
+				executableName := executablePathSegments[len(executablePathSegments)-1]
+
+				// output in info mode instead of stderr, as it was crashing CI jobs of some people
+				glcm.Info(executableName + ": A newer version " + v2.original + " is available to download\n")
+			}
 			return
 		}
 
@@ -252,15 +264,18 @@ func beginDetectNewVersion() chan struct{} {
 		}
 
 		// Step 4: compare remote version to local version to see if there's a newer AzCopy
-		v1, err := NewVersion(common.AzcopyVersion)
+		metadata := getPropResp.NewMetadata()
+		v2, err = NewVersion(metadata["latest_version"])
 		if err != nil {
 			return
 		}
 
-		metadata := getPropResp.NewMetadata()
-		v2, err := NewVersion(metadata["latest_version"])
-		if err != nil {
-			return
+		if v1.OlderThan(*v2) {
+			executablePathSegments := strings.Split(strings.Replace(os.Args[0], "\\", "/", -1), "/")
+			executableName := executablePathSegments[len(executablePathSegments)-1]
+
+			// output in info mode instead of stderr, as it was crashing CI jobs of some people
+			glcm.Info(executableName + ": A newer version " + v2.original + " is available to download\n")
 		}
 
 		// Step 5: Persist the new version in the local

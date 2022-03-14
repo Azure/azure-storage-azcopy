@@ -111,12 +111,6 @@ func (v Version) NewerThan(v2 Version) bool {
 
 func (v Version) CacheNewerVersion(v2 Version, filePath string) {
 	if v.OlderThan(v2) {
-		executablePathSegments := strings.Split(strings.Replace(os.Args[0], "\\", "/", -1), "/")
-		executableName := executablePathSegments[len(executablePathSegments)-1]
-
-		// output in info mode instead of stderr, as it was crashing CI jobs of some people
-		glcm.Info(executableName + ": A newer version " + v2.original + " is available to download\n")
-
 		expiry := time.Now().Add(24 * time.Hour).Format(versionFileTimeFormat)
 		if err := os.WriteFile(filePath, []byte(v2.original+","+expiry), 0666); err != nil {
 			fmt.Println(err)
