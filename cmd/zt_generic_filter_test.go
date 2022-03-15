@@ -97,7 +97,7 @@ func (s *genericFilterSuite) TestDateParsingForIncludeAfter(c *chk.C) {
 
 		// failure cases (these all get Go's cryptic datetime parsing error messages, unfortunately)
 		{"2019-03-31 18:30:15", "", "cannot parse \" 18:30:15\" as \"T\""},       // space instead of T
-		{"2019-03-31T18:30:15UTC", "", "cannot parse \"UTC\" as \".0000000\""},     // "UTC" instead of .0000000
+		{"2019-03-31T18:30:15UTC", "", "cannot parse \"UTC\" as \".0000000\""},   // "UTC" instead of .0000000
 		{"2019/03/31T18:30:15", "", "cannot parse \"/03/31T18:30:15\" as \"-\""}, //wrong date separator
 		{"2019-03-31T18:1:15", "", "cannot parse \"1:15\" as \"04\""},            // single-digit minute
 	}

@@ -115,7 +115,7 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-	        EnumerationParallelism = concurrencySettings.EnumerationPoolSize.Value
+		EnumerationParallelism = concurrencySettings.EnumerationPoolSize.Value
 		EnumerationParallelStatFiles = concurrencySettings.ParallelStatFiles.Value
 
 		// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter

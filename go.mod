@@ -1,8 +1,7 @@
 module github.com/Azure/azure-storage-azcopy/v10
 
 require (
-	cloud.google.com/go/compute v1.5.0 // indirect
-	cloud.google.com/go/iam v0.2.0 // indirect
+	cloud.google.com/go/iam v0.3.0 // indirect
 	cloud.google.com/go/storage v1.21.0
 	github.com/Azure/azure-pipeline-go v0.2.3
 	github.com/Azure/azure-storage-blob-go v0.13.1-0.20210914164749-2d6cd3e07548
@@ -18,16 +17,19 @@ require (
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/mattn/go-ieproxy v0.0.3
 	github.com/minio/minio-go v6.0.14+incompatible
+	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/pkg/errors v0.9.1
-	github.com/spf13/cobra v1.3.0
+	github.com/rogpeppe/go-internal v1.8.1 // indirect
+	github.com/spf13/cobra v1.4.0
 	github.com/stretchr/objx v0.3.0 // indirect
 	github.com/wastore/keychain v0.0.0-20180920053336-f2c902a3d807
 	github.com/wastore/keyctl v0.3.1
-	golang.org/x/crypto v0.0.0-20220214200702-86341886e292
-	golang.org/x/oauth2 v0.0.0-20220223155221-ee480838109b
+	golang.org/x/crypto v0.0.0-20220314234724-5d542ad81a58
+	golang.org/x/oauth2 v0.0.0-20220309155454-6242fa91716a
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20220224120231-95c6836cb0e7
-	google.golang.org/api v0.70.0
+	golang.org/x/sys v0.0.0-20220310020820-b874c991c1a5
+	google.golang.org/api v0.72.0
+	google.golang.org/genproto v0.0.0-20220314164441-57ef72a4c106 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 )
 

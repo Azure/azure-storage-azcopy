@@ -52,5 +52,5 @@ func (err AzError) LoginCredMissing() AzError {
 }
 
 func (err AzError) InvalidBlobName() AzError {
-	return AzError {uint64(2), "Invalid Blob Name.", ""}
+	return AzError{uint64(2), "Invalid Blob Name.", ""}
 }
