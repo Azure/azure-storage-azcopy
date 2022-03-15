@@ -99,16 +99,17 @@ func (v Version) compare(v2 Version) int {
 	return 1
 }
 
-// detect if version v is older than v2
+// OlderThan detect if version v is older than v2
 func (v Version) OlderThan(v2 Version) bool {
 	return v.compare(v2) == -1
 }
 
-// detect if version v is newer than v2
+// NewerThan detect if version v is newer than v2
 func (v Version) NewerThan(v2 Version) bool {
 	return v.compare(v2) == 1
 }
 
+// CacheNewerVersion caches the version v2 to filePath if v2 is newer than v1
 func (v Version) CacheNewerVersion(v2 Version, filePath string) {
 	if v.OlderThan(v2) {
 		expiry := time.Now().Add(24 * time.Hour).Format(versionFileTimeFormat)
@@ -118,6 +119,8 @@ func (v Version) CacheNewerVersion(v2 Version, filePath string) {
 	}
 }
 
+// ValidateCachedVersion checks if the given filepath contains cached version, expiry or not.
+// If yes, then it reads the cache, checks if the cache is still fresh and finally creates Version object from it and returns it.
 func ValidateCachedVersion(filePath string) (*Version, error) {
 	// Check the locally cached file to get the version.
 	data, err := os.ReadFile(filePath)
