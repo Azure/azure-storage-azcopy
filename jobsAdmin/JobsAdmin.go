@@ -158,6 +158,8 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 	// Spin up slice pool pruner
 	go ja.slicePoolPruneLoop()
 
+	go ja.messageHandler(common.GetLifecycleMgr().MsgHandlerChannel())
+
 }
 
 // Decide on a max amount of RAM we are willing to use. This functions as a cap, and prevents excessive usage.
@@ -506,6 +508,28 @@ func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint3
 	a := ste.NewPerformanceAdvisor(p, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency, dir, averageBytesPerFile, isToAzureFiles)
 	return a.GetAdvice()
 }
+
+func (ja *jobsAdmin) messageHandler(inputChan <-chan common.LcmMsgType) {
+	toBytes := func(mb int64) int64 {
+		return mb * 1024 * 1024
+	}
+	for {
+		msg := <-inputChan
+		msgType := common.MsgTypeMap[msg.MsgType]
+		switch msgType {
+		case common.EInputMsgType.ThroughputAdjustment():
+			newVal, err := strconv.Atoi(msg.Value)
+			if err != nil {
+				continue;
+			}
+			ja.UpdateTargetBandwidth(toBytes(int64(newVal)))
+		default:
+		}
+
+	}
+
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // The jobIDToJobMgr maps each JobID to its JobMgr

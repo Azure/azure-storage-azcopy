@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"encoding/json"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 )
@@ -29,6 +30,7 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 		allowCancelFromStdIn: false,
 		allowWatchInput:      false,
 		closeFunc:            func() {}, // noop since we have nothing to do by default
+		msgHandlerChannel:    make(chan LcmMsgType),
 	}
 
 	// kick off the single routine that processes output
@@ -69,6 +71,7 @@ type LifecycleMgr interface {
 	SetForceLogging()
 	IsForceLoggingDisabled() bool
 	DownloadToTempPath() bool
+	MsgHandlerChannel()   <-chan LcmMsgType
 }
 
 func GetLifecycleMgr() LifecycleMgr {
@@ -92,6 +95,8 @@ type lifecycleMgr struct {
 	e2eAllowAwaitOpen     bool           // allow the user to send 'open' from stdin to allow the opening of the first file
 	closeFunc             func()         // used to close logs before exiting
 	disableSyslog         bool
+	waitForUserResponse   chan bool
+	msgHandlerChannel     chan LcmMsgType
 }
 
 type userInput struct {
@@ -109,24 +114,46 @@ func (lcm *lifecycleMgr) watchInputs() {
 			continue
 		}
 
-		// reads input until the first occurrence of \n in the input,
-		input, err := consoleReader.ReadString('\n')
-		timeReceived := time.Now()
+		select {
+		case <-lcm.waitForUserResponse:
+			// reads input until the first occurrence of \n in the input,
+			input, err := consoleReader.ReadString('\n')
+			timeReceived := time.Now()
+			if err != nil {
+				continue
+			}
+
+			msg := strings.TrimSpace(input)
+			lcm.inputQueue <- userInput{timeReceived: timeReceived, content: msg}
+		default:
+		}
+
+		var msg LcmMsgType
+		decoder := json.NewDecoder(os.Stdin)
+		err := decoder.Decode(&msg)
 		if err != nil {
+			lcm.Info("Discarding incorrectly formatted input message.")
 			continue
 		}
 
-		// remove spaces before/after the content
-		msg := strings.TrimSpace(input)
+		msgType, ok := MsgTypeMap[msg.MsgType]
+		if !ok {
+			lcm.Info(fmt.Sprintf("Discarding incorrect message: %s.", msg.MsgType))
+			continue
+		}
 
-		if lcm.allowCancelFromStdIn && strings.EqualFold(msg, "cancel") {
+		switch msgType {
+		case EInputMsgType.CancelJob():
 			lcm.cancelChannel <- os.Interrupt
-		} else if lcm.e2eAllowAwaitContinue && strings.EqualFold(msg, "continue") {
-			close(lcm.e2eContinueChannel)
-		} else if lcm.e2eAllowAwaitOpen && strings.EqualFold(msg, "open") {
-			close(lcm.e2eAllowOpenChannel)
-		} else {
-			lcm.inputQueue <- userInput{timeReceived: timeReceived, content: msg}
+		case EInputMsgType.E2EInterrupts():
+			if lcm.e2eAllowAwaitContinue && strings.EqualFold(msg.Value, "continue") {
+				close(lcm.e2eContinueChannel)
+			} else if lcm.e2eAllowAwaitOpen && strings.EqualFold(msg.Value, "open") {
+				close(lcm.e2eAllowOpenChannel)
+			}
+		default:
+			lcm.msgHandlerChannel <- msg
+			
 		}
 	}
 }
@@ -240,6 +267,9 @@ func (lcm *lifecycleMgr) Info(msg string) {
 }
 
 func (lcm *lifecycleMgr) Prompt(message string, details PromptDetails) ResponseOption {
+	// Request watchInputs to wait for response from user
+	lcm.waitForUserResponse <- true
+
 	expectedInputChannel := make(chan string, 1)
 	lcm.msgQueue <- outputMessage{
 		msgContent:    message,
@@ -578,7 +608,7 @@ func (lcm *lifecycleMgr) E2EEnableAwaitAllowOpenFiles(enable bool) {
 
 // Fetching `AZCOPY_DISABLE_SYSLOG` from the environment variables and
 // setting `disableSyslog` flag in LifeCycleManager to avoid Env Vars Lookup redundantly
-func (lcm *lifecycleMgr) SetForceLogging() {
+	func (lcm *lifecycleMgr) SetForceLogging() {
 	disableSyslog, err := strconv.ParseBool(lcm.GetEnvironmentVariable(EEnvironmentVariable.DisableSyslog()))
 	if err != nil {
 		// By default, we'll retain the current behaviour. i.e. To log in Syslog/WindowsEventLog if not specified by the user
@@ -598,6 +628,10 @@ func (lcm *lifecycleMgr) DownloadToTempPath() bool {
 		ret = true
 	}
 	return ret
+}
+
+func (lcm *lifecycleMgr) MsgHandlerChannel() <-chan LcmMsgType {
+	return lcm.msgHandlerChannel
 }
 
 // captures the common logic of exiting if there's an expected error
