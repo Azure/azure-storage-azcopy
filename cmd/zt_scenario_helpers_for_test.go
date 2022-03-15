@@ -881,7 +881,7 @@ func getDefaultCopyRawInput(src string, dst string) rawCopyCmdArgs {
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
 		forceWrite:                     common.EOverwriteOption.True().String(),
 		preserveOwner:                  common.PreserveOwnerDefault,
-		asSubdir: true,
+		asSubdir:                       true,
 	}
 }
 
@@ -901,6 +901,31 @@ func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 		logVerbosity:                   defaultLogVerbosityForSync,
 		blobType:                       common.EBlobType.Detect().String(),
 		blockBlobTier:                  common.EBlockBlobTier.None().String(),
+		pageBlobTier:                   common.EPageBlobTier.None().String(),
+		md5ValidationOption:            common.DefaultHashValidationOption.String(),
+		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
+		forceWrite:                     common.EOverwriteOption.True().String(),
+		preserveOwner:                  common.PreserveOwnerDefault,
+		includeDirectoryStubs:          true,
+	}
+}
+
+func getDefaultSetPropertiesRawInput(src string, accessTier common.BlockBlobTier) rawCopyCmdArgs {
+	fromTo := common.EFromTo.BlobNone()
+	srcURL, _ := url.Parse(src)
+
+	if strings.Contains(srcURL.Host, "file") {
+		fromTo = common.EFromTo.FileNone()
+	} //else if strings.Contains(srcURL.Host, "dfs") {
+	//	fromTo = common.EFromTo.BlobFSTrash()
+	//}
+
+	return rawCopyCmdArgs{
+		src:                            src,
+		fromTo:                         fromTo.String(),
+		logVerbosity:                   defaultLogVerbosityForSync,
+		blobType:                       common.EBlobType.Detect().String(),
+		blockBlobTier:                  accessTier.String(),
 		pageBlobTier:                   common.EPageBlobTier.None().String(),
 		md5ValidationOption:            common.DefaultHashValidationOption.String(),
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
