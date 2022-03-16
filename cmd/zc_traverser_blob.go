@@ -376,9 +376,10 @@ func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 		containerName,
 	)
 
-	object.blobSnapshotID = blobInfo.Snapshot
 	object.blobDeleted = blobInfo.Deleted
-	if blobInfo.VersionID != nil {
+	if t.includeDeleted && t.includeSnapshot {
+		object.blobSnapshotID = blobInfo.Snapshot
+	} else if t.includeDeleted && t.includeVersion && blobInfo.VersionID != nil {
 		object.blobVersionID = *blobInfo.VersionID
 	}
 	return object
