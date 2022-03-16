@@ -24,7 +24,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
@@ -448,11 +447,6 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 }
 
 func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool) (t *blobTraverser) {
-	if strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning())) == "false" &&
-		includeDeleted && (includeSnapshot || includeVersion) {
-		os.Setenv("AZCOPY_DISABLE_HIERARCHICAL_SCAN", "true")
-		fmt.Println("AZCOPY_DISABLE_HIERARCHICAL_SCAN has been set to true to permanently delete soft-deleted snapshots/versions.")
-	}
 	t = &blobTraverser{
 		rawURL:                      rawURL,
 		p:                           p,
@@ -468,7 +462,15 @@ func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 		includeVersion:              includeVersion,
 	}
 
-	if strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning())) == "true" {
+	disableHierarchicalScanning := strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))
+
+	// disableHierarchicalScanning should be true for permanent delete
+	if (disableHierarchicalScanning == "false" || disableHierarchicalScanning == "") && includeDeleted && (includeSnapshot || includeVersion) {
+		t.parallelListing = false
+		fmt.Println("AZCOPY_DISABLE_HIERARCHICAL_SCAN has been set to true to permanently delete soft-deleted snapshots/versions.")
+	}
+
+	if disableHierarchicalScanning == "true" {
 		// TODO log to frontend log that parallel listing was disabled, once the frontend log PR is merged
 		t.parallelListing = false
 	}
