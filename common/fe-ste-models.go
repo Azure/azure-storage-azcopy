@@ -452,6 +452,9 @@ func (Location) S3() Location        { return Location(6) }
 func (Location) Benchmark() Location { return Location(7) }
 func (Location) GCP() Location       { return Location(8) }
 
+// None is used in case we're transferring properties
+func (Location) None() Location { return Location(9) }
+
 func (l Location) String() string {
 	return enum.StringInt(l, reflect.TypeOf(l))
 }
@@ -538,6 +541,9 @@ func (FromTo) BlobFile() FromTo    { return FromTo(fromToValue(ELocation.Blob(),
 func (FromTo) FileFile() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.File())) }
 func (FromTo) S3Blob() FromTo      { return FromTo(fromToValue(ELocation.S3(), ELocation.Blob())) }
 func (FromTo) GCPBlob() FromTo     { return FromTo(fromToValue(ELocation.GCP(), ELocation.Blob())) }
+func (FromTo) BlobNone() FromTo    { return fromToValue(ELocation.Blob(), ELocation.None()) }
+func (FromTo) BlobFSNone() FromTo  { return fromToValue(ELocation.BlobFS(), ELocation.None()) }
+func (FromTo) FileNone() FromTo    { return fromToValue(ELocation.File(), ELocation.None()) }
 
 // todo: to we really want these?  Starts to look like a bit of a combinatorial explosion
 func (FromTo) BenchmarkBlob() FromTo {
@@ -596,6 +602,10 @@ func (ft *FromTo) IsUpload() bool {
 
 func (ft *FromTo) AreBothFolderAware() bool {
 	return ft.From().IsFolderAware() && ft.To().IsFolderAware()
+}
+
+func (ft *FromTo) IsPropertyOnlyTransfer() bool {
+	return *ft == EFromTo.BlobNone() || *ft == EFromTo.BlobFSNone() || *ft == EFromTo.FileNone()
 }
 
 // TODO: deletes are not covered by the above Is* routines
