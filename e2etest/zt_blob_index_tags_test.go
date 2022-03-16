@@ -28,10 +28,17 @@ import (
 // ================================  Copy: Setting Tags ========================================================
 func TestTags_SetTagsSingleBlob(t *testing.T) {
 	blobTagsStr := "foo=bar&blah=bazz"
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), params{
-		recursive: true,
-		blobTags:  blobTagsStr,
-	}, nil, testFiles{
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.LocalBlob()),
+		eValidate.AutoPlusContent(),
+		allCredentialTypes,
+		allCredentialTypes,
+		params{
+			recursive: true,
+			blobTags:  blobTagsStr,
+	  }, nil, testFiles{
 		defaultSize: "1M",
 		shouldTransfer: []interface{}{
 			f("file1.txt", with{blobTags: blobTagsStr}),
@@ -40,10 +47,17 @@ func TestTags_SetTagsSingleBlob(t *testing.T) {
 }
 
 func TestTags_SetTagsSpecialCharactersSingleBlob(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), params{
-		recursive: true,
-		blobTags:  "bla_bla=foo%2b-foo&bla%2fbla%2f2=bar",
-	}, nil, testFiles{
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.LocalBlob()),
+		eValidate.AutoPlusContent(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive: true,
+			blobTags:  "bla_bla=foo%2b-foo&bla%2fbla%2f2=bar",
+	  }, nil, testFiles{
 		defaultSize: "1M",
 		shouldTransfer: []interface{}{
 			// folder("", ),
@@ -54,10 +68,17 @@ func TestTags_SetTagsSpecialCharactersSingleBlob(t *testing.T) {
 
 func TestTags_SetTagsMultipleBlobs(t *testing.T) {
 	blobTagsStr := "foo=bar&blah=bazz"
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), params{
-		recursive: true,
-		blobTags:  blobTagsStr,
-	}, nil, testFiles{
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.LocalBlob()),
+		eValidate.AutoPlusContent(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive: true,
+			blobTags:  blobTagsStr,
+	  }, nil, testFiles{
 		defaultSize: "1M",
 		shouldTransfer: []interface{}{
 			folder(""),
@@ -70,10 +91,17 @@ func TestTags_SetTagsMultipleBlobs(t *testing.T) {
 
 // ================================  Copy: Preserve Tags ========================================================
 func TestTags_PreserveTagsSingleBlob(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
-		recursive:           true,
-		s2sPreserveBlobTags: true,
-	}, nil, testFiles{
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.BlobBlob()),
+		eValidate.AutoPlusContent(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive:           true,
+			s2sPreserveBlobTags: true,
+	  }, nil, testFiles{
 		defaultSize: "1M",
 		shouldTransfer: []interface{}{
 			// folder("", ),
@@ -84,10 +112,17 @@ func TestTags_PreserveTagsSingleBlob(t *testing.T) {
 }
 
 func TestTags_PreserveTagsSpecialCharactersSingleBlob(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
-		recursive:           true,
-		s2sPreserveBlobTags: true,
-	}, nil, testFiles{
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.BlobBlob()),
+		eValidate.AutoPlusContent(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive:           true,
+			s2sPreserveBlobTags: true,
+	  }, nil, testFiles{
 		defaultSize: "1M",
 		shouldTransfer: []interface{}{
 			// folder("", ),
@@ -97,9 +132,16 @@ func TestTags_PreserveTagsSpecialCharactersSingleBlob(t *testing.T) {
 }
 
 func TestTags_PreserveTagsMultipleBlobs(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
-		recursive:           true,
-		s2sPreserveBlobTags: true,
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.BlobBlob()),
+		eValidate.AutoPlusContent(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive:           true,
+			s2sPreserveBlobTags: true,
 	}, nil, testFiles{
 		defaultSize: "1M",
 		shouldTransfer: []interface{}{
@@ -112,10 +154,17 @@ func TestTags_PreserveTagsMultipleBlobs(t *testing.T) {
 }
 
 func TestTags_PreserveTagsSpecialCharactersMultipleBlobs(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
-		recursive:           true,
-		s2sPreserveBlobTags: true,
-	}, nil, testFiles{
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.BlobBlob()),
+		eValidate.AutoPlusContent(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive:           true,
+			s2sPreserveBlobTags: true,
+	  }, nil, testFiles{
 		defaultSize: "1M",
 		shouldTransfer: []interface{}{
 			folder(""),
@@ -128,10 +177,17 @@ func TestTags_PreserveTagsSpecialCharactersMultipleBlobs(t *testing.T) {
 
 // ================================  Sync: Preserve Tags ========================================================
 func TestTags_PreserveTagsSpecialCharactersDuringSync(t *testing.T) {
-	RunScenarios(t, eOperation.Sync(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
-		recursive:           true,
-		s2sPreserveBlobTags: true,
-	}, nil, testFiles{
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.BlobBlob()),
+		eValidate.AutoPlusContent(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive:           true,
+			s2sPreserveBlobTags: true,
+	  }, nil, testFiles{
 		defaultSize: "1M",
 		shouldTransfer: []interface{}{
 			folder(""),
