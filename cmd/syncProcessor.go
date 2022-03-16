@@ -38,11 +38,6 @@ import (
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
 func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption) *copyTransferProcessor {
-	preserveLastModifiedTime := true // must be true for sync so that future syncs have this information available
-	if !cca.preserveSMBInfo {
-		preserveLastModifiedTime = false
-	}
-
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:           cca.jobID,
 		CommandString:   cca.commandString,
@@ -54,7 +49,7 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 
 		// flags
 		BlobAttributes: common.BlobTransferAttributes{
-			PreserveLastModifiedTime: preserveLastModifiedTime,
+			PreserveLastModifiedTime: cca.preserveSMBInfo, // true by default; must be true for sync so that future syncs have this information available
 			PutMd5:                   cca.putMd5,
 			MD5ValidationOption:      cca.md5ValidationOption,
 			BlockSizeInBytes:         cca.blockSize},
