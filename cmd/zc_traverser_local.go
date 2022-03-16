@@ -307,7 +307,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 
 	if err != nil {
 		azcopyScanningLogger.Log(pipeline.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
-		return fmt.Errorf("cannot scan the path %s, please verify that it is a valid", t.fullPath)
+		return fmt.Errorf("failed to scan path %s due to %s", t.fullPath, err.Error())
 	}
 
 	// if the path is a single file, then pass it through the filters and send to processor
