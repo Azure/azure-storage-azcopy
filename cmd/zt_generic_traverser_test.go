@@ -111,7 +111,7 @@ func (s *genericTraverserSuite) TestFilesGetProperties(c *chk.C) {
 }
 
 func (s *genericTraverserSuite) TestS3GetProperties(c *chk.C) {
-	//skipIfS3Disabled(c)
+	skipIfS3Disabled(c)
 	client, err := createS3ClientWithMinio(createS3ResOptions{})
 
 	if err != nil {
