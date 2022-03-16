@@ -723,7 +723,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDirWithFromTo(c *chk.C)
 func (s *cmdIntegrationSuite) TestPermDeleteSnapshotsVersionsUnderSingleBlob(c *chk.C) {
 	serviceURL := setUpAccountPermDelete(c)
 	os.Setenv("AZCOPY_DISABLE_HIERARCHICAL_SCAN", "true")
-	
+
 	time.Sleep(time.Second * 10)
 
 	// set up the container with numerous blobs
