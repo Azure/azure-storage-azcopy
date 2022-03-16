@@ -451,7 +451,9 @@ func (Location) BlobFS() Location    { return Location(5) }
 func (Location) S3() Location        { return Location(6) }
 func (Location) Benchmark() Location { return Location(7) }
 func (Location) GCP() Location       { return Location(8) }
-func (Location) None() Location      { return Location(9) }
+
+// None is used in case we're transferring properties
+func (Location) None() Location { return Location(9) }
 
 func (l Location) String() string {
 	return enum.StringInt(l, reflect.TypeOf(l))
@@ -480,7 +482,7 @@ func (l Location) IsRemote() bool {
 	switch l {
 	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3(), ELocation.GCP():
 		return true
-	case ELocation.Local(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown(), ELocation.None():
+	case ELocation.Local(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
 		return false
 	default:
 		panic("unexpected location, please specify if it is remote")
@@ -501,7 +503,7 @@ func (l Location) IsFolderAware() bool {
 	switch l {
 	case ELocation.BlobFS(), ELocation.File(), ELocation.Local():
 		return true
-	case ELocation.Blob(), ELocation.S3(), ELocation.GCP(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown(), ELocation.None():
+	case ELocation.Blob(), ELocation.S3(), ELocation.GCP(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
 		return false
 	default:
 		panic("unexpected location, please specify if it is folder-aware")
@@ -539,8 +541,9 @@ func (FromTo) BlobFile() FromTo    { return FromTo(fromToValue(ELocation.Blob(),
 func (FromTo) FileFile() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.File())) }
 func (FromTo) S3Blob() FromTo      { return FromTo(fromToValue(ELocation.S3(), ELocation.Blob())) }
 func (FromTo) GCPBlob() FromTo     { return FromTo(fromToValue(ELocation.GCP(), ELocation.Blob())) }
-func (FromTo) BlobNone() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.None())) }
-func (FromTo) BlobFSNone() FromTo  { return FromTo(fromToValue(ELocation.BlobFS(), ELocation.None())) }
+func (FromTo) BlobNone() FromTo    { return fromToValue(ELocation.Blob(), ELocation.None()) }
+func (FromTo) BlobFSNone() FromTo  { return fromToValue(ELocation.BlobFS(), ELocation.None()) }
+func (FromTo) FileNone() FromTo    { return fromToValue(ELocation.File(), ELocation.None()) }
 
 // todo: to we really want these?  Starts to look like a bit of a combinatorial explosion
 func (FromTo) BenchmarkBlob() FromTo {
@@ -599,6 +602,10 @@ func (ft *FromTo) IsUpload() bool {
 
 func (ft *FromTo) AreBothFolderAware() bool {
 	return ft.From().IsFolderAware() && ft.To().IsFolderAware()
+}
+
+func (ft *FromTo) IsPropertyOnlyTransfer() bool {
+	return *ft == EFromTo.BlobNone() || *ft == EFromTo.BlobFSNone() || *ft == EFromTo.FileNone()
 }
 
 // TODO: deletes are not covered by the above Is* routines
