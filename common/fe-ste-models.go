@@ -540,7 +540,7 @@ func (FromTo) FileFile() FromTo    { return FromTo(fromToValue(ELocation.File(),
 func (FromTo) S3Blob() FromTo      { return FromTo(fromToValue(ELocation.S3(), ELocation.Blob())) }
 func (FromTo) GCPBlob() FromTo     { return FromTo(fromToValue(ELocation.GCP(), ELocation.Blob())) }
 func (FromTo) BlobNone() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.None())) }
-func (FromTo) FileNone() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.None())) }
+func (FromTo) BlobFSNone() FromTo  { return FromTo(fromToValue(ELocation.BlobFS(), ELocation.None())) }
 
 // todo: to we really want these?  Starts to look like a bit of a combinatorial explosion
 func (FromTo) BenchmarkBlob() FromTo {
@@ -1499,17 +1499,15 @@ func GetClientProvidedKey(options CpkOptions) azblob.ClientProvidedKeyOptions {
 	return ToClientProvidedKeyOptions(_cpkInfo, _cpkScopeInfo)
 }
 
-
 ////////////////////////////////////////////////////////////////
 type LCMMsgType uint16
 
 var ELCMMsgType LCMMsgType
 
-func(LCMMsgType) Invalid()                                LCMMsgType {return LCMMsgType(0)}
-func(LCMMsgType) CancelJob()                              LCMMsgType {return LCMMsgType(1)}
-func(LCMMsgType) E2EInterrupts()                          LCMMsgType {return LCMMsgType(2)}
-func(LCMMsgType) PerformanceAdjustment()                  LCMMsgType {return LCMMsgType(3)}
-
+func (LCMMsgType) Invalid() LCMMsgType               { return LCMMsgType(0) }
+func (LCMMsgType) CancelJob() LCMMsgType             { return LCMMsgType(1) }
+func (LCMMsgType) E2EInterrupts() LCMMsgType         { return LCMMsgType(2) }
+func (LCMMsgType) PerformanceAdjustment() LCMMsgType { return LCMMsgType(3) }
 
 func (m *LCMMsgType) Parse(s string) error {
 	val, err := enum.Parse(reflect.TypeOf(m), s, true)
