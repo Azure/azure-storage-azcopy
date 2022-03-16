@@ -914,11 +914,9 @@ func getDefaultSetPropertiesRawInput(src string, accessTier common.BlockBlobTier
 	fromTo := common.EFromTo.BlobNone()
 	srcURL, _ := url.Parse(src)
 
-	if strings.Contains(srcURL.Host, "file") {
-		fromTo = common.EFromTo.FileNone()
-	} //else if strings.Contains(srcURL.Host, "dfs") {
-	//	fromTo = common.EFromTo.BlobFSTrash()
-	//}
+	if strings.Contains(srcURL.Host, "dfs") {
+		fromTo = common.EFromTo.BlobFSNone()
+	}
 
 	return rawCopyCmdArgs{
 		src:                            src,

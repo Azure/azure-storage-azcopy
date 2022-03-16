@@ -540,7 +540,7 @@ func (FromTo) FileFile() FromTo    { return FromTo(fromToValue(ELocation.File(),
 func (FromTo) S3Blob() FromTo      { return FromTo(fromToValue(ELocation.S3(), ELocation.Blob())) }
 func (FromTo) GCPBlob() FromTo     { return FromTo(fromToValue(ELocation.GCP(), ELocation.Blob())) }
 func (FromTo) BlobNone() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.None())) }
-func (FromTo) FileNone() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.None())) }
+func (FromTo) BlobFSNone() FromTo  { return FromTo(fromToValue(ELocation.BlobFS(), ELocation.None())) }
 
 // todo: to we really want these?  Starts to look like a bit of a combinatorial explosion
 func (FromTo) BenchmarkBlob() FromTo {

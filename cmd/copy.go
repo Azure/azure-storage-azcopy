@@ -1443,7 +1443,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// 	e := copyFileToNEnumerator(jobPartOrder)
 	// 	err = e.enumerate(cca)
 
-	case common.EFromTo.BlobNone(), common.EFromTo.FileNone():
+	case common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone():
 		e, createErr := setPropertiesEnumerator(cca)
 		if createErr != nil {
 			return createErr

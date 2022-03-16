@@ -52,11 +52,8 @@ func init() {
 				switch srcLocationType {
 				case common.ELocation.Blob():
 					raw.fromTo = common.EFromTo.BlobNone().String()
-				case common.ELocation.File():
-					// TODO: return problem if blockBlobTier is not none (files have no tier)
-					raw.fromTo = common.EFromTo.FileNone().String()
-				//case common.ELocation.BlobFS():
-				//	raw.fromTo = common.EFromTo.BlobFSTrash().String()
+				case common.ELocation.BlobFS():
+					raw.fromTo = common.EFromTo.BlobFSTrash().String()
 				default:
 					return fmt.Errorf("invalid source type %s to delete. azcopy support removing blobs/files/adls gen2", srcLocationType.String())
 				}
