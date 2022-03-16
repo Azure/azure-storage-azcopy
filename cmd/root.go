@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -227,11 +228,7 @@ func beginDetectNewVersion() chan struct{} {
 		}
 
 		// Step 1: Fetch & validate the cached version and if it is updated, we'll return without making REST call.
-		versionFileName := "/latest_version.txt"
-		if runtime.GOOS == "windows" {
-			versionFileName = "\\latest_version.txt"
-		}
-		filePath := azcopyAppPathFolder + versionFileName
+		filePath := filepath.Join(azcopyAppPathFolder, "latest_version.txt")
 		v2, err := ValidateCachedVersion(filePath)
 		if err == nil {
 			if v1.OlderThan(*v2) {
