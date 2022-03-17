@@ -539,9 +539,10 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 				doCancel()
 				continue // to exit on next pass through loop
 			case <-lcm.doneChannel:
+				
 					newCount = jc.ReportProgressOrExit(lcm)
 					lastFetchTime = time.Now()
-			default:
+			case <- time.After(wait):
 				if time.Since(lastFetchTime) >= wait {
 					newCount = jc.ReportProgressOrExit(lcm)
 					lastFetchTime = time.Now()
