@@ -115,17 +115,12 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 
 	maxRamBytesToUse := getMaxRamForChunks()
 
-	// default to a pacer that doesn't actually control the rate
-	// (it just records total throughput, since for historical reasons we do that in the pacer)
-	var pacer ste.PacerAdmin = ste.NewNullAutoPacer()
-	if targetRateInMegaBitsPerSec > 0 {
-		// use the "networking mega" (based on powers of 10, not powers of 2, since that's what mega means in networking context)
-		targetRateInBytesPerSec := int64(targetRateInMegaBitsPerSec * 1000 * 1000 / 8)
-		unusedExpectedCoarseRequestByteCount := int64(0)
-		pacer = ste.NewTokenBucketPacer(targetRateInBytesPerSec, unusedExpectedCoarseRequestByteCount)
-		// Note: as at July 2019, we don't currently have a shutdown method/event on JobsAdmin where this pacer
-		// could be shut down. But, it's global anyway, so we just leave it running until application exit.
-	}
+	// use the "networking mega" (based on powers of 10, not powers of 2, since that's what mega means in networking context)
+	targetRateInBytesPerSec := int64(targetRateInMegaBitsPerSec * 1000 * 1000 / 8)
+	unusedExpectedCoarseRequestByteCount := int64(0)
+	pacer := ste.NewTokenBucketPacer(targetRateInBytesPerSec, unusedExpectedCoarseRequestByteCount)
+	// Note: as at July 2019, we don't currently have a shutdown method/event on JobsAdmin where this pacer
+	// could be shut down. But, it's global anyway, so we just leave it running until application exit.
 
 	ja := &jobsAdmin{
 		concurrency:             concurrency,
@@ -510,8 +505,8 @@ func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint3
 }
 
 func (ja *jobsAdmin) messageHandler(inputChan <-chan common.LcmMsgType) {
-	toBytes := func(mb int64) int64 {
-		return mb * 1024 * 1024
+	toBitsPerSec := func(megaBitsPerSec int64) int64 {
+		return megaBitsPerSec * 1000 * 1000 / 8
 	}
 	for {
 		msg := <-inputChan
@@ -522,7 +517,7 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan common.LcmMsgType) {
 			if err != nil {
 				continue;
 			}
-			ja.UpdateTargetBandwidth(toBytes(int64(newVal)))
+			ja.UpdateTargetBandwidth(toBitsPerSec(int64(newVal)))
 		default:
 		}
 

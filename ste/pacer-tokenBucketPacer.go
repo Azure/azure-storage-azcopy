@@ -80,6 +80,7 @@ func NewTokenBucketPacer(bytesPerSecond int64, expectedBytesPerCoarseRequest int
 		atomicTargetBytesPerSecond: bytesPerSecond,
 		expectedBytesPerRequest:    int64(expectedBytesPerCoarseRequest),
 		done:                       make(chan struct{}),
+		newTargetBytesPerSecond:    make(chan int64),
 	}
 
 	go p.pacerBody()
@@ -90,6 +91,11 @@ func NewTokenBucketPacer(bytesPerSecond int64, expectedBytesPerCoarseRequest int
 // RequestTrafficAllocation function is called by goroutines to request right to send a certain amount of bytes.
 // It controls their rate by blocking until they are allowed to proceed
 func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCount int64) error {
+	//if targetBytesIsZero, we have a null pacer, we just track GrandTotal
+	if p.targetBytesPerSecond() == 0 {
+		atomic.AddInt64(&p.atomicGrandTotal, byteCount)
+		return nil
+	}
 
 	// block until tokens are available
 	for atomic.AddInt64(&p.atomicTokenBucket, -byteCount) < 0 {
