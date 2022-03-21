@@ -101,7 +101,7 @@ jobs:
           set -e
           GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
           export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
-          go test -timeout 30m -race -short -cover ./e2etest
+          go test -timeout 60m -race -short -cover ./e2etest
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
@@ -122,7 +122,7 @@ jobs:
           go build -o $(System.DefaultWorkingDirectory)/azcopy_windows_amd64.exe
           go build -o $(System.DefaultWorkingDirectory)/azcopy_windows_386.exe
           echo 'starting E2E tests on windows'
-          go test -timeout 30m -race -cover -v ./e2etest
+          go test -timeout 60m -race -cover -v ./e2etest
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
@@ -145,7 +145,7 @@ jobs:
           go build -o azcopy_darwin_amd64
           echo 'starting E2E tests on mac-os'
           export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_darwin_amd64
-          go test -timeout 30m -race -cover -v ./e2etest
+          go test -timeout 60m -race -cover -v ./e2etest
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
@@ -196,7 +196,7 @@ jobs:
           # the set -e line is needed so that the unit tests failure would cause the job to fail properly
           # "-check.v" (must be after package list) outputs timings
           set -e
-          go test -timeout 45m -race -short -cover ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v"
+          go test -timeout 60m -race -short -cover ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v"
           GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
         name: 'Run_unit_tests'
         env:
