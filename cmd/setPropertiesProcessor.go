@@ -33,8 +33,15 @@ func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPar
 		ForceIfReadOnly: cca.ForceIfReadOnly,
 
 		// flags
-		LogLevel:       cca.LogVerbosity,
-		BlobAttributes: common.BlobTransferAttributes{DeleteSnapshotsOption: cca.deleteSnapshotsOption, PermanentDeleteOption: cca.permanentDeleteOption},
+		LogLevel: cca.LogVerbosity,
+		BlobAttributes: common.BlobTransferAttributes{
+			DeleteSnapshotsOption: cca.deleteSnapshotsOption,
+			PermanentDeleteOption: cca.permanentDeleteOption,
+			BlockBlobTier:         cca.blockBlobTier,
+			PageBlobTier:          cca.pageBlobTier,
+		},
+		// TODO add ALL other values from BlobTransferAttributes
+		// TODO add a flag in front end to distinguish which property we're transfering and all the tags related to it
 	}
 
 	reportFirstPart := func(jobStarted bool) {
