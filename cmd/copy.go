@@ -928,10 +928,11 @@ func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
 
 func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 	// preserverSMBInfo will be true by default for SMB-aware locations unless specified false.
-	// 1. Upload (Windows -> Azure File)
-	// 2. Download (Azure File -> Windows)
+	// 1. Upload (Windows/Linux -> Azure File)
+	// 2. Download (Azure File -> Windows/Linux)
 	// 3. S2S (Azure File -> Azure File)
-	if runtime.GOOS == "windows" && (fromTo == common.EFromTo.LocalFile() || fromTo == common.EFromTo.FileLocal()) {
+	if (runtime.GOOS == "windows" || runtime.GOOS == "linux") &&
+		(fromTo == common.EFromTo.LocalFile() || fromTo == common.EFromTo.FileLocal()) {
 		return true
 	} else if fromTo == common.EFromTo.FileFile() {
 		return true
@@ -956,8 +957,9 @@ func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, ov
 		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.IffString(flagName == PreservePermissionsFlag, "permission", "SMB"))
 	}
 
-	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) && runtime.GOOS != "windows" {
-		return fmt.Errorf("%s is set but persistence for up/downloads is a Windows-only feature", flagName)
+	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) &&
+		runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+		return fmt.Errorf("%s is set but persistence for up/downloads is supported only in Windows and Linux", flagName)
 	}
 
 	return nil

@@ -14,6 +14,8 @@ require (
 	github.com/mattn/go-ieproxy v0.0.3
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/pkg/errors v0.9.1
+	github.com/pkg/xattr v0.4.6
+	github.com/rogpeppe/go-internal v1.8.1 // indirect
 	github.com/spf13/cobra v1.4.0
 	github.com/wastore/keychain v0.0.0-20180920053336-f2c902a3d807
 	github.com/wastore/keyctl v0.3.1
