@@ -14,8 +14,21 @@ import (
 
 //var explainedSkippedRemoveOnce sync.Once
 
+func getTierString(tier common.BlockBlobTier) azblob.AccessTierType {
+	tier_string := azblob.AccessTierNone
+	switch tier {
+	case common.EBlockBlobTier.Hot():
+		tier_string = azblob.AccessTierHot
+	case common.EBlockBlobTier.Cool():
+		tier_string = azblob.AccessTierCool
+	case common.EBlockBlobTier.Archive():
+		tier_string = azblob.AccessTierArchive
+	default:
+		panic("invalid tier type")
+	}
+	return tier_string
+}
 func SetProperties(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
-
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytes transferred by the size of the source.
 	if jptm.WasCanceled() {
 		jptm.ReportTransferDone()
@@ -25,7 +38,7 @@ func SetProperties(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 	// schedule the work as a chunk, so it will run on the main goroutine pool, instead of the
 	// smaller "transfer initiation pool", where this code runs.
 	id := common.NewChunkID(jptm.Info().Source, 0, 0)
-	cf := createChunkFunc(true, jptm, id, func() {
+	cf := createChunkFunc(true, jptm, id, func() { //TODO t-iverma should done status be set? The job is async
 		to := jptm.FromTo()
 		switch to.From() {
 		case common.ELocation.Blob():
@@ -43,12 +56,12 @@ func SetProperties(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 
 func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	info := jptm.Info()
-	// Get the source blob url of blob to delete
+	// Get the source blob url of blob to set properties on
 	u, _ := url.Parse(info.Source)
 	srcBlobURL := azblob.NewBlobURL(*u, p)
 
 	// Internal function which checks the transfer status and logs the msg respectively.
-	// Sets the transfer status and Report Transfer as Done.
+	// Sets the transfer status and Reports Transfer as Done.
 	// Internal function is created to avoid redundancy of the above steps from several places in the api.
 	transferDone := func(status common.TransferStatus, err error) {
 		if status == common.ETransferStatus.Failed() {
@@ -60,11 +73,17 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		jptm.SetStatus(status)
 		jptm.ReportTransferDone()
 	}
+	//_, err := srcBlobURL.SetMetadata(jptm.Context(), info.SrcMetadata.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+	//TODO t-iverma so we're using this function and not the settier api? -> Changed
 
-	_, err := srcBlobURL.SetMetadata(jptm.Context(), info.SrcMetadata.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+	block_blob_tier, _ := jptm.BlobTiers()
+	set_to_tier := getTierString(block_blob_tier)
+
+	_, err := srcBlobURL.SetTier(jptm.Context(), set_to_tier, azblob.LeaseAccessConditions{})
+	//todo add more options like priority etc.
 	if err != nil {
 		if strErr, ok := err.(azblob.StorageError); ok {
-			// TODO: Do we need to add more conditions?
+			// TODO: Do we need to add more conditions? Won't happen on some snapshots and versions. Check documentation
 
 			// If the status code was 403, it means there was an authentication error, and we exit.
 			// User can resume the job if completely ordered with a new sas.

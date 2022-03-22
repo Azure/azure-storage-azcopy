@@ -482,7 +482,7 @@ func (l Location) IsRemote() bool {
 	switch l {
 	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3(), ELocation.GCP():
 		return true
-	case ELocation.Local(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
+	case ELocation.Local(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown(), ELocation.None():
 		return false
 	default:
 		panic("unexpected location, please specify if it is remote")

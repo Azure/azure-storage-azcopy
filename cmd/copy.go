@@ -872,7 +872,7 @@ func (raw *rawCopyCmdArgs) warnIfHasWildcard(oncer *sync.Once, paramName string,
 // else parsing the arguments will fail.
 func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
 	raw.blobType = common.EBlobType.Detect().String()
-	raw.blockBlobTier = common.EBlockBlobTier.None().String()
+	//raw.blockBlobTier = common.EBlockBlobTier.None().String()
 	raw.pageBlobTier = common.EPageBlobTier.None().String()
 	raw.md5ValidationOption = common.DefaultHashValidationOption.String()
 	raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
