@@ -31,7 +31,7 @@ import (
 
 //////////////////////////////////////////
 type sysLogger struct {
-	// maximum loglevel represents the maximum severity of log messages which can be logged to Job Log file.
+	// minimum loglevel represents the minimum severity of log messages which can be logged to Job Log file.
 	// any message with severity higher than this will be ignored.
 	jobID             JobID
 	minimumLevelToLog pipeline.LogLevel // The maximum customer-desired log level for this job
@@ -51,15 +51,18 @@ func NewSysLogger(jobID JobID, minimumLevelToLog LogLevel, logSuffix string) ILo
 }
 
 func (sl *sysLogger) OpenLog() {
-    writer, err := syslog.New(syslog.LOG_NOTICE, fmt.Sprintf("%s %s", sl.logSuffix, sl.jobID.String()))
-    PanicIfErr(err)
+	if sl.minimumLevelToLog == pipeline.LogNone {
+		return
+	    }
+	writer, err := syslog.New(syslog.LOG_NOTICE, fmt.Sprintf("%s %s", sl.logSuffix, sl.jobID.String()))
+	PanicIfErr(err)
 
-    sl.writer = writer
-    // Log the Azcopy Version
-    sl.writer.Notice("AzcopyVersion " + AzcopyVersion)
-    // Log the OS Environment and OS Architecture
-    sl.writer.Notice("OS-Environment " + runtime.GOOS)
-    sl.writer.Notice("OS-Architecture " + runtime.GOARCH)
+	sl.writer = writer
+	// Log the Azcopy Version
+	sl.writer.Notice("AzcopyVersion " + AzcopyVersion)
+	// Log the OS Environment and OS Architecture
+	sl.writer.Notice("OS-Environment " + runtime.GOOS)
+	sl.writer.Notice("OS-Architecture " + runtime.GOARCH)
 }
 
 func (sl *sysLogger) MinimumLogLevel() pipeline.LogLevel {
