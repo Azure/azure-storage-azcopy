@@ -180,7 +180,7 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 			CredentialInfo: order.CredentialInfo,
 		})
 	// Supply no plan MMF because we don't have one, and AddJobPart will create one on its own.
-	jm.AddJobPart(order.PartNum, jppfn, nil, order.SourceRoot.SAS, order.DestinationRoot.SAS, true) // Add this part to the Job and schedule its transfers
+	jm.AddJobPart(order.PartNum, jppfn, nil, order.SourceRoot.SAS, order.DestinationRoot.SAS, true, nil) // Add this part to the Job and schedule its transfers
 
 	// Update jobPart Status with the status Manager
 	jm.SendJobPartCreatedMsg(ste.JobPartCreatedMsg{TotalTransfers: uint32(len(order.Transfers.List)),

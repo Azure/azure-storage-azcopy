@@ -6,7 +6,6 @@ import (
 	"math"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -100,7 +99,8 @@ func main1() {
 	 jppfn := ste.JobPartPlanFileName(fmt.Sprintf(ste.JobPartPlanFileNameFormat, jobID.String(), 0, ste.DataSchemaVersion))	 
 	 jppfn.Create(order)                                                                  // Convert the order to a plan file
 
-	jm.AddJobPart(order.PartNum, jppfn, nil, order.SourceRoot.SAS, order.DestinationRoot.SAS, true) 
+	waitToComplete := make(chan struct{})
+	jm.AddJobPart(order.PartNum, jppfn, nil, order.SourceRoot.SAS, order.DestinationRoot.SAS, true, waitToComplete) 
 
 	// Update jobPart Status with the status Manager
 	jm.SendJobPartCreatedMsg(ste.JobPartCreatedMsg{TotalTransfers: uint32(len(order.Transfers.List)),
@@ -109,11 +109,5 @@ func main1() {
 		FileTransfers:        order.Transfers.FileTransferCount,
 		FolderTransfer:       order.Transfers.FolderTransferCount})
 
-	jobDone := false
-	for !jobDone {
-		part0,_ := jm.JobPartMgr(0)
-		part0plan := part0.Plan().JobStatus()
-		jobDone = part0plan.IsJobDone()
-		time.Sleep(time.Second * 2)
-	}
+	<-waitToComplete
 }
