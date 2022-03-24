@@ -186,7 +186,7 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 	sdStr, err := sddl.SecurityDescriptorToString(sd)
 	if err != nil {
 		// Panic, as it's unexpected and we would want to know.
-		panic("Cannot parse binary Security Descriptor returned by QuerySecurityObject")
+		panic(fmt.Errorf("Cannot parse binary Security Descriptor returned by QuerySecurityObject(%s, 0x%x): %v", f.jptm.Info().Source, securityInfoFlags, err))
 	}
 
 	fSDDL, err := sddl.ParseSDDL(sdStr)

@@ -45,9 +45,11 @@ import (
  *       Are they used for filesystem objects?
  */
 const (
-	SDDL_REVISION = 1 // SDDL Revision MUST always be 1.
-	SID_REVISION  = 1 // SID Revision MUST always be 1.
-	ACL_REVISION  = 2 // Higher ACL revisions support stuff like Object ACE.
+	SDDL_REVISION   = 1 // SDDL Revision MUST always be 1.
+	SID_REVISION    = 1 // SID Revision MUST always be 1.
+	ACL_REVISION    = 2 // ACL revision for support basic ACE type used for filesystem ACLs.
+	ACL_REVISION_DS = 4 // ACL revision for supporting stuff like Object ACE. This should ideally not be used with the ACE
+	// types we support, but I've seen some objects like that.
 )
 
 type SECURITY_INFORMATION uint32
@@ -856,12 +858,16 @@ func aceRightsToString(aceRights uint32) string {
 	}
 
 	// Use stringified rights only if *all* available rights can be represented with a shorthand name.
+	// The else part is commented as it's being hit too often. One such common aceRights value is 0x1200a9.
 	if allRights == aceRights {
 		return aceRightsString
-	} else if allRights != 0 {
-		fmt.Printf("aceRightsString: Only partial rights could be stringified (aceRights=0x%x, allRights=0x%x)",
-			aceRights, allRights)
 	}
+	/*
+		else if allRights != 0 {
+			fmt.Printf("aceRightsString: Only partial rights could be stringified (aceRights=0x%x, allRights=0x%x)",
+				aceRights, allRights)
+		}
+	*/
 
 	// Fallback to integral mask value.
 	return fmt.Sprintf("0x%x", aceRights)
@@ -1113,9 +1119,17 @@ func getDaclString(sd []byte) (string, error) {
 
 	// ACL.AclRevision.
 	aclRevision := sd[dacloffset]
-	if aclRevision != ACL_REVISION {
+
+	//
+	// Though we support only ACCESS_ALLOWED_ACE_TYPE and ACCESS_DENIED_ACE_TYPE which as per docs should be
+	// present with ACL revision 2, but I've seen some objects with these ACE types but acl revision 4.
+	// Instead of failing here, we let it proceed. Later isUnsupportedAceType() will catch unsupported ACE types.
+	//
+	// https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-dtyp/20233ed8-a6c6-4097-aafa-dd545ed24428
+	//
+	if aclRevision != ACL_REVISION && aclRevision != ACL_REVISION_DS {
 		// More importantly we don't support Object ACEs (ACL_REVISION_DS).
-		return "", fmt.Errorf("Unsupported ACL Revision (%d), supported revision is %d", aclRevision, ACL_REVISION)
+		return "", fmt.Errorf("Invalid ACL Revision (%d), valid values are 2 and 4.", aclRevision)
 	}
 
 	// ACL.AceCount.
