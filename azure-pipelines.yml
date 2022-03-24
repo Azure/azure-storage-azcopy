@@ -215,9 +215,6 @@ jobs:
           export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
           export TEST_DIRECTORY_PATH=$(pwd)/test-temp
 
-          # install the CLFSLoad extension
-          pip3 install clfsload
-
           keyctl session test python ./testSuite/scripts/run.py
         name: 'Run_smoke_tests'
         env:
