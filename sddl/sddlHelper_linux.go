@@ -589,6 +589,7 @@ var domainRidShortcuts = map[string]uint32{
 
 // Test whether sd refers to a valid Security Descriptor.
 // We do some basic validations of the SECURITY_DESCRIPTOR_RELATIVE header.
+// 'flags' is used to convey what all information does the caller want us to verify in the binary SD.
 func sdRelativeIsValid(sd []byte, flags SECURITY_INFORMATION) error {
 	if len(sd) < int(unsafe.Sizeof(SECURITY_DESCRIPTOR_RELATIVE{})) {
 		return fmt.Errorf("sd too small (%d bytes)", len(sd))
@@ -617,59 +618,32 @@ func sdRelativeIsValid(sd []byte, flags SECURITY_INFORMATION) error {
 		return fmt.Errorf("SE_SELF_RELATIVE control bit must be set (control=0x%x)", control)
 	}
 
-	// DACL must be present if DACL_SECURITY_INFORMATION is set, else not.
+	// Caller wants us to validate DACL information?
 	if (flags & DACL_SECURITY_INFORMATION) != 0 {
+		// SE_DACL_PRESENT bit MUST be *always* set.
 		if (control & SE_DACL_PRESENT) == 0 {
-			return fmt.Errorf("SE_DACL_PRESENT control bit must be set (control=0x%x)", control)
+			return fmt.Errorf("SE_DACL_PRESENT control bit must always be set (control=0x%x)", control)
 		}
 
-		// DACL must be present.
-		if offsetDacl == 0 {
-			return fmt.Errorf("offsetDacl must not be 0")
-		}
-
-		// OffsetDacl must point inside the relative Security Descriptor.
-		if offsetDacl+uint32(unsafe.Sizeof(ACL{})) > uint32(len(sd)) {
+		// offsetDacl may be 0 which would mean "No ACLs" aka "allow all users".
+		// If non-zero, OffsetDacl must point inside the relative Security Descriptor.
+		if offsetDacl != 0 && offsetDacl+uint32(unsafe.Sizeof(ACL{})) > uint32(len(sd)) {
 			return fmt.Errorf("DACL (offsetDacl=%d) must lie within sd (length=%d)", offsetDacl, len(sd))
 		}
-	} else {
-		if (control & SE_DACL_PRESENT) != 0 {
-			return fmt.Errorf("SE_DACL_PRESENT control bit must not be set (control=0x%x)", control)
-		}
-
-		// DACL must not be present.
-		if offsetDacl != 0 {
-			return fmt.Errorf("offsetDacl (%d) must be 0", offsetDacl)
-		}
 	}
 
-	// SACL must be present if SACL_SECURITY_INFORMATION is set, else not.
+	// Caller wants us to validate SACL information?
 	if (flags & SACL_SECURITY_INFORMATION) != 0 {
-		if (control & SE_SACL_PRESENT) == 0 {
-			return fmt.Errorf("SE_SACL_PRESENT control bit must be set (control=0x%x)", control)
-		}
-
-		// SACL must be present.
-		if offsetSacl == 0 {
-			return fmt.Errorf("offsetSacl must not be 0")
-		}
-
-		// OffsetSacl must point inside the relative Security Descriptor.
-		if offsetSacl+uint32(unsafe.Sizeof(ACL{})) > uint32(len(sd)) {
-			return fmt.Errorf("SACL (offsetSacl=%d) must lie within sd (length=%d)", offsetSacl, len(sd))
-		}
-	} else {
-		if (control & SE_SACL_PRESENT) != 0 {
-			return fmt.Errorf("SE_SACL_PRESENT control bit must not be set (control=0x%x)", control)
-		}
-
-		// SACL must not be present.
-		if offsetSacl != 0 {
-			return fmt.Errorf("offsetSacl (%d) must be 0", offsetSacl)
+		// SE_SACL_PRESENT bit is optional. If not set it means there is no SACL present.
+		if (control&SE_SACL_PRESENT) != 0 && offsetSacl != 0 {
+			// OffsetSacl must point inside the relative Security Descriptor.
+			if offsetSacl+uint32(unsafe.Sizeof(ACL{})) > uint32(len(sd)) {
+				return fmt.Errorf("SACL (offsetSacl=%d) must lie within sd (length=%d)", offsetSacl, len(sd))
+			}
 		}
 	}
 
-	// OwnerSID must be present if OWNER_SECURITY_INFORMATION is set, else not.
+	// Caller wants us to validate OwnerSID?
 	if (flags & OWNER_SECURITY_INFORMATION) != 0 {
 		if offsetOwner == 0 {
 			return fmt.Errorf("offsetOwner must not be 0")
@@ -680,13 +654,9 @@ func sdRelativeIsValid(sd []byte, flags SECURITY_INFORMATION) error {
 			return fmt.Errorf("OwnerSID (offsetOwner=%d) must lie within sd (length=%d)",
 				offsetOwner, len(sd))
 		}
-	} else {
-		if offsetOwner != 0 {
-			return fmt.Errorf("offsetOwner (%d) must be 0", offsetOwner)
-		}
 	}
 
-	// GroupSID must be present if GROUP_SECURITY_INFORMATION is set, else not.
+	// Caller wants us to validate GroupSID?
 	if (flags & GROUP_SECURITY_INFORMATION) != 0 {
 		if offsetGroup == 0 {
 			return fmt.Errorf("offsetGroup must not be 0")
@@ -696,10 +666,6 @@ func sdRelativeIsValid(sd []byte, flags SECURITY_INFORMATION) error {
 		if offsetGroup+uint32(unsafe.Sizeof(SID{})) > uint32(len(sd)) {
 			return fmt.Errorf("GroupSID (offsetGroup=%d) must lie within sd (length=%d)",
 				offsetGroup, len(sd))
-		}
-	} else {
-		if offsetGroup != 0 {
-			return fmt.Errorf("offsetGroup (%d) must be 0", offsetGroup)
 		}
 	}
 
@@ -1102,8 +1068,17 @@ func getDaclString(sd []byte) (string, error) {
 	control := binary.LittleEndian.Uint16(sd[2:4])
 
 	// DACL not present?
+	//
+	// Note: I have observed that Windows always sets SE_DACL_PRESENT even if we save a binary SD with
+	//       SE_DACL_PRESENT cleared, so we don't expect the following but we still have it for resilience.
+	//       Since user has not specified SE_DACL_PRESENT, it means he doesn't want to set any ACLs, which means
+	//       he wants to "allow all users", hence "D:NO_ACCESS_CONTROL" is most appropriate.
+	//       If we just return "D:" it would mean user wants access control but has not specified any ACEs, which
+	//       would instead mean "allow nobody".
+	//
 	if (control & SE_DACL_PRESENT) == 0 {
-		return "", nil
+		fmt.Printf("[UNEXPECTED] SE_DACL_PRESENT bit not set, control word is 0x%x", control)
+		return "D:NO_ACCESS_CONTROL", nil
 	}
 
 	daclString := "D:"
@@ -1124,7 +1099,11 @@ func getDaclString(sd []byte) (string, error) {
 	dacloffset := binary.LittleEndian.Uint32(sd[16:20])
 
 	if dacloffset == 0 {
-		return "", fmt.Errorf("SE_DACL_PRESENT control bit set, but OffsetDacl is 0!")
+		// dacloffset==0 means that user doesn't want any explicit ACL to be set, which means "allow all users".
+		// This can be represented as "D:<flags>NO_ACCESS_CONTROL".
+		daclString += "NO_ACCESS_CONTROL"
+
+		return daclString, nil
 	}
 
 	if (dacloffset + 8) > uint32(len(sd)) {
@@ -1140,13 +1119,15 @@ func getDaclString(sd []byte) (string, error) {
 	}
 
 	// ACL.AceCount.
-	num_aces := binary.LittleEndian.Uint32(sd[dacloffset+4 : dacloffset+8])
+	numAces := binary.LittleEndian.Uint32(sd[dacloffset+4 : dacloffset+8])
 
 	// Offset of the first ACE.
 	offset := dacloffset + 8
 
 	// Go over all the ACEs and stringify them.
-	for i := 0; i < int(num_aces); i++ {
+	// If numAces is 0 it'll result in daclString to have only flags and no ACEs.
+	// Such an ACL will mean "allow nobody".
+	for i := 0; i < int(numAces); i++ {
 		if (offset + 4) > uint32(len(sd)) {
 			return "", fmt.Errorf("Short ACE (offset=%d), Security Descriptor size=%d bytes!",
 				offset, len(sd))
@@ -1227,7 +1208,7 @@ func SetControl(sd []byte, controlBitsOfInterest, controlBitsToSet SECURITY_DESC
 
 // Convert a possibly non-numeric SID to numeric SID.
 func CanonicalizeSid(sidString string) (string, error) {
-        // Convert to binary SID and back to canonicalize it.
+	// Convert to binary SID and back to canonicalize it.
 	sidSlice, err := stringToSid(sidString)
 	if err != nil {
 		return "", err
@@ -1276,8 +1257,12 @@ func SecurityDescriptorToString(sd []byte) (string, error) {
 // SecurityDescriptorFromString converts a SDDL formatted string into a binary Security Descriptor in
 // SECURITY_DESCRIPTOR_RELATIVE format.
 func SecurityDescriptorFromString(sddlString string) ([]byte, error) {
-	aclFlagsToControlBitmap := func(aclFlags string, forSacl bool) (SECURITY_DESCRIPTOR_CONTROL, error) {
+
+	// Since NO_ACCESS_CONTROL friendly flag does not have a corresponding binary flag, we return it separately
+	// as a boolean. Caller can then act appropriately.
+	aclFlagsToControlBitmap := func(aclFlags string, forSacl bool) (SECURITY_DESCRIPTOR_CONTROL, bool, error) {
 		var control SECURITY_DESCRIPTOR_CONTROL = 0
+		var no_access_control bool = false
 
 		for i := 0; i < len(aclFlags); {
 			if aclFlags[i] == 'P' {
@@ -1289,7 +1274,7 @@ func SecurityDescriptorFromString(sddlString string) ([]byte, error) {
 				i++
 			} else if aclFlags[i] == 'A' {
 				if i == len(aclFlags) {
-					return 0, fmt.Errorf("Incomplete ACL Flags, ends at 'A': %s", aclFlags)
+					return 0, false, fmt.Errorf("Incomplete ACL Flags, ends at 'A': %s", aclFlags)
 				}
 				i++
 				if aclFlags[i] == 'R' { // AR.
@@ -1307,15 +1292,25 @@ func SecurityDescriptorFromString(sddlString string) ([]byte, error) {
 					}
 					i++
 				} else {
-					return 0, fmt.Errorf("Encountered unsupported ACL Flag '%s' after 'A'",
+					return 0, false, fmt.Errorf("Encountered unsupported ACL Flag '%s' after 'A'",
 						string(aclFlags[i]))
 				}
+			} else if aclFlags[i] == 'N' {
+				nacLen := len("NO_ACCESS_CONTROL")
+				if i+nacLen > len(aclFlags) {
+					return 0, false, fmt.Errorf("Incomplete NO_ACCESS_CONTROL Flag: %s", aclFlags)
+				}
+				if aclFlags[i:i+nacLen] == "NO_ACCESS_CONTROL" {
+					// NO_ACCESS_CONTROL seen.
+					no_access_control = true
+				}
+				i += nacLen
 			} else {
-				return 0, fmt.Errorf("Encountered unsupported ACL Flag '%s'", string(aclFlags[i]))
+				return 0, false, fmt.Errorf("Encountered unsupported ACL Flag '%s'", string(aclFlags[i]))
 			}
 		}
 
-		return control, nil
+		return control, no_access_control, nil
 	}
 
 	aceFlagsToByte := func(aceFlags string) (byte, error) {
@@ -1359,6 +1354,15 @@ func SecurityDescriptorFromString(sddlString string) ([]byte, error) {
 
 	aceRightsToAccessMask := func(aceRights string) (uint32, error) {
 		var accessMask uint32 = 0
+
+		// Hex right string will start with 0x or 0X.
+		if len(aceRights) > 2 && (aceRights[0:2] == "0x" || aceRights[0:2] == "0X") {
+			accessMask, err := strconv.ParseUint(aceRights[2:], 16, 32)
+			if err != nil {
+				return 0, fmt.Errorf("Failed to parse integral aceRights %s: %v", aceRights, err)
+			}
+			return uint32(accessMask), nil
+		}
 
 		for i := 0; i < len(aceRights); {
 			// Must have even number of characters.
@@ -1404,14 +1408,14 @@ func SecurityDescriptorFromString(sddlString string) ([]byte, error) {
 		// ACCESS_ALLOWED_ACE.Header.AceFlags.
 		flags, err := aceFlagsToByte(aclEntry.Sections[1])
 		if err != nil {
-			return nil, fmt.Errorf("Unknown aceFlag: %s", aclEntry.Sections[1])
+			return nil, fmt.Errorf("Unknown aceFlag %s: %v", aclEntry.Sections[1], err)
 		}
 		ace[1] = flags
 
 		// ACCESS_ALLOWED_ACE.AccessMask.
 		accessMask, err := aceRightsToAccessMask(aclEntry.Sections[2])
 		if err != nil {
-			return nil, fmt.Errorf("Unknown aceRights: %s", aclEntry.Sections[2])
+			return nil, fmt.Errorf("Unknown aceRights %s: %v", aclEntry.Sections[2], err)
 		}
 		binary.LittleEndian.PutUint32(ace[4:8], accessMask)
 
@@ -1451,7 +1455,14 @@ func SecurityDescriptorFromString(sddlString string) ([]byte, error) {
 	sd := make([]byte, sdSize)
 
 	// Returned Security Descriptor is in Self Relative format.
-	control := SECURITY_DESCRIPTOR_CONTROL(SE_SELF_RELATIVE)
+	//
+	// Note: We always set SE_DACL_PRESENT as we have observed that Windows always sets that.
+	//       It then uses offsetDacl to control whether ACLs are checked or not.
+	//       offsetDacl==0 would mean that there are no ACLs and hence the file will have the "allow all users"
+	//       permission.
+	//       offsetDacl!=0 would cause the ACEs to be inspected from offsetDacl and if there are no ACEs present it
+	//       would mean "allow nobody".
+	control := SECURITY_DESCRIPTOR_CONTROL(SE_SELF_RELATIVE | SE_DACL_PRESENT)
 	offsetOwner := 0
 	offsetGroup := 0
 	offsetDacl := 0
@@ -1485,81 +1496,103 @@ func SecurityDescriptorFromString(sddlString string) ([]byte, error) {
 	}
 
 	// TODO: Add and audit SACL support.
-	if (parsedSDDL.SACL.Flags != "" && parsedSDDL.SACL.Flags != "NO_ACCESS_CONTROL") || len(parsedSDDL.SACL.ACLEntries) != 0 {
-		offsetSacl = offset
-
-		// ACL.AclRevision.
-		sd[offsetSacl] = ACL_REVISION
-		// ACL.Sbz1.
-		sd[offsetSacl+1] = 0
-
-		// Base aclSize. We will add ACE sizes to it to get complete ACL size.
-		var aclSize uint16 = 8
-		// ACL.AceCount.
-		binary.LittleEndian.PutUint16(sd[offsetSacl+4:offsetSacl+6], uint16(len(parsedSDDL.SACL.ACLEntries)))
-		// ACL.Sbz2.
-		binary.LittleEndian.PutUint16(sd[offsetSacl+6:offsetSacl+8], 0)
-
-		control |= SE_SACL_PRESENT
-		flags, err := aclFlagsToControlBitmap(parsedSDDL.SACL.Flags, true /* forSacl */)
+	if parsedSDDL.SACL.Flags != "" || len(parsedSDDL.SACL.ACLEntries) != 0 {
+		flags, no_access_control, err := aclFlagsToControlBitmap(parsedSDDL.SACL.Flags, true /* forSacl */)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to parse SACL Flags %s: %v", parsedSDDL.SACL.Flags, err)
 		}
 		control |= flags
 
-		offset += 8
-		for i := 0; i < len(parsedSDDL.SACL.ACLEntries); i++ {
-			aceSlice, err := aclEntryToSlice(parsedSDDL.SACL.ACLEntries[i])
-			if err != nil {
-				return nil, err
+		// If NO_ACCESS_CONTROL flag is set we will skip the following, which will result in offsetSacl to be set as 0
+		// in the binary SD, which would mean "No ACLs" aka "allow all users".
+		if !no_access_control {
+			offsetSacl = offset
+
+			// ACL.AclRevision.
+			sd[offsetSacl] = ACL_REVISION
+			// ACL.Sbz1.
+			sd[offsetSacl+1] = 0
+
+			// Base aclSize. We will add ACE sizes to it to get complete ACL size.
+			var aclSize uint16 = 8
+
+			// ACL.AceCount.
+			binary.LittleEndian.PutUint16(sd[offsetSacl+4:offsetSacl+6], uint16(len(parsedSDDL.SACL.ACLEntries)))
+			// ACL.Sbz2.
+			binary.LittleEndian.PutUint16(sd[offsetSacl+6:offsetSacl+8], 0)
+
+			offset += 8 // struct ACL.
+			for i := 0; i < len(parsedSDDL.SACL.ACLEntries); i++ {
+				aceSlice, err := aclEntryToSlice(parsedSDDL.SACL.ACLEntries[i])
+				if err != nil {
+					return nil, err
+				}
+				copy(sd[offset:offset+len(aceSlice)], aceSlice)
+				offset += len(aceSlice)
+				aclSize += uint16(len(aceSlice))
 			}
-			copy(sd[offset:offset+len(aceSlice)], aceSlice)
-			offset += len(aceSlice)
-			aclSize += uint16(len(aceSlice))
+
+			// ACL.AclSize.
+			binary.LittleEndian.PutUint16(sd[offsetSacl+2:offsetSacl+4], aclSize)
+
+			// Put in the end to prevent "unreachable code" complaints from vet.
+			panic("SACLs not supported!")
+		} else {
+			// If NO_ACCESS_CONTROL flag is set, there shouldn't be any ACEs.
+			// TODO: Is it safer to skip/ignore the ACEs?
+			if len(parsedSDDL.SACL.ACLEntries) != 0 {
+				return nil, fmt.Errorf("%d ACEs present along with NO_ACCESS_CONTROL SACL flag (%s): %v",
+					len(parsedSDDL.SACL.ACLEntries), parsedSDDL.SACL.Flags, err)
+			}
 		}
-
-		// ACL.AclSize.
-		binary.LittleEndian.PutUint16(sd[offsetSacl+2:offsetSacl+4], aclSize)
-
-		// Put in the end to prevent "unreachable code" complaints from vet.
-		panic("SACLs not supported!")
 	}
 
-	if (parsedSDDL.DACL.Flags != "" && parsedSDDL.DACL.Flags != "NO_ACCESS_CONTROL") || len(parsedSDDL.DACL.ACLEntries) != 0 {
-		offsetDacl = offset
-
-		// ACL.AclRevision.
-		sd[offsetDacl] = ACL_REVISION
-		// ACL.Sbz1.
-		sd[offsetDacl+1] = 0
-
-		// Base aclSize. We will add ACE sizes to it to get complete ACL size.
-		var aclSize uint16 = 8
-		// ACL.AceCount.
-		binary.LittleEndian.PutUint16(sd[offsetDacl+4:offsetDacl+6], uint16(len(parsedSDDL.DACL.ACLEntries)))
-		// ACL.Sbz2.
-		binary.LittleEndian.PutUint16(sd[offsetDacl+6:offsetDacl+8], 0)
-
-		control |= SE_DACL_PRESENT
-		flags, err := aclFlagsToControlBitmap(parsedSDDL.DACL.Flags, false /* forSacl */)
+	if parsedSDDL.DACL.Flags != "" || len(parsedSDDL.DACL.ACLEntries) != 0 {
+		flags, no_access_control, err := aclFlagsToControlBitmap(parsedSDDL.DACL.Flags, false /* forSacl */)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to parse DACL Flags %s: %v", parsedSDDL.DACL.Flags, err)
 		}
 		control |= flags
 
-		offset += 8
-		for i := 0; i < len(parsedSDDL.DACL.ACLEntries); i++ {
-			aceSlice, err := aclEntryToSlice(parsedSDDL.DACL.ACLEntries[i])
-			if err != nil {
-				return nil, err
-			}
-			copy(sd[offset:offset+len(aceSlice)], aceSlice)
-			offset += len(aceSlice)
-			aclSize += uint16(len(aceSlice))
-		}
+		// If NO_ACCESS_CONTROL flag is set we will skip the following, which will result in offsetDacl to be set as 0
+		// in the binary SD, which would mean "No ACLs" aka "allow all users".
+		if !no_access_control {
+			offsetDacl = offset
 
-		// ACL.AclSize.
-		binary.LittleEndian.PutUint16(sd[offsetDacl+2:offsetDacl+4], aclSize)
+			// ACL.AclRevision.
+			sd[offsetDacl] = ACL_REVISION
+			// ACL.Sbz1.
+			sd[offsetDacl+1] = 0
+
+			// Base aclSize. We will add ACE sizes to it to get complete ACL size.
+			var aclSize uint16 = 8
+
+			// ACL.AceCount.
+			binary.LittleEndian.PutUint16(sd[offsetDacl+4:offsetDacl+6], uint16(len(parsedSDDL.DACL.ACLEntries)))
+			// ACL.Sbz2.
+			binary.LittleEndian.PutUint16(sd[offsetDacl+6:offsetDacl+8], 0)
+
+			offset += 8 // struct ACL.
+			for i := 0; i < len(parsedSDDL.DACL.ACLEntries); i++ {
+				aceSlice, err := aclEntryToSlice(parsedSDDL.DACL.ACLEntries[i])
+				if err != nil {
+					return nil, err
+				}
+				copy(sd[offset:offset+len(aceSlice)], aceSlice)
+				offset += len(aceSlice)
+				aclSize += uint16(len(aceSlice))
+			}
+
+			// ACL.AclSize.
+			binary.LittleEndian.PutUint16(sd[offsetDacl+2:offsetDacl+4], aclSize)
+		} else {
+			// If NO_ACCESS_CONTROL flag is set, there shouldn't be any ACEs.
+			// TODO: Is it safer to skip/ignore the ACEs?
+			if len(parsedSDDL.DACL.ACLEntries) != 0 {
+				return nil, fmt.Errorf("%d ACEs present along with NO_ACCESS_CONTROL DACL flag (%s): %v",
+					len(parsedSDDL.DACL.ACLEntries), parsedSDDL.DACL.Flags, err)
+			}
+		}
 	}
 
 	// sd.Control.
