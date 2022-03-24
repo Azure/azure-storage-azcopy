@@ -54,7 +54,7 @@ type IJobMgr interface {
 	//Throughput() XferThroughput
 	// If existingPlanMMF is nil, a new MMF is opened.
 	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF, sourceSAS string,
-		destinationSAS string, scheduleTransfers bool) IJobPartMgr
+		destinationSAS string, scheduleTransfers bool, completionChan chan struct{}) IJobPartMgr
 	SetIncludeExclude(map[string]int, map[string]int)
 	IncludeExclude() (map[string]int, map[string]int)
 	ResumeTransfers(appCtx context.Context)
@@ -401,12 +401,14 @@ func (jm *jobMgr) logPerfInfo(displayStrings []string, constraint common.PerfCon
 
 // initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
 func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF, sourceSAS string,
-	destinationSAS string, scheduleTransfers bool) IJobPartMgr {
+	destinationSAS string, scheduleTransfers bool, completionChan chan struct{}) IJobPartMgr {
 	jpm := &jobPartMgr{jobMgr: jm, filename: planFile, sourceSAS: sourceSAS,
 		destinationSAS: destinationSAS, pacer: jm.pacer,
 		slicePool:        jm.slicePool,
 		cacheLimiter:     jm.cacheLimiter,
-		fileCountLimiter: jm.fileCountLimiter}
+		fileCountLimiter: jm.fileCountLimiter,
+		closeOnCompletion: completionChan,
+		}
 	// If an existing plan MMF was supplied, re use it. Otherwise, init a new one.
 	if existingPlanMMF == nil {
 		jpm.planMMF = jpm.filename.Map()
@@ -597,6 +599,10 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 		jobProgressInfo.transfersCompleted += partProgressInfo.transfersCompleted
 		jobProgressInfo.transfersSkipped += partProgressInfo.transfersSkipped
 		jobProgressInfo.transfersFailed += partProgressInfo.transfersFailed
+
+		if partProgressInfo.completionChan != nil {
+			close(partProgressInfo.completionChan)
+		}
 
 		// If the last part is still awaited or other parts all still not complete,
 		// JobPart 0 status is not changed (unless we are cancelling)
