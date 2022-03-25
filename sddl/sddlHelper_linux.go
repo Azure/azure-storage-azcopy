@@ -194,15 +194,15 @@ const (
 	FILE_GENERIC_EXECUTE = (STANDARD_RIGHTS_EXECUTE | FILE_READ_ATTRIBUTES | FILE_EXECUTE | SYNCHRONIZE)
 
 	// Access rights for DS objects.
-	ADS_RIGHT_DS_CREATE_CHILD   = 0x1
-	ADS_RIGHT_DS_DELETE_CHILD   = 0x2
-	ADS_RIGHT_ACTRL_DS_LIST     = 0x4
-	ADS_RIGHT_DS_SELF           = 0x8
-	ADS_RIGHT_DS_READ_PROP      = 0x10
-	ADS_RIGHT_DS_WRITE_PROP     = 0x20
-	ADS_RIGHT_DS_DELETE_TREE    = 0x40
-	ADS_RIGHT_DS_LIST_OBJECT    = 0x80
-	ADS_RIGHT_DS_CONTROL_ACCESS = 0x100
+	ADS_RIGHT_DS_CREATE_CHILD   = 0x0001
+	ADS_RIGHT_DS_DELETE_CHILD   = 0x0002
+	ADS_RIGHT_ACTRL_DS_LIST     = 0x0004
+	ADS_RIGHT_DS_SELF           = 0x0008
+	ADS_RIGHT_DS_READ_PROP      = 0x0010
+	ADS_RIGHT_DS_WRITE_PROP     = 0x0020
+	ADS_RIGHT_DS_DELETE_TREE    = 0x0040
+	ADS_RIGHT_DS_LIST_OBJECT    = 0x0080
+	ADS_RIGHT_DS_CONTROL_ACCESS = 0x0100
 
 	// Registry Specific Access Rights.
 	KEY_QUERY_VALUE        = 0x0001
@@ -227,7 +227,7 @@ const (
 )
 
 // Access mask exactly matching the value here will be mapped to the key.
-var aceRightsMap = map[string]uint32{
+var aceStringToRightsMap = map[string]uint32{
 	"GA": GENERIC_ALL,
 	"GR": GENERIC_READ,
 	"GW": GENERIC_WRITE,
@@ -263,27 +263,26 @@ var aceRightsMap = map[string]uint32{
 	"NX": SYSTEM_MANDATORY_LABEL_NO_EXECUTE_UP,
 }
 
-// Access mask comprising of these values will contain a concatenation of all corresponding keys.
-var aceRightsMapConcat = map[string]uint32{
-	"GA": GENERIC_ALL,
-	"GR": GENERIC_READ,
-	"GW": GENERIC_WRITE,
-	"GX": GENERIC_EXECUTE,
-
-	"RC": READ_CONTROL,
-	"SD": DELETE,
-	"WD": WRITE_DAC,
-	"WO": WRITE_OWNER,
-
-	"RP": ADS_RIGHT_DS_READ_PROP,
-	"WP": ADS_RIGHT_DS_WRITE_PROP,
-	"CC": ADS_RIGHT_DS_CREATE_CHILD,
-	"DC": ADS_RIGHT_DS_DELETE_CHILD,
-	"LC": ADS_RIGHT_ACTRL_DS_LIST,
-	"SW": ADS_RIGHT_DS_SELF,
-	"LO": ADS_RIGHT_DS_LIST_OBJECT,
-	"DT": ADS_RIGHT_DS_DELETE_TREE,
-	"CR": ADS_RIGHT_DS_CONTROL_ACCESS,
+// Access rights to their corresponding friendly names.
+// Note that this intentionally has some of the fields left out from aceStringToRightsMap.
+var aceRightsToStringMap = map[uint32]string{
+	GENERIC_ALL:                 "GA",
+	GENERIC_READ:                "GR",
+	GENERIC_WRITE:               "GW",
+	GENERIC_EXECUTE:             "GX",
+	READ_CONTROL:                "RC",
+	DELETE:                      "SD",
+	WRITE_DAC:                   "WD",
+	WRITE_OWNER:                 "WO",
+	ADS_RIGHT_DS_READ_PROP:      "RP",
+	ADS_RIGHT_DS_WRITE_PROP:     "WP",
+	ADS_RIGHT_DS_CREATE_CHILD:   "CC",
+	ADS_RIGHT_DS_DELETE_CHILD:   "DC",
+	ADS_RIGHT_ACTRL_DS_LIST:     "LC",
+	ADS_RIGHT_DS_SELF:           "SW",
+	ADS_RIGHT_DS_LIST_OBJECT:    "LO",
+	ADS_RIGHT_DS_DELETE_TREE:    "DT",
+	ADS_RIGHT_DS_CONTROL_ACCESS: "CR",
 }
 
 var (
@@ -837,10 +836,8 @@ func aceRightsToString(aceRights uint32) string {
 	/*
 	 * Check if the aceRights exactly maps to a shorthand name.
 	 */
-	for k, v := range aceRightsMap {
-		if aceRights == v {
-			return k
-		}
+	if v, ok := aceRightsToStringMap[aceRights]; ok {
+		return v
 	}
 
 	/*
@@ -850,10 +847,10 @@ func aceRightsToString(aceRights uint32) string {
 	aceRightsString := ""
 	var allRights uint32 = 0
 
-	for k, v := range aceRightsMapConcat {
-		if (aceRights & v) == v {
-			aceRightsString += k
-			allRights |= v
+	for k, v := range aceRightsToStringMap {
+		if (aceRights & k) == k {
+			aceRightsString += v
+			allRights |= k
 		}
 	}
 
@@ -1386,7 +1383,7 @@ func SecurityDescriptorFromString(sddlString string) ([]byte, error) {
 
 			right := aceRights[i : i+2]
 
-			if mask, ok := aceRightsMap[right]; ok {
+			if mask, ok := aceStringToRightsMap[right]; ok {
 				accessMask |= mask
 			} else {
 				return 0, fmt.Errorf("Unknown aceRight(%s): %s", right, aceRights)
