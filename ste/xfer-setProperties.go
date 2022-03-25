@@ -23,6 +23,8 @@ func getTierString(tier common.BlockBlobTier) azblob.AccessTierType {
 		tier_string = azblob.AccessTierCool
 	case common.EBlockBlobTier.Archive():
 		tier_string = azblob.AccessTierArchive
+	case common.EBlockBlobTier.None():
+		panic("trying to set tier to none")
 	default:
 		panic("invalid tier type")
 	}
@@ -73,8 +75,6 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		jptm.SetStatus(status)
 		jptm.ReportTransferDone()
 	}
-	//_, err := srcBlobURL.SetMetadata(jptm.Context(), info.SrcMetadata.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
-	//TODO t-iverma so we're using this function and not the settier api? -> Changed
 
 	block_blob_tier, _ := jptm.BlobTiers()
 	set_to_tier := getTierString(block_blob_tier)
