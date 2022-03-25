@@ -27,6 +27,16 @@ import (
 	"strings"
 )
 
+func (raw *rawCopyCmdArgs) setMandatoryDefaultsForSetProperties() {
+	raw.blobType = common.EBlobType.Detect().String()
+	//raw.blockBlobTier = common.EBlockBlobTier.None().String()
+	raw.pageBlobTier = common.EPageBlobTier.None().String()
+	raw.md5ValidationOption = common.DefaultHashValidationOption.String()
+	raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
+	raw.forceWrite = common.EOverwriteOption.True().String()
+	raw.preserveOwner = common.PreserveOwnerDefault
+}
+
 func init() {
 	raw := rawCopyCmdArgs{}
 
@@ -63,7 +73,7 @@ func init() {
 					return fmt.Errorf("Invalid destination. Please enter a valid destination, i.e. BlobTrash, FileTrash, BlobFSTrash")
 				}
 			}
-			raw.setMandatoryDefaults()
+			raw.setMandatoryDefaultsForSetProperties()
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
@@ -89,7 +99,7 @@ func init() {
 			//	glcm.Exit(nil, common.EExitCode.Success())
 			//}
 			//
-			//glcm.SurrenderControl()
+			glcm.SurrenderControl()
 		},
 	}
 
