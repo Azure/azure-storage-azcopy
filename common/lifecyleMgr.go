@@ -114,62 +114,46 @@ func (lcm *lifecycleMgr) watchInputs() {
 			continue
 		}
 
-		//if we allow cancelFromStdin, the json messages will not be allowed
-		if lcm.allowCancelFromStdIn {
-			input, err := consoleReader.ReadString('\n')
-			if err != nil {
-				continue
-			}
-
-			msg := strings.TrimSpace(input)
-			if strings.EqualFold(msg, "cancel") {
-				lcm.cancelChannel <- os.Interrupt
-			}
-			continue
-		}
-
-		//First check if we need to prompt something
-		select {
-		case <-lcm.waitForUserResponse:
-			// reads input until the first occurrence of \n in the input,
-			input, err := consoleReader.ReadString('\n')
-			timeReceived := time.Now()
-			if err != nil {
-				continue
-			}
-
-			msg := strings.TrimSpace(input)
-			lcm.inputQueue <- userInput{timeReceived: timeReceived, content: msg}
-		default:
-		}
-
-		var msg LCMMsg
-		decoder := json.NewDecoder(os.Stdin)
-		err := decoder.Decode(&msg)
+		// reads input until the first occurrence of \n in the input,
+		input, err := consoleReader.ReadString('\n')
+		timeReceived := time.Now()
 		if err != nil {
-			lcm.Info("Discarding incorrectly formatted input message.")
 			continue
 		}
 
-		lcm.Info(fmt.Sprintf("Received request for %s with timeStamp %s", msg.MsgType, msg.TimeStamp.String()))
-		var msgType LCMMsgType
-		if err := msgType.Parse(msg.MsgType); err != nil {
-			lcm.Info(fmt.Sprintf("Discarding incorrect message: %s.", msg.MsgType))
-			continue
-		}
+		// remove spaces before/after the content
+		msg := strings.TrimSpace(input)
 
-		switch msgType {
-		case ELCMMsgType.CancelJob():
+		if lcm.allowCancelFromStdIn && strings.EqualFold(msg, "cancel") {
 			lcm.cancelChannel <- os.Interrupt
-		case ELCMMsgType.E2EInterrupts():
-			if lcm.e2eAllowAwaitContinue && strings.EqualFold(msg.Value, "continue") {
-				close(lcm.e2eContinueChannel)
-			} else if lcm.e2eAllowAwaitOpen && strings.EqualFold(msg.Value, "open") {
-				close(lcm.e2eAllowOpenChannel)
+		} else if lcm.e2eAllowAwaitContinue && strings.EqualFold(msg, "continue") {
+			close(lcm.e2eContinueChannel)
+		} else if lcm.e2eAllowAwaitOpen && strings.EqualFold(msg, "open") {
+			close(lcm.e2eAllowOpenChannel)
+		} else if msg[0] == '{' { //json string
+			var m LCMMsg
+			err = json.Unmarshal([]byte(msg), &m)
+			if err != nil {
+				lcm.Info("Discarding incorrectly formatted input message.")
+				continue
 			}
-		default:
-			lcm.msgHandlerChannel <- msg
-			
+
+			lcm.Info(fmt.Sprintf("Received request for %s with timeStamp %s", m.MsgType, m.TimeStamp.String()))
+			var msgType LCMMsgType
+			if err := msgType.Parse(m.MsgType); err != nil {
+				lcm.Info(fmt.Sprintf("Discarding incorrect message: %s.", m.MsgType))
+				continue
+			}
+
+			switch msgType {
+			case ELCMMsgType.CancelJob():
+				lcm.cancelChannel <- os.Interrupt
+			default:
+				lcm.msgHandlerChannel <- m
+
+			}
+		} else {
+			lcm.inputQueue <- userInput{timeReceived: timeReceived, content: msg}
 		}
 	}
 }
@@ -283,9 +267,6 @@ func (lcm *lifecycleMgr) Info(msg string) {
 }
 
 func (lcm *lifecycleMgr) Prompt(message string, details PromptDetails) ResponseOption {
-	// Request watchInputs to wait for response from user
-	lcm.waitForUserResponse <- true
-
 	expectedInputChannel := make(chan string, 1)
 	lcm.msgQueue <- outputMessage{
 		msgContent:    message,
@@ -624,7 +605,7 @@ func (lcm *lifecycleMgr) E2EEnableAwaitAllowOpenFiles(enable bool) {
 
 // Fetching `AZCOPY_DISABLE_SYSLOG` from the environment variables and
 // setting `disableSyslog` flag in LifeCycleManager to avoid Env Vars Lookup redundantly
-	func (lcm *lifecycleMgr) SetForceLogging() {
+func (lcm *lifecycleMgr) SetForceLogging() {
 	disableSyslog, err := strconv.ParseBool(lcm.GetEnvironmentVariable(EEnvironmentVariable.DisableSyslog()))
 	if err != nil {
 		// By default, we'll retain the current behaviour. i.e. To log in Syslog/WindowsEventLog if not specified by the user
