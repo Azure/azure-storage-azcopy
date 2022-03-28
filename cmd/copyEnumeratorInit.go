@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"log"
 	"net/url"
 	"os"
@@ -20,7 +21,6 @@ import (
 	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
 type BucketToContainerNameResolver interface {
@@ -151,11 +151,11 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			err = cca.createDstContainer(dstContainerName, cca.Destination, ctx, existingContainers, cca.LogVerbosity)
 
 			// check against seenFailedContainers so we don't spam the job log with initialization failed errors
-			if _, ok := seenFailedContainers[dstContainerName]; err != nil && ste.JobsAdmin != nil && !ok {
+			if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 				logDstContainerCreateFailureOnce.Do(func() {
 					glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 				})
-				ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err), pipeline.LogWarning)
+				jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err), pipeline.LogWarning)
 				seenFailedContainers[dstContainerName] = true
 			}
 		} else if cca.FromTo.From().IsRemote() { // if the destination has implicit container names
@@ -187,11 +187,11 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					// if JobsAdmin is nil, we're probably in testing mode.
 					// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
 					// check against seenFailedContainers so we don't spam the job log with initialization failed errors
-					if _, ok := seenFailedContainers[bucketName]; err != nil && ste.JobsAdmin != nil && !ok {
+					if _, ok := seenFailedContainers[bucketName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 						logDstContainerCreateFailureOnce.Do(func() {
 							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
-						ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", bucketName, err), pipeline.LogWarning)
+						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", bucketName, err), pipeline.LogWarning)
 						seenFailedContainers[bucketName] = true
 					}
 				}
@@ -207,11 +207,11 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				if err == nil {
 					err = cca.createDstContainer(resName, cca.Destination, ctx, existingContainers, cca.LogVerbosity)
 
-					if _, ok := seenFailedContainers[dstContainerName]; err != nil && ste.JobsAdmin != nil && !ok {
+					if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 						logDstContainerCreateFailureOnce.Do(func() {
 							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
-						ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err), pipeline.LogWarning)
+						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err), pipeline.LogWarning)
 						seenFailedContainers[dstContainerName] = true
 					}
 				}
@@ -227,8 +227,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
-	if ste.JobsAdmin != nil {
-		ste.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
+	if jobsAdmin.JobsAdmin != nil {
+		jobsAdmin.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
 	}
 
 	processor := func(object StoredObject) error {
@@ -410,9 +410,9 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []ObjectFilter {
 	}
 
 	// finally, log any search prefix computed from these
-	if ste.JobsAdmin != nil {
+	if jobsAdmin.JobsAdmin != nil {
 		if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(cca.Recursive); prefixFilter != "" {
-			ste.JobsAdmin.LogToJobLog("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, pipeline.LogInfo) // "May be used" because we don't know here which enumerators will use it
+			jobsAdmin.JobsAdmin.LogToJobLog("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, pipeline.LogInfo) // "May be used" because we don't know here which enumerators will use it
 		}
 	}
 
