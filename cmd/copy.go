@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"io"
 	"math"
 	"net/url"
@@ -1313,8 +1314,8 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Make AUTO default for Azure Files since Azure Files throttles too easily.
-	if ste.JobsAdmin != nil && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.File()) {
-		ste.JobsAdmin.SetConcurrencySettingsToAuto()
+	if jobsAdmin.JobsAdmin != nil && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.File()) {
+		jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
 	}
 
 	// Note: credential info here is only used by remove at the moment.
@@ -1585,7 +1586,7 @@ TotalBytesTransferred: %v
 Final Job Status: %v%s%s
 `,
 					summary.JobID.String(),
-					ste.ToFixed(duration.Minutes(), 4),
+					jobsAdmin.ToFixed(duration.Minutes(), 4),
 					summary.FileTransfers,
 					summary.FolderPropertyTransfers,
 					summary.TotalTransfers,
@@ -1603,7 +1604,7 @@ Final Job Status: %v%s%s
 				}
 
 				// log to job log
-				jobMan, exists := ste.JobsAdmin.JobMgr(summary.JobID)
+				jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
 				if exists {
 					jobMan.Log(pipeline.LogInfo, logStats+"\n"+output)
 				}
@@ -1651,7 +1652,7 @@ Final Job Status: %v%s%s
 			}
 
 			throughput := computeThroughput()
-			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", ste.ToFixed(throughput, 4))
+			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
 			if throughput == 0 {
 				// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
 				throughputString = ""
