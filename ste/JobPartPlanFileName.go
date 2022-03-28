@@ -23,10 +23,10 @@ func (jppfn *JobPartPlanFileName) Exists() bool {
 }
 
 func (jppfn *JobPartPlanFileName) GetJobPartPlanPath() string {
-	return fmt.Sprintf("%s%s%s", JobsAdmin.AppPathFolder(), common.AZCOPY_PATH_SEPARATOR_STRING, string(*jppfn))
+	return fmt.Sprintf("%s%s%s", common.AzcopyJobPlanFolder, common.AZCOPY_PATH_SEPARATOR_STRING, string(*jppfn))
 }
 
-const jobPartPlanFileNameFormat = "%v--%05d.steV%d"
+const JobPartPlanFileNameFormat = "%v--%05d.steV%d"
 
 // TODO: This needs testing
 func (jpfn JobPartPlanFileName) Parse() (jobID common.JobID, partNumber common.PartNumber, err error) {
@@ -76,7 +76,7 @@ func (jpfn JobPartPlanFileName) Map() *JobPartPlanMMF {
 // createJobPartPlanFile creates the memory map JobPartPlanHeader using the given JobPartOrder and JobPartPlanBlobData
 func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	if jpfn.Exists() {
-		panic(fmt.Sprint("Duplicate job created. You probably shouldn't ever see this, but if you do, try cleaning out", JobsAdmin.(*jobsAdmin).planDir))
+		panic(fmt.Sprint("Duplicate job created. You probably shouldn't ever see this, but if you do, try cleaning out", jpfn.GetJobPartPlanPath()))
 	}
 
 	// Validate that the passed-in strings can fit in their respective fields

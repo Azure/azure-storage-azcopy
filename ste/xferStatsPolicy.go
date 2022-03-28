@@ -32,7 +32,7 @@ import (
 	"time"
 )
 
-type pipelineNetworkStats struct {
+type PipelineNetworkStats struct {
 	atomicOperationCount       int64
 	atomicNetworkErrorCount    int64
 	atomic503CountThroughput   int64
@@ -44,8 +44,8 @@ type pipelineNetworkStats struct {
 	tunerInterface             ConcurrencyTuner
 }
 
-func newPipelineNetworkStats(tunerInterface ConcurrencyTuner) *pipelineNetworkStats {
-	s := &pipelineNetworkStats{tunerInterface: tunerInterface}
+func newPipelineNetworkStats(tunerInterface ConcurrencyTuner) *PipelineNetworkStats {
+	s := &PipelineNetworkStats{tunerInterface: tunerInterface}
 	tunerWillCallUs := tunerInterface.RequestCallbackWhenStable(s.start) // we want to start gather stats after the tuner has reached a stable value. No point in gathering them earlier
 	if !tunerWillCallUs {
 		// assume tuner is inactive, and start ourselves now
@@ -55,19 +55,19 @@ func newPipelineNetworkStats(tunerInterface ConcurrencyTuner) *pipelineNetworkSt
 }
 
 // start starts the gathering of stats
-func (s *pipelineNetworkStats) start() {
+func (s *PipelineNetworkStats) start() {
 	atomic.StoreInt64(&s.atomicStartSeconds, time.Now().Unix())
 }
 
-func (s *pipelineNetworkStats) getStartSeconds() int64 {
+func (s *PipelineNetworkStats) getStartSeconds() int64 {
 	return atomic.LoadInt64(&s.atomicStartSeconds)
 }
 
-func (s *pipelineNetworkStats) IsStarted() bool {
+func (s *PipelineNetworkStats) IsStarted() bool {
 	return s.getStartSeconds() > 0
 }
 
-func (s *pipelineNetworkStats) recordRetry(responseBody string) {
+func (s *PipelineNetworkStats) recordRetry(responseBody string) {
 	if strings.Contains(responseBody, "gress is over the account limit") { // maybe Ingress or Egress
 		atomic.AddInt64(&s.atomic503CountThroughput, 1)
 	} else if strings.Contains(responseBody, "Operations per second is over the account limit") {
@@ -77,7 +77,7 @@ func (s *pipelineNetworkStats) recordRetry(responseBody string) {
 	}
 }
 
-func (s *pipelineNetworkStats) OperationsPerSecond() int {
+func (s *PipelineNetworkStats) OperationsPerSecond() int {
 	s.nocopy.Check()
 	if !s.IsStarted() {
 		return 0
@@ -90,7 +90,7 @@ func (s *pipelineNetworkStats) OperationsPerSecond() int {
 	}
 }
 
-func (s *pipelineNetworkStats) NetworkErrorPercentage() float32 {
+func (s *PipelineNetworkStats) NetworkErrorPercentage() float32 {
 	s.nocopy.Check()
 	ops := float32(atomic.LoadInt64(&s.atomicOperationCount))
 	if ops > 0 {
@@ -100,7 +100,7 @@ func (s *pipelineNetworkStats) NetworkErrorPercentage() float32 {
 	}
 }
 
-func (s *pipelineNetworkStats) TotalServerBusyPercentage() float32 {
+func (s *PipelineNetworkStats) TotalServerBusyPercentage() float32 {
 	s.nocopy.Check()
 	ops := float32(atomic.LoadInt64(&s.atomicOperationCount))
 	if ops > 0 {
@@ -112,14 +112,14 @@ func (s *pipelineNetworkStats) TotalServerBusyPercentage() float32 {
 	}
 }
 
-func (s *pipelineNetworkStats) GetTotalRetries() int64 {
+func (s *PipelineNetworkStats) GetTotalRetries() int64 {
 	s.nocopy.Check()
 	return atomic.LoadInt64(&s.atomic503CountThroughput) +
 		atomic.LoadInt64(&s.atomic503CountIOPS) +
 		atomic.LoadInt64(&s.atomic503CountUnknown)
 }
 
-func (s *pipelineNetworkStats) IOPSServerBusyPercentage() float32 {
+func (s *PipelineNetworkStats) IOPSServerBusyPercentage() float32 {
 	s.nocopy.Check()
 	ops := float32(atomic.LoadInt64(&s.atomicOperationCount))
 	if ops > 0 {
@@ -129,7 +129,7 @@ func (s *pipelineNetworkStats) IOPSServerBusyPercentage() float32 {
 	}
 }
 
-func (s *pipelineNetworkStats) ThroughputServerBusyPercentage() float32 {
+func (s *PipelineNetworkStats) ThroughputServerBusyPercentage() float32 {
 	s.nocopy.Check()
 	ops := float32(atomic.LoadInt64(&s.atomicOperationCount))
 	if ops > 0 {
@@ -139,7 +139,7 @@ func (s *pipelineNetworkStats) ThroughputServerBusyPercentage() float32 {
 	}
 }
 
-func (s *pipelineNetworkStats) OtherServerBusyPercentage() float32 {
+func (s *PipelineNetworkStats) OtherServerBusyPercentage() float32 {
 	s.nocopy.Check()
 	ops := float32(atomic.LoadInt64(&s.atomicOperationCount))
 	if ops > 0 {
@@ -149,7 +149,7 @@ func (s *pipelineNetworkStats) OtherServerBusyPercentage() float32 {
 	}
 }
 
-func (s *pipelineNetworkStats) AverageE2EMilliseconds() int {
+func (s *PipelineNetworkStats) AverageE2EMilliseconds() int {
 	s.nocopy.Check()
 	ops := atomic.LoadInt64(&s.atomicOperationCount)
 	if ops > 0 {
@@ -161,7 +161,7 @@ func (s *pipelineNetworkStats) AverageE2EMilliseconds() int {
 
 type xferStatsPolicy struct {
 	next  pipeline.Policy
-	stats *pipelineNetworkStats
+	stats *PipelineNetworkStats
 }
 
 // Do accumulates stats for each call
@@ -213,7 +213,7 @@ func transparentlyReadBody(r *http.Response) string {
 	return string(buf) // copy to string
 }
 
-func newXferStatsPolicyFactory(accumulator *pipelineNetworkStats) pipeline.Factory {
+func newXferStatsPolicyFactory(accumulator *PipelineNetworkStats) pipeline.Factory {
 	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
 		r := xferStatsPolicy{next: next, stats: accumulator}
 		return r.Do
