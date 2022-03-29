@@ -510,7 +510,7 @@ func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint3
 
 /* PerfAdjustment message. */
 type jaPerfAdjustmentMsg struct {
-	Throughput int64 `json:"cap-mbps"`
+	Throughput int64 `json:"cap-mbps,string"`
 }
 
 func (ja *jobsAdmin) messageHandler(inputChan <-chan common.LCMMsg) {
