@@ -361,3 +361,11 @@ func (EnvironmentVariable) MimeMapping() EnvironmentVariable {
 		Description:  "Location of the file to override default OS mime mapping",
 	}
 }
+
+func (EnvironmentVariable) DownloadToTempPath() EnvironmentVariable {
+	return EnvironmentVariable {
+		Name:        "AZCOPY_DOWNLOAD_TO_TEMP_PATH",
+		DefaultValue: "true",
+		Description: "Configures azcopy to download to a temp path before actual download. Allowed values are true/false",
+	}
+}
