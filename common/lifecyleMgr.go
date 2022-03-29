@@ -68,6 +68,7 @@ type LifecycleMgr interface {
 	RegisterCloseFunc(func())
 	SetForceLogging()
 	IsForceLoggingDisabled() bool
+	DownloadToTempPath() bool
 }
 
 func GetLifecycleMgr() LifecycleMgr {
@@ -588,6 +589,15 @@ func (lcm *lifecycleMgr) SetForceLogging() {
 
 func (lcm *lifecycleMgr) IsForceLoggingDisabled() bool {
 	return lcm.disableSyslog
+}
+
+func (lcm *lifecycleMgr) DownloadToTempPath() bool {
+	ret, err := strconv.ParseBool(lcm.GetEnvironmentVariable(EEnvironmentVariable.DownloadToTempPath()))
+	if err != nil {
+		// By default we'll download to temp path
+		ret = true
+	}
+	return ret
 }
 
 // captures the common logic of exiting if there's an expected error
