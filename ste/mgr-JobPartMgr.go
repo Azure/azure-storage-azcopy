@@ -237,6 +237,7 @@ type jobPartProgressInfo struct {
 	transfersCompleted int
 	transfersSkipped   int
 	transfersFailed    int
+	completionChan     chan struct{}
 }
 
 // jobPartMgr represents the runtime information for a Job's Part
@@ -310,6 +311,8 @@ type jobPartMgr struct {
 	atomicTransfersSkipped   uint32
 
 	cpkOptions common.CpkOptions
+
+	closeOnCompletion chan struct{}
 }
 
 func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {
@@ -843,6 +846,7 @@ func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfe
 			transfersCompleted: int(atomic.LoadUint32(&jpm.atomicTransfersCompleted)),
 			transfersSkipped:   int(atomic.LoadUint32(&jpm.atomicTransfersSkipped)),
 			transfersFailed:    int(atomic.LoadUint32(&jpm.atomicTransfersFailed)),
+			completionChan:     jpm.closeOnCompletion,
 		}
 		jpm.jobMgr.ReportJobPartDone(jppi)
 	}

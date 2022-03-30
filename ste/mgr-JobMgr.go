@@ -54,7 +54,7 @@ type IJobMgr interface {
 	//Throughput() XferThroughput
 	// If existingPlanMMF is nil, a new MMF is opened.
 	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF, sourceSAS string,
-		destinationSAS string, scheduleTransfers bool) IJobPartMgr
+		destinationSAS string, scheduleTransfers bool, completionChan chan struct{}) IJobPartMgr
 	SetIncludeExclude(map[string]int, map[string]int)
 	IncludeExclude() (map[string]int, map[string]int)
 	ResumeTransfers(appCtx context.Context)
@@ -97,6 +97,7 @@ type IJobMgr interface {
 	AddSuccessfulBytesInActiveFiles(n int64)
 	SuccessfulBytesInActiveFiles() uint64
 	CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.CancelPauseResumeResponse
+	IsDaemon() bool
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -104,7 +105,7 @@ type IJobMgr interface {
 func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel,
 	       commandString string, logFileFolder string, tuner ConcurrencyTuner,
 	       pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
-	       jobLogger common.ILoggerResetable) IJobMgr {
+	       jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
 	const channelSize = 100000
 	// PartsChannelSize defines the number of JobParts which can be placed into the
 	// parts channel. Any JobPart which comes from FE and partChannel is full,
@@ -128,6 +129,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	
 	/* Create book-keeping channels */
 	jobPartProgressCh := make(chan jobPartProgressInfo)
+	var jstm jobStatusManager
 	jstm.respChan = make(chan common.ListJobSummaryResponse)
 	jstm.listReq = make(chan bool)
 	jstm.partCreated = make(chan JobPartCreatedMsg, 100)
@@ -140,7 +142,6 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		concurrency:                   concurrency,
 		overwritePrompter:             newOverwritePrompter(),
 		pipelineNetworkStats:          newPipelineNetworkStats(tuner), // let the stats coordinate with the concurrency tuner
-		exclusiveDestinationMapHolder: &atomic.Value{},
 		initMu:                        &sync.Mutex{},
 		jobPartProgress:               jobPartProgressCh,
 		coordinatorChannels:           CoordinatorChannels{
@@ -167,6 +168,8 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		cacheLimiter:                 cacheLimiter,
 		fileCountLimiter:             fileCountLimiter,
 		cpuMon:                       cpuMon,
+		jstm:                         &jstm,
+		isDaemon:                     daemonMode,
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
 	jm.logJobsAdminMessages()
@@ -249,6 +252,7 @@ type jobMgrInitState struct {
 	securityInfoPersistenceManager *securityInfoPersistenceManager
 	folderCreationTracker          FolderCreationTracker
 	folderDeletionManager          common.FolderDeletionManager
+	exclusiveDestinationMapHolder  *atomic.Value
 }
 
 // jobMgr represents the runtime information for a Job
@@ -274,7 +278,6 @@ type jobMgr struct {
 	cancel               context.CancelFunc
 	pipelineNetworkStats *PipelineNetworkStats
 
-	exclusiveDestinationMapHolder *atomic.Value
 
 	// Share the same HTTP Client across all job parts, so that the we maximize re-use of
 	// its internal connection pool
@@ -311,10 +314,13 @@ type jobMgr struct {
 	slicePool           common.ByteSlicePooler
 	cacheLimiter        common.CacheLimiter
 	fileCountLimiter    common.CacheLimiter
+	jstm                *jobStatusManager
 
 	/* Pool sizer related stuff */
 	atomicCurrentMainPoolSize          int32 // align 64 bit integers for 32 bit arch
 	atomicSuccessfulBytesInActiveFiles int64
+
+	isDaemon bool /* is it running as service */
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -395,12 +401,14 @@ func (jm *jobMgr) logPerfInfo(displayStrings []string, constraint common.PerfCon
 
 // initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
 func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF, sourceSAS string,
-	destinationSAS string, scheduleTransfers bool) IJobPartMgr {
+	destinationSAS string, scheduleTransfers bool, completionChan chan struct{}) IJobPartMgr {
 	jpm := &jobPartMgr{jobMgr: jm, filename: planFile, sourceSAS: sourceSAS,
 		destinationSAS: destinationSAS, pacer: jm.pacer,
 		slicePool:        jm.slicePool,
 		cacheLimiter:     jm.cacheLimiter,
-		fileCountLimiter: jm.fileCountLimiter}
+		fileCountLimiter: jm.fileCountLimiter,
+		closeOnCompletion: completionChan,
+		}
 	// If an existing plan MMF was supplied, re use it. Otherwise, init a new one.
 	if existingPlanMMF == nil {
 		jpm.planMMF = jpm.filename.Map()
@@ -411,7 +419,6 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, e
 	jm.jobPartMgrs.Set(partNum, jpm)
 	jm.setFinalPartOrdered(partNum, jpm.planMMF.Plan().IsFinalPart)
 	jm.setDirection(jpm.Plan().FromTo)
-	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(partNum, jpm.Plan().FromTo)
 
 	jm.initMu.Lock()
 	defer jm.initMu.Unlock()
@@ -421,9 +428,12 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, e
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
 			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, jpm.Plan()),
 			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
+			exclusiveDestinationMapHolder:  &atomic.Value{},
 		}
+		jm.initState.exclusiveDestinationMapHolder.Store(common.NewExclusiveStringMap(jpm.Plan().FromTo, runtime.GOOS))
 	}
 	jpm.jobMgrInitState = jm.initState // so jpm can use it as much as desired without locking (since the only mutation is the init in jobManager. As far as jobPartManager is concerned, the init state is read-only
+	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(partNum, jpm.Plan().FromTo)
 
 	if scheduleTransfers {
 		// If the schedule transfer is set to true
@@ -455,7 +465,6 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 	jm.jobPartMgrs.Set(order.PartNum, jpm)
 	jm.setFinalPartOrdered(order.PartNum, jpm.planMMF.Plan().IsFinalPart)
 	jm.setDirection(jpm.Plan().FromTo)
-	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(order.PartNum, jpm.Plan().FromTo)
 
 	jm.initMu.Lock()
 	defer jm.initMu.Unlock()
@@ -465,9 +474,12 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
 			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, jpm.Plan()),
 			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
+			exclusiveDestinationMapHolder:  &atomic.Value{},
 		}
+		jm.initState.exclusiveDestinationMapHolder.Store(common.NewExclusiveStringMap(jpm.Plan().FromTo, runtime.GOOS))
 	}
 	jpm.jobMgrInitState = jm.initState // so jpm can use it as much as desired without locking (since the only mutation is the init in jobManager. As far as jobPartManager is concerned, the init state is read-only
+	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(order.PartNum, jpm.Plan().FromTo)
 
 	jm.QueueJobParts(jpm)
 	return jpm
@@ -515,11 +527,7 @@ func (jm *jobMgr) setDirection(fromTo common.FromTo) {
 
 // can't do this at time of constructing the jobManager, because it doesn't know fromTo at that time
 func (jm *jobMgr) getExclusiveDestinationMap(partNum PartNumber, fromTo common.FromTo) *common.ExclusiveStringMap {
-	// assume that first part is ordered before any others
-	if partNum == 0 {
-		jm.exclusiveDestinationMapHolder.Store(common.NewExclusiveStringMap(fromTo, runtime.GOOS))
-	}
-	return jm.exclusiveDestinationMapHolder.Load().(*common.ExclusiveStringMap)
+	return jm.initState.exclusiveDestinationMapHolder.Load().(*common.ExclusiveStringMap)
 }
 
 func (jm *jobMgr) HttpClient() *http.Client {
@@ -591,6 +599,10 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 		jobProgressInfo.transfersCompleted += partProgressInfo.transfersCompleted
 		jobProgressInfo.transfersSkipped += partProgressInfo.transfersSkipped
 		jobProgressInfo.transfersFailed += partProgressInfo.transfersFailed
+
+		if partProgressInfo.completionChan != nil {
+			close(partProgressInfo.completionChan)
+		}
 
 		// If the last part is still awaited or other parts all still not complete,
 		// JobPart 0 status is not changed (unless we are cancelling)
@@ -1002,7 +1014,10 @@ func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.
 	}
 	return jr
 }
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+func (jm *jobMgr) IsDaemon() bool {
+	return jm.isDaemon
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

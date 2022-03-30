@@ -294,7 +294,7 @@ func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
 		func() ste.IJobMgr {
 			// Return existing or new IJobMgr to caller
-			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, ja.jobLogger)
+			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, ja.jobLogger, false)
 		})
 }
 
@@ -343,7 +343,7 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinat
 		}
 		mmf := planFile.Map()
 		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
-		jm.AddJobPart(partNum, planFile, mmf, sourceSAS, destinationSAS, false)
+		jm.AddJobPart(partNum, planFile, mmf, sourceSAS, destinationSAS, false, nil)
 	}
 
 	jm, _ := ja.JobMgr(jobId)
@@ -377,7 +377,7 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 		mmf := planFile.Map()
 		//todo : call the compute transfer function here for each job.
 		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
-		jm.AddJobPart(partNum, planFile, mmf, EMPTY_SAS_STRING, EMPTY_SAS_STRING, false)
+		jm.AddJobPart(partNum, planFile, mmf, EMPTY_SAS_STRING, EMPTY_SAS_STRING, false, nil)
 	}
 }
 
