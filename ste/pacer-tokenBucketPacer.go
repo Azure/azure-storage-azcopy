@@ -115,6 +115,13 @@ func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCou
 		case <-time.After(modifiedSleepDuration):
 			// keep looping
 		}
+		
+		// If we've updated target to a NULL pacer, we'll return immediately
+		if p.targetBytesPerSecond() == 0 {
+			atomic.AddInt64(&p.atomicGrandTotal, byteCount)
+			return nil
+		}
+
 	}
 
 	// record what we issued
