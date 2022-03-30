@@ -301,6 +301,9 @@ func (ja *jobsAdmin) BytesOverWire() int64 {
 }
 
 func (ja *jobsAdmin) UpdateTargetBandwidth(newTarget int64) {
+	if newTarget < 0 {
+		return
+	}
 	ja.pacer.UpdateTargetBytesPerSecond(newTarget)
 }
 
@@ -549,6 +552,7 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan common.LCMMsg) {
 				continue
 			}
 
+			lastPerfAdjustTime = time.Now()
 			ja.UpdateTargetBandwidth(toBitsPerSec(perfAdjustmentReq.Throughput))
 			glcm.Info(fmt.Sprintf("Adjusted throughput to %dMbps",perfAdjustmentReq.Throughput))
 		default:

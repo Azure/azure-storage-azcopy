@@ -30,6 +30,7 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 		allowCancelFromStdIn: false,
 		allowWatchInput:      false,
 		closeFunc:            func() {}, // noop since we have nothing to do by default
+		waitForUserResponse:  make(chan bool),
 		msgHandlerChannel:    make(chan LCMMsg),
 	}
 
@@ -116,28 +117,29 @@ func (lcm *lifecycleMgr) watchInputs() {
 
 		// reads input until the first occurrence of \n in the input,
 		input, err := consoleReader.ReadString('\n')
-		timeReceived := time.Now()
 		if err != nil {
 			continue
 		}
 
 		// remove spaces before/after the content
 		msg := strings.TrimSpace(input)
+		timeReceived := time.Now()
+		
+		select {
+		case <-lcm.waitForUserResponse:
+			lcm.inputQueue <- userInput{timeReceived: timeReceived, content: msg}
+			continue
+		default:
+		}
 
+		var m LCMMsg
 		if lcm.allowCancelFromStdIn && strings.EqualFold(msg, "cancel") {
 			lcm.cancelChannel <- os.Interrupt
 		} else if lcm.e2eAllowAwaitContinue && strings.EqualFold(msg, "continue") {
 			close(lcm.e2eContinueChannel)
 		} else if lcm.e2eAllowAwaitOpen && strings.EqualFold(msg, "open") {
 			close(lcm.e2eAllowOpenChannel)
-		} else if msg[0] == '{' { //json string
-			var m LCMMsg
-			err = json.Unmarshal([]byte(msg), &m)
-			if err != nil {
-				lcm.Info("Discarding incorrectly formatted input message.")
-				continue
-			}
-
+		} else if err := json.Unmarshal([]byte(msg), &m); err == nil { //json string
 			lcm.Info(fmt.Sprintf("Received request for %s with timeStamp %s", m.MsgType, m.TimeStamp.String()))
 			var msgType LCMMsgType
 			if err := msgType.Parse(m.MsgType); err != nil {
@@ -153,7 +155,7 @@ func (lcm *lifecycleMgr) watchInputs() {
 
 			}
 		} else {
-			lcm.inputQueue <- userInput{timeReceived: timeReceived, content: msg}
+			lcm.Info("Discarding incorrectly formatted input message")
 		}
 	}
 }
@@ -274,6 +276,9 @@ func (lcm *lifecycleMgr) Prompt(message string, details PromptDetails) ResponseO
 		inputChannel:  expectedInputChannel,
 		promptDetails: details,
 	}
+
+	// Request watchInputs() to wait for response from user
+	lcm.waitForUserResponse <- true
 
 	// block until input comes from the user
 	rawResponse := <-expectedInputChannel
