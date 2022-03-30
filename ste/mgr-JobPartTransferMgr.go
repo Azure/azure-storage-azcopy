@@ -91,6 +91,7 @@ type IJobPartTransferMgr interface {
 	CpkInfo() common.CpkInfo
 	CpkScopeInfo() common.CpkScopeInfo
 	IsSourceEncrypted() bool
+	SetPropertiesAPIOption() common.SetPropertiesAPIOption
 }
 
 type TransferInfo struct {
@@ -516,6 +517,10 @@ func (jptm *jobPartTransferMgr) IsSourceEncrypted() bool {
 	return jptm.jobPartMgr.IsSourceEncrypted()
 }
 
+func (jptm *jobPartTransferMgr) SetPropertiesAPIOption() common.SetPropertiesAPIOption {
+	return jptm.jobPartMgr.GetSetPropertiesAPIOption()
+}
+
 // JobHasLowFileCount returns an estimate of whether we only have a very small number of files in the overall job
 // (An "estimate" because it actually only looks at the current job part)
 func (jptm *jobPartTransferMgr) JobHasLowFileCount() bool {
@@ -763,7 +768,7 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 		// If the status code was 403, it means there was an authentication error and we exit.
 		// User can resume the job if completely ordered with a new sas.
 		if status == http.StatusForbidden &&
-		!jptm.jobPartMgr.(*jobPartMgr).jobMgr.IsDaemon() {
+			!jptm.jobPartMgr.(*jobPartMgr).jobMgr.IsDaemon() {
 			// quit right away, since without proper authentication no work can be done
 			// display a clear message
 			common.GetLifecycleMgr().Info(fmt.Sprintf("Authentication failed, it is either not correct, or expired, or does not have the correct permission %s", err.Error()))

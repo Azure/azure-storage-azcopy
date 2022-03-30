@@ -119,6 +119,34 @@ func (DeleteSnapshotsOption) None() DeleteSnapshotsOption    { return DeleteSnap
 func (DeleteSnapshotsOption) Include() DeleteSnapshotsOption { return DeleteSnapshotsOption(1) }
 func (DeleteSnapshotsOption) Only() DeleteSnapshotsOption    { return DeleteSnapshotsOption(2) }
 
+type SetPropertiesAPIOption uint8
+
+var ESetPropertiesAPIOption = SetPropertiesAPIOption(0)
+
+func (SetPropertiesAPIOption) None() SetPropertiesAPIOption        { return SetPropertiesAPIOption(0) }
+func (SetPropertiesAPIOption) SetTier() SetPropertiesAPIOption     { return SetPropertiesAPIOption(1) }
+func (SetPropertiesAPIOption) SetMetaData() SetPropertiesAPIOption { return SetPropertiesAPIOption(2) }
+func (SetPropertiesAPIOption) SetTierAndMetaData() SetPropertiesAPIOption {
+	return SetPropertiesAPIOption(3)
+}
+
+func (s SetPropertiesAPIOption) String() string {
+	return enum.StringInt(s, reflect.TypeOf(s))
+}
+
+func (s *SetPropertiesAPIOption) Parse(str string) error {
+	// allow empty to mean none
+	if str == "" {
+		*s = ESetPropertiesAPIOption.None()
+		return nil
+	}
+	val, err := enum.ParseInt(reflect.TypeOf(s), str, true, true)
+	if err == nil {
+		*s = val.(SetPropertiesAPIOption)
+	}
+	return err
+}
+
 func (d DeleteSnapshotsOption) String() string {
 	return enum.StringInt(d, reflect.TypeOf(d))
 }
