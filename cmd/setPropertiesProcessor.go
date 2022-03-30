@@ -22,6 +22,25 @@ package cmd
 
 import "github.com/Azure/azure-storage-azcopy/v10/common"
 
+// setting SetPropertiesAPIOption for choosing which API to use
+// TODO name change needed
+func setSetPropertiesAPIOption(cca *CookedCopyCmdArgs) common.SetPropertiesAPIOption {
+	if cca.metadata != "" {
+		if cca.blockBlobTier != common.EBlockBlobTier.None() {
+			return common.ESetPropertiesAPIOption.SetTierAndMetaData()
+		} else {
+			return common.ESetPropertiesAPIOption.SetMetaData()
+		}
+	} else {
+		if cca.blockBlobTier != common.EBlockBlobTier.None() {
+			return common.ESetPropertiesAPIOption.SetTier()
+		}
+	}
+	// if metadata is nill and BlockBlobTier and PageBlobTier are both nill
+	//TODO add pageblobTier
+	return common.ESetPropertiesAPIOption.None()
+}
+
 func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption) *copyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:           cca.jobID,
@@ -39,9 +58,11 @@ func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPar
 			PermanentDeleteOption: cca.permanentDeleteOption,
 			BlockBlobTier:         cca.blockBlobTier,
 			PageBlobTier:          cca.pageBlobTier,
+			Metadata:              cca.metadata,
 		},
 		// TODO add ALL other values from BlobTransferAttributes
 		// TODO add a flag in front end to distinguish which property we're transfering and all the tags related to it
+		SetPropertiesAPIOption: setSetPropertiesAPIOption(cca),
 	}
 
 	reportFirstPart := func(jobStarted bool) {

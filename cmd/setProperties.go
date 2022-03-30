@@ -116,5 +116,6 @@ func init() {
 	setPropCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "Defines the location of text file which has the list of only files to be copied.")
 	setPropCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "Changes the access tier of the blobs to the given tier")
 	setPropCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Look into sub-directories recursively when uploading from local file system.")
-
+	setPropCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Key-value pairs to be set as metadata. Pass empty string to delete all metadata.")
+	//TODO: CAUTION: Passing any value to it will delete any previously present values. Maybe a --metadata=delete to delete all previous metadata?
 }

@@ -78,26 +78,34 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 
 	block_blob_tier, _ := jptm.BlobTiers()
 	set_to_tier := getTierString(block_blob_tier)
+	SetPropertiesAPIOption := jptm.SetPropertiesAPIOption()
 
-	_, err := srcBlobURL.SetTier(jptm.Context(), set_to_tier, azblob.LeaseAccessConditions{})
-	//todo add more options like priority etc.
-	if err != nil {
-		if strErr, ok := err.(azblob.StorageError); ok {
-			// TODO: Do we need to add more conditions? Won't happen on some snapshots and versions. Check documentation
+	switch SetPropertiesAPIOption {
+	case common.ESetPropertiesAPIOption.SetTier():
+		_, err := srcBlobURL.SetTier(jptm.Context(), set_to_tier, azblob.LeaseAccessConditions{})
+		//todo add more options like priority etc.
+		if err != nil {
+			if strErr, ok := err.(azblob.StorageError); ok {
+				// TODO: Do we need to add more conditions? Won't happen on some snapshots and versions. Check documentation
 
-			// If the status code was 403, it means there was an authentication error, and we exit.
-			// User can resume the job if completely ordered with a new sas.
-			if strErr.Response().StatusCode == http.StatusForbidden {
-				errMsg := fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error())
-				jptm.Log(pipeline.LogError, errMsg)
-				common.GetLifecycleMgr().Error(errMsg)
+				// If the status code was 403, it means there was an authentication error, and we exit.
+				// User can resume the job if completely ordered with a new sas.
+				if strErr.Response().StatusCode == http.StatusForbidden {
+					errMsg := fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error())
+					jptm.Log(pipeline.LogError, errMsg)
+					common.GetLifecycleMgr().Error(errMsg)
+				}
 			}
-		}
 
-		// in all other cases, make the transfer as failed
-		transferDone(common.ETransferStatus.Failed(), err)
-	} else {
-		transferDone(common.ETransferStatus.Success(), nil)
+			// in all other cases, make the transfer as failed
+			transferDone(common.ETransferStatus.Failed(), err)
+		} else {
+			transferDone(common.ETransferStatus.Success(), nil)
+		}
+	case common.ESetPropertiesAPIOption.SetMetaData(), common.ESetPropertiesAPIOption.SetTierAndMetaData():
+		panic("Not Supported to be setting metadata yet")
+	default:
+		jptm.Log(pipeline.LogInfo, "No properties were changed becaue common.ESetPropertiesAPIOption.SetTierAndMetaData() was set to none")
 	}
 }
 
