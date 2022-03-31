@@ -22,6 +22,7 @@ package jobsAdmin
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"os"
@@ -115,17 +116,12 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 
 	maxRamBytesToUse := getMaxRamForChunks()
 
-	// default to a pacer that doesn't actually control the rate
-	// (it just records total throughput, since for historical reasons we do that in the pacer)
-	var pacer ste.PacerAdmin = ste.NewNullAutoPacer()
-	if targetRateInMegaBitsPerSec > 0 {
-		// use the "networking mega" (based on powers of 10, not powers of 2, since that's what mega means in networking context)
-		targetRateInBytesPerSec := int64(targetRateInMegaBitsPerSec * 1000 * 1000 / 8)
-		unusedExpectedCoarseRequestByteCount := int64(0)
-		pacer = ste.NewTokenBucketPacer(targetRateInBytesPerSec, unusedExpectedCoarseRequestByteCount)
-		// Note: as at July 2019, we don't currently have a shutdown method/event on JobsAdmin where this pacer
-		// could be shut down. But, it's global anyway, so we just leave it running until application exit.
-	}
+	// use the "networking mega" (based on powers of 10, not powers of 2, since that's what mega means in networking context)
+	targetRateInBytesPerSec := int64(targetRateInMegaBitsPerSec * 1000 * 1000 / 8)
+	unusedExpectedCoarseRequestByteCount := int64(0)
+	pacer := ste.NewTokenBucketPacer(targetRateInBytesPerSec, unusedExpectedCoarseRequestByteCount)
+	// Note: as at July 2019, we don't currently have a shutdown method/event on JobsAdmin where this pacer
+	// could be shut down. But, it's global anyway, so we just leave it running until application exit.
 
 	ja := &jobsAdmin{
 		concurrency:             concurrency,
@@ -157,6 +153,8 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 
 	// Spin up slice pool pruner
 	go ja.slicePoolPruneLoop()
+
+	go ja.messageHandler(common.GetLifecycleMgr().MsgHandlerChannel())
 
 }
 
@@ -301,6 +299,14 @@ func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
 func (ja *jobsAdmin) BytesOverWire() int64 {
 	return ja.pacer.GetTotalTraffic()
 }
+
+func (ja *jobsAdmin) UpdateTargetBandwidth(newTarget int64) {
+	if newTarget < 0 {
+		return
+	}
+	ja.pacer.UpdateTargetBytesPerSecond(newTarget)
+}
+
 /*
 func (ja *jobsAdmin) AddSuccessfulBytesInActiveFiles(n int64) {
 	atomic.AddInt64(&ja.atomicSuccessfulBytesInActiveFiles, n)
@@ -501,6 +507,61 @@ func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint3
 	a := ste.NewPerformanceAdvisor(p, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency, dir, averageBytesPerFile, isToAzureFiles)
 	return a.GetAdvice()
 }
+
+
+//Structs for messageHandler
+
+/* PerfAdjustment message. */
+type jaPerfAdjustmentMsg struct {
+	Throughput int64 `json:"cap-mbps,string"`
+}
+
+func (ja *jobsAdmin) messageHandler(inputChan <-chan common.LCMMsg) {
+	toBitsPerSec := func(megaBitsPerSec int64) int64 {
+		return megaBitsPerSec * 1000 * 1000 / 8
+	}
+	glcm := common.GetLifecycleMgr()
+	
+	lastPerfAdjustTime := time.Now() // right when this routine songs
+	const minIntervalBetweenPerfAdjustment = time.Minute
+	
+	for {
+		msg := <-inputChan
+		var msgType common.LCMMsgType
+		msgType.Parse(msg.MsgType) // MsgType is already verified by LCM
+		switch msgType {
+		case common.ELCMMsgType.PerformanceAdjustment():
+			var perfAdjustmentReq jaPerfAdjustmentMsg
+
+			if time.Since(lastPerfAdjustTime) < minIntervalBetweenPerfAdjustment {
+				msgStr := "Performance Adjustment already in progress. Please try after some time."
+				glcm.Info(msgStr)
+				continue
+			}
+			
+			if err := json.Unmarshal([]byte(msg.Value), &perfAdjustmentReq); err != nil {
+				msgStr := fmt.Sprintf("Error parsing message %s. ERR: %s", msg.Value, err.Error())
+				glcm.Info(msgStr)
+				continue
+			}
+			
+			if perfAdjustmentReq.Throughput < 0 {
+				msgStr := fmt.Sprintf("Invalid value %d for cap-mbps. cap-mpbs should be greater than 0",
+						      perfAdjustmentReq.Throughput)
+				glcm.Info(msgStr)
+				continue
+			}
+
+			lastPerfAdjustTime = time.Now()
+			ja.UpdateTargetBandwidth(toBitsPerSec(perfAdjustmentReq.Throughput))
+			glcm.Info(fmt.Sprintf("Adjusted throughput to %dMbps",perfAdjustmentReq.Throughput))
+		default:
+		}
+
+	}
+
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // The jobIDToJobMgr maps each JobID to its JobMgr
