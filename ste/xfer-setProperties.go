@@ -14,21 +14,44 @@ import (
 
 //var explainedSkippedRemoveOnce sync.Once
 
-func getTierString(tier common.BlockBlobTier) azblob.AccessTierType {
-	tier_string := azblob.AccessTierNone
+func getBlockBlobTierString(tier common.BlockBlobTier) azblob.AccessTierType {
 	switch tier {
 	case common.EBlockBlobTier.Hot():
-		tier_string = azblob.AccessTierHot
+		return azblob.AccessTierHot
 	case common.EBlockBlobTier.Cool():
-		tier_string = azblob.AccessTierCool
+		return azblob.AccessTierCool
 	case common.EBlockBlobTier.Archive():
-		tier_string = azblob.AccessTierArchive
+		return azblob.AccessTierArchive
 	case common.EBlockBlobTier.None():
 		panic("trying to set tier to none")
 	default:
 		panic("invalid tier type")
 	}
-	return tier_string
+}
+
+func getPageBlobTierString(tier common.PageBlobTier) azblob.AccessTierType {
+	switch tier {
+	case common.EPageBlobTier.P10():
+		return azblob.AccessTierP10
+	case common.EPageBlobTier.P15():
+		return azblob.AccessTierP15
+	case common.EPageBlobTier.P20():
+		return azblob.AccessTierP20
+	case common.EPageBlobTier.P30():
+		return azblob.AccessTierP30
+	case common.EPageBlobTier.P4():
+		return azblob.AccessTierP4
+	case common.EPageBlobTier.P40():
+		return azblob.AccessTierP40
+	case common.EPageBlobTier.P50():
+		return azblob.AccessTierP50
+	case common.EPageBlobTier.P6():
+		return azblob.AccessTierP6
+	case common.EPageBlobTier.None():
+		panic("trying to set tier to none")
+	default:
+		panic("Invalid tier type")
+	}
 }
 func SetProperties(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytes transferred by the size of the source.
@@ -76,13 +99,21 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		jptm.ReportTransferDone()
 	}
 
-	block_blob_tier, _ := jptm.BlobTiers()
-	set_to_tier := getTierString(block_blob_tier)
+	blockBlobTier, pageBlobTier := jptm.BlobTiers()
+	srcBlobType := jptm.Info().SrcBlobType
+	_ = srcBlobType
 	SetPropertiesAPIOption := jptm.SetPropertiesAPIOption()
-
 	switch SetPropertiesAPIOption {
 	case common.ESetPropertiesAPIOption.SetTier():
-		_, err := srcBlobURL.SetTier(jptm.Context(), set_to_tier, azblob.LeaseAccessConditions{})
+		var err error = nil
+		switch srcBlobType {
+		case azblob.BlobBlockBlob:
+			_, err = srcBlobURL.SetTier(jptm.Context(), getBlockBlobTierString(blockBlobTier), azblob.LeaseAccessConditions{})
+		case azblob.BlobPageBlob:
+			_, err = srcBlobURL.SetTier(jptm.Context(), getPageBlobTierString(pageBlobTier), azblob.LeaseAccessConditions{})
+		default:
+			panic("Invalid blob type")
+		}
 		//todo add more options like priority etc.
 		if err != nil {
 			if strErr, ok := err.(azblob.StorageError); ok {
@@ -105,7 +136,7 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	case common.ESetPropertiesAPIOption.SetMetaData(), common.ESetPropertiesAPIOption.SetTierAndMetaData():
 		panic("Not Supported to be setting metadata yet")
 	default:
-		jptm.Log(pipeline.LogInfo, "No properties were changed becaue common.ESetPropertiesAPIOption.SetTierAndMetaData() was set to none")
+		jptm.Log(pipeline.LogInfo, "No properties were changed because common.ESetPropertiesAPIOption.SetTierAndMetaData() was set to none")
 	}
 }
 

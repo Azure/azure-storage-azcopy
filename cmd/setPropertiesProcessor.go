@@ -26,18 +26,17 @@ import "github.com/Azure/azure-storage-azcopy/v10/common"
 // TODO name change needed
 func setSetPropertiesAPIOption(cca *CookedCopyCmdArgs) common.SetPropertiesAPIOption {
 	if cca.metadata != "" {
-		if cca.blockBlobTier != common.EBlockBlobTier.None() {
+		if cca.blockBlobTier != common.EBlockBlobTier.None() || cca.pageBlobTier != common.EPageBlobTier.None() {
 			return common.ESetPropertiesAPIOption.SetTierAndMetaData()
 		} else {
 			return common.ESetPropertiesAPIOption.SetMetaData()
 		}
 	} else {
-		if cca.blockBlobTier != common.EBlockBlobTier.None() {
+		if cca.blockBlobTier != common.EBlockBlobTier.None() || cca.pageBlobTier != common.EPageBlobTier.None() {
 			return common.ESetPropertiesAPIOption.SetTier()
 		}
 	}
-	// if metadata is nill and BlockBlobTier and PageBlobTier are both nill
-	//TODO add pageblobTier
+	// if metadata is nil and BlockBlobTier and PageBlobTier are both nil
 	return common.ESetPropertiesAPIOption.None()
 }
 
