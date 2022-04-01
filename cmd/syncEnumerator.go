@@ -102,6 +102,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// They must both pass to get the file included
 	// Same rule applies to excludeFilters and excludeAttrFilters
 	filters := buildIncludeFilters(cca.includePatterns)
+	filters  = buildIncludeFilters(cca.includePaths)
 	if cca.fromTo.From() == common.ELocation.Local() {
 		includeAttrFilters := buildAttrFilters(cca.includeFileAttributes, cca.source.ValueLocal(), true)
 		filters = append(filters, includeAttrFilters...)
