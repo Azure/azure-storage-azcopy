@@ -118,7 +118,7 @@ type rawCopyCmdArgs struct {
 	pageBlobTier  string
 	output        string // TODO: Is this unused now? replaced with param at root level?
 	// list of blobTypes to exclude while enumerating the transfer
-	excludeBlobType string
+	ExcludeBlobType string
 	// Opt-in flag to persist SMB ACLs to Azure Files.
 	preserveSMBPermissions bool
 	preservePermissions    bool // Separate flag so that we don't get funkiness with two "flags" targeting the same boolean
@@ -841,16 +841,16 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	cooked.s2sSourceChangeValidation = raw.s2sSourceChangeValidation
 
 	// If the user has provided some input with excludeBlobType flag, parse the input.
-	if len(raw.excludeBlobType) > 0 {
+	if len(raw.ExcludeBlobType) > 0 {
 		// Split the string using delimiter ';' and parse the individual blobType
-		blobTypes := strings.Split(raw.excludeBlobType, ";")
+		blobTypes := strings.Split(raw.ExcludeBlobType, ";")
 		for _, blobType := range blobTypes {
 			var eBlobType common.BlobType
 			err := eBlobType.Parse(blobType)
 			if err != nil {
 				return cooked, fmt.Errorf("error parsing the exclude-blob-type %s provided with exclude-blob-type flag ", blobType)
 			}
-			cooked.excludeBlobType = append(cooked.excludeBlobType, eBlobType.ToAzBlobType())
+			cooked.ExcludeBlobType = append(cooked.ExcludeBlobType, eBlobType.ToAzBlobType())
 		}
 	}
 
@@ -1115,7 +1115,7 @@ type CookedCopyCmdArgs struct {
 	// options from flags
 	blockSize int64
 	// list of blobTypes to exclude while enumerating the transfer
-	excludeBlobType []azblob.BlobType
+	ExcludeBlobType []azblob.BlobType
 	blobType        common.BlobType
 	// Blob index tags categorize data in your storage account utilizing key-value tag attributes.
 	// These tags are automatically indexed and exposed as a queryable multi-dimensional index to easily find data.
@@ -1422,7 +1422,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		AutoDecompress:  cca.autoDecompress,
 		Priority:        common.EJobPriority.Normal(),
 		LogLevel:        azcopyLogVerbosity,
-		ExcludeBlobType: cca.excludeBlobType,
+		ExcludeBlobType: cca.ExcludeBlobType,
 		BlobAttributes: common.BlobTransferAttributes{
 			BlobType:                 cca.blobType,
 			BlockSizeInBytes:         cca.blockSize,
@@ -1921,7 +1921,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.autoDecompress, "decompress", false, "Automatically decompress files when downloading, if their content-encoding indicates that they are compressed. The supported content-encoding values are 'gzip' and 'deflate'. File extensions of '.gz'/'.gzip' or '.zz' aren't necessary, but will be removed if present.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Look into sub-directories recursively when uploading from local file system.")
 	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS. Piping: BlobPipe, PipeBlob")
-	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "", "Optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from the container "+
+	cpCmd.PersistentFlags().StringVar(&raw.ExcludeBlobType, "exclude-blob-type", "", "Optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from the container "+
 		"or the account. Use of this flag is not applicable for copying data from non azure-service to service. More than one blob should be separated by ';'. ")
 	// options change how the transfers are performed
 	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage, and downloading from Azure Storage. The default value is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")

@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/JeffreyRichter/enum/enum"
 )
 
@@ -128,8 +127,6 @@ type CopyJobPartOrderRequest struct {
 	Priority        JobPriority     // priority of the task
 	FromTo          FromTo
 	Fpo             FolderPropertyOption // passed in from front-end to ensure that front-end and STE agree on the desired behaviour for the job
-	// list of blobTypes to exclude.
-	ExcludeBlobType []azblob.BlobType
 
 	SourceRoot      ResourceString
 	DestinationRoot ResourceString
