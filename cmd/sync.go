@@ -59,15 +59,16 @@ type rawSyncCmdArgs struct {
 	excludeRegex          string
 	excludeBlobType       string
 
-	preservePermissions     bool
-	preserveSMBPermissions  bool // deprecated and synonymous with preservePermissions
-	preserveOwner           bool
-	preserveSMBInfo         bool
-	preservePOSIXProperties bool
-	followSymlinks          bool
-	backupMode              bool
-	putMd5                  bool
-	md5ValidationOption     string
+	blobType              string
+
+	preservePermissions    bool
+	preserveSMBPermissions bool // deprecated and synonymous with preservePermissions
+	preserveOwner          bool
+	preserveSMBInfo        bool
+	followSymlinks         bool
+	backupMode             bool
+	putMd5                 bool
+	md5ValidationOption    string
 	// this flag indicates the user agreement with respect to deleting the extra files at the destination
 	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
 	// otherwise the user is prompted to make a decision
@@ -342,7 +343,23 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		}
 		cooked.excludeBlobType = append(cooked.excludeBlobType, eBlobType.ToAzBlobType())
 	}
-	
+
+	// parse the given blob type.
+	err = cooked.blobType.Parse(raw.blobType)
+	if err != nil {
+		return cooked, err
+	}
+
+	// blob type is not supported if destination is not blob
+	if cooked.blobType != common.EBlobType.Detect() && cooked.fromTo.To() != common.ELocation.Blob() {
+		return cooked, fmt.Errorf("blob-type is not supported for the scenario (%s)", cooked.fromTo.String())
+	}
+
+	// If the given blobType is AppendBlob, block-size-mb should not be greater than
+	// 4MB.
+	if cookedSize, _ := blockSizeInBytes(raw.blockSizeMB); cooked.blobType == common.EBlobType.AppendBlob() && cookedSize > common.MaxAppendBlobBlockSize {
+		return cooked, fmt.Errorf("block size cannot be greater than 4MB for AppendBlob blob type")
+	}
 
 	cooked.dryrunMode = raw.dryrun
 
@@ -397,6 +414,7 @@ type cookedSyncCmdArgs struct {
 	includeRegex          []string
 	excludeRegex          []string
 	excludeBlobType       []azblob.BlobType
+	blobType              common.BlobType
 
 	// options
 	preservePermissions     common.PreservePermissionsOption
@@ -790,6 +808,8 @@ func init() {
 	syncCmd.PersistentFlags().StringVar(&raw.excludeRegex, "exclude-regex", "", "Exclude the relative path of the files that match with the regular expressions. Separate regular expressions with ';'.")
 	syncCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "", "Optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from the container "+
 		"or the account. Use of this flag is not applicable for copying data from non azure-service to service. More than one blob should be separated by ';'. ")
+	syncCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "Defines the type of blob at the destination. This is used for uploading blobs and when copying between accounts (default 'Detect'). Valid values include 'Detect', 'BlockBlob', 'PageBlob', and 'AppendBlob'. "+
+		"When copying between accounts, a value of 'Detect' causes AzCopy to use the type of source blob to determine the type of the destination blob. When uploading a file, 'Detect' determines if the file is a VHD or a VHDX file based on the file extension. If the file is either a VHD or VHDX file, AzCopy treats the file as a page blob.")
 	syncCmd.PersistentFlags().StringVar(&raw.deleteDestination, "delete-destination", "false", "Defines whether to delete extra files from the destination that are not present at the source. Could be set to true, false, or prompt. "+
 		"If set to prompt, the user will be asked a question before scheduling files and blobs for deletion. (default 'false').")
 	syncCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob or file. (By default the hash is NOT created.) Only available when uploading.")
