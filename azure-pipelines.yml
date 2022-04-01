@@ -29,7 +29,7 @@ jobs:
         env:
           GO111MODULE: 'on'
         inputs:
-          version: '1.16'
+          version: '1.16.14'
 
       - script: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.43.0
@@ -67,6 +67,12 @@ jobs:
       - task: PublishBuildArtifacts@1
         displayName: 'Publish Artifacts'
         condition: succeededOrFailed()
+        
+      - task: ComponentGovernanceComponentDetection@0
+        inputs:
+          scanType: 'Register'
+          verbosity: 'Verbose'
+          alertWarningLevel: 'High'
 
   - job: E2E_Test
     timeoutInMinutes: 360
@@ -88,19 +94,22 @@ jobs:
     steps:
       - task: GoTool@0
         inputs:
-          version: '1.16'
+          version: '1.16.14'
 
       # Running E2E Tests on Linux - AMD64
       - script: |
           set -e
           GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
           export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
-          go test -timeout 20m -race -short -cover ./e2etest
+          go test -timeout 60m -race -short -cover ./e2etest
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
           AZCOPY_E2E_ACCOUNT_KEY_HNS: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
           AZCOPY_E2E_ACCOUNT_NAME_HNS: $(AZCOPY_E2E_ACCOUNT_NAME_HNS)
+          AZCOPY_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
+          AZCOPY_E2E_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
+          AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
           AZCOPY_E2E_CLASSIC_ACCOUNT_NAME: $(AZCOPY_E2E_CLASSIC_ACCOUNT_NAME)
           AZCOPY_E2E_CLASSIC_ACCOUNT_KEY: $(AZCOPY_E2E_CLASSIC_ACCOUNT_KEY)
           CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
@@ -113,12 +122,15 @@ jobs:
           go build -o $(System.DefaultWorkingDirectory)/azcopy_windows_amd64.exe
           go build -o $(System.DefaultWorkingDirectory)/azcopy_windows_386.exe
           echo 'starting E2E tests on windows'
-          go test -timeout 30m -race -cover -v ./e2etest
+          go test -timeout 60m -race -cover -v ./e2etest
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
           AZCOPY_E2E_ACCOUNT_KEY_HNS: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
           AZCOPY_E2E_ACCOUNT_NAME_HNS: $(AZCOPY_E2E_ACCOUNT_NAME_HNS)
+          AZCOPY_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
+          AZCOPY_E2E_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
+          AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
           AZCOPY_E2E_CLASSIC_ACCOUNT_NAME: $(AZCOPY_E2E_CLASSIC_ACCOUNT_NAME)
           AZCOPY_E2E_CLASSIC_ACCOUNT_KEY: $(AZCOPY_E2E_CLASSIC_ACCOUNT_KEY)
           CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
@@ -133,12 +145,15 @@ jobs:
           go build -o azcopy_darwin_amd64
           echo 'starting E2E tests on mac-os'
           export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_darwin_amd64
-          go test -timeout 30m -race -cover -v ./e2etest
+          go test -timeout 60m -race -cover -v ./e2etest
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
           AZCOPY_E2E_ACCOUNT_KEY_HNS: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
           AZCOPY_E2E_ACCOUNT_NAME_HNS: $(AZCOPY_E2E_ACCOUNT_NAME_HNS)
+          AZCOPY_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
+          AZCOPY_E2E_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
+          AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
           AZCOPY_E2E_CLASSIC_ACCOUNT_NAME: $(AZCOPY_E2E_CLASSIC_ACCOUNT_NAME)
           AZCOPY_E2E_CLASSIC_ACCOUNT_KEY: $(AZCOPY_E2E_CLASSIC_ACCOUNT_KEY)
           CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
@@ -161,7 +176,7 @@ jobs:
       - task: GoTool@0
         name: 'Set_up_Golang'
         inputs:
-          version: '1.16'
+          version: '1.16.14'
       - task: DownloadSecureFile@1
         name: ciGCSServiceAccountKey
         displayName: 'Download GCS Service Account Key'
@@ -181,7 +196,7 @@ jobs:
           # the set -e line is needed so that the unit tests failure would cause the job to fail properly
           # "-check.v" (must be after package list) outputs timings
           set -e
-          go test -timeout 45m -race -short -cover ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v"
+          go test -timeout 60m -race -short -cover ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v"
           GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
         name: 'Run_unit_tests'
         env:

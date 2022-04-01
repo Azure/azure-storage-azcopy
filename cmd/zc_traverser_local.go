@@ -29,6 +29,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
@@ -305,7 +306,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 
 	if err != nil {
-		return fmt.Errorf("cannot scan the path %s, please verify that it is a valid", t.fullPath)
+		azcopyScanningLogger.Log(pipeline.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
+		return fmt.Errorf("failed to scan path %s due to %s", t.fullPath, err.Error())
 	}
 
 	// if the path is a single file, then pass it through the filters and send to processor
@@ -341,9 +343,12 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 
 				var entityType common.EntityType
 				if fileInfo.IsDir() {
-					fileInfo, err = WrapFolder(filePath, fileInfo)
+					newFileInfo, err := WrapFolder(filePath, fileInfo)
 					if err != nil {
 						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get last change of target at %s: %s", filePath, err))
+					} else {
+						// fileInfo becomes nil in case we fail to wrap folder.
+						fileInfo = newFileInfo
 					}
 
 					entityType = common.EEntityType.Folder()

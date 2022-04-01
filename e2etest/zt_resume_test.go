@@ -9,7 +9,7 @@ import (
 )
 
 func TestResume_Generic(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync()|eOperation.Resume(), eTestFromTo.AllSync(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync()|eOperation.Resume(), eTestFromTo.AllSync(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 		debugSkipFiles: []string{
 			"/fileb",
@@ -59,7 +59,7 @@ func TestResume_LargeGeneric(t *testing.T) {
 		t.FailNow()
 	}
 
-	RunScenarios(t, eOperation.CopyAndSync()|eOperation.Resume(), eTestFromTo.AllSync(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync()|eOperation.Resume(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:      true,
 		debugSkipFiles: toSkip,
 	}, nil, testFiles{
@@ -78,6 +78,8 @@ func TestResume_PublicSource_BlobTarget(t *testing.T) {
 		eOperation.Copy()|eOperation.Resume(),
 		eTestFromTo.Other(common.EFromTo.BlobBlob(), common.EFromTo.BlobLocal()),
 		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
 		params{
 			recursive:      true,
 			debugSkipFiles: []string{";"}, // skip the only file is ;
@@ -102,6 +104,8 @@ func TestResume_PublicSource_ContainerTarget(t *testing.T) {
 		eOperation.CopyAndSync()|eOperation.Resume(),
 		eTestFromTo.Other(common.EFromTo.BlobBlob(), common.EFromTo.BlobLocal()),
 		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
 		params{
 			recursive:      true,
 			debugSkipFiles: []string{"a.txt"}, // skip the only file is ;

@@ -46,6 +46,7 @@ type scenario struct {
 	operation           Operation
 	validate            Validate
 	fromTo              common.FromTo
+	credTypes           [2]common.CredentialType
 	p                   params
 	hs                  hooks
 	fs                  testFiles
@@ -125,7 +126,7 @@ func (s *scenario) Run() {
 
 func (s *scenario) runHook(h hookFunc) bool {
 	if h == nil {
-		return true //nothing to do. So "successful"
+		return true // nothing to do. So "successful"
 	}
 
 	// run the hook, passing ourself in as the implementation of hookHelper interface
@@ -186,19 +187,26 @@ func (s *scenario) runAzCopy() {
 		}
 	}
 
-	// run AzCopy
-	const useSas = true // TODO: support other auth options (see params of RunTest)
 	tf := s.GetTestFiles()
-	var srcUseSas = tf.sourcePublic == azblob.PublicAccessNone
+	// run AzCopy
 	result, wasClean, err := r.ExecuteAzCopyCommand(
 		s.operation,
-		s.state.source.getParam(s.stripTopDir, srcUseSas, tf.objectTarget),
-		// Prefer the destination target over the object target itself.
-		s.state.dest.getParam(false, useSas, common.IffString(tf.destTarget != "", tf.destTarget, tf.objectTarget)),
+		s.state.source.getParam(s.stripTopDir, s.credTypes[0] == common.ECredentialType.Anonymous(), tf.objectTarget),
+		s.state.dest.getParam(false, s.credTypes[1] == common.ECredentialType.Anonymous(), common.IffString(tf.destTarget != "", tf.destTarget, tf.objectTarget)),
+		s.credTypes[0] == common.ECredentialType.OAuthToken() || s.credTypes[1] == common.ECredentialType.OAuthToken(), // needsOAuth
 		afterStart, s.chToStdin)
 
 	if !wasClean {
 		s.a.AssertNoErr(err, "running AzCopy")
+	}
+
+	// Generally, a cancellation is done when auth fails.
+	if result.finalStatus.JobStatus == common.EJobStatus.Cancelled() {
+		for _, v := range result.finalStatus.FailedTransfers {
+			if v.ErrorCode == 403 {
+				s.a.Error("authorization failed, perhaps SPN auth or the SAS token is bad?")
+			}
+		}
 	}
 
 	s.state.result = &result
@@ -232,6 +240,7 @@ func (s *scenario) resumeAzCopy() {
 		eOperation.Resume(),
 		s.state.result.jobID.String(),
 		"",
+		false,
 		afterStart,
 		s.chToStdin,
 	)
@@ -429,7 +438,7 @@ func (s *scenario) validateContent() {
 	}
 }
 
-//// Individual property validation routines
+// // Individual property validation routines
 
 func (s *scenario) validateMetadata(expected, actual map[string]string, isFolder bool) {
 	if isFolder { // hdi_isfolder is service-relevant metadata, not something we'd be testing for. This can pop up when specifying a folder() on blob.
@@ -551,7 +560,7 @@ func (s *scenario) validateLastWriteTime(expected, actual *time.Time) {
 		expected, actual))
 }
 
-//nolint
+// nolint
 func (s *scenario) validateSMBAttrs(expected, actual *uint32) {
 	if expected == nil {
 		// These properties were not explicitly stated for verification
@@ -575,7 +584,7 @@ func (s *scenario) cleanup() {
 	}
 }
 
-/// support the hookHelper functions. These are use by our hooks to modify the state, or resources, of the running test
+// / support the hookHelper functions. These are use by our hooks to modify the state, or resources, of the running test
 
 func (s *scenario) FromTo() common.FromTo {
 	return s.fromTo

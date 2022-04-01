@@ -159,6 +159,7 @@ func (TestResourceFactory) CreateNewContainer(c asserter, publicAccess azblob.Pu
 	name = TestResourceNameGenerator{}.GenerateContainerName(c)
 	container = TestResourceFactory{}.GetBlobServiceURL(accountType).NewContainerURL(name)
 
+
 	cResp, err := container.Create(context.Background(), nil, publicAccess)
 	c.AssertNoErr(err)
 	c.Assert(cResp.StatusCode(), equals(), 201)
@@ -252,10 +253,10 @@ func generateName(c asserter, prefix string, maxLen int) string {
 	name := c.CompactScenarioName() // don't want to just use test name here, because each test contains multiple scenarios with the declarative runner
 
 	textualPortion := fmt.Sprintf("%s-%s", prefix, strings.ToLower(name))
-	currentTime := time.Now()
-	numericSuffix := fmt.Sprintf("%02d%02d%d", currentTime.Minute(), currentTime.Second(), currentTime.Nanosecond())
+	// GUIDs are less prone to overlap than times.
+	guidSuffix := uuid.New().String()
 	if maxLen > 0 {
-		maxTextLen := maxLen - len(numericSuffix)
+		maxTextLen := maxLen - len(guidSuffix)
 		if maxTextLen < 1 {
 			panic("max len too short")
 		}
@@ -263,7 +264,7 @@ func generateName(c asserter, prefix string, maxLen int) string {
 			textualPortion = textualPortion[:maxTextLen]
 		}
 	}
-	name = textualPortion + numericSuffix
+	name = textualPortion + guidSuffix
 	return name
 }
 

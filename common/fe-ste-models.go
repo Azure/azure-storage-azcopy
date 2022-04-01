@@ -1495,3 +1495,33 @@ func GetClientProvidedKey(options CpkOptions) azblob.ClientProvidedKeyOptions {
 	_cpkScopeInfo := GetCpkScopeInfo(options.CpkScopeInfo)
 	return ToClientProvidedKeyOptions(_cpkInfo, _cpkScopeInfo)
 }
+
+
+////////////////////////////////////////////////////////////////
+type LCMMsgType uint16
+
+var ELCMMsgType LCMMsgType
+
+func(LCMMsgType) Invalid()                                LCMMsgType {return LCMMsgType(0)}
+func(LCMMsgType) CancelJob()                              LCMMsgType {return LCMMsgType(1)}
+func(LCMMsgType) E2EInterrupts()                          LCMMsgType {return LCMMsgType(2)}
+func(LCMMsgType) PerformanceAdjustment()                  LCMMsgType {return LCMMsgType(3)}
+
+
+func (m *LCMMsgType) Parse(s string) error {
+	val, err := enum.Parse(reflect.TypeOf(m), s, true)
+	if err == nil {
+		*m = val.(LCMMsgType)
+	}
+	return err
+}
+
+func (m *LCMMsgType) String() string {
+	return enum.StringInt(m, reflect.TypeOf(m))
+}
+
+type LCMMsg struct {
+	TimeStamp time.Time `json:"TimeStamp"`
+	MsgType   string    `json:"MessageType"`
+	Value     string    `json:"Value"`
+}

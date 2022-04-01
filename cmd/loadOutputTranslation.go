@@ -24,10 +24,9 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"io"
 	"strings"
-
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -225,7 +224,7 @@ Number of Transfers Skipped: %v
 TotalBytesTransferred: %v
 Final Job Status: %v
 `,
-		ste.ToFixed(summary.Elapsed/60, 4),
+		jobsAdmin.ToFixed(summary.Elapsed/60, 4),
 		summary.FilesTotal,
 		summary.FilesCompleted,
 		summary.FilesFailed,
