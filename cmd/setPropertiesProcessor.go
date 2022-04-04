@@ -25,19 +25,13 @@ import "github.com/Azure/azure-storage-azcopy/v10/common"
 // setting SetPropertiesAPIOption for choosing which API to use
 // TODO name change needed
 func setSetPropertiesAPIOption(cca *CookedCopyCmdArgs) common.SetPropertiesAPIOption {
-	if cca.metadata != "" {
-		if cca.blockBlobTier != common.EBlockBlobTier.None() || cca.pageBlobTier != common.EPageBlobTier.None() {
-			return common.ESetPropertiesAPIOption.SetTierAndMetaData()
-		} else {
-			return common.ESetPropertiesAPIOption.SetMetaData()
-		}
-	} else {
-		if cca.blockBlobTier != common.EBlockBlobTier.None() || cca.pageBlobTier != common.EPageBlobTier.None() {
-			return common.ESetPropertiesAPIOption.SetTier()
-		}
+	if cca.blockBlobTier != common.EBlockBlobTier.None() || cca.pageBlobTier != common.EPageBlobTier.None() {
+		common.ESetPropertiesAPIOption.SetTier()
 	}
-	// if metadata is nil and BlockBlobTier and PageBlobTier are both nil
-	return common.ESetPropertiesAPIOption.None()
+	if cca.metadata != "" {
+		common.ESetPropertiesAPIOption.SetMetadata()
+	}
+	return common.ESetPropertiesAPIOption
 }
 
 func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption) *copyTransferProcessor {

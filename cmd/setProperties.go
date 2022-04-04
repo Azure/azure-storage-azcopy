@@ -105,10 +105,10 @@ func init() {
 
 	rootCmd.AddCommand(setPropCmd)
 
-	setPropCmd.PersistentFlags().StringVar(&raw.dst, "dst", "", "The destination location of the copy operation")
+	//TODO setPropCmd.PersistentFlags().StringVar(&raw.dst, "dst", "", "The destination location of the copy operation")
 	setPropCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "Define the log verbosity for the log file. Available levels include: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default 'INFO')")
 	setPropCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
-	setPropCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "Include only these paths when removing. "+
+	setPropCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "Include only these paths when setting property. "+
 		"This option does not support wildcard characters (*). Checks relative path prefix. For example: myFolder;myFolder/subDirName/file.pdf")
 	setPropCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
 	setPropCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "Exclude these paths when removing. "+
@@ -117,6 +117,4 @@ func init() {
 	setPropCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "Changes the access tier of the blobs to the given tier")
 	setPropCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "Upload page blob to Azure Storage using this blob tier. (default 'None').")
 	setPropCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Look into sub-directories recursively when uploading from local file system.")
-	setPropCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Key-value pairs to be set as metadata. Pass empty string to delete all metadata.")
-	//TODO: CAUTION: Passing any value to it will delete any previously present values. Maybe a --metadata=delete to delete all previous metadata?
 }
