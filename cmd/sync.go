@@ -61,14 +61,15 @@ type rawSyncCmdArgs struct {
 
 	blobType              string
 
-	preservePermissions    bool
-	preserveSMBPermissions bool // deprecated and synonymous with preservePermissions
-	preserveOwner          bool
-	preserveSMBInfo        bool
-	followSymlinks         bool
-	backupMode             bool
-	putMd5                 bool
-	md5ValidationOption    string
+	preservePermissions       bool
+	preserveSMBPermissions    bool // deprecated and synonymous with preservePermissions
+	preserveOwner             bool
+	preserveSMBInfo           bool
+	followSymlinks            bool
+	backupMode                bool
+	putMd5                    bool
+	md5ValidationOption       string
+	s2sSourceChangeValidation bool
 	// this flag indicates the user agreement with respect to deleting the extra files at the destination
 	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
 	// otherwise the user is prompted to make a decision
@@ -376,6 +377,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		return cooked, err
 	}
 	cooked.checkLength = raw.checkLength
+	cooked.s2sSourceChangeValidation = raw.s2sSourceChangeValidation
 
 	return cooked, nil
 }
@@ -466,6 +468,8 @@ type cookedSyncCmdArgs struct {
 	dryrunMode bool
 
 	checkLength bool
+
+	s2sSourceChangeValidation bool
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
