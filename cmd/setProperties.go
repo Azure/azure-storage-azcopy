@@ -45,8 +45,8 @@ func init() {
 		Aliases:    []string{},
 		SuggestFor: []string{},
 		// TODO: t-iverma: short and long descriptions
-		Short: "a",
-		Long:  "b",
+		Short: "Change properties of given blob",
+		Long:  "",
 		Args: func(cmd *cobra.Command, args []string) error {
 			// we only want one arg, which is the source
 			if len(args) != 1 {
