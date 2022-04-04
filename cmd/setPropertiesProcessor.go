@@ -53,8 +53,6 @@ func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPar
 			PageBlobTier:          cca.pageBlobTier,
 			Metadata:              cca.metadata,
 		},
-		// TODO add ALL other values from BlobTransferAttributes
-		// TODO add a flag in front end to distinguish which property we're transfering and all the tags related to it
 		SetPropertiesAPIOption: setSetPropertiesAPIOption(cca),
 	}
 
