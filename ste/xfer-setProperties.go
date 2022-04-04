@@ -63,7 +63,7 @@ func SetProperties(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 	// schedule the work as a chunk, so it will run on the main goroutine pool, instead of the
 	// smaller "transfer initiation pool", where this code runs.
 	id := common.NewChunkID(jptm.Info().Source, 0, 0)
-	cf := createChunkFunc(true, jptm, id, func() { //TODO t-iverma should done status be set? The job is async
+	cf := createChunkFunc(true, jptm, id, func() {
 		to := jptm.FromTo()
 		switch to.From() {
 		case common.ELocation.Blob():
