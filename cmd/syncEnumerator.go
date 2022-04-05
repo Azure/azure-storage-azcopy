@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"runtime"
+	"strings"
 	"sync/atomic"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -111,7 +112,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		filters = append(filters, excludeAttrFilters...)
 	}
 
-	//includeRegex
+	// includeRegex
 	filters = append(filters, buildRegexFilters(cca.includeRegex, true)...)
 	filters = append(filters, buildRegexFilters(cca.excludeRegex, false)...)
 
@@ -123,7 +124,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	}
 
 	// decide our folder transfer strategy
-	fpo, folderMessage := newFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.isHNSToHNS) // sync always acts like stripTopDir=true
+	fpo, folderMessage := newFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.isHNSToHNS, strings.EqualFold(cca.destination.Value, common.Dev_Null)) // sync always acts like stripTopDir=true
 	if !cca.dryrunMode {
 		glcm.Info(folderMessage)
 	}
