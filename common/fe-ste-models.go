@@ -124,16 +124,13 @@ type SetPropertiesAPIOption uint32 // [0000000000...32 times]
 var ESetPropertiesAPIOption = SetPropertiesAPIOption(0)
 
 // functions to set values
-func (SetPropertiesAPIOption) None()        { ESetPropertiesAPIOption += 0 }
-func (SetPropertiesAPIOption) SetTier()     { ESetPropertiesAPIOption += 1 }
-func (SetPropertiesAPIOption) SetMetadata() { ESetPropertiesAPIOption += 2 }
+func (SetPropertiesAPIOption) None()        { ESetPropertiesAPIOption |= 0 }
+func (SetPropertiesAPIOption) SetTier()     { ESetPropertiesAPIOption |= 1 }
+func (SetPropertiesAPIOption) SetMetadata() { ESetPropertiesAPIOption |= 2 }
 
 // functions to get values (to be used in sde)
-func (SetPropertiesAPIOption) nthBit(n int32) int32 {
-	return (n & (1 << (ESetPropertiesAPIOption - 1))) >> (ESetPropertiesAPIOption - 1)
-}
-func (SetPropertiesAPIOption) TierBit() int32     { return ESetPropertiesAPIOption.nthBit(1) }
-func (SetPropertiesAPIOption) MetaDataBit() int32 { return ESetPropertiesAPIOption.nthBit(2) }
+func (SetPropertiesAPIOption) TransferTier() bool     { return int32(ESetPropertiesAPIOption&1) == 1 }
+func (SetPropertiesAPIOption) TransferMetaData() bool { return int32(ESetPropertiesAPIOption&2) == 2 }
 
 func (d DeleteSnapshotsOption) String() string {
 	return enum.StringInt(d, reflect.TypeOf(d))

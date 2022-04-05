@@ -104,7 +104,7 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	_ = srcBlobType
 	SetPropertiesAPIOption := jptm.SetPropertiesAPIOption()
 
-	if SetPropertiesAPIOption.TierBit() == 1 {
+	if SetPropertiesAPIOption.TransferTier() {
 		var err error = nil
 		switch srcBlobType {
 		case azblob.BlobBlockBlob:
@@ -135,7 +135,7 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		}
 	}
 
-	if SetPropertiesAPIOption.MetaDataBit() == 1 {
+	if SetPropertiesAPIOption.TransferMetaData() {
 		panic("Not Supported to be setting metadata yet")
 	}
 }
