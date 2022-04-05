@@ -2,6 +2,8 @@ package e2etest
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -26,6 +28,8 @@ func TestSMB_FromShareSnapshot(t *testing.T) {
 }
 
 func TestSMB_ToDevNull(t *testing.T) {
+	isWindows := strings.EqualFold(runtime.GOOS, "windows")
+
 	RunScenarios(t,
 		eOperation.Copy(),
 		eTestFromTo.Other(common.EFromTo.FileLocal()),
@@ -34,8 +38,8 @@ func TestSMB_ToDevNull(t *testing.T) {
 		anonymousAuthOnly,
 		params{
 			recursive:              true,
-			preserveSMBPermissions: true,
-			preserveSMBInfo:        true,
+			preserveSMBPermissions: isWindows,
+			preserveSMBInfo:        isWindows,
 			checkMd5:               common.EHashValidationOption.FailIfDifferent(),
 			destNull:               true,
 		},
