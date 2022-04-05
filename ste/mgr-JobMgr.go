@@ -265,6 +265,9 @@ type jobMgr struct {
 	// atomicCurrentConcurrentConnections defines the number of active goroutines performing the transfer / executing the chunk func
 	// TODO: added for debugging purpose. remove later
 	atomicCurrentConcurrentConnections int64
+	/* Pool sizer related values */
+	atomicSuccessfulBytesInActiveFiles int64 // atomic 64-bit values should always be at the start of a struct to ensure alignment
+	atomicCurrentMainPoolSize          int32
 	// atomicAllTransfersScheduled defines whether all job parts have been iterated and resumed or not
 	atomicAllTransfersScheduled     int32
 	atomicFinalPartOrderedIndicator int32
@@ -315,10 +318,6 @@ type jobMgr struct {
 	cacheLimiter        common.CacheLimiter
 	fileCountLimiter    common.CacheLimiter
 	jstm                *jobStatusManager
-
-	/* Pool sizer related stuff */
-	atomicCurrentMainPoolSize          int32 // align 64 bit integers for 32 bit arch
-	atomicSuccessfulBytesInActiveFiles int64
 
 	isDaemon bool /* is it running as service */
 }
