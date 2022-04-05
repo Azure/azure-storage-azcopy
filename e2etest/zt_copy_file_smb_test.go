@@ -24,3 +24,33 @@ func TestSMB_FromShareSnapshot(t *testing.T) {
 		},
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
+
+func TestSMB_ToDevNull(t *testing.T) {
+	RunScenarios(t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.FileLocal()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive:              true,
+			preserveSMBPermissions: true,
+			preserveSMBInfo:        true,
+			checkMd5:               common.EHashValidationOption.FailIfDifferent(),
+			destNull:               true,
+		},
+		nil,
+		testFiles{
+			defaultSize: defaultStringFileSize,
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("foo"),
+				folder("a"),
+				f("a/bar"),
+			},
+		},
+		EAccountType.Standard(),
+		EAccountType.Standard(),
+		"",
+	)
+}
