@@ -22,6 +22,7 @@ package parallel
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -32,9 +33,14 @@ type crawler struct {
 	parallelism int
 	cond        *sync.Cond
 	// the following are protected by cond (and must only be accessed when cond.L is held)
-	unstartedDirs      []Directory // not a channel, because channels have length limits, and those get in our way
-	dirInProgressCount int64
-	lastAutoShutdown   time.Time
+	unstartedDirs       []Directory // not a channel, because channels have length limits, and those get in our way
+	dirInProgressCount  int64
+	lastAutoShutdown    time.Time
+	desiredNumOfthreads int
+	currentNumOfthreads int
+	desiredTuneCond     *sync.Cond
+	desiredTuneCh       chan int
+	done                bool
 }
 
 type Directory interface{}
@@ -54,13 +60,17 @@ type EnumerateOneDirFunc func(dir Directory, enqueueDir func(Directory), enqueue
 
 // Crawl crawls an abstract directory tree, using the supplied enumeration function.  May be use for whatever
 // that function can enumerate (i.e. not necessarily a local file system, just anything tree-structured)
-func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int) <-chan CrawlResult {
+func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int, ch chan int) <-chan CrawlResult {
 	c := &crawler{
-		unstartedDirs: make([]Directory, 0, 1024),
-		output:        make(chan CrawlResult, 1000),
-		workerBody:    worker,
-		parallelism:   parallelism,
-		cond:          sync.NewCond(&sync.Mutex{}),
+		unstartedDirs:       make([]Directory, 0, 1024),
+		output:              make(chan CrawlResult, 1000),
+		workerBody:          worker,
+		parallelism:         parallelism,
+		desiredNumOfthreads: parallelism,
+		currentNumOfthreads: 0,
+		desiredTuneCh:       ch,
+		cond:                sync.NewCond(&sync.Mutex{}),
+		desiredTuneCond:     sync.NewCond(&sync.Mutex{}),
 	}
 	go c.start(ctx, root)
 	return c.output
@@ -79,35 +89,115 @@ func (c *crawler) start(ctx context.Context, root Directory) {
 		}
 	}
 	go heartbeat()
+	if c.desiredTuneCh != nil {
+		go c.adjustNumberofthreads()
+	}
+
+	go c.adjustNumberofthreads()
 
 	c.unstartedDirs = append(c.unstartedDirs, root)
 	c.runWorkersToCompletion(ctx)
+
+	if c.desiredTuneCh != nil {
+		close(c.desiredTuneCh)
+	}
+	c.done = true
 	close(c.output)
 	close(done)
 }
 
 func (c *crawler) runWorkersToCompletion(ctx context.Context) {
-	wg := &sync.WaitGroup{}
-	for i := 0; i < c.parallelism; i++ {
-		wg.Add(1)
-		go c.workerLoop(ctx, wg, i)
+
+	for {
+		c.desiredTuneCond.L.Lock()
+		if c.desiredNumOfthreads == 0 {
+			fmt.Printf("CurrentNumOfthreads: %d, desiredNumOfThreds: %d", c.currentNumOfthreads, c.desiredNumOfthreads)
+			fmt.Printf("Return")
+			c.desiredTuneCond.L.Unlock()
+			return
+		}
+
+		if c.desiredNumOfthreads > c.currentNumOfthreads {
+			fmt.Printf("Increasing currentNumOfthreads: %d, desiredNumOfThreds: %d", c.currentNumOfthreads, c.desiredNumOfthreads)
+			go c.workerLoop(ctx, c.currentNumOfthreads)
+			c.currentNumOfthreads++
+		} else if c.desiredNumOfthreads < c.currentNumOfthreads {
+			fmt.Printf("Wait for decrease currentNumOfthreads: %d, desiredNumOfThreds: %d", c.currentNumOfthreads, c.desiredNumOfthreads)
+			if c.desiredNumOfthreads != c.currentNumOfthreads {
+				c.desiredTuneCond.Wait()
+			}
+
+		} else {
+
+			if c.desiredNumOfthreads == c.currentNumOfthreads && c.desiredNumOfthreads != 0 {
+				c.desiredTuneCond.Wait()
+			}
+
+		}
+		c.desiredTuneCond.L.Unlock()
 	}
-	wg.Wait()
 }
 
-func (c *crawler) workerLoop(ctx context.Context, wg *sync.WaitGroup, workerIndex int) {
-	defer wg.Done()
+func (c *crawler) workerLoop(ctx context.Context, workerIndex int) {
+	//defer wg.Done()
 
 	var err error
 	mayHaveMore := true
+	nice := false
+
 	for mayHaveMore && ctx.Err() == nil {
 		mayHaveMore, err = c.processOneDirectory(ctx, workerIndex)
 		if err != nil {
 			c.output <- CrawlResult{err: err}
 			// output the error, but we don't necessarily stop the enumeration (e.g. it might be one unreadable dir)
 		}
+
+		c.desiredTuneCond.L.Lock()
+		{
+			if c.desiredNumOfthreads < c.currentNumOfthreads {
+				c.currentNumOfthreads--
+				nice = true
+				mayHaveMore = false
+			}
+
+			if !mayHaveMore && !nice {
+				c.desiredNumOfthreads--
+				c.currentNumOfthreads--
+			}
+			c.desiredTuneCond.Signal()
+		}
+		c.desiredTuneCond.L.Unlock()
 	}
 }
+
+func (c *crawler) adjustNumberofthreads() {
+	for {
+		var desire int
+		if c.done {
+			return
+		}
+
+		if c.currentNumOfthreads > 5 {
+			desire = -1
+		} else {
+			desire = 1
+		}
+		c.desiredTuneCond.L.Lock()
+		c.desiredNumOfthreads += desire
+		c.desiredTuneCond.Signal()
+		c.desiredTuneCond.L.Unlock()
+		time.Sleep(10 * time.Second)
+	}
+}
+
+// func (c *crawler) adjustNumberofthreads() {
+// 	for desire := range c.desiredTuneCh {
+// 		c.desiredTuneCond.L.Lock()
+// 		c.desiredNumOfthreads += desire
+// 		c.desiredTuneCond.Signal()
+// 		c.desiredTuneCond.L.Unlock()
+// 	}
+// }
 
 func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (bool, error) {
 	const maxQueueDirectories = 1000 * 1000

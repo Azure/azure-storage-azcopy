@@ -53,7 +53,7 @@ func CrawlLocalDirectory(ctx context.Context, root string, parallelism int, read
 		func(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry, error)) error {
 			return enumerateOneFileSystemDirectory(dir, enqueueDir, enqueueOutput, reader)
 		},
-		parallelism,
+		parallelism, nil,
 	)
 }
 
