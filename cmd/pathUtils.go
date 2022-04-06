@@ -221,7 +221,8 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 	case common.ELocation.GCP():
 		return resource, "", nil
 	case common.ELocation.Benchmark(), // cover for benchmark as we generate data for that
-		common.ELocation.Unknown(): // cover for unknown as we treat that as garbage
+		common.ELocation.Unknown(), // cover for unknown as we treat that as garbage
+		common.ELocation.None():
 		// Local and S3 don't feature URL-embedded tokens
 		return resource, "", nil
 

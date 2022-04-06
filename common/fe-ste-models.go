@@ -111,6 +111,22 @@ type Version uint32
 type Status uint32
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+type SetPropertiesAPIOption uint32 // [0000000000...32 times]
+
+var ESetPropertiesAPIOption = SetPropertiesAPIOption(0)
+
+// functions to set values
+func (SetPropertiesAPIOption) None()        { ESetPropertiesAPIOption |= 0 }
+func (SetPropertiesAPIOption) SetTier()     { ESetPropertiesAPIOption |= 1 }
+func (SetPropertiesAPIOption) SetMetadata() { ESetPropertiesAPIOption |= 2 }
+
+// functions to get values (to be used in sde)
+func (SetPropertiesAPIOption) TransferTierBit() bool { return int32(ESetPropertiesAPIOption&1) == 1 }
+func (SetPropertiesAPIOption) TransferMetaDataBit() bool {
+	return int32(ESetPropertiesAPIOption&2) == 2
+}
+
 var EDeleteSnapshotsOption = DeleteSnapshotsOption(0)
 
 type DeleteSnapshotsOption uint8
@@ -452,6 +468,9 @@ func (Location) S3() Location        { return Location(6) }
 func (Location) Benchmark() Location { return Location(7) }
 func (Location) GCP() Location       { return Location(8) }
 
+// None is used in case we're transferring properties
+func (Location) None() Location { return Location(9) }
+
 func (l Location) String() string {
 	return enum.StringInt(l, reflect.TypeOf(l))
 }
@@ -479,7 +498,7 @@ func (l Location) IsRemote() bool {
 	switch l {
 	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3(), ELocation.GCP():
 		return true
-	case ELocation.Local(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
+	case ELocation.Local(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown(), ELocation.None():
 		return false
 	default:
 		panic("unexpected location, please specify if it is remote")
@@ -538,6 +557,9 @@ func (FromTo) BlobFile() FromTo    { return FromTo(fromToValue(ELocation.Blob(),
 func (FromTo) FileFile() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.File())) }
 func (FromTo) S3Blob() FromTo      { return FromTo(fromToValue(ELocation.S3(), ELocation.Blob())) }
 func (FromTo) GCPBlob() FromTo     { return FromTo(fromToValue(ELocation.GCP(), ELocation.Blob())) }
+func (FromTo) BlobNone() FromTo    { return fromToValue(ELocation.Blob(), ELocation.None()) }
+func (FromTo) BlobFSNone() FromTo  { return fromToValue(ELocation.BlobFS(), ELocation.None()) }
+func (FromTo) FileNone() FromTo    { return fromToValue(ELocation.File(), ELocation.None()) }
 
 // todo: to we really want these?  Starts to look like a bit of a combinatorial explosion
 func (FromTo) BenchmarkBlob() FromTo {
@@ -596,6 +618,10 @@ func (ft *FromTo) IsUpload() bool {
 
 func (ft *FromTo) AreBothFolderAware() bool {
 	return ft.From().IsFolderAware() && ft.To().IsFolderAware()
+}
+
+func (ft *FromTo) IsPropertyOnlyTransfer() bool {
+	return *ft == EFromTo.BlobNone() || *ft == EFromTo.BlobFSNone() || *ft == EFromTo.FileNone()
 }
 
 // TODO: deletes are not covered by the above Is* routines
@@ -1496,17 +1522,15 @@ func GetClientProvidedKey(options CpkOptions) azblob.ClientProvidedKeyOptions {
 	return ToClientProvidedKeyOptions(_cpkInfo, _cpkScopeInfo)
 }
 
-
 ////////////////////////////////////////////////////////////////
 type LCMMsgType uint16
 
 var ELCMMsgType LCMMsgType
 
-func(LCMMsgType) Invalid()                                LCMMsgType {return LCMMsgType(0)}
-func(LCMMsgType) CancelJob()                              LCMMsgType {return LCMMsgType(1)}
-func(LCMMsgType) E2EInterrupts()                          LCMMsgType {return LCMMsgType(2)}
-func(LCMMsgType) PerformanceAdjustment()                  LCMMsgType {return LCMMsgType(3)}
-
+func (LCMMsgType) Invalid() LCMMsgType               { return LCMMsgType(0) }
+func (LCMMsgType) CancelJob() LCMMsgType             { return LCMMsgType(1) }
+func (LCMMsgType) E2EInterrupts() LCMMsgType         { return LCMMsgType(2) }
+func (LCMMsgType) PerformanceAdjustment() LCMMsgType { return LCMMsgType(3) }
 
 func (m *LCMMsgType) Parse(s string) error {
 	val, err := enum.Parse(reflect.TypeOf(m), s, true)
