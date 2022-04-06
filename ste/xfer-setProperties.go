@@ -23,7 +23,7 @@ func getBlockBlobTierString(tier common.BlockBlobTier) azblob.AccessTierType {
 	case common.EBlockBlobTier.Archive():
 		return azblob.AccessTierArchive
 	case common.EBlockBlobTier.None():
-		panic("trying to set tier to none")
+		return azblob.AccessTierNone
 	default:
 		panic("invalid tier type")
 	}
@@ -48,7 +48,7 @@ func getPageBlobTierString(tier common.PageBlobTier) azblob.AccessTierType {
 	case common.EPageBlobTier.P6():
 		return azblob.AccessTierP6
 	case common.EPageBlobTier.None():
-		panic("trying to set tier to none")
+		return azblob.AccessTierNone
 	default:
 		panic("Invalid tier type")
 	}
@@ -108,11 +108,13 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		var err error = nil
 		switch srcBlobType {
 		case azblob.BlobBlockBlob:
-			_, err = srcBlobURL.SetTier(jptm.Context(), getBlockBlobTierString(blockBlobTier), azblob.LeaseAccessConditions{})
+			if getBlockBlobTierString(blockBlobTier) != azblob.AccessTierNone {
+				_, err = srcBlobURL.SetTier(jptm.Context(), getBlockBlobTierString(blockBlobTier), azblob.LeaseAccessConditions{})
+			}
 		case azblob.BlobPageBlob:
-			_, err = srcBlobURL.SetTier(jptm.Context(), getPageBlobTierString(pageBlobTier), azblob.LeaseAccessConditions{})
-		default:
-			panic("Invalid blob type")
+			if getPageBlobTierString(pageBlobTier) != azblob.AccessTierNone {
+				_, err = srcBlobURL.SetTier(jptm.Context(), getPageBlobTierString(pageBlobTier), azblob.LeaseAccessConditions{})
+			}
 		}
 		//todo add more options like priority etc.
 		if err != nil {
