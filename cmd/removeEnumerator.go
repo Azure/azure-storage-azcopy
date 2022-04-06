@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -75,8 +76,8 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
-	if ste.JobsAdmin != nil {
-		ste.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
+	if jobsAdmin.JobsAdmin != nil {
+		jobsAdmin.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
 	}
 
 	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo)

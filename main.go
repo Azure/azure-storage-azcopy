@@ -64,9 +64,10 @@ func main() {
 		common.PanicIfErr(err)
 	}
 
+	jobID := common.NewJobID()
 	// If insufficient arguments, show usage & terminate
 	if len(os.Args) == 1 {
-		cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder, azcopyJobPlanFolder, 0)
+		cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder, azcopyJobPlanFolder, 0, jobID)
 		return
 	}
 
@@ -79,7 +80,7 @@ func main() {
 		log.Fatalf("initialization failed: %v", err)
 	}
 
-	cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder, azcopyJobPlanFolder, maxFileAndSocketHandles)
+	cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder, azcopyJobPlanFolder, maxFileAndSocketHandles, jobID)
 	glcm.Exit(nil, common.EExitCode.Success())
 }
 
