@@ -1527,10 +1527,10 @@ type LCMMsgType uint16
 
 var ELCMMsgType LCMMsgType
 
-func (LCMMsgType) Invalid() LCMMsgType               { return LCMMsgType(0) }
-func (LCMMsgType) CancelJob() LCMMsgType             { return LCMMsgType(1) }
-func (LCMMsgType) E2EInterrupts() LCMMsgType         { return LCMMsgType(2) }
-func (LCMMsgType) PerformanceAdjustment() LCMMsgType { return LCMMsgType(3) }
+func (LCMMsgType) Invalid()               	{ return LCMMsgType(0) }
+func (LCMMsgType) CancelJob()             	{ return LCMMsgType(1) }
+func (LCMMsgType) E2EInterrupts()         	{ return LCMMsgType(2) }
+func (LCMMsgType) PerformanceAdjustment() 	{ return LCMMsgType(3) }
 
 func (m *LCMMsgType) Parse(s string) error {
 	val, err := enum.Parse(reflect.TypeOf(m), s, true)
