@@ -28,6 +28,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -74,7 +75,13 @@ func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
 }
 
 func UnfurlSymlinks(symlinkPath string) (result string, err error) {
+	var count uint32
 	unfurlingPlan := []string{symlinkPath}
+
+	// We need to do some special UNC path handling for windows.
+	if runtime.GOOS != "windows" {
+		return filepath.EvalSymlinks(symlinkPath)
+	}
 
 	for len(unfurlingPlan) > 0 {
 		item := unfurlingPlan[0]
@@ -95,7 +102,7 @@ func UnfurlSymlinks(symlinkPath string) (result string, err error) {
 			// Previously, we'd try to detect if the read link was a relative path by appending and starting the item
 			// However, it seems to be a fairly unlikely and hard to reproduce scenario upon investigation (Couldn't manage to reproduce the scenario)
 			// So it was dropped. However, on the off chance, we'll still do it if syntactically it makes sense.
-			if len(result) == 0 || result[0] == '.' { // A relative path being "" or "." likely (and in the latter case, on our officially supported OSes, always) means that it's just the same folder.
+			if result == "" || result == "." { // A relative path being "" or "." likely (and in the latter case, on our officially supported OSes, always) means that it's just the same folder.
 				result = filepath.Dir(item)
 			} else if !os.IsPathSeparator(result[0]) { // We can assume that a relative path won't start with a separator
 				possiblyResult := filepath.Join(filepath.Dir(item), result)
@@ -106,12 +113,21 @@ func UnfurlSymlinks(symlinkPath string) (result string, err error) {
 
 			result = common.ToExtendedPath(result)
 
+			/*
+			 * Either we can store all the symlink seen till now for this path or we count how many iterations to find out cyclic loop.
+			 * Choose the count method and restrict the number of links to 40. Which linux kernel adhere.
+			 */
+			if count >= 40 {
+				return "", errors.New("failed to unfurl symlink: too many links")
+			}
+
 			unfurlingPlan = append(unfurlingPlan, result)
 		} else {
 			return item, nil
 		}
 
 		unfurlingPlan = unfurlingPlan[1:]
+		count++
 	}
 
 	return "", errors.New("failed to unfurl symlink: exited loop early")
@@ -209,10 +225,31 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				computedRelativePath = ""
 			}
 
+			// TODO: Later we might want to transfer these special files as such.
+			unsupportedFileTypes := (os.ModeSocket | os.ModeNamedPipe | os.ModeIrregular | os.ModeDevice)
+
+			if (fileInfo.Mode() & unsupportedFileTypes) != 0 {
+				err := fmt.Errorf("Unsupported file type %s: %v", filePath, fileInfo.Mode())
+				WarnStdoutAndScanningLog(err.Error())
+
+				if errorChannel != nil {
+					errorChannel <- ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err}
+				}
+				return nil
+			}
+
 			if fileInfo.Mode()&os.ModeSymlink != 0 {
 				if !followSymlinks {
 					return nil // skip it
 				}
+
+				/*
+				 * There is one case where symlink can point to outside of sharepoint(symlink is absolute path). In that case
+				 * we need to throw error. Its very unlikely same file or folder present on the agent side.
+				 * In that case it anywaythrow the error.
+				 *
+				 * TODO: Need to handle this case.
+				 */
 				result, err := UnfurlSymlinks(filePath)
 
 				if err != nil {
@@ -274,24 +311,16 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 						WarnStdoutAndScanningLog(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
 					}
 				} else {
-					WarnStdoutAndScanningLog(fmt.Sprintf("Symlinks to individual files are not currently supported, so will ignore file at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
-					// TODO: remove the above info call and enable the below, with suitable multi-OS testing
-					//    including enable the test: TestWalkWithSymlinks_ToFile
-					/*
-							// It's a symlink to a file. Just process the file because there's no danger of cycles with links to individual files.
-							// (this does create the inconsistency that if there are two symlinks to the same file we will process it twice,
-							// but if there are two symlinks to the same directory we will process it only once. Because only directories are
-							// deduped to break cycles.  For now, we are living with the inconsistency. The alternative would be to "burn" more
-							// RAM by putting filepaths into seenDirs too, but that could be a non-trivial amount of RAM in big directories trees).
+					// It's a symlink to a file and we handle cyclic symlinks.
+					// (this does create the inconsistency that if there are two symlinks to the same file we will process it twice,
+					// but if there are two symlinks to the same directory we will process it only once. Because only directories are
+					// deduped to break cycles.  For now, we are living with the inconsistency. The alternative would be to "burn" more
+					// RAM by putting filepaths into seenDirs too, but that could be a non-trivial amount of RAM in big directories trees).
+					targetFi := symlinkTargetFileInfo{rStat, fileInfo.Name()}
 
-							// TODO: this code here won't handle the case of (file-type symlink) -> (another file-type symlink) -> file
-						    //    But do we WANT to handle that?  (since it opens us to risk of file->file cycles, and we are deliberately NOT
-						    //    putting files in our map, to reduce RAM usage).  Maybe just detect if the target of a file symlink its itself a symlink
-						    //    and skip those cases with an error message?
-							// Make file info that has name of source, and stats of dest (to mirror what os.Stat calls on source will give us later)
-							targetFi := symlinkTargetFileInfo{rStat, fileInfo.Name()}
-							return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), targetFi, fileError)
-					*/
+					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), targetFi, fileError)
+					_, err = getProcessingError(err)
+					return err
 				}
 				return nil
 			} else {
