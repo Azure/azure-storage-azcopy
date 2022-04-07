@@ -61,6 +61,7 @@ type IJobMgr interface {
 	AllTransfersScheduled() bool
 	ConfirmAllTransfersScheduled()
 	ResetAllTransfersScheduled()
+	Reset(context.Context, string) IJobMgr
 	PipelineLogInfo() pipeline.LogOptions
 	ReportJobPartDone(jobPartProgressInfo)
 	Context() context.Context
@@ -171,8 +172,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		jstm:                         &jstm,
 		isDaemon:                     daemonMode,
 		/*Other fields remain zero-value until this job is scheduled */}
-	jm.reset(appCtx, commandString)
-	jm.logJobsAdminMessages()
+	jm.Reset(appCtx, commandString)
 	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
 	// the Channel and schedules the transfers of that JobPart.
 	go jm.scheduleJobParts()
@@ -194,7 +194,7 @@ func (jm *jobMgr) getOverwritePrompter() *overwritePrompter {
 	return jm.overwritePrompter
 }
 
-func (jm *jobMgr) reset(appCtx context.Context, commandString string) IJobMgr {
+func (jm *jobMgr) Reset(appCtx context.Context, commandString string) IJobMgr {
 	//jm.logger.OpenLog()
 	// log the user given command to the job log file.
 	// since the log file is opened in case of resume, list and many other operations
@@ -360,7 +360,6 @@ func (jm *jobMgr) ActiveConnections() int64 {
 // GetPerfStrings returns strings that may be logged for performance diagnostic purposes
 // The number and content of strings may change as we enhance our perf diagnostics
 func (jm *jobMgr) GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint) {
-	jm.logJobsAdminMessages()
 	atomicTransferDirection := jm.atomicTransferDirection.AtomicLoad()
 
 	// get data appropriate to our current transfer direction
@@ -551,7 +550,7 @@ func (jm *jobMgr) IncludeExclude() (map[string]int, map[string]int) {
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
 func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
-	jm.reset(appCtx, "")
+	jm.Reset(appCtx, "")
 	// Since while creating the JobMgr, atomicAllTransfersScheduled is set to true
 	// reset it to false while resuming it
 	//jm.ResetAllTransfersScheduled()
@@ -672,24 +671,6 @@ func (jm *jobMgr) CloseLog() {
 
 func (jm *jobMgr) ChunkStatusLogger() common.ChunkStatusLogger {
 	return jm.chunkStatusLogger
-}
-
-// TODO: find a better way for JobsAdmin to log (it doesn't have direct access to the job log, because it was originally designed to support multiple jobs
-func (jm *jobMgr) logJobsAdminMessages() {
-	/*
-	for {
-		select {
-		case msg := <-jobsAdmin.JobsAdmin.MessagesForJobLog():
-			prefix := ""
-			if msg.LogLevel <= pipeline.LogWarning {
-				prefix = fmt.Sprintf("%s: ", common.LogLevel(msg.LogLevel)) // so readers can find serious ones, but information ones still look uncluttered without INFO:
-			}
-			jm.Log(pipeline.LogWarning, prefix+msg.string) // use LogError here, so that it forces these to get logged, even if user is running at warning level instead of Info.  They won't have "warning" prefix, if Info level was passed in to MessagesForJobLog
-		default:
-			return
-		}
-	}
-	*/
 }
 
 // PartsDone returns the number of the Job's parts that are either completed or failed
