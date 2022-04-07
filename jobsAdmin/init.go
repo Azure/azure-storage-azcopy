@@ -24,18 +24,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"io/ioutil"
 	"math"
 	"net/http"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 var steCtx = context.Background()
-
 
 const EMPTY_SAS_STRING = ""
 
@@ -122,19 +122,19 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 			serialize(ListJobTransfers(payload), writer) // TODO: make struct
 		})
 	/*
-	http.HandleFunc(common.ERpcCmd.CancelJob().Pattern(),
-		func(writer http.ResponseWriter, request *http.Request) {
-			var payload common.JobID
-			deserialize(request, &payload)
-			serialize(CancelPauseJobOrder(payload, common.EJobStatus.Cancelling()), writer)
-		})
-	http.HandleFunc(common.ERpcCmd.PauseJob().Pattern(),
-		func(writer http.ResponseWriter, request *http.Request) {
-			var payload common.JobID
-			deserialize(request, &payload)
-			serialize(CancelPauseJobOrder(payload, common.EJobStatus.Paused()), writer)
-		})
-	 */
+		http.HandleFunc(common.ERpcCmd.CancelJob().Pattern(),
+			func(writer http.ResponseWriter, request *http.Request) {
+				var payload common.JobID
+				deserialize(request, &payload)
+				serialize(CancelPauseJobOrder(payload, common.EJobStatus.Cancelling()), writer)
+			})
+		http.HandleFunc(common.ERpcCmd.PauseJob().Pattern(),
+			func(writer http.ResponseWriter, request *http.Request) {
+				var payload common.JobID
+				deserialize(request, &payload)
+				serialize(CancelPauseJobOrder(payload, common.EJobStatus.Paused()), writer)
+			})
+	*/
 	http.HandleFunc(common.ERpcCmd.ResumeJob().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
 			var payload common.ResumeJobRequest
@@ -214,6 +214,7 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 	}
 	return jm.CancelPauseJobOrder(desiredJobStatus)
 }
+
 /*
 	// Search for the Part 0 of the Job, since the Part 0 status concludes the actual status of the Job
 	jpm, found := jm.JobPartMgr(0)
@@ -476,6 +477,30 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	}
 	part0PlanStatus := part0.Plan().JobStatus()
 
+	// This is added to let FE to continue fetching the Job Progress Summary
+	// in case of resume. In case of resume, the Job is already completely
+	// ordered so the progress summary should be fetched until all job parts
+	// are iterated and have been scheduled
+	js.CompleteJobOrdered = js.CompleteJobOrdered || jm.AllTransfersScheduled()
+
+	if part0PlanStatus != common.EJobStatus.Cancelled() && part0PlanStatus != common.EJobStatus.Failed() &&
+		(js.CompleteJobOrdered) && (part0PlanStatus.IsJobDone()) {
+		/*
+		 * Plan file (hence part0PlanStatus.IsJobDone) is updated inline by jm.reportJobPartDoneHandler()
+		 * while the various transfer stats are updated via xferDone messages processed by handleStatusUpdateMessage().
+		 * Now that the job has completed, make sure we drain all queued-but-not-processed-yet xferDone messages so as to
+		 * return correct updated job status to our caller who may not call us again since we declare job completion.
+		 */
+		if jm.DrainXferDoneMessages() {
+			// Let's get JobStatus once again to get the updated value.
+			js = jm.ListJobSummary()
+			js.Timestamp = time.Now().UTC()
+			js.JobID = jm.JobID()
+			js.ErrorMsg = ""
+			js.CompleteJobOrdered = true
+		}
+	}
+
 	// Add on byte count from files in flight, to get a more accurate running total
 	js.TotalBytesTransferred += jm.SuccessfulBytesInActiveFiles()
 	if js.TotalBytesExpected == 0 {
@@ -484,12 +509,6 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	} else {
 		js.PercentComplete = 100 * float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected)
 	}
-
-	// This is added to let FE to continue fetching the Job Progress Summary
-	// in case of resume. In case of resume, the Job is already completely
-	// ordered so the progress summary should be fetched until all job parts
-	// are iterated and have been scheduled
-	js.CompleteJobOrdered = js.CompleteJobOrdered || jm.AllTransfersScheduled()
 
 	js.BytesOverWire = uint64(JobsAdmin.BytesOverWire())
 
@@ -523,7 +542,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		}
 
 		if js.JobStatus.IsJobDone() {
-			js.PerformanceAdvice = JobsAdmin.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped, part0.Plan().FromTo, dir, p )
+			js.PerformanceAdvice = JobsAdmin.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped, part0.Plan().FromTo, dir, p)
 		}
 	}
 
