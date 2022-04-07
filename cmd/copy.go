@@ -1313,8 +1313,8 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 // dispatches the job order (in parts) to the storage engine
 func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	// Make AUTO default for Azure Files since Azure Files throttles too easily.
-	if jobsAdmin.JobsAdmin != nil && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.File()) {
+	// Make AUTO default for Azure Files since Azure Files throttles too easily unless user specified concurrency value
+	if jobsAdmin.JobsAdmin != nil && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.File()) && glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "" {
 		jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
 	}
 
