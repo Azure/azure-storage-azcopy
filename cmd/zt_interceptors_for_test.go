@@ -86,6 +86,9 @@ func (m *mockedLifecycleManager) DownloadToTempPath() bool {
 	return false
 }
 
+func (m *mockedLifecycleManager) ReportAllJobPartsDone() {
+}
+
 func (m *mockedLifecycleManager) Progress(o common.OutputBuilder) {
 	select {
 	case m.progressLog <- o(common.EOutputFormat.Text()):
