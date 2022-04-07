@@ -1,4 +1,6 @@
+//go:build linux || darwin
 // +build linux darwin
+
 // Copyright Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,8 +25,8 @@ package common
 
 import (
 	"fmt"
-	"runtime"
 	"log/syslog"
+	"runtime"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 )
@@ -35,17 +37,16 @@ type sysLogger struct {
 	// any message with severity higher than this will be ignored.
 	jobID             JobID
 	minimumLevelToLog pipeline.LogLevel // The maximum customer-desired log level for this job
-	writer            *syslog.Writer      // The Job's logger
+	writer            *syslog.Writer    // The Job's logger
 	logSuffix         string
 	sanitizer         pipeline.LogSanitizer
 }
-
 
 func NewSysLogger(jobID JobID, minimumLevelToLog LogLevel, logSuffix string) ILoggerResetable {
 	return &sysLogger{
 		jobID:             jobID,
 		minimumLevelToLog: minimumLevelToLog.ToPipelineLogLevel(),
-		logSuffix:         logSuffix, 
+		logSuffix:         logSuffix,
 		sanitizer:         NewAzCopyLogSanitizer(),
 	}
 }
@@ -53,7 +54,7 @@ func NewSysLogger(jobID JobID, minimumLevelToLog LogLevel, logSuffix string) ILo
 func (sl *sysLogger) OpenLog() {
 	if sl.minimumLevelToLog == pipeline.LogNone {
 		return
-	    }
+	}
 	writer, err := syslog.New(syslog.LOG_NOTICE, fmt.Sprintf("%s %s", sl.logSuffix, sl.jobID.String()))
 	PanicIfErr(err)
 
@@ -63,6 +64,16 @@ func (sl *sysLogger) OpenLog() {
 	// Log the OS Environment and OS Architecture
 	sl.writer.Notice("OS-Environment " + runtime.GOOS)
 	sl.writer.Notice("OS-Architecture " + runtime.GOARCH)
+}
+
+// This update is not necessarily safe from multiple goroutines simultaneously calling it.
+// Typically we will call ChangeLogLevel() once at the beginning so it should be ok.
+func (sl *sysLogger) ChangeLogLevel(level pipeline.LogLevel) {
+	if level == pipeline.LogNone {
+		return
+	}
+	sl.minimumLevelToLog = level
+	return
 }
 
 func (sl *sysLogger) MinimumLogLevel() pipeline.LogLevel {
@@ -85,9 +96,8 @@ func (sl *sysLogger) CloseLog() {
 	sl.writer.Close()
 }
 
-
 func (sl *sysLogger) Panic(err error) {
-	sl.writer.Crit(err.Error())  // We do NOT panic here as the app would terminate;
+	sl.writer.Crit(err.Error()) // We do NOT panic here as the app would terminate;
 	//we just log it. We should never reach this line of code!
 }
 
