@@ -23,8 +23,7 @@ package cmd
 import "github.com/Azure/azure-storage-azcopy/v10/common"
 
 // setting SetPropertiesAPIOption for choosing which API to use
-// TODO name change needed
-func setSetPropertiesAPIOption(cca *CookedCopyCmdArgs) common.SetPropertiesAPIOption {
+func setBitsForSetProperties(cca *CookedCopyCmdArgs) common.SetPropertiesAPIOption {
 	if cca.blockBlobTier != common.EBlockBlobTier.None() || cca.pageBlobTier != common.EPageBlobTier.None() {
 		common.ESetPropertiesAPIOption.SetTier()
 	}
@@ -53,7 +52,7 @@ func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPar
 			PageBlobTier:          cca.pageBlobTier,
 			Metadata:              cca.metadata,
 		},
-		SetPropertiesAPIOption: setSetPropertiesAPIOption(cca),
+		SetPropertiesAPIOption: setBitsForSetProperties(cca),
 	}
 
 	reportFirstPart := func(jobStarted bool) {
