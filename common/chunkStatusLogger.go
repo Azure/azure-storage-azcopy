@@ -241,6 +241,7 @@ type ChunkStatusLoggerCloser interface {
 	GetCounts(td TransferDirection) []chunkStatusCount
 	GetPrimaryPerfConstraint(td TransferDirection, rc RetryCounter) PerfConstraint
 	FlushLog() // not close, because we had issues with writes coming in after this // TODO: see if that issue still exists
+	CloseLogger()
 }
 
 type RetryCounter interface {
@@ -315,6 +316,18 @@ func (csl *chunkStatusLogger) FlushLog() {
 	}
 }
 
+// CloseLogger close the chunklogger thread.
+func (csl *chunkStatusLogger) CloseLogger() {
+	// Once logger is closed, we log no more chunks.
+	csl.outputEnabled = false
+
+	/*
+	 * No more chunks will ever be written, let the main logger know about this.
+	 * On closing this channel the main logger will exit from its for-range loop.
+	 */
+	close(csl.unsavedEntries)
+}
+
 func (csl *chunkStatusLogger) main(chunkLogPath string) {
 	f, err := os.Create(chunkLogPath)
 	if err != nil {
@@ -332,18 +345,22 @@ func (csl *chunkStatusLogger) main(chunkLogPath string) {
 	defer doFlush()
 
 	alwaysFlushFromNowOn := false
+
+	// We will exit the following for-range loop after CloseLogger() closes the csl.unsavedEntries channel.
 	for x := range csl.unsavedEntries {
 		if x == nil {
 			alwaysFlushFromNowOn = true
 			doFlush()
 			csl.flushDone <- struct{}{}
 			continue // TODO can become break (or be moved to later if we close unsaved entries, once we figure out how we got stuff written to us after CloseLog was called)
+
 		}
 		_, _ = w.WriteString(fmt.Sprintf("%s,%d,%s,%s\n", x.Name, x.OffsetInFile(), x.reason, x.waitStart))
 		if alwaysFlushFromNowOn {
 			// TODO: remove when we figure out how we got stuff written to us after CloseLog was called. For now, this should handle those cases (if they still exist)
 			doFlush()
 		}
+
 	}
 }
 

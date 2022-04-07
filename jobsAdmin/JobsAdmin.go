@@ -24,7 +24,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -34,6 +33,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -99,6 +100,9 @@ var JobsAdmin interface {
 	TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32, fromTo common.FromTo, dir common.TransferDirection, p *ste.PipelineNetworkStats) []common.PerformanceAdvice
 
 	SetConcurrencySettingsToAuto()
+
+	// JobMgrCleanUp do the JobMgr cleanup.
+	JobMgrCleanUp(jobId common.JobID)
 }
 
 func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {
@@ -241,19 +245,20 @@ type jobsAdmin struct {
 	logger                             common.ILoggerCloser
 	jobIDToJobMgr                      jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
 	// Other global state can be stored in more fields here...
-	logDir                      string // Where log files are stored
-	planDir                     string // Initialize to directory where Job Part Plans are stored
-	appCtx                      context.Context
-	pacer                       ste.PacerAdmin
-	slicePool                   common.ByteSlicePooler
-	cacheLimiter                common.CacheLimiter
-	fileCountLimiter            common.CacheLimiter
-	concurrencyTuner   ste.ConcurrencyTuner
-	commandLineMbpsCap float64
+	logDir                  string // Where log files are stored
+	planDir                 string // Initialize to directory where Job Part Plans are stored
+	appCtx                  context.Context
+	pacer                   ste.PacerAdmin
+	slicePool               common.ByteSlicePooler
+	cacheLimiter            common.CacheLimiter
+	fileCountLimiter        common.CacheLimiter
+	concurrencyTuner        ste.ConcurrencyTuner
+	commandLineMbpsCap      float64
 	provideBenchmarkResults bool
 	cpuMonitor              common.CPUMonitor
 	jobLogger               common.ILoggerResetable
 }
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func (ja *jobsAdmin) NewJobPartPlanFileName(jobID common.JobID, partNumber common.PartNumber) ste.JobPartPlanFileName {
@@ -294,6 +299,35 @@ func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
 			// Return existing or new IJobMgr to caller
 			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, ja.jobLogger, false)
 		})
+}
+
+// JobMgrCleanup cleans up the jobMgr identified by the given jobId. It undoes what NewJobMgr() does, basically it does the following:
+// 1. Stop all go routines started to process this job.
+// 2. Release the memory allocated for this JobMgr instance.
+// Note: this is not thread safe and only one goroutine should call this for a job.
+func (ja *jobsAdmin) JobMgrCleanUp(jobId common.JobID) {
+	// First thing get the jobMgr.
+	jm, found := ja.JobMgr(jobId)
+
+	if found {
+		jm.Log(pipeline.LogInfo, "JobMgrDone Enter")
+
+		// Delete the jobMgr from jobIDtoJobMgr map, so that next call will fail.
+		ja.DeleteJob(jobId)
+
+		jm.Log(pipeline.LogInfo, "Job deleted from jobMgr map")
+
+		/*
+		 * Rest of jobMgr related cleanup done by DeferredCleanupJobMgr function.
+		 * Now that we have removed the jobMgr from the map, no new caller will find it and hence cannot start any
+		 * new activity using the jobMgr. We cleanup the resources of the jobMgr in a deferred manner as a safety net
+		 * to allow processing any messages that may be in transit.
+		 *
+		 * NOTE: This is not really required but we don't want to miss any in-transit messages as some of the TODOs in
+		 *               the code suggest.
+		 */
+		go jm.DeferredCleanupJobMgr()
+	}
 }
 
 func (ja *jobsAdmin) BytesOverWire() int64 {
@@ -508,7 +542,6 @@ func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint3
 	return a.GetAdvice()
 }
 
-
 //Structs for messageHandler
 
 /* PerfAdjustment message. */
@@ -521,10 +554,10 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan common.LCMMsg) {
 		return megaBitsPerSec * 1000 * 1000 / 8
 	}
 	glcm := common.GetLifecycleMgr()
-	
+
 	lastPerfAdjustTime := time.Now() // right when this routine songs
 	const minIntervalBetweenPerfAdjustment = time.Minute
-	
+
 	for {
 		msg := <-inputChan
 		var msgType common.LCMMsgType
@@ -538,23 +571,23 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan common.LCMMsg) {
 				glcm.Info(msgStr)
 				continue
 			}
-			
+
 			if err := json.Unmarshal([]byte(msg.Value), &perfAdjustmentReq); err != nil {
 				msgStr := fmt.Sprintf("Error parsing message %s. ERR: %s", msg.Value, err.Error())
 				glcm.Info(msgStr)
 				continue
 			}
-			
+
 			if perfAdjustmentReq.Throughput < 0 {
 				msgStr := fmt.Sprintf("Invalid value %d for cap-mbps. cap-mpbs should be greater than 0",
-						      perfAdjustmentReq.Throughput)
+					perfAdjustmentReq.Throughput)
 				glcm.Info(msgStr)
 				continue
 			}
 
 			lastPerfAdjustTime = time.Now()
 			ja.UpdateTargetBandwidth(toBitsPerSec(perfAdjustmentReq.Throughput))
-			glcm.Info(fmt.Sprintf("Adjusted throughput to %dMbps",perfAdjustmentReq.Throughput))
+			glcm.Info(fmt.Sprintf("Adjusted throughput to %dMbps", perfAdjustmentReq.Throughput))
 		default:
 		}
 

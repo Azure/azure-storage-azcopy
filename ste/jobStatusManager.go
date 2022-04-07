@@ -21,17 +21,19 @@
 package ste
 
 import (
+	"fmt"
 	"time"
 
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type JobPartCreatedMsg struct {
-	TotalTransfers uint32
-	IsFinalPart    bool
+	TotalTransfers       uint32
+	IsFinalPart          bool
 	TotalBytesEnumerated uint64
-	FileTransfers  uint32
-	FolderTransfer uint32
+	FileTransfers        uint32
+	FolderTransfer       uint32
 }
 
 type xferDoneMsg = common.TransferDetail
@@ -41,6 +43,7 @@ type jobStatusManager struct {
 	listReq     chan bool
 	partCreated chan JobPartCreatedMsg
 	xferDone    chan xferDoneMsg
+	done        chan struct{}
 }
 
 /* These functions should not fail */
@@ -59,6 +62,11 @@ func (jm *jobMgr) ListJobSummary() common.ListJobSummaryResponse {
 
 func (jm *jobMgr) ResurrectSummary(js common.ListJobSummaryResponse) {
 	jm.jstm.js = js
+}
+
+func (jm *jobMgr) CleanupJobStatusMgr() {
+	jm.Log(pipeline.LogInfo, "CleanJobStatusMgr called.")
+	jm.jstm.done <- struct{}{}
 }
 
 func (jm *jobMgr) handleStatusUpdateMessage() {
@@ -106,6 +114,10 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			// There is no need to keep sending the same items over and over again
 			js.FailedTransfers = []common.TransferDetail{}
 			js.SkippedTransfers = []common.TransferDetail{}
+
+		case <-jstm.done:
+			fmt.Println("Cleanup JobStatusmgr")
+			return
 		}
 	}
 }
