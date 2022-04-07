@@ -310,6 +310,12 @@ func (ja *jobsAdmin) JobMgrCleanUp(jobId common.JobID) {
 	jm, found := ja.JobMgr(jobId)
 
 	if found {
+		/*
+		 * Change log level to Info, so that we can capture these messages in job log file.
+		 * These log messages useful in debuggability and tells till what stage cleanup done.
+		 */
+		jm.ChangeLogLevel(pipeline.LogInfo)
+
 		jm.Log(pipeline.LogInfo, "JobMgrDone Enter")
 
 		// Delete the jobMgr from jobIDtoJobMgr map, so that next call will fail.
