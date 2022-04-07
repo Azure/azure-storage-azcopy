@@ -86,6 +86,7 @@ type IJobMgr interface {
 	SendXferDoneMsg(msg xferDoneMsg)
 	ListJobSummary() common.ListJobSummaryResponse
 	ResurrectSummary(js common.ListJobSummaryResponse)
+	DrainXferDoneMessages() bool
 
 	/* Ported from jobsAdmin() */
 	ScheduleTransfer(priority common.JobPriority, jptm IJobPartTransferMgr)
@@ -140,6 +141,8 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	jstm.partCreated = make(chan JobPartCreatedMsg, 100)
 	jstm.xferDone = make(chan xferDoneMsg, 1000)
 	jstm.done = make(chan struct{}, 1)
+	jstm.drainXferDoneSignal = make(chan struct{})
+	jstm.xferDoneDrainedSignal = make(chan struct{})
 	// Different logger for each job.
 	if jobLogger == nil {
 		jobLogger = common.NewJobLogger(jobID, common.ELogLevel.Debug(), logFileFolder, "" /* logFileNameSuffix */)
