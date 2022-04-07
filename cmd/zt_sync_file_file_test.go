@@ -22,13 +22,13 @@ package cmd
 
 import (
 	"context"
-	"os"
-	"sort"
-	"strings"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	chk "gopkg.in/check.v1"
+	"os"
+	"sort"
+	"strings"
+	"time"
 )
 
 // regular file->file sync
@@ -613,5 +613,56 @@ func (s *cmdIntegrationSuite) TestDryrunSyncLocaltoFile(c *chk.C) {
 
 		c.Check(testDryrunStatements(blobsToInclude, msg), chk.Equals, true)
 		c.Check(testDryrunStatements(fileToDelete, msg), chk.Equals, true)
+	})
+}
+
+// regular share->share sync but destination is identical to the source, transfers are scheduled based on lmt
+func (s *cmdIntegrationSuite) TestFileSyncS2SWithIdenticalDestinationTemp(c *chk.C) {
+	fsu := getFSU()
+	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
+	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	defer deleteShare(c, srcShareURL)
+	defer deleteShare(c, dstShareURL)
+
+	// set up the source share with numerous files
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, srcShareURL, "")
+	c.Assert(len(fileList), chk.Not(chk.Equals), 0)
+
+	// set up the destination with the exact same files
+	scenarioHelper{}.generateAzureFilesFromList(c, dstShareURL, fileList)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
+	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
+	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
+	raw.preserveSMBInfo = false
+
+	// nothing should be sync since the source is older
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+	})
+
+	// refresh the source files' last modified time so that they get synced
+	scenarioHelper{}.generateAzureFilesFromList(c, srcShareURL, fileList)
+	mockedRPC.reset()
+	currentTime := time.Now()
+	newTime := currentTime.Add(-time.Hour) // give extra hour
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateS2SSyncTransfersAreScheduled(c, "", "", fileList, mockedRPC)
+
+		for _, transfer := range mockedRPC.transfers {
+			if transfer.LastModifiedTime.Before(currentTime) && transfer.LastModifiedTime.After(newTime) {
+				c.Succeed()
+			}
+		}
 	})
 }
