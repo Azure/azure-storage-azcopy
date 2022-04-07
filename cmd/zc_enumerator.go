@@ -392,7 +392,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 			output = newListTraverser(baseResource, location, nil, nil, recursive, toFollow, getProperties,
 				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions)
 		} else {
-			output = newLocalTraverser(resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter)
+			output = newLocalTraverser(ctx, resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter)
 		}
 	case common.ELocation.Benchmark():
 		ben, err := newBenchmarkTraverser(resource.Value, incrementEnumerationCounter)
