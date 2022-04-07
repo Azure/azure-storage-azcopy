@@ -99,12 +99,10 @@ type IJobMgr interface {
 	CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.CancelPauseResumeResponse
 	IsDaemon() bool
 
-
 	ChangeLogLevel(pipeline.LogLevel)
 	// Cleanup Functions
 	DeferredCleanupJobMgr()
 	CleanupJobStatusMgr()
-
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -748,7 +746,7 @@ func (jm *jobMgr) DeferredCleanupJobMgr() {
 	// Sleep for sometime so that all go routine done with cleanUp and log the progress in job log.
 	time.Sleep(60 * time.Second)
 
-	jm.CloseLog()
+	jm.logger.CloseLog()
 }
 
 func (jm *jobMgr) ChunkStatusLogger() common.ChunkStatusLogger {
@@ -853,6 +851,7 @@ func (jm *jobMgr) QueueJobParts(jpm IJobPartMgr) {
 func (jm *jobMgr) deleteJobPartsMgrs() {
 	jm.Log(pipeline.LogInfo, "JobPartsMgrsDelete enter")
 	jm.jobPartMgrs.Iterate(false, func(k common.PartNumber, v IJobPartMgr) {
+		v.Close()
 		delete(jm.jobPartMgrs.m, k)
 	})
 	jm.Log(pipeline.LogInfo, "JobPartsMgrsDelete exit")
