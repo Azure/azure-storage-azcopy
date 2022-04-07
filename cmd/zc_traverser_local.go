@@ -21,6 +21,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -38,7 +39,7 @@ type localTraverser struct {
 	fullPath       string
 	recursive      bool
 	followSymlinks bool
-
+	appCtx         *context.Context
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
 }
@@ -154,7 +155,7 @@ func (s symlinkTargetFileInfo) Name() string {
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
 // 2) Easier to test individually than to test the entire traverser.
-func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlinks bool) (err error) {
+func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath.WalkFunc, followSymlinks bool) (err error) {
 
 	// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
 	// So, what is the plan of attack?
@@ -184,7 +185,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 		walkQueue = walkQueue[1:]
 		// walk contents of this queueItem in parallel
 		// (for simplicity of coding, we don't parallelize across multiple queueItems)
-		parallel.Walk(queueItem.fullPath, EnumerationParallelism, EnumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
+		parallel.Walk(appCtx, queueItem.fullPath, EnumerationParallelism, EnumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
 			if fileError != nil {
 				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError))
 				return nil
@@ -384,7 +385,11 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			}
 
 			// note: Walk includes root, so no need here to separately create StoredObject for root (as we do for other folder-aware sources)
-			return WalkWithSymlinks(t.fullPath, processFile, t.followSymlinks)
+			if t.appCtx != nil {
+				return WalkWithSymlinks(*t.appCtx, t.fullPath, processFile, t.followSymlinks)
+			} else {
+				return WalkWithSymlinks(nil, t.fullPath, processFile, t.followSymlinks)
+			}
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath
 			// We don't transfer any directory properties here, not even the root. (Because the root's
@@ -462,11 +467,12 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	return
 }
 
-func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter enumerationCounterFunc) *localTraverser {
+func newLocalTraverser(ctx *context.Context, fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter enumerationCounterFunc) *localTraverser {
 	traverser := localTraverser{
 		fullPath:                    cleanLocalPath(fullPath),
 		recursive:                   recursive,
 		followSymlinks:              followSymlinks,
+		appCtx:                      ctx,
 		incrementEnumerationCounter: incrementEnumerationCounter}
 	return &traverser
 }

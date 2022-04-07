@@ -63,7 +63,9 @@ func CrawlLocalDirectory(ctx context.Context, root string, parallelism int, read
 //    (whereas with filepath.Walk it will usually (always?) have a value).
 // 2. If the return value of walkFunc function is not nil, enumeration will always stop, not matter what the type of the error.
 //    (Unlike filepath.WalkFunc, where returning filePath.SkipDir is handled as a special case).
-func Walk(root string, parallelism int, parallelStat bool, walkFn filepath.WalkFunc) {
+func Walk(appCtx context.Context, root string, parallelism int, parallelStat bool, walkFn filepath.WalkFunc) {
+	var ctx context.Context
+	var cancel context.CancelFunc
 	signalRootError := func(e error) {
 		_ = walkFn(root, nil, e)
 	}
@@ -96,7 +98,11 @@ func Walk(root string, parallelism int, parallelStat bool, walkFn filepath.WalkF
 	// walk the stuff inside the root
 	reader, remainingParallelism := NewDirReader(parallelism, parallelStat)
 	defer reader.Close()
-	ctx, cancel := context.WithCancel(context.Background())
+	if appCtx != nil {
+		ctx, cancel = context.WithCancel(appCtx)
+	} else {
+		ctx, cancel = context.WithCancel(context.Background())
+	}
 	ch := CrawlLocalDirectory(ctx, root, remainingParallelism, reader)
 	for crawlResult := range ch {
 		entry, err := crawlResult.Item()
