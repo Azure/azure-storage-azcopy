@@ -47,6 +47,7 @@ type ILoggerCloser interface {
 type ILoggerResetable interface {
 	OpenLog()
 	MinimumLogLevel() pipeline.LogLevel
+	ChangeLogLevel(pipeline.LogLevel)
 	ILoggerCloser
 }
 
@@ -156,6 +157,16 @@ func (jl *jobLogger) ShouldLog(level pipeline.LogLevel) bool {
 		return false
 	}
 	return level <= jl.minimumLevelToLog
+}
+
+// This update is not necessarily safe from multiple goroutines simultaneously calling it.
+// Typically we will call ChangeLogLevel() once at the beginning so it should be ok.
+func (jl *jobLogger) ChangeLogLevel(level pipeline.LogLevel) {
+	if level == pipeline.LogNone {
+		return
+	}
+	jl.minimumLevelToLog = level
+	return
 }
 
 func (jl *jobLogger) CloseLog() {
