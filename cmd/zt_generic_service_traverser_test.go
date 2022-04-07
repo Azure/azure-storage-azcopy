@@ -56,7 +56,7 @@ func (s *genericTraverserSuite) TestBlobFSServiceTraverserWithManyObjects(c *chk
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, objectList)
 
 	// Create a local traversal
-	localTraverser := newLocalTraverser(nil, dstDirName, true, true, func(common.EntityType) {})
+	localTraverser := newLocalTraverser(nil, dstDirName, true, true, func(common.EntityType) {}, nil)
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
@@ -172,7 +172,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, objectList)
 
 	// Create a local traversal
-	localTraverser := newLocalTraverser(nil, dstDirName, true, true, func(common.EntityType) {})
+	localTraverser := newLocalTraverser(nil, dstDirName, true, true, func(common.EntityType) {}, nil)
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
@@ -357,7 +357,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, objectList)
 
 	// Create a local traversal
-	localTraverser := newLocalTraverser(nil, dstDirName, true, true, func(common.EntityType) {})
+	localTraverser := newLocalTraverser(nil, dstDirName, true, true, func(common.EntityType) {}, nil)
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
