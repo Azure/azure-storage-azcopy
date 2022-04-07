@@ -22,12 +22,13 @@ package parallel
 
 import (
 	"context"
-	chk "gopkg.in/check.v1"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	chk "gopkg.in/check.v1"
 )
 
 // Hookup to the testing framework
@@ -61,7 +62,7 @@ func (s *fileSystemCrawlerSuite) TestParallelEnumerationFindsTheRightFiles(c *ch
 
 	// our parallel walk
 	parallelResults := make(map[string]struct{})
-	Walk(dir, 16, false, func(path string, _ os.FileInfo, fileErr error) error {
+	Walk(nil, dir, 16, false, func(path string, _ os.FileInfo, fileErr error) error {
 		if fileErr == nil {
 			parallelResults[path] = struct{}{}
 		}
@@ -122,7 +123,7 @@ func (s *fileSystemCrawlerSuite) doTestParallelEnumerationGetsTheRightFileInfo(p
 
 	// our parallel walk
 	parallelResults := make(map[string]os.FileInfo)
-	Walk(dir, 64, parallelStat, func(path string, fi os.FileInfo, fileErr error) error {
+	Walk(nil, dir, 64, parallelStat, func(path string, fi os.FileInfo, fileErr error) error {
 		if fileErr == nil {
 			parallelResults[path] = fi
 		}
@@ -174,7 +175,7 @@ func (s *fileSystemCrawlerSuite) doTestParallelEnumerationGetsTheRightFileInfo(p
 func (s *fileSystemCrawlerSuite) TestRootErrorsAreSignalled(c *chk.C) {
 	receivedError := false
 	nonExistentDir := filepath.Join(os.TempDir(), "Big random-named directory that almost certainly doesn't exist 85784362628398473732827384")
-	Walk(nonExistentDir, 16, false, func(path string, _ os.FileInfo, fileErr error) error {
+	Walk(nil, nonExistentDir, 16, false, func(path string, _ os.FileInfo, fileErr error) error {
 		if fileErr != nil && path == nonExistentDir {
 			receivedError = true
 		}
