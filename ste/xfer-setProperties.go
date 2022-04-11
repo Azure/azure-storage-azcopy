@@ -64,7 +64,7 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	srcBlobType := jptm.Info().SrcBlobType
 	SetPropertiesAPIOption := jptm.SetPropertiesAPIOption()
 
-	if SetPropertiesAPIOption.TransferTier() {
+	if SetPropertiesAPIOption.ShouldTransferTier() {
 		var err error = nil
 		switch srcBlobType {
 		case azblob.BlobBlockBlob:
@@ -72,6 +72,7 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 				_, err = srcBlobURL.SetTier(jptm.Context(), blockBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
 			}
 		case azblob.BlobPageBlob:
+			// todo check if works
 			if pageBlobTier.ToAccessTierType() != azblob.AccessTierNone {
 				_, err = srcBlobURL.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
 			}
@@ -97,7 +98,7 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		}
 	}
 
-	if SetPropertiesAPIOption.TransferMetaData() {
+	if SetPropertiesAPIOption.ShouldTransferMetaData() {
 		panic("Not Supported to be setting metadata yet")
 	}
 }

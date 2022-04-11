@@ -1158,6 +1158,9 @@ type CookedCopyCmdArgs struct {
 
 	// Optional flag that sets rehydrate priority for rehydration
 	rehydratePriority common.RehydratePriorityType
+
+	// Bitmasked uint checking which properties to transfer
+	propertiesToTransfer common.SetPropertiesAPIOption
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {

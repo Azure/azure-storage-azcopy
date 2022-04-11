@@ -80,7 +80,6 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 			return err
 		}
 
-		// TODO: this appears to be obsolete due to the above err == NothingScheduledError. Review/discuss.
 		if !jobInitiated {
 			if cca.isCleanupJob {
 				glcm.Error("Cleanup completed (nothing needed to be deleted)")

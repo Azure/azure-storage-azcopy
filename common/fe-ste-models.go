@@ -124,13 +124,22 @@ type SetPropertiesAPIOption uint32 // [0000000000...32 times]
 var ESetPropertiesAPIOption = SetPropertiesAPIOption(0)
 
 // functions to set values
-func (SetPropertiesAPIOption) None()        { ESetPropertiesAPIOption |= 0 }
-func (SetPropertiesAPIOption) SetTier()     { ESetPropertiesAPIOption |= 1 }
-func (SetPropertiesAPIOption) SetMetadata() { ESetPropertiesAPIOption |= 2 }
+func (SetPropertiesAPIOption) None() SetPropertiesAPIOption        { return SetPropertiesAPIOption(0) }
+func (SetPropertiesAPIOption) SetTier() SetPropertiesAPIOption     { return SetPropertiesAPIOption(1) }
+func (SetPropertiesAPIOption) SetMetadata() SetPropertiesAPIOption { return SetPropertiesAPIOption(2) }
+func (SetPropertiesAPIOption) SetBlobTags() SetPropertiesAPIOption { return SetPropertiesAPIOption(4) }
 
 // functions to get values (to be used in sde)
-func (SetPropertiesAPIOption) TransferTier() bool     { return int32(ESetPropertiesAPIOption&1) == 1 }
-func (SetPropertiesAPIOption) TransferMetaData() bool { return int32(ESetPropertiesAPIOption&2) == 2 }
+// If Y is inside X then X & Y == Y
+func (op *SetPropertiesAPIOption) ShouldTransferTier() bool {
+	return (*op)&ESetPropertiesAPIOption.SetTier() == ESetPropertiesAPIOption.SetTier()
+}
+func (op *SetPropertiesAPIOption) ShouldTransferMetaData() bool {
+	return (*op)&ESetPropertiesAPIOption.SetMetadata() == ESetPropertiesAPIOption.SetMetadata()
+}
+func (op *SetPropertiesAPIOption) ShouldTransferBlobTags() bool {
+	return (*op)&ESetPropertiesAPIOption.SetBlobTags() == ESetPropertiesAPIOption.SetBlobTags()
+}
 
 func (d DeleteSnapshotsOption) String() string {
 	return enum.StringInt(d, reflect.TypeOf(d))

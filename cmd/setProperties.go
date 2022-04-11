@@ -35,6 +35,16 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaultsForSetProperties() {
 	raw.preserveOwner = common.PreserveOwnerDefault
 }
 
+func (cca *CookedCopyCmdArgs) makeTransferEnum() error {
+	if cca.blockBlobTier != common.EBlockBlobTier.None() || cca.pageBlobTier != common.EPageBlobTier.None() {
+		if cca.FromTo.From() == common.ELocation.File() {
+			return fmt.Errorf("tier cannot be set upon files")
+		}
+		cca.propertiesToTransfer |= common.ESetPropertiesAPIOption.SetTier()
+	}
+	return nil
+}
+
 func init() {
 	raw := rawCopyCmdArgs{}
 
@@ -44,7 +54,7 @@ func init() {
 		SuggestFor: []string{"props", "prop", "set"},
 		// TODO: t-iverma: short and long descriptions
 		Short: setPropertiesCmdShortDescription,
-		Long:  "",
+		Long:  setPropertiesCmdLongDescription,
 		Args: func(cmd *cobra.Command, args []string) error {
 			// we only want one arg, which is the source
 			if len(args) != 1 {
@@ -82,6 +92,8 @@ func init() {
 			}
 
 			cooked, err := raw.cook()
+			err = cooked.makeTransferEnum()
+
 			if err != nil {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 			}
@@ -93,9 +105,9 @@ func init() {
 				glcm.Error("failed to perform set-properties command due to error: " + err.Error())
 			}
 
-			//if cooked.dryrunMode {
-			//	glcm.Exit(nil, common.EExitCode.Success())
-			//}
+			if cooked.dryrunMode {
+				glcm.Exit(nil, common.EExitCode.Success())
+			}
 
 			glcm.SurrenderControl()
 		},
@@ -103,7 +115,6 @@ func init() {
 
 	rootCmd.AddCommand(setPropCmd)
 
-	//TODO setPropCmd.PersistentFlags().StringVar(&raw.dst, "dst", "", "The destination location of the copy operation")
 	setPropCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. Valid values : BlobNone, FileNone, BlobFSNone")
 	setPropCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "Define the log verbosity for the log file. Available levels include: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default 'INFO')")
 	setPropCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
@@ -117,4 +128,5 @@ func init() {
 	setPropCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "Upload page blob to Azure Storage using this blob tier. (default 'None').")
 	setPropCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Look into sub-directories recursively when uploading from local file system.")
 	setPropCmd.PersistentFlags().StringVar(&raw.rehydratePriority, "rehydrate-priority", "None", "Optional flag that sets rehydrate priority for rehydration. Valid values: Standard, High")
+	setPropCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the file paths that would be affected by this command. This flag does not affect the actual files.")
 }
