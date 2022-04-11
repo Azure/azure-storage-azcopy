@@ -51,7 +51,7 @@ func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPar
 			Metadata:          cca.metadata,
 			RehydratePriority: cca.rehydratePriority,
 		},
-		SetPropertiesAPIOption: setBitsForSetProperties(cca),
+		SetPropertiesAPIOption: cca.propertiesToTransfer,
 	}
 
 	reportFirstPart := func(jobStarted bool) {
