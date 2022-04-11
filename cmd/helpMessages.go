@@ -525,3 +525,7 @@ Run an upload that does not delete the transferred files. (These files can then 
 
    - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 100 --delete-test-data=false
 `
+
+const setPropertiesCmdShortDescription = "Change properties of given blob"
+
+const setPropertiesCmdLongDescription = ""

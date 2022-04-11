@@ -29,8 +29,6 @@ import (
 
 func (raw *rawCopyCmdArgs) setMandatoryDefaultsForSetProperties() {
 	raw.blobType = common.EBlobType.Detect().String()
-	//raw.blockBlobTier = common.EBlockBlobTier.None().String()
-	//raw.pageBlobTier = common.EPageBlobTier.None().String()
 	raw.md5ValidationOption = common.DefaultHashValidationOption.String()
 	raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
 	raw.forceWrite = common.EOverwriteOption.True().String()
@@ -42,10 +40,10 @@ func init() {
 
 	setPropCmd := &cobra.Command{
 		Use:        "set-properties",
-		Aliases:    []string{},
-		SuggestFor: []string{},
+		Aliases:    []string{"properties", "set-props"},
+		SuggestFor: []string{"props", "prop", "set"},
 		// TODO: t-iverma: short and long descriptions
-		Short: "Change properties of given blob",
+		Short: setPropertiesCmdShortDescription,
 		Long:  "",
 		Args: func(cmd *cobra.Command, args []string) error {
 			// we only want one arg, which is the source
@@ -56,21 +54,22 @@ func init() {
 			//the resource to set properties of is set as src
 			raw.src = args[0]
 
-			//TODO what is the purpose of these lines?
 			srcLocationType := InferArgumentLocation(raw.src)
 			if raw.fromTo == "" {
 				switch srcLocationType {
 				case common.ELocation.Blob():
 					raw.fromTo = common.EFromTo.BlobNone().String()
 				case common.ELocation.BlobFS():
-					raw.fromTo = common.EFromTo.BlobFSTrash().String()
+					raw.fromTo = common.EFromTo.BlobFSNone().String()
+				case common.ELocation.File():
+					raw.fromTo = common.EFromTo.FileNone().String()
 				default:
 					return fmt.Errorf("invalid source type %s to delete. azcopy support removing blobs/files/adls gen2", srcLocationType.String())
 				}
 			} else if raw.fromTo != "" {
-				err := strings.Contains(raw.fromTo, "Trash")
+				err := strings.Contains(raw.fromTo, "None")
 				if !err {
-					return fmt.Errorf("Invalid destination. Please enter a valid destination, i.e. BlobTrash, FileTrash, BlobFSTrash")
+					return fmt.Errorf("invalid destination. Please enter a valid destination, i.e. BlobNone, FileNone, BlobFSNone")
 				}
 			}
 			raw.setMandatoryDefaultsForSetProperties()
@@ -90,7 +89,6 @@ func init() {
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 
-			// TODO -> what is the purpose of these lines?
 			if err != nil {
 				glcm.Error("failed to perform set-properties command due to error: " + err.Error())
 			}
@@ -98,7 +96,7 @@ func init() {
 			//if cooked.dryrunMode {
 			//	glcm.Exit(nil, common.EExitCode.Success())
 			//}
-			//
+
 			glcm.SurrenderControl()
 		},
 	}
@@ -106,6 +104,7 @@ func init() {
 	rootCmd.AddCommand(setPropCmd)
 
 	//TODO setPropCmd.PersistentFlags().StringVar(&raw.dst, "dst", "", "The destination location of the copy operation")
+	setPropCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. Valid values : BlobNone, FileNone, BlobFSNone")
 	setPropCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "Define the log verbosity for the log file. Available levels include: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default 'INFO')")
 	setPropCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
 	setPropCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "Include only these paths when setting property. "+
@@ -117,4 +116,5 @@ func init() {
 	setPropCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "Changes the access tier of the blobs to the given tier")
 	setPropCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "Upload page blob to Azure Storage using this blob tier. (default 'None').")
 	setPropCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Look into sub-directories recursively when uploading from local file system.")
+	setPropCmd.PersistentFlags().StringVar(&raw.rehydratePriority, "rehydrate-priority", "None", "Optional flag that sets rehydrate priority for rehydration. Valid values: Standard, High")
 }

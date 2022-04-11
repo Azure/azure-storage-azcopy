@@ -317,6 +317,8 @@ type jobPartMgr struct {
 	closeOnCompletion chan struct{}
 
 	SetPropertiesAPIOption common.SetPropertiesAPIOption
+
+	RehydratePriority common.RehydratePriorityType
 }
 
 func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {
@@ -395,6 +397,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		IsSourceEncrypted: dstData.IsSourceEncrypted,
 	}
 	jpm.SetPropertiesAPIOption = dstData.SetPropertiesAPIOption
+	jpm.RehydratePriority = plan.RehydratePriority
 
 	jpm.preserveLastModifiedTime = plan.DstLocalData.PreserveLastModifiedTime
 

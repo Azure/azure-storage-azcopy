@@ -87,6 +87,8 @@ type JobPartPlanHeader struct {
 
 	// Determine what to do with soft-deleted snapshots
 	PermanentDeleteOption common.PermanentDeleteOption
+
+	RehydratePriority common.RehydratePriorityType
 }
 
 // Status returns the job status stored in JobPartPlanHeader in thread-safe manner

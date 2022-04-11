@@ -118,6 +118,8 @@ type TransferInfo struct {
 	// NumChunks is the number of chunks in which transfer will be split into while uploading the transfer.
 	// NumChunks is not used in case of AppendBlob transfer.
 	NumChunks uint16
+
+	RehydratePriority azblob.RehydratePriorityType
 }
 
 func (i TransferInfo) IsFolderPropertiesTransfer() bool {
@@ -363,8 +365,9 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 			SrcMetadata:    srcMetadata,
 			SrcBlobTags:    srcBlobTags,
 		},
-		SrcBlobType:    srcBlobType,
-		S2SSrcBlobTier: srcBlobTier,
+		SrcBlobType:       srcBlobType,
+		S2SSrcBlobTier:    srcBlobTier,
+		RehydratePriority: plan.RehydratePriority.ToRehydratePriorityType(),
 	}
 
 	return *jptm.transferInfo

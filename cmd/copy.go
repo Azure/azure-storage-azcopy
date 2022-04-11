@@ -170,6 +170,9 @@ type rawCopyCmdArgs struct {
 
 	// Optional flag that permanently deletes soft-deleted snapshots/versions
 	permanentDeleteOption string
+
+	// Optional flag that sets rehydrate priority for rehydration
+	rehydratePriority string
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -375,6 +378,8 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	if err != nil {
 		return cooked, err
 	}
+
+	err = cooked.rehydratePriority.Parse(raw.rehydratePriority)
 
 	// Everything uses the new implementation of list-of-files now.
 	// This handles both list-of-files and include-path as a list enumerator.
@@ -1150,6 +1155,9 @@ type CookedCopyCmdArgs struct {
 
 	// Optional flag that permanently deletes soft deleted blobs
 	permanentDeleteOption common.PermanentDeleteOption
+
+	// Optional flag that sets rehydrate priority for rehydration
+	rehydratePriority common.RehydratePriorityType
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {
@@ -1444,7 +1452,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// 	e := copyFileToNEnumerator(jobPartOrder)
 	// 	err = e.enumerate(cca)
 
-	case common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone():
+	case common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone(), common.EFromTo.FileNone():
 		e, createErr := setPropertiesEnumerator(cca)
 		if createErr != nil {
 			return createErr
