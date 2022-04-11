@@ -62,9 +62,9 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	fmt.Println("Rehydrate priority unused- " + rehydratePriority) //this line is a personal reminder and will be removed when https://github.com/Azure/azure-storage-blob-go/pull/319 is merged
 	blockBlobTier, pageBlobTier := jptm.BlobTiers()
 	srcBlobType := jptm.Info().SrcBlobType
-	SetPropertiesAPIOption := jptm.PropertiesToTransfer()
+	PropertiesToTransfer := jptm.PropertiesToTransfer()
 
-	if SetPropertiesAPIOption.ShouldTransferTier() {
+	if PropertiesToTransfer.ShouldTransferTier() {
 		var err error = nil
 		switch srcBlobType {
 		case azblob.BlobBlockBlob:
@@ -98,7 +98,7 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		}
 	}
 
-	if SetPropertiesAPIOption.ShouldTransferMetaData() {
+	if PropertiesToTransfer.ShouldTransferMetaData() {
 		panic("Not Supported to be setting metadata yet")
 	}
 }
