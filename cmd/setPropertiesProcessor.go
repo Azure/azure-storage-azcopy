@@ -22,15 +22,15 @@ package cmd
 
 import "github.com/Azure/azure-storage-azcopy/v10/common"
 
-// setting SetPropertiesAPIOption for choosing which API to use
-func setBitsForSetProperties(cca *CookedCopyCmdArgs) common.SetPropertiesAPIOption {
+// setting SetPropertiesFlags for choosing which API to use
+func setBitsForSetProperties(cca *CookedCopyCmdArgs) common.SetPropertiesFlags {
 	if cca.blockBlobTier != common.EBlockBlobTier.None() || cca.pageBlobTier != common.EPageBlobTier.None() {
-		common.ESetPropertiesAPIOption.SetTier()
+		common.ESetPropertiesFlags.SetTier()
 	}
 	if cca.metadata != "" {
-		common.ESetPropertiesAPIOption.SetMetadata()
+		common.ESetPropertiesFlags.SetMetadata()
 	}
-	return common.ESetPropertiesAPIOption
+	return common.ESetPropertiesFlags
 }
 
 func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption) *copyTransferProcessor {
@@ -51,7 +51,7 @@ func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPar
 			Metadata:          cca.metadata,
 			RehydratePriority: cca.rehydratePriority,
 		},
-		SetPropertiesAPIOption: cca.propertiesToTransfer,
+		SetPropertiesFlags: cca.propertiesToTransfer,
 	}
 
 	reportFirstPart := func(jobStarted bool) {
