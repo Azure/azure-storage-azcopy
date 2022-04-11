@@ -40,7 +40,7 @@ func (cca *CookedCopyCmdArgs) makeTransferEnum() error {
 		if cca.FromTo.From() == common.ELocation.File() {
 			return fmt.Errorf("tier cannot be set upon files")
 		}
-		cca.propertiesToTransfer |= common.ESetPropertiesAPIOption.SetTier()
+		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetTier()
 	}
 	return nil
 }

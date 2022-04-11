@@ -119,26 +119,26 @@ func (DeleteSnapshotsOption) None() DeleteSnapshotsOption    { return DeleteSnap
 func (DeleteSnapshotsOption) Include() DeleteSnapshotsOption { return DeleteSnapshotsOption(1) }
 func (DeleteSnapshotsOption) Only() DeleteSnapshotsOption    { return DeleteSnapshotsOption(2) }
 
-type SetPropertiesAPIOption uint32 // [0000000000...32 times]
+type SetPropertiesFlags uint32 // [0000000000...32 times]
 
-var ESetPropertiesAPIOption = SetPropertiesAPIOption(0)
+var ESetPropertiesFlags = SetPropertiesFlags(0)
 
 // functions to set values
-func (SetPropertiesAPIOption) None() SetPropertiesAPIOption        { return SetPropertiesAPIOption(0) }
-func (SetPropertiesAPIOption) SetTier() SetPropertiesAPIOption     { return SetPropertiesAPIOption(1) }
-func (SetPropertiesAPIOption) SetMetadata() SetPropertiesAPIOption { return SetPropertiesAPIOption(2) }
-func (SetPropertiesAPIOption) SetBlobTags() SetPropertiesAPIOption { return SetPropertiesAPIOption(4) }
+func (SetPropertiesFlags) None() SetPropertiesFlags        { return SetPropertiesFlags(0) }
+func (SetPropertiesFlags) SetTier() SetPropertiesFlags     { return SetPropertiesFlags(1) }
+func (SetPropertiesFlags) SetMetadata() SetPropertiesFlags { return SetPropertiesFlags(2) }
+func (SetPropertiesFlags) SetBlobTags() SetPropertiesFlags { return SetPropertiesFlags(4) }
 
 // functions to get values (to be used in sde)
 // If Y is inside X then X & Y == Y
-func (op *SetPropertiesAPIOption) ShouldTransferTier() bool {
-	return (*op)&ESetPropertiesAPIOption.SetTier() == ESetPropertiesAPIOption.SetTier()
+func (op *SetPropertiesFlags) ShouldTransferTier() bool {
+	return (*op)&ESetPropertiesFlags.SetTier() == ESetPropertiesFlags.SetTier()
 }
-func (op *SetPropertiesAPIOption) ShouldTransferMetaData() bool {
-	return (*op)&ESetPropertiesAPIOption.SetMetadata() == ESetPropertiesAPIOption.SetMetadata()
+func (op *SetPropertiesFlags) ShouldTransferMetaData() bool {
+	return (*op)&ESetPropertiesFlags.SetMetadata() == ESetPropertiesFlags.SetMetadata()
 }
-func (op *SetPropertiesAPIOption) ShouldTransferBlobTags() bool {
-	return (*op)&ESetPropertiesAPIOption.SetBlobTags() == ESetPropertiesAPIOption.SetBlobTags()
+func (op *SetPropertiesFlags) ShouldTransferBlobTags() bool {
+	return (*op)&ESetPropertiesFlags.SetBlobTags() == ESetPropertiesFlags.SetBlobTags()
 }
 
 func (d DeleteSnapshotsOption) String() string {

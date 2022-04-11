@@ -62,7 +62,7 @@ type IJobPartMgr interface {
 	IsSourceEncrypted() bool
 	/* Status Manager Updates */
 	SendXferDoneMsg(msg xferDoneMsg)
-	GetSetPropertiesAPIOption() common.SetPropertiesAPIOption
+	PropertiesToTransfer() common.SetPropertiesFlags
 }
 
 type serviceAPIVersionOverride struct{}
@@ -316,7 +316,7 @@ type jobPartMgr struct {
 
 	closeOnCompletion chan struct{}
 
-	SetPropertiesAPIOption common.SetPropertiesAPIOption
+	SetPropertiesFlags common.SetPropertiesFlags
 
 	RehydratePriority common.RehydratePriorityType
 }
@@ -396,7 +396,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		CpkScopeInfo:      string(dstData.CpkScopeInfo[:dstData.CpkScopeInfoLength]),
 		IsSourceEncrypted: dstData.IsSourceEncrypted,
 	}
-	jpm.SetPropertiesAPIOption = dstData.SetPropertiesAPIOption
+	jpm.SetPropertiesFlags = dstData.SetPropertiesFlags
 	jpm.RehydratePriority = plan.RehydratePriority
 
 	jpm.preserveLastModifiedTime = plan.DstLocalData.PreserveLastModifiedTime
@@ -788,8 +788,8 @@ func (jpm *jobPartMgr) IsSourceEncrypted() bool {
 	return jpm.cpkOptions.IsSourceEncrypted
 }
 
-func (jpm *jobPartMgr) GetSetPropertiesAPIOption() common.SetPropertiesAPIOption {
-	return jpm.SetPropertiesAPIOption
+func (jpm *jobPartMgr) PropertiesToTransfer() common.SetPropertiesFlags {
+	return jpm.SetPropertiesFlags
 }
 
 func (jpm *jobPartMgr) ShouldPutMd5() bool {

@@ -91,7 +91,7 @@ type IJobPartTransferMgr interface {
 	CpkInfo() common.CpkInfo
 	CpkScopeInfo() common.CpkScopeInfo
 	IsSourceEncrypted() bool
-	SetPropertiesAPIOption() common.SetPropertiesAPIOption
+	PropertiesToTransfer() common.SetPropertiesFlags
 }
 
 type TransferInfo struct {
@@ -520,8 +520,8 @@ func (jptm *jobPartTransferMgr) IsSourceEncrypted() bool {
 	return jptm.jobPartMgr.IsSourceEncrypted()
 }
 
-func (jptm *jobPartTransferMgr) SetPropertiesAPIOption() common.SetPropertiesAPIOption {
-	return jptm.jobPartMgr.GetSetPropertiesAPIOption()
+func (jptm *jobPartTransferMgr) PropertiesToTransfer() common.SetPropertiesFlags {
+	return jptm.jobPartMgr.PropertiesToTransfer()
 }
 
 // JobHasLowFileCount returns an estimate of whether we only have a very small number of files in the overall job
