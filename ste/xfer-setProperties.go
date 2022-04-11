@@ -12,47 +12,6 @@ import (
 	"strings"
 )
 
-//var explainedSkippedRemoveOnce sync.Once
-
-func getBlockBlobTierString(tier common.BlockBlobTier) azblob.AccessTierType {
-	switch tier {
-	case common.EBlockBlobTier.Hot():
-		return azblob.AccessTierHot
-	case common.EBlockBlobTier.Cool():
-		return azblob.AccessTierCool
-	case common.EBlockBlobTier.Archive():
-		return azblob.AccessTierArchive
-	case common.EBlockBlobTier.None():
-		return azblob.AccessTierNone
-	default:
-		panic("invalid tier type")
-	}
-}
-
-func getPageBlobTierString(tier common.PageBlobTier) azblob.AccessTierType {
-	switch tier {
-	case common.EPageBlobTier.P10():
-		return azblob.AccessTierP10
-	case common.EPageBlobTier.P15():
-		return azblob.AccessTierP15
-	case common.EPageBlobTier.P20():
-		return azblob.AccessTierP20
-	case common.EPageBlobTier.P30():
-		return azblob.AccessTierP30
-	case common.EPageBlobTier.P4():
-		return azblob.AccessTierP4
-	case common.EPageBlobTier.P40():
-		return azblob.AccessTierP40
-	case common.EPageBlobTier.P50():
-		return azblob.AccessTierP50
-	case common.EPageBlobTier.P6():
-		return azblob.AccessTierP6
-	case common.EPageBlobTier.None():
-		return azblob.AccessTierNone
-	default:
-		panic("Invalid tier type")
-	}
-}
 func SetProperties(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytes transferred by the size of the source.
 	if jptm.WasCanceled() {
@@ -73,7 +32,7 @@ func SetProperties(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 		case common.ELocation.File():
 			setPropertiesFile(jptm, p)
 		default:
-			panic("Shouldn't have happened")
+			panic("Attempting set-properties on invalid location: " + to.From().String())
 		}
 	})
 	jptm.ScheduleChunks(cf)
@@ -99,21 +58,22 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		jptm.ReportTransferDone()
 	}
 
+	rehydratePriority := jptm.Info().RehydratePriority
+	fmt.Println("Rehydrate priority unused- " + rehydratePriority) //this line is a personal reminder and will be removed when https://github.com/Azure/azure-storage-blob-go/pull/319 is merged
 	blockBlobTier, pageBlobTier := jptm.BlobTiers()
 	srcBlobType := jptm.Info().SrcBlobType
-	_ = srcBlobType
 	SetPropertiesAPIOption := jptm.SetPropertiesAPIOption()
 
 	if SetPropertiesAPIOption.TransferTier() {
 		var err error = nil
 		switch srcBlobType {
 		case azblob.BlobBlockBlob:
-			if getBlockBlobTierString(blockBlobTier) != azblob.AccessTierNone {
-				_, err = srcBlobURL.SetTier(jptm.Context(), getBlockBlobTierString(blockBlobTier), azblob.LeaseAccessConditions{})
+			if blockBlobTier.ToAccessTierType() != azblob.AccessTierNone {
+				_, err = srcBlobURL.SetTier(jptm.Context(), blockBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
 			}
 		case azblob.BlobPageBlob:
-			if getPageBlobTierString(pageBlobTier) != azblob.AccessTierNone {
-				_, err = srcBlobURL.SetTier(jptm.Context(), getPageBlobTierString(pageBlobTier), azblob.LeaseAccessConditions{})
+			if pageBlobTier.ToAccessTierType() != azblob.AccessTierNone {
+				_, err = srcBlobURL.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
 			}
 		}
 		//todo add more options like priority etc.

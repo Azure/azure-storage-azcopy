@@ -208,6 +208,7 @@ type BlobTransferAttributes struct {
 	DeleteSnapshotsOption    DeleteSnapshotsOption // when deleting, specify what to do with the snapshots
 	BlobTagsString           string                // when user explicitly provides blob tags
 	PermanentDeleteOption    PermanentDeleteOption // Permanently deletes soft-deleted snapshots when indicated by user
+	RehydratePriority        RehydratePriorityType // rehydrate priority of blob
 }
 
 type JobIDDetails struct {

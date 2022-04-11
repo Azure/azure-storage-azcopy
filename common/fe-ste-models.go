@@ -1546,3 +1546,28 @@ type LCMMsg struct {
 	MsgType   string    `json:"MessageType"`
 	Value     string    `json:"Value"`
 }
+
+////////////////////////////////////////////////////////////////
+type RehydratePriorityType uint8
+
+var ERehydratePriorityType = RehydratePriorityType(0) // setting default as none
+
+func (RehydratePriorityType) None() RehydratePriorityType     { return RehydratePriorityType(0) }
+func (RehydratePriorityType) Standard() RehydratePriorityType { return RehydratePriorityType(1) }
+func (RehydratePriorityType) High() RehydratePriorityType     { return RehydratePriorityType(2) }
+
+func (rpt *RehydratePriorityType) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(rpt), s, true, true)
+	if err == nil {
+		*rpt = val.(RehydratePriorityType)
+	}
+	return err
+}
+
+func (rpt RehydratePriorityType) String() string {
+	return enum.StringInt(rpt, reflect.TypeOf(rpt))
+}
+
+func (rpt RehydratePriorityType) ToRehydratePriorityType() azblob.RehydratePriorityType {
+	return azblob.RehydratePriorityType(rpt.String())
+}

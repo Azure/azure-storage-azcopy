@@ -46,11 +46,10 @@ func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPar
 		// flags
 		LogLevel: cca.LogVerbosity,
 		BlobAttributes: common.BlobTransferAttributes{
-			DeleteSnapshotsOption: cca.deleteSnapshotsOption,
-			PermanentDeleteOption: cca.permanentDeleteOption,
-			BlockBlobTier:         cca.blockBlobTier,
-			PageBlobTier:          cca.pageBlobTier,
-			Metadata:              cca.metadata,
+			BlockBlobTier:     cca.blockBlobTier,
+			PageBlobTier:      cca.pageBlobTier,
+			Metadata:          cca.metadata,
+			RehydratePriority: cca.rehydratePriority,
 		},
 		SetPropertiesAPIOption: setBitsForSetProperties(cca),
 	}
