@@ -22,24 +22,13 @@ package cmd
 
 import "github.com/Azure/azure-storage-azcopy/v10/common"
 
-// setting SetPropertiesFlags for choosing which API to use
-func setBitsForSetProperties(cca *CookedCopyCmdArgs) common.SetPropertiesFlags {
-	if cca.blockBlobTier != common.EBlockBlobTier.None() || cca.pageBlobTier != common.EPageBlobTier.None() {
-		common.ESetPropertiesFlags.SetTier()
-	}
-	if cca.metadata != "" {
-		common.ESetPropertiesFlags.SetMetadata()
-	}
-	return common.ESetPropertiesFlags
-}
-
 func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption) *copyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:           cca.jobID,
 		CommandString:   cca.commandString,
 		FromTo:          cca.FromTo,
 		Fpo:             fpo,
-		SourceRoot:      cca.Source.CloneWithConsolidatedSeparators(), // TODO: why do we consolidate here, but not in "copy"? Is it needed in both places or neither? Or is copy just covering the same need differently?
+		SourceRoot:      cca.Source.CloneWithConsolidatedSeparators(),
 		CredentialInfo:  cca.credentialInfo,
 		ForceIfReadOnly: cca.ForceIfReadOnly,
 
