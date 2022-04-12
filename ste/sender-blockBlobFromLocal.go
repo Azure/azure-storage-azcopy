@@ -111,7 +111,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		}
 
 		if jptm.Info().SourceSize == 0 {
-			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{}, destBlobTier, blobTags, u.cpkToApply)
+			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{}, destBlobTier, blobTags, u.cpkToApply, azblob.ImmutabilityPolicyOptions{})
 		} else {
 			// File with content
 
@@ -126,7 +126,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 			// Upload the file
 			body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
 			_, err = u.destBlockBlobURL.Upload(jptm.Context(), body, u.headersToApply, u.metadataToApply,
-				azblob.BlobAccessConditions{}, u.destBlobTier, blobTags, u.cpkToApply)
+				azblob.BlobAccessConditions{}, u.destBlobTier, blobTags, u.cpkToApply, azblob.ImmutabilityPolicyOptions{})
 		}
 
 		// if the put blob is a failure, update the transfer status to failed

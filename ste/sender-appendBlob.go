@@ -152,7 +152,7 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 	if separateSetTagsRequired || len(blobTags) == 0 {
 		blobTags = nil
 	}
-	if _, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, blobTags, s.cpkToApply); err != nil {
+	if _, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, blobTags, s.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}
