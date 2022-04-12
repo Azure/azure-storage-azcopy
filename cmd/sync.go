@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -513,7 +514,7 @@ func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, th
 		// text output
 		throughputString := ""
 		if cca.firstPartOrdered() {
-			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", ste.ToFixed(throughput, 4))
+			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
 		}
 		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
 			srcScanned, dstScanned, throughputString)
@@ -559,6 +560,22 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		return
 	}
 
+	lcm.Progress(func(format common.OutputFormat) string {
+		if format == common.EOutputFormat.Json() {
+			return cca.getJsonOfSyncJobSummary(summary)
+		}
+
+		// indicate whether constrained by disk or not
+		perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, false)
+
+		return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v%s",
+			summary.PercentComplete,
+			summary.TransfersCompleted,
+			summary.TransfersFailed,
+			summary.TotalTransfers-summary.TransfersCompleted-summary.TransfersFailed,
+			summary.TotalTransfers, perfString, jobsAdmin.ToFixed(throughput, 4), diskString)
+	})
+
 	if jobDone {
 		exitCode := common.EExitCode.Success()
 		if summary.TransfersFailed > 0 {
@@ -590,7 +607,7 @@ Final Job Status: %v%s%s
 				summary.JobID.String(),
 				atomic.LoadUint64(&cca.atomicSourceFilesScanned),
 				atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
-				ste.ToFixed(duration.Minutes(), 4),
+				jobsAdmin.ToFixed(duration.Minutes(), 4),
 				summary.FileTransfers,
 				summary.FolderPropertyTransfers,
 				summary.TotalTransfers,
@@ -603,7 +620,7 @@ Final Job Status: %v%s%s
 				screenStats,
 				formatPerfAdvice(summary.PerformanceAdvice))
 
-			jobMan, exists := ste.JobsAdmin.JobMgr(summary.JobID)
+			jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
 			if exists {
 				jobMan.Log(pipeline.LogInfo, logStats+"\n"+output)
 			}
@@ -611,22 +628,6 @@ Final Job Status: %v%s%s
 			return output
 		}, exitCode)
 	}
-
-	lcm.Progress(func(format common.OutputFormat) string {
-		if format == common.EOutputFormat.Json() {
-			return cca.getJsonOfSyncJobSummary(summary)
-		}
-
-		// indicate whether constrained by disk or not
-		perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, false)
-
-		return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v%s",
-			summary.PercentComplete,
-			summary.TransfersCompleted,
-			summary.TransfersFailed,
-			summary.TotalTransfers-summary.TransfersCompleted-summary.TransfersFailed,
-			summary.TotalTransfers, perfString, ste.ToFixed(throughput, 4), diskString)
-	})
 
 	return
 }

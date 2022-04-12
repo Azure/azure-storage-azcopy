@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"encoding/json"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 )
@@ -29,6 +30,8 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 		allowCancelFromStdIn: false,
 		allowWatchInput:      false,
 		closeFunc:            func() {}, // noop since we have nothing to do by default
+		waitForUserResponse:  make(chan bool),
+		msgHandlerChannel:    make(chan LCMMsg),
 	}
 
 	// kick off the single routine that processes output
@@ -68,6 +71,9 @@ type LifecycleMgr interface {
 	RegisterCloseFunc(func())
 	SetForceLogging()
 	IsForceLoggingDisabled() bool
+	DownloadToTempPath() bool
+	MsgHandlerChannel()   <-chan LCMMsg
+	ReportAllJobPartsDone()
 }
 
 func GetLifecycleMgr() LifecycleMgr {
@@ -79,6 +85,7 @@ type lifecycleMgr struct {
 	msgQueue              chan outputMessage
 	progressCache         string // useful for keeping job progress on the last line
 	cancelChannel         chan os.Signal
+	doneChannel           chan bool
 	e2eContinueChannel    chan struct{}
 	e2eAllowOpenChannel   chan struct{}
 	waitEverCalled        int32
@@ -91,6 +98,8 @@ type lifecycleMgr struct {
 	e2eAllowAwaitOpen     bool           // allow the user to send 'open' from stdin to allow the opening of the first file
 	closeFunc             func()         // used to close logs before exiting
 	disableSyslog         bool
+	waitForUserResponse   chan bool
+	msgHandlerChannel     chan LCMMsg
 }
 
 type userInput struct {
@@ -110,22 +119,45 @@ func (lcm *lifecycleMgr) watchInputs() {
 
 		// reads input until the first occurrence of \n in the input,
 		input, err := consoleReader.ReadString('\n')
-		timeReceived := time.Now()
 		if err != nil {
 			continue
 		}
 
 		// remove spaces before/after the content
 		msg := strings.TrimSpace(input)
+		timeReceived := time.Now()
+		
+		select {
+		case <-lcm.waitForUserResponse:
+			lcm.inputQueue <- userInput{timeReceived: timeReceived, content: msg}
+			continue
+		default:
+		}
 
+		var m LCMMsg
 		if lcm.allowCancelFromStdIn && strings.EqualFold(msg, "cancel") {
 			lcm.cancelChannel <- os.Interrupt
 		} else if lcm.e2eAllowAwaitContinue && strings.EqualFold(msg, "continue") {
 			close(lcm.e2eContinueChannel)
 		} else if lcm.e2eAllowAwaitOpen && strings.EqualFold(msg, "open") {
 			close(lcm.e2eAllowOpenChannel)
+		} else if err := json.Unmarshal([]byte(msg), &m); err == nil { //json string
+			lcm.Info(fmt.Sprintf("Received request for %s with timeStamp %s", m.MsgType, m.TimeStamp.String()))
+			var msgType LCMMsgType
+			if err := msgType.Parse(m.MsgType); err != nil {
+				lcm.Info(fmt.Sprintf("Discarding incorrect message: %s.", m.MsgType))
+				continue
+			}
+
+			switch msgType {
+			case ELCMMsgType.CancelJob():
+				lcm.cancelChannel <- os.Interrupt
+			default:
+				lcm.msgHandlerChannel <- m
+
+			}
 		} else {
-			lcm.inputQueue <- userInput{timeReceived: timeReceived, content: msg}
+			lcm.Info("Discarding incorrectly formatted input message")
 		}
 	}
 }
@@ -246,6 +278,9 @@ func (lcm *lifecycleMgr) Prompt(message string, details PromptDetails) ResponseO
 		inputChannel:  expectedInputChannel,
 		promptDetails: details,
 	}
+
+	// Request watchInputs() to wait for response from user
+	lcm.waitForUserResponse <- true
 
 	// block until input comes from the user
 	rawResponse := <-expectedInputChannel
@@ -484,6 +519,8 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 	go func() {
 		const progressFrequencyThreshold = 1000000
 		var oldCount, newCount uint32
+		wait := 2 * time.Second
+		lastFetchTime := time.Now().Add(-wait) // So that we start fetching time immediately
 
 		// cancelChannel will be notified when os receives os.Interrupt and os.Kill signals
 		signal.Notify(lcm.cancelChannel, os.Interrupt, os.Kill)
@@ -501,11 +538,17 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 			case <-lcm.cancelChannel:
 				doCancel()
 				continue // to exit on next pass through loop
-			default:
-				newCount = jc.ReportProgressOrExit(lcm)
+			case <-lcm.doneChannel:
+				
+					newCount = jc.ReportProgressOrExit(lcm)
+					lastFetchTime = time.Now()
+			case <- time.After(wait):
+				if time.Since(lastFetchTime) >= wait {
+					newCount = jc.ReportProgressOrExit(lcm)
+					lastFetchTime = time.Now()
+				}
 			}
 
-			wait := 2 * time.Second
 			if newCount >= progressFrequencyThreshold && !cancelCalled {
 				// report less on progress  - to save on the CPU costs of doing so and because, if there are this many files,
 				// its going to be a long job anyway, so no need to report so often
@@ -513,13 +556,6 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 				if oldCount < progressFrequencyThreshold {
 					lcm.Info(fmt.Sprintf("Reducing progress output frequency to %v, because there are over %d files", wait, progressFrequencyThreshold))
 				}
-			}
-
-			// wait a bit before fetching job status again, as fetching has costs associated with it on the backend
-			select {
-			case <-lcm.cancelChannel:
-				doCancel()
-			case <-time.After(wait):
 			}
 
 			oldCount = newCount
@@ -588,6 +624,23 @@ func (lcm *lifecycleMgr) SetForceLogging() {
 
 func (lcm *lifecycleMgr) IsForceLoggingDisabled() bool {
 	return lcm.disableSyslog
+}
+
+func (lcm *lifecycleMgr) DownloadToTempPath() bool {
+	ret, err := strconv.ParseBool(lcm.GetEnvironmentVariable(EEnvironmentVariable.DownloadToTempPath()))
+	if err != nil {
+		// By default we'll download to temp path
+		ret = true
+	}
+	return ret
+}
+
+func (lcm *lifecycleMgr) MsgHandlerChannel() <-chan LCMMsg {
+	return lcm.msgHandlerChannel
+}
+
+func (lcm *lifecycleMgr) ReportAllJobPartsDone() {
+	lcm.doneChannel <- true
 }
 
 // captures the common logic of exiting if there's an expected error
