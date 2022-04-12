@@ -49,7 +49,7 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	// Internal function is created to avoid redundancy of the above steps from several places in the api.
 	transferDone := func(status common.TransferStatus, err error) {
 		if status == common.ETransferStatus.Failed() {
-			jptm.LogError(info.Source, "SET-PROPERTIES ERROR ", err)
+			jptm.LogError(info.Source, "SET-PROPERTIES FAILED with error: ", err)
 		} else {
 			jptm.Log(pipeline.LogInfo, fmt.Sprintf("SET-PROPERTIES SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
 		}
