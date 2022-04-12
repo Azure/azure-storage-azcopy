@@ -77,7 +77,7 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 				_, err = srcBlobURL.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
 			}
 		}
-		//todo add more options like priority etc.
+
 		if err != nil {
 			if strErr, ok := err.(azblob.StorageError); ok {
 				// TODO: Do we need to add more conditions? Won't happen on some snapshots and versions. Check documentation

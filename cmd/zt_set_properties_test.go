@@ -85,7 +85,7 @@ func validateSetPropertiesTransfersAreScheduled(c *chk.C, isSrcEncoded bool, exp
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
 	for _, transfer := range mockedRPC.transfers {
 		srcRelativeFilePath := transfer.Source
-		c.Assert(transfer.BlobTier, chk.Equals, transferTier)
+		c.Assert(transfer.BlobTier, chk.Equals, transferTier.ToAccessTierType())
 		if isSrcEncoded {
 			srcRelativeFilePath, _ = url.PathUnescape(srcRelativeFilePath)
 		}
