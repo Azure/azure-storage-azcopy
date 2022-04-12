@@ -61,21 +61,16 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	rehydratePriority := jptm.Info().RehydratePriority
 	fmt.Println("Rehydrate priority unused- " + rehydratePriority) //this line is a personal reminder and will be removed when https://github.com/Azure/azure-storage-blob-go/pull/319 is merged
 	blockBlobTier, pageBlobTier := jptm.BlobTiers()
-	srcBlobType := jptm.Info().SrcBlobType
+	//srcBlobType := jptm.Info().SrcBlobType
 	PropertiesToTransfer := jptm.PropertiesToTransfer()
 
 	if PropertiesToTransfer.ShouldTransferTier() {
 		var err error = nil
-		switch srcBlobType {
-		case azblob.BlobBlockBlob:
-			if blockBlobTier.ToAccessTierType() != azblob.AccessTierNone {
-				_, err = srcBlobURL.SetTier(jptm.Context(), blockBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
-			}
-		case azblob.BlobPageBlob:
-			// todo check if works
-			if pageBlobTier.ToAccessTierType() != azblob.AccessTierNone {
-				_, err = srcBlobURL.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
-			}
+		if ValidateTier(jptm, blockBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context()) {
+			_, err = srcBlobURL.SetTier(jptm.Context(), blockBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
+		}
+		if ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context()) {
+			_, err = srcBlobURL.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
 		}
 
 		if err != nil {
