@@ -69,6 +69,7 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		if ValidateTier(jptm, blockBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context()) {
 			_, err = srcBlobURL.SetTier(jptm.Context(), blockBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
 		}
+		// cannot return true for >1, therefore only one of these will run
 		if ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context()) {
 			_, err = srcBlobURL.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
 		}

@@ -58,7 +58,7 @@ func init() {
 		Args: func(cmd *cobra.Command, args []string) error {
 			// we only want one arg, which is the source
 			if len(args) != 1 {
-				return fmt.Errorf("setproperties command only takes 1 arguments (src). Passed %d arguments", len(args))
+				return fmt.Errorf("set-properties command only takes 1 argument (src). Passed %d argument(s)", len(args))
 			}
 
 			//the resource to set properties of is set as src
@@ -74,7 +74,7 @@ func init() {
 				case common.ELocation.File():
 					raw.fromTo = common.EFromTo.FileNone().String()
 				default:
-					return fmt.Errorf("invalid source type %s to delete. azcopy support removing blobs/files/adls gen2", srcLocationType.String())
+					return fmt.Errorf("invalid source type %s. azcopy supports set-properties of blobs/files/adls gen2", srcLocationType.String())
 				}
 			} else if raw.fromTo != "" {
 				err := strings.Contains(raw.fromTo, "None")

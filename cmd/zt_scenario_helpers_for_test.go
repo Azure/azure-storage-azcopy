@@ -914,6 +914,19 @@ func getDefaultSetPropertiesRawInput(src string, accessTier common.BlockBlobTier
 	fromTo := common.EFromTo.BlobNone()
 	srcURL, _ := url.Parse(src)
 
+	srcLocationType := InferArgumentLocation(src)
+	switch srcLocationType {
+	case common.ELocation.Blob():
+		fromTo = common.EFromTo.BlobNone()
+	case common.ELocation.BlobFS():
+		fromTo = common.EFromTo.BlobFSNone()
+	case common.ELocation.File():
+		fromTo = common.EFromTo.FileNone()
+	default:
+		panic(fmt.Sprintf("invalid source type %s to delete. azcopy support removing blobs/files/adls gen2", srcLocationType.String()))
+
+	}
+
 	if strings.Contains(srcURL.Host, "file") {
 		fromTo = common.EFromTo.FileNone()
 	} else if strings.Contains(srcURL.Host, "dfs") {
