@@ -1460,7 +1460,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		if createErr != nil {
 			return createErr
 		}
-		e.enumerate()
+		err = e.enumerate()
 
 	default:
 		return fmt.Errorf("copy direction %v is not supported\n", cca.FromTo)
