@@ -31,7 +31,7 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 		allowWatchInput:      false,
 		closeFunc:            func() {}, // noop since we have nothing to do by default
 		waitForUserResponse:  make(chan bool),
-		msgHandlerChannel:    make(chan LCMMsg),
+		msgHandlerChannel:    make(chan *LCMMsg),
 	}
 
 	// kick off the single routine that processes output
@@ -72,7 +72,7 @@ type LifecycleMgr interface {
 	SetForceLogging()
 	IsForceLoggingDisabled() bool
 	DownloadToTempPath() bool
-	MsgHandlerChannel()   <-chan LCMMsg
+	MsgHandlerChannel()   <-chan *LCMMsg
 	ReportAllJobPartsDone()
 }
 
@@ -99,7 +99,7 @@ type lifecycleMgr struct {
 	closeFunc             func()         // used to close logs before exiting
 	disableSyslog         bool
 	waitForUserResponse   chan bool
-	msgHandlerChannel     chan LCMMsg
+	msgHandlerChannel     chan *LCMMsg
 }
 
 type userInput struct {
@@ -134,18 +134,18 @@ func (lcm *lifecycleMgr) watchInputs() {
 		default:
 		}
 
-		var m LCMMsg
+		var req LCMMsgReq
 		if lcm.allowCancelFromStdIn && strings.EqualFold(msg, "cancel") {
 			lcm.cancelChannel <- os.Interrupt
 		} else if lcm.e2eAllowAwaitContinue && strings.EqualFold(msg, "continue") {
 			close(lcm.e2eContinueChannel)
 		} else if lcm.e2eAllowAwaitOpen && strings.EqualFold(msg, "open") {
 			close(lcm.e2eAllowOpenChannel)
-		} else if err := json.Unmarshal([]byte(msg), &m); err == nil { //json string
-			lcm.Info(fmt.Sprintf("Received request for %s with timeStamp %s", m.MsgType, m.TimeStamp.String()))
+		} else if err := json.Unmarshal([]byte(msg), &req); err == nil { //json string
+			lcm.Info(fmt.Sprintf("Received request for %s with timeStamp %s", req.MsgType, req.TimeStamp.String()))
 			var msgType LCMMsgType
-			if err := msgType.Parse(m.MsgType); err != nil {
-				lcm.Info(fmt.Sprintf("Discarding incorrect message: %s.", m.MsgType))
+			if err := msgType.Parse(req.MsgType); err != nil {
+				lcm.Info(fmt.Sprintf("Discarding incorrect message: %s.", req.MsgType))
 				continue
 			}
 
@@ -153,7 +153,12 @@ func (lcm *lifecycleMgr) watchInputs() {
 			case ELCMMsgType.CancelJob():
 				lcm.cancelChannel <- os.Interrupt
 			default:
+				m := NewLCMMsg()
+				m.Req = &req
 				lcm.msgHandlerChannel <- m
+
+				//wait till the message is completed
+				<-m.respChan
 
 			}
 		} else {
@@ -635,7 +640,7 @@ func (lcm *lifecycleMgr) DownloadToTempPath() bool {
 	return ret
 }
 
-func (lcm *lifecycleMgr) MsgHandlerChannel() <-chan LCMMsg {
+func (lcm *lifecycleMgr) MsgHandlerChannel() <-chan *LCMMsg {
 	return lcm.msgHandlerChannel
 }
 

@@ -1520,8 +1520,38 @@ func (m *LCMMsgType) String() string {
 	return enum.StringInt(m, reflect.TypeOf(m))
 }
 
-type LCMMsg struct {
+type LCMMsgReq struct {
 	TimeStamp time.Time `json:"TimeStamp"`
-	MsgType   string    `json:"MessageType"`
+	MsgType   string    `json:"RequestType"`
 	Value     string    `json:"Value"`
 }
+
+type LCMMsgResp struct {
+	TimeStamp time.Time `json:"TimeStamp"`
+	MsgType   string    `json:"ResponseType"`
+	Value     string    `json:"Value"`
+	Err       error     `json:"-"`
+}
+
+type LCMMsg struct {
+	Req              *LCMMsgReq
+	Resp             *LCMMsgResp
+	respChan         chan bool
+}
+
+func NewLCMMsg() *LCMMsg {
+	return &LCMMsg{respChan: make(chan bool),}
+}
+
+func (m *LCMMsg) SetRequest(req *LCMMsgReq) {
+	m.Req = req
+}
+
+func (m *LCMMsg) SetResponse(resp *LCMMsgResp) {
+	m.Resp = resp
+}
+
+func (m *LCMMsg) Reply() {
+	m.respChan <- true
+}
+

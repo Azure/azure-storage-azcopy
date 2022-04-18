@@ -516,45 +516,67 @@ type jaPerfAdjustmentMsg struct {
 	Throughput int64 `json:"cap-mbps,string"`
 }
 
-func (ja *jobsAdmin) messageHandler(inputChan <-chan common.LCMMsg) {
+type jaPerfAdjustmentResp struct {
+	Status                      bool               `json:"status"`
+	AdjustedThroughPut          int64               `json:"cap-mbps"`
+	Err                         string              `json:"error"`
+}
+
+func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 	toBitsPerSec := func(megaBitsPerSec int64) int64 {
 		return megaBitsPerSec * 1000 * 1000 / 8
 	}
-	glcm := common.GetLifecycleMgr()
 	
 	lastPerfAdjustTime := time.Now() // right when this routine songs
 	const minIntervalBetweenPerfAdjustment = time.Minute
+	var err error
 	
 	for {
 		msg := <-inputChan
 		var msgType common.LCMMsgType
-		msgType.Parse(msg.MsgType) // MsgType is already verified by LCM
+		msgType.Parse(msg.Req.MsgType) // MsgType is already verified by LCM
 		switch msgType {
 		case common.ELCMMsgType.PerformanceAdjustment():
+			var resp jaPerfAdjustmentResp
 			var perfAdjustmentReq jaPerfAdjustmentMsg
 
 			if time.Since(lastPerfAdjustTime) < minIntervalBetweenPerfAdjustment {
-				msgStr := "Performance Adjustment already in progress. Please try after some time."
-				glcm.Info(msgStr)
-				continue
+				err = fmt.Errorf("performance Adjustment already in progress. Please try after " + 
+						lastPerfAdjustTime.Add(minIntervalBetweenPerfAdjustment).Format(time.RFC3339))
 			}
 			
-			if err := json.Unmarshal([]byte(msg.Value), &perfAdjustmentReq); err != nil {
-				msgStr := fmt.Sprintf("Error parsing message %s. ERR: %s", msg.Value, err.Error())
-				glcm.Info(msgStr)
-				continue
+			if e := json.Unmarshal([]byte(msg.Req.Value), &perfAdjustmentReq); e != nil {
+				err = fmt.Errorf("error parsing message %s. Err: %s", msg.Req.Value, e.Error())
 			}
 			
 			if perfAdjustmentReq.Throughput < 0 {
-				msgStr := fmt.Sprintf("Invalid value %d for cap-mbps. cap-mpbs should be greater than 0",
+				err = fmt.Errorf("invalid value %d for cap-mbps. cap-mpbs should be greater than 0",
 						      perfAdjustmentReq.Throughput)
-				glcm.Info(msgStr)
-				continue
 			}
 
-			lastPerfAdjustTime = time.Now()
-			ja.UpdateTargetBandwidth(toBitsPerSec(perfAdjustmentReq.Throughput))
-			glcm.Info(fmt.Sprintf("Adjusted throughput to %dMbps",perfAdjustmentReq.Throughput))
+			if err == nil {
+				lastPerfAdjustTime = time.Now()
+				ja.UpdateTargetBandwidth(toBitsPerSec(perfAdjustmentReq.Throughput))
+				
+				resp.Status = true
+				resp.AdjustedThroughPut = perfAdjustmentReq.Throughput
+				resp.Err = ""
+			} else {
+				resp.Status = false
+				resp.AdjustedThroughPut = -1
+				resp.Err = err.Error()
+			}
+
+			ret, _ := json.Marshal(resp)
+			msg.SetResponse(&common.LCMMsgResp {
+				TimeStamp: time.Now(),
+				MsgType: msg.Req.MsgType,
+				Value: string(ret),
+				Err: err,
+			})
+
+			msg.Reply()
+
 		default:
 		}
 
@@ -569,7 +591,7 @@ type jobIDToJobMgr struct {
 	nocopy common.NoCopy
 	lock   sync.RWMutex
 	m      map[common.JobID]ste.IJobMgr
-}
+} 
 
 func newJobIDToJobMgr() jobIDToJobMgr {
 	return jobIDToJobMgr{m: make(map[common.JobID]ste.IJobMgr)}
