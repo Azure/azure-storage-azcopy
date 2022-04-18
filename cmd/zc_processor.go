@@ -72,6 +72,33 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 	srcRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, true)
 	dstRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, false)
 
+	if s.copyJobTemplate.MetadataUpdateOption != common.EMetadataUpdateOption.None() {
+		// if metadata update option is not none, metadata needs to be modified.
+		// srcMetadata coming from original blob
+		// userMetadata coming from flag passed by user
+		srcMetadata := storedObject.Metadata
+		userMetadata := s.copyJobTemplate.Metadata
+		userMetadataMap := common.Metadata{} // code picked from copy.go #1301
+		if len(userMetadata) > 0 {
+			for _, keyAndValue := range strings.Split(userMetadata, ";") { // key/value pairs are separated by ';'
+				kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+				userMetadataMap[kv[0]] = kv[1]
+			}
+		}
+
+		switch s.copyJobTemplate.MetadataUpdateOption {
+		case common.EMetadataUpdateOption.Erase():
+			storedObject.Metadata = common.Metadata{}
+		case common.EMetadataUpdateOption.Overwrite():
+			storedObject.Metadata = userMetadataMap
+		case common.EMetadataUpdateOption.Append():
+			for key, value := range userMetadataMap {
+				srcMetadata[key] = value
+			}
+			storedObject.Metadata = srcMetadata
+		}
+	}
+
 	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(
 		false, // sync has no --decompress option
 		srcRelativePath,

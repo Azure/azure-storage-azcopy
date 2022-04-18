@@ -141,6 +141,38 @@ func (op *SetPropertiesFlags) ShouldTransferBlobTags() bool {
 	return (*op)&ESetPropertiesFlags.SetBlobTags() == ESetPropertiesFlags.SetBlobTags()
 }
 
+///////////SPACE FOR METADATAUPDATEOPTION
+var EMetadataUpdateOption = MetadataUpdateOption(3) // Default to "None"
+
+type MetadataUpdateOption uint8
+
+func (MetadataUpdateOption) Erase() MetadataUpdateOption     { return MetadataUpdateOption(0) }
+func (MetadataUpdateOption) Overwrite() MetadataUpdateOption { return MetadataUpdateOption(1) }
+func (MetadataUpdateOption) Append() MetadataUpdateOption {
+	return MetadataUpdateOption(2)
+}
+func (MetadataUpdateOption) None() MetadataUpdateOption { return MetadataUpdateOption(3) }
+
+func (p *MetadataUpdateOption) Parse(s string) error {
+	// allow empty to mean "None"
+	if s == "" {
+		*p = EMetadataUpdateOption.None()
+		return nil
+	}
+
+	val, err := enum.Parse(reflect.TypeOf(p), s, true)
+	if err == nil {
+		*p = val.(MetadataUpdateOption)
+	}
+	return err
+}
+
+func (p MetadataUpdateOption) String() string {
+	return enum.StringInt(p, reflect.TypeOf(p))
+}
+
+/////////////////////////////////////////
+
 func (d DeleteSnapshotsOption) String() string {
 	return enum.StringInt(d, reflect.TypeOf(d))
 }

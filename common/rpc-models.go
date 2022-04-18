@@ -149,6 +149,8 @@ type CopyJobPartOrderRequest struct {
 	S2SPreserveBlobTags            bool
 	CpkOptions                     CpkOptions
 	SetPropertiesFlags             SetPropertiesFlags
+	Metadata                       string
+	MetadataUpdateOption           MetadataUpdateOption
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,

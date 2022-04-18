@@ -67,6 +67,7 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 			_, err = srcBlobURL.SetTier(jptm.Context(), blockBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
 		}
 		// cannot return true for >1, therefore only one of these will run
+		// TODO how to prevent this line from creating an INFO: statement?
 		if ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context()) {
 			_, err = srcBlobURL.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
 		}
@@ -78,8 +79,8 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	}
 
 	if PropertiesToTransfer.ShouldTransferMetaData() {
-		var err error = nil
-		err = fmt.Errorf("trying to set metadata - not supported yet")
+		metadata := jptm.Info().SrcMetadata //SrcMetadata has already been changed
+		_, err := srcBlobURL.SetMetadata(jptm.Context(), metadata.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 		if err != nil {
 			errorHandlerForXferSetProperties(err, jptm, transferDone)
 		}
@@ -124,8 +125,8 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	}
 
 	if PropertiesToTransfer.ShouldTransferMetaData() {
-		var err error = nil
-		err = fmt.Errorf("trying to set metadata - not supported yet")
+		metadata := jptm.Info().SrcMetadata //SrcMetadata has already been changed
+		_, err := srcBlobURL.SetMetadata(jptm.Context(), metadata.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 		if err != nil {
 			errorHandlerForXferSetProperties(err, jptm, transferDone)
 		}
@@ -161,8 +162,8 @@ func setPropertiesFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		transferDone(common.ETransferStatus.Failed(), err)
 	}
 	if PropertiesToTransfer.ShouldTransferMetaData() {
-		var err error = nil
-		err = fmt.Errorf("trying to set metadata - not supported yet")
+		metadata := jptm.Info().SrcMetadata //SrcMetadata has already been changed to desired map
+		_, err := srcFileURL.SetMetadata(jptm.Context(), metadata.ToAzFileMetadata())
 		if err != nil {
 			errorHandlerForXferSetProperties(err, jptm, transferDone)
 		}

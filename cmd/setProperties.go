@@ -35,12 +35,61 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaultsForSetProperties() {
 	raw.preserveOwner = common.PreserveOwnerDefault
 }
 
+func (cca *CookedCopyCmdArgs) setPropertiesExtractVars() error {
+	err := cca.makeTransferEnum()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (cca *CookedCopyCmdArgs) makeTransferEnum() error {
 	if cca.blockBlobTier != common.EBlockBlobTier.None() || cca.pageBlobTier != common.EPageBlobTier.None() {
 		if cca.FromTo.From() == common.ELocation.File() {
 			return fmt.Errorf("tier cannot be set upon files")
 		}
 		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetTier()
+	}
+	if cca.MetadataUpdateOption != common.EMetadataUpdateOption.None() {
+		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetMetadata()
+	}
+	return nil
+}
+
+func (raw *rawCopyCmdArgs) extractMetadataOption() error {
+	if len(raw.metadata) == 0 { //if no metadata passed, return nil
+		raw.metadataUpdateOption = "none"
+		return nil
+	}
+
+	if len(raw.metadata) == 1 {
+		if raw.metadata == "e" {
+			raw.metadataUpdateOption = "erase"
+			raw.metadata = ""
+			return nil
+		} else {
+			return fmt.Errorf("invalid character passed as metadata flag input")
+		}
+	}
+
+	metadataUpdateOption := strings.Split(raw.metadata, ";")[0] // now it is "e" or "o" or "a"
+	if len(metadataUpdateOption) != 1 {
+		return fmt.Errorf("invalid metadata string passed as input, please specify metadata option correctly")
+	}
+	switch metadataUpdateOption {
+	case "e":
+		raw.metadataUpdateOption = "erase"
+	case "o":
+		raw.metadataUpdateOption = "overwrite"
+	case "a":
+		raw.metadataUpdateOption = "append"
+	default:
+		return fmt.Errorf("Invalid character '" + metadataUpdateOption + "' provided as input")
+	}
+	raw.metadata = raw.metadata[2:]
+
+	if raw.metadataUpdateOption == "erase" && len(raw.metadata) != 0 {
+		return fmt.Errorf("conflicting input- metadata string provided with 'e' erase option")
 	}
 	return nil
 }
@@ -91,9 +140,15 @@ func init() {
 				glcm.EnableCancelFromStdIn()
 			}
 
+			err := raw.extractMetadataOption()
+			if err != nil {
+				glcm.Error("failed to parse user input due to error: " + err.Error())
+			}
+
 			cooked, err := raw.cook()
 			if err == nil { // do this only if error is nil. We would not want to overwrite err = nil if there was error in cook()
 				err = cooked.makeTransferEnum()
+				// TODO rename this to something like a setProperties post cook method
 			}
 
 			if err != nil {
@@ -117,6 +172,7 @@ func init() {
 
 	rootCmd.AddCommand(setPropCmd)
 
+	setPropCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Upload to Azure Storage with these key-value pairs as metadata.")
 	setPropCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. Valid values : BlobNone, FileNone, BlobFSNone")
 	setPropCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "Define the log verbosity for the log file. Available levels include: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default 'INFO')")
 	setPropCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
