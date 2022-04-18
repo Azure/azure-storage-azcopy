@@ -92,7 +92,9 @@ func init() {
 			}
 
 			cooked, err := raw.cook()
-			err = cooked.makeTransferEnum()
+			if err == nil { // do this only if error is nil. We would not want to overwrite err = nil if there was error in cook()
+				err = cooked.makeTransferEnum()
+			}
 
 			if err != nil {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
