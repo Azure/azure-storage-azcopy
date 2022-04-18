@@ -298,7 +298,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 				}
 
 				storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, strings.TrimPrefix(blobInfo.Name, searchPrefix), containerName)
-
+				fmt.Println(storedObject.Metadata)
 				if t.s2sPreserveSourceTags && blobInfo.BlobTags != nil {
 					blobTagsMap := common.BlobTags{}
 					for _, blobTag := range blobInfo.BlobTags.BlobTagSet {

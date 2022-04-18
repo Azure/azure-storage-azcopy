@@ -318,7 +318,8 @@ type JobPartPlanDstBlob struct {
 	// Specifies the maximum size of block which determines the number of chunks and chunk size of a transfer
 	BlockSize int64
 
-	SetPropertiesFlags common.SetPropertiesFlags
+	SetPropertiesFlags   common.SetPropertiesFlags
+	MetadataUpdateOption common.MetadataUpdateOption
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
