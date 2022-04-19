@@ -159,7 +159,7 @@ func (lcm *lifecycleMgr) watchInputs() {
 
 				//wait till the message is completed
 				<-m.respChan
-
+				lcm.Response(*m.Resp)
 			}
 		} else {
 			lcm.Info("Discarding incorrectly formatted input message")
@@ -364,6 +364,26 @@ func (lcm *lifecycleMgr) Exit(o OutputBuilder, applicationExitCode ExitCode) {
 	}
 }
 
+func (lcm *lifecycleMgr) Response(resp LCMMsgResp) {
+
+	var respMsg string
+
+	if lcm.outputFormat == EOutputFormat.Json() {
+		m, err := json.Marshal(resp)
+		respMsg = string(m)
+		PanicIfErr(err)
+	} else {
+		respMsg = fmt.Sprintf("Info: %v", resp.Value.String())
+	}
+
+	respMsg = lcm.logSanitizer.SanitizeLogMessage(respMsg)
+
+	lcm.msgQueue <- outputMessage{
+		msgContent: respMsg,
+		msgType:    eOutputMessageType.Response(),
+	}
+}
+
 // this is used by commands that wish to stall forever to wait for the operations to complete
 func (lcm *lifecycleMgr) SurrenderControl() {
 	// stall forever
@@ -458,7 +478,7 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 
 		lcm.progressCache = msgToOutput.msgContent
 
-	case eOutputMessageType.Init(), eOutputMessageType.Info(), eOutputMessageType.Dryrun():
+	case eOutputMessageType.Init(), eOutputMessageType.Info(), eOutputMessageType.Dryrun(), eOutputMessageType.Response():
 		if lcm.progressCache != "" { // a progress status is already on the last line
 			// print the info from the beginning on current line
 			fmt.Print("\r")

@@ -508,20 +508,6 @@ func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint3
 	return a.GetAdvice()
 }
 
-
-//Structs for messageHandler
-
-/* PerfAdjustment message. */
-type jaPerfAdjustmentMsg struct {
-	Throughput int64 `json:"cap-mbps,string"`
-}
-
-type jaPerfAdjustmentResp struct {
-	Status                      bool               `json:"status"`
-	AdjustedThroughPut          int64               `json:"cap-mbps"`
-	Err                         string              `json:"error"`
-}
-
 func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 	toBitsPerSec := func(megaBitsPerSec int64) int64 {
 		return megaBitsPerSec * 1000 * 1000 / 8
@@ -537,16 +523,16 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 		msgType.Parse(msg.Req.MsgType) // MsgType is already verified by LCM
 		switch msgType {
 		case common.ELCMMsgType.PerformanceAdjustment():
-			var resp jaPerfAdjustmentResp
-			var perfAdjustmentReq jaPerfAdjustmentMsg
+			var resp common.PerfAdjustmentResp
+			var perfAdjustmentReq common.PerfAdjustmentReq
 
 			if time.Since(lastPerfAdjustTime) < minIntervalBetweenPerfAdjustment {
-				err = fmt.Errorf("performance Adjustment already in progress. Please try after " + 
+				err = fmt.Errorf("Performance Adjustment already in progress. Please try after " + 
 						lastPerfAdjustTime.Add(minIntervalBetweenPerfAdjustment).Format(time.RFC3339))
 			}
 			
 			if e := json.Unmarshal([]byte(msg.Req.Value), &perfAdjustmentReq); e != nil {
-				err = fmt.Errorf("error parsing message %s. Err: %s", msg.Req.Value, e.Error())
+				err = fmt.Errorf("parsing %s failed with %s", msg.Req.Value, e.Error())
 			}
 			
 			if perfAdjustmentReq.Throughput < 0 {
@@ -567,11 +553,10 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 				resp.Err = err.Error()
 			}
 
-			ret, _ := json.Marshal(resp)
 			msg.SetResponse(&common.LCMMsgResp {
 				TimeStamp: time.Now(),
 				MsgType: msg.Req.MsgType,
-				Value: string(ret),
+				Value: resp,
 				Err: err,
 			})
 
