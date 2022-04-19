@@ -766,6 +766,9 @@ func runSyncAndVerify(c *chk.C, raw rawSyncCmdArgs, verifier func(err error)) {
 func runCopyAndVerify(c *chk.C, raw rawCopyCmdArgs, verifier func(err error)) {
 	// the simulated user input should parse properly
 	cooked, err := raw.cook()
+	if err == nil && cooked.blockBlobTier != common.EBlockBlobTier.None() {
+		err = cooked.makeTransferEnum()
+	}
 	if err != nil {
 		verifier(err)
 		return
