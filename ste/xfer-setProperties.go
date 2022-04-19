@@ -56,12 +56,14 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		jptm.SetStatus(status)
 		jptm.ReportTransferDone()
 	}
-	rehydratePriority := info.RehydratePriority
-	fmt.Println("Rehydrate priority unused- " + rehydratePriority) //this line is a personal reminder and will be removed when https://github.com/Azure/azure-storage-blob-go/pull/319 is merged
-	blockBlobTier, pageBlobTier := jptm.BlobTiers()
+
 	PropertiesToTransfer := jptm.PropertiesToTransfer()
 
 	if PropertiesToTransfer.ShouldTransferTier() {
+		rehydratePriority := info.RehydratePriority
+		fmt.Println("Rehydrate priority unused- " + rehydratePriority) //this line is a personal reminder and will be removed when https://github.com/Azure/azure-storage-blob-go/pull/319 is merged
+		blockBlobTier, pageBlobTier := jptm.BlobTiers()
+
 		var err error = nil
 		if ValidateTier(jptm, blockBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context()) {
 			_, err = srcBlobURL.SetTier(jptm.Context(), blockBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
@@ -109,10 +111,10 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		jptm.ReportTransferDone()
 	}
 
-	_, pageBlobTier := jptm.BlobTiers()
 	PropertiesToTransfer := jptm.PropertiesToTransfer()
 
 	if PropertiesToTransfer.ShouldTransferTier() {
+		_, pageBlobTier := jptm.BlobTiers()
 		var err error = nil
 		if ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context()) {
 			_, err = srcBlobURL.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
