@@ -13,7 +13,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 16
+const DataSchemaVersion common.Version = 17
 
 const (
 	CustomHeaderMaxBytes = 256
