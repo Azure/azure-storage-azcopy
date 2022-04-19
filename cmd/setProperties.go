@@ -35,14 +35,6 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaultsForSetProperties() {
 	raw.preserveOwner = common.PreserveOwnerDefault
 }
 
-func (cca *CookedCopyCmdArgs) setPropertiesExtractVars() error {
-	err := cca.makeTransferEnum()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func (cca *CookedCopyCmdArgs) makeTransferEnum() error {
 	if cca.blockBlobTier != common.EBlockBlobTier.None() || cca.pageBlobTier != common.EPageBlobTier.None() {
 		if cca.FromTo.From() == common.ELocation.File() {
@@ -50,46 +42,8 @@ func (cca *CookedCopyCmdArgs) makeTransferEnum() error {
 		}
 		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetTier()
 	}
-	if cca.MetadataUpdateOption != common.EMetadataUpdateOption.None() {
+	if cca.metadata != "" {
 		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetMetadata()
-	}
-	return nil
-}
-
-func (raw *rawCopyCmdArgs) extractMetadataOption() error {
-	if len(raw.metadata) == 0 { //if no metadata passed, return nil
-		raw.metadataUpdateOption = "none"
-		return nil
-	}
-
-	if len(raw.metadata) == 1 {
-		if raw.metadata == "e" {
-			raw.metadataUpdateOption = "erase"
-			raw.metadata = ""
-			return nil
-		} else {
-			return fmt.Errorf("invalid character passed as metadata flag input")
-		}
-	}
-
-	metadataUpdateOption := strings.Split(raw.metadata, ";")[0] // now it is "e" or "o" or "a"
-	if len(metadataUpdateOption) != 1 {
-		return fmt.Errorf("invalid metadata string passed as input, please specify metadata option correctly")
-	}
-	switch metadataUpdateOption {
-	case "e":
-		raw.metadataUpdateOption = "erase"
-	case "o":
-		raw.metadataUpdateOption = "overwrite"
-	case "a":
-		raw.metadataUpdateOption = "append"
-	default:
-		return fmt.Errorf("Invalid character '" + metadataUpdateOption + "' provided as input")
-	}
-	raw.metadata = raw.metadata[2:]
-
-	if raw.metadataUpdateOption == "erase" && len(raw.metadata) != 0 {
-		return fmt.Errorf("conflicting input- metadata string provided with 'e' erase option")
 	}
 	return nil
 }
@@ -138,11 +92,6 @@ func init() {
 			glcm.EnableInputWatcher()
 			if cancelFromStdin {
 				glcm.EnableCancelFromStdIn()
-			}
-
-			err := raw.extractMetadataOption()
-			if err != nil {
-				glcm.Error("failed to parse user input due to error: " + err.Error())
 			}
 
 			cooked, err := raw.cook()

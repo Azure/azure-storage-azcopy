@@ -63,7 +63,6 @@ type IJobPartMgr interface {
 	/* Status Manager Updates */
 	SendXferDoneMsg(msg xferDoneMsg)
 	PropertiesToTransfer() common.SetPropertiesFlags
-	MetadataUpdateType() common.MetadataUpdateOption
 }
 
 type serviceAPIVersionOverride struct{}
@@ -320,8 +319,6 @@ type jobPartMgr struct {
 	SetPropertiesFlags common.SetPropertiesFlags
 
 	RehydratePriority common.RehydratePriorityType
-
-	MetadataUpdateOption common.MetadataUpdateOption
 }
 
 func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {
@@ -401,7 +398,6 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	}
 	jpm.SetPropertiesFlags = dstData.SetPropertiesFlags
 	jpm.RehydratePriority = plan.RehydratePriority
-	jpm.MetadataUpdateOption = dstData.MetadataUpdateOption
 
 	jpm.preserveLastModifiedTime = plan.DstLocalData.PreserveLastModifiedTime
 
@@ -794,10 +790,6 @@ func (jpm *jobPartMgr) IsSourceEncrypted() bool {
 
 func (jpm *jobPartMgr) PropertiesToTransfer() common.SetPropertiesFlags {
 	return jpm.SetPropertiesFlags
-}
-
-func (jpm *jobPartMgr) MetadataUpdateType() common.MetadataUpdateOption {
-	return jpm.MetadataUpdateOption
 }
 
 func (jpm *jobPartMgr) ShouldPutMd5() bool {

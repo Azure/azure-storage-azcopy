@@ -173,8 +173,6 @@ type rawCopyCmdArgs struct {
 
 	// Optional flag that sets rehydrate priority for rehydration
 	rehydratePriority string
-
-	metadataUpdateOption string
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -860,11 +858,6 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	cooked.dryrunMode = raw.dryrun
 
-	err = cooked.MetadataUpdateOption.Parse(raw.metadataUpdateOption)
-	if err != nil {
-		return cooked, err
-	}
-
 	return cooked, nil
 }
 
@@ -1168,8 +1161,6 @@ type CookedCopyCmdArgs struct {
 
 	// Bitmasked uint checking which properties to transfer
 	propertiesToTransfer common.SetPropertiesFlags
-
-	MetadataUpdateOption common.MetadataUpdateOption
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {

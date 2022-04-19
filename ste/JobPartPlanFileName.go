@@ -202,7 +202,6 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			CpkScopeInfoLength:       uint16(len(order.CpkOptions.CpkScopeInfo)),
 			IsSourceEncrypted:        order.CpkOptions.IsSourceEncrypted,
 			SetPropertiesFlags:       order.SetPropertiesFlags,
-			MetadataUpdateOption:     order.MetadataUpdateOption,
 		},
 		DstLocalData: JobPartPlanDstLocal{
 			PreserveLastModifiedTime: order.BlobAttributes.PreserveLastModifiedTime,
