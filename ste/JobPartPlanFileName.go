@@ -218,6 +218,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		DeleteSnapshotsOption:          order.BlobAttributes.DeleteSnapshotsOption,
 		PermanentDeleteOption:          order.BlobAttributes.PermanentDeleteOption,
 		RehydratePriority:              order.BlobAttributes.RehydratePriority,
+		Metadata:                       order.BlobAttributes.Metadata,
 	}
 
 	// Copy any strings into their respective fields

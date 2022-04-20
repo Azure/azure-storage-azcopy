@@ -89,6 +89,8 @@ type JobPartPlanHeader struct {
 	PermanentDeleteOption common.PermanentDeleteOption
 
 	RehydratePriority common.RehydratePriorityType
+
+	Metadata string
 }
 
 // Status returns the job status stored in JobPartPlanHeader in thread-safe manner

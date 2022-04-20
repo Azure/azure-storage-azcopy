@@ -20,7 +20,9 @@
 
 package cmd
 
-import "github.com/Azure/azure-storage-azcopy/v10/common"
+import (
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+)
 
 func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption) *copyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{

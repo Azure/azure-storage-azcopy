@@ -58,6 +58,7 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	}
 
 	PropertiesToTransfer := jptm.PropertiesToTransfer()
+	_, metadata, _, _ := jptm.ResourceDstData(nil) // TODO what is this arg we're passing?
 
 	if PropertiesToTransfer.ShouldTransferTier() {
 		rehydratePriority := info.RehydratePriority
@@ -81,8 +82,8 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	}
 
 	if PropertiesToTransfer.ShouldTransferMetaData() {
-		metadata := jptm.Info().SrcMetadata //SrcMetadata has already been changed
 		_, err := srcBlobURL.SetMetadata(jptm.Context(), metadata.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+		//TODO the canonical thingi in this is changing key value to upper case. How to go around it?
 		if err != nil {
 			errorHandlerForXferSetProperties(err, jptm, transferDone)
 		}
