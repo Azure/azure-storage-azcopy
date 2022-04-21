@@ -1313,8 +1313,8 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 // dispatches the job order (in parts) to the storage engine
 func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	// Make AUTO default for Azure Files since Azure Files throttles too easily.
-	if jobsAdmin.JobsAdmin != nil && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.File()) {
+	// Make AUTO default for Azure Files since Azure Files throttles too easily unless user specified concurrency value
+	if jobsAdmin.JobsAdmin != nil && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.File()) && glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "" {
 		jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
 	}
 
@@ -1557,6 +1557,55 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
 	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 
+	var computeThroughput = func() float64 {
+		// compute the average throughput for the last time interval
+		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(base10Mega))
+		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
+
+		// reset the interval timer and byte count
+		cca.intervalStartTime = time.Now()
+		cca.intervalBytesTransferred = summary.BytesOverWire
+
+		return common.Iffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
+	}
+	glcm.Progress(func(format common.OutputFormat) string {
+		if format == common.EOutputFormat.Json() {
+			jsonOutput, err := json.Marshal(summary)
+			common.PanicIfErr(err)
+			return string(jsonOutput)
+		} else {
+			// abbreviated output for cleanup jobs
+			if cca.isCleanupJob {
+				return cleanupStatusString
+			}
+
+			// if json is not needed, then we generate a message that goes nicely on the same line
+			// display a scanning keyword if the job is not completely ordered
+			var scanningString = " (scanning...)"
+			if summary.CompleteJobOrdered {
+				scanningString = ""
+			}
+
+			throughput := computeThroughput()
+			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
+			if throughput == 0 {
+				// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
+				throughputString = ""
+			}
+
+			// indicate whether constrained by disk or not
+			isBenchmark := cca.FromTo.From() == common.ELocation.Benchmark()
+			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, isBenchmark)
+
+			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
+				summary.PercentComplete,
+				summary.TransfersCompleted,
+				summary.TransfersFailed,
+				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
+				summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
+		}
+	})
+
 	if jobDone {
 		exitCode := cca.getSuccessExitCode()
 		if summary.TransfersFailed > 0 {
@@ -1620,56 +1669,6 @@ Final Job Status: %v%s%s
 			lcm.Exit(builder, exitCode)
 		}
 	}
-
-	var computeThroughput = func() float64 {
-		// compute the average throughput for the last time interval
-		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(base10Mega))
-		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
-
-		// reset the interval timer and byte count
-		cca.intervalStartTime = time.Now()
-		cca.intervalBytesTransferred = summary.BytesOverWire
-
-		return common.Iffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
-	}
-
-	glcm.Progress(func(format common.OutputFormat) string {
-		if format == common.EOutputFormat.Json() {
-			jsonOutput, err := json.Marshal(summary)
-			common.PanicIfErr(err)
-			return string(jsonOutput)
-		} else {
-			// abbreviated output for cleanup jobs
-			if cca.isCleanupJob {
-				return cleanupStatusString
-			}
-
-			// if json is not needed, then we generate a message that goes nicely on the same line
-			// display a scanning keyword if the job is not completely ordered
-			var scanningString = " (scanning...)"
-			if summary.CompleteJobOrdered {
-				scanningString = ""
-			}
-
-			throughput := computeThroughput()
-			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
-			if throughput == 0 {
-				// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
-				throughputString = ""
-			}
-
-			// indicate whether constrained by disk or not
-			isBenchmark := cca.FromTo.From() == common.ELocation.Benchmark()
-			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, isBenchmark)
-
-			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
-				summary.PercentComplete,
-				summary.TransfersCompleted,
-				summary.TransfersFailed,
-				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
-				summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
-		}
-	})
 
 	return
 }
