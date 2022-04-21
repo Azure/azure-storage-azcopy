@@ -17,7 +17,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-
+// TODO check the problem with TAGS not working with SAS (mismatched permissions)
 package cmd
 
 import (
@@ -44,6 +44,10 @@ func (cca *CookedCopyCmdArgs) makeTransferEnum() error {
 	}
 	if cca.metadata != "" {
 		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetMetadata()
+	}
+	if cca.blobTags != nil {
+		// the fact that fromto is not filenone is taken care of by the cook function
+		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetBlobTags()
 	}
 	return nil
 }
@@ -121,7 +125,7 @@ func init() {
 
 	rootCmd.AddCommand(setPropCmd)
 
-	setPropCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Upload to Azure Storage with these key-value pairs as metadata.")
+	setPropCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Set the given location with these key-value pairs (separated by ';') as metadata.")
 	setPropCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. Valid values : BlobNone, FileNone, BlobFSNone")
 	setPropCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "Define the log verbosity for the log file. Available levels include: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default 'INFO')")
 	setPropCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
@@ -136,4 +140,5 @@ func init() {
 	setPropCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Look into sub-directories recursively when uploading from local file system.")
 	setPropCmd.PersistentFlags().StringVar(&raw.rehydratePriority, "rehydrate-priority", "None", "Optional flag that sets rehydrate priority for rehydration. Valid values: Standard, High")
 	setPropCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the file paths that would be affected by this command. This flag does not affect the actual files.")
+	setPropCmd.PersistentFlags().StringVar(&raw.blobTags, "blob-tags", "", "Set tags on blobs to categorize data in your storage account (separated by '&')")
 }

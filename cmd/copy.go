@@ -549,7 +549,8 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 	cooked.disableAutoDecoding = raw.disableAutoDecoding
 
-	if cooked.FromTo.To() != common.ELocation.Blob() && raw.blobTags != "" {
+	if !(cooked.FromTo.To() == common.ELocation.Blob() || cooked.FromTo == common.EFromTo.BlobNone() || cooked.FromTo != common.EFromTo.BlobFSNone()) && raw.blobTags != "" {
+		// TODO check what blobfs is
 		return cooked, errors.New("blob tags can only be set when transferring to blob storage")
 	}
 	blobTags := common.ToCommonBlobTagsMap(raw.blobTags)

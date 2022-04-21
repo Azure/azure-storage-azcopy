@@ -40,6 +40,7 @@ func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPar
 			BlockBlobTier:     cca.blockBlobTier,
 			PageBlobTier:      cca.pageBlobTier,
 			Metadata:          cca.metadata,
+			BlobTagsString:    cca.blobTags.ToString(),
 			RehydratePriority: cca.rehydratePriority,
 		},
 		SetPropertiesFlags: cca.propertiesToTransfer,

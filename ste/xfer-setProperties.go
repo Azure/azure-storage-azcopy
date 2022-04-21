@@ -58,7 +58,7 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	}
 
 	PropertiesToTransfer := jptm.PropertiesToTransfer()
-	_, metadata, _, _ := jptm.ResourceDstData(nil) // TODO what is this arg we're passing?
+	_, metadata, blobTags, _ := jptm.ResourceDstData(nil) // TODO what is this arg we're passing?
 
 	if PropertiesToTransfer.ShouldTransferTier() {
 		rehydratePriority := info.RehydratePriority
@@ -88,6 +88,12 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 			errorHandlerForXferSetProperties(err, jptm, transferDone)
 		}
 	}
+	if PropertiesToTransfer.ShouldTransferBlobTags() {
+		_, err := srcBlobURL.SetTags(jptm.Context(), nil, nil, nil, blobTags.ToAzBlobTagsMap())
+		if err != nil {
+			errorHandlerForXferSetProperties(err, jptm, transferDone)
+		}
+	}
 	// marking it a successful flow, as no property has resulted in err != nil
 	transferDone(common.ETransferStatus.Success(), nil)
 }
@@ -113,6 +119,7 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	}
 
 	PropertiesToTransfer := jptm.PropertiesToTransfer()
+	_, metadata, blobTags, _ := jptm.ResourceDstData(nil) // TODO what is this arg we're passing?
 
 	if PropertiesToTransfer.ShouldTransferTier() {
 		_, pageBlobTier := jptm.BlobTiers()
@@ -128,8 +135,13 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	}
 
 	if PropertiesToTransfer.ShouldTransferMetaData() {
-		metadata := jptm.Info().SrcMetadata //SrcMetadata has already been changed
 		_, err := srcBlobURL.SetMetadata(jptm.Context(), metadata.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+		if err != nil {
+			errorHandlerForXferSetProperties(err, jptm, transferDone)
+		}
+	}
+	if PropertiesToTransfer.ShouldTransferBlobTags() {
+		_, err := srcBlobURL.SetTags(jptm.Context(), nil, nil, nil, blobTags.ToAzBlobTagsMap())
 		if err != nil {
 			errorHandlerForXferSetProperties(err, jptm, transferDone)
 		}
@@ -159,18 +171,19 @@ func setPropertiesFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	}
 
 	PropertiesToTransfer := jptm.PropertiesToTransfer()
+	_, metadata, _, _ := jptm.ResourceDstData(nil) // TODO No blob tag support for files?
 
 	if PropertiesToTransfer.ShouldTransferTier() {
 		err := fmt.Errorf("trying to change tier of file")
 		transferDone(common.ETransferStatus.Failed(), err)
 	}
 	if PropertiesToTransfer.ShouldTransferMetaData() {
-		metadata := jptm.Info().SrcMetadata //SrcMetadata has already been changed to desired map
 		_, err := srcFileURL.SetMetadata(jptm.Context(), metadata.ToAzFileMetadata())
 		if err != nil {
 			errorHandlerForXferSetProperties(err, jptm, transferDone)
 		}
 	}
+	// TAGS NOT AVAILABLE FOR FILES
 	transferDone(common.ETransferStatus.Success(), nil)
 }
 
