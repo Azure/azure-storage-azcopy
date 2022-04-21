@@ -546,10 +546,12 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 				
 				resp.Status = true
 				resp.AdjustedThroughPut = perfAdjustmentReq.Throughput
+				resp.NextAdjustmentAfter = lastPerfAdjustTime.Add(minIntervalBetweenPerfAdjustment)
 				resp.Err = ""
 			} else {
 				resp.Status = false
 				resp.AdjustedThroughPut = -1
+				resp.NextAdjustmentAfter = lastPerfAdjustTime.Add(minIntervalBetweenPerfAdjustment)
 				resp.Err = err.Error()
 			}
 

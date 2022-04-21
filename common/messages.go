@@ -74,9 +74,10 @@ type PerfAdjustmentReq struct {
 }
 
 type PerfAdjustmentResp struct {
-	Status             bool   `json:"status"`
-	AdjustedThroughPut int64  `json:"cap-mbps"`
-	Err                string `json:"error"`
+	Status                            bool          `json:"status"`
+	AdjustedThroughPut                int64         `json:"cap-mbps"`
+	NextAdjustmentAfter               time.Time     `json:"NextAdjustmentAfter"`
+	Err                               string        `json:"error"`
 }
 
 func (p PerfAdjustmentResp) String() string {
