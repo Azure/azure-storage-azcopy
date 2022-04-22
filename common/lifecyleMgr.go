@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"encoding/json"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 )
