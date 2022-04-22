@@ -89,6 +89,9 @@ func (m *mockedLifecycleManager) DownloadToTempPath() bool {
 func (m *mockedLifecycleManager) ReportAllJobPartsDone() {
 }
 
+func (m *mockedLifecycleManager) SetQuietMode(mode common.QuietMode) {
+}
+
 func (m *mockedLifecycleManager) Progress(o common.OutputBuilder) {
 	select {
 	case m.progressLog <- o(common.EOutputFormat.Text()):

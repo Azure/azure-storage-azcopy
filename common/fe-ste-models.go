@@ -843,6 +843,30 @@ func (ct *CredentialType) Parse(s string) error {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+var EQuietMode = QuietMode(0)
+
+type QuietMode uint8
+
+func (QuietMode) Default() QuietMode     { return QuietMode(0) }
+func (QuietMode) ErrorsOnly() QuietMode  { return QuietMode(1) }
+func (QuietMode) NoProgress() QuietMode  { return QuietMode(2) }
+func (QuietMode) PromptsOnly() QuietMode { return QuietMode(3) }
+func (QuietMode) Quiet() QuietMode       { return QuietMode(4) } // Cannot work with 'ask-everytime' or overwrite=prompt
+
+func (qm *QuietMode) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(qm), s, true, true)
+	if err == nil {
+		*qm = val.(QuietMode)
+	}
+	return err
+}
+
+func (qm QuietMode) String() string {
+	return enum.StringInt(qm, reflect.TypeOf(qm))
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 var EHashValidationOption = HashValidationOption(0)
 
 var DefaultHashValidationOption = EHashValidationOption.FailIfDifferent()
@@ -1496,17 +1520,15 @@ func GetClientProvidedKey(options CpkOptions) azblob.ClientProvidedKeyOptions {
 	return ToClientProvidedKeyOptions(_cpkInfo, _cpkScopeInfo)
 }
 
-
 ////////////////////////////////////////////////////////////////
 type LCMMsgType uint16
 
 var ELCMMsgType LCMMsgType
 
-func(LCMMsgType) Invalid()                                LCMMsgType {return LCMMsgType(0)}
-func(LCMMsgType) CancelJob()                              LCMMsgType {return LCMMsgType(1)}
-func(LCMMsgType) E2EInterrupts()                          LCMMsgType {return LCMMsgType(2)}
-func(LCMMsgType) PerformanceAdjustment()                  LCMMsgType {return LCMMsgType(3)}
-
+func (LCMMsgType) Invalid() LCMMsgType               { return LCMMsgType(0) }
+func (LCMMsgType) CancelJob() LCMMsgType             { return LCMMsgType(1) }
+func (LCMMsgType) E2EInterrupts() LCMMsgType         { return LCMMsgType(2) }
+func (LCMMsgType) PerformanceAdjustment() LCMMsgType { return LCMMsgType(3) }
 
 func (m *LCMMsgType) Parse(s string) error {
 	val, err := enum.Parse(reflect.TypeOf(m), s, true)
