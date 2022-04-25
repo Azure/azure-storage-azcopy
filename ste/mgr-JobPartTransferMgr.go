@@ -212,7 +212,7 @@ func (jptm *jobPartTransferMgr) GetS2SSourceBlobTokenCredential() azblob.TokenCr
 	}
 
 	if jpm.jobMgr.getInMemoryTransitJobState().S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
-		return common.CreateBlobCredential(jptm.Context(), jptm.jobPartMgr.(*jobPartMgr).jobMgr.getInMemoryTransitJobState().CredentialInfo, credOption).(azblob.TokenCredential)
+		return common.CreateBlobCredential(jptm.Context(), jptm.jobPartMgr.(*jobPartMgr).jobMgr.getInMemoryTransitJobState().CredentialInfo.WithType(common.ECredentialType.OAuthToken()), credOption).(azblob.TokenCredential)
 	} else {
 		return nil
 	}
