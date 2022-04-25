@@ -377,15 +377,19 @@ func (lcm *lifecycleMgr) processOutputMessage() {
 	for {
 		msgToPrint := <-lcm.msgQueue
 
-		switch lcm.outputFormat {
-		case EOutputFormat.Json():
-			lcm.processJSONOutput(msgToPrint)
-		case EOutputFormat.Text():
-			lcm.processTextOutput(msgToPrint)
-		case EOutputFormat.None():
+		if shouldQuietMessage(msgToPrint, lcm.QuietModeType) {
 			lcm.processNoneOutput(msgToPrint)
-		default:
-			panic("unimplemented output format")
+		} else {
+			switch lcm.outputFormat {
+			case EOutputFormat.Json():
+				lcm.processJSONOutput(msgToPrint)
+			case EOutputFormat.Text():
+				lcm.processTextOutput(msgToPrint)
+			case EOutputFormat.None():
+				lcm.processNoneOutput(msgToPrint)
+			default:
+				panic("unimplemented output format")
+			}
 		}
 	}
 }
@@ -656,5 +660,20 @@ func (lcm *lifecycleMgr) SetQuietMode(mode QuietMode) {
 func PanicIfErr(err error) {
 	if err != nil {
 		panic(err)
+	}
+}
+
+func shouldQuietMessage(msgToOutput outputMessage, quietMode QuietMode) bool {
+	messageType := msgToOutput.msgType
+
+	switch quietMode {
+	case EQuietMode.NoProgress():
+		return messageType == eOutputMessageType.Progress()
+	case EQuietMode.ErrorsOnly():
+		return messageType != eOutputMessageType.Error()
+	case EQuietMode.Quiet():
+		return true
+	default:
+		return false
 	}
 }
