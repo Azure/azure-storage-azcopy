@@ -22,6 +22,7 @@ import (
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
+
 // debug knob
 var DebugSkipFiles = make(map[string]bool)
 
@@ -540,8 +541,22 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 
 	// Create source info provider's pipeline for S2S copy.
 	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() {
+		var sourceCred azblob.Credential = azblob.NewAnonymousCredential()
+		jobState := jpm.jobMgr.getInMemoryTransitJobState()
+		if fromTo.To() == common.ELocation.Blob() && jobState.S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
+			credOption := common.CredentialOpOptions{
+				LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
+				LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
+				Panic:    jpm.Panic,
+				CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
+				Cancel:   jpm.jobMgr.Cancel,
+			}
+
+			sourceCred = common.CreateBlobCredential(ctx, jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType), credOption)
+		}
+
 		jpm.sourceProviderPipeline = NewBlobPipeline(
-			azblob.NewAnonymousCredential(),
+			sourceCred,
 			azblob.PipelineOptions{
 				Log: jpm.jobMgr.PipelineLogInfo(),
 				Telemetry: azblob.TelemetryOptions{
