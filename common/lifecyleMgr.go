@@ -74,7 +74,7 @@ type LifecycleMgr interface {
 	DownloadToTempPath() bool
 	MsgHandlerChannel() <-chan LCMMsg
 	ReportAllJobPartsDone()
-	SetQuietMode(mode QuietMode)
+	SetQuietMode(mode QuietMode) //TODO add this to all the commands
 }
 
 func GetLifecycleMgr() LifecycleMgr {
