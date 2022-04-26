@@ -64,6 +64,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			return nil, err
 		} else {
 			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
+			jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo
 		}
 	}
 
