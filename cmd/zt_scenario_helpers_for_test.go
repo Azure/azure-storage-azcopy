@@ -913,7 +913,7 @@ func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 	}
 }
 
-func getDefaultSetPropertiesRawInput(src string, accessTier common.BlockBlobTier) rawCopyCmdArgs {
+func getDefaultSetPropertiesRawInput(src string, params transferParams) rawCopyCmdArgs {
 	fromTo := common.EFromTo.BlobNone()
 	srcURL, _ := url.Parse(src)
 
@@ -936,12 +936,12 @@ func getDefaultSetPropertiesRawInput(src string, accessTier common.BlockBlobTier
 		fromTo = common.EFromTo.BlobFSNone()
 	}
 
-	return rawCopyCmdArgs{
+	rawArgs := rawCopyCmdArgs{
 		src:                            src,
 		fromTo:                         fromTo.String(),
 		logVerbosity:                   defaultLogVerbosityForSync,
 		blobType:                       common.EBlobType.Detect().String(),
-		blockBlobTier:                  accessTier.String(),
+		blockBlobTier:                  common.EBlockBlobTier.None().String(),
 		pageBlobTier:                   common.EPageBlobTier.None().String(),
 		md5ValidationOption:            common.DefaultHashValidationOption.String(),
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
@@ -949,4 +949,19 @@ func getDefaultSetPropertiesRawInput(src string, accessTier common.BlockBlobTier
 		preserveOwner:                  common.PreserveOwnerDefault,
 		includeDirectoryStubs:          true,
 	}
+
+	if params.blockBlobTier != common.EBlockBlobTier.None() {
+		rawArgs.blockBlobTier = params.blockBlobTier.String()
+	}
+	if params.pageBlobTier != common.EPageBlobTier.None() {
+		rawArgs.pageBlobTier = params.pageBlobTier.String()
+	}
+	if params.metadata != "" {
+		rawArgs.metadata = params.metadata
+	}
+	if params.blobTags != nil {
+		rawArgs.blobTags = params.blobTags.ToString()
+	}
+
+	return rawArgs
 }

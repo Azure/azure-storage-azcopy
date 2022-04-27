@@ -29,6 +29,26 @@ import (
 	"time"
 )
 
+type transferParams struct {
+	blockBlobTier common.BlockBlobTier
+	pageBlobTier  common.PageBlobTier
+	metadata      string
+	blobTags      common.BlobTags
+}
+
+func (tp transferParams) getMetadata() common.Metadata {
+	metadataString := tp.metadata
+
+	metadataMap := common.Metadata{}
+	if len(metadataString) > 0 {
+		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
+			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+			metadataMap[kv[0]] = kv[1]
+		}
+	}
+	return metadataMap
+}
+
 func (scenarioHelper) generateBlobsFromListWithAccessTier(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string, accessTier azblob.AccessTierType) {
 	for _, blobName := range blobList {
 		blob := containerURL.NewBlockBlobURL(blobName)
@@ -76,7 +96,14 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlobWithAccessTier(c *chk.C
 	return
 }
 
-func validateSetPropertiesTransfersAreScheduled(c *chk.C, isSrcEncoded bool, expectedTransfers []string, transferTier common.BlockBlobTier, mockedRPC interceptor) {
+func checkMapsEqual(c *chk.C, mapA map[string]string, mapB map[string]string) {
+	c.Assert(len(mapA), chk.Equals, len(mapB))
+	for k, v := range mapA {
+		c.Assert(mapB[k], chk.Equals, v)
+	}
+}
+
+func validateSetPropertiesTransfersAreScheduled(c *chk.C, isSrcEncoded bool, expectedTransfers []string, transferParams transferParams, mockedRPC interceptor) {
 
 	// validate that the right number of transfers were scheduled
 	c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedTransfers))
@@ -85,7 +112,10 @@ func validateSetPropertiesTransfersAreScheduled(c *chk.C, isSrcEncoded bool, exp
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
 	for _, transfer := range mockedRPC.transfers {
 		srcRelativeFilePath := transfer.Source
-		c.Assert(transfer.BlobTier, chk.Equals, transferTier.ToAccessTierType())
+		c.Assert(transfer.BlobTier, chk.Equals, transferParams.blockBlobTier.ToAccessTierType())
+		checkMapsEqual(c, transfer.Metadata, transferParams.getMetadata())
+		checkMapsEqual(c, transfer.BlobTags, transferParams.blobTags)
+
 		if isSrcEncoded {
 			srcRelativeFilePath, _ = url.PathUnescape(srcRelativeFilePath)
 		}
@@ -121,14 +151,19 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlob(c *chk.C) {
 
 		// construct the raw input to simulate user input
 		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
-		toTier := common.EBlockBlobTier.Cool()
-		raw := getDefaultSetPropertiesRawInput(rawBlobURLWithSAS.String(), toTier)
+		transferParams := transferParams{
+			blockBlobTier: common.EBlockBlobTier.Cool(),
+			pageBlobTier:  common.EPageBlobTier.None(),
+			metadata:      "abc=def;metadata=value",
+			blobTags:      common.BlobTags{"abc": "fgd"},
+		}
+		raw := getDefaultSetPropertiesRawInput(rawBlobURLWithSAS.String(), transferParams)
 
 		runCopyAndVerify(c, raw, func(err error) {
 			c.Assert(err, chk.IsNil)
 
 			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
-			validateSetPropertiesTransfersAreScheduled(c, true, []string{""}, toTier, mockedRPC)
+			validateSetPropertiesTransfersAreScheduled(c, true, []string{""}, transferParams, mockedRPC)
 			//TODO: I don't think we need to change ^ this function from remove, do we?
 		})
 	}
@@ -151,8 +186,13 @@ func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainer(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	toTier := common.EBlockBlobTier.Cool()
-	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), toTier)
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.Cool(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "",
+		blobTags:      common.BlobTags{},
+	}
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
 	raw.recursive = true
 	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
 
@@ -163,7 +203,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainer(c *chk.C) {
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
 
 		// validate that the right transfers were sent
-		validateSetPropertiesTransfersAreScheduled(c, true, blobList, toTier, mockedRPC)
+		validateSetPropertiesTransfersAreScheduled(c, true, blobList, transferParams, mockedRPC)
 		//TODO: I don't think we need to change ^ this function from remove, do we?
 	})
 
@@ -205,13 +245,20 @@ func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeFlag(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), common.EBlockBlobTier.Cool())
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.Cool(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "",
+		blobTags:      common.BlobTags{},
+	}
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
 	raw.include = includeString
 	raw.recursive = true
 
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateDownloadTransfersAreScheduled(c, "", "", blobsToInclude, mockedRPC)
+		validateDownloadTransfersAreScheduled(c, "", "", blobList, mockedRPC)
+		validateSetPropertiesTransfersAreScheduled(c, true, blobList, transferParams, mockedRPC)
 	})
 }
 
@@ -237,7 +284,14 @@ func (s *cmdIntegrationSuite) TestSetPropertiesWithExcludeFlag(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), common.EBlockBlobTier.Cool())
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.Cool(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "",
+		blobTags:      common.BlobTags{},
+	}
+
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
 	raw.exclude = excludeString
 	raw.recursive = true
 	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
@@ -245,6 +299,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesWithExcludeFlag(c *chk.C) {
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		validateDownloadTransfersAreScheduled(c, "", "", blobList, mockedRPC)
+		validateSetPropertiesTransfersAreScheduled(c, true, blobList, transferParams, mockedRPC)
 	})
 }
 
@@ -276,7 +331,14 @@ func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeAndExcludeFlag(c *chk.
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), common.EBlockBlobTier.Cool())
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.Cool(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "",
+		blobTags:      common.BlobTags{},
+	}
+
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
 	raw.include = includeString
 	raw.exclude = excludeString
 	raw.recursive = true
@@ -284,6 +346,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeAndExcludeFlag(c *chk.
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		validateDownloadTransfersAreScheduled(c, "", "", blobsToInclude, mockedRPC)
+		validateSetPropertiesTransfersAreScheduled(c, true, blobList, transferParams, mockedRPC)
 	})
 }
 
@@ -310,7 +373,14 @@ func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsAndVirtualDirs(c *chk.
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), common.EBlockBlobTier.Cool())
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.Cool(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "",
+		blobTags:      common.BlobTags{},
+	}
+
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
 	raw.recursive = true
 
 	// make the input for list-of-files
@@ -328,7 +398,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsAndVirtualDirs(c *chk.
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
 
 		// validate that the right transfers were sent
-		validateRemoveTransfersAreScheduled(c, true, blobList, mockedRPC)
+		validateSetPropertiesTransfersAreScheduled(c, true, blobList, transferParams, mockedRPC)
 	})
 
 	// turn off recursive, this time only top blobs should be deleted
@@ -382,7 +452,14 @@ func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsWithIncludeAndExclude(
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), common.EBlockBlobTier.Cool())
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.Cool(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "",
+		blobTags:      common.BlobTags{},
+	}
+
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
 
 	raw.recursive = true
 	raw.include = includeString
@@ -407,7 +484,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsWithIncludeAndExclude(
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
 
 		// validate that the right transfers were sent
-		validateRemoveTransfersAreScheduled(c, true, blobsToInclude, mockedRPC)
+		validateSetPropertiesTransfersAreScheduled(c, true, blobsToInclude, transferParams, mockedRPC)
 	})
 }
 
@@ -431,14 +508,21 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobWithFromTo(c *chk.C) {
 
 		// construct the raw input to simulate user input
 		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
-		raw := getDefaultSetPropertiesRawInput(rawBlobURLWithSAS.String(), common.EBlockBlobTier.Cool())
+		transferParams := transferParams{
+			blockBlobTier: common.EBlockBlobTier.Cool(),
+			pageBlobTier:  common.EPageBlobTier.None(),
+			metadata:      "",
+			blobTags:      common.BlobTags{},
+		}
+
+		raw := getDefaultSetPropertiesRawInput(rawBlobURLWithSAS.String(), transferParams)
 		raw.fromTo = "BlobNone"
 
 		runCopyAndVerify(c, raw, func(err error) {
 			c.Assert(err, chk.IsNil)
 
 			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
-			validateRemoveTransfersAreScheduled(c, true, []string{""}, mockedRPC)
+			validateSetPropertiesTransfersAreScheduled(c, true, []string{""}, transferParams, mockedRPC)
 		})
 	}
 }
@@ -461,7 +545,14 @@ func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerWithFromTo(c *
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), common.EBlockBlobTier.Cool())
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.Cool(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "",
+		blobTags:      common.BlobTags{},
+	}
+
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
 	raw.fromTo = "BlobNone"
 	raw.recursive = true
 	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
@@ -473,7 +564,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerWithFromTo(c *
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
 
 		// validate that the right transfers were sent
-		validateRemoveTransfersAreScheduled(c, true, blobList, mockedRPC)
+		validateSetPropertiesTransfersAreScheduled(c, true, blobList, transferParams, mockedRPC)
 	})
 
 	// turn off recursive, this time only top blobs should be deleted
@@ -510,7 +601,14 @@ func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderVirtualDirWithFromTo(c 
 
 	// construct the raw input to simulate user input
 	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName)
-	raw := getDefaultSetPropertiesRawInput(rawVirtualDirectoryURLWithSAS.String(), common.EBlockBlobTier.Cool())
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.Cool(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "",
+		blobTags:      common.BlobTags{},
+	}
+
+	raw := getDefaultSetPropertiesRawInput(rawVirtualDirectoryURLWithSAS.String(), transferParams)
 	raw.fromTo = "BlobNone"
 	raw.recursive = true
 
@@ -522,7 +620,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderVirtualDirWithFromTo(c 
 
 		// validate that the right transfers were sent
 		expectedTransfers := scenarioHelper{}.shaveOffPrefix(blobList, vdirName)
-		validateRemoveTransfersAreScheduled(c, true, expectedTransfers, mockedRPC)
+		validateSetPropertiesTransfersAreScheduled(c, true, expectedTransfers, transferParams, mockedRPC)
 	})
 
 	// turn off recursive, this time only top blobs should be deleted
