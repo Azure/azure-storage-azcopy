@@ -36,8 +36,8 @@ func TestChange_DetectFileChangedDuringTransfer(t *testing.T) {
 		eOperation.CopyAndSync(),
 		eTestFromTo.AllPairs(),
 		eValidate.Auto(),
-		allCredentialTypes,
-		allCredentialTypes,
+		anonymousAuthOnly,
+		anonymousAuthOnly,
 		params{
 			recursive: true,
 		}, &hooks{
