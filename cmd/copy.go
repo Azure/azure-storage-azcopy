@@ -868,8 +868,6 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	if err != nil {
 		return cooked, err
 	}
-	// TODO if we press ctrl c, terminate without seeking answer whether user wants to quit
-	//TODO see input watchers
 	return cooked, nil
 }
 
