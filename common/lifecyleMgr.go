@@ -273,6 +273,12 @@ func (lcm *lifecycleMgr) Info(msg string) {
 }
 
 func (lcm *lifecycleMgr) Prompt(message string, details PromptDetails) ResponseOption {
+
+	if shouldQuietMessage(outputMessage{msgType: eOutputMessageType.Prompt()}, lcm.QuietModeType) {
+		//if prompts are disabled by the user's choice of quiet mode, assume default behavior and don't stop flow.
+		return EResponseOption.Default()
+	}
+
 	expectedInputChannel := make(chan string, 1)
 	lcm.msgQueue <- outputMessage{
 		msgContent:    message,
