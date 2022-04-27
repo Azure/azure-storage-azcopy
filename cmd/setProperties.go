@@ -83,7 +83,7 @@ func init() {
 				default:
 					return fmt.Errorf("invalid source type %s. azcopy supports set-properties of blobs/files/adls gen2", srcLocationType.String())
 				}
-			} else if raw.fromTo != "" {
+			} else {
 				err := strings.Contains(raw.fromTo, "None")
 				if !err {
 					return fmt.Errorf("invalid destination. Please enter a valid destination, i.e. BlobNone, FileNone, BlobFSNone")

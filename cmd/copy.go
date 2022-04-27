@@ -171,8 +171,9 @@ type rawCopyCmdArgs struct {
 	// Optional flag that permanently deletes soft-deleted snapshots/versions
 	permanentDeleteOption string
 
-	// Optional flag that sets rehydrate priority for rehydration
+	// Optional. Indicates the priority with which to rehydrate an archived blob. Valid values are High/Standard.
 	rehydratePriority string
+	// The priority setting can be changed from Standard to High by calling Set Blob Tier with this header set to High and setting x-ms-access-tier to the same value as previously set. The priority setting cannot be lowered from High to Standard.
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
