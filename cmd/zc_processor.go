@@ -80,6 +80,10 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 		s.folderPropertiesOption,
 	)
 
+	if s.copyJobTemplate.FromTo.To() == common.ELocation.None() {
+		copyTransfer.BlobTier = s.copyJobTemplate.BlobAttributes.BlockBlobTier.ToAccessTierType()
+	}
+
 	if !shouldSendToSte {
 		return nil // skip this one
 	}
