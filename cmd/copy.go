@@ -1377,8 +1377,9 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			// Setting tags when tags explicitly provided by the user through blob-tags flag
 			BlobTagsString: cca.blobTags.ToString(),
 		},
-		CommandString:  cca.commandString,
-		CredentialInfo: cca.credentialInfo,
+		CommandString:         cca.commandString,
+		CredentialInfo:        cca.credentialInfo,
+		PrimaryCredentialType: cca.credentialInfo.CredentialType,
 	}
 
 	from := cca.FromTo.From()

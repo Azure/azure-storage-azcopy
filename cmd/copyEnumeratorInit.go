@@ -52,7 +52,6 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		glcm.Info("SECURITY: If the source and destination accounts are in the same AAD tenant & the OAuth token has appropriate permissions on both, the source SAS token is not required and OAuth can be used round-trip.")
 	}
 
-	jobPartOrder.PrimaryCredentialType = cca.credentialInfo.CredentialType
 	if cca.FromTo.IsS2S() {
 		jobPartOrder.S2SSourceCredentialType = srcCredInfo.CredentialType
 	}
