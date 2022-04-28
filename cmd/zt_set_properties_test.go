@@ -126,9 +126,6 @@ func validateSetPropertiesTransfersAreScheduled(c *chk.C, isSrcEncoded bool, exp
 
 		delete(lookupMap, srcRelativeFilePath)
 	}
-	//if len(lookupMap) > 0 {
-	//	panic("set breakpoint here to debug")
-	//}
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlob(c *chk.C) {
@@ -164,7 +161,6 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlob(c *chk.C) {
 
 			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
 			validateSetPropertiesTransfersAreScheduled(c, true, []string{""}, transferParams, mockedRPC)
-			//TODO: I don't think we need to change ^ this function from remove, do we?
 		})
 	}
 }
