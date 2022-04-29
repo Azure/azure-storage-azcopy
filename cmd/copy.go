@@ -862,7 +862,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
-	if cooked.ForceWrite == common.EOverwriteOption.Prompt() && (cooked.quietMode == common.EQuietMode.Quiet() || cooked.quietMode == common.EQuietMode.ErrorsOnly()) {
+	if cooked.ForceWrite == common.EOverwriteOption.Prompt() && cooked.quietMode == common.EQuietMode.Quiet() {
 		err = fmt.Errorf("cannot set quiet mode '%s' with specified overwrite option '%s'", cooked.quietMode.String(), cooked.ForceWrite.String())
 	}
 	if err != nil {

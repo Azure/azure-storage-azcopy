@@ -672,8 +672,10 @@ func shouldQuietMessage(msgToOutput outputMessage, quietMode QuietMode) bool {
 	switch quietMode {
 	case EQuietMode.NoProgress():
 		return messageType == eOutputMessageType.Progress()
-	case EQuietMode.ErrorsOnly():
-		return messageType != eOutputMessageType.Error()
+	case EQuietMode.NoProgressOrErrors():
+		return messageType == eOutputMessageType.Progress() || messageType == eOutputMessageType.Error()
+	case EQuietMode.Essential():
+		return !(messageType == eOutputMessageType.Init() || messageType == eOutputMessageType.EndOfJob())
 	case EQuietMode.Quiet():
 		return true
 	default:

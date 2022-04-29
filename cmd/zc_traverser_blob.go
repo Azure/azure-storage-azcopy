@@ -23,10 +23,9 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 	"net/url"
 	"strings"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"

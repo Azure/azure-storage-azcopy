@@ -847,10 +847,11 @@ var EQuietMode = QuietMode(0)
 
 type QuietMode uint8
 
-func (QuietMode) Default() QuietMode    { return QuietMode(0) }
-func (QuietMode) ErrorsOnly() QuietMode { return QuietMode(1) }
-func (QuietMode) NoProgress() QuietMode { return QuietMode(2) }
-func (QuietMode) Quiet() QuietMode      { return QuietMode(4) } // Cannot work with 'ask-everytime' or overwrite=prompt
+func (QuietMode) Default() QuietMode            { return QuietMode(0) }
+func (QuietMode) NoProgress() QuietMode         { return QuietMode(1) }
+func (QuietMode) NoProgressOrErrors() QuietMode { return QuietMode(2) }
+func (QuietMode) Essential() QuietMode          { return QuietMode(3) }
+func (QuietMode) Quiet() QuietMode              { return QuietMode(4) } // Cannot work with 'ask-everytime' or overwrite=prompt
 
 func (qm *QuietMode) Parse(s string) error {
 	val, err := enum.ParseInt(reflect.TypeOf(qm), s, true, true)
