@@ -62,7 +62,7 @@ type LifecycleMgr interface {
 	GetEnvironmentVariable(EnvironmentVariable) string           // get the environment variable or its default value
 	ClearEnvironmentVariable(EnvironmentVariable)                // clears the environment variable
 	SetOutputFormat(OutputFormat)                                // change the output format of the entire application
-	EnableInputWatcher()                                         // depending on the command, we may allow user to give input through Stdin
+	EnableInputWatcher()                                         // depending on the command, we may allow user to give input through Stdin  // TODO input = true by default for quiet mode
 	EnableCancelFromStdIn()                                      // allow user to send in `cancel` to stop the job
 	AddUserAgentPrefix(string) string                            // append the global user agent prefix, if applicable
 	E2EAwaitContinue()                                           // used by E2E tests
@@ -651,9 +651,6 @@ func (lcm *lifecycleMgr) ReportAllJobPartsDone() {
 
 func (lcm *lifecycleMgr) SetQuietMode(mode QuietMode) {
 	lcm.QuietModeType = mode
-	if lcm.QuietModeType == EQuietMode.Quiet() {
-		lcm.outputFormat = EOutputFormat.None()
-	}
 }
 
 // captures the common logic of exiting if there's an expected error
