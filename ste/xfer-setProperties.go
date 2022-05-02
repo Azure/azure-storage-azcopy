@@ -171,7 +171,7 @@ func setPropertiesFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	}
 
 	PropertiesToTransfer := jptm.PropertiesToTransfer()
-	_, metadata, _, _ := jptm.ResourceDstData(nil) // TODO No blob tag support for files?
+	_, metadata, _, _ := jptm.ResourceDstData(nil)
 
 	if PropertiesToTransfer.ShouldTransferTier() {
 		// this case should have been picked up by front end and given error (changing tier is not available for File Storage)
