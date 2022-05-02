@@ -653,7 +653,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.jobMgr.PipelineNetworkStats())
 	// Create pipeline for Azure File.
 	case common.EFromTo.FileTrash(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile(), common.EFromTo.BenchmarkFile(),
-		common.EFromTo.FileFile(), common.EFromTo.BlobFile():
+		common.EFromTo.FileFile(), common.EFromTo.BlobFile(), common.EFromTo.FileNone():
 		jpm.pipeline = NewFilePipeline(
 			azfile.NewAnonymousCredential(),
 			azfile.PipelineOptions{
