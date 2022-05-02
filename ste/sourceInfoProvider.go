@@ -91,36 +91,6 @@ type ISMBPropertyBearingSourceInfoProvider interface {
 	GetSMBProperties() (TypedSMBPropertyHolder, error)
 }
 
-type UnixStatAdapter struct { // Created because unix.Statx_t is exclusive to unix-based GOOSes
-	statx bool // Was the call based on unix.Stat or unix.Statx?
-
-	Mask       int64
-	BlockSize  int64
-	Attributes uint64
-	NumLinks   uint64
-	OwnerUID   uint32
-	GroupGID   uint32
-	Mode       uint32
-
-	INode          uint64
-	Size           uint64
-	Blocks         uint64
-	AttributesMask uint64 // todo
-
-	AccessTime time.Time // atime
-	BirthTime  time.Time // btime, statx only
-	ChangeTime time.Time // ctime
-	ModTime    time.Time // mtime
-
-	RepDevID uint64
-	DevID    uint64
-	// MajorRepDevID uint32
-	// MinorRepDevID uint32 // todo: should this be a single uint64?
-	//
-	// MajorDevID uint32
-	// MinorDevID uint32
-}
-
 type IUNIXPropertyBearingSourceInfoProvider interface {
 	ISourceInfoProvider
 
