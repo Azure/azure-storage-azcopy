@@ -94,7 +94,7 @@ type ISMBPropertyBearingSourceInfoProvider interface {
 type IUNIXPropertyBearingSourceInfoProvider interface {
 	ISourceInfoProvider
 
-	GetUNIXProperties() (*UnixStatAdapter, error)
+	GetUNIXProperties() (UnixStatAdapter, error)
 }
 
 type ICustomLocalOpener interface {

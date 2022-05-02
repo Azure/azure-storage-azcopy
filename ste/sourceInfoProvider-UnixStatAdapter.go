@@ -2,7 +2,6 @@ package ste
 
 import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"golang.org/x/sys/unix"
 	"strconv"
 	"time"
 )
@@ -48,13 +47,13 @@ type UnixStatAdapter interface {
 	FileMode() uint32 // Mode may not always be available to check in a Statx call (though it should be, since we requested it.) Best safe than sorry; check Mask!
 	INode() uint64
 	Device() uint64
-	RDevice() uint64 // RDevice is ONLY useful when Mode has unix.S_IFCHR or unix.S_IFBLK; as those determine if the file is a representitive of a block or character device.
+	RDevice() uint64 // RDevice is ONLY useful when Mode has S_IFCHR or S_IFBLK; as those determine if the file is a representitive of a block or character device.
 	ATime() time.Time
 	MTime() time.Time
 	CTime() time.Time
 }
 
-type UnixStatContainer struct { // Created because unix.Statx_t is exclusive to unix-based GOOSes
+type UnixStatContainer struct { // Created for downloads
 	statx bool // Was the call based on unix.Stat or unix.Statx?
 
 	mask       uint32
@@ -269,7 +268,39 @@ func ReadStatFromMetadata(metadata azblob.Metadata, contentLength uint) (UnixSta
 	return s, nil
 }
 
-//
+const ( // Values cloned from x/sys/unix to avoid dependency
+	STATX_ALL             = 0xfff
+	STATX_ATIME           = 0x20
+	STATX_ATTR_APPEND     = 0x20
+	STATX_ATTR_AUTOMOUNT  = 0x1000
+	STATX_ATTR_COMPRESSED = 0x4
+	STATX_ATTR_DAX        = 0x200000
+	STATX_ATTR_ENCRYPTED  = 0x800
+	STATX_ATTR_IMMUTABLE  = 0x10
+	STATX_ATTR_MOUNT_ROOT = 0x2000
+	STATX_ATTR_NODUMP     = 0x40
+	STATX_ATTR_VERITY     = 0x100000
+	STATX_BASIC_STATS     = 0x7ff
+	STATX_BLOCKS          = 0x400
+	STATX_BTIME           = 0x800
+	STATX_CTIME           = 0x80
+	STATX_GID             = 0x10
+	STATX_INO             = 0x100
+	STATX_MNT_ID          = 0x1000
+	STATX_MODE            = 0x2
+	STATX_MTIME           = 0x40
+	STATX_NLINK           = 0x4
+	STATX_SIZE            = 0x200
+	STATX_TYPE            = 0x1
+	STATX_UID             = 0x8
+
+	S_IFBLK = 0x6000
+	S_IFCHR = 0x2000
+	S_IFDIR = 0x4000
+	S_IFIFO = 0x1000
+	S_IFLNK = 0xa000
+)
+
 func AddStatToBlobMetadata(s UnixStatAdapter, metadata azblob.Metadata) {
 	// TODO: File mode properties (hdi_isfolder, etc.)
 	if s.Extended() { // try to poll the other properties
@@ -279,46 +310,46 @@ func AddStatToBlobMetadata(s UnixStatAdapter, metadata azblob.Metadata) {
 		tryAddMetadata(metadata, LINUXAttributeMeta, strconv.FormatUint(s.Attribute()&s.AttributeMask(), 10)) // AttributesMask indicates what attributes are supported by the filesystem
 		tryAddMetadata(metadata, LINUXAttributeMaskMeta, strconv.FormatUint(s.AttributeMask(), 10))
 
-		if statxReturned(mask, unix.STATX_BTIME) {
+		if statxReturned(mask, STATX_BTIME) {
 			tryAddMetadata(metadata, LINUXBTimeMeta, strconv.FormatInt(s.BTime().Unix(), 10))
 		}
 
-		if statxReturned(mask, unix.STATX_MODE) {
+		if statxReturned(mask, STATX_MODE) {
 			tryAddMetadata(metadata, POSIXNlinkMeta, strconv.FormatUint(s.NLink(), 10))
 		}
 
-		if statxReturned(mask, unix.STATX_UID) {
+		if statxReturned(mask, STATX_UID) {
 			tryAddMetadata(metadata, POSIXOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
 		}
 
-		if statxReturned(mask, unix.STATX_GID) {
+		if statxReturned(mask, STATX_GID) {
 			tryAddMetadata(metadata, POSIXGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
 		}
 
-		if statxReturned(mask, unix.STATX_MODE) {
+		if statxReturned(mask, STATX_MODE) {
 			tryAddMetadata(metadata, POSIXModeMeta, strconv.FormatUint(uint64(s.FileMode()), 10))
 		}
 
-		if statxReturned(mask, unix.STATX_INO) {
+		if statxReturned(mask, STATX_INO) {
 			tryAddMetadata(metadata, POSIXINodeMeta, strconv.FormatUint(s.INode(), 10))
 		}
 
 		// This is not optional.
 		tryAddMetadata(metadata, POSIXDevMeta, strconv.FormatUint(s.Device(), 10))
 
-		if statxReturned(mask, unix.STATX_MODE) && ((s.FileMode()&unix.S_IFCHR) == unix.S_IFCHR || (s.FileMode()&unix.S_IFBLK) == unix.S_IFBLK) {
+		if statxReturned(mask, STATX_MODE) && ((s.FileMode()&S_IFCHR) == S_IFCHR || (s.FileMode()&S_IFBLK) == S_IFBLK) {
 			tryAddMetadata(metadata, POSIXRDevMeta, strconv.FormatUint(s.RDevice(), 10))
 		}
 
-		if statxReturned(mask, unix.STATX_ATIME) {
+		if statxReturned(mask, STATX_ATIME) {
 			tryAddMetadata(metadata, POSIXATimeMeta, strconv.FormatInt(s.ATime().Unix(), 10))
 		}
 
-		if statxReturned(mask, unix.STATX_MTIME) {
+		if statxReturned(mask, STATX_MTIME) {
 			tryAddMetadata(metadata, POSIXModTimeMeta, strconv.FormatInt(s.MTime().Unix(), 10))
 		}
 
-		if statxReturned(mask, unix.STATX_CTIME) {
+		if statxReturned(mask, STATX_CTIME) {
 			tryAddMetadata(metadata, POSIXCTimeMeta, strconv.FormatInt(s.CTime().Unix(), 10))
 		}
 	} else {
@@ -329,7 +360,7 @@ func AddStatToBlobMetadata(s UnixStatAdapter, metadata azblob.Metadata) {
 		tryAddMetadata(metadata, POSIXINodeMeta, strconv.FormatUint(s.INode(), 10))
 		tryAddMetadata(metadata, POSIXDevMeta, strconv.FormatUint(s.Device(), 10))
 
-		if (s.FileMode()&unix.S_IFCHR) == unix.S_IFCHR || (s.FileMode()&unix.S_IFBLK) == unix.S_IFBLK { // this is not relevant unless the file is a block or character device.
+		if (s.FileMode()&S_IFCHR) == S_IFCHR || (s.FileMode()&S_IFBLK) == S_IFBLK { // this is not relevant unless the file is a block or character device.
 			tryAddMetadata(metadata, POSIXRDevMeta, strconv.FormatUint(s.RDevice(), 10))
 		}
 

@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func (f localFileSourceInfoProvider) GetUNIXProperties() (*UnixStatAdapter, error) {
+func (f localFileSourceInfoProvider) GetUNIXProperties() (UnixStatAdapter, error) {
 	// Can we use statx?
 	var uname unix.Utsname
 	err := unix.Uname(&uname)
@@ -56,7 +56,7 @@ func (f localFileSourceInfoProvider) GetUNIXProperties() (*UnixStatAdapter, erro
 		resp = statTAdapter(stat)
 	}
 
-	return &resp, nil
+	return resp, nil
 }
 
 type statxTAdapter unix.Statx_t

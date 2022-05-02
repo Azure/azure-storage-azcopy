@@ -45,6 +45,19 @@ func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeli
 	return &blockBlobUploader{blockBlobSenderBase: *senderBase, md5Channel: newMd5Channel()}, nil
 }
 
+func (s *blockBlobUploader) Prologue(ps common.PrologueState) (destinationModified bool) {
+	if unixSIP, ok := s.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
+		statAdapter, err := unixSIP.GetUNIXProperties()
+		if err != nil {
+			s.jptm.FailActiveSend("GetUNIXProperties", err)
+		}
+
+		AddStatToBlobMetadata(statAdapter, s.metadataToApply)
+	}
+
+	return s.blockBlobSenderBase.Prologue(ps)
+}
+
 func (u *blockBlobUploader) Md5Channel() chan<- []byte {
 	return u.md5Channel
 }
