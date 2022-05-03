@@ -30,11 +30,6 @@ type BucketToContainerNameResolver interface {
 func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) (*CopyEnumerator, error) {
 	var traverser ResourceTraverser
 
-	// Warn about GCP -> Blob being in preview. Also, we do not support GCP as destination.
-	if cca.FromTo.From() == common.ELocation.GCP() {
-		glcm.Info("Google Cloud Storage to Azure Blob copy is currently in preview. Validate the copy operation carefully before removing your data at source.")
-	}
-
 	srcCredInfo := common.CredentialInfo{}
 	var isPublic bool
 	var err error
