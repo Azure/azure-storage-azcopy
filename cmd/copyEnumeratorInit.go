@@ -223,7 +223,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.isHNStoHNS)
+	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.isHNStoHNS, strings.EqualFold(cca.Destination.Value, common.Dev_Null))
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
@@ -287,7 +287,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						dryrunValue := fmt.Sprintf("DRYRUN: copy %v", common.ToShortPath(cca.Source.Value))
 						if runtime.GOOS == "windows" {
 							dryrunValue += strings.ReplaceAll(srcRelPath, "/", "\\")
-						} else { //linux and mac
+						} else { // linux and mac
 							dryrunValue += srcRelPath
 						}
 						dryrunValue += fmt.Sprintf(" to %v%v", strings.Trim(cca.Destination.Value, "/"), dstRelPath)
@@ -299,7 +299,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 							common.ToShortPath(cca.Destination.Value))
 						if runtime.GOOS == "windows" {
 							dryrunValue += strings.ReplaceAll(dstRelPath, "/", "\\")
-						} else { //linux and mac
+						} else { // linux and mac
 							dryrunValue += dstRelPath
 						}
 						return dryrunValue
@@ -665,7 +665,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 }
 
 // we assume that preserveSmbPermissions and preserveSmbInfo have already been validated, such that they are only true if both resource types support them
-func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preserveSmbPermissions, isDfsDfs bool) (common.FolderPropertyOption, string) {
+func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preserveSmbPermissions, isDfsDfs, isDstNull bool) (common.FolderPropertyOption, string) {
 
 	getSuffix := func(willProcess bool) string {
 		willProcessString := common.IffString(willProcess, "will be processed", "will not be processed")
@@ -683,7 +683,7 @@ func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir b
 		}
 	}
 
-	bothFolderAware := fromTo.AreBothFolderAware() || isDfsDfs
+	bothFolderAware := (fromTo.AreBothFolderAware() || isDfsDfs) && !isDstNull // Copying folders to dev null doesn't make sense.
 	isRemoveFromFolderAware := fromTo == common.EFromTo.FileTrash()
 	if bothFolderAware || isRemoveFromFolderAware {
 		if !recursive {
