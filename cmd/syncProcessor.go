@@ -65,7 +65,6 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 		CpkOptions:                     cca.cpkOptions,
 		S2SPreserveBlobTags:            cca.s2sPreserveBlobTags,
 
-		PrimaryCredentialType:   cca.credentialInfo.CredentialType,
 		S2SSourceCredentialType: cca.s2sSourceCredentialType,
 	}
 

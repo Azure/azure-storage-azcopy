@@ -49,14 +49,14 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	if cca.Source.SAS != "" && cca.FromTo.IsS2S() && jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		glcm.Info("SECURITY: If the source and destination accounts are in the same AAD tenant & the OAuth token has appropriate permissions on both, the source SAS token is not required and OAuth can be used round-trip.")
+		glcm.Info("Authentication: If the source and destination accounts are in the same AAD tenant & the user/spn/msi has appropriate permissions on both, the source SAS token is not required and OAuth can be used round-trip.")
 	}
 
 	if cca.FromTo.IsS2S() {
 		jobPartOrder.S2SSourceCredentialType = srcCredInfo.CredentialType
 	}
 
-	if jobPartOrder.S2SSourceCredentialType == common.ECredentialType.OAuthToken() && jobPartOrder.PrimaryCredentialType != common.ECredentialType.OAuthToken() {
+	if jobPartOrder.S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
 		uotm := GetUserOAuthTokenManagerInstance()
 		// get token from env var or cache
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
