@@ -39,12 +39,9 @@ type transferParams struct {
 func (tp transferParams) getMetadata() common.Metadata {
 	metadataString := tp.metadata
 
-	metadataMap := common.Metadata{}
-	if len(metadataString) > 0 {
-		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
-			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-			metadataMap[kv[0]] = kv[1]
-		}
+	metadataMap, err := common.StringToMetadata(metadataString)
+	if err != nil {
+		panic("unable to form Metadata from string: " + err.Error())
 	}
 	return metadataMap
 }

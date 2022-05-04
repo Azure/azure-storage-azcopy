@@ -1059,6 +1059,21 @@ func UnMarshalToCommonMetadata(metadataString string) (Metadata, error) {
 	return result, nil
 }
 
+func StringToMetadata(metadataString string) (Metadata, error) {
+	metadataMap := Metadata{}
+	if len(metadataString) > 0 {
+		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
+			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+			// what if '=' not present?
+			if len(kv) != 2 {
+				return metadataMap, fmt.Errorf("invalid metadata string passed")
+			}
+			metadataMap[kv[0]] = kv[1]
+		}
+	}
+	return metadataMap, nil
+}
+
 // isValidMetadataKey checks if the given string is a valid metadata key for Azure.
 // For Azure, metadata key must adhere to the naming rules for C# identifiers.
 // As testing, reserved keywords for C# identifiers are also valid metadata key. (e.g. this, int)
