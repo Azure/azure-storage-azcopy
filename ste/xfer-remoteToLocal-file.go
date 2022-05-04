@@ -110,31 +110,6 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 	// step 4a: mark destination as modified before we take our first action there (which is to create the destination file)
 	jptm.SetDestinationIsModified()
 
-	// step 4b: special handling for empty files
-	if fileSize == 0 {
-		if strings.EqualFold(info.Destination, common.Dev_Null) {
-			// do nothing
-		} else {
-			err := jptm.WaitUntilLockDestination(jptm.Context())
-			if err == nil {
-				err = createEmptyFile(jptm, info.Destination)
-			}
-			if err != nil {
-				jptm.LogDownloadError(info.Source, info.Destination, "Empty File Creation error "+err.Error(), 0)
-				jptm.SetStatus(common.ETransferStatus.Failed())
-			}
-		}
-		// Run the prologue anyway, as some downloaders (files) require this.
-		// Note that this doesn't actually have adverse effects (at the moment).
-		// For files, it just sets a few properties.
-		// For blobs, it sets up a page blob pacer if it's a page blob.
-		// For blobFS, it's a noop.
-		dl.Prologue(jptm, p)
-		epilogueWithCleanupDownload(jptm, dl, nil, nil) // need standard epilogue, rather than a quick exit, so we can preserve modification dates
-		return
-	}
-
-	// step 4c: normal file creation when source has content
 	writeThrough := false
 	// TODO: consider cases where we might set it to true. It might give more predictable and understandable disk throughput.
 	//    But can't be used in the cases shown in the if statement below (one of which is only pseudocode, at this stage)
@@ -145,24 +120,35 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 	//        writeThrough = false
 	//    }
 
-	failFileCreation := func(err error) {
-		jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
-		jptm.SetStatus(common.ETransferStatus.Failed())
-		// use standard epilogue for consistency, but force release of file count (without an actual file) if necessary
-		epilogueWithCleanupDownload(jptm, dl, nil, nil)
-	}
-	// block until we can safely use a file handle
-	err := jptm.WaitUntilLockDestination(jptm.Context())
-	if err != nil {
-		failFileCreation(err)
-		return
-	}
-
 	var dstFile io.WriteCloser
-	if strings.EqualFold(info.Destination, common.Dev_Null) {
-		// the user wants to discard the downloaded data
-		dstFile = devNullWriter{}
-	} else {
+	if ctdl, ok := dl.(creationTimeDownloader); info.Destination != os.DevNull && ok { // ctdl never needs to handle devnull
+		failFileCreation := func(err error) {
+			jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			// use standard epilogue for consistency, but force release of file count (without an actual file) if necessary
+			epilogueWithCleanupDownload(jptm, dl, nil, nil)
+		}
+		// block until we can safely use a file handle
+		err := jptm.WaitUntilLockDestination(jptm.Context())
+		if err != nil {
+			failFileCreation(err)
+			return
+		}
+
+		size := fileSize
+		ct := common.ECompressionType.None()
+		if jptm.ShouldDecompress() {
+			size = 0                                  // we don't know what the final size will be, so we can't pre-size it
+			ct, err = jptm.GetSourceCompressionType() // calls same decompression getter routine as the front-end does
+			if err != nil {                           // check this, and return error, before we create any disk file, since if we return err, then no cleanup of file will be required
+				failFileCreation(err)
+				return
+			}
+			// Why get the decompression type again here, when we already looked at it at enumeration time?
+			// Because we have better ability to report unsupported compression types here, with clear "transfer failed" handling,
+			// and we still need to set size to zero here, so relying on enumeration more wouldn't simply this code much, if at all.
+		}
+
 		// Normal scenario, create the destination file as expected
 		// Use pseudo chunk id to allow our usual state tracking mechanism to keep count of how many
 		// file creations are running at any given instant, for perf diagnostics
@@ -171,11 +157,87 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		// to correct name.
 		pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.CreateLocalFile())
-		dstFile, err = createDestinationFile(jptm, info.getDownloadPath(), fileSize, writeThrough)
+		var needChunks bool
+		dstFile, needChunks, err = ctdl.CreateFile(jptm, info.Destination, size, writeThrough, nil)
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 		if err != nil {
 			failFileCreation(err)
 			return
+		}
+
+		if !needChunks { // If no chunks need to be transferred (e.g. this is 0-bytes long, a symlink, etc.), treat it as a 0-byte transfer
+			dl.Prologue(jptm, p)
+			epilogueWithCleanupDownload(jptm, dl, nil, nil)
+			return
+		}
+
+		if jptm.ShouldDecompress() { // Wrap the file in the decompressor if necessary
+			jptm.LogAtLevelForCurrentTransfer(pipeline.LogInfo, "will be decompressed from "+ct.String())
+
+			// wrap for automatic decompression
+			dstFile = common.NewDecompressingWriter(dstFile, ct)
+			// why don't we just let Go's network stack automatically decompress for us? Because
+			// 1. Then we can't check the MD5 hash (since logically, any stored hash should be the hash of the file that exists in Storage, i.e. the compressed one)
+			// 2. Then we can't pre-plan a certain number of fixed-size chunks (which is required by the way our architecture currently works).
+		}
+	} else {
+		// step 4b: special handling for empty files
+		if fileSize == 0 {
+			if strings.EqualFold(info.Destination, common.Dev_Null) {
+				// do nothing
+			} else {
+				err := jptm.WaitUntilLockDestination(jptm.Context())
+				if err == nil {
+					err = createEmptyFile(jptm, info.Destination)
+				}
+				if err != nil {
+					jptm.LogDownloadError(info.Source, info.Destination, "Empty File Creation error "+err.Error(), 0)
+					jptm.SetStatus(common.ETransferStatus.Failed())
+				}
+			}
+			// Run the prologue anyway, as some downloaders (files) require this.
+			// Note that this doesn't actually have adverse effects (at the moment).
+			// For files, it just sets a few properties.
+			// For blobs, it sets up a page blob pacer if it's a page blob.
+			// For blobFS, it's a noop.
+			dl.Prologue(jptm, p)
+			epilogueWithCleanupDownload(jptm, dl, nil, nil) // need standard epilogue, rather than a quick exit, so we can preserve modification dates
+			return
+		}
+
+		// step 4c: normal file creation when source has content
+
+		failFileCreation := func(err error) {
+			jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			// use standard epilogue for consistency, but force release of file count (without an actual file) if necessary
+			epilogueWithCleanupDownload(jptm, dl, nil, nil)
+		}
+		// block until we can safely use a file handle
+		err := jptm.WaitUntilLockDestination(jptm.Context())
+		if err != nil {
+			failFileCreation(err)
+			return
+		}
+
+		if strings.EqualFold(info.Destination, common.Dev_Null) {
+			// the user wants to discard the downloaded data
+			dstFile = devNullWriter{}
+		} else {
+			// Normal scenario, create the destination file as expected
+			// Use pseudo chunk id to allow our usual state tracking mechanism to keep count of how many
+			// file creations are running at any given instant, for perf diagnostics
+			//
+			// We create the file to a temporary location with name .azcopy-<jobID>-<actualName> and then move it
+			// to correct name.
+			pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
+			jptm.LogChunkStatus(pseudoId, common.EWaitReason.CreateLocalFile())
+			dstFile, err = createDestinationFile(jptm, info.getDownloadPath(), fileSize, writeThrough)
+			jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
+			if err != nil {
+				failFileCreation(err)
+				return
+			}
 		}
 	}
 
@@ -351,11 +413,11 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 				}
 			}
 
-			//check if we need to rename back to original name. At this point, we're sure the file is completely
-			//downloaded and not corrupt. Infact, post this point we should only log errors and
-			//not fail the transfer.
-			renameNecessary := !strings.EqualFold(info.getDownloadPath(), info.Destination) && 
-			                   !strings.EqualFold(info.Destination, common.Dev_Null)
+			// check if we need to rename back to original name. At this point, we're sure the file is completely
+			// downloaded and not corrupt. Infact, post this point we should only log errors and
+			// not fail the transfer.
+			renameNecessary := !strings.EqualFold(info.getDownloadPath(), info.Destination) &&
+				!strings.EqualFold(info.Destination, common.Dev_Null)
 			if err == nil && renameNecessary {
 				renameErr := os.Rename(info.getDownloadPath(), info.Destination)
 				if renameErr != nil {
@@ -471,7 +533,7 @@ func tryDeleteFile(info TransferInfo, jptm IJobPartTransferMgr) {
 }
 
 // Returns the path of file to be downloaded. If we want to
-// download to a temp path we return a temp paht in format 
+// download to a temp path we return a temp paht in format
 // /actual/parent/path/.azDownload-<jobID>-<actualFileName>
 func (info *TransferInfo) getDownloadPath() string {
 	if common.GetLifecycleMgr().DownloadToTempPath() {

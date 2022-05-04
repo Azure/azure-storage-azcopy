@@ -11,14 +11,14 @@ const ( // POSIX property metadata
 	POSIXINodeMeta         = "posix-ino"
 	POSIXCTimeMeta         = "posix-ctime"
 	LINUXBTimeMeta         = "linux-btime"
-	POSIXBlockDeviceMeta   = "is_block_dev"
+	POSIXBlockDeviceMeta   = "is_block_dev" // todo: read & use these
 	POSIXCharDeviceMeta    = "is_char_dev"
 	POSIXSocketMeta        = "is_socket"
 	POSIXFIFOMeta          = "is_fifo"
 	POSIXDevMeta           = "posix-dev"
 	POSIXRDevMeta          = "posix-rdev"
 	POSIXATimeMeta         = "posix-atime"
-	POSIXFolderMeta        = "hdi_isfolder"
+	POSIXFolderMeta        = "hdi_isfolder" // todo: read & use these
 	POSIXSymlinkMeta       = "is_symlink"
 	POSIXOwnerMeta         = "posix-owner"
 	POSIXGroupMeta         = "posix-group"
@@ -28,6 +28,24 @@ const ( // POSIX property metadata
 	LINUXAttributeMaskMeta = "linux-attribute-mask"
 	LINUXStatxMaskMeta     = "linux-statx-mask"
 )
+
+var allLinuxProperties = []string{
+	POSIXNlinkMeta,
+	POSIXINodeMeta,
+	LINUXBTimeMeta,
+	POSIXBlockDeviceMeta,
+	POSIXCharDeviceMeta,
+	POSIXSocketMeta,
+	POSIXFIFOMeta,
+	POSIXDevMeta,
+	POSIXRDevMeta,
+	POSIXATimeMeta,
+	POSIXFolderMeta,
+	POSIXSymlinkMeta,
+	POSIXOwnerMeta,
+	POSIXGroupMeta,
+	POSIXModeMeta,
+}
 
 //goland:noinspection GoCommentStart
 type UnixStatAdapter interface {
@@ -139,8 +157,8 @@ func (u UnixStatContainer) CTime() time.Time {
 // ReadStatFromMetadata is not fault-tolerant. If any given article does not parse,
 // it will throw an error instead of continuing on, as it may be considered incorrect to attempt to persist the rest of the data.
 // despite this function being used only in Downloads at the current moment, it still attempts to re-create as complete of a UnixStatAdapter as possible.
-func ReadStatFromMetadata(metadata azblob.Metadata, contentLength uint) (UnixStatAdapter, error) {
-	s := UnixStatContainer{}
+func ReadStatFromMetadata(metadata azblob.Metadata, contentLength int64) (UnixStatAdapter, error) {
+	s := UnixStatContainer{size: uint64(contentLength)}
 
 	if mask, ok := metadata[LINUXStatxMaskMeta]; ok {
 		m, err := strconv.ParseUint(mask, 10, 32)
@@ -294,11 +312,12 @@ const ( // Values cloned from x/sys/unix to avoid dependency
 	STATX_TYPE            = 0x1
 	STATX_UID             = 0x8
 
-	S_IFBLK = 0x6000
-	S_IFCHR = 0x2000
-	S_IFDIR = 0x4000
-	S_IFIFO = 0x1000
-	S_IFLNK = 0xa000
+	S_IFSOCK = 0xc000
+	S_IFBLK  = 0x6000
+	S_IFCHR  = 0x2000
+	S_IFDIR  = 0x4000
+	S_IFIFO  = 0x1000
+	S_IFLNK  = 0xa000
 )
 
 func AddStatToBlobMetadata(s UnixStatAdapter, metadata azblob.Metadata) {

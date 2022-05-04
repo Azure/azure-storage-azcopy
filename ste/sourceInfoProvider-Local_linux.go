@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+func (f localFileSourceInfoProvider) HasUNIXProperties() bool {
+	return true
+}
+
 func (f localFileSourceInfoProvider) GetUNIXProperties() (UnixStatAdapter, error) {
 	// Can we use statx?
 	var uname unix.Utsname
@@ -45,7 +49,7 @@ func (f localFileSourceInfoProvider) GetUNIXProperties() (UnixStatAdapter, error
 			return nil, err
 		}
 
-		// resp = statTAdapter(stat)
+		resp = statxTAdapter(stat)
 	} else { // We must stat, because statx is for sure unavailable.
 		var stat unix.Stat_t
 		err = unix.Stat(f.transferInfo.Source, &stat)

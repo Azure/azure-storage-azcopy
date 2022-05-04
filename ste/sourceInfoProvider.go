@@ -95,6 +95,7 @@ type IUNIXPropertyBearingSourceInfoProvider interface {
 	ISourceInfoProvider
 
 	GetUNIXProperties() (UnixStatAdapter, error)
+	HasUNIXProperties() bool
 }
 
 type ICustomLocalOpener interface {

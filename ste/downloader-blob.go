@@ -37,13 +37,15 @@ type blobDownloader struct {
 
 	// used to avoid downloading zero ranges of page blobs
 	pageRangeOptimizer *pageRangeOptimizer
+
+	// used to avoid re-setting file mode
+	setMode bool
 }
 
 func newBlobDownloader() downloader {
 	return &blobDownloader{
 		filePacer: NewNullAutoPacer(), // defer creation of real one, if needed, to Prologue
 	}
-
 }
 
 func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
