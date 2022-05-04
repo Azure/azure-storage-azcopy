@@ -177,7 +177,6 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 	jm.SetInMemoryTransitJobState(
 		ste.InMemoryTransitJobState{
 			CredentialInfo:          order.CredentialInfo,
-			PrimaryCredentialType:   order.PrimaryCredentialType,
 			S2SSourceCredentialType: order.S2SSourceCredentialType,
 		})
 	// Supply no plan MMF because we don't have one, and AddJobPart will create one on its own.

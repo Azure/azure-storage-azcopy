@@ -46,8 +46,8 @@ type PartNumber = common.PartNumber
 // This can be optimized if FE would no more be another module vs STE module.
 type InMemoryTransitJobState struct {
 	CredentialInfo common.CredentialInfo
-	PrimaryCredentialType   common.CredentialType // Primary credential type, used in all situations.
-	S2SSourceCredentialType common.CredentialType // Secondary credential type
+	// S2SSourceCredentialType can override the CredentialInfo.CredentialType when being used for the source (e.g. Source Info Provider and when using GetS2SSourceBlobTokenCredential)
+	S2SSourceCredentialType common.CredentialType
 }
 
 type IJobMgr interface {
@@ -75,7 +75,7 @@ type IJobMgr interface {
 	// TODO: added for debugging purpose. remove later
 	ActiveConnections() int64
 	GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint)
-	//Close()
+	// Close()
 	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
 	SetInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
 	ChunkStatusLogger() common.ChunkStatusLogger
@@ -106,9 +106,9 @@ type IJobMgr interface {
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel,
-	       commandString string, logFileFolder string, tuner ConcurrencyTuner,
-	       pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
-	       jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
+	commandString string, logFileFolder string, tuner ConcurrencyTuner,
+	pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
+	jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
 	const channelSize = 100000
 	// PartsChannelSize defines the number of JobParts which can be placed into the
 	// parts channel. Any JobPart which comes from FE and partChannel is full,
@@ -129,7 +129,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 
 	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
 	enableChunkLogOutput := level.ToPipelineLogLevel() == pipeline.LogDebug
-	
+
 	/* Create book-keeping channels */
 	jobPartProgressCh := make(chan jobPartProgressInfo)
 	var jstm jobStatusManager
@@ -139,25 +139,25 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	jstm.xferDone = make(chan xferDoneMsg, 1000)
 
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
-		httpClient:                    NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
-		logger:                        jobLogger,
-		chunkStatusLogger:             common.NewChunkStatusLogger(jobID, cpuMon, logFileFolder, enableChunkLogOutput),
-		concurrency:                   concurrency,
-		overwritePrompter:             newOverwritePrompter(),
-		pipelineNetworkStats:          newPipelineNetworkStats(tuner), // let the stats coordinate with the concurrency tuner
-		initMu:                        &sync.Mutex{},
-		jobPartProgress:               jobPartProgressCh,
-		coordinatorChannels:           CoordinatorChannels{
-			partsChannel:          partsCh,
-			normalTransferCh:      normalTransferCh,
-			lowTransferCh:         lowTransferCh,
+		httpClient:           NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
+		logger:               jobLogger,
+		chunkStatusLogger:    common.NewChunkStatusLogger(jobID, cpuMon, logFileFolder, enableChunkLogOutput),
+		concurrency:          concurrency,
+		overwritePrompter:    newOverwritePrompter(),
+		pipelineNetworkStats: newPipelineNetworkStats(tuner), // let the stats coordinate with the concurrency tuner
+		initMu:               &sync.Mutex{},
+		jobPartProgress:      jobPartProgressCh,
+		coordinatorChannels: CoordinatorChannels{
+			partsChannel:     partsCh,
+			normalTransferCh: normalTransferCh,
+			lowTransferCh:    lowTransferCh,
 		},
-		xferChannels:                  XferChannels{
-			partsChannel:          partsCh,
-			normalTransferCh:      normalTransferCh,
-			lowTransferCh:         lowTransferCh,
-			normalChunckCh:        normalChunkCh,
-			lowChunkCh:            lowChunkCh,
+		xferChannels: XferChannels{
+			partsChannel:     partsCh,
+			normalTransferCh: normalTransferCh,
+			lowTransferCh:    lowTransferCh,
+			normalChunckCh:   normalChunkCh,
+			lowChunkCh:       lowChunkCh,
 		},
 		poolSizingChannels: poolSizingChannels{ // all deliberately unbuffered, because pool sizer routine works in lock-step with these - processing them as they happen, never catching up on populated buffer later
 			entryNotificationCh: make(chan struct{}),
@@ -165,14 +165,14 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 			scalebackRequestCh:  make(chan struct{}),
 			requestSlowTuneCh:   make(chan struct{}),
 		},
-		concurrencyTuner:             tuner,
-		pacer:                        pacer,
-		slicePool:                    slicePool,
-		cacheLimiter:                 cacheLimiter,
-		fileCountLimiter:             fileCountLimiter,
-		cpuMon:                       cpuMon,
-		jstm:                         &jstm,
-		isDaemon:                     daemonMode,
+		concurrencyTuner: tuner,
+		pacer:            pacer,
+		slicePool:        slicePool,
+		cacheLimiter:     cacheLimiter,
+		fileCountLimiter: fileCountLimiter,
+		cpuMon:           cpuMon,
+		jstm:             &jstm,
+		isDaemon:         daemonMode,
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.Reset(appCtx, commandString)
 	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
@@ -185,10 +185,10 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	for cc := 0; cc < concurrency.TransferInitiationPoolSize.Value; cc++ {
 		go jm.transferProcessor(cc)
 	}
-	
+
 	go jm.reportJobPartDoneHandler()
 	go jm.handleStatusUpdateMessage()
-	
+
 	return &jm
 }
 
@@ -197,7 +197,7 @@ func (jm *jobMgr) getOverwritePrompter() *overwritePrompter {
 }
 
 func (jm *jobMgr) Reset(appCtx context.Context, commandString string) IJobMgr {
-	//jm.logger.OpenLog()
+	// jm.logger.OpenLog()
 	// log the user given command to the job log file.
 	// since the log file is opened in case of resume, list and many other operations
 	// for which commandString passed is empty, the length check is added
@@ -282,7 +282,6 @@ type jobMgr struct {
 	ctx                  context.Context
 	cancel               context.CancelFunc
 	pipelineNetworkStats *PipelineNetworkStats
-
 
 	// Share the same HTTP Client across all job parts, so that the we maximize re-use of
 	// its internal connection pool
@@ -404,11 +403,11 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, e
 	destinationSAS string, scheduleTransfers bool, completionChan chan struct{}) IJobPartMgr {
 	jpm := &jobPartMgr{jobMgr: jm, filename: planFile, sourceSAS: sourceSAS,
 		destinationSAS: destinationSAS, pacer: jm.pacer,
-		slicePool:        jm.slicePool,
-		cacheLimiter:     jm.cacheLimiter,
-		fileCountLimiter: jm.fileCountLimiter,
+		slicePool:         jm.slicePool,
+		cacheLimiter:      jm.cacheLimiter,
+		fileCountLimiter:  jm.fileCountLimiter,
 		closeOnCompletion: completionChan,
-		}
+	}
 	// If an existing plan MMF was supplied, re use it. Otherwise, init a new one.
 	if existingPlanMMF == nil {
 		jpm.planMMF = jpm.filename.Map()
@@ -440,21 +439,21 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, e
 		// Instead of the scheduling the Transfer for given JobPart
 		// JobPart is put into the partChannel
 		// from where it is picked up and scheduled
-		//jpm.ScheduleTransfers(jm.ctx, make(map[string]int), make(map[string]int))
+		// jpm.ScheduleTransfers(jm.ctx, make(map[string]int), make(map[string]int))
 		jm.QueueJobParts(jpm)
 	}
 	return jpm
 }
 
 func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr {
-	jppfn := JobPartPlanFileName(fmt.Sprintf(JobPartPlanFileNameFormat, order.JobID.String(), 0, DataSchemaVersion))	 
-	jppfn.Create(order)  // Convert the order to a plan file
+	jppfn := JobPartPlanFileName(fmt.Sprintf(JobPartPlanFileNameFormat, order.JobID.String(), 0, DataSchemaVersion))
+	jppfn.Create(order) // Convert the order to a plan file
 
 	jpm := &jobPartMgr{
-		jobMgr: jm, 
-		filename: jppfn,
+		jobMgr:           jm,
+		filename:         jppfn,
 		sourceSAS:        order.SourceRoot.SAS,
-		destinationSAS:   order.DestinationRoot.SAS,  
+		destinationSAS:   order.DestinationRoot.SAS,
 		pacer:            jm.pacer,
 		slicePool:        jm.slicePool,
 		cacheLimiter:     jm.cacheLimiter,
@@ -484,7 +483,6 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 	jm.QueueJobParts(jpm)
 	return jpm
 }
-
 
 func (jm *jobMgr) setFinalPartOrdered(partNum PartNumber, isFinalPart bool) {
 	newVal := common.Iffint32(isFinalPart, 1, 0)
@@ -558,7 +556,7 @@ func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 	// jm.ResetAllTransfersScheduled()
 	jm.jobPartMgrs.Iterate(false, func(p common.PartNumber, jpm IJobPartMgr) {
 		jm.QueueJobParts(jpm)
-		//jpm.ScheduleTransfers(jm.ctx, includeTransfer, excludeTransfer)
+		// jpm.ScheduleTransfers(jm.ctx, includeTransfer, excludeTransfer)
 	})
 }
 
@@ -640,7 +638,7 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			if allKnownPartsDone {
 				common.GetLifecycleMgr().ReportAllJobPartsDone()
 			}
-		} //Else log and wait for next part to complete
+		} // Else log and wait for next part to complete
 
 		if shouldLog {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("is part of Job which %d total number of parts done ", partsDone))
@@ -679,10 +677,10 @@ func (jm *jobMgr) ChunkStatusLogger() common.ChunkStatusLogger {
 }
 
 // PartsDone returns the number of the Job's parts that are either completed or failed
-//func (jm *jobMgr) PartsDone() uint32 { return atomic.LoadUint32(&jm.partsDone) }
+// func (jm *jobMgr) PartsDone() uint32 { return atomic.LoadUint32(&jm.partsDone) }
 
 // SetPartsDone sets the number of Job's parts that are done (completed or failed)
-//func (jm *jobMgr) SetPartsDone(partsDone uint32) { atomic.StoreUint32(&jm.partsDone, partsDone) }
+// func (jm *jobMgr) SetPartsDone(partsDone uint32) { atomic.StoreUint32(&jm.partsDone, partsDone) }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /* Infra ported to jobManager from JobsAdmin */
@@ -718,10 +716,10 @@ func (jm *jobMgr) CurrentMainPoolSize() int {
 func (jm *jobMgr) ScheduleTransfer(priority common.JobPriority, jptm IJobPartTransferMgr) {
 	switch priority { // priority determines which channel handles the job part's transfers
 	case common.EJobPriority.Normal():
-		//jptm.SetChunkChannel(ja.xferChannels.normalChunckCh)
+		// jptm.SetChunkChannel(ja.xferChannels.normalChunckCh)
 		jm.coordinatorChannels.normalTransferCh <- jptm
 	case common.EJobPriority.Low():
-		//jptm.SetChunkChannel(ja.xferChannels.lowChunkCh)
+		// jptm.SetChunkChannel(ja.xferChannels.lowChunkCh)
 		jm.coordinatorChannels.lowTransferCh <- jptm
 	default:
 		jm.Panic(fmt.Errorf("invalid priority: %q", priority))
@@ -920,20 +918,19 @@ func (jm *jobMgr) transferProcessor(workerID int) {
 	}
 }
 
-
-func(jm *jobMgr) IterateJobParts(readonly bool, f func(k common.PartNumber, v IJobPartMgr)) {
+func (jm *jobMgr) IterateJobParts(readonly bool, f func(k common.PartNumber, v IJobPartMgr)) {
 	jm.jobPartMgrs.Iterate(readonly, f)
 }
 
-func(jm *jobMgr) TransferDirection() common.TransferDirection {
+func (jm *jobMgr) TransferDirection() common.TransferDirection {
 	return jm.atomicTransferDirection.AtomicLoad()
 }
 
-func(jm *jobMgr) AddSuccessfulBytesInActiveFiles(n int64) {
+func (jm *jobMgr) AddSuccessfulBytesInActiveFiles(n int64) {
 	atomic.AddInt64(&jm.atomicSuccessfulBytesInActiveFiles, n)
 }
 
-func(jm *jobMgr) SuccessfulBytesInActiveFiles() uint64 {
+func (jm *jobMgr) SuccessfulBytesInActiveFiles() uint64 {
 	n := atomic.LoadInt64(&jm.atomicSuccessfulBytesInActiveFiles)
 	if n < 0 {
 		n = 0 // should never happen, but would result in nasty over/underflow if it did
