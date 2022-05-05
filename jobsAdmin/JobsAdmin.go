@@ -513,8 +513,8 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 		return megaBitsPerSec * 1000 * 1000 / 8
 	}
 	
-	lastPerfAdjustTime := time.Now() // right when this routine songs
 	const minIntervalBetweenPerfAdjustment = time.Minute
+	lastPerfAdjustTime := time.Now().Add(-2 * minIntervalBetweenPerfAdjustment)
 	var err error
 	
 	for {
