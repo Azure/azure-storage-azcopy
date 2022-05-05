@@ -54,11 +54,10 @@ type scenario struct {
 	stripTopDir bool // TODO: figure out how we'll control and use this
 
 	// internal declarative runner state
-	a           asserter
-	state       scenarioState // TODO: does this really need to be a separate struct?
-	needResume  bool
-	chToStdin   chan string
-	isSourceAcc bool
+	a          asserter
+	state      scenarioState // TODO: does this really need to be a separate struct?
+	needResume bool
+	chToStdin  chan string
 }
 
 type scenarioState struct {
@@ -113,12 +112,16 @@ func (s *scenario) Run() {
 	if s.a.Failed() {
 		return // no point in doing more validation
 	}
-	s.validateProperties()
-	if s.a.Failed() {
-		return // no point in doing more validation
-	}
-	if s.validate&eValidate.AutoPlusContent() != 0 {
-		s.validateContent()
+
+	if !s.p.destNull {
+		s.validateProperties()
+		if s.a.Failed() {
+			return // no point in doing more validation
+		}
+
+		if s.validate&eValidate.AutoPlusContent() != 0 {
+			s.validateContent()
+		}
 	}
 
 	s.runHook(s.hs.afterValidation)
@@ -140,7 +143,7 @@ func (s *scenario) assignSourceAndDest() {
 		// TODO: handle account to account (multi-container) scenarios
 		switch loc {
 		case common.ELocation.Local():
-			return &resourceLocal{}
+			return &resourceLocal{common.IffString(s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
 		case common.ELocation.File():
 			return &resourceAzureFileShare{accountType: s.srcAccountType}
 		case common.ELocation.Blob():
@@ -165,7 +168,7 @@ func (s *scenario) assignSourceAndDest() {
 	}
 
 	s.state.source = createTestResource(s.fromTo.From(), true)
-	s.state.dest = createTestResource(s.fromTo.To(), s.isSourceAcc)
+	s.state.dest = createTestResource(s.fromTo.To(), false)
 }
 
 func (s *scenario) runAzCopy() {

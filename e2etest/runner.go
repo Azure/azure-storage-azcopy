@@ -92,6 +92,7 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 	set("cpk-by-value", p.cpkByValue, false)
 	set("is-object-dir", p.isObjectDir, false)
 	set("debug-skip-files", strings.Join(p.debugSkipFiles, ";"), "")
+	set("check-md5", p.checkMd5.String(), "FailIfDifferent")
 	if o == eOperation.Copy() {
 		set("s2s-preserve-access-tier", p.s2sPreserveAccessTier, true)
 	}
@@ -134,7 +135,7 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string, env []
 	c.Stdout = &stdout
 	c.Stderr = &stderr
 
-	//instead of err := c.Run(), we do the following
+	// instead of err := c.Run(), we do the following
 	runErr := c.Start()
 	if runErr == nil {
 		defer func() {
@@ -221,12 +222,12 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 
 		env = append(env,
 			"AZCOPY_AUTO_LOGIN_TYPE=SPN",
-					"AZCOPY_SPA_APPLICATION_ID=" + appId,
-					"AZCOPY_SPA_CLIENT_SECRET=" + clientSecret,
-			)
+			"AZCOPY_SPA_APPLICATION_ID="+appId,
+			"AZCOPY_SPA_CLIENT_SECRET="+clientSecret,
+		)
 
 		if tenId != "" {
-			env = append(env, "AZCOPY_TENANT_ID=" + tenId)
+			env = append(env, "AZCOPY_TENANT_ID="+tenId)
 		}
 	}
 
