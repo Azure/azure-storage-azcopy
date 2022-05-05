@@ -275,8 +275,8 @@ func (lcm *lifecycleMgr) Info(msg string) {
 func (lcm *lifecycleMgr) Prompt(message string, details PromptDetails) ResponseOption {
 
 	if shouldQuietMessage(outputMessage{msgType: eOutputMessageType.Prompt()}, lcm.QuietModeType) {
-		//if prompts are disabled by the user's choice of quiet mode, assume default behavior and don't stop flow.
-		return EResponseOption.Default()
+		//if prompts are disabled by the user's choice of quiet mode, assume the answer is a 'yes' or yes for all
+		return EResponseOption.Yes()
 	}
 
 	expectedInputChannel := make(chan string, 1)
@@ -670,12 +670,10 @@ func shouldQuietMessage(msgToOutput outputMessage, quietMode QuietMode) bool {
 	messageType := msgToOutput.msgType
 
 	switch quietMode {
-	case EQuietMode.NoProgress():
-		return messageType == eOutputMessageType.Progress()
-	case EQuietMode.NoProgressOrErrors():
-		return messageType == eOutputMessageType.Progress() || messageType == eOutputMessageType.Error()
+	case EQuietMode.Default():
+		return false
 	case EQuietMode.Essential():
-		return !(messageType == eOutputMessageType.Init() || messageType == eOutputMessageType.EndOfJob())
+		return messageType == eOutputMessageType.Progress() || messageType == eOutputMessageType.Info() || messageType == eOutputMessageType.Prompt()
 	case EQuietMode.Quiet():
 		return true
 	default:
