@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"syscall"
+	"time"
 )
 
 // CreateFile covers the following UNIX properties:
@@ -33,13 +34,11 @@ func (bd *blobDownloader) CreateFile(jptm IJobPartTransferMgr, destination strin
 		stat, err = unixSIP.GetUNIXProperties()
 
 		if stat.Extended() {
-			if stat.StatxMask()&STATX_MODE == STATX_MODE {
-				mode = stat.FileMode()
-			} else {
-				mode = 0
+			if stat.StatxMask()&STATX_MODE == STATX_MODE { // We need to retain access to the file until we're well & done with it
+				mode = stat.FileMode() | common.DEFAULT_FILE_PERM
 			}
 		} else {
-			mode = stat.FileMode()
+			mode = stat.FileMode() | common.DEFAULT_FILE_PERM
 		}
 
 		if mode != 0 { // Folders are not necessary to handle
@@ -68,25 +67,104 @@ func (bd *blobDownloader) CreateFile(jptm IJobPartTransferMgr, destination strin
 		}
 	}
 
-	if needMakeFile {
-		flags := os.O_RDWR | os.O_CREATE | os.O_TRUNC
-		if writeThrough {
-			flags |= os.O_SYNC
+	bd.fileMode = mode
+
+	if !needMakeFile {
+		return
+	}
+
+	flags := os.O_RDWR | os.O_CREATE | os.O_TRUNC
+	if writeThrough {
+		flags |= os.O_SYNC
+	}
+
+	file, err = os.OpenFile(destination, flags, os.FileMode(mode)) // os.FileMode is uint32 on Linux.
+	if err != nil {
+		return
+	}
+
+	if size == 0 {
+		return
+	}
+
+	err = syscall.Fallocate(int(file.(*os.File).Fd()), 0, 0, size)
+	if err == syscall.ENOTSUP {
+		err = file.(*os.File).Truncate(size) // err will get returned at the end
+	}
+
+	return
+}
+
+func (bd *blobDownloader) ApplyUnixProperties(adapter UnixStatAdapter) (err error) {
+	// First, grab our file descriptor and such.
+	f, err := os.OpenFile(bd.txInfo.Destination, os.O_RDWR, os.FileMode(bd.fileMode))
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	// At this point, mode has already been applied. Let's work out what we need to apply, and apply the rest.
+	if adapter.Extended() {
+		var fi os.FileInfo
+		fi, err = f.Stat() // grab the base stats
+		var stat syscall.Stat_t
+		stat = fi.Sys().(syscall.Stat_t)
+		mask := adapter.StatxMask()
+
+		attr := adapter.Attribute()
+		_, _, err = syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), uintptr(unix.FS_IOC_SETFLAGS), uintptr(attr))
+		if nil == nil {
+			return
 		}
 
-		file, err = os.OpenFile(destination, flags, os.FileMode(mode))
+		atime := time.Unix(stat.Atim.Unix())
+		if statxReturned(mask, STATX_ATIME) {
+			atime = adapter.ATime()
+		}
+
+		mtime := time.Unix(stat.Mtim.Unix())
+		if statxReturned(mask, STATX_MTIME) {
+			mtime = adapter.MTime()
+		}
+
+		// adapt times
+		err = os.Chtimes(bd.txInfo.Destination, atime, mtime)
 		if err != nil {
 			return
 		}
 
-		if size == 0 {
+		mode := os.FileMode(common.DEFAULT_FILE_PERM)
+		if statxReturned(mask, STATX_MODE) {
+			mode = os.FileMode(adapter.FileMode() & 777)
+		}
+
+		err = os.Chmod(bd.txInfo.Destination, mode)
+		if err != nil {
 			return
 		}
 
-		err = syscall.Fallocate(int(file.(*os.File).Fd()), 0, 0, size)
-		if err == syscall.ENOTSUP {
-			err = file.(*os.File).Truncate(size) // err will get returned at the end
+		uid := stat.Uid
+		if statxReturned(mask, STATX_UID) {
+			uid = adapter.Owner()
 		}
+
+		gid := stat.Gid
+		if statxReturned(mask, STATX_GID) {
+			gid = adapter.Group()
+		}
+		// set ownership
+		err = os.Chown(bd.txInfo.Destination, int(uid), int(gid))
+	} else {
+		err = os.Chtimes(bd.txInfo.Destination, adapter.ATime(), adapter.MTime())
+		if err != nil {
+			return
+		}
+
+		err = os.Chmod(bd.txInfo.Destination, os.FileMode(adapter.FileMode()&777)) // only write permissions
+		if err != nil {
+			return
+		}
+		err = os.Chown(bd.txInfo.Destination, int(adapter.Owner()), int(adapter.Group()))
 	}
 
 	return

@@ -40,6 +40,10 @@ type blobDownloader struct {
 
 	// used to avoid re-setting file mode
 	setMode bool
+
+	jptm     IJobPartTransferMgr
+	txInfo   TransferInfo
+	fileMode uint32
 }
 
 func newBlobDownloader() downloader {
@@ -49,6 +53,9 @@ func newBlobDownloader() downloader {
 }
 
 func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
+	bd.txInfo = jptm.Info()
+	bd.jptm = jptm
+
 	if jptm.Info().SrcBlobType == azblob.BlobPageBlob {
 		// page blobs need a file-specific pacer
 		// See comments in uploader-pageBlob for the reasons, since the same reasons apply are are explained there
@@ -61,6 +68,23 @@ func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipelin
 }
 
 func (bd *blobDownloader) Epilogue() {
+	bsip, err := newBlobSourceInfoProvider(bd.jptm)
+	if err != nil {
+		// todo fail
+	}
+	unixstat, _ := bsip.(IUNIXPropertyBearingSourceInfoProvider)
+	if ubd, ok := (interface{})(bd).(unixPropertyAwareDownloader); ok && unixstat.HasUNIXProperties() {
+		adapter, err := unixstat.GetUNIXProperties()
+		if err != nil {
+			// todo fail
+		}
+
+		err = ubd.ApplyUnixProperties(adapter)
+		if err != nil {
+			// todo fail
+		}
+	}
+
 	_ = bd.filePacer.Close()
 }
 
