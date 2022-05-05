@@ -843,23 +843,23 @@ func (ct *CredentialType) Parse(s string) error {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-var EQuietMode = QuietMode(0)
+var EOutputVerbosity = OutputVerbosity(0)
 
-type QuietMode uint8
+type OutputVerbosity uint8
 
-func (QuietMode) Default() QuietMode   { return QuietMode(0) }
-func (QuietMode) Essential() QuietMode { return QuietMode(1) } // no progress, no info, no prompts. Print everything else
-func (QuietMode) Quiet() QuietMode     { return QuietMode(2) } // nothing at all
+func (OutputVerbosity) Default() OutputVerbosity   { return OutputVerbosity(0) }
+func (OutputVerbosity) Essential() OutputVerbosity { return OutputVerbosity(1) } // no progress, no info, no prompts. Print everything else
+func (OutputVerbosity) Quiet() OutputVerbosity     { return OutputVerbosity(2) } // nothing at all
 
-func (qm *QuietMode) Parse(s string) error {
+func (qm *OutputVerbosity) Parse(s string) error {
 	val, err := enum.ParseInt(reflect.TypeOf(qm), s, true, true)
 	if err == nil {
-		*qm = val.(QuietMode)
+		*qm = val.(OutputVerbosity)
 	}
 	return err
 }
 
-func (qm QuietMode) String() string {
+func (qm OutputVerbosity) String() string {
 	return enum.StringInt(qm, reflect.TypeOf(qm))
 }
 

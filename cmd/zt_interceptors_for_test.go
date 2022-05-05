@@ -89,7 +89,7 @@ func (m *mockedLifecycleManager) DownloadToTempPath() bool {
 func (m *mockedLifecycleManager) ReportAllJobPartsDone() {
 }
 
-func (m *mockedLifecycleManager) SetQuietMode(mode common.QuietMode) {
+func (m *mockedLifecycleManager) SetOutputVerbosity(mode common.OutputVerbosity) {
 }
 
 func (m *mockedLifecycleManager) Progress(o common.OutputBuilder) {

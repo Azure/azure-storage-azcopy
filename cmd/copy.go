@@ -170,9 +170,6 @@ type rawCopyCmdArgs struct {
 
 	// Optional flag that permanently deletes soft-deleted snapshots/versions
 	permanentDeleteOption string
-
-	// Optional flag to specify the quiet-mode of the operation
-	quietMode string
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -856,14 +853,8 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	cooked.dryrunMode = raw.dryrun
 
-	// forming quiet-mode variable
-	err = cooked.quietMode.Parse(raw.quietMode)
-	if err != nil {
-		return cooked, err
-	}
-
-	if cooked.ForceWrite == common.EOverwriteOption.Prompt() && cooked.quietMode == common.EQuietMode.Quiet() {
-		err = fmt.Errorf("cannot set quiet mode '%s' with specified overwrite option '%s'", cooked.quietMode.String(), cooked.ForceWrite.String())
+	if cooked.ForceWrite == common.EOverwriteOption.Prompt() && (azcopyOutputVerbosity == common.EOutputVerbosity.Quiet() || azcopyOutputVerbosity == common.EOutputVerbosity.Essential()) {
+		err = fmt.Errorf("cannot set output level '%s' with overwrite option '%s'", azcopyOutputVerbosity.String(), cooked.ForceWrite.String())
 	}
 	if err != nil {
 		return cooked, err
@@ -1165,8 +1156,6 @@ type CookedCopyCmdArgs struct {
 
 	// Optional flag that permanently deletes soft deleted blobs
 	permanentDeleteOption common.PermanentDeleteOption
-
-	quietMode common.QuietMode
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {
@@ -1828,7 +1817,7 @@ func init() {
 			if err != nil {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 			}
-			glcm.SetQuietMode(cooked.quietMode)
+			glcm.SetOutputVerbosity(azcopyOutputVerbosity) // TODO add this to all commands
 
 			glcm.Info("Scanning...")
 
@@ -1907,7 +1896,6 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.includeDirectoryStubs, "include-directory-stub", false, "False by default to ignore directory stubs. Directory stubs are blobs with metadata 'hdi_isfolder:true'. Setting value to true will preserve directory stubs during transfers.")
 	cpCmd.PersistentFlags().BoolVar(&raw.disableAutoDecoding, "disable-auto-decoding", false, "False by default to enable automatic decoding of illegal chars on Windows. Can be set to true to disable automatic decoding.")
 	cpCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the file paths that would be copied by this command. This flag does not copy the actual files.")
-	cpCmd.PersistentFlags().StringVar(&raw.quietMode, "quiet-mode", "default", "Specify quiet-mode to control what gets printed to the terminal. Available options: Default, NoProgress, ErrorsOnly, Quiet.")
 	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
 	// right before transferring in ste(backend).
 	// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),

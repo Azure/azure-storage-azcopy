@@ -74,7 +74,7 @@ type LifecycleMgr interface {
 	DownloadToTempPath() bool
 	MsgHandlerChannel() <-chan LCMMsg
 	ReportAllJobPartsDone()
-	SetQuietMode(mode QuietMode) //TODO add this to all the commands
+	SetOutputVerbosity(mode OutputVerbosity)
 }
 
 func GetLifecycleMgr() LifecycleMgr {
@@ -101,7 +101,7 @@ type lifecycleMgr struct {
 	disableSyslog         bool
 	waitForUserResponse   chan bool
 	msgHandlerChannel     chan LCMMsg
-	QuietModeType         QuietMode
+	OutputVerbosityType   OutputVerbosity
 }
 
 type userInput struct {
@@ -274,8 +274,8 @@ func (lcm *lifecycleMgr) Info(msg string) {
 
 func (lcm *lifecycleMgr) Prompt(message string, details PromptDetails) ResponseOption {
 
-	if shouldQuietMessage(outputMessage{msgType: eOutputMessageType.Prompt()}, lcm.QuietModeType) {
-		//if prompts are disabled by the user's choice of quiet mode, assume the answer is a 'yes' or yes for all
+	if shouldQuietMessage(outputMessage{msgType: eOutputMessageType.Prompt()}, lcm.OutputVerbosityType) {
+		//if prompts are disabled by the user's choice of output level (quiet mode), assume the answer is a 'yes' or yes for all
 		return EResponseOption.Yes()
 	}
 
@@ -383,7 +383,7 @@ func (lcm *lifecycleMgr) processOutputMessage() {
 	for {
 		msgToPrint := <-lcm.msgQueue
 
-		if shouldQuietMessage(msgToPrint, lcm.QuietModeType) {
+		if shouldQuietMessage(msgToPrint, lcm.OutputVerbosityType) {
 			lcm.processNoneOutput(msgToPrint)
 		} else {
 			switch lcm.outputFormat {
@@ -655,8 +655,8 @@ func (lcm *lifecycleMgr) ReportAllJobPartsDone() {
 	lcm.doneChannel <- true
 }
 
-func (lcm *lifecycleMgr) SetQuietMode(mode QuietMode) {
-	lcm.QuietModeType = mode
+func (lcm *lifecycleMgr) SetOutputVerbosity(mode OutputVerbosity) {
+	lcm.OutputVerbosityType = mode
 }
 
 // captures the common logic of exiting if there's an expected error
@@ -666,15 +666,15 @@ func PanicIfErr(err error) {
 	}
 }
 
-func shouldQuietMessage(msgToOutput outputMessage, quietMode QuietMode) bool {
+func shouldQuietMessage(msgToOutput outputMessage, quietMode OutputVerbosity) bool {
 	messageType := msgToOutput.msgType
 
 	switch quietMode {
-	case EQuietMode.Default():
+	case EOutputVerbosity.Default():
 		return false
-	case EQuietMode.Essential():
+	case EOutputVerbosity.Essential():
 		return messageType == eOutputMessageType.Progress() || messageType == eOutputMessageType.Info() || messageType == eOutputMessageType.Prompt()
-	case EQuietMode.Quiet():
+	case EOutputVerbosity.Quiet():
 		return true
 	default:
 		return false
