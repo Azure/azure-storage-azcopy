@@ -32,6 +32,7 @@ type pageBlobUploader struct {
 	pageBlobSenderBase
 
 	md5Channel chan []byte
+	sip        ISourceInfoProvider
 }
 
 func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
@@ -40,7 +41,20 @@ func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipelin
 		return nil, err
 	}
 
-	return &pageBlobUploader{pageBlobSenderBase: *senderBase, md5Channel: newMd5Channel()}, nil
+	return &pageBlobUploader{pageBlobSenderBase: *senderBase, md5Channel: newMd5Channel(), sip: sip}, nil
+}
+
+func (u *pageBlobUploader) Prologue(ps common.PrologueState) (destinationModified bool) {
+	if unixSIP, ok := u.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
+		statAdapter, err := unixSIP.GetUNIXProperties()
+		if err != nil {
+			u.jptm.FailActiveSend("GetUNIXProperties", err)
+		}
+
+		AddStatToBlobMetadata(statAdapter, u.metadataToApply)
+	}
+
+	return false
 }
 
 func (u *pageBlobUploader) Md5Channel() chan<- []byte {

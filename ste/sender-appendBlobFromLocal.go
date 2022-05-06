@@ -30,6 +30,20 @@ type appendBlobUploader struct {
 	appendBlobSenderBase
 
 	md5Channel chan []byte
+	sip        ISourceInfoProvider
+}
+
+func (u *appendBlobUploader) Prologue(ps common.PrologueState) (destinationModified bool) {
+	if unixSIP, ok := u.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
+		statAdapter, err := unixSIP.GetUNIXProperties()
+		if err != nil {
+			u.jptm.FailActiveSend("GetUNIXProperties", err)
+		}
+
+		AddStatToBlobMetadata(statAdapter, u.metadataToApply)
+	}
+
+	return false
 }
 
 func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
@@ -38,7 +52,7 @@ func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipel
 		return nil, err
 	}
 
-	return &appendBlobUploader{appendBlobSenderBase: *senderBase, md5Channel: newMd5Channel()}, nil
+	return &appendBlobUploader{appendBlobSenderBase: *senderBase, md5Channel: newMd5Channel(), sip: sip}, nil
 }
 
 func (u *appendBlobUploader) Md5Channel() chan<- []byte {
