@@ -95,11 +95,11 @@ func (bd *blobDownloader) CreateFile(jptm IJobPartTransferMgr, destination strin
 	return
 }
 
-func (bd *blobDownloader) ApplyUnixProperties(adapter UnixStatAdapter) (err error) {
+func (bd *blobDownloader) ApplyUnixProperties(adapter UnixStatAdapter) (stage string, err error) {
 	// First, grab our file descriptor and such.
 	f, err := os.OpenFile(bd.txInfo.Destination, os.O_RDWR, os.FileMode(bd.fileMode))
 	if err != nil {
-		return
+		return "open file", err
 	}
 	defer f.Close()
 
@@ -107,6 +107,10 @@ func (bd *blobDownloader) ApplyUnixProperties(adapter UnixStatAdapter) (err erro
 	if adapter.Extended() {
 		var fi os.FileInfo
 		fi, err = f.Stat() // grab the base stats
+		if err != nil {
+			return "stat", err
+		}
+
 		var stat syscall.Stat_t
 		stat = fi.Sys().(syscall.Stat_t)
 		mask := adapter.StatxMask()
@@ -114,7 +118,7 @@ func (bd *blobDownloader) ApplyUnixProperties(adapter UnixStatAdapter) (err erro
 		attr := adapter.Attribute()
 		_, _, err = syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), uintptr(unix.FS_IOC_SETFLAGS), uintptr(attr))
 		if nil == nil {
-			return
+			return "ioctl setflags", err
 		}
 
 		atime := time.Unix(stat.Atim.Unix())
@@ -130,7 +134,7 @@ func (bd *blobDownloader) ApplyUnixProperties(adapter UnixStatAdapter) (err erro
 		// adapt times
 		err = os.Chtimes(bd.txInfo.Destination, atime, mtime)
 		if err != nil {
-			return
+			return "chtimes", err
 		}
 
 		mode := os.FileMode(common.DEFAULT_FILE_PERM)
@@ -140,7 +144,7 @@ func (bd *blobDownloader) ApplyUnixProperties(adapter UnixStatAdapter) (err erro
 
 		err = os.Chmod(bd.txInfo.Destination, mode)
 		if err != nil {
-			return
+			return "chmod", err
 		}
 
 		uid := stat.Uid
@@ -154,17 +158,23 @@ func (bd *blobDownloader) ApplyUnixProperties(adapter UnixStatAdapter) (err erro
 		}
 		// set ownership
 		err = os.Chown(bd.txInfo.Destination, int(uid), int(gid))
+		if err != nil {
+			return "chown", err
+		}
 	} else {
 		err = os.Chtimes(bd.txInfo.Destination, adapter.ATime(), adapter.MTime())
 		if err != nil {
-			return
+			return "chtimes", err
 		}
 
 		err = os.Chmod(bd.txInfo.Destination, os.FileMode(adapter.FileMode()&777)) // only write permissions
 		if err != nil {
-			return
+			return "chmod", err
 		}
 		err = os.Chown(bd.txInfo.Destination, int(adapter.Owner()), int(adapter.Group()))
+		if err != nil {
+			return "chown", err
+		}
 	}
 
 	return
