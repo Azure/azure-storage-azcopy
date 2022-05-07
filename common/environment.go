@@ -318,7 +318,7 @@ func (EnvironmentVariable) CredentialType() EnvironmentVariable {
 func (EnvironmentVariable) DefaultServiceApiVersion() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:         "AZCOPY_DEFAULT_SERVICE_API_VERSION",
-		DefaultValue: "2020-04-08",
+		DefaultValue: "2020-10-02",
 		Description:  "Overrides the service API version so that AzCopy could accommodate custom environments such as Azure Stack.",
 	}
 }
@@ -363,9 +363,9 @@ func (EnvironmentVariable) MimeMapping() EnvironmentVariable {
 }
 
 func (EnvironmentVariable) DownloadToTempPath() EnvironmentVariable {
-	return EnvironmentVariable {
-		Name:        "AZCOPY_DOWNLOAD_TO_TEMP_PATH",
+	return EnvironmentVariable{
+		Name:         "AZCOPY_DOWNLOAD_TO_TEMP_PATH",
 		DefaultValue: "true",
-		Description: "Configures azcopy to download to a temp path before actual download. Allowed values are true/false",
+		Description:  "Configures azcopy to download to a temp path before actual download. Allowed values are true/false",
 	}
 }
