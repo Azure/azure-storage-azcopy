@@ -25,7 +25,7 @@ class FileShare_Upload_User_Scenario(unittest.TestCase):
     # util_test_file_upload_size_n_fullname verifies the azcopy upload of n*Bytes file as an Azure file with full file name.
     def util_test_file_upload_size_n_fullname(self, sizeInBytes=1):
         # create the test file.
-        file_name = "test_file_upload_%dB_fullname.vhd" % (sizeInBytes)
+        file_name = "test_file_upload_%dB_fullname" % (sizeInBytes)
         file_path = util.create_test_file(file_name, sizeInBytes)
 
         # execute azcopy upload.
@@ -40,7 +40,7 @@ class FileShare_Upload_User_Scenario(unittest.TestCase):
 
     def test_file_upload_1mb_wildcard(self):
         # create the test file.
-        file_name = "test_file_upload_1mb_wildcard.vhd"
+        file_name = "test_file_upload_1mb_wildcard"
         file_path = util.create_test_file(file_name, 1024 * 1024)
 
         # execute azcopy upload.
@@ -59,7 +59,7 @@ class FileShare_Upload_User_Scenario(unittest.TestCase):
     # complete empty file i.e each character is Null character.
     def test_file_range_for_complete_sparse_file(self):
         # create test file.
-        file_name = "sparse_file.vhd"
+        file_name = "sparse_file"
         file_path = util.create_complete_sparse_file(file_name, 4 * 1024 * 1024)
 
         # execute azcopy file upload.
@@ -79,7 +79,7 @@ class FileShare_Upload_User_Scenario(unittest.TestCase):
     # for azure file upload by azcopy.
     def test_file_upload_partial_sparse_file(self):
         # create test file.
-        file_name = "test_partial_sparse_file.vhd"
+        file_name = "test_partial_sparse_file"
         file_path = util.create_partial_sparse_file(file_name, 16 * 1024 * 1024)
 
         # execute azcopy file upload.
