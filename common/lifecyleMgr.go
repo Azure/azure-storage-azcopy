@@ -2,6 +2,7 @@ package common
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -11,7 +12,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-	"encoding/json"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 )
@@ -72,7 +72,7 @@ type LifecycleMgr interface {
 	SetForceLogging()
 	IsForceLoggingDisabled() bool
 	DownloadToTempPath() bool
-	MsgHandlerChannel()   <-chan *LCMMsg
+	MsgHandlerChannel() <-chan *LCMMsg
 	ReportAllJobPartsDone()
 }
 
@@ -126,7 +126,7 @@ func (lcm *lifecycleMgr) watchInputs() {
 		// remove spaces before/after the content
 		msg := strings.TrimSpace(input)
 		timeReceived := time.Now()
-		
+
 		select {
 		case <-lcm.waitForUserResponse:
 			lcm.inputQueue <- userInput{timeReceived: timeReceived, content: msg}
@@ -373,7 +373,7 @@ func (lcm *lifecycleMgr) Response(resp LCMMsgResp) {
 		respMsg = string(m)
 		PanicIfErr(err)
 	} else {
-		respMsg = fmt.Sprintf("Info: %v", resp.Value.String())
+		respMsg = fmt.Sprintf("INFO: %v", resp.Value.String())
 	}
 
 	respMsg = lcm.logSanitizer.SanitizeLogMessage(respMsg)
@@ -564,10 +564,10 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 				doCancel()
 				continue // to exit on next pass through loop
 			case <-lcm.doneChannel:
-				
-					newCount = jc.ReportProgressOrExit(lcm)
-					lastFetchTime = time.Now()
-			case <- time.After(wait):
+
+				newCount = jc.ReportProgressOrExit(lcm)
+				lastFetchTime = time.Now()
+			case <-time.After(wait):
 				if time.Since(lastFetchTime) >= wait {
 					newCount = jc.ReportProgressOrExit(lcm)
 					lastFetchTime = time.Now()
