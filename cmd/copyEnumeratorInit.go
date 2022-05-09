@@ -37,11 +37,29 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	if srcCredInfo, isPublic, err = GetCredentialInfoForLocation(ctx, cca.FromTo.From(), cca.Source.Value, cca.Source.SAS, true, cca.CpkOptions); err != nil {
 		return nil, err
 		// If S2S and source takes OAuthToken as its cred type (OR) source takes anonymous as its cred type, but it's not public and there's no SAS
-	} else if cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() &&
-		(srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() ||
+	} else if cca.FromTo.IsS2S() &&
+		((srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() && cca.FromTo.To() != common.ELocation.Blob()) || // Blob can forward OAuth tokens
 			(srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && !isPublic && cca.Source.SAS == "")) {
-		// TODO: Generate a SAS token if it's blob -> *
-		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource")
+		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource, or the destination is blob storage")
+	}
+
+	if cca.Source.SAS != "" && cca.FromTo.IsS2S() && jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+		glcm.Info("Authentication: If the source and destination accounts are in the same AAD tenant & the user/spn/msi has appropriate permissions on both, the source SAS token is not required and OAuth can be used round-trip.")
+	}
+
+	if cca.FromTo.IsS2S() {
+		jobPartOrder.S2SSourceCredentialType = srcCredInfo.CredentialType
+	}
+
+	if jobPartOrder.S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
+		uotm := GetUserOAuthTokenManagerInstance()
+		// get token from env var or cache
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+			return nil, err
+		} else {
+			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
+			jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo
+		}
 	}
 
 	jobPartOrder.CpkOptions = cca.CpkOptions

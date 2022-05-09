@@ -45,7 +45,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	}
 
 	if cca.fromTo.IsS2S() {
-		if cca.fromTo.From() != common.ELocation.S3() {
+		if cca.fromTo.From() != common.ELocation.S3() && cca.fromTo.From() != common.ELocation.Blob() { // blob and S3 don't necessarily require SAS tokens (S3 w/ access key, blob w/ copysourceauthorization)
 			// Adding files here seems like an odd case, but since files can't be public
 			// the second half of this if statement does not hurt.
 

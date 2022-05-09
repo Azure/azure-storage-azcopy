@@ -122,7 +122,7 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		}
 		_, err := c.destPageBlobURL.UploadPagesFromURL(
 			enrichedContext, c.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize, nil,
-			azblob.PageBlobAccessConditions{}, azblob.ModifiedAccessConditions{}, c.cpkToApply)
+			azblob.PageBlobAccessConditions{}, azblob.ModifiedAccessConditions{}, c.cpkToApply, c.jptm.GetS2SSourceBlobTokenCredential())
 		if err != nil {
 			c.jptm.FailActiveS2SCopy("Uploading page from URL", err)
 			return
