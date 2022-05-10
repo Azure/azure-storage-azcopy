@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"strings"
 	"time"
 
@@ -94,34 +95,6 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
 	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 
-	if jobDone {
-		exitCode := common.EExitCode.Success()
-		if summary.TransfersFailed > 0 {
-			exitCode = common.EExitCode.Error()
-		}
-
-		lcm.Exit(func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
-				jsonOutput, err := json.Marshal(summary)
-				common.PanicIfErr(err)
-				return string(jsonOutput)
-			} else {
-				return fmt.Sprintf(
-					"\n\nJob %s summary\nElapsed Time (Minutes): %v\nNumber of File Transfers: %v\nNumber of Folder Property Transfers: %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nTotalBytesTransferred: %v\nFinal Job Status: %v\n",
-					summary.JobID.String(),
-					ste.ToFixed(duration.Minutes(), 4),
-					summary.FileTransfers,
-					summary.FolderPropertyTransfers,
-					summary.TotalTransfers,
-					summary.TransfersCompleted,
-					summary.TransfersFailed,
-					summary.TransfersSkipped,
-					summary.TotalBytesTransferred,
-					summary.JobStatus)
-			}
-		}, exitCode)
-	}
-
 	var computeThroughput = func() float64 {
 		// compute the average throughput for the last time interval
 		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(base10Mega))
@@ -148,7 +121,7 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 			}
 
 			throughput := computeThroughput()
-			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", ste.ToFixed(throughput, 4))
+			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
 			if throughput == 0 {
 				// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
 				throughputString = ""
@@ -165,6 +138,35 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 				summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
 		}
 	})
+
+	if jobDone {
+		exitCode := common.EExitCode.Success()
+		if summary.TransfersFailed > 0 {
+			exitCode = common.EExitCode.Error()
+		}
+
+		lcm.Exit(func(format common.OutputFormat) string {
+			if format == common.EOutputFormat.Json() {
+				jsonOutput, err := json.Marshal(summary)
+				common.PanicIfErr(err)
+				return string(jsonOutput)
+			} else {
+				return fmt.Sprintf(
+					"\n\nJob %s summary\nElapsed Time (Minutes): %v\nNumber of File Transfers: %v\nNumber of Folder Property Transfers: %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nTotalBytesTransferred: %v\nFinal Job Status: %v\n",
+					summary.JobID.String(),
+					jobsAdmin.ToFixed(duration.Minutes(), 4),
+					summary.FileTransfers,
+					summary.FolderPropertyTransfers,
+					summary.TotalTransfers,
+					summary.TransfersCompleted,
+					summary.TransfersFailed,
+					summary.TransfersSkipped,
+					summary.TotalBytesTransferred,
+					summary.JobStatus)
+			}
+		}, exitCode)
+	}
+
 	return
 }
 

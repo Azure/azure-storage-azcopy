@@ -171,7 +171,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		// to correct name.
 		pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.CreateLocalFile())
-		dstFile, err = createDestinationFile(jptm, info.getTempDownloadPath(), fileSize, writeThrough)
+		dstFile, err = createDestinationFile(jptm, info.getDownloadPath(), fileSize, writeThrough)
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 		if err != nil {
 			failFileCreation(err)
@@ -342,7 +342,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 
 			// check length if enabled (except for dev null and decompression case, where that's impossible)
 			if info.DestLengthValidation && info.Destination != common.Dev_Null && !jptm.ShouldDecompress() {
-				fi, err := common.OSStat(info.getTempDownloadPath())
+				fi, err := common.OSStat(info.getDownloadPath())
 
 				if err != nil {
 					jptm.FailActiveDownload("Download length check", err)
@@ -351,14 +351,16 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 				}
 			}
 
-			//Rename back to original name. At this point, we're sure the file is completely
+			//check if we need to rename back to original name. At this point, we're sure the file is completely
 			//downloaded and not corrupt. Infact, post this point we should only log errors and
 			//not fail the transfer.
-			if err == nil && !strings.EqualFold(info.Destination, common.Dev_Null) {
-				renameErr := os.Rename(info.getTempDownloadPath(), info.Destination)
+			renameNecessary := !strings.EqualFold(info.getDownloadPath(), info.Destination) && 
+			                   !strings.EqualFold(info.Destination, common.Dev_Null)
+			if err == nil && renameNecessary {
+				renameErr := os.Rename(info.getDownloadPath(), info.Destination)
 				if renameErr != nil {
 					jptm.LogError(info.Destination, fmt.Sprintf(
-						"Failed to rename. File at %s", info.getTempDownloadPath()), renameErr)
+						"Failed to rename. File at %s", info.getDownloadPath()), renameErr)
 				}
 			}
 		}
@@ -461,19 +463,23 @@ func tryDeleteFile(info TransferInfo, jptm IJobPartTransferMgr) {
 		return
 	}
 
-	err := deleteFile(info.getTempDownloadPath())
+	err := deleteFile(info.getDownloadPath())
 	if err != nil {
 		// If there was an error deleting the file, log the error
 		jptm.LogError(info.Destination, "Delete File Error ", err)
 	}
 }
 
-//Returns the path of temp file to be downloaded. The paths is in format
+// Returns the path of file to be downloaded. If we want to
+// download to a temp path we return a temp paht in format 
 // /actual/parent/path/.azDownload-<jobID>-<actualFileName>
-func (info *TransferInfo) getTempDownloadPath() string {
-	parent, fileName := filepath.Split(info.Destination)
-	fileName = fmt.Sprintf(azcopyTempDownloadPrefix, info.JobID.String()) + fileName
-	return filepath.Join(parent, fileName)
+func (info *TransferInfo) getDownloadPath() string {
+	if common.GetLifecycleMgr().DownloadToTempPath() {
+		parent, fileName := filepath.Split(info.Destination)
+		fileName = fmt.Sprintf(azcopyTempDownloadPrefix, info.JobID.String()) + fileName
+		return filepath.Join(parent, fileName)
+	}
+	return info.Destination
 }
 
 // conforms to io.Writer and io.Closer

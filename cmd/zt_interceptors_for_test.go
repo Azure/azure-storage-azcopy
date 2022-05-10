@@ -82,6 +82,13 @@ type mockedLifecycleManager struct {
 	outputFormat common.OutputFormat
 }
 
+func (m *mockedLifecycleManager) DownloadToTempPath() bool {
+	return false
+}
+
+func (m *mockedLifecycleManager) ReportAllJobPartsDone() {
+}
+
 func (m *mockedLifecycleManager) Progress(o common.OutputBuilder) {
 	select {
 	case m.progressLog <- o(common.EOutputFormat.Text()):
@@ -165,6 +172,10 @@ func (*mockedLifecycleManager) GatherAllLogs(channel chan string) (result []stri
 	}
 
 	return
+}
+
+func (*mockedLifecycleManager) MsgHandlerChannel() <-chan *common.LCMMsg {
+	return nil
 }
 
 type dummyProcessor struct {

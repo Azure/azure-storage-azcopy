@@ -1,9 +1,9 @@
 package common
 
 import (
+	chk "gopkg.in/check.v1"
 	"net/url"
 	"strings"
-	chk "gopkg.in/check.v1"
 )
 
 type extensionsTestSuite struct{}
@@ -122,7 +122,7 @@ func (*extensionsTestSuite) TestRedaction(c *chk.C) {
 		}
 
 		c.Assert(len(expectedOutputParams), chk.Equals, len(actualOutputParams))
-		
+
 		var sigfound bool = false
 		for i := range expectedOutputParams {
 			expParam, expValue := strings.Split(expectedOutputParams[i], "=")[0], strings.Split(expectedOutputParams[i], "=")[1]

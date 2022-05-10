@@ -26,16 +26,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// loadCmd represents the load command
+// this command is deprecated
 var loadCmd = &cobra.Command{
-	Use: "load",
-	// Note: the help messages are kept in this file on purpose, to limit the footprint of the change (easier migration later)
-	Short: "Sub-commands related to transferring data in specific formats",
-	Long:  "Sub-commands related to transferring data in specific formats, such as Microsoft's Avere Cloud FileSystem (CLFS) format.",
-	Example: `
-Load an entire directory to a container with a SAS in CLFS format:
-  - azcopy load clfs "/path/to/dir" "https://[account].blob.core.windows.net/[container]?[SAS]" --state-path="/path/to/state/path"
-`,
+	Use:    "load",
+	Short:  "This command has been deprecated.",
+	Long:   "This command has been deprecated.",
+	Hidden: true,
 }
 
 func init() {

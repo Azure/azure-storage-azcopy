@@ -55,12 +55,12 @@ type ILoggerResetable interface {
 func NewAppLogger(minimumLevelToLog pipeline.LogLevel, logFileFolder string) ILoggerCloser {
 	// TODO: Put start date time in file Name
 	// TODO: log life time management.
-	//appLogFile, err := os.OpenFile(path.Join(logFileFolder, "azcopy.log"), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666) // TODO: Make constant for 0666
-	//PanicIfErr(err)
+	// appLogFile, err := os.OpenFile(path.Join(logFileFolder, "azcopy.log"), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666) // TODO: Make constant for 0666
+	// PanicIfErr(err)
 	return &appLogger{
 		minimumLevelToLog: minimumLevelToLog,
-		//file:              appLogFile,
-		//logger:            log.New(appLogFile, "", log.LstdFlags|log.LUTC),
+		// file:              appLogFile,
+		// logger:            log.New(appLogFile, "", log.LstdFlags|log.LUTC),
 	}
 }
 
@@ -81,23 +81,23 @@ func (al *appLogger) ShouldLog(level pipeline.LogLevel) bool {
 
 func (al *appLogger) CloseLog() {
 	// TODO consider delete completely to get rid of app logger
-	//al.logger.Println("Closing Log")
-	//err := al.file.Close()
-	//PanicIfErr(err)
+	// al.logger.Println("Closing Log")
+	// err := al.file.Close()
+	// PanicIfErr(err)
 }
 
 func (al *appLogger) Log(loglevel pipeline.LogLevel, msg string) {
 	// TODO consider delete completely to get rid of app logger
 	// TODO: see also the workaround in jobsAdmin.LogToJobLog
 	// TODO: if we DON'T delete, use azCopyLogSanitizer
-	//if al.ShouldLog(loglevel) {
+	// if al.ShouldLog(loglevel) {
 	//	al.logger.Println(msg)
-	//}
+	// }
 }
 
 func (al *appLogger) Panic(err error) {
 	// TODO consider delete completely to get rid of app logger
-	//al.logger.Panic(err)
+	// al.logger.Panic(err)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -110,7 +110,6 @@ type jobLogger struct {
 	file              *os.File          // The job's log file
 	logFileFolder     string            // The log file's parent folder, needed for opening the file at the right place
 	logger            *log.Logger       // The Job's logger
-	appLogger         ILogger
 	sanitizer         pipeline.LogSanitizer
 	logFileNameSuffix string // Used to allow more than 1 log per job, ex: front-end and back-end logs should be separate
 }
@@ -187,8 +186,8 @@ func (jl jobLogger) Log(loglevel pipeline.LogLevel, msg string) {
 }
 
 func (jl jobLogger) Panic(err error) {
-	jl.logger.Println(err)  // We do NOT panic here as the app would terminate; we just log it
-	jl.appLogger.Panic(err) // We panic here that it logs and the app terminates
+	jl.logger.Println(err) // We do NOT panic here as the app would terminate; we just log it
+	panic(err)
 	// We should never reach this line of code!
 }
 
@@ -222,4 +221,22 @@ func NewReadLogFunc(logger ILogger, fullUrl *url.URL) func(int, error, int64, in
 
 func IsForceLoggingDisabled() bool {
 	return GetLifecycleMgr().IsForceLoggingDisabled()
+}
+
+type S3HTTPTraceLogger struct {
+	logger   ILogger
+	logLevel pipeline.LogLevel
+}
+
+func NewS3HTTPTraceLogger(logger ILogger, level pipeline.LogLevel) S3HTTPTraceLogger {
+	return S3HTTPTraceLogger{
+		logger:   logger,
+		logLevel: level,
+	}
+}
+
+func (e S3HTTPTraceLogger) Write(msg []byte) (n int, err error) {
+	toPrint := string(msg)
+	e.logger.Log(e.logLevel, toPrint)
+	return len(toPrint), nil
 }

@@ -28,7 +28,7 @@ type IJobPartTransferMgr interface {
 	BlobTypeOverride() common.BlobType
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	JobHasLowFileCount() bool
-	//ScheduleChunk(chunkFunc chunkFunc)
+	// ScheduleChunk(chunkFunc chunkFunc)
 	Context() context.Context
 	SlicePool() common.ByteSlicePooler
 	CacheLimiter() common.CacheLimiter
@@ -91,6 +91,7 @@ type IJobPartTransferMgr interface {
 	CpkInfo() common.CpkInfo
 	CpkScopeInfo() common.CpkScopeInfo
 	IsSourceEncrypted() bool
+	GetS2SSourceBlobTokenCredential() azblob.TokenCredential
 }
 
 type TransferInfo struct {
@@ -127,7 +128,7 @@ func (i TransferInfo) IsFolderPropertiesTransfer() bool {
 // The main reason is that preserving folder LMTs at download time is very difficult, because it requires us to keep track of when the
 // last file has been saved in each folder OR just do all the folders at the very end.
 // This is because if we modify the contents of a folder after setting its LMT, then the LMT will change because Windows and Linux
-//(and presumably MacOS) automatically update the folder LMT when the contents are changed.
+// (and presumably MacOS) automatically update the folder LMT when the contents are changed.
 // The possible solutions to this problem may become difficult on very large jobs (e.g. 10s or hundreds of millions of files,
 // with millions of directories).
 // The secondary reason is that folder LMT's don't actually tell the user anything particularly useful. Specifically,
@@ -154,7 +155,7 @@ type SrcProperties struct {
 	SrcBlobTags    common.BlobTags
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 type chunkFunc func(int)
 
@@ -198,6 +199,23 @@ type jobPartTransferMgr struct {
 		@Parteek removed 3/23 morning, as jeff ad equivalent
 		// transfer chunks are put into this channel and execution engine takes chunk out of this channel.
 		chunkChannel chan<- ChunkMsg*/
+}
+
+func (jptm *jobPartTransferMgr) GetS2SSourceBlobTokenCredential() azblob.TokenCredential {
+	jpm := jptm.jobPartMgr.(*jobPartMgr)
+	credOption := common.CredentialOpOptions{
+		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
+		LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
+		Panic:    jpm.Panic,
+		CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
+		Cancel:   jpm.jobMgr.Cancel,
+	}
+
+	if jpm.jobMgr.getInMemoryTransitJobState().S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
+		return common.CreateBlobCredential(jptm.Context(), jptm.jobPartMgr.(*jobPartMgr).jobMgr.getInMemoryTransitJobState().CredentialInfo.WithType(common.ECredentialType.OAuthToken()), credOption).(azblob.TokenCredential)
+	} else {
+		return nil
+	}
 }
 
 func (jptm *jobPartTransferMgr) GetOverwritePrompter() *overwritePrompter {
@@ -547,7 +565,7 @@ func (jptm *jobPartTransferMgr) ReportChunkDone(id common.ChunkID) (lastChunk bo
 	// track progress
 	if jptm.IsLive() {
 		atomic.AddInt64(&jptm.atomicSuccessfulBytes, id.Length())
-		JobsAdmin.AddSuccessfulBytesInActiveFiles(id.Length())
+		jptm.jobPartMgr.(*jobPartMgr).jobMgr.AddSuccessfulBytesInActiveFiles(id.Length())
 	}
 
 	// Do our actual processing
@@ -555,7 +573,8 @@ func (jptm *jobPartTransferMgr) ReportChunkDone(id common.ChunkID) (lastChunk bo
 	lastChunk = chunksDone == jptm.numChunks
 	if lastChunk {
 		jptm.runActionAfterLastChunk()
-		JobsAdmin.AddSuccessfulBytesInActiveFiles(-atomic.LoadInt64(&jptm.atomicSuccessfulBytes)) // subtract our bytes from the active files bytes, because we are done now
+		jptm.jobPartMgr.(*jobPartMgr).jobMgr.AddSuccessfulBytesInActiveFiles(-atomic.LoadInt64(&jptm.atomicSuccessfulBytes))
+		// subtract our bytes from the active files bytes, because we are done now
 	}
 	return lastChunk, chunksDone
 }
@@ -761,13 +780,13 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 		jptm.SetErrorCode(int32(status)) // TODO: what are the rules about when this needs to be set, and doesn't need to be (e.g. for earlier failures)?
 		// If the status code was 403, it means there was an authentication error and we exit.
 		// User can resume the job if completely ordered with a new sas.
-		if status == http.StatusForbidden {
+		if status == http.StatusForbidden &&
+			!jptm.jobPartMgr.(*jobPartMgr).jobMgr.IsDaemon() {
 			// quit right away, since without proper authentication no work can be done
 			// display a clear message
 			common.GetLifecycleMgr().Info(fmt.Sprintf("Authentication failed, it is either not correct, or expired, or does not have the correct permission %s", err.Error()))
 			// and use the normal cancelling mechanism so that we can exit in a clean and controlled way
-			jobId := jptm.jobPartMgr.Plan().JobID
-			CancelPauseJobOrder(jobId, common.EJobStatus.Cancelling())
+			jptm.jobPartMgr.(*jobPartMgr).jobMgr.CancelPauseJobOrder(common.EJobStatus.Cancelling())
 			// TODO: this results in the final job output line being: Final Job Status: Cancelled
 			//     That's not ideal, because it would be better if it said Final Job Status: Failed
 			//     However, we don't have any way to distinguish "user cancelled after some failed files" from
@@ -899,7 +918,7 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 		panic("cannot report the same transfer done twice")
 	}
 
-	//Update Status Manager
+	// Update Status Manager
 	jptm.jobPartMgr.SendXferDoneMsg(xferDoneMsg{Src: jptm.Info().Source,
 		Dst:                jptm.Info().Destination,
 		IsFolderProperties: jptm.Info().IsFolderPropertiesTransfer(),

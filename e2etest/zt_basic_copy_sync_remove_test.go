@@ -28,7 +28,7 @@ import (
 
 // ================================  Copy And Sync: Upload, Download, and S2S  =========================================
 func TestBasic_CopyUploadSingleBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), anonymousAuthOnly, allCredentialTypes, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1K",
@@ -40,7 +40,7 @@ func TestBasic_CopyUploadSingleBlob(t *testing.T) {
 }
 
 func TestBasic_CopyUploadEmptyBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "0K",
@@ -52,7 +52,7 @@ func TestBasic_CopyUploadEmptyBlob(t *testing.T) {
 }
 
 func TestBasic_CopyUploadLargeBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, &hooks{
 		beforeTestRun: func(h hookHelper) {
@@ -68,7 +68,7 @@ func TestBasic_CopyUploadLargeBlob(t *testing.T) {
 }
 
 func TestBasic_CopyDownloadSingleBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), allCredentialTypes, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1K",
@@ -80,7 +80,7 @@ func TestBasic_CopyDownloadSingleBlob(t *testing.T) {
 }
 
 func TestBasic_CopyDownloadEmptyBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "0K",
@@ -92,7 +92,7 @@ func TestBasic_CopyDownloadEmptyBlob(t *testing.T) {
 }
 
 func TestBasic_CopyDownloadLargeBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, &hooks{
 		beforeTestRun: func(h hookHelper) {
@@ -108,7 +108,8 @@ func TestBasic_CopyDownloadLargeBlob(t *testing.T) {
 }
 
 func TestBasic_CopyS2SSingleBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), params{
+	// AllCredentialTypes on both sides allows us to test OAuth-OAuth
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), allCredentialTypes, allCredentialTypes, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1K",
@@ -119,7 +120,7 @@ func TestBasic_CopyS2SSingleBlob(t *testing.T) {
 }
 
 func TestBasic_CopyS2SEmptyBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "0K",
@@ -130,7 +131,7 @@ func TestBasic_CopyS2SEmptyBlob(t *testing.T) {
 }
 
 func TestBasic_CopyS2SLargeBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, &hooks{
 		beforeTestRun: func(h hookHelper) {
@@ -145,7 +146,7 @@ func TestBasic_CopyS2SLargeBlob(t *testing.T) {
 }
 
 func TestBasic_CopyUploadDir(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1M",
@@ -163,7 +164,7 @@ func TestBasic_CopyUploadDir(t *testing.T) {
 }
 
 func TestBasic_CopyDownloadDir(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1M",
@@ -181,7 +182,7 @@ func TestBasic_CopyDownloadDir(t *testing.T) {
 }
 
 func TestBasic_CopyS2SDir(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1M",
@@ -200,8 +201,7 @@ func TestBasic_CopyS2SDir(t *testing.T) {
 
 // ================================  Remove: File, Folder, and Container  ==============================================
 func TestBasic_CopyRemoveFile(t *testing.T) {
-
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), allCredentialTypes, anonymousAuthOnly, params{
 		relativeSourcePath: "file2.txt",
 	}, nil, testFiles{
 		defaultSize: "1K",
@@ -215,7 +215,7 @@ func TestBasic_CopyRemoveFile(t *testing.T) {
 }
 
 func TestBasic_CopyRemoveLargeFile(t *testing.T) {
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		relativeSourcePath: "file2.txt",
 	}, &hooks{
 		beforeTestRun: func(h hookHelper) {
@@ -234,7 +234,7 @@ func TestBasic_CopyRemoveLargeFile(t *testing.T) {
 
 func TestBasic_CopyRemoveFolder(t *testing.T) {
 
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:          true,
 		relativeSourcePath: "folder2/",
 	}, nil, testFiles{
@@ -253,7 +253,7 @@ func TestBasic_CopyRemoveFolder(t *testing.T) {
 
 func TestBasic_CopyRemoveContainer(t *testing.T) {
 
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:          true,
 		relativeSourcePath: "",
 	}, nil, testFiles{
@@ -279,7 +279,7 @@ func TestBasic_CopyToWrongBlobType(t *testing.T) {
 				continue
 			}
 
-			RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob(), common.EFromTo.LocalBlob()), eValidate.Auto(), params{
+			RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob(), common.EFromTo.LocalBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 				recursive:              true,
 				blobType:               src.String(),
 				stripTopDir:            true,
@@ -313,6 +313,8 @@ func TestBasic_CopyWithShareRoot(t *testing.T) {
 		eOperation.Copy(), // Sync already shares the root by default.
 		eTestFromTo.AllUploads(),
 		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
 		params{
 			recursive:        true,
 			invertedAsSubdir: true,

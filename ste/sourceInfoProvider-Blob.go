@@ -63,7 +63,7 @@ func (p *blobSourceInfoProvider) AccessControl() (azbfs.BlobFSAccessControl, err
 
 func (p *blobSourceInfoProvider) BlobTier() azblob.AccessTierType {
 	return p.transferInfo.S2SSrcBlobTier
-} 
+}
 
 func (p *blobSourceInfoProvider) BlobType() azblob.BlobType {
 	return p.transferInfo.SrcBlobType

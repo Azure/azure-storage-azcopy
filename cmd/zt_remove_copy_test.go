@@ -41,6 +41,6 @@ func (s *cmdIntegrationSuite) TestCopyBlobsWithDirectoryStubsS2S(c *chk.C) {
 
 		// validate that the right transfers were sent
 		expectedTransfers := scenarioHelper{}.shaveOffPrefix(blobAndDirStubsList, strings.TrimSuffix(vdirName, "/"))
-		validateCopyTransfersAreScheduled(c, true, true, vdirName, "/vdir1",expectedTransfers, mockedRPC)
+		validateCopyTransfersAreScheduled(c, true, true, vdirName, "/vdir1", expectedTransfers, mockedRPC)
 	})
 }

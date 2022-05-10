@@ -55,8 +55,8 @@ func (t *s3ServiceTraverser) IsDirectory(isSource bool) bool {
 func (t *s3ServiceTraverser) listContainers() ([]string, error) {
 	if len(t.cachedBuckets) == 0 {
 		bucketList := make([]string, 0)
-
-		if bucketInfo, err := t.s3Client.ListBuckets(); err == nil {
+		bucketInfo, err := t.s3Client.ListBuckets()
+		if err == nil {
 			for _, v := range bucketInfo {
 				// Match a pattern for the bucket name and the bucket name only
 				if t.bucketPattern != "" {
@@ -120,6 +120,7 @@ func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor obje
 		}
 	}
 
+	t.s3Client.TraceOff()
 	return nil
 }
 
@@ -142,17 +143,13 @@ func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, getProperties b
 
 	t.s3URL = s3URLPartsExtension{s3URLParts}
 
-	t.s3Client, err = common.CreateS3Client(
-		t.ctx,
-		common.CredentialInfo{
-			CredentialType: common.ECredentialType.S3AccessKey(),
-			S3CredentialInfo: common.S3CredentialInfo{
-				Endpoint: t.s3URL.Endpoint,
-			},
+	t.s3Client, err = common.CreateS3Client(t.ctx, common.CredentialInfo{
+		CredentialType: common.ECredentialType.S3AccessKey(),
+		S3CredentialInfo: common.S3CredentialInfo{
+			Endpoint: t.s3URL.Endpoint,
 		},
-		common.CredentialOpOptions{
-			LogError: glcm.Error,
-		})
-
+	}, common.CredentialOpOptions{
+		LogError: glcm.Error,
+	}, azcopyScanningLogger)
 	return
 }

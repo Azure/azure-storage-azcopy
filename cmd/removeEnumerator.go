@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -70,13 +71,13 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	// (Must enumerate folders when deleting from a folder-aware location. Can't do folder deletion just based on file
 	// deletion, because that would not handle folders that were empty at the start of the job).
 	// isHNStoHNS is IGNORED here, because BlobFS locations don't take this route currently.
-	fpo, message := newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false)
+	fpo, message := newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, false)
 	// do not print Info message if in dry run mode
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
-	if ste.JobsAdmin != nil {
-		ste.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
+	if jobsAdmin.JobsAdmin != nil {
+		jobsAdmin.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
 	}
 
 	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo)

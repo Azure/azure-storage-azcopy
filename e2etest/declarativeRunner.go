@@ -33,6 +33,67 @@ import (
 // In particular, it lets one test cover a range of different source/dest types, and even cover both sync and copy.
 // See first test in zt_enumeration for an annotated example.
 
+var validCredTypesPerLocation = map[common.Location][]common.CredentialType{
+	common.ELocation.Unknown(): {common.ECredentialType.Unknown(), common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()}, // Delete!
+	common.ELocation.File():    {common.ECredentialType.Anonymous()},
+	common.ELocation.Blob():    {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
+	common.ELocation.BlobFS():  {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()}, // todo: currently, account key auth isn't even supported in e2e tests.
+	common.ELocation.Local():   {common.ECredentialType.Anonymous()},
+	common.ELocation.Pipe():    {common.ECredentialType.Anonymous()},
+	common.ELocation.S3():      {common.ECredentialType.S3AccessKey()},
+	common.ELocation.GCP():     {common.ECredentialType.GoogleAppCredentials()},
+}
+
+var allCredentialTypes []common.CredentialType = nil
+
+// var oAuthOnly = []common.CredentialType{common.ECredentialType.OAuthToken()}
+var anonymousAuthOnly = []common.CredentialType{common.ECredentialType.Anonymous()}
+
+func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredentialTypesSrc, requestedCredentialTypesDst []common.CredentialType) [][2]common.CredentialType {
+	output := make([][2]common.CredentialType, 0)
+
+	credIsRequested := func(cType common.CredentialType, dst bool) bool {
+		if (dst && requestedCredentialTypesDst == nil) || (!dst && requestedCredentialTypesSrc == nil) {
+			return true
+		}
+
+		toSearch := requestedCredentialTypesSrc
+		if dst {
+			toSearch = requestedCredentialTypesDst
+		}
+
+		for _, v := range toSearch {
+			if v == cType {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	// determine source types
+	var sourceTypes []common.CredentialType
+	if fromTo.IsS2S() && fromTo != common.EFromTo.BlobBlob() {
+		// source must always be anonymous-- no exceptions until OAuth over S2S is introduced.
+		sourceTypes = []common.CredentialType{common.ECredentialType.Anonymous()}
+	} else {
+		sourceTypes = validCredTypesPerLocation[fromTo.From()]
+	}
+
+	for _, srcCredType := range sourceTypes {
+		for _, dstCredType := range validCredTypesPerLocation[fromTo.To()] {
+			// make sure the user asked for this.
+			if !(credIsRequested(srcCredType, false) && credIsRequested(dstCredType, true)) {
+				continue
+			}
+
+			output = append(output, [2]common.CredentialType{srcCredType, dstCredType})
+		}
+	}
+
+	return output
+}
+
 // RunScenarios is the key entry point for declarative testing.
 // It constructs and executes scenarios (subtest in Go-speak), according to its parameters, and checks their results
 func RunScenarios(
@@ -40,8 +101,14 @@ func RunScenarios(
 	operations Operation,
 	testFromTo TestFromTo,
 	validate Validate, // TODO: do we really want the test author to have to nominate which validation should happen?  Pros: better perf of tests. Cons: they have to tell us, and if they tell us wrong test may not test what they think it tests
-	/*_ interface{}, // TODO if we want it??, blockBLobsOnly or specifc/all blob types
-	  _ interface{}, // TODO if we want it??, default auth type only, or specific/all auth types*/
+	// _ interface{}, // TODO if we want it??, blockBLobsOnly or specifc/all blob types
+
+	// It would be a pain to list out every combo by hand,
+	// In addition to the fact that not every credential type is sensible.
+	// Thus, the E2E framework takes in a requested set of credential types, and applies them where sensible.
+	// This allows you to make tests use OAuth only, SAS only, etc.
+	requestedCredentialTypesSrc []common.CredentialType,
+	requestedCredentialTypesDst []common.CredentialType,
 	p params,
 	hs *hooks,
 	fs testFiles,
@@ -58,7 +125,7 @@ func RunScenarios(
 	}
 
 	// construct all the scenarios
-	scenarios := make([]scenario, 0, 16)
+	scenarios := make([]scenario, 0)
 	for _, op := range operations.getValues() {
 		if op == eOperation.Resume() {
 			continue
@@ -73,44 +140,43 @@ func RunScenarios(
 			}
 			seenFromTos[fromTo] = true
 
-			// Create unique name for generating container names
-			compactScenarioName := fmt.Sprintf("%.4s-%s-%c-%c%c", suiteName, testName, op.String()[0], fromTo.From().String()[0], fromTo.To().String()[0])
-			fullScenarioName := fmt.Sprintf("%s.%s.%s-%s", suiteName, testName, op.String(), fromTo.String())
+			credentialTypes := getValidCredCombinationsForFromTo(fromTo, requestedCredentialTypesSrc, requestedCredentialTypesDst)
 
-			// Sub-test name is not globally unique (it doesn't need to be) but it is more human-readable
-			subtestName := fmt.Sprintf("%s-%s", op, fromTo)
-			if scenarioSuffix != "" {
-				subtestName += "-" + scenarioSuffix
-			}
+			for _, credTypes := range credentialTypes {
+				// Create unique name for generating container names
+				compactScenarioName := fmt.Sprintf("%.4s-%s-%c-%c%c", suiteName, testName, op.String()[0], fromTo.From().String()[0], fromTo.To().String()[0])
+				fullScenarioName := fmt.Sprintf("%s.%s.%s-%s", suiteName, testName, op.String(), fromTo.String())
+				// Sub-test name is not globally unique (it doesn't need to be) but it is more human-readable
+				subtestName := fmt.Sprintf("%s-%s", op, fromTo)
 
-			hsToUse := hooks{}
-			if hs != nil {
-				hsToUse = *hs
-			}
+				hsToUse := hooks{}
+				if hs != nil {
+					hsToUse = *hs
+				}
 
-			// Handles destination being different account type
-			isSourceAcc := true
-			if destAccountType != accountType {
-				isSourceAcc = false
-			}
-			s := scenario{
-				srcAccountType:      accountType,
-				destAccountType:     destAccountType,
-				subtestName:         subtestName,
-				compactScenarioName: compactScenarioName,
-				fullScenarioName:    fullScenarioName,
-				operation:           op,
-				fromTo:              fromTo,
-				validate:            validate,
-				p:                   p, // copies them, because they are a struct. This is what we need, since they may be morphed while running
-				hs:                  hsToUse,
-				fs:                  fs.DeepCopy(),
-				needResume:          operations&eOperation.Resume() != 0,
-				stripTopDir:         p.stripTopDir,
-				isSourceAcc:         isSourceAcc,
-			}
+				if scenarioSuffix != "" {
+					subtestName += "-" + scenarioSuffix
+				}
 
-			scenarios = append(scenarios, s)
+				s := scenario{
+					srcAccountType:      accountType,
+					destAccountType:     destAccountType,
+					subtestName:         subtestName,
+					compactScenarioName: compactScenarioName,
+					fullScenarioName:    fullScenarioName,
+					operation:           op,
+					fromTo:              fromTo,
+					credTypes:           credTypes,
+					validate:            validate,
+					p:                   p, // copies them, because they are a struct. This is what we need, since they may be morphed while running
+					hs:                  hsToUse,
+					fs:                  fs.DeepCopy(),
+					needResume:          operations&eOperation.Resume() != 0,
+					stripTopDir:         p.stripTopDir,
+				}
+
+				scenarios = append(scenarios, s)
+			}
 		}
 	}
 
@@ -122,22 +188,28 @@ func RunScenarios(
 	// run them in parallel if not debugging, but sequentially (for easier debugging) if a debugger is attached
 	parallel := !isLaunchedByDebugger && !p.disableParallelTesting // this only works if gops.exe is on your path. See azcopyDebugHelper.go for instructions.
 	for _, s := range scenarios {
-		sen := s // capture to separate var inside the loop, for the parallel case
 		// use t.Run to get proper sub-test support
 		t.Run(s.subtestName, func(t *testing.T) {
-			if parallel {
-				t.Parallel() // tell testing that it can run stuff in parallel with us
-			}
-			// set asserter now (and only now), since before this point we don't have the right "t"
-			sen.a = &testingAsserter{
-				t:                   t,
-				fullScenarioName:    sen.fullScenarioName,
-				compactScenarioName: sen.compactScenarioName,
-			}
-			if hs != nil {
-				sen.runHook(hs.beforeTestRun)
-			}
-			sen.Run()
+			sen := s // capture to separate var inside the loop, for the parallel case
+			credNames := fmt.Sprintf("%s-%s", s.credTypes[0].String(), s.credTypes[1].String())
+
+			t.Run(credNames, func(t *testing.T) {
+				if parallel {
+					t.Parallel() // tell testing that it can run stuff in parallel with us
+				}
+				// set asserter now (and only now), since before this point we don't have the right "t"
+				sen.a = &testingAsserter{
+					t:                   t,
+					fullScenarioName:    sen.fullScenarioName,
+					compactScenarioName: sen.compactScenarioName,
+				}
+
+				if hs != nil {
+					sen.runHook(hs.beforeTestRun)
+				}
+
+				sen.Run()
+			})
 		})
 	}
 }

@@ -498,7 +498,7 @@ func (s *cmdIntegrationSuite) TestDryrunRemoveSingleBlob(c *chk.C) {
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) //text format
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -512,7 +512,7 @@ func (s *cmdIntegrationSuite) TestDryrunRemoveSingleBlob(c *chk.C) {
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
 
 		msg := <-mockedLcm.dryrunLog
-		//comparing message printed for dry run
+		// comparing message printed for dry run
 		c.Check(strings.Contains(msg, "DRYRUN: remove"), chk.Equals, true)
 		c.Check(strings.Contains(msg, containerURL.String()), chk.Equals, true)
 		c.Check(strings.Contains(msg, blobName[0]), chk.Equals, true)
@@ -533,7 +533,7 @@ func (s *cmdIntegrationSuite) TestDryrunRemoveBlobsUnderContainer(c *chk.C) {
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) //text format
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -571,7 +571,7 @@ func (s *cmdIntegrationSuite) TestDryrunRemoveBlobsUnderContainerJson(c *chk.C) 
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Json()) //json format
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Json()) // json format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -588,7 +588,7 @@ func (s *cmdIntegrationSuite) TestDryrunRemoveBlobsUnderContainerJson(c *chk.C) 
 		deleteTransfer := common.CopyTransfer{}
 		errMarshal := json.Unmarshal([]byte(msg), &deleteTransfer)
 		c.Assert(errMarshal, chk.IsNil)
-		//comparing some values of deleteTransfer
+		// comparing some values of deleteTransfer
 		c.Check(strings.Compare(deleteTransfer.Source, blobName[0]), chk.Equals, 0)
 		c.Check(strings.Compare(deleteTransfer.Destination, blobName[0]), chk.Equals, 0)
 		c.Check(strings.Compare(deleteTransfer.EntityType.String(), common.EEntityType.File().String()), chk.Equals, 0)
@@ -723,7 +723,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDirWithFromTo(c *chk.C)
 func (s *cmdIntegrationSuite) TestPermDeleteSnapshotsVersionsUnderSingleBlob(c *chk.C) {
 	serviceURL := setUpAccountPermDelete(c)
 	os.Setenv("AZCOPY_DISABLE_HIERARCHICAL_SCAN", "true")
-	
+
 	time.Sleep(time.Second * 10)
 
 	// set up the container with numerous blobs

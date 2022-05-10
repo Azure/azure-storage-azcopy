@@ -34,6 +34,18 @@ import (
 // the general guidance is to take in as few parameters as possible
 type GlobalInputManager struct{}
 
+func (GlobalInputManager) GetServicePrincipalAuth() (tenantID string, applicationID string, clientSecret string) {
+	tenantID = os.Getenv("AZCOPY_E2E_TENANT_ID")
+	applicationID = os.Getenv("AZCOPY_E2E_APPLICATION_ID")
+	clientSecret = os.Getenv("AZCOPY_E2E_CLIENT_SECRET")
+
+	if applicationID == "" || clientSecret == "" {
+		panic("Insufficient information was supplied for service principal authentication")
+	}
+
+	return
+}
+
 func (GlobalInputManager) GetAccountAndKey(accountType AccountType) (string, string) {
 	var name, key string
 
