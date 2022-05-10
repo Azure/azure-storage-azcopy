@@ -853,6 +853,13 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	cooked.dryrunMode = raw.dryrun
 
+	if cooked.ForceWrite == common.EOverwriteOption.Prompt() && (azcopyOutputVerbosity == common.EOutputVerbosity.Quiet() || azcopyOutputVerbosity == common.EOutputVerbosity.Essential()) { //TODO add to other commands
+		err = fmt.Errorf("cannot set output level '%s' with overwrite option '%s'", azcopyOutputVerbosity.String(), cooked.ForceWrite.String())
+	}
+	if err != nil {
+		return cooked, err
+	}
+
 	return cooked, nil
 }
 
@@ -1811,6 +1818,7 @@ func init() {
 			if err != nil {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 			}
+			glcm.SetOutputVerbosity(azcopyOutputVerbosity) // TODO add this to all commands
 
 			glcm.Info("Scanning...")
 
