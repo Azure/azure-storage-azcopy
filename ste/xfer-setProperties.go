@@ -62,17 +62,16 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 
 	if PropertiesToTransfer.ShouldTransferTier() {
 		rehydratePriority := info.RehydratePriority
-		fmt.Println("Rehydrate priority unused- " + rehydratePriority) //this line is a personal reminder and will be removed when https://github.com/Azure/azure-storage-blob-go/pull/319 is merged
 		blockBlobTier, pageBlobTier := jptm.BlobTiers()
 
 		var err error = nil
 		if ValidateTier(jptm, blockBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context()) {
-			_, err = srcBlobURL.SetTier(jptm.Context(), blockBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
+			_, err = srcBlobURL.SetTier(jptm.Context(), blockBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{}, rehydratePriority)
 		}
 		// cannot return true for >1, therefore only one of these will run
 		// TODO how to prevent this line from creating an INFO: statement?
 		if ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context()) {
-			_, err = srcBlobURL.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
+			_, err = srcBlobURL.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{}, rehydratePriority)
 		}
 
 		if err != nil {
@@ -122,10 +121,11 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	_, metadata, blobTags, _ := jptm.ResourceDstData(nil) // TODO what is this arg we're passing?
 
 	if PropertiesToTransfer.ShouldTransferTier() {
+		rehydratePriority := info.RehydratePriority
 		_, pageBlobTier := jptm.BlobTiers()
 		var err error = nil
 		if ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context()) {
-			_, err = srcBlobURL.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
+			_, err = srcBlobURL.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{}, rehydratePriority)
 		}
 
 		if err != nil {
