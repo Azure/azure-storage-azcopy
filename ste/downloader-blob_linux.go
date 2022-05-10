@@ -29,12 +29,12 @@ func (bd *blobDownloader) CreateFile(jptm IJobPartTransferMgr, destination strin
 	needChunks = size > 0
 	needMakeFile := true
 	var mode = uint32(common.DEFAULT_FILE_PERM)
-	if unixSIP.HasUNIXProperties() {
-		var stat UnixStatAdapter
+	if bd.jptm.Info().PreservePOSIXProperties.IsTruthy() && unixSIP.HasUNIXProperties() {
+		var stat common.UnixStatAdapter
 		stat, err = unixSIP.GetUNIXProperties()
 
 		if stat.Extended() {
-			if stat.StatxMask()&STATX_MODE == STATX_MODE { // We need to retain access to the file until we're well & done with it
+			if stat.StatxMask()&common.STATX_MODE == common.STATX_MODE { // We need to retain access to the file until we're well & done with it
 				mode = stat.FileMode() | common.DEFAULT_FILE_PERM
 			}
 		} else {
@@ -43,19 +43,19 @@ func (bd *blobDownloader) CreateFile(jptm IJobPartTransferMgr, destination strin
 
 		if mode != 0 { // Folders are not necessary to handle
 			switch {
-			case mode&S_IFBLK == S_IFBLK || mode&S_IFCHR == S_IFCHR:
+			case mode&common.S_IFBLK == common.S_IFBLK || mode&common.S_IFCHR == common.S_IFCHR:
 				// the file is representative of a device and does not need to be written to
 				err = unix.Mknod(destination, mode, int(stat.RDevice()))
 
 				needChunks = false
 				needMakeFile = false
-			case mode&S_IFIFO == S_IFIFO || mode&S_IFSOCK == S_IFSOCK:
+			case mode&common.S_IFIFO == common.S_IFIFO || mode&common.S_IFSOCK == common.S_IFSOCK:
 				// the file is a pipe and does not need to be written to
 				err = unix.Mknod(destination, mode, 0)
 
 				needChunks = false
 				needMakeFile = false
-			case mode&S_IFLNK == S_IFLNK:
+			case mode&common.S_IFLNK == common.S_IFLNK:
 				// the file is a symlink and does not need to be written to
 				// TODO: cause symlinks to be uploaded this way
 				// TODO: get link path
@@ -95,7 +95,7 @@ func (bd *blobDownloader) CreateFile(jptm IJobPartTransferMgr, destination strin
 	return
 }
 
-func (bd *blobDownloader) ApplyUnixProperties(adapter UnixStatAdapter) (stage string, err error) {
+func (bd *blobDownloader) ApplyUnixProperties(adapter common.UnixStatAdapter) (stage string, err error) {
 	// First, grab our file descriptor and such.
 	f, err := os.OpenFile(bd.txInfo.Destination, os.O_RDWR, os.FileMode(bd.fileMode))
 	if err != nil {
@@ -117,17 +117,17 @@ func (bd *blobDownloader) ApplyUnixProperties(adapter UnixStatAdapter) (stage st
 
 		attr := adapter.Attribute()
 		_, _, err = syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), uintptr(unix.FS_IOC_SETFLAGS), uintptr(attr))
-		if nil == nil {
+		if err != nil {
 			return "ioctl setflags", err
 		}
 
 		atime := time.Unix(stat.Atim.Unix())
-		if statxReturned(mask, STATX_ATIME) {
+		if common.StatXReturned(mask, common.STATX_ATIME) {
 			atime = adapter.ATime()
 		}
 
 		mtime := time.Unix(stat.Mtim.Unix())
-		if statxReturned(mask, STATX_MTIME) {
+		if common.StatXReturned(mask, common.STATX_MTIME) {
 			mtime = adapter.MTime()
 		}
 
@@ -138,7 +138,7 @@ func (bd *blobDownloader) ApplyUnixProperties(adapter UnixStatAdapter) (stage st
 		}
 
 		mode := os.FileMode(common.DEFAULT_FILE_PERM)
-		if statxReturned(mask, STATX_MODE) {
+		if common.StatXReturned(mask, common.STATX_MODE) {
 			mode = os.FileMode(adapter.FileMode() & 777)
 		}
 
@@ -148,12 +148,12 @@ func (bd *blobDownloader) ApplyUnixProperties(adapter UnixStatAdapter) (stage st
 		}
 
 		uid := stat.Uid
-		if statxReturned(mask, STATX_UID) {
+		if common.StatXReturned(mask, common.STATX_UID) {
 			uid = adapter.Owner()
 		}
 
 		gid := stat.Gid
-		if statxReturned(mask, STATX_GID) {
+		if common.StatXReturned(mask, common.STATX_GID) {
 			gid = adapter.Group()
 		}
 		// set ownership

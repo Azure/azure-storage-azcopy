@@ -31,14 +31,14 @@ const JobPartPlanFileNameFormat = "%v--%05d.steV%d"
 // TODO: This needs testing
 func (jpfn JobPartPlanFileName) Parse() (jobID common.JobID, partNumber common.PartNumber, err error) {
 	var dataSchemaVersion common.Version
-	//n, err := fmt.Sscanf(string(jpfn), jobPartPlanFileNameFormat, &jobID, &partNumber, &dataSchemaVersion)
-	//if err != nil || n != 3 {
+	// n, err := fmt.Sscanf(string(jpfn), jobPartPlanFileNameFormat, &jobID, &partNumber, &dataSchemaVersion)
+	// if err != nil || n != 3 {
 	//	panic(err)
-	//}
-	//if dataSchemaVersion != DataSchemaVersion {
+	// }
+	// if dataSchemaVersion != DataSchemaVersion {
 	//	err = fmt.Errorf("job part Plan file's data schema version ('%d') doesn't match whatthis app requires ('%d')", dataSchemaVersion, DataSchemaVersion)
-	//}
-	//TODO: confirm the alternative approach. fmt.Sscanf not working for reading back string into struct JobId.
+	// }
+	// TODO: confirm the alternative approach. fmt.Sscanf not working for reading back string into struct JobId.
 	jpfnSplit := strings.Split(string(jpfn), "--")
 	jobId, err := common.ParseJobID(jpfnSplit[0])
 	if err != nil {
@@ -137,7 +137,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	 */
 
 	// create the Job Part Plan file
-	//planPathname := planDir + "/" + string(jpfn)
+	// planPathname := planDir + "/" + string(jpfn)
 	file, err := os.Create(jpfn.GetJobPartPlanPath())
 	if err != nil {
 		panic(fmt.Errorf("couldn't create job part plan file %q: %v", jpfn, err))
@@ -150,7 +150,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	// it means that user provided some block-size and  auto-correct will not
 	// apply.
 	blockSize := order.BlobAttributes.BlockSizeInBytes
-	//if blockSize == 0 { // TODO: Fix below
+	// if blockSize == 0 { // TODO: Fix below
 	//	blockSize = common.DefaultBlockBlobBlockSize
 	//	/*switch order.BlobAttributes.BlobType {
 	//	case common.BlobType{}.Block():
@@ -162,7 +162,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	//	default:
 	//		panic(errors.New("unrecognized blob type"))
 	//	}*/
-	//}
+	// }
 	// Initialize the Job Part's Plan header
 	jpph := JobPartPlanHeader{
 		Version:                DataSchemaVersion,
@@ -206,8 +206,9 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			PreserveLastModifiedTime: order.BlobAttributes.PreserveLastModifiedTime,
 			MD5VerificationOption:    order.BlobAttributes.MD5ValidationOption, // here because it relates to downloads (file destination)
 		},
-		PreservePermissions: order.PreserveSMBPermissions,
-		PreserveSMBInfo:     order.PreserveSMBInfo,
+		PreservePermissions:     order.PreserveSMBPermissions,
+		PreserveSMBInfo:         order.PreserveSMBInfo,
+		PreservePOSIXProperties: order.PreservePOSIXProperties,
 		// For S2S copy, per JobPartPlan info
 		S2SGetPropertiesInBackend:      order.S2SGetPropertiesInBackend,
 		S2SSourceChangeValidation:      order.S2SSourceChangeValidation,
@@ -311,7 +312,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			SrcBlobTagsLength:           int16(srcBlobTagsLength),
 
 			atomicTransferStatus: common.ETransferStatus.Started(), // Default
-			//ChunkNum:                getNumChunks(uint64(order.Transfers.List[t].SourceSize), uint64(data.BlockSize)),
+			// ChunkNum:                getNumChunks(uint64(order.Transfers.List[t].SourceSize), uint64(data.BlockSize)),
 		}
 		eof += writeValue(file, &jppt) // Write the transfer entry
 

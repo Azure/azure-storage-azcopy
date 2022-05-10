@@ -28,7 +28,7 @@ type IJobPartTransferMgr interface {
 	BlobTypeOverride() common.BlobType
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	JobHasLowFileCount() bool
-	//ScheduleChunk(chunkFunc chunkFunc)
+	// ScheduleChunk(chunkFunc chunkFunc)
 	Context() context.Context
 	SlicePool() common.ByteSlicePooler
 	CacheLimiter() common.CacheLimiter
@@ -94,14 +94,15 @@ type IJobPartTransferMgr interface {
 }
 
 type TransferInfo struct {
-	JobID                  common.JobID
-	BlockSize              int64
-	Source                 string
-	SourceSize             int64
-	Destination            string
-	EntityType             common.EntityType
-	PreserveSMBPermissions common.PreservePermissionsOption
-	PreserveSMBInfo        bool
+	JobID                   common.JobID
+	BlockSize               int64
+	Source                  string
+	SourceSize              int64
+	Destination             string
+	EntityType              common.EntityType
+	PreserveSMBPermissions  common.PreservePermissionsOption
+	PreserveSMBInfo         bool
+	PreservePOSIXProperties common.PosixPropertiesOption
 
 	// Transfer info for S2S copy
 	SrcProperties
@@ -127,7 +128,7 @@ func (i TransferInfo) IsFolderPropertiesTransfer() bool {
 // The main reason is that preserving folder LMTs at download time is very difficult, because it requires us to keep track of when the
 // last file has been saved in each folder OR just do all the folders at the very end.
 // This is because if we modify the contents of a folder after setting its LMT, then the LMT will change because Windows and Linux
-//(and presumably MacOS) automatically update the folder LMT when the contents are changed.
+// (and presumably MacOS) automatically update the folder LMT when the contents are changed.
 // The possible solutions to this problem may become difficult on very large jobs (e.g. 10s or hundreds of millions of files,
 // with millions of directories).
 // The secondary reason is that folder LMT's don't actually tell the user anything particularly useful. Specifically,
@@ -353,6 +354,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		EntityType:                     entityType,
 		PreserveSMBPermissions:         plan.PreservePermissions,
 		PreserveSMBInfo:                plan.PreserveSMBInfo,
+		PreservePOSIXProperties:        plan.PreservePOSIXProperties,
 		S2SGetPropertiesInBackend:      s2sGetPropertiesInBackend,
 		S2SSourceChangeValidation:      s2sSourceChangeValidation,
 		S2SInvalidMetadataHandleOption: s2sInvalidMetadataHandleOption,
@@ -763,7 +765,7 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 		// If the status code was 403, it means there was an authentication error and we exit.
 		// User can resume the job if completely ordered with a new sas.
 		if status == http.StatusForbidden &&
-		!jptm.jobPartMgr.(*jobPartMgr).jobMgr.IsDaemon() {
+			!jptm.jobPartMgr.(*jobPartMgr).jobMgr.IsDaemon() {
 			// quit right away, since without proper authentication no work can be done
 			// display a clear message
 			common.GetLifecycleMgr().Info(fmt.Sprintf("Authentication failed, it is either not correct, or expired, or does not have the correct permission %s", err.Error()))
@@ -900,7 +902,7 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 		panic("cannot report the same transfer done twice")
 	}
 
-	//Update Status Manager
+	// Update Status Manager
 	jptm.jobPartMgr.SendXferDoneMsg(xferDoneMsg{Src: jptm.Info().Source,
 		Dst:                jptm.Info().Destination,
 		IsFolderProperties: jptm.Info().IsFolderPropertiesTransfer(),

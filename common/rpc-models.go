@@ -107,8 +107,8 @@ func ConsolidatePathSeparators(path string) string {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//Transfers describes each file/folder being transferred in a given JobPartOrder, and
-//other auxilliary details of this order.
+// Transfers describes each file/folder being transferred in a given JobPartOrder, and
+// other auxilliary details of this order.
 type Transfers struct {
 	List                []CopyTransfer
 	TotalSizeInBytes    uint64
@@ -142,6 +142,7 @@ type CopyJobPartOrderRequest struct {
 
 	PreserveSMBPermissions         PreservePermissionsOption
 	PreserveSMBInfo                bool
+	PreservePOSIXProperties        PosixPropertiesOption
 	S2SGetPropertiesInBackend      bool
 	S2SSourceChangeValidation      bool
 	DestLengthValidation           bool

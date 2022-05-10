@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
@@ -61,6 +62,8 @@ type blobTraverser struct {
 	includeSnapshot bool
 
 	includeVersion bool
+
+	posixPropOption common.PosixPropertiesOption
 }
 
 func (t *blobTraverser) IsDirectory(isSource bool) bool {
@@ -231,6 +234,38 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	return t.serialList(containerURL, blobUrlParts.ContainerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters)
 }
 
+// If a user does not want to persist device reference files, we should filter them out.
+// It does not make sense to implement this as a standard filter, as local does not get this information via metadata.
+func (t *blobTraverser) blobRepresentsDevice(object StoredObject) bool {
+	if t.posixPropOption != common.EPosixPropertiesOption.SpecialFilesAndProperties() {
+		return false // The user either wants these files, or is not processing POSIX properties at all. Either way, it makes sense to transfer this file.
+	}
+
+	stxmask, ok := object.Metadata[common.LINUXStatxMaskMeta]
+	if ok { // statx
+		m, err := strconv.ParseUint(stxmask, 10, 32)
+		if err != nil {
+			return false
+		}
+
+		if !common.StatXReturned(uint32(m), common.STATX_MODE) {
+			return false
+		}
+	}
+
+	mode, ok := object.Metadata[common.POSIXModeMeta]
+	if !ok {
+		return false
+	}
+
+	m, err := strconv.ParseUint(mode, 10, 32)
+	if err != nil {
+		return false
+	}
+
+	return uint32(m)&common.S_IFCHR == common.S_IFCHR || uint32(m)&common.S_IFBLK == common.S_IFBLK
+}
+
 func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, containerName string, searchPrefix string,
 	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 	// Define how to enumerate its contents
@@ -270,6 +305,8 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 								containerName,
 							)
 
+							// No need to check if this is a device, since it's a directory stub.
+
 							if t.s2sPreserveSourceTags {
 								var BlobTags *azblob.BlobTags
 								BlobTags, err = fblobURL.GetTags(t.ctx, nil)
@@ -297,6 +334,10 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 				}
 
 				storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, strings.TrimPrefix(blobInfo.Name, searchPrefix), containerName)
+
+				if t.blobRepresentsDevice(storedObject) {
+					continue // skip devices unless the user wants them
+				}
 
 				if t.s2sPreserveSourceTags && blobInfo.BlobTags != nil {
 					blobTagsMap := common.BlobTags{}
@@ -420,6 +461,10 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 
 			storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, relativePath, containerName)
 
+			if t.blobRepresentsDevice(storedObject) {
+				continue // filter out device files if the user didn't request them
+			}
+
 			// Setting blob tags
 			if t.s2sPreserveSourceTags && blobInfo.BlobTags != nil {
 				blobTagsMap := common.BlobTags{}
@@ -446,7 +491,7 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 	return nil
 }
 
-func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool) (t *blobTraverser) {
+func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool, posixPropertiesOption common.PosixPropertiesOption) (t *blobTraverser) {
 	t = &blobTraverser{
 		rawURL:                      rawURL,
 		p:                           p,
@@ -460,6 +505,7 @@ func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 		includeDeleted:              includeDeleted,
 		includeSnapshot:             includeSnapshot,
 		includeVersion:              includeVersion,
+		posixPropOption:             posixPropertiesOption,
 	}
 
 	disableHierarchicalScanning := strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))

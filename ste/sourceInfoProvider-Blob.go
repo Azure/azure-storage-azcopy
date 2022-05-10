@@ -35,13 +35,13 @@ type blobSourceInfoProvider struct {
 	defaultRemoteSourceInfoProvider
 }
 
-func (p *blobSourceInfoProvider) GetUNIXProperties() (UnixStatAdapter, error) {
+func (p *blobSourceInfoProvider) GetUNIXProperties() (common.UnixStatAdapter, error) {
 	prop, err := p.Properties()
 	if err != nil {
 		return nil, err
 	}
 
-	return ReadStatFromMetadata(prop.SrcMetadata.ToAzBlobMetadata(), p.SourceSize())
+	return common.ReadStatFromMetadata(prop.SrcMetadata.ToAzBlobMetadata(), p.SourceSize())
 }
 
 func (p *blobSourceInfoProvider) HasUNIXProperties() bool {
@@ -50,7 +50,7 @@ func (p *blobSourceInfoProvider) HasUNIXProperties() bool {
 		return false // This transfer is probably going to fail anyway.
 	}
 
-	for _, v := range allLinuxProperties {
+	for _, v := range common.AllLinuxProperties {
 		_, ok := prop.SrcMetadata[v]
 		if ok {
 			return true

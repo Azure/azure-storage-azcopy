@@ -72,7 +72,7 @@ func NewJobID() JobID {
 	return JobID(NewUUID())
 }
 
-//var EmptyJobId JobID = JobID{}
+// var EmptyJobId JobID = JobID{}
 func (j JobID) IsEmpty() bool {
 	return j == JobID{}
 }
@@ -109,6 +109,40 @@ func (j *JobID) UnmarshalJSON(b []byte) error {
 type PartNumber uint32
 type Version uint32
 type Status uint32
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var EPosixPropertiesOption = PosixPropertiesOption(0)
+
+type PosixPropertiesOption uint8
+
+func (PosixPropertiesOption) None() PosixPropertiesOption                      { return 0 }
+func (PosixPropertiesOption) SpecialFilesAndProperties() PosixPropertiesOption { return 1 } // Carry over everything but referenced char/block devices
+func (PosixPropertiesOption) FullFidelity() PosixPropertiesOption              { return 2 } // Carry over referenced char/block devices
+
+func (p PosixPropertiesOption) String() string {
+	return enum.StringInt(p, reflect.TypeOf(p))
+}
+
+func (p *PosixPropertiesOption) Parse(s string) error {
+	if s == "" || strings.EqualFold(s, "false") {
+		*p = p.None()
+		return nil
+	} else if strings.EqualFold(s, "true") {
+		*p = p.FullFidelity()
+		return nil
+	}
+
+	val, err := enum.ParseInt(reflect.TypeOf(p), s, true, true)
+	if err == nil {
+		*p = val.(PosixPropertiesOption)
+	}
+	return err
+}
+
+func (p PosixPropertiesOption) IsTruthy() bool {
+	return p != p.None()
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 var EDeleteSnapshotsOption = DeleteSnapshotsOption(0)
@@ -955,7 +989,7 @@ type CopyTransfer struct {
 	Source           string
 	Destination      string
 	EntityType       EntityType
-	LastModifiedTime time.Time //represents the last modified time of source which ensures that source hasn't changed while transferring
+	LastModifiedTime time.Time // represents the last modified time of source which ensures that source hasn't changed while transferring
 	SourceSize       int64     // size of the source entity in bytes.
 
 	// Properties for service to service copy (some also used in upload or download too)
@@ -1085,9 +1119,9 @@ func (bt BlobTags) ToAzBlobTagsMap() azblob.BlobTagsMap {
 }
 
 //// FromAzBlobTagsMapToCommonBlobTags converts azblob's BlobTagsMap to common BlobTags
-//func FromAzBlobTagsMapToCommonBlobTags(azbt azblob.BlobTagsMap) BlobTags {
+// func FromAzBlobTagsMapToCommonBlobTags(azbt azblob.BlobTagsMap) BlobTags {
 //	return BlobTags(azbt)
-//}
+// }
 
 func (bt BlobTags) ToString() string {
 	lst := make([]string, 0)
@@ -1299,7 +1333,7 @@ const SizePerFileParam = "size-per-file"
 const FileCountParam = "file-count"
 const FileCountDefault = 100
 
-//BenchMarkMode enumerates values for Azcopy bench command. Valid values Upload or Download
+// BenchMarkMode enumerates values for Azcopy bench command. Valid values Upload or Download
 type BenchMarkMode uint8
 
 var EBenchMarkMode = BenchMarkMode(0)
@@ -1496,17 +1530,15 @@ func GetClientProvidedKey(options CpkOptions) azblob.ClientProvidedKeyOptions {
 	return ToClientProvidedKeyOptions(_cpkInfo, _cpkScopeInfo)
 }
 
-
 ////////////////////////////////////////////////////////////////
 type LCMMsgType uint16
 
 var ELCMMsgType LCMMsgType
 
-func(LCMMsgType) Invalid()                                LCMMsgType {return LCMMsgType(0)}
-func(LCMMsgType) CancelJob()                              LCMMsgType {return LCMMsgType(1)}
-func(LCMMsgType) E2EInterrupts()                          LCMMsgType {return LCMMsgType(2)}
-func(LCMMsgType) PerformanceAdjustment()                  LCMMsgType {return LCMMsgType(3)}
-
+func (LCMMsgType) Invalid() LCMMsgType               { return LCMMsgType(0) }
+func (LCMMsgType) CancelJob() LCMMsgType             { return LCMMsgType(1) }
+func (LCMMsgType) E2EInterrupts() LCMMsgType         { return LCMMsgType(2) }
+func (LCMMsgType) PerformanceAdjustment() LCMMsgType { return LCMMsgType(3) }
 
 func (m *LCMMsgType) Parse(s string) error {
 	val, err := enum.Parse(reflect.TypeOf(m), s, true)

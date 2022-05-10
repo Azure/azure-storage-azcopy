@@ -52,7 +52,7 @@ func (s *blockBlobUploader) Prologue(ps common.PrologueState) (destinationModifi
 			s.jptm.FailActiveSend("GetUNIXProperties", err)
 		}
 
-		AddStatToBlobMetadata(statAdapter, s.metadataToApply)
+		common.AddStatToBlobMetadata(statAdapter, s.metadataToApply)
 	}
 
 	return s.blockBlobSenderBase.Prologue(ps)

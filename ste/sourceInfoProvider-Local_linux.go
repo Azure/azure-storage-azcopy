@@ -4,6 +4,7 @@ package ste
 
 import (
 	"errors"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"golang.org/x/sys/unix"
 	"regexp"
 	"strconv"
@@ -15,7 +16,7 @@ func (f localFileSourceInfoProvider) HasUNIXProperties() bool {
 	return true
 }
 
-func (f localFileSourceInfoProvider) GetUNIXProperties() (UnixStatAdapter, error) {
+func (f localFileSourceInfoProvider) GetUNIXProperties() (common.UnixStatAdapter, error) {
 	// Can we use statx?
 	var uname unix.Utsname
 	err := unix.Uname(&uname)
@@ -35,7 +36,7 @@ func (f localFileSourceInfoProvider) GetUNIXProperties() (UnixStatAdapter, error
 		versions[k], _ = strconv.ParseInt(v, 10, 64)
 	}
 
-	var resp UnixStatAdapter
+	var resp common.UnixStatAdapter
 
 	if versions[0] > 4 || (versions[0] == 4 && versions[1] > 11) { // Can we statx?
 		var stat unix.Statx_t

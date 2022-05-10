@@ -53,7 +53,7 @@ type creationTimeDownloader interface {
 type unixPropertyAwareDownloader interface {
 	downloader
 
-	ApplyUnixProperties(adapter UnixStatAdapter) (stage string, err error)
+	ApplyUnixProperties(adapter common.UnixStatAdapter) (stage string, err error)
 }
 
 // folderDownloader is a downloader that can also process folder properties

@@ -52,6 +52,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.CpkOptions = cca.CpkOptions
 	jobPartOrder.PreserveSMBPermissions = cca.preservePermissions
 	jobPartOrder.PreserveSMBInfo = cca.preserveSMBInfo
+	jobPartOrder.PreservePOSIXProperties = cca.preservePOSIXProperties
 
 	// Infer on download so that we get LMT and MD5 on files download
 	// On S2S transfers the following rules apply:
@@ -67,10 +68,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
 	jobPartOrder.S2SPreserveBlobTags = cca.S2sPreserveBlobTags
 
-	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo,
-		&cca.FollowSymlinks, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties,
-		cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs,
-		cca.S2sPreserveBlobTags, cca.LogVerbosity.ToPipelineLogLevel(), cca.CpkOptions)
+	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo, &cca.FollowSymlinks, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, cca.S2sPreserveBlobTags, cca.LogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, cca.preservePOSIXProperties)
 
 	if err != nil {
 		return nil, err
@@ -287,7 +285,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						dryrunValue := fmt.Sprintf("DRYRUN: copy %v", common.ToShortPath(cca.Source.Value))
 						if runtime.GOOS == "windows" {
 							dryrunValue += strings.ReplaceAll(srcRelPath, "/", "\\")
-						} else { //linux and mac
+						} else { // linux and mac
 							dryrunValue += srcRelPath
 						}
 						dryrunValue += fmt.Sprintf(" to %v%v", strings.Trim(cca.Destination.Value, "/"), dstRelPath)
@@ -299,7 +297,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 							common.ToShortPath(cca.Destination.Value))
 						if runtime.GOOS == "windows" {
 							dryrunValue += strings.ReplaceAll(dstRelPath, "/", "\\")
-						} else { //linux and mac
+						} else { // linux and mac
 							dryrunValue += dstRelPath
 						}
 						return dryrunValue
@@ -341,9 +339,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, nil,
-		nil, false, false, false, common.EPermanentDeleteOption.None(),
-		func(common.EntityType) {}, cca.ListOfVersionIDs, false, pipeline.LogNone, cca.CpkOptions)
+	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, cca.ListOfVersionIDs, false, pipeline.LogNone, cca.CpkOptions, common.EPosixPropertiesOption.None())
 
 	if err != nil {
 		return false

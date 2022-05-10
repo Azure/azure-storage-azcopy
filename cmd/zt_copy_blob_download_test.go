@@ -174,7 +174,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{})
+	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPosixPropertiesOption.None())
 	processor := func(object StoredObject) error {
 		// Append the container name to the relative path
 		relPath := "/" + object.ContainerName + "/" + object.relativePath
@@ -222,7 +222,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{})
+	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPosixPropertiesOption.None())
 	processor := func(object StoredObject) error {
 		// Append the container name to the relative path
 		relPath := "/" + object.ContainerName + "/" + object.relativePath
@@ -494,7 +494,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithRegexInclude(c *chk.C
 		c.Assert(err, chk.IsNil)
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
-		//comparing is names of files match
+		// comparing is names of files match
 		actualTransfer := []string{}
 		for i := 0; i < len(mockedRPC.transfers); i++ {
 			actualTransfer = append(actualTransfer, strings.Trim(mockedRPC.transfers[i].Source, "/"))
@@ -509,7 +509,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithRegexInclude(c *chk.C
 	})
 }
 
-//test multiple regular expression with include
+// test multiple regular expression with include
 func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithMultRegexInclude(c *chk.C) {
 	bsu := getBSU()
 
@@ -547,7 +547,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithMultRegexInclude(c *c
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
 		// validate that the right transfers were sent
 
-		//comparing is names of files, since not in order need to sort each string and the compare them
+		// comparing is names of files, since not in order need to sort each string and the compare them
 		actualTransfer := []string{}
 		for i := 0; i < len(mockedRPC.transfers); i++ {
 			actualTransfer = append(actualTransfer, strings.Trim(mockedRPC.transfers[i].Source, "/"))
@@ -561,13 +561,13 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithMultRegexInclude(c *c
 	})
 }
 
-//testing empty expressions for both include and exclude
+// testing empty expressions for both include and exclude
 func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithEmptyRegex(c *chk.C) {
 	bsu := getBSU()
 
 	// set up the container with  blobs
 	containerURL, containerName := createNewContainer(c, bsu)
-	//test empty regex flag so all blobs will be included since there is no filter
+	// test empty regex flag so all blobs will be included since there is no filter
 	blobsToInclude := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
 	defer deleteContainer(c, containerURL)
 	c.Assert(containerURL, chk.NotNil)
@@ -595,14 +595,14 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithEmptyRegex(c *chk.C) 
 		c.Assert(err, chk.IsNil)
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
-		//do not need to check file names since all files for blobsToInclude are passed bc flags are empty
+		// do not need to check file names since all files for blobsToInclude are passed bc flags are empty
 		// validate that the right transfers were sent
 		validateDownloadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING,
 			blobsToInclude, mockedRPC)
 	})
 }
 
-//testing exclude with one regular expression
+// testing exclude with one regular expression
 func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithRegexExclude(c *chk.C) {
 	bsu := getBSU()
 
@@ -638,7 +638,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithRegexExclude(c *chk.C
 		c.Assert(err, chk.IsNil)
 		// validate that only blobsTo
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
-		//comparing is names of files, since not in order need to sort each string and the compare them
+		// comparing is names of files, since not in order need to sort each string and the compare them
 		actualTransfer := []string{}
 		for i := 0; i < len(mockedRPC.transfers); i++ {
 			actualTransfer = append(actualTransfer, strings.Trim(mockedRPC.transfers[i].Destination, "/"))
@@ -653,7 +653,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithRegexExclude(c *chk.C
 	})
 }
 
-//testing exclude with multiple regular expressions
+// testing exclude with multiple regular expressions
 func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithMultRegexExclude(c *chk.C) {
 	bsu := getBSU()
 
@@ -689,7 +689,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithMultRegexExclude(c *c
 		c.Assert(err, chk.IsNil)
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
-		//comparing is names of files, since not in order need to sort each string and the compare them
+		// comparing is names of files, since not in order need to sort each string and the compare them
 		actualTransfer := []string{}
 		for i := 0; i < len(mockedRPC.transfers); i++ {
 			actualTransfer = append(actualTransfer, strings.Trim(mockedRPC.transfers[i].Destination, "/"))
@@ -723,7 +723,7 @@ func (s *cmdIntegrationSuite) TestDryrunCopyLocalToBlob(c *chk.C) {
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) //text format
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -767,7 +767,7 @@ func (s *cmdIntegrationSuite) TestDryrunCopyBlobToBlob(c *chk.C) {
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) //text format
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -811,7 +811,7 @@ func (s *cmdIntegrationSuite) TestDryrunCopyBlobToBlobJson(c *chk.C) {
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Json()) //json format
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Json()) // json format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -830,7 +830,7 @@ func (s *cmdIntegrationSuite) TestDryrunCopyBlobToBlobJson(c *chk.C) {
 		copyMessage := common.CopyTransfer{}
 		errMarshal := json.Unmarshal([]byte(msg), &copyMessage)
 		c.Assert(errMarshal, chk.IsNil)
-		//comparing some values of copyMessage
+		// comparing some values of copyMessage
 		c.Check(strings.Compare(strings.Trim(copyMessage.Source, "/"), blobsToInclude[0]), chk.Equals, 0)
 		c.Check(strings.Compare(strings.Trim(copyMessage.Destination, "/"), blobsToInclude[0]), chk.Equals, 0)
 		c.Check(strings.Compare(copyMessage.EntityType.String(), common.EEntityType.File().String()), chk.Equals, 0)
@@ -859,7 +859,7 @@ func (s *cmdIntegrationSuite) TestDryrunCopyS3toBlob(c *chk.C) {
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) //text format
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
@@ -905,7 +905,7 @@ func (s *cmdIntegrationSuite) TestDryrunCopyGCPtoBlob(c *chk.C) {
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) //text format
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input

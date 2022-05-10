@@ -68,7 +68,7 @@ func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipelin
 }
 
 func (bd *blobDownloader) Epilogue() {
-	if !bd.jptm.IsLive() {
+	if bd.jptm.IsLive() && bd.jptm.Info().PreservePOSIXProperties.IsTruthy() {
 		bsip, err := newBlobSourceInfoProvider(bd.jptm)
 		if err != nil {
 			bd.jptm.FailActiveDownload("get blob source info provider", err)

@@ -63,8 +63,9 @@ type JobPartPlanHeader struct {
 	DstBlobData            JobPartPlanDstBlob  // Additional data for blob destinations
 	DstLocalData           JobPartPlanDstLocal // Additional data for local destinations
 
-	PreservePermissions common.PreservePermissionsOption
-	PreserveSMBInfo     bool
+	PreservePermissions     common.PreservePermissionsOption
+	PreserveSMBInfo         bool
+	PreservePOSIXProperties common.PosixPropertiesOption
 	// S2SGetPropertiesInBackend represents whether to enable get S3 objects' or Azure files' properties during s2s copy in backend.
 	S2SGetPropertiesInBackend bool
 	// S2SSourceChangeValidation represents whether user wants to check if source has changed after enumerating.
@@ -343,7 +344,7 @@ type JobPartPlanTransfer struct {
 	// DstLength represents the actual length of destination string for specific transfer
 	DstLength int16
 	// ChunkCount represents the num of chunks a transfer is split into
-	//ChunkCount uint16	// TODO: Remove this, we need to determine it at runtime
+	// ChunkCount uint16	// TODO: Remove this, we need to determine it at runtime
 	// EntityType indicates whether this is a file or a folder
 	// We use a dedicated field for this because the alternative (of doing something fancy the names) was too complex and error-prone
 	EntityType common.EntityType

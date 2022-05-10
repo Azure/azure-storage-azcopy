@@ -40,7 +40,7 @@ func (u *appendBlobUploader) Prologue(ps common.PrologueState) (destinationModif
 			u.jptm.FailActiveSend("GetUNIXProperties", err)
 		}
 
-		AddStatToBlobMetadata(statAdapter, u.metadataToApply)
+		common.AddStatToBlobMetadata(statAdapter, u.metadataToApply)
 	}
 
 	return false

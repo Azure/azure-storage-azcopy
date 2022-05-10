@@ -41,6 +41,8 @@ type localTraverser struct {
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
+
+	posixPropertiesOption common.PosixPropertiesOption
 }
 
 func (t *localTraverser) IsDirectory(bool) bool {
@@ -316,6 +318,10 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
 
+		if t.FileRepresentsDevice(t.fullPath) {
+			return errors.New("")
+		}
+
 		err := processIfPassedFilters(filters,
 			newStoredObject(
 				preprocessor,
@@ -354,6 +360,10 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					entityType = common.EEntityType.Folder()
 				} else {
 					entityType = common.EEntityType.File()
+
+					if t.FileRepresentsDevice(filePath) {
+						return nil // do not process a device file if the user doesn't want it.
+					}
 				}
 
 				relPath := strings.TrimPrefix(strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(t.fullPath)), common.DeterminePathSeparator(t.fullPath))
@@ -425,6 +435,14 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						if err != nil {
 							return err
 						}
+
+						if t.FileRepresentsDevice(result) {
+							continue // do not persist device representations
+						}
+					}
+				} else {
+					if t.FileRepresentsDevice(common.GenerateFullPath(t.fullPath, singleFile.Name())) {
+						continue // do not persist device representations
 					}
 				}
 
@@ -462,7 +480,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	return
 }
 
-func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter enumerationCounterFunc) *localTraverser {
+func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter enumerationCounterFunc, posixPropertiesOption common.PosixPropertiesOption) *localTraverser {
 	traverser := localTraverser{
 		fullPath:                    cleanLocalPath(fullPath),
 		recursive:                   recursive,

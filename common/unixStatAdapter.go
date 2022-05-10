@@ -1,4 +1,4 @@
-package ste
+package common
 
 import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -29,7 +29,7 @@ const ( // POSIX property metadata
 	LINUXStatxMaskMeta     = "linux-statx-mask"
 )
 
-var allLinuxProperties = []string{
+var AllLinuxProperties = []string{
 	POSIXNlinkMeta,
 	POSIXINodeMeta,
 	LINUXBTimeMeta,
@@ -329,46 +329,46 @@ func AddStatToBlobMetadata(s UnixStatAdapter, metadata azblob.Metadata) {
 		tryAddMetadata(metadata, LINUXAttributeMeta, strconv.FormatUint(s.Attribute()&s.AttributeMask(), 10)) // AttributesMask indicates what attributes are supported by the filesystem
 		tryAddMetadata(metadata, LINUXAttributeMaskMeta, strconv.FormatUint(s.AttributeMask(), 10))
 
-		if statxReturned(mask, STATX_BTIME) {
+		if StatXReturned(mask, STATX_BTIME) {
 			tryAddMetadata(metadata, LINUXBTimeMeta, strconv.FormatInt(s.BTime().Unix(), 10))
 		}
 
-		if statxReturned(mask, STATX_MODE) {
+		if StatXReturned(mask, STATX_MODE) {
 			tryAddMetadata(metadata, POSIXNlinkMeta, strconv.FormatUint(s.NLink(), 10))
 		}
 
-		if statxReturned(mask, STATX_UID) {
+		if StatXReturned(mask, STATX_UID) {
 			tryAddMetadata(metadata, POSIXOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
 		}
 
-		if statxReturned(mask, STATX_GID) {
+		if StatXReturned(mask, STATX_GID) {
 			tryAddMetadata(metadata, POSIXGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
 		}
 
-		if statxReturned(mask, STATX_MODE) {
+		if StatXReturned(mask, STATX_MODE) {
 			tryAddMetadata(metadata, POSIXModeMeta, strconv.FormatUint(uint64(s.FileMode()), 10))
 		}
 
-		if statxReturned(mask, STATX_INO) {
+		if StatXReturned(mask, STATX_INO) {
 			tryAddMetadata(metadata, POSIXINodeMeta, strconv.FormatUint(s.INode(), 10))
 		}
 
 		// This is not optional.
 		tryAddMetadata(metadata, POSIXDevMeta, strconv.FormatUint(s.Device(), 10))
 
-		if statxReturned(mask, STATX_MODE) && ((s.FileMode()&S_IFCHR) == S_IFCHR || (s.FileMode()&S_IFBLK) == S_IFBLK) {
+		if StatXReturned(mask, STATX_MODE) && ((s.FileMode()&S_IFCHR) == S_IFCHR || (s.FileMode()&S_IFBLK) == S_IFBLK) {
 			tryAddMetadata(metadata, POSIXRDevMeta, strconv.FormatUint(s.RDevice(), 10))
 		}
 
-		if statxReturned(mask, STATX_ATIME) {
+		if StatXReturned(mask, STATX_ATIME) {
 			tryAddMetadata(metadata, POSIXATimeMeta, strconv.FormatInt(s.ATime().Unix(), 10))
 		}
 
-		if statxReturned(mask, STATX_MTIME) {
+		if StatXReturned(mask, STATX_MTIME) {
 			tryAddMetadata(metadata, POSIXModTimeMeta, strconv.FormatInt(s.MTime().Unix(), 10))
 		}
 
-		if statxReturned(mask, STATX_CTIME) {
+		if StatXReturned(mask, STATX_CTIME) {
 			tryAddMetadata(metadata, POSIXCTimeMeta, strconv.FormatInt(s.CTime().Unix(), 10))
 		}
 	} else {
@@ -389,7 +389,7 @@ func AddStatToBlobMetadata(s UnixStatAdapter, metadata azblob.Metadata) {
 	}
 }
 
-func statxReturned(mask uint32, want uint32) bool {
+func StatXReturned(mask uint32, want uint32) bool {
 	return (mask & want) == want
 }
 
