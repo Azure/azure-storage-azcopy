@@ -92,6 +92,7 @@ type IJobPartTransferMgr interface {
 	CpkScopeInfo() common.CpkScopeInfo
 	IsSourceEncrypted() bool
 	GetS2SSourceBlobTokenCredential() azblob.TokenCredential
+	PropertiesToTransfer() common.SetPropertiesFlags
 }
 
 type TransferInfo struct {
@@ -117,7 +118,8 @@ type TransferInfo struct {
 
 	// NumChunks is the number of chunks in which transfer will be split into while uploading the transfer.
 	// NumChunks is not used in case of AppendBlob transfer.
-	NumChunks uint16
+	NumChunks         uint16
+	RehydratePriority azblob.RehydratePriorityType
 }
 
 func (i TransferInfo) IsFolderPropertiesTransfer() bool {
@@ -380,8 +382,9 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 			SrcMetadata:    srcMetadata,
 			SrcBlobTags:    srcBlobTags,
 		},
-		SrcBlobType:    srcBlobType,
-		S2SSrcBlobTier: srcBlobTier,
+		SrcBlobType:       srcBlobType,
+		S2SSrcBlobTier:    srcBlobTier,
+		RehydratePriority: plan.RehydratePriority.ToRehydratePriorityType(),
 	}
 
 	return *jptm.transferInfo
@@ -532,6 +535,10 @@ func (jptm *jobPartTransferMgr) CpkScopeInfo() common.CpkScopeInfo {
 
 func (jptm *jobPartTransferMgr) IsSourceEncrypted() bool {
 	return jptm.jobPartMgr.IsSourceEncrypted()
+}
+
+func (jptm *jobPartTransferMgr) PropertiesToTransfer() common.SetPropertiesFlags {
+	return jptm.jobPartMgr.PropertiesToTransfer()
 }
 
 // JobHasLowFileCount returns an estimate of whether we only have a very small number of files in the overall job

@@ -201,6 +201,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			CpkInfo:                  order.CpkOptions.CpkInfo,
 			CpkScopeInfoLength:       uint16(len(order.CpkOptions.CpkScopeInfo)),
 			IsSourceEncrypted:        order.CpkOptions.IsSourceEncrypted,
+			SetPropertiesFlags:       order.SetPropertiesFlags,
 		},
 		DstLocalData: JobPartPlanDstLocal{
 			PreserveLastModifiedTime: order.BlobAttributes.PreserveLastModifiedTime,
@@ -216,6 +217,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		atomicJobStatus:                common.EJobStatus.InProgress(), // We default to InProgress
 		DeleteSnapshotsOption:          order.BlobAttributes.DeleteSnapshotsOption,
 		PermanentDeleteOption:          order.BlobAttributes.PermanentDeleteOption,
+		RehydratePriority:              order.BlobAttributes.RehydratePriority,
 	}
 
 	// Copy any strings into their respective fields

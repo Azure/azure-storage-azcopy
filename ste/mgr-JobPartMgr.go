@@ -62,6 +62,7 @@ type IJobPartMgr interface {
 	IsSourceEncrypted() bool
 	/* Status Manager Updates */
 	SendXferDoneMsg(msg xferDoneMsg)
+	PropertiesToTransfer() common.SetPropertiesFlags
 }
 
 type serviceAPIVersionOverride struct{}
@@ -314,6 +315,10 @@ type jobPartMgr struct {
 	cpkOptions common.CpkOptions
 
 	closeOnCompletion chan struct{}
+
+	SetPropertiesFlags common.SetPropertiesFlags
+
+	RehydratePriority common.RehydratePriorityType
 }
 
 func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {
@@ -391,6 +396,9 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		CpkScopeInfo:      string(dstData.CpkScopeInfo[:dstData.CpkScopeInfoLength]),
 		IsSourceEncrypted: dstData.IsSourceEncrypted,
 	}
+
+	jpm.SetPropertiesFlags = dstData.SetPropertiesFlags
+	jpm.RehydratePriority = plan.RehydratePriority
 
 	jpm.preserveLastModifiedTime = plan.DstLocalData.PreserveLastModifiedTime
 
@@ -609,7 +617,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	// Create pipeline for data transfer.
 	switch fromTo {
 	case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(), common.EFromTo.BenchmarkBlob(),
-		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob(), common.EFromTo.GCPBlob():
+		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob(), common.EFromTo.GCPBlob(), common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone():
 		credential := common.CreateBlobCredential(ctx, credInfo, credOption)
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 		jpm.pipeline = NewBlobPipeline(
@@ -660,7 +668,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.jobMgr.PipelineNetworkStats())
 	// Create pipeline for Azure File.
 	case common.EFromTo.FileTrash(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile(), common.EFromTo.BenchmarkFile(),
-		common.EFromTo.FileFile(), common.EFromTo.BlobFile():
+		common.EFromTo.FileFile(), common.EFromTo.BlobFile(), common.EFromTo.FileNone():
 		jpm.pipeline = NewFilePipeline(
 			azfile.NewAnonymousCredential(),
 			azfile.PipelineOptions{
@@ -793,6 +801,10 @@ func (jpm *jobPartMgr) CpkScopeInfo() common.CpkScopeInfo {
 
 func (jpm *jobPartMgr) IsSourceEncrypted() bool {
 	return jpm.cpkOptions.IsSourceEncrypted
+}
+
+func (jpm *jobPartMgr) PropertiesToTransfer() common.SetPropertiesFlags {
+	return jpm.SetPropertiesFlags
 }
 
 func (jpm *jobPartMgr) ShouldPutMd5() bool {
