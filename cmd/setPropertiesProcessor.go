@@ -24,20 +24,26 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-// extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
-func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption) *copyTransferProcessor {
+func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption) *copyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:           cca.jobID,
 		CommandString:   cca.commandString,
 		FromTo:          cca.FromTo,
 		Fpo:             fpo,
-		SourceRoot:      cca.Source.CloneWithConsolidatedSeparators(), // TODO: why do we consolidate here, but not in "copy"? Is it needed in both places or neither? Or is copy just covering the same need differently?
+		SourceRoot:      cca.Source.CloneWithConsolidatedSeparators(),
 		CredentialInfo:  cca.credentialInfo,
 		ForceIfReadOnly: cca.ForceIfReadOnly,
 
 		// flags
-		LogLevel:       cca.LogVerbosity,
-		BlobAttributes: common.BlobTransferAttributes{DeleteSnapshotsOption: cca.deleteSnapshotsOption, PermanentDeleteOption: cca.permanentDeleteOption},
+		LogLevel: cca.LogVerbosity,
+		BlobAttributes: common.BlobTransferAttributes{
+			BlockBlobTier:     cca.blockBlobTier,
+			PageBlobTier:      cca.pageBlobTier,
+			Metadata:          cca.metadata,
+			BlobTagsString:    cca.blobTags.ToString(),
+			RehydratePriority: cca.rehydratePriority,
+		},
+		SetPropertiesFlags: cca.propertiesToTransfer,
 	}
 
 	reportFirstPart := func(jobStarted bool) {
