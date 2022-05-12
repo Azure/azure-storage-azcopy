@@ -81,6 +81,7 @@ func init() {
 			if err != nil {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 			}
+			glcm.SetOutputVerbosity(azcopyOutputVerbosity)
 
 			if cooked.permanentDeleteOption != common.EPermanentDeleteOption.None() {
 				glcm.Info("Permanent delete is a PREVIEW feature and soft-deleted snapshots/versions will be deleted PERMANENTLY. Please proceed with caution.")
