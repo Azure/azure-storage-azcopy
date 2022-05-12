@@ -76,6 +76,7 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 
 		if err != nil {
 			errorHandlerForXferSetProperties(err, jptm, transferDone)
+			return
 		}
 		// don't mark it a success just yet, because more properties might need to be changed
 	}
@@ -85,12 +86,14 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		//TODO the canonical thingi in this is changing key value to upper case. How to go around it?
 		if err != nil {
 			errorHandlerForXferSetProperties(err, jptm, transferDone)
+			return
 		}
 	}
 	if PropertiesToTransfer.ShouldTransferBlobTags() {
 		_, err := srcBlobURL.SetTags(jptm.Context(), nil, nil, nil, blobTags.ToAzBlobTagsMap())
 		if err != nil {
 			errorHandlerForXferSetProperties(err, jptm, transferDone)
+			return
 		}
 	}
 	// marking it a successful flow, as no property has resulted in err != nil
@@ -130,6 +133,7 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 
 		if err != nil {
 			errorHandlerForXferSetProperties(err, jptm, transferDone)
+			return
 		}
 		// don't mark it a success just yet, because more properties might need to be changed
 	}
@@ -138,12 +142,14 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		_, err := srcBlobURL.SetMetadata(jptm.Context(), metadata.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 		if err != nil {
 			errorHandlerForXferSetProperties(err, jptm, transferDone)
+			return
 		}
 	}
 	if PropertiesToTransfer.ShouldTransferBlobTags() {
 		_, err := srcBlobURL.SetTags(jptm.Context(), nil, nil, nil, blobTags.ToAzBlobTagsMap())
 		if err != nil {
 			errorHandlerForXferSetProperties(err, jptm, transferDone)
+			return
 		}
 	}
 
@@ -182,6 +188,7 @@ func setPropertiesFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		_, err := srcFileURL.SetMetadata(jptm.Context(), metadata.ToAzFileMetadata())
 		if err != nil {
 			errorHandlerForXferSetProperties(err, jptm, transferDone)
+			return
 		}
 	}
 	// TAGS NOT AVAILABLE FOR FILES
