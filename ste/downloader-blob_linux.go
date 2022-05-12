@@ -21,15 +21,12 @@ func (bd *blobDownloader) CreateFile(jptm IJobPartTransferMgr, destination strin
 	err = common.CreateParentDirectoryIfNotExist(destination, t)
 
 	// try to remove the file before we create something else over it
-	err = os.Remove(destination)
-	if err != nil {
-		return
-	}
+	_ = os.Remove(destination)
 
 	needChunks = size > 0
 	needMakeFile := true
 	var mode = uint32(common.DEFAULT_FILE_PERM)
-	if bd.jptm.Info().PreservePOSIXProperties.IsTruthy() && unixSIP.HasUNIXProperties() {
+	if jptm.Info().PreservePOSIXProperties.IsTruthy() && unixSIP.HasUNIXProperties() {
 		var stat common.UnixStatAdapter
 		stat, err = unixSIP.GetUNIXProperties()
 
@@ -101,45 +98,31 @@ func (bd *blobDownloader) ApplyUnixProperties(adapter common.UnixStatAdapter) (s
 	if err != nil {
 		return "open file", err
 	}
-	defer f.Close()
+
+	var fi os.FileInfo
+	fi, err = f.Stat() // grab the base stats
+	if err != nil {
+		return "stat", err
+	}
+
+	_ = f.Close() // Close before we write properties, because otherwise we'll offset atime.
 
 	// At this point, mode has already been applied. Let's work out what we need to apply, and apply the rest.
 	if adapter.Extended() {
-		var fi os.FileInfo
-		fi, err = f.Stat() // grab the base stats
-		if err != nil {
-			return "stat", err
-		}
-
-		var stat syscall.Stat_t
-		stat = fi.Sys().(syscall.Stat_t)
+		var stat *syscall.Stat_t
+		stat = fi.Sys().(*syscall.Stat_t)
 		mask := adapter.StatxMask()
 
-		attr := adapter.Attribute()
-		_, _, err = syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), uintptr(unix.FS_IOC_SETFLAGS), uintptr(attr))
-		if err != nil {
-			return "ioctl setflags", err
-		}
+		// todo: this is being troublesome.
+		// attr := adapter.Attribute()
+		// _, _, err = syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), uintptr(unix.FS_IOC_SETFLAGS), uintptr(attr))
+		// if err != nil {
+		// 	return "ioctl setflags", err
+		// }
 
-		atime := time.Unix(stat.Atim.Unix())
-		if common.StatXReturned(mask, common.STATX_ATIME) {
-			atime = adapter.ATime()
-		}
-
-		mtime := time.Unix(stat.Mtim.Unix())
-		if common.StatXReturned(mask, common.STATX_MTIME) {
-			mtime = adapter.MTime()
-		}
-
-		// adapt times
-		err = os.Chtimes(bd.txInfo.Destination, atime, mtime)
-		if err != nil {
-			return "chtimes", err
-		}
-
-		mode := os.FileMode(common.DEFAULT_FILE_PERM)
+		mode := os.FileMode(common.HEX_DEFAULT_FILE_PERM)
 		if common.StatXReturned(mask, common.STATX_MODE) {
-			mode = os.FileMode(adapter.FileMode() & 777)
+			mode = os.FileMode(adapter.FileMode())
 		}
 
 		err = os.Chmod(bd.txInfo.Destination, mode)
@@ -161,19 +144,34 @@ func (bd *blobDownloader) ApplyUnixProperties(adapter common.UnixStatAdapter) (s
 		if err != nil {
 			return "chown", err
 		}
-	} else {
-		err = os.Chtimes(bd.txInfo.Destination, adapter.ATime(), adapter.MTime())
+
+		atime := time.Unix(stat.Atim.Unix())
+		if common.StatXReturned(mask, common.STATX_ATIME) {
+			atime = adapter.ATime()
+		}
+
+		mtime := time.Unix(stat.Mtim.Unix())
+		if common.StatXReturned(mask, common.STATX_MTIME) {
+			mtime = adapter.MTime()
+		}
+
+		// adapt times
+		err = os.Chtimes(bd.txInfo.Destination, atime, mtime)
 		if err != nil {
 			return "chtimes", err
 		}
-
-		err = os.Chmod(bd.txInfo.Destination, os.FileMode(adapter.FileMode()&777)) // only write permissions
+	} else {
+		err = os.Chmod(bd.txInfo.Destination, os.FileMode(adapter.FileMode())) // only write permissions
 		if err != nil {
 			return "chmod", err
 		}
 		err = os.Chown(bd.txInfo.Destination, int(adapter.Owner()), int(adapter.Group()))
 		if err != nil {
 			return "chown", err
+		}
+		err = os.Chtimes(bd.txInfo.Destination, adapter.ATime(), adapter.MTime())
+		if err != nil {
+			return "chtimes", err
 		}
 	}
 

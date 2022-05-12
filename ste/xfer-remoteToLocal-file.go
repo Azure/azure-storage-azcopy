@@ -158,7 +158,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.CreateLocalFile())
 		var needChunks bool
-		dstFile, needChunks, err = ctdl.CreateFile(jptm, info.Destination, size, writeThrough, nil)
+		dstFile, needChunks, err = ctdl.CreateFile(jptm, info.getDownloadPath(), size, writeThrough, nil)
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 		if err != nil {
 			failFileCreation(err)

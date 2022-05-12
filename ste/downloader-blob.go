@@ -68,21 +68,23 @@ func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipelin
 }
 
 func (bd *blobDownloader) Epilogue() {
-	if bd.jptm.IsLive() && bd.jptm.Info().PreservePOSIXProperties.IsTruthy() {
-		bsip, err := newBlobSourceInfoProvider(bd.jptm)
-		if err != nil {
-			bd.jptm.FailActiveDownload("get blob source info provider", err)
-		}
-		unixstat, _ := bsip.(IUNIXPropertyBearingSourceInfoProvider)
-		if ubd, ok := (interface{})(bd).(unixPropertyAwareDownloader); ok && unixstat.HasUNIXProperties() {
-			adapter, err := unixstat.GetUNIXProperties()
+	if bd.jptm != nil {
+		if bd.jptm.IsLive() && bd.jptm.Info().PreservePOSIXProperties.IsTruthy() {
+			bsip, err := newBlobSourceInfoProvider(bd.jptm)
 			if err != nil {
-				bd.jptm.FailActiveDownload("get unix properties", err)
+				bd.jptm.FailActiveDownload("get blob source info provider", err)
 			}
+			unixstat, _ := bsip.(IUNIXPropertyBearingSourceInfoProvider)
+			if ubd, ok := (interface{})(bd).(unixPropertyAwareDownloader); ok && unixstat.HasUNIXProperties() {
+				adapter, err := unixstat.GetUNIXProperties()
+				if err != nil {
+					bd.jptm.FailActiveDownload("get unix properties", err)
+				}
 
-			stage, err := ubd.ApplyUnixProperties(adapter)
-			if err != nil {
-				bd.jptm.FailActiveDownload("set unix properties: "+stage, err)
+				stage, err := ubd.ApplyUnixProperties(adapter)
+				if err != nil {
+					bd.jptm.FailActiveDownload("set unix properties: "+stage, err)
+				}
 			}
 		}
 	}

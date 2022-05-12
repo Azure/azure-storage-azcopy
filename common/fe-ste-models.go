@@ -50,7 +50,8 @@ const (
 
 	//  this is the perm that AzCopy has used throughout its preview.  So, while we considered relaxing it to 0666
 	//  we decided that the best option was to leave it as is, and only relax it if user feedback so requires.
-	DEFAULT_FILE_PERM = 0644
+	DEFAULT_FILE_PERM     = 0644  // the os package will handle base-10 for us.
+	HEX_DEFAULT_FILE_PERM = 0x644 // when making unix syscalls directly, hex form is expected.
 
 	// Since we haven't updated the Go SDKs to handle CPK just yet, we need to detect CPK related errors
 	// and inform the user that we don't support CPK yet.

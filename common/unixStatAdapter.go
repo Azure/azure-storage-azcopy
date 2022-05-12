@@ -7,26 +7,26 @@ import (
 )
 
 const ( // POSIX property metadata
-	POSIXNlinkMeta         = "posix-nlink"
-	POSIXINodeMeta         = "posix-ino"
-	POSIXCTimeMeta         = "posix-ctime"
-	LINUXBTimeMeta         = "linux-btime"
+	POSIXNlinkMeta         = "posix_nlink"
+	POSIXINodeMeta         = "posix_ino"
+	POSIXCTimeMeta         = "posix_ctime"
+	LINUXBTimeMeta         = "linux_btime"
 	POSIXBlockDeviceMeta   = "is_block_dev" // todo: read & use these
 	POSIXCharDeviceMeta    = "is_char_dev"
 	POSIXSocketMeta        = "is_socket"
 	POSIXFIFOMeta          = "is_fifo"
-	POSIXDevMeta           = "posix-dev"
-	POSIXRDevMeta          = "posix-rdev"
-	POSIXATimeMeta         = "posix-atime"
+	POSIXDevMeta           = "posix_dev"
+	POSIXRDevMeta          = "posix_rdev"
+	POSIXATimeMeta         = "posix_atime"
 	POSIXFolderMeta        = "hdi_isfolder" // todo: read & use these
 	POSIXSymlinkMeta       = "is_symlink"
-	POSIXOwnerMeta         = "posix-owner"
-	POSIXGroupMeta         = "posix-group"
+	POSIXOwnerMeta         = "posix_owner"
+	POSIXGroupMeta         = "posix_group"
 	POSIXModeMeta          = "permissions"
 	POSIXModTimeMeta       = "modtime"
-	LINUXAttributeMeta     = "linux-attribute"
-	LINUXAttributeMaskMeta = "linux-attribute-mask"
-	LINUXStatxMaskMeta     = "linux-statx-mask"
+	LINUXAttributeMeta     = "linux_attribute"
+	LINUXAttributeMaskMeta = "linux_attribute_mask"
+	LINUXStatxMaskMeta     = "linux_statx_mask"
 )
 
 var AllLinuxProperties = []string{
@@ -318,6 +318,18 @@ const ( // Values cloned from x/sys/unix to avoid dependency
 	S_IFDIR  = 0x4000
 	S_IFIFO  = 0x1000
 	S_IFLNK  = 0xa000
+
+	S_IRUSR = 0x400
+	S_IWUSR = 0x200
+	S_IXUSR = 0x100
+	S_IRGRP = 0x040
+	S_IWGRP = 0x020
+	S_IXGRP = 0x010
+	S_IROTH = 0x004
+	S_IWOTH = 0x002
+	S_IXOTH = 0x001
+
+	S_ALLPERM = 0x777
 )
 
 func AddStatToBlobMetadata(s UnixStatAdapter, metadata azblob.Metadata) {
