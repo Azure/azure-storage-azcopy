@@ -80,6 +80,22 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 		s.folderPropertiesOption,
 	)
 
+	if s.copyJobTemplate.FromTo.To() == common.ELocation.None() {
+		copyTransfer.BlobTier = s.copyJobTemplate.BlobAttributes.BlockBlobTier.ToAccessTierType()
+
+		metadataString := s.copyJobTemplate.BlobAttributes.Metadata
+		metadataMap := common.Metadata{}
+		if len(metadataString) > 0 {
+			for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
+				kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+				metadataMap[kv[0]] = kv[1]
+			}
+		}
+		copyTransfer.Metadata = metadataMap
+
+		copyTransfer.BlobTags = common.ToCommonBlobTagsMap(s.copyJobTemplate.BlobAttributes.BlobTagsString)
+	}
+
 	if !shouldSendToSte {
 		return nil // skip this one
 	}

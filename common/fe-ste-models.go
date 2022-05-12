@@ -451,6 +451,7 @@ func (Location) BlobFS() Location    { return Location(5) }
 func (Location) S3() Location        { return Location(6) }
 func (Location) Benchmark() Location { return Location(7) }
 func (Location) GCP() Location       { return Location(8) }
+func (Location) None() Location      { return Location(9) } // None is used in case we're transferring properties
 
 func (l Location) String() string {
 	return enum.StringInt(l, reflect.TypeOf(l))
@@ -479,7 +480,7 @@ func (l Location) IsRemote() bool {
 	switch l {
 	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3(), ELocation.GCP():
 		return true
-	case ELocation.Local(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
+	case ELocation.Local(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown(), ELocation.None():
 		return false
 	default:
 		panic("unexpected location, please specify if it is remote")
@@ -500,7 +501,7 @@ func (l Location) IsFolderAware() bool {
 	switch l {
 	case ELocation.BlobFS(), ELocation.File(), ELocation.Local():
 		return true
-	case ELocation.Blob(), ELocation.S3(), ELocation.GCP(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
+	case ELocation.Blob(), ELocation.S3(), ELocation.GCP(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown(), ELocation.None():
 		return false
 	default:
 		panic("unexpected location, please specify if it is folder-aware")
@@ -538,6 +539,9 @@ func (FromTo) BlobFile() FromTo    { return FromTo(fromToValue(ELocation.Blob(),
 func (FromTo) FileFile() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.File())) }
 func (FromTo) S3Blob() FromTo      { return FromTo(fromToValue(ELocation.S3(), ELocation.Blob())) }
 func (FromTo) GCPBlob() FromTo     { return FromTo(fromToValue(ELocation.GCP(), ELocation.Blob())) }
+func (FromTo) BlobNone() FromTo    { return fromToValue(ELocation.Blob(), ELocation.None()) }
+func (FromTo) BlobFSNone() FromTo  { return fromToValue(ELocation.BlobFS(), ELocation.None()) }
+func (FromTo) FileNone() FromTo    { return fromToValue(ELocation.File(), ELocation.None()) }
 
 // todo: to we really want these?  Starts to look like a bit of a combinatorial explosion
 func (FromTo) BenchmarkBlob() FromTo {
@@ -596,6 +600,10 @@ func (ft *FromTo) IsUpload() bool {
 
 func (ft *FromTo) AreBothFolderAware() bool {
 	return ft.From().IsFolderAware() && ft.To().IsFolderAware()
+}
+
+func (ft *FromTo) IsPropertyOnlyTransfer() bool {
+	return *ft == EFromTo.BlobNone() || *ft == EFromTo.BlobFSNone() || *ft == EFromTo.FileNone()
 }
 
 // TODO: deletes are not covered by the above Is* routines
@@ -1023,6 +1031,21 @@ func UnMarshalToCommonMetadata(metadataString string) (Metadata, error) {
 	}
 
 	return result, nil
+}
+
+func StringToMetadata(metadataString string) (Metadata, error) {
+	metadataMap := Metadata{}
+	if len(metadataString) > 0 {
+		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
+			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+			// what if '=' not present?
+			if len(kv) != 2 {
+				return metadataMap, fmt.Errorf("invalid metadata string passed")
+			}
+			metadataMap[kv[0]] = kv[1]
+		}
+	}
+	return metadataMap, nil
 }
 
 // isValidMetadataKey checks if the given string is a valid metadata key for Azure.
@@ -1496,4 +1519,49 @@ func GetClientProvidedKey(options CpkOptions) azblob.ClientProvidedKeyOptions {
 	return ToClientProvidedKeyOptions(_cpkInfo, _cpkScopeInfo)
 }
 
+////////////////////////////////////////////////////////////////////////////////
+type SetPropertiesFlags uint32 // [0000000000...32 times]
 
+var ESetPropertiesFlags = SetPropertiesFlags(0)
+
+// functions to set values
+func (SetPropertiesFlags) None() SetPropertiesFlags        { return SetPropertiesFlags(0) }
+func (SetPropertiesFlags) SetTier() SetPropertiesFlags     { return SetPropertiesFlags(1) }
+func (SetPropertiesFlags) SetMetadata() SetPropertiesFlags { return SetPropertiesFlags(2) }
+func (SetPropertiesFlags) SetBlobTags() SetPropertiesFlags { return SetPropertiesFlags(4) }
+
+// functions to get values (to be used in sde)
+// If Y is inside X then X & Y == Y
+func (op *SetPropertiesFlags) ShouldTransferTier() bool {
+	return (*op)&ESetPropertiesFlags.SetTier() == ESetPropertiesFlags.SetTier()
+}
+func (op *SetPropertiesFlags) ShouldTransferMetaData() bool {
+	return (*op)&ESetPropertiesFlags.SetMetadata() == ESetPropertiesFlags.SetMetadata()
+}
+func (op *SetPropertiesFlags) ShouldTransferBlobTags() bool {
+	return (*op)&ESetPropertiesFlags.SetBlobTags() == ESetPropertiesFlags.SetBlobTags()
+}
+
+////////////////////////////////////////////////////////////////////////////////
+type RehydratePriorityType uint8
+
+var ERehydratePriorityType = RehydratePriorityType(0) // setting default as none
+
+func (RehydratePriorityType) None() RehydratePriorityType     { return RehydratePriorityType(0) }
+func (RehydratePriorityType) Standard() RehydratePriorityType { return RehydratePriorityType(1) }
+func (RehydratePriorityType) High() RehydratePriorityType     { return RehydratePriorityType(2) }
+
+func (rpt *RehydratePriorityType) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(rpt), s, true, true)
+	if err == nil {
+		*rpt = val.(RehydratePriorityType)
+	}
+	return err
+}
+func (rpt RehydratePriorityType) String() string {
+	return enum.StringInt(rpt, reflect.TypeOf(rpt))
+}
+
+func (rpt RehydratePriorityType) ToRehydratePriorityType() azblob.RehydratePriorityType {
+	return azblob.RehydratePriorityType(rpt.String())
+}
