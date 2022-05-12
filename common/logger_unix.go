@@ -69,11 +69,9 @@ func (sl *sysLogger) OpenLog() {
 // This update is not necessarily safe from multiple goroutines simultaneously calling it.
 // Typically we will call ChangeLogLevel() once at the beginning so it should be ok.
 func (sl *sysLogger) ChangeLogLevel(level pipeline.LogLevel) {
-	if level == pipeline.LogNone {
-		return
+	if level != pipeline.LogNone {
+		sl.minimumLevelToLog = level
 	}
-	sl.minimumLevelToLog = level
-	return
 }
 
 func (sl *sysLogger) MinimumLogLevel() pipeline.LogLevel {

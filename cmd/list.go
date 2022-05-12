@@ -24,10 +24,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	pipeline2 "github.com/Azure/azure-pipeline-go/pipeline"
 	"strconv"
 	"strings"
-
-	pipeline2 "github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/spf13/cobra"
 

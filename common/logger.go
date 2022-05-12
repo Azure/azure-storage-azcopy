@@ -163,11 +163,9 @@ func (jl *jobLogger) ShouldLog(level pipeline.LogLevel) bool {
 // This update is not necessarily safe from multiple goroutines simultaneously calling it.
 // Typically we will call ChangeLogLevel() once at the beginning so it should be ok.
 func (jl *jobLogger) ChangeLogLevel(level pipeline.LogLevel) {
-	if level == pipeline.LogNone {
-		return
+	if level != pipeline.LogNone {
+		jl.minimumLevelToLog = level
 	}
-	jl.minimumLevelToLog = level
-	return
 }
 
 func (jl *jobLogger) CloseLog() {
