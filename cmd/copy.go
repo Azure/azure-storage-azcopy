@@ -170,6 +170,10 @@ type rawCopyCmdArgs struct {
 
 	// Optional flag that permanently deletes soft-deleted snapshots/versions
 	permanentDeleteOption string
+
+	// Optional. Indicates the priority with which to rehydrate an archived blob. Valid values are High/Standard.
+	rehydratePriority string
+	// The priority setting can be changed from Standard to High by calling Set Blob Tier with this header set to High and setting x-ms-access-tier to the same value as previously set. The priority setting cannot be lowered from High to Standard.
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -376,6 +380,11 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
+	err = cooked.rehydratePriority.Parse(raw.rehydratePriority)
+	if err != nil {
+		return cooked, err
+	}
+
 	// Everything uses the new implementation of list-of-files now.
 	// This handles both list-of-files and include-path as a list enumerator.
 	// This saves us time because we know *exactly* what we're looking for right off the bat.
@@ -544,7 +553,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 	cooked.disableAutoDecoding = raw.disableAutoDecoding
 
-	if cooked.FromTo.To() != common.ELocation.Blob() && raw.blobTags != "" {
+	if !(cooked.FromTo.To() == common.ELocation.Blob() || cooked.FromTo == common.EFromTo.BlobNone() || cooked.FromTo != common.EFromTo.BlobFSNone()) && raw.blobTags != "" {
 		return cooked, errors.New("blob tags can only be set when transferring to blob storage")
 	}
 	blobTags := common.ToCommonBlobTagsMap(raw.blobTags)
@@ -1150,6 +1159,12 @@ type CookedCopyCmdArgs struct {
 
 	// Optional flag that permanently deletes soft deleted blobs
 	permanentDeleteOption common.PermanentDeleteOption
+
+	// Optional flag that sets rehydrate priority for rehydration
+	rehydratePriority common.RehydratePriorityType
+
+	// Bitmasked uint checking which properties to transfer
+	propertiesToTransfer common.SetPropertiesFlags
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {
@@ -1443,6 +1458,14 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// case common.EFromTo.FileBlob():
 	// 	e := copyFileToNEnumerator(jobPartOrder)
 	// 	err = e.enumerate(cca)
+
+	case common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone(), common.EFromTo.FileNone():
+		e, createErr := setPropertiesEnumerator(cca)
+		if createErr != nil {
+			return createErr
+		}
+		err = e.enumerate()
+
 	default:
 		return fmt.Errorf("copy direction %v is not supported\n", cca.FromTo)
 	}
