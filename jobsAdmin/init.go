@@ -59,7 +59,7 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 	// Initialize the JobsAdmin, resurrect Job plan files
 	initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec, azcopyJobPlanFolder, azcopyLogPathFolder, providePerfAdvice)
 	// No need to read the existing JobPartPlan files since Azcopy is running in process
-	//JobsAdmin.ResurrectJobParts()
+	// JobsAdmin.ResurrectJobParts()
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
 
 	// if we've a custom mime map
@@ -105,8 +105,8 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 		})
 	http.HandleFunc(common.ERpcCmd.ListJobs().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
-			//var payload common.ListRequest
-			//deserialize(request, &payload)
+			// var payload common.ListRequest
+			// deserialize(request, &payload)
 			serialize(ListJobs(common.EJobStatus.All()), writer)
 		})
 	http.HandleFunc(common.ERpcCmd.ListJobSummary().Pattern(),
@@ -150,14 +150,14 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 		})
 
 	// Listen for front-end requests
-	//if err := http.ListenAndServe("localhost:1337", nil); err != nil {
+	// if err := http.ListenAndServe("localhost:1337", nil); err != nil {
 	//	fmt.Print("Server already initialized")
 	//	return err
-	//}
+	// }
 	return nil // TODO: don't return (like normal main)
 }
 
-///////////////////////////////////////////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////////////////
 
 // ExecuteNewCopyJobPartOrder api executes a new job part order
 func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
@@ -177,7 +177,8 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 	// Get credential info from RPC request order, and set in InMemoryTransitJobState.
 	jm.SetInMemoryTransitJobState(
 		ste.InMemoryTransitJobState{
-			CredentialInfo: order.CredentialInfo,
+			CredentialInfo:          order.CredentialInfo,
+			S2SSourceCredentialType: order.S2SSourceCredentialType,
 		})
 	// Supply no plan MMF because we don't have one, and AddJobPart will create one on its own.
 	jm.AddJobPart(order.PartNum, jppfn, nil, order.SourceRoot.SAS, order.DestinationRoot.SAS, true, nil) // Add this part to the Job and schedule its transfers
@@ -391,7 +392,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		common.EJobStatus.CompletedWithErrorsAndSkipped(),
 		common.EJobStatus.Cancelled(),
 		common.EJobStatus.Paused():
-		//go func() {
+		// go func() {
 		// Navigate through transfers and schedule them independently
 		// This is done to avoid FE to get blocked until all the transfers have been scheduled
 		// Get credential info from RPC request, and set in InMemoryTransitJobState.
@@ -429,7 +430,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		})
 
 		jm.ResumeTransfers(steCtx) // Reschedule all job part's transfers
-		//}()
+		// }()
 		jr = common.CancelPauseResumeResponse{
 			CancelledPauseResumed: true,
 			ErrorMsg:              "",
@@ -712,7 +713,7 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 		}
 		// jPartPlan represents the memory map JobPartPlanHeader for given jobid and part number
 		jpp := jpm.Plan()
-		//numTransfer := jPartPlan.NumTransfers
+		// numTransfer := jPartPlan.NumTransfers
 		// transferStatusList represents the list containing number of transfer for given jobID and part number
 		for t := uint32(0); t < jpp.NumTransfers; t++ {
 			// getting transfer header of transfer at index index for given jobId and part number

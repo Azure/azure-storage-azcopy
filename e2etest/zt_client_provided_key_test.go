@@ -21,9 +21,8 @@
 package e2etest
 
 import (
-	"testing"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"testing"
 )
 
 // Scenarios to consider for copy

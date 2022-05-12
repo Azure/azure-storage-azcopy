@@ -46,12 +46,14 @@ type PartNumber = common.PartNumber
 // This can be optimized if FE would no more be another module vs STE module.
 type InMemoryTransitJobState struct {
 	CredentialInfo common.CredentialInfo
+	// S2SSourceCredentialType can override the CredentialInfo.CredentialType when being used for the source (e.g. Source Info Provider and when using GetS2SSourceBlobTokenCredential)
+	S2SSourceCredentialType common.CredentialType
 }
 
 type IJobMgr interface {
 	JobID() common.JobID
 	JobPartMgr(partNum PartNumber) (IJobPartMgr, bool)
-	//Throughput() XferThroughput
+	// Throughput() XferThroughput
 	// If existingPlanMMF is nil, a new MMF is opened.
 	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF, sourceSAS string,
 		destinationSAS string, scheduleTransfers bool, completionChan chan struct{}) IJobPartMgr
@@ -73,7 +75,7 @@ type IJobMgr interface {
 	// TODO: added for debugging purpose. remove later
 	ActiveConnections() int64
 	GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint)
-	//Close()
+	// Close()
 	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
 	SetInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
 	ChunkStatusLogger() common.ChunkStatusLogger
@@ -107,7 +109,7 @@ type IJobMgr interface {
 	CleanupJobStatusMgr()
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel,
 	commandString string, logFileFolder string, tuner ConcurrencyTuner,
@@ -159,6 +161,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		pipelineNetworkStats: newPipelineNetworkStats(tuner), // let the stats coordinate with the concurrency tuner
 		initMu:               &sync.Mutex{},
 		jobPartProgress:      jobPartProgressCh,
+
 		reportCancelCh:       make(chan struct{}, 1),
 		coordinatorChannels: CoordinatorChannels{
 			partsChannel:     partsCh,
@@ -171,6 +174,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 			lowTransferCh:    lowTransferCh,
 			normalChunckCh:   normalChunkCh,
 			lowChunkCh:       lowChunkCh,
+
 			closeTransferCh:  make(chan struct{}, 100),
 			scheduleCloseCh:  make(chan struct{}, 1),
 		},
@@ -219,7 +223,7 @@ func (jm *jobMgr) getOverwritePrompter() *overwritePrompter {
 }
 
 func (jm *jobMgr) Reset(appCtx context.Context, commandString string) IJobMgr {
-	//jm.logger.OpenLog()
+	// jm.logger.OpenLog()
 	// log the user given command to the job log file.
 	// since the log file is opened in case of resume, list and many other operations
 	// for which commandString passed is empty, the length check is added
@@ -316,7 +320,7 @@ type jobMgr struct {
 
 	// partsDone keep the count of completed part of the Job.
 	partsDone uint32
-	//throughput  common.CountPerSecond // TODO: Set LastCheckedTime to now
+	// throughput  common.CountPerSecond // TODO: Set LastCheckedTime to now
 
 	inMemoryTransitJobState InMemoryTransitJobState
 	// list of transfer mentioned to include only then while resuming the job
@@ -349,14 +353,14 @@ type jobMgr struct {
 	isDaemon bool /* is it running as service */
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func (jm *jobMgr) Progress() (uint64, uint64) {
 	return atomic.LoadUint64(&jm.atomicNumberOfBytesCovered),
 		atomic.LoadUint64(&jm.atomicTotalBytesToXfer)
 }
 
-//func (jm *jobMgr) Throughput() XferThroughput { return jm.throughput }
+// func (jm *jobMgr) Throughput() XferThroughput { return jm.throughput }
 
 // JobID returns the JobID that this jobMgr managers
 func (jm *jobMgr) JobID() common.JobID { return jm.jobID }
@@ -465,7 +469,7 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, e
 		// Instead of the scheduling the Transfer for given JobPart
 		// JobPart is put into the partChannel
 		// from where it is picked up and scheduled
-		//jpm.ScheduleTransfers(jm.ctx, make(map[string]int), make(map[string]int))
+		// jpm.ScheduleTransfers(jm.ctx, make(map[string]int), make(map[string]int))
 		jm.QueueJobParts(jpm)
 	}
 	return jpm
@@ -579,10 +583,10 @@ func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 	jm.Reset(appCtx, "")
 	// Since while creating the JobMgr, atomicAllTransfersScheduled is set to true
 	// reset it to false while resuming it
-	//jm.ResetAllTransfersScheduled()
+	// jm.ResetAllTransfersScheduled()
 	jm.jobPartMgrs.Iterate(false, func(p common.PartNumber, jpm IJobPartMgr) {
 		jm.QueueJobParts(jpm)
-		//jpm.ScheduleTransfers(jm.ctx, includeTransfer, excludeTransfer)
+		// jpm.ScheduleTransfers(jm.ctx, includeTransfer, excludeTransfer)
 	})
 }
 
@@ -671,9 +675,13 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 						jobProgressInfo.transfersCompleted > 0))
 				}
 
-				// reset counters
-				atomic.StoreUint32(&jm.partsDone, 0)
-				jobProgressInfo = jobPartProgressInfo{}
+			// flush logs
+			jm.chunkStatusLogger.FlushLog() // TODO: remove once we sort out what will be calling CloseLog (currently nothing)
+			if allKnownPartsDone {
+				common.GetLifecycleMgr().ReportAllJobPartsDone()
+			}
+		} // Else log and wait for next part to complete
+
 
 				// flush logs
 				jm.chunkStatusLogger.FlushLog() // TODO: remove once we sort out what will be calling CloseLog (currently nothing)
@@ -761,10 +769,10 @@ func (jm *jobMgr) cleanupChunkStatusLogger() {
 }
 
 // PartsDone returns the number of the Job's parts that are either completed or failed
-//func (jm *jobMgr) PartsDone() uint32 { return atomic.LoadUint32(&jm.partsDone) }
+// func (jm *jobMgr) PartsDone() uint32 { return atomic.LoadUint32(&jm.partsDone) }
 
 // SetPartsDone sets the number of Job's parts that are done (completed or failed)
-//func (jm *jobMgr) SetPartsDone(partsDone uint32) { atomic.StoreUint32(&jm.partsDone, partsDone) }
+// func (jm *jobMgr) SetPartsDone(partsDone uint32) { atomic.StoreUint32(&jm.partsDone, partsDone) }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /* Infra ported to jobManager from JobsAdmin */
@@ -803,10 +811,10 @@ func (jm *jobMgr) CurrentMainPoolSize() int {
 func (jm *jobMgr) ScheduleTransfer(priority common.JobPriority, jptm IJobPartTransferMgr) {
 	switch priority { // priority determines which channel handles the job part's transfers
 	case common.EJobPriority.Normal():
-		//jptm.SetChunkChannel(ja.xferChannels.normalChunckCh)
+		// jptm.SetChunkChannel(ja.xferChannels.normalChunckCh)
 		jm.coordinatorChannels.normalTransferCh <- jptm
 	case common.EJobPriority.Low():
-		//jptm.SetChunkChannel(ja.xferChannels.lowChunkCh)
+		// jptm.SetChunkChannel(ja.xferChannels.lowChunkCh)
 		jm.coordinatorChannels.lowTransferCh <- jptm
 	default:
 		jm.Panic(fmt.Errorf("invalid priority: %q", priority))
@@ -1179,14 +1187,14 @@ func (m *jobPartToJobPartMgr) Iterate(readonly bool, f func(k common.PartNumber,
 	locker.Unlock()
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // ThroughputState struct holds the attribute to monitor the through of an existing JobOrder
-//type XferThroughput struct {
+// type XferThroughput struct {
 //	lastCheckedTime  time.Time
 //	lastCheckedBytes int64
 //	currentBytes     int64
-//}
+// }
 
 // getLastCheckedTime api returns the lastCheckedTime of ThroughputState instance in thread-safe manner
 /*func (t *XferThroughput) LastCheckedTime() time.Time { return t.lastCheckedTime }
