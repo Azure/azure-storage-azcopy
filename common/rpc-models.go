@@ -40,7 +40,7 @@ func (c *RpcCmd) Parse(s string) error {
 	return err
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // ResourceString represents a source or dest string, that can have
 // three parts: the main part, a sas, and extra query parameters that are not part of the sas.
@@ -105,7 +105,7 @@ func ConsolidatePathSeparators(path string) string {
 	return strings.ReplaceAll(path, AZCOPY_PATH_SEPARATOR_STRING, pathSep)
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Transfers describes each file/folder being transferred in a given JobPartOrder, and
 // other auxilliary details of this order.
@@ -149,6 +149,11 @@ type CopyJobPartOrderRequest struct {
 	S2SInvalidMetadataHandleOption InvalidMetadataHandleOption
 	S2SPreserveBlobTags            bool
 	CpkOptions                     CpkOptions
+
+	// S2SSourceCredentialType will override CredentialInfo.CredentialType for use on the source.
+	// As a result, CredentialInfo.OAuthTokenInfo may end up being fulfilled even _if_ CredentialInfo.CredentialType is _not_ OAuth.
+	// This may not always be the case (for instance, if we opt to use multiple OAuth tokens). At that point, this will likely be it's own CredentialInfo.
+	S2SSourceCredentialType CredentialType // Only Anonymous and OAuth will really be used in response to this, but S3 and GCP will come along too...
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,
@@ -158,6 +163,12 @@ type CredentialInfo struct {
 	OAuthTokenInfo    OAuthTokenInfo
 	S3CredentialInfo  S3CredentialInfo
 	GCPCredentialInfo GCPCredentialInfo
+}
+
+func (c CredentialInfo) WithType(credentialType CredentialType) CredentialInfo {
+	// c is a clone, so this is OK
+	c.CredentialType = credentialType
+	return c
 }
 
 type GCPCredentialInfo struct {

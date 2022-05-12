@@ -22,6 +22,7 @@ import (
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
+
 // debug knob
 var DebugSkipFiles = make(map[string]bool)
 
@@ -39,7 +40,7 @@ type IJobPartMgr interface {
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	ShouldPutMd5() bool
 	SAS() (string, string)
-	//CancelJob()
+	// CancelJob()
 	Close()
 	// TODO: added for debugging purpose. remove later
 	OccupyAConnection()
@@ -110,8 +111,8 @@ func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 			DisableKeepAlives:      false,
 			DisableCompression:     true, // must disable the auto-decompression of gzipped files, and just download the gzipped version. See https://github.com/Azure/azure-storage-azcopy/issues/374
 			MaxResponseHeaderBytes: 0,
-			//ResponseHeaderTimeout:  time.Duration{},
-			//ExpectContinueTimeout:  time.Duration{},
+			// ResponseHeaderTimeout:  time.Duration{},
+			// ExpectContinueTimeout:  time.Duration{},
 		},
 	}
 }
@@ -169,7 +170,7 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 		newRetryNotificationPolicyFactory(), // record that a retry status was returned
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		//NewPacerPolicyFactory(p),
+		// NewPacerPolicyFactory(p),
 		NewVersionPolicyFactory(),
 		NewRequestLogPolicyFactory(RequestLogOptions{
 			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
@@ -230,7 +231,7 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Holds the status of transfers in this jptm
 type jobPartProgressInfo struct {
@@ -336,7 +337,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	jobCtx = context.WithValue(jobCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
 	jpm.atomicTransfersDone = 0 // Reset the # of transfers done back to 0
 	// partplan file is opened and mapped when job part is added
-	//jpm.planMMF = jpm.filename.Map() // Open the job part plan file & memory-map it in
+	// jpm.planMMF = jpm.filename.Map() // Open the job part plan file & memory-map it in
 	plan := jpm.planMMF.Plan()
 	if plan.PartNum == 0 && plan.NumTransfers == 0 {
 		/* This will wind down the transfer and report summary */
@@ -439,7 +440,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			transferIndex:       t,
 			ctx:                 transferCtx,
 			cancel:              transferCancel,
-			//TODO: insert the factory func interface in jptm.
+			// TODO: insert the factory func interface in jptm.
 			// numChunks will be set by the transfer's prologue method
 		}
 		if jpm.ShouldLog(pipeline.LogInfo) {
@@ -540,8 +541,22 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 
 	// Create source info provider's pipeline for S2S copy.
 	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() {
+		var sourceCred azblob.Credential = azblob.NewAnonymousCredential()
+		jobState := jpm.jobMgr.getInMemoryTransitJobState()
+		if fromTo.To() == common.ELocation.Blob() && jobState.S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
+			credOption := common.CredentialOpOptions{
+				LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
+				LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
+				Panic:    jpm.Panic,
+				CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
+				Cancel:   jpm.jobMgr.Cancel,
+			}
+
+			sourceCred = common.CreateBlobCredential(ctx, jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType), credOption)
+		}
+
 		jpm.sourceProviderPipeline = NewBlobPipeline(
-			azblob.NewAnonymousCredential(),
+			sourceCred,
 			azblob.PipelineOptions{
 				Log: jpm.jobMgr.PipelineLogInfo(),
 				Telemetry: azblob.TelemetryOptions{
@@ -835,7 +850,7 @@ func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfe
 	transfersDone = atomic.AddUint32(&jpm.atomicTransfersDone, 1)
 	jpm.updateJobPartProgress(status)
 
-	//Add a safety count-check
+	// Add a safety count-check
 
 	if jpm.ShouldLog(pipeline.LogInfo) {
 		plan := jpm.Plan()
@@ -848,12 +863,14 @@ func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfe
 			transfersFailed:    int(atomic.LoadUint32(&jpm.atomicTransfersFailed)),
 			completionChan:     jpm.closeOnCompletion,
 		}
+		jpm.Plan().SetJobPartStatus(common.EJobStatus.EnhanceJobStatusInfo(jppi.transfersSkipped > 0,
+			jppi.transfersFailed > 0, jppi.transfersCompleted > 0))
 		jpm.jobMgr.ReportJobPartDone(jppi)
 	}
 	return transfersDone
 }
 
-//func (jpm *jobPartMgr) Cancel() { jpm.jobMgr.Cancel() }
+// func (jpm *jobPartMgr) Cancel() { jpm.jobMgr.Cancel() }
 func (jpm *jobPartMgr) Close() {
 	jpm.planMMF.Unmap()
 	// Clear other fields to all for GC
@@ -897,10 +914,10 @@ func (jpm *jobPartMgr) SendXferDoneMsg(msg xferDoneMsg) {
 // TODO: Can we delete this method?
 // numberOfTransfersDone returns the numberOfTransfersDone_doNotUse of JobPartPlanInfo
 // instance in thread safe manner
-//func (jpm *jobPartMgr) numberOfTransfersDone() uint32 {	return atomic.LoadUint32(&jpm.numberOfTransfersDone_doNotUse)}
+// func (jpm *jobPartMgr) numberOfTransfersDone() uint32 {	return atomic.LoadUint32(&jpm.numberOfTransfersDone_doNotUse)}
 
 // setNumberOfTransfersDone sets the number of transfers done to a specific value
 // in a thread safe manner
-//func (jppi *jobPartPlanInfo) setNumberOfTransfersDone(val uint32) {
+// func (jppi *jobPartPlanInfo) setNumberOfTransfersDone(val uint32) {
 //	atomic.StoreUint32(&jPartPlanInfo.numberOfTransfersDone_doNotUse, val)
-//}
+// }

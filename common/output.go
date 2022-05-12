@@ -28,6 +28,9 @@ func (outputMessageType) EndOfJob() outputMessageType { return outputMessageType
 func (outputMessageType) Error() outputMessageType  { return outputMessageType(4) } // indicate fatal error, exit right after
 func (outputMessageType) Prompt() outputMessageType { return outputMessageType(5) } // ask the user a question after erasing the progress
 
+func (outputMessageType) Response() outputMessageType { return outputMessageType(7) } /* Response to LCMMsg (like PerformanceAdjustment)
+//Json with determined fields for output-type json, INFO for other o/p types. */
+
 func (o outputMessageType) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
 }

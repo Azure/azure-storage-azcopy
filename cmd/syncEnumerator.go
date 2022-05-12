@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"runtime"
+	"strings"
 	"sync/atomic"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -44,7 +45,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	}
 
 	if cca.fromTo.IsS2S() {
-		if cca.fromTo.From() != common.ELocation.S3() {
+		if cca.fromTo.From() != common.ELocation.S3() && cca.fromTo.From() != common.ELocation.Blob() { // blob and S3 don't necessarily require SAS tokens (S3 w/ access key, blob w/ copysourceauthorization)
 			// Adding files here seems like an odd case, but since files can't be public
 			// the second half of this if statement does not hurt.
 
@@ -122,7 +123,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	}
 
 	// decide our folder transfer strategy
-	fpo, folderMessage := newFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.isHNSToHNS) // sync always acts like stripTopDir=true
+	fpo, folderMessage := newFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.isHNSToHNS, strings.EqualFold(cca.destination.Value, common.Dev_Null)) // sync always acts like stripTopDir=true
 	if !cca.dryrunMode {
 		glcm.Info(folderMessage)
 	}

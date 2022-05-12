@@ -30,11 +30,6 @@ type BucketToContainerNameResolver interface {
 func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) (*CopyEnumerator, error) {
 	var traverser ResourceTraverser
 
-	// Warn about GCP -> Blob being in preview. Also, we do not support GCP as destination.
-	if cca.FromTo.From() == common.ELocation.GCP() {
-		glcm.Info("Google Cloud Storage to Azure Blob copy is currently in preview. Validate the copy operation carefully before removing your data at source.")
-	}
-
 	srcCredInfo := common.CredentialInfo{}
 	var isPublic bool
 	var err error
@@ -42,11 +37,29 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	if srcCredInfo, isPublic, err = GetCredentialInfoForLocation(ctx, cca.FromTo.From(), cca.Source.Value, cca.Source.SAS, true, cca.CpkOptions); err != nil {
 		return nil, err
 		// If S2S and source takes OAuthToken as its cred type (OR) source takes anonymous as its cred type, but it's not public and there's no SAS
-	} else if cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() &&
-		(srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() ||
+	} else if cca.FromTo.IsS2S() &&
+		((srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() && cca.FromTo.To() != common.ELocation.Blob()) || // Blob can forward OAuth tokens
 			(srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && !isPublic && cca.Source.SAS == "")) {
-		// TODO: Generate a SAS token if it's blob -> *
-		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource")
+		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource, or the destination is blob storage")
+	}
+
+	if cca.Source.SAS != "" && cca.FromTo.IsS2S() && jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+		glcm.Info("Authentication: If the source and destination accounts are in the same AAD tenant & the user/spn/msi has appropriate permissions on both, the source SAS token is not required and OAuth can be used round-trip.")
+	}
+
+	if cca.FromTo.IsS2S() {
+		jobPartOrder.S2SSourceCredentialType = srcCredInfo.CredentialType
+	}
+
+	if jobPartOrder.S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
+		uotm := GetUserOAuthTokenManagerInstance()
+		// get token from env var or cache
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+			return nil, err
+		} else {
+			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
+			jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo
+		}
 	}
 
 	jobPartOrder.CpkOptions = cca.CpkOptions
@@ -221,7 +234,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.isHNStoHNS)
+	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.isHNStoHNS, strings.EqualFold(cca.Destination.Value, common.Dev_Null))
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
@@ -661,7 +674,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 }
 
 // we assume that preserveSmbPermissions and preserveSmbInfo have already been validated, such that they are only true if both resource types support them
-func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preserveSmbPermissions, isDfsDfs bool) (common.FolderPropertyOption, string) {
+func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preserveSmbPermissions, isDfsDfs, isDstNull bool) (common.FolderPropertyOption, string) {
 
 	getSuffix := func(willProcess bool) string {
 		willProcessString := common.IffString(willProcess, "will be processed", "will not be processed")
@@ -679,7 +692,7 @@ func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir b
 		}
 	}
 
-	bothFolderAware := fromTo.AreBothFolderAware() || isDfsDfs
+	bothFolderAware := (fromTo.AreBothFolderAware() || isDfsDfs) && !isDstNull // Copying folders to dev null doesn't make sense.
 	isRemoveFromFolderAware := fromTo == common.EFromTo.FileTrash()
 	if bothFolderAware || isRemoveFromFolderAware {
 		if !recursive {
