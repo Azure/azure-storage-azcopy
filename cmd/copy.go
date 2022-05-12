@@ -1818,7 +1818,7 @@ func init() {
 			if err != nil {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 			}
-			glcm.SetOutputVerbosity(azcopyOutputVerbosity) // TODO add this to all commands
+			glcm.SetOutputVerbosity(azcopyOutputVerbosity)
 
 			glcm.Info("Scanning...")
 
