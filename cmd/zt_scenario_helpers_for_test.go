@@ -768,6 +768,9 @@ func runSyncAndVerify(c *chk.C, raw rawSyncCmdArgs, verifier func(err error)) {
 func runCopyAndVerify(c *chk.C, raw rawCopyCmdArgs, verifier func(err error)) {
 	// the simulated user input should parse properly
 	cooked, err := raw.cook()
+	if err == nil && cooked.blockBlobTier != common.EBlockBlobTier.None() { // TODO add other conditions
+		err = cooked.makeEnumAndPerformChecks()
+	}
 	if err != nil {
 		verifier(err)
 		return
@@ -910,4 +913,57 @@ func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 		preserveOwner:                  common.PreserveOwnerDefault,
 		includeDirectoryStubs:          true,
 	}
+}
+
+func getDefaultSetPropertiesRawInput(src string, params transferParams) rawCopyCmdArgs {
+	fromTo := common.EFromTo.BlobNone()
+	srcURL, _ := url.Parse(src)
+
+	srcLocationType := InferArgumentLocation(src)
+	switch srcLocationType {
+	case common.ELocation.Blob():
+		fromTo = common.EFromTo.BlobNone()
+	case common.ELocation.BlobFS():
+		fromTo = common.EFromTo.BlobFSNone()
+	case common.ELocation.File():
+		fromTo = common.EFromTo.FileNone()
+	default:
+		panic(fmt.Sprintf("invalid source type %s to delete. azcopy support removing blobs/files/adls gen2", srcLocationType.String()))
+
+	}
+
+	if strings.Contains(srcURL.Host, "file") {
+		fromTo = common.EFromTo.FileNone()
+	} else if strings.Contains(srcURL.Host, "dfs") {
+		fromTo = common.EFromTo.BlobFSNone()
+	}
+
+	rawArgs := rawCopyCmdArgs{
+		src:                            src,
+		fromTo:                         fromTo.String(),
+		logVerbosity:                   defaultLogVerbosityForSync,
+		blobType:                       common.EBlobType.Detect().String(),
+		blockBlobTier:                  common.EBlockBlobTier.None().String(),
+		pageBlobTier:                   common.EPageBlobTier.None().String(),
+		md5ValidationOption:            common.DefaultHashValidationOption.String(),
+		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
+		forceWrite:                     common.EOverwriteOption.True().String(),
+		preserveOwner:                  common.PreserveOwnerDefault,
+		includeDirectoryStubs:          true,
+	}
+
+	if params.blockBlobTier != common.EBlockBlobTier.None() {
+		rawArgs.blockBlobTier = params.blockBlobTier.String()
+	}
+	if params.pageBlobTier != common.EPageBlobTier.None() {
+		rawArgs.pageBlobTier = params.pageBlobTier.String()
+	}
+	if params.metadata != "" {
+		rawArgs.metadata = params.metadata
+	}
+	if params.blobTags != nil {
+		rawArgs.blobTags = params.blobTags.ToString()
+	}
+
+	return rawArgs
 }
