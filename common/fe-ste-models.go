@@ -1563,5 +1563,12 @@ func (rpt RehydratePriorityType) String() string {
 }
 
 func (rpt RehydratePriorityType) ToRehydratePriorityType() azblob.RehydratePriorityType {
-	return azblob.RehydratePriorityType(rpt.String())
+	switch rpt {
+	case ERehydratePriorityType.None(), ERehydratePriorityType.Standard():
+		return azblob.RehydratePriorityStandard
+	case ERehydratePriorityType.High():
+		return azblob.RehydratePriorityHigh
+	default:
+		return azblob.RehydratePriorityStandard
+	}
 }

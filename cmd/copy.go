@@ -380,6 +380,9 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
+	if raw.rehydratePriority == "" {
+		raw.rehydratePriority = "standard"
+	}
 	err = cooked.rehydratePriority.Parse(raw.rehydratePriority)
 	if err != nil {
 		return cooked, err
