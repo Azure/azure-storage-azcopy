@@ -112,6 +112,10 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 					return fmt.Sprintf("DRYRUN: remove %v/%v",
 						s.copyJobTemplate.SourceRoot.Value,
 						srcRelativePath)
+				} else if s.copyJobTemplate.FromTo.To() == common.ELocation.None() { //set-properties
+					return fmt.Sprintf("DRYRUN: set-properties %v/%v",
+						s.copyJobTemplate.SourceRoot.Value,
+						srcRelativePath)
 				} else { //copy for sync
 					if s.copyJobTemplate.FromTo.From() == common.ELocation.Local() {
 						// formatting from local source
