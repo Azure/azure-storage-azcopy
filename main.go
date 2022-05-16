@@ -42,12 +42,18 @@ func main() {
 
 	rand.Seed(time.Now().UnixNano()) // make sure our random numbers actually are random (but remember, use crypto/rand for anything where strong/reliable randomness is required
 
+	azcopyLogPathFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.LogLocation())     // user specified location for log files
+	azcopyJobPlanFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.JobPlanLocation()) // user specified location for plan files
+
 	// note: azcopyAppPathFolder is the default location for all AzCopy data (logs, job plans, oauth token on Windows)
 	// but both logs and job plans can be put elsewhere as they can become very large
-	azcopyAppPathFolder := GetAzCopyAppPath()
+	azcopyAppPathFolder := ""
+
+	if azcopyLogPathFolder == "" || azcopyJobPlanFolder == "" { // we don't need to make this folder if both log and plan need to be elsewhere
+		azcopyAppPathFolder = GetAzCopyAppPath()
+	}
 
 	// the user can optionally put the log files somewhere else
-	azcopyLogPathFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.LogLocation())
 	if azcopyLogPathFolder == "" {
 		azcopyLogPathFolder = azcopyAppPathFolder
 	}
@@ -56,7 +62,6 @@ func main() {
 	}
 
 	// the user can optionally put the plan files somewhere else
-	azcopyJobPlanFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.JobPlanLocation())
 	if azcopyJobPlanFolder == "" {
 		azcopyJobPlanFolder = path.Join(azcopyAppPathFolder, "plans")
 	}
