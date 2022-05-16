@@ -47,10 +47,13 @@ func main() {
 
 	// note: azcopyAppPathFolder is the default location for all AzCopy data (logs, job plans, oauth token on Windows)
 	// but both logs and job plans can be put elsewhere as they can become very large
-	azcopyAppPathFolder := ""
+	azcopyAppPathFolder := GetAzCopyAppPath()
 
-	if azcopyLogPathFolder == "" || azcopyJobPlanFolder == "" { // we don't need to make this folder if both log and plan need to be elsewhere
-		azcopyAppPathFolder = GetAzCopyAppPath()
+	if azcopyLogPathFolder == "" || azcopyJobPlanFolder == "" { // we actually make this folder only if at least one - log or plan file- needs to be here
+		err := os.Mkdir(azcopyAppPathFolder, os.ModeDir)
+		if err != nil && !os.IsExist(err) {
+			common.PanicIfErr(err)
+		}
 	}
 
 	// the user can optionally put the log files somewhere else
