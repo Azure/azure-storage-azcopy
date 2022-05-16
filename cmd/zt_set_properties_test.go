@@ -125,7 +125,7 @@ func validateSetPropertiesTransfersAreScheduled(c *chk.C, isSrcEncoded bool, exp
 	}
 }
 
-func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlob(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForBlobTier(c *chk.C) {
 	bsu := getBSU()
 	containerURL, containerName := createNewContainer(c, bsu)
 	defer deleteContainer(c, containerURL)
@@ -162,7 +162,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlob(c *chk.C) {
 	}
 }
 
-func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainer(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerForBlobTier(c *chk.C) {
 	bsu := getBSU()
 
 	// set up the container with numerous blobs
@@ -216,7 +216,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainer(c *chk.C) {
 
 // TODO: func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDir(c *chk.C)
 
-func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeFlag(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeFlagForBlobTier(c *chk.C) {
 	bsu := getBSU()
 
 	// set up the container with numerous blobs
@@ -250,12 +250,12 @@ func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeFlag(c *chk.C) {
 
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateDownloadTransfersAreScheduled(c, "", "", blobList, mockedRPC)
-		validateSetPropertiesTransfersAreScheduled(c, true, blobList, transferParams, mockedRPC)
+		validateDownloadTransfersAreScheduled(c, "", "", blobsToInclude, mockedRPC)
+		validateSetPropertiesTransfersAreScheduled(c, true, blobsToInclude, transferParams, mockedRPC)
 	})
 }
 
-func (s *cmdIntegrationSuite) TestSetPropertiesWithExcludeFlag(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSetPropertiesWithExcludeFlagForBlobTier(c *chk.C) {
 	bsu := getBSU()
 
 	// set up the container with numerous blobs
@@ -296,7 +296,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesWithExcludeFlag(c *chk.C) {
 	})
 }
 
-func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeAndExcludeFlag(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeAndExcludeFlagForBlobTier(c *chk.C) {
 	bsu := getBSU()
 
 	// set up the container with numerous blobs
@@ -339,12 +339,12 @@ func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeAndExcludeFlag(c *chk.
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		validateDownloadTransfersAreScheduled(c, "", "", blobsToInclude, mockedRPC)
-		validateSetPropertiesTransfersAreScheduled(c, true, blobList, transferParams, mockedRPC)
+		validateSetPropertiesTransfersAreScheduled(c, true, blobsToInclude, transferParams, mockedRPC)
 	})
 }
 
 // note: list-of-files flag is used
-func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsAndVirtualDirs(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsAndVirtualDirsForBlobTier(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
 	bsu := getBSU()
 	vdirName := "megadir"
@@ -415,7 +415,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsAndVirtualDirs(c *chk.
 	})
 }
 
-func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsWithIncludeAndExclude(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsWithIncludeAndExcludeForBlobTier(c *chk.C) {
 	bsu := getBSU()
 	vdirName := "megadir"
 
@@ -481,9 +481,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsWithIncludeAndExclude(
 	})
 }
 
-//TODO : func (s *cmdIntegrationSuite) TestSetPropertiesBlobsWithDirectoryStubs(c *chk.C)
-
-func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobWithFromTo(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobWithFromToForBlobTier(c *chk.C) {
 	bsu := getBSU()
 	containerURL, containerName := createNewContainer(c, bsu)
 	defer deleteContainer(c, containerURL)
@@ -520,7 +518,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobWithFromTo(c *chk.C) {
 	}
 }
 
-func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerWithFromTo(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerWithFromToForBlobTier(c *chk.C) {
 	bsu := getBSU()
 
 	// set up the container with numerous blobs
@@ -574,7 +572,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerWithFromTo(c *
 	})
 }
 
-func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderVirtualDirWithFromTo(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderVirtualDirWithFromToForBlobTier(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
 	bsu := getBSU()
 	vdirName := "vdir1/vdir2/vdir3/"
@@ -599,6 +597,1010 @@ func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderVirtualDirWithFromTo(c 
 		pageBlobTier:  common.EPageBlobTier.None(),
 		metadata:      "",
 		blobTags:      common.BlobTags{},
+	}
+
+	raw := getDefaultSetPropertiesRawInput(rawVirtualDirectoryURLWithSAS.String(), transferParams)
+	raw.fromTo = "BlobNone"
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
+
+		// validate that the right transfers were sent
+		expectedTransfers := scenarioHelper{}.shaveOffPrefix(blobList, vdirName)
+		validateSetPropertiesTransfersAreScheduled(c, true, expectedTransfers, transferParams, mockedRPC)
+	})
+
+	// turn off recursive, this time only top blobs should be deleted
+	raw.recursive = false
+	mockedRPC.reset()
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(blobList))
+
+		for _, transfer := range mockedRPC.transfers {
+			c.Assert(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+		}
+	})
+}
+
+///////////////////////////////// METADATA /////////////////////////////////
+
+func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForMetadata(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	for _, blobName := range []string{"top/mid/low/singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
+		// set up the container with a single blob
+		blobList := []string{blobName}
+
+		// upload the data with given accessTier
+		scenarioHelper{}.generateBlobsFromListWithAccessTier(c, containerURL, blobList, blockBlobDefaultData, azblob.AccessTierHot)
+		c.Assert(containerURL, chk.NotNil)
+
+		// set up interceptor
+		mockedRPC := interceptor{}
+		Rpc = mockedRPC.intercept
+		mockedRPC.init()
+
+		// construct the raw input to simulate user input
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		transferParams := transferParams{
+			blockBlobTier: common.EBlockBlobTier.None(),
+			pageBlobTier:  common.EPageBlobTier.None(),
+			metadata:      "abc=def;metadata=value",
+			blobTags:      common.BlobTags{},
+		}
+		raw := getDefaultSetPropertiesRawInput(rawBlobURLWithSAS.String(), transferParams)
+
+		runCopyAndVerify(c, raw, func(err error) {
+			c.Assert(err, chk.IsNil)
+
+			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
+			validateSetPropertiesTransfersAreScheduled(c, true, []string{""}, transferParams, mockedRPC)
+		})
+	}
+}
+
+func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerForMetadata(c *chk.C) {
+	bsu := getBSU()
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(c, containerURL, "", azblob.AccessTierHot)
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.None(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "abc=def;metadata=value",
+		blobTags:      common.BlobTags{},
+	}
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
+	raw.recursive = true
+	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
+
+		// validate that the right transfers were sent
+		validateSetPropertiesTransfersAreScheduled(c, true, blobList, transferParams, mockedRPC)
+	})
+
+	// turn off recursive, this time only top blobs should be changed
+	raw.recursive = false
+	mockedRPC.reset()
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(blobList))
+
+		for _, transfer := range mockedRPC.transfers {
+			c.Assert(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+		}
+	})
+}
+
+func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeFlagForMetadata(c *chk.C) {
+	bsu := getBSU()
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(c, containerURL, "", azblob.AccessTierHot)
+	defer deleteContainer(c, containerURL)
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// add special blobs that we wish to include
+	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg", "exactName"}
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(c, containerURL, blobsToInclude, blockBlobDefaultData, azblob.AccessTierHot)
+	includeString := "*.pdf;*.jpeg;exactName"
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.None(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "abc=def;metadata=value",
+		blobTags:      common.BlobTags{},
+	}
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
+	raw.include = includeString
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateDownloadTransfersAreScheduled(c, "", "", blobsToInclude, mockedRPC)
+		validateSetPropertiesTransfersAreScheduled(c, true, blobsToInclude, transferParams, mockedRPC)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestSetPropertiesWithExcludeFlagForMetadata(c *chk.C) {
+	bsu := getBSU()
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(c, containerURL, "", azblob.AccessTierHot)
+	defer deleteContainer(c, containerURL)
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// add special blobs that we wish to exclude
+	blobsToExclude := []string{"notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(c, containerURL, blobsToExclude, blockBlobDefaultData, azblob.AccessTierHot)
+	excludeString := "*.pdf;*.jpeg;exactName"
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.None(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "abc=def;metadata=value",
+		blobTags:      common.BlobTags{},
+	}
+
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
+	raw.exclude = excludeString
+	raw.recursive = true
+	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateDownloadTransfersAreScheduled(c, "", "", blobList, mockedRPC)
+		validateSetPropertiesTransfersAreScheduled(c, true, blobList, transferParams, mockedRPC)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeAndExcludeFlagForMetadata(c *chk.C) {
+	bsu := getBSU()
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(c, containerURL, "", azblob.AccessTierHot)
+	defer deleteContainer(c, containerURL)
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// add special blobs that we wish to include
+	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(c, containerURL, blobsToInclude, blockBlobDefaultData, azblob.AccessTierHot)
+	includeString := "*.pdf;*.jpeg;exactName"
+
+	// add special blobs that we wish to exclude
+	// note that the excluded files also match the include string
+	blobsToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(c, containerURL, blobsToExclude, blockBlobDefaultData, azblob.AccessTierHot)
+	excludeString := "so*;not*;exactName"
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.None(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "abc=def;metadata=value",
+		blobTags:      common.BlobTags{},
+	}
+
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
+	raw.include = includeString
+	raw.exclude = excludeString
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateDownloadTransfersAreScheduled(c, "", "", blobsToInclude, mockedRPC)
+		validateSetPropertiesTransfersAreScheduled(c, true, blobsToInclude, transferParams, mockedRPC)
+	})
+}
+
+// note: list-of-files flag is used
+func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsAndVirtualDirsForMetadata(c *chk.C) {
+	c.Skip("Enable after setting Account to non-HNS")
+	bsu := getBSU()
+	vdirName := "megadir"
+
+	// set up the container with numerous blobs and a vdir
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+	c.Assert(containerURL, chk.NotNil)
+	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(c, containerURL, "", azblob.AccessTierHot)
+	blobListPart2 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(c, containerURL, vdirName+"/", azblob.AccessTierHot)
+
+	blobList := append(blobListPart1, blobListPart2...)
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.None(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "abc=def;metadata=value",
+		blobTags:      common.BlobTags{},
+	}
+
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
+	raw.recursive = true
+
+	// make the input for list-of-files
+	listOfFiles := append(blobListPart1, vdirName)
+
+	// add some random files that don't actually exist
+	listOfFiles = append(listOfFiles, "WUTAMIDOING")
+	listOfFiles = append(listOfFiles, "DONTKNOW")
+	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(c, listOfFiles)
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
+
+		// validate that the right transfers were sent
+		validateSetPropertiesTransfersAreScheduled(c, true, blobList, transferParams, mockedRPC)
+	})
+
+	// turn off recursive, this time only top blobs should be deleted
+	raw.recursive = false
+	mockedRPC.reset()
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(blobList))
+
+		for _, transfer := range mockedRPC.transfers {
+			source, err := url.PathUnescape(transfer.Source)
+			c.Assert(err, chk.IsNil)
+
+			// if the transfer is under the given dir, make sure only the top level files were scheduled
+			if strings.HasPrefix(source, vdirName) {
+				trimmedSource := strings.TrimPrefix(source, vdirName+"/")
+				c.Assert(strings.Contains(trimmedSource, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+			}
+		}
+	})
+}
+
+func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsWithIncludeAndExcludeForMetadata(c *chk.C) {
+	bsu := getBSU()
+	vdirName := "megadir"
+
+	// set up the container with numerous blobs and a vdir
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+	c.Assert(containerURL, chk.NotNil)
+	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(c, containerURL, "", azblob.AccessTierHot)
+	scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(c, containerURL, vdirName+"/", azblob.AccessTierHot)
+
+	// add special blobs that we wish to include
+	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(c, containerURL, blobsToInclude, blockBlobDefaultData, azblob.AccessTierHot)
+
+	includeString := "*.pdf;*.jpeg;exactName"
+
+	// add special blobs that we wish to exclude
+	// note that the excluded files also match the include string
+	blobsToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(c, containerURL, blobsToExclude, blockBlobDefaultData, azblob.AccessTierHot)
+	excludeString := "so*;not*;exactName"
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.None(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "abc=def;metadata=value",
+		blobTags:      common.BlobTags{},
+	}
+
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
+
+	raw.recursive = true
+	raw.include = includeString
+	raw.exclude = excludeString
+
+	// make the input for list-of-files
+	listOfFiles := append(blobListPart1, vdirName)
+
+	// add some random files that don't actually exist
+	listOfFiles = append(listOfFiles, "WUTAMIDOING")
+	listOfFiles = append(listOfFiles, "DONTKNOW")
+
+	// add files to both include and exclude
+	listOfFiles = append(listOfFiles, blobsToInclude...)
+	listOfFiles = append(listOfFiles, blobsToExclude...)
+	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(c, listOfFiles)
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
+
+		// validate that the right transfers were sent
+		validateSetPropertiesTransfersAreScheduled(c, true, blobsToInclude, transferParams, mockedRPC)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobWithFromToForMetadata(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	for _, blobName := range []string{"top/mid/low/singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
+		// set up the container with a single blob
+		blobList := []string{blobName}
+		scenarioHelper{}.generateBlobsFromListWithAccessTier(c, containerURL, blobList, blockBlobDefaultData, azblob.AccessTierHot)
+		c.Assert(containerURL, chk.NotNil)
+
+		// set up interceptor
+		mockedRPC := interceptor{}
+		Rpc = mockedRPC.intercept
+		mockedRPC.init()
+
+		// construct the raw input to simulate user input
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		transferParams := transferParams{
+			blockBlobTier: common.EBlockBlobTier.None(),
+			pageBlobTier:  common.EPageBlobTier.None(),
+			metadata:      "abc=def;metadata=value",
+			blobTags:      common.BlobTags{},
+		}
+
+		raw := getDefaultSetPropertiesRawInput(rawBlobURLWithSAS.String(), transferParams)
+		raw.fromTo = "BlobNone"
+
+		runCopyAndVerify(c, raw, func(err error) {
+			c.Assert(err, chk.IsNil)
+
+			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
+			validateSetPropertiesTransfersAreScheduled(c, true, []string{""}, transferParams, mockedRPC)
+		})
+	}
+}
+
+func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerWithFromToForMetadata(c *chk.C) {
+	bsu := getBSU()
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(c, containerURL, "", azblob.AccessTierHot)
+
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.None(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "abc=def;metadata=value",
+		blobTags:      common.BlobTags{},
+	}
+
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
+	raw.fromTo = "BlobNone"
+	raw.recursive = true
+	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
+
+		// validate that the right transfers were sent
+		validateSetPropertiesTransfersAreScheduled(c, true, blobList, transferParams, mockedRPC)
+	})
+
+	// turn off recursive, this time only top blobs should be deleted
+	raw.recursive = false
+	mockedRPC.reset()
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(blobList))
+
+		for _, transfer := range mockedRPC.transfers {
+			c.Assert(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+		}
+	})
+}
+
+func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderVirtualDirWithFromToForMetadata(c *chk.C) {
+	c.Skip("Enable after setting Account to non-HNS")
+	bsu := getBSU()
+	vdirName := "vdir1/vdir2/vdir3/"
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(c, containerURL, vdirName, azblob.AccessTierHot)
+
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName)
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.None(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "abc=def;metadata=value",
+		blobTags:      common.BlobTags{},
+	}
+
+	raw := getDefaultSetPropertiesRawInput(rawVirtualDirectoryURLWithSAS.String(), transferParams)
+	raw.fromTo = "BlobNone"
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
+
+		// validate that the right transfers were sent
+		expectedTransfers := scenarioHelper{}.shaveOffPrefix(blobList, vdirName)
+		validateSetPropertiesTransfersAreScheduled(c, true, expectedTransfers, transferParams, mockedRPC)
+	})
+
+	// turn off recursive, this time only top blobs should be deleted
+	raw.recursive = false
+	mockedRPC.reset()
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(blobList))
+
+		for _, transfer := range mockedRPC.transfers {
+			c.Assert(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+		}
+	})
+}
+
+///////////////////////////////// TAGS /////////////////////////////////
+
+func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForBlobTags(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	for _, blobName := range []string{"top/mid/low/singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
+		// set up the container with a single blob
+		blobList := []string{blobName}
+
+		// upload the data with given accessTier
+		scenarioHelper{}.generateBlobsFromListWithAccessTier(c, containerURL, blobList, blockBlobDefaultData, azblob.AccessTierHot)
+		c.Assert(containerURL, chk.NotNil)
+
+		// set up interceptor
+		mockedRPC := interceptor{}
+		Rpc = mockedRPC.intercept
+		mockedRPC.init()
+
+		// construct the raw input to simulate user input
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		transferParams := transferParams{
+			blockBlobTier: common.EBlockBlobTier.None(),
+			pageBlobTier:  common.EPageBlobTier.None(),
+			metadata:      "",
+			blobTags:      common.BlobTags{"abc": "fgd"},
+		}
+		raw := getDefaultSetPropertiesRawInput(rawBlobURLWithSAS.String(), transferParams)
+
+		runCopyAndVerify(c, raw, func(err error) {
+			c.Assert(err, chk.IsNil)
+
+			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
+			validateSetPropertiesTransfersAreScheduled(c, true, []string{""}, transferParams, mockedRPC)
+		})
+	}
+}
+
+func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerForBlobTags(c *chk.C) {
+	bsu := getBSU()
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(c, containerURL, "", azblob.AccessTierHot)
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.None(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "",
+		blobTags:      common.BlobTags{"abc": "fgd"},
+	}
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
+	raw.recursive = true
+	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
+
+		// validate that the right transfers were sent
+		validateSetPropertiesTransfersAreScheduled(c, true, blobList, transferParams, mockedRPC)
+	})
+
+	// turn off recursive, this time only top blobs should be changed
+	raw.recursive = false
+	mockedRPC.reset()
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(blobList))
+
+		for _, transfer := range mockedRPC.transfers {
+			c.Assert(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+		}
+	})
+}
+
+func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeFlagForBlobTags(c *chk.C) {
+	bsu := getBSU()
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(c, containerURL, "", azblob.AccessTierHot)
+	defer deleteContainer(c, containerURL)
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// add special blobs that we wish to include
+	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg", "exactName"}
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(c, containerURL, blobsToInclude, blockBlobDefaultData, azblob.AccessTierHot)
+	includeString := "*.pdf;*.jpeg;exactName"
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.None(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "",
+		blobTags:      common.BlobTags{"abc": "fgd"},
+	}
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
+	raw.include = includeString
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateDownloadTransfersAreScheduled(c, "", "", blobsToInclude, mockedRPC)
+		validateSetPropertiesTransfersAreScheduled(c, true, blobsToInclude, transferParams, mockedRPC)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestSetPropertiesWithExcludeFlagForBlobTags(c *chk.C) {
+	bsu := getBSU()
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(c, containerURL, "", azblob.AccessTierHot)
+	defer deleteContainer(c, containerURL)
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// add special blobs that we wish to exclude
+	blobsToExclude := []string{"notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(c, containerURL, blobsToExclude, blockBlobDefaultData, azblob.AccessTierHot)
+	excludeString := "*.pdf;*.jpeg;exactName"
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.None(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "",
+		blobTags:      common.BlobTags{"abc": "fgd"},
+	}
+
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
+	raw.exclude = excludeString
+	raw.recursive = true
+	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateDownloadTransfersAreScheduled(c, "", "", blobList, mockedRPC)
+		validateSetPropertiesTransfersAreScheduled(c, true, blobList, transferParams, mockedRPC)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeAndExcludeFlagForBlobTags(c *chk.C) {
+	bsu := getBSU()
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(c, containerURL, "", azblob.AccessTierHot)
+	defer deleteContainer(c, containerURL)
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// add special blobs that we wish to include
+	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(c, containerURL, blobsToInclude, blockBlobDefaultData, azblob.AccessTierHot)
+	includeString := "*.pdf;*.jpeg;exactName"
+
+	// add special blobs that we wish to exclude
+	// note that the excluded files also match the include string
+	blobsToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(c, containerURL, blobsToExclude, blockBlobDefaultData, azblob.AccessTierHot)
+	excludeString := "so*;not*;exactName"
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.None(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "",
+		blobTags:      common.BlobTags{"abc": "fgd"},
+	}
+
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
+	raw.include = includeString
+	raw.exclude = excludeString
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateDownloadTransfersAreScheduled(c, "", "", blobsToInclude, mockedRPC)
+		validateSetPropertiesTransfersAreScheduled(c, true, blobsToInclude, transferParams, mockedRPC)
+	})
+}
+
+// note: list-of-files flag is used
+func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsAndVirtualDirsForBlobTags(c *chk.C) {
+	c.Skip("Enable after setting Account to non-HNS")
+	bsu := getBSU()
+	vdirName := "megadir"
+
+	// set up the container with numerous blobs and a vdir
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+	c.Assert(containerURL, chk.NotNil)
+	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(c, containerURL, "", azblob.AccessTierHot)
+	blobListPart2 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(c, containerURL, vdirName+"/", azblob.AccessTierHot)
+
+	blobList := append(blobListPart1, blobListPart2...)
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.None(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "",
+		blobTags:      common.BlobTags{"abc": "fgd"},
+	}
+
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
+	raw.recursive = true
+
+	// make the input for list-of-files
+	listOfFiles := append(blobListPart1, vdirName)
+
+	// add some random files that don't actually exist
+	listOfFiles = append(listOfFiles, "WUTAMIDOING")
+	listOfFiles = append(listOfFiles, "DONTKNOW")
+	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(c, listOfFiles)
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
+
+		// validate that the right transfers were sent
+		validateSetPropertiesTransfersAreScheduled(c, true, blobList, transferParams, mockedRPC)
+	})
+
+	// turn off recursive, this time only top blobs should be deleted
+	raw.recursive = false
+	mockedRPC.reset()
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(blobList))
+
+		for _, transfer := range mockedRPC.transfers {
+			source, err := url.PathUnescape(transfer.Source)
+			c.Assert(err, chk.IsNil)
+
+			// if the transfer is under the given dir, make sure only the top level files were scheduled
+			if strings.HasPrefix(source, vdirName) {
+				trimmedSource := strings.TrimPrefix(source, vdirName+"/")
+				c.Assert(strings.Contains(trimmedSource, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+			}
+		}
+	})
+}
+
+func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsWithIncludeAndExcludeForBlobTags(c *chk.C) {
+	bsu := getBSU()
+	vdirName := "megadir"
+
+	// set up the container with numerous blobs and a vdir
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+	c.Assert(containerURL, chk.NotNil)
+	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(c, containerURL, "", azblob.AccessTierHot)
+	scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(c, containerURL, vdirName+"/", azblob.AccessTierHot)
+
+	// add special blobs that we wish to include
+	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(c, containerURL, blobsToInclude, blockBlobDefaultData, azblob.AccessTierHot)
+
+	includeString := "*.pdf;*.jpeg;exactName"
+
+	// add special blobs that we wish to exclude
+	// note that the excluded files also match the include string
+	blobsToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(c, containerURL, blobsToExclude, blockBlobDefaultData, azblob.AccessTierHot)
+	excludeString := "so*;not*;exactName"
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.None(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "",
+		blobTags:      common.BlobTags{"abc": "fgd"},
+	}
+
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
+
+	raw.recursive = true
+	raw.include = includeString
+	raw.exclude = excludeString
+
+	// make the input for list-of-files
+	listOfFiles := append(blobListPart1, vdirName)
+
+	// add some random files that don't actually exist
+	listOfFiles = append(listOfFiles, "WUTAMIDOING")
+	listOfFiles = append(listOfFiles, "DONTKNOW")
+
+	// add files to both include and exclude
+	listOfFiles = append(listOfFiles, blobsToInclude...)
+	listOfFiles = append(listOfFiles, blobsToExclude...)
+	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(c, listOfFiles)
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
+
+		// validate that the right transfers were sent
+		validateSetPropertiesTransfersAreScheduled(c, true, blobsToInclude, transferParams, mockedRPC)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobWithFromToForBlobTags(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	for _, blobName := range []string{"top/mid/low/singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
+		// set up the container with a single blob
+		blobList := []string{blobName}
+		scenarioHelper{}.generateBlobsFromListWithAccessTier(c, containerURL, blobList, blockBlobDefaultData, azblob.AccessTierHot)
+		c.Assert(containerURL, chk.NotNil)
+
+		// set up interceptor
+		mockedRPC := interceptor{}
+		Rpc = mockedRPC.intercept
+		mockedRPC.init()
+
+		// construct the raw input to simulate user input
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		transferParams := transferParams{
+			blockBlobTier: common.EBlockBlobTier.None(),
+			pageBlobTier:  common.EPageBlobTier.None(),
+			metadata:      "",
+			blobTags:      common.BlobTags{"abc": "fgd"},
+		}
+
+		raw := getDefaultSetPropertiesRawInput(rawBlobURLWithSAS.String(), transferParams)
+		raw.fromTo = "BlobNone"
+
+		runCopyAndVerify(c, raw, func(err error) {
+			c.Assert(err, chk.IsNil)
+
+			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
+			validateSetPropertiesTransfersAreScheduled(c, true, []string{""}, transferParams, mockedRPC)
+		})
+	}
+}
+
+func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerWithFromToForBlobTags(c *chk.C) {
+	bsu := getBSU()
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(c, containerURL, "", azblob.AccessTierHot)
+
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.None(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "",
+		blobTags:      common.BlobTags{"abc": "fgd"},
+	}
+
+	raw := getDefaultSetPropertiesRawInput(rawContainerURLWithSAS.String(), transferParams)
+	raw.fromTo = "BlobNone"
+	raw.recursive = true
+	raw.includeDirectoryStubs = false // The test target is a DFS account, which coincidentally created our directory stubs. Thus, we mustn't include them, since this is a test of blob.
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
+
+		// validate that the right transfers were sent
+		validateSetPropertiesTransfersAreScheduled(c, true, blobList, transferParams, mockedRPC)
+	})
+
+	// turn off recursive, this time only top blobs should be deleted
+	raw.recursive = false
+	mockedRPC.reset()
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(blobList))
+
+		for _, transfer := range mockedRPC.transfers {
+			c.Assert(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+		}
+	})
+}
+
+func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderVirtualDirWithFromToForBlobTags(c *chk.C) {
+	c.Skip("Enable after setting Account to non-HNS")
+	bsu := getBSU()
+	vdirName := "vdir1/vdir2/vdir3/"
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(c, containerURL, vdirName, azblob.AccessTierHot)
+
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName)
+	transferParams := transferParams{
+		blockBlobTier: common.EBlockBlobTier.None(),
+		pageBlobTier:  common.EPageBlobTier.None(),
+		metadata:      "",
+		blobTags:      common.BlobTags{"abc": "fgd"},
 	}
 
 	raw := getDefaultSetPropertiesRawInput(rawVirtualDirectoryURLWithSAS.String(), transferParams)
