@@ -102,11 +102,6 @@ type IJobMgr interface {
 	CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.CancelPauseResumeResponse
 	IsDaemon() bool
 	ChangeLogLevel(pipeline.LogLevel)
-
-	// Cleanup Functions
-	DeferredCleanupJobMgr()
-	CleanupJobStatusMgr()
-
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
