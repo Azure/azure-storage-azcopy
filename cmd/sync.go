@@ -337,14 +337,16 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.includeRegex = raw.parsePatterns(raw.includeRegex)
 	cooked.excludeRegex = raw.parsePatterns(raw.excludeRegex)
 			// Split the string using delimiter ';' and parse the individual blobType
-	blobTypes := strings.Split(raw.excludeBlobType, ";")
-	for _, blobType := range blobTypes {
-		var eBlobType common.BlobType
-		err := eBlobType.Parse(blobType)
-		if err != nil {
-			return cooked, fmt.Errorf("error parsing the exclude-blob-type %s provided with exclude-blob-type flag ", blobType)
+	if len(raw.excludeBlobType) > 0 {
+		blobTypes := strings.Split(raw.excludeBlobType, ";")
+		for _, blobType := range blobTypes {
+			var eBlobType common.BlobType
+			err := eBlobType.Parse(blobType)
+			if err != nil {
+				return cooked, fmt.Errorf("error parsing the exclude-blob-type %s provided with exclude-blob-type flag ", blobType)
+			}
+			cooked.excludeBlobType = append(cooked.excludeBlobType, eBlobType.ToAzBlobType())
 		}
-		cooked.excludeBlobType = append(cooked.excludeBlobType, eBlobType.ToAzBlobType())
 	}
 
 	// parse the given blob type.
