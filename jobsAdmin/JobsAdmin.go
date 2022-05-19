@@ -328,7 +328,7 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinat
 	files := func(prefix, ext string) []os.FileInfo {
 		var files []os.FileInfo
 		filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
-			if !fileInfo.IsDir() && fileInfo.Size() != 0 && strings.HasPrefix(fileInfo.Name(), prefix) && strings.HasSuffix(fileInfo.Name(), ext) {
+			if fileInfo != nil && !fileInfo.IsDir() && fileInfo.Size() != 0 && strings.HasPrefix(fileInfo.Name(), prefix) && strings.HasSuffix(fileInfo.Name(), ext) {
 				files = append(files, fileInfo)
 			}
 			return nil

@@ -261,7 +261,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks_ToFolder(c *chk.C) {
 
 	fileCount := 0
 	sawLinkTargetDir := false
-	c.Assert(WalkWithSymlinks(nil, tmpDir, func(path string, fi os.FileInfo, err error) error {
+	c.Assert(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
 		c.Assert(err, chk.IsNil)
 
 		if fi.IsDir() {
@@ -331,7 +331,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksBreakLoop(c *chk.C) {
 	// Only 3 files should ever be found.
 	// This is because the symlink links back to the root dir
 	fileCount := 0
-	c.Assert(WalkWithSymlinks(nil, tmpDir, func(path string, fi os.FileInfo, err error) error {
+	c.Assert(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
 		c.Assert(err, chk.IsNil)
 
 		if fi.IsDir() {
@@ -361,7 +361,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksDedupe(c *chk.C) {
 	// Only 6 files should ever be found.
 	// 3 in the root dir, 3 in subdir, then symlinkdir should be ignored because it's been seen.
 	fileCount := 0
-	c.Assert(WalkWithSymlinks(nil, tmpDir, func(path string, fi os.FileInfo, err error) error {
+	c.Assert(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
 		c.Assert(err, chk.IsNil)
 
 		if fi.IsDir() {
@@ -392,7 +392,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksMultitarget(c *chk.C) {
 	trySymlink(filepath.Join(tmpDir, "extradir"), filepath.Join(tmpDir, "linktolink"), c)
 
 	fileCount := 0
-	c.Assert(WalkWithSymlinks(nil, tmpDir, func(path string, fi os.FileInfo, err error) error {
+	c.Assert(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
 		c.Assert(err, chk.IsNil)
 
 		if fi.IsDir() {
@@ -425,7 +425,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksToParentAndChild(c *chk.C) {
 	trySymlink(child, filepath.Join(root1, "tochild"), c)
 
 	fileCount := 0
-	c.Assert(WalkWithSymlinks(nil, root1, func(path string, fi os.FileInfo, err error) error {
+	c.Assert(WalkWithSymlinks(context.TODO(), root1, func(path string, fi os.FileInfo, err error) error {
 		c.Assert(err, chk.IsNil)
 
 		if fi.IsDir() {

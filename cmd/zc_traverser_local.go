@@ -190,6 +190,12 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError))
 				return nil
 			}
+
+			if fileInfo != nil {
+				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed: File information missing", filePath))
+				return nil
+			}
+
 			computedRelativePath := strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(queueItem.fullPath))
 			computedRelativePath = cleanLocalPath(common.GenerateFullPath(queueItem.relativeBase, computedRelativePath))
 			computedRelativePath = strings.TrimPrefix(computedRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
@@ -388,7 +394,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			if t.appCtx != nil {
 				return WalkWithSymlinks(*t.appCtx, t.fullPath, processFile, t.followSymlinks)
 			} else {
-				return WalkWithSymlinks(nil, t.fullPath, processFile, t.followSymlinks)
+				return WalkWithSymlinks(context.TODO(), t.fullPath, processFile, t.followSymlinks)
 			}
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath
