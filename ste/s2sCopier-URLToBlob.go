@@ -77,6 +77,10 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 			fmt.Sprintf("BlobType %q is set for destination blob.", targetBlobType))
 	}
 
+	if jptm.Info().IsFolderPropertiesTransfer() {
+		return newBlobFolderSender(jptm, destination, p, pacer, srcInfoProvider)
+	}
+
 	switch targetBlobType {
 	case azblob.BlobBlockBlob:
 		return newURLToBlockBlobCopier(jptm, destination, p, pacer, srcInfoProvider)

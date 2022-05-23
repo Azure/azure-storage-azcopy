@@ -221,7 +221,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.isHNStoHNS)
+	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties.IsTruthy(), cca.isHNStoHNS)
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
@@ -661,7 +661,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 }
 
 // we assume that preserveSmbPermissions and preserveSmbInfo have already been validated, such that they are only true if both resource types support them
-func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preserveSmbPermissions, isDfsDfs bool) (common.FolderPropertyOption, string) {
+func newFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preserveSmbPermissions, preservePosixProperties, isDfsDfs bool) (common.FolderPropertyOption, string) {
 
 	getSuffix := func(willProcess bool) string {
 		willProcessString := common.IffString(willProcess, "will be processed", "will not be processed")
@@ -679,7 +679,7 @@ func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir b
 		}
 	}
 
-	bothFolderAware := fromTo.AreBothFolderAware() || isDfsDfs
+	bothFolderAware := fromTo.AreBothFolderAware() || isDfsDfs || preservePosixProperties // preservePosixProperties is only possible on blob up/downloads
 	isRemoveFromFolderAware := fromTo == common.EFromTo.FileTrash()
 	if bothFolderAware || isRemoveFromFolderAware {
 		if !recursive {

@@ -1017,6 +1017,16 @@ type CopyTransfer struct {
 // Metadata used in AzCopy.
 type Metadata map[string]string
 
+func (m Metadata) Clone() Metadata {
+	out := make(Metadata)
+
+	for k, v := range m {
+		out[k] = v
+	}
+
+	return out
+}
+
 // ToAzBlobMetadata converts metadata to azblob's metadata.
 func (m Metadata) ToAzBlobMetadata() azblob.Metadata {
 	return azblob.Metadata(m)

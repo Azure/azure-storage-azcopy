@@ -38,152 +38,101 @@ func (f localFileSourceInfoProvider) GetUNIXProperties() (common.UnixStatAdapter
 
 	var resp common.UnixStatAdapter
 
+	/*
+		Why shouldn't we just do a single call?
+
+		For some odd reason during testing, Statx had strange behaviour, in that statx returned atime properly, but the stx_mask didn't contain the atime flag.
+		Furthermore, Statx is linux-exclusive. It may be best to obtain all posix-standard properties through a posix-standard interface, for the sake of future accuracy.
+	*/
+
+	var statx *unix.Statx_t
 	if versions[0] > 4 || (versions[0] == 4 && versions[1] > 11) { // Can we statx?
 		var stat unix.Statx_t
 		// dirfd is a null pointer, because we should only ever be passing relative paths here, and directories will be passed via transferInfo.Source.
 		// AT_SYMLINK_NOFOLLOW is not used, because we automagically resolve symlinks. TODO: Add option to not follow symlinks, and use AT_SYMLINK_NOFOLLOW when resolving is disabled.
 		err = unix.Statx(0, f.transferInfo.Source,
-			unix.AT_STATX_FORCE_SYNC, // We want to sync attributes to ensure correctness.
-			unix.STATX_ALL,           // We want EVERY available statx field, since this is full POSIX preservation.
+			unix.AT_STATX_SYNC_AS_STAT, // We want to sync attributes to ensure correctness.
+			unix.STATX_BTIME,           // Let's pull only the special statx properties, and yank the rest from a standard stat_t call.
 			&stat)
 		if err != nil {
 			return nil, err
 		}
 
-		resp = statxTAdapter(stat)
-	} else { // We must stat, because statx is for sure unavailable.
-		var stat unix.Stat_t
-		err = unix.Stat(f.transferInfo.Source, &stat)
-		if err != nil {
-			return nil, err
-		}
-
-		resp = statTAdapter(stat)
+		statx = &stat
 	}
+
+	var stat unix.Stat_t
+	err = unix.Stat(f.transferInfo.Source, &stat)
+	if err != nil {
+		return nil, err
+	}
+
+	resp = comboStatAdapter{&stat, statx}
 
 	return resp, nil
 }
 
-type statxTAdapter unix.Statx_t
-
-func (s statxTAdapter) Extended() bool {
-	return true
+type comboStatAdapter struct {
+	base      *unix.Stat_t
+	extension *unix.Statx_t
 }
 
-func (s statxTAdapter) StatxMask() uint32 {
-	return s.Mask
+func (c comboStatAdapter) Extended() bool {
+	return c.extension != nil
 }
 
-func (s statxTAdapter) Attribute() uint64 {
-	return s.Attributes
+func (c comboStatAdapter) StatxMask() uint32 {
+	return c.extension.Mask
 }
 
-func (s statxTAdapter) AttributeMask() uint64 {
-	return s.Attributes_mask
+func (c comboStatAdapter) Attribute() uint64 {
+	return c.extension.Attributes
 }
 
-func (s statxTAdapter) BTime() time.Time {
-	return time.Unix(s.Btime.Sec, int64(s.Btime.Nsec))
+func (c comboStatAdapter) AttributeMask() uint64 {
+	return c.extension.Attributes_mask
 }
 
-func (s statxTAdapter) NLink() uint64 {
-	return uint64(s.Nlink)
+func (c comboStatAdapter) BTime() time.Time {
+	return time.Unix(c.extension.Btime.Sec, int64(c.extension.Btime.Nsec))
 }
 
-func (s statxTAdapter) Owner() uint32 {
-	return s.Uid
+func (c comboStatAdapter) NLink() uint64 {
+	return c.base.Nlink
 }
 
-func (s statxTAdapter) Group() uint32 {
-	return s.Gid
+func (c comboStatAdapter) Owner() uint32 {
+	return c.base.Uid
 }
 
-func (s statxTAdapter) FileMode() uint32 {
-	return uint32(s.Mode)
+func (c comboStatAdapter) Group() uint32 {
+	return c.base.Gid
 }
 
-func (s statxTAdapter) INode() uint64 {
-	return s.Ino
+func (c comboStatAdapter) FileMode() uint32 {
+	return c.base.Mode
 }
 
-func (s statxTAdapter) Device() uint64 {
-	return unix.Mkdev(s.Dev_major, s.Dev_minor)
+func (c comboStatAdapter) INode() uint64 {
+	return c.base.Ino
 }
 
-func (s statxTAdapter) RDevice() uint64 {
-	return unix.Mkdev(s.Rdev_major, s.Rdev_minor)
+func (c comboStatAdapter) Device() uint64 {
+	return c.base.Dev
 }
 
-func (s statxTAdapter) ATime() time.Time {
-	return time.Unix(s.Atime.Sec, int64(s.Atime.Nsec))
+func (c comboStatAdapter) RDevice() uint64 {
+	return c.base.Rdev
 }
 
-func (s statxTAdapter) MTime() time.Time {
-	return time.Unix(s.Mtime.Sec, int64(s.Mtime.Nsec))
+func (c comboStatAdapter) ATime() time.Time {
+	return time.Unix(c.base.Atim.Unix())
 }
 
-func (s statxTAdapter) CTime() time.Time {
-	return time.Unix(s.Btime.Sec, int64(s.Ctime.Nsec))
+func (c comboStatAdapter) MTime() time.Time {
+	return time.Unix(c.base.Mtim.Unix())
 }
 
-type statTAdapter unix.Stat_t
-
-func (s statTAdapter) Extended() bool {
-	return false
-}
-
-func (s statTAdapter) StatxMask() uint32 {
-	return 0
-}
-
-func (s statTAdapter) Attribute() uint64 {
-	return 0
-}
-
-func (s statTAdapter) AttributeMask() uint64 {
-	return 0
-}
-
-func (s statTAdapter) BTime() time.Time {
-	return time.Time{}
-}
-
-func (s statTAdapter) NLink() uint64 {
-	return s.Nlink
-}
-
-func (s statTAdapter) Owner() uint32 {
-	return s.Uid
-}
-
-func (s statTAdapter) Group() uint32 {
-	return s.Gid
-}
-
-func (s statTAdapter) FileMode() uint32 {
-	return s.Mode
-}
-
-func (s statTAdapter) INode() uint64 {
-	return s.Ino
-}
-
-func (s statTAdapter) Device() uint64 {
-	return s.Dev
-}
-
-func (s statTAdapter) RDevice() uint64 {
-	return s.Rdev
-}
-
-func (s statTAdapter) ATime() time.Time {
-	return time.Unix(s.Atim.Unix())
-}
-
-func (s statTAdapter) MTime() time.Time {
-	return time.Unix(s.Mtim.Unix())
-}
-
-func (s statTAdapter) CTime() time.Time {
-	return time.Unix(s.Ctim.Unix())
+func (c comboStatAdapter) CTime() time.Time {
+	return time.Unix(c.base.Ctim.Unix())
 }

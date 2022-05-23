@@ -72,7 +72,7 @@ type UnixStatAdapter interface {
 }
 
 type UnixStatContainer struct { // Created for downloads
-	statx bool // Was the call based on unix.Stat or unix.Statx?
+	statx bool // Does the call contain extended properties (attributes, birthTime)?
 
 	mask       uint32
 	attributes uint64
@@ -192,7 +192,7 @@ func ReadStatFromMetadata(metadata azblob.Metadata, contentLength int64) (UnixSt
 			if err != nil {
 				return s, err
 			}
-			s.birthTime = time.Unix(b, 0)
+			s.birthTime = time.Unix(0, b)
 		}
 	}
 
@@ -262,7 +262,7 @@ func ReadStatFromMetadata(metadata azblob.Metadata, contentLength int64) (UnixSt
 			return s, err
 		}
 
-		s.accessTime = time.Unix(at, 0)
+		s.accessTime = time.Unix(0, at)
 	}
 
 	if mtime, ok := metadata[POSIXModTimeMeta]; ok {
@@ -271,7 +271,7 @@ func ReadStatFromMetadata(metadata azblob.Metadata, contentLength int64) (UnixSt
 			return s, err
 		}
 
-		s.modTime = time.Unix(mt, 0)
+		s.modTime = time.Unix(0, mt)
 	}
 
 	if ctime, ok := metadata[POSIXCTimeMeta]; ok {
@@ -280,7 +280,7 @@ func ReadStatFromMetadata(metadata azblob.Metadata, contentLength int64) (UnixSt
 			return s, err
 		}
 
-		s.changeTime = time.Unix(ct, 0)
+		s.changeTime = time.Unix(0, ct)
 	}
 
 	return s, nil
@@ -332,6 +332,12 @@ const ( // Values cloned from x/sys/unix to avoid dependency
 	S_ALLPERM = 0x777
 )
 
+func ClearStatFromBlobMetadata(metadata azblob.Metadata) {
+	for _, v := range AllLinuxProperties {
+		delete(metadata, v)
+	}
+}
+
 func AddStatToBlobMetadata(s UnixStatAdapter, metadata azblob.Metadata) {
 	// TODO: File mode properties (hdi_isfolder, etc.)
 	if s.Extended() { // try to poll the other properties
@@ -342,63 +348,24 @@ func AddStatToBlobMetadata(s UnixStatAdapter, metadata azblob.Metadata) {
 		tryAddMetadata(metadata, LINUXAttributeMaskMeta, strconv.FormatUint(s.AttributeMask(), 10))
 
 		if StatXReturned(mask, STATX_BTIME) {
-			tryAddMetadata(metadata, LINUXBTimeMeta, strconv.FormatInt(s.BTime().Unix(), 10))
+			tryAddMetadata(metadata, LINUXBTimeMeta, strconv.FormatInt(s.BTime().UnixNano(), 10))
 		}
-
-		if StatXReturned(mask, STATX_MODE) {
-			tryAddMetadata(metadata, POSIXNlinkMeta, strconv.FormatUint(s.NLink(), 10))
-		}
-
-		if StatXReturned(mask, STATX_UID) {
-			tryAddMetadata(metadata, POSIXOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
-		}
-
-		if StatXReturned(mask, STATX_GID) {
-			tryAddMetadata(metadata, POSIXGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
-		}
-
-		if StatXReturned(mask, STATX_MODE) {
-			tryAddMetadata(metadata, POSIXModeMeta, strconv.FormatUint(uint64(s.FileMode()), 10))
-		}
-
-		if StatXReturned(mask, STATX_INO) {
-			tryAddMetadata(metadata, POSIXINodeMeta, strconv.FormatUint(s.INode(), 10))
-		}
-
-		// This is not optional.
-		tryAddMetadata(metadata, POSIXDevMeta, strconv.FormatUint(s.Device(), 10))
-
-		if StatXReturned(mask, STATX_MODE) && ((s.FileMode()&S_IFCHR) == S_IFCHR || (s.FileMode()&S_IFBLK) == S_IFBLK) {
-			tryAddMetadata(metadata, POSIXRDevMeta, strconv.FormatUint(s.RDevice(), 10))
-		}
-
-		if StatXReturned(mask, STATX_ATIME) {
-			tryAddMetadata(metadata, POSIXATimeMeta, strconv.FormatInt(s.ATime().Unix(), 10))
-		}
-
-		if StatXReturned(mask, STATX_MTIME) {
-			tryAddMetadata(metadata, POSIXModTimeMeta, strconv.FormatInt(s.MTime().Unix(), 10))
-		}
-
-		if StatXReturned(mask, STATX_CTIME) {
-			tryAddMetadata(metadata, POSIXCTimeMeta, strconv.FormatInt(s.CTime().Unix(), 10))
-		}
-	} else {
-		tryAddMetadata(metadata, POSIXNlinkMeta, strconv.FormatUint(s.NLink(), 10))
-		tryAddMetadata(metadata, POSIXOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
-		tryAddMetadata(metadata, POSIXGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
-		tryAddMetadata(metadata, POSIXModeMeta, strconv.FormatUint(uint64(s.FileMode()), 10))
-		tryAddMetadata(metadata, POSIXINodeMeta, strconv.FormatUint(s.INode(), 10))
-		tryAddMetadata(metadata, POSIXDevMeta, strconv.FormatUint(s.Device(), 10))
-
-		if (s.FileMode()&S_IFCHR) == S_IFCHR || (s.FileMode()&S_IFBLK) == S_IFBLK { // this is not relevant unless the file is a block or character device.
-			tryAddMetadata(metadata, POSIXRDevMeta, strconv.FormatUint(s.RDevice(), 10))
-		}
-
-		tryAddMetadata(metadata, POSIXATimeMeta, strconv.FormatInt(s.ATime().Unix(), 10))
-		tryAddMetadata(metadata, POSIXModTimeMeta, strconv.FormatInt(s.MTime().Unix(), 10))
-		tryAddMetadata(metadata, POSIXCTimeMeta, strconv.FormatInt(s.CTime().Unix(), 10))
 	}
+
+	tryAddMetadata(metadata, POSIXNlinkMeta, strconv.FormatUint(s.NLink(), 10))
+	tryAddMetadata(metadata, POSIXOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
+	tryAddMetadata(metadata, POSIXGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
+	tryAddMetadata(metadata, POSIXModeMeta, strconv.FormatUint(uint64(s.FileMode()), 10))
+	tryAddMetadata(metadata, POSIXINodeMeta, strconv.FormatUint(s.INode(), 10))
+	tryAddMetadata(metadata, POSIXDevMeta, strconv.FormatUint(s.Device(), 10))
+
+	if (s.FileMode()&S_IFCHR) == S_IFCHR || (s.FileMode()&S_IFBLK) == S_IFBLK { // this is not relevant unless the file is a block or character device.
+		tryAddMetadata(metadata, POSIXRDevMeta, strconv.FormatUint(s.RDevice(), 10))
+	}
+
+	tryAddMetadata(metadata, POSIXATimeMeta, strconv.FormatInt(s.ATime().UnixNano(), 10))
+	tryAddMetadata(metadata, POSIXModTimeMeta, strconv.FormatInt(s.MTime().UnixNano(), 10))
+	tryAddMetadata(metadata, POSIXCTimeMeta, strconv.FormatInt(s.CTime().UnixNano(), 10))
 }
 
 func StatXReturned(mask uint32, want uint32) bool {

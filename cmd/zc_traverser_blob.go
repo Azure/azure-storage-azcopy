@@ -178,7 +178,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			preprocessor,
 			getObjectNameOnly(strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
 			"",
-			common.EEntityType.File(),
+			common.EntityType(common.IffUint8(isBlob, uint8(common.EEntityType.File()), uint8(common.EEntityType.Folder()))),
 			blobProperties.LastModified(),
 			blobProperties.ContentLength(),
 			blobProperties,
@@ -296,7 +296,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 								preprocessor,
 								getObjectNameOnly(strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)),
 								folderRelativePath,
-								common.EEntityType.File(), // folder stubs are treated like files in in the serial lister as well
+								common.EEntityType.Folder(), // folder stubs are treated like files in in the serial lister as well
 								resp.LastModified(),
 								resp.ContentLength(),
 								resp,
@@ -404,11 +404,13 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 
 func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, blobInfo azblob.BlobItemInternal, relativePath string, containerName string) StoredObject {
 	adapter := blobPropertiesAdapter{blobInfo.Properties}
+
+	_, isFolder := blobInfo.Metadata["hdi_isfolder"]
 	object := newStoredObject(
 		preprocessor,
 		getObjectNameOnly(blobInfo.Name),
 		relativePath,
-		common.EEntityType.File(),
+		common.EntityType(common.IffUint8(isFolder, uint8(common.EEntityType.Folder()), uint8(common.EEntityType.File()))),
 		blobInfo.Properties.LastModified,
 		*blobInfo.Properties.ContentLength,
 		adapter,
