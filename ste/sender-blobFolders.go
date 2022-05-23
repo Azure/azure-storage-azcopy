@@ -97,7 +97,8 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 		azblob.BlobAccessConditions{},
 		azblob.DefaultAccessTier, // It doesn't make sense to use a special access tier, the blob will be 0 bytes.
 		b.blobTagsToApply,
-		b.cpkToApply)
+		b.cpkToApply,
+		azblob.ImmutabilityPolicyOptions{})
 	if err != nil {
 		return fmt.Errorf("when creating folder: %w", err)
 	}
