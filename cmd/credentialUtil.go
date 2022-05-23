@@ -240,7 +240,7 @@ func getBlobFSCredentialType(ctx context.Context, blobResourceURL string, standa
 		return common.ECredentialType.Unknown(), err
 	}
 
-	//Give preference to explicitly supplied SAS tokens
+	// Give preference to explicitly supplied SAS tokens
 	sas := azbfs.NewBfsURLParts(*resourceURL).SAS
 
 	if isSASExisted := sas.Signature() != ""; isSASExisted || standaloneSAS {
@@ -275,7 +275,12 @@ func oAuthTokenExists() (oauthTokenExists bool) {
 		oauthTokenExists = true
 	}
 
-	uotm := GetUserOAuthTokenManagerInstance()
+	uotm, err := GetOAuthTokenManagerInstance()
+	if err != nil {
+		oauthTokenExists = false
+		return
+	}
+
 	if hasCachedToken, err := uotm.HasCachedToken(); hasCachedToken {
 		oauthTokenExists = true
 	} else if err != nil {
@@ -590,7 +595,7 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // ==============================================================================================
 func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
 	credential := common.CreateBlobCredential(ctx, credInfo, common.CredentialOpOptions{
-		//LogInfo:  glcm.Info, //Comment out for debugging
+		// LogInfo:  glcm.Info, //Comment out for debugging
 		LogError: glcm.Info,
 	})
 
@@ -627,7 +632,7 @@ const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost
 
 func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
 	credential := common.CreateBlobFSCredential(ctx, credInfo, common.CredentialOpOptions{
-		//LogInfo:  glcm.Info, //Comment out for debugging
+		// LogInfo:  glcm.Info, //Comment out for debugging
 		LogError: glcm.Info,
 	})
 

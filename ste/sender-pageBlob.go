@@ -250,6 +250,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		destBlobTier,
 		blobTags,
 		s.cpkToApply,
+		azblob.ImmutabilityPolicyOptions{},
 	); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return

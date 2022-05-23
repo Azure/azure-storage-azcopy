@@ -108,7 +108,8 @@ func TestBasic_CopyDownloadLargeBlob(t *testing.T) {
 }
 
 func TestBasic_CopyS2SSingleBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), anonymousAuthOnly, allCredentialTypes, params{
+	// AllCredentialTypes on both sides allows us to test OAuth-OAuth
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), allCredentialTypes, allCredentialTypes, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1K",

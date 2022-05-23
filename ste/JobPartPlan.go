@@ -13,7 +13,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 16
+const DataSchemaVersion common.Version = 17
 
 const (
 	CustomHeaderMaxBytes = 256
@@ -21,7 +21,7 @@ const (
 	BlobTagsMaxByte      = 4000
 )
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 type JobPartPlanMMF common.MMF
 
@@ -32,7 +32,7 @@ func (mmf *JobPartPlanMMF) Plan() *JobPartPlanHeader {
 }
 func (mmf *JobPartPlanMMF) Unmap() { (*common.MMF)(mmf).Unmap() }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // JobPartPlanHeader represents the header of Job Part's memory-mapped file
 type JobPartPlanHeader struct {
@@ -82,6 +82,7 @@ type JobPartPlanHeader struct {
 	// jobStatus_doNotUse is a private member whose value can be accessed by Status and SetJobStatus
 	// jobStatus_doNotUse should not be directly accessed anywhere except by the Status and SetJobStatus
 	atomicJobStatus common.JobStatus
+	atomicPartStatus common.JobStatus
 
 	// For delete operation specify what to do with snapshots
 	DeleteSnapshotsOption common.DeleteSnapshotsOption
@@ -99,6 +100,14 @@ func (jpph *JobPartPlanHeader) JobStatus() common.JobStatus {
 func (jpph *JobPartPlanHeader) SetJobStatus(newJobStatus common.JobStatus) {
 	jpph.atomicJobStatus.AtomicStore(newJobStatus)
 }
+
+func (jpph *JobPartPlanHeader) JobPartStatus() common.JobStatus {
+	return jpph.atomicPartStatus.AtomicLoad()
+}
+
+func (jpph *JobPartPlanHeader) SetJobPartStatus(newJobStatus common.JobStatus) {
+	jpph.atomicPartStatus.AtomicStore(newJobStatus)
+} 
 
 // Transfer api gives memory map JobPartPlanTransfer header for given index
 func (jpph *JobPartPlanHeader) Transfer(transferIndex uint32) *JobPartPlanTransfer {
@@ -256,7 +265,7 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 	return
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // JobPartPlanDstBlob holds additional settings required when the destination is a blob
 type JobPartPlanDstBlob struct {
@@ -318,7 +327,7 @@ type JobPartPlanDstBlob struct {
 	BlockSize int64
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // jobPartPlanDstLocal holds additional settings required when the destination is a local file
 type JobPartPlanDstLocal struct {
@@ -331,7 +340,7 @@ type JobPartPlanDstLocal struct {
 	MD5VerificationOption common.HashValidationOption
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // JobPartPlanTransfer represent the header of Job Part's Transfer in Memory Map File
 type JobPartPlanTransfer struct {
