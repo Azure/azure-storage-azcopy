@@ -88,7 +88,7 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkFunc {
 	return createSendToRemoteChunkFunc(c.jptm, id, func() {
 		jptm := c.jptm
-
+		// TODO t-iverma investigate here
 		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 		// Create blob and finish.
 		if !ValidateTier(jptm, c.destBlobTier, c.destBlockBlobURL.BlobURL, c.jptm.Context()) {
