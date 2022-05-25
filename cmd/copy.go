@@ -912,11 +912,10 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 }
 
 func areBothLocationsPOSIXAware(fromTo common.FromTo) bool {
-	// POSIX properties are stored in blob metadata-- They don't need a special persistence strategy for BlobBlob. That said, we silently ignore the BlobBlob case, because customers are assumed to be blind to the inner workings of AzCopy.
-	return (runtime.GOOS == "linux" && (
+	// POSIX properties are stored in blob metadata-- They don't need a special persistence strategy for BlobBlob.
+	return runtime.GOOS == "linux" && (
 	// fromTo == common.EFromTo.BlobLocal() || TODO
-	fromTo == common.EFromTo.LocalBlob())) ||
-		fromTo == common.EFromTo.BlobBlob()
+	fromTo == common.EFromTo.LocalBlob())
 }
 
 func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, overwrite *common.OverwriteOption, flagName string) error {
