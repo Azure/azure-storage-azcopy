@@ -56,14 +56,15 @@ type rawSyncCmdArgs struct {
 	includeRegex          string
 	excludeRegex          string
 
-	preservePermissions    bool
-	preserveSMBPermissions bool // deprecated and synonymous with preservePermissions
-	preserveOwner          bool
-	preserveSMBInfo        bool
-	followSymlinks         bool
-	backupMode             bool
-	putMd5                 bool
-	md5ValidationOption    string
+	preservePermissions     bool
+	preserveSMBPermissions  bool // deprecated and synonymous with preservePermissions
+	preserveOwner           bool
+	preserveSMBInfo         bool
+	preservePOSIXProperties bool
+	followSymlinks          bool
+	backupMode              bool
+	putMd5                  bool
+	md5ValidationOption     string
 	// this flag indicates the user agreement with respect to deleting the extra files at the destination
 	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
 	// otherwise the user is prompted to make a decision
@@ -270,6 +271,8 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		cooked.isHNSToHNS = true // override HNS settings, since if a user is tx'ing blob->blob and copying permissions, it's DEFINITELY going to be HNS (since perms don't exist w/o HNS).
 	}
 
+	cooked.preservePOSIXProperties = raw.preservePOSIXProperties && areBothLocationsPOSIXAware(cooked.fromTo)
+
 	cooked.putMd5 = raw.putMd5
 	if err = validatePutMd5(cooked.putMd5, cooked.fromTo); err != nil {
 		return cooked, err
@@ -369,14 +372,15 @@ type cookedSyncCmdArgs struct {
 	excludeRegex          []string
 
 	// options
-	preservePermissions common.PreservePermissionsOption
-	preserveSMBInfo     bool
-	putMd5              bool
-	md5ValidationOption common.HashValidationOption
-	blockSize           int64
-	logVerbosity        common.LogLevel
-	forceIfReadOnly     bool
-	backupMode          bool
+	preservePermissions     common.PreservePermissionsOption
+	preserveSMBInfo         bool
+	preservePOSIXProperties bool
+	putMd5                  bool
+	md5ValidationOption     common.HashValidationOption
+	blockSize               int64
+	logVerbosity            common.LogLevel
+	forceIfReadOnly         bool
+	backupMode              bool
 
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
@@ -739,6 +743,7 @@ func init() {
 	// smb info/permissions can be persisted in the scenario of File -> File
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Azure Files). This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", true, "For SMB-aware locations, flag will be set to true by default. Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Azure Files). This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is not preserved for folders. ")
+	syncCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", true, "On Linux, the flag will be set to true by default. Preserves property info gleamed from stat and statx.")
 
 	// TODO: enable when we support local <-> File
 	// syncCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
