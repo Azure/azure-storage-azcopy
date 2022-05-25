@@ -65,7 +65,7 @@ type JobPartPlanHeader struct {
 
 	PreservePermissions     common.PreservePermissionsOption
 	PreserveSMBInfo         bool
-	PreservePOSIXProperties common.PosixPropertiesOption
+	PreservePOSIXProperties bool
 	// S2SGetPropertiesInBackend represents whether to enable get S3 objects' or Azure files' properties during s2s copy in backend.
 	S2SGetPropertiesInBackend bool
 	// S2SSourceChangeValidation represents whether user wants to check if source has changed after enumerating.
@@ -81,7 +81,7 @@ type JobPartPlanHeader struct {
 	// jobStatus_doNotUse represents the current status of JobPartPlan
 	// jobStatus_doNotUse is a private member whose value can be accessed by Status and SetJobStatus
 	// jobStatus_doNotUse should not be directly accessed anywhere except by the Status and SetJobStatus
-	atomicJobStatus common.JobStatus
+	atomicJobStatus  common.JobStatus
 	atomicPartStatus common.JobStatus
 
 	// For delete operation specify what to do with snapshots
@@ -107,7 +107,7 @@ func (jpph *JobPartPlanHeader) JobPartStatus() common.JobStatus {
 
 func (jpph *JobPartPlanHeader) SetJobPartStatus(newJobStatus common.JobStatus) {
 	jpph.atomicPartStatus.AtomicStore(newJobStatus)
-} 
+}
 
 // Transfer api gives memory map JobPartPlanTransfer header for given index
 func (jpph *JobPartPlanHeader) Transfer(transferIndex uint32) *JobPartPlanTransfer {

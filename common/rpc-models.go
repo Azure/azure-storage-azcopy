@@ -142,7 +142,7 @@ type CopyJobPartOrderRequest struct {
 
 	PreserveSMBPermissions         PreservePermissionsOption
 	PreserveSMBInfo                bool
-	PreservePOSIXProperties        PosixPropertiesOption
+	PreservePOSIXProperties        bool
 	S2SGetPropertiesInBackend      bool
 	S2SSourceChangeValidation      bool
 	DestLengthValidation           bool

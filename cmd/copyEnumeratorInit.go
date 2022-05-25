@@ -81,7 +81,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
 	jobPartOrder.S2SPreserveBlobTags = cca.S2sPreserveBlobTags
 
-	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo, &cca.FollowSymlinks, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, cca.S2sPreserveBlobTags, cca.LogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, cca.preservePOSIXProperties)
+	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo, &cca.FollowSymlinks, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, cca.S2sPreserveBlobTags, cca.LogVerbosity.ToPipelineLogLevel(), cca.CpkOptions)
 
 	if err != nil {
 		return nil, err
@@ -234,7 +234,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties.IsTruthy(), cca.isHNStoHNS, strings.EqualFold(cca.Destination.Value, common.Dev_Null))
+	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, cca.isHNStoHNS, strings.EqualFold(cca.Destination.Value, common.Dev_Null))
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
@@ -352,7 +352,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, cca.ListOfVersionIDs, false, pipeline.LogNone, cca.CpkOptions, common.EPosixPropertiesOption.None())
+	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, cca.ListOfVersionIDs, false, pipeline.LogNone, cca.CpkOptions)
 
 	if err != nil {
 		return false

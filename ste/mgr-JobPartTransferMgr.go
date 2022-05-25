@@ -103,7 +103,7 @@ type TransferInfo struct {
 	EntityType              common.EntityType
 	PreserveSMBPermissions  common.PreservePermissionsOption
 	PreserveSMBInfo         bool
-	PreservePOSIXProperties common.PosixPropertiesOption
+	PreservePOSIXProperties bool
 
 	// Transfer info for S2S copy
 	SrcProperties

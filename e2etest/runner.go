@@ -96,6 +96,7 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 	if o == eOperation.Copy() {
 		set("s2s-preserve-access-tier", p.s2sPreserveAccessTier, true)
 	}
+	set("preserve-posix-properties", p.preservePOSIXProperties, false) // Default to false, because otherwise we pick up folders we don't want to worry about on Linux.
 }
 
 func (t *TestRunner) SetAwaitOpenFlag() {

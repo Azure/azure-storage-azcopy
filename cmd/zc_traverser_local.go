@@ -464,7 +464,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	return
 }
 
-func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter enumerationCounterFunc, posixPropertiesOption common.PosixPropertiesOption) *localTraverser {
+func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter enumerationCounterFunc) *localTraverser {
 	traverser := localTraverser{
 		fullPath:                    cleanLocalPath(fullPath),
 		recursive:                   recursive,
