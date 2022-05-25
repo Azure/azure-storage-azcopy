@@ -85,6 +85,7 @@ func init() {
 			}
 
 			glcm.Info("Scanning...")
+			// TODO tiverma check if the source can be copied to destination or not in frontend
 
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
