@@ -34,13 +34,15 @@ type appendBlobUploader struct {
 }
 
 func (u *appendBlobUploader) Prologue(ps common.PrologueState) (destinationModified bool) {
-	if unixSIP, ok := u.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
-		statAdapter, err := unixSIP.GetUNIXProperties()
-		if err != nil {
-			u.jptm.FailActiveSend("GetUNIXProperties", err)
-		}
+	if u.jptm.Info().PreservePOSIXProperties {
+		if unixSIP, ok := u.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
+			statAdapter, err := unixSIP.GetUNIXProperties()
+			if err != nil {
+				u.jptm.FailActiveSend("GetUNIXProperties", err)
+			}
 
-		common.AddStatToBlobMetadata(statAdapter, u.metadataToApply)
+			common.AddStatToBlobMetadata(statAdapter, u.metadataToApply)
+		}
 	}
 
 	return u.appendBlobSenderBase.Prologue(ps)

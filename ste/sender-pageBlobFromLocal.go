@@ -45,13 +45,15 @@ func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipelin
 }
 
 func (u *pageBlobUploader) Prologue(ps common.PrologueState) (destinationModified bool) {
-	if unixSIP, ok := u.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
-		statAdapter, err := unixSIP.GetUNIXProperties()
-		if err != nil {
-			u.jptm.FailActiveSend("GetUNIXProperties", err)
-		}
+	if u.jptm.Info().PreservePOSIXProperties {
+		if unixSIP, ok := u.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
+			statAdapter, err := unixSIP.GetUNIXProperties()
+			if err != nil {
+				u.jptm.FailActiveSend("GetUNIXProperties", err)
+			}
 
-		common.AddStatToBlobMetadata(statAdapter, u.metadataToApply)
+			common.AddStatToBlobMetadata(statAdapter, u.metadataToApply)
+		}
 	}
 
 	return u.pageBlobSenderBase.Prologue(ps)
