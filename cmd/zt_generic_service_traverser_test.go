@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"context"
+
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	chk "gopkg.in/check.v1"
