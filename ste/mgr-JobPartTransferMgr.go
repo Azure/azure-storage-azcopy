@@ -816,6 +816,10 @@ func (jptm *jobPartTransferMgr) Log(level pipeline.LogLevel, msg string) {
 	jptm.jobPartMgr.Log(level, fmt.Sprintf("%s: [P#%d-T#%d] ", common.LogLevel(level), plan.PartNum, jptm.transferIndex)+msg)
 }
 
+func (jptm *jobPartTransferMgr) ChangeLogLevel(level pipeline.LogLevel) {
+	jptm.jobPartMgr.ChangeLogLevel(level)
+}
+
 func (jptm *jobPartTransferMgr) ErrorCodeAndString(err error) (int, string) {
 	switch e := err.(type) {
 	case azblob.StorageError:

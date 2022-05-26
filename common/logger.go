@@ -36,6 +36,7 @@ import (
 type ILogger interface {
 	ShouldLog(level pipeline.LogLevel) bool
 	Log(level pipeline.LogLevel, msg string)
+	ChangeLogLevel(level pipeline.LogLevel)
 	Panic(err error)
 }
 
@@ -94,6 +95,11 @@ func (al *appLogger) Log(loglevel pipeline.LogLevel, msg string) {
 	// if al.ShouldLog(loglevel) {
 	//	al.logger.Println(msg)
 	// }
+}
+
+func (al *appLogger) ChangeLogLevel(loglevel pipeline.LogLevel) {
+	// TODO consider delete completely to get rid of app logger
+	// al.logger.ChangeLogLevel(loglevel)
 }
 
 func (al *appLogger) Panic(err error) {

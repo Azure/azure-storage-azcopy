@@ -478,6 +478,7 @@ func (ja *jobsAdmin) DeleteJob(jobID common.JobID) {
 */
 func (ja *jobsAdmin) ShouldLog(level pipeline.LogLevel) bool  { return ja.logger.ShouldLog(level) }
 func (ja *jobsAdmin) Log(level pipeline.LogLevel, msg string) { ja.logger.Log(level, msg) }
+func (ja *jobsAdmin) ChangeLogLevel(level pipeline.LogLevel)  { ja.logger.ChangeLogLevel(level) }
 func (ja *jobsAdmin) Panic(err error)                         { ja.logger.Panic(err) }
 func (ja *jobsAdmin) CloseLog()                               { ja.logger.CloseLog() }
 
@@ -511,17 +512,6 @@ func (ja *jobsAdmin) LogToJobLog(msg string, level pipeline.LogLevel) {
 		prefix = fmt.Sprintf("%s: ", common.LogLevel(level)) // so readers can find serious ones, but information ones still look uncluttered without INFO:
 	}
 	ja.jobLogger.Log(pipeline.LogWarning, prefix+msg) // use LogError here, so that it forces these to get logged, even if user is running at warning level instead of Info.  They won't have "warning" prefix, if Info level was passed in to MessagesForJobLog
-}
-
-func (ja *jobsAdmin) ChangeLogLevel(level pipeline.LogLevel, jobId common.JobID) error {
-	jm, found := ja.jobIDToJobMgr.Get(jobId)
-	if !found {
-		err := fmt.Errorf("No JobMgr found with this JobId(%s)", jobId.String())
-		return err
-	} else {
-		jm.ChangeLogLevel(level)
-		return nil
-	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
