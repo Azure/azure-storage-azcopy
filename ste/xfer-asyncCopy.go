@@ -121,3 +121,8 @@ func asyncCopyFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		transferDone(common.ETransferStatus.Success(), nil)
 	}
 }
+
+//resp, _ := containerURL.ListBlobsFlatSegment(ctx, Marker{},
+//ListBlobsSegmentOptions{Details: BlobListingDetails{Snapshots: true}})
+
+//func (s *aztestsSuite) TestBlobAbortCopyInProgress(c *chk.C) {
