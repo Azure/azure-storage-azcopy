@@ -54,7 +54,7 @@ func (u *pageBlobUploader) Prologue(ps common.PrologueState) (destinationModifie
 		common.AddStatToBlobMetadata(statAdapter, u.metadataToApply)
 	}
 
-	return false
+	return u.pageBlobSenderBase.Prologue(ps)
 }
 
 func (u *pageBlobUploader) Md5Channel() chan<- []byte {

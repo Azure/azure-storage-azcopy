@@ -43,7 +43,7 @@ func (u *appendBlobUploader) Prologue(ps common.PrologueState) (destinationModif
 		common.AddStatToBlobMetadata(statAdapter, u.metadataToApply)
 	}
 
-	return false
+	return u.appendBlobSenderBase.Prologue(ps)
 }
 
 func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
