@@ -98,11 +98,8 @@ func Walk(appCtx context.Context, root string, parallelism int, parallelStat boo
 	// walk the stuff inside the root
 	reader, remainingParallelism := NewDirReader(parallelism, parallelStat)
 	defer reader.Close()
-	if appCtx != nil {
-		ctx, cancel = context.WithCancel(appCtx)
-	} else {
-		ctx, cancel = context.WithCancel(context.Background())
-	}
+
+	ctx, cancel = context.WithCancel(appCtx)
 	ch := CrawlLocalDirectory(ctx, root, remainingParallelism, reader)
 	for crawlResult := range ch {
 		entry, err := crawlResult.Item()
