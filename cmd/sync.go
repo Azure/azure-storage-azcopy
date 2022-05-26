@@ -729,7 +729,6 @@ func init() {
 			if err != nil {
 				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error())
 			}
-			glcm.SetOutputVerbosity(azcopyOutputVerbosity)
 
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()

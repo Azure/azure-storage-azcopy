@@ -90,6 +90,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		err = azcopyOutputVerbosity.Parse(outputVerbosityRaw)
+		glcm.SetOutputVerbosity(azcopyOutputVerbosity)
 		if err != nil {
 			return err
 		}
