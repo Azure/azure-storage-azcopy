@@ -46,15 +46,8 @@ func main() {
 	azcopyJobPlanFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.JobPlanLocation()) // user specified location for plan files
 
 	// note: azcopyAppPathFolder is the default location for all AzCopy data (logs, job plans, oauth token on Windows)
-	// but both logs and job plans can be put elsewhere as they can become very large
+	// but all the above can be put elsewhere as they can become very large
 	azcopyAppPathFolder := GetAzCopyAppPath()
-
-	if azcopyLogPathFolder == "" || azcopyJobPlanFolder == "" { // we make this folder only if at least one - log or plan file- needs to be here
-		err := os.Mkdir(azcopyAppPathFolder, os.ModeDir)
-		if err != nil && !os.IsExist(err) {
-			common.PanicIfErr(err)
-		}
-	}
 
 	// the user can optionally put the log files somewhere else
 	if azcopyLogPathFolder == "" {
@@ -75,7 +68,7 @@ func main() {
 	jobID := common.NewJobID()
 	// If insufficient arguments, show usage & terminate
 	if len(os.Args) == 1 {
-		cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder, azcopyJobPlanFolder, 0, jobID)
+		cmd.Execute(azcopyLogPathFolder, azcopyJobPlanFolder, 0, jobID)
 		return
 	}
 
@@ -88,7 +81,7 @@ func main() {
 		log.Fatalf("initialization failed: %v", err)
 	}
 
-	cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder, azcopyJobPlanFolder, maxFileAndSocketHandles, jobID)
+	cmd.Execute(azcopyLogPathFolder, azcopyJobPlanFolder, maxFileAndSocketHandles, jobID)
 	glcm.Exit(nil, common.EExitCode.Success())
 }
 
