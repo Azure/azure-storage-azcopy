@@ -37,18 +37,15 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaultsForSetProperties() {
 
 func (cca *CookedCopyCmdArgs) checkIfChangesPossible() error {
 	// tier can't be set on files
-
 	if cca.FromTo.From() == common.ELocation.File() && (cca.blockBlobTier != common.EBlockBlobTier.None() || cca.pageBlobTier != common.EPageBlobTier.None()) {
 		return fmt.Errorf("changing tier is not available for File Storage")
 	}
+
 	return nil
 }
 
-func (cca *CookedCopyCmdArgs) makeEnumAndPerformChecks() error {
+func (cca *CookedCopyCmdArgs) makeTransferEnum() error {
 	if cca.blockBlobTier != common.EBlockBlobTier.None() || cca.pageBlobTier != common.EPageBlobTier.None() {
-		if cca.FromTo.From() == common.ELocation.File() {
-			return fmt.Errorf("tier cannot be set upon files")
-		}
 		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetTier()
 	}
 	if cca.metadata != "" {
@@ -109,7 +106,7 @@ func init() {
 
 			cooked, err := raw.cook()
 			if err == nil { // do this only if error is nil. We would not want to overwrite err = nil if there was error in cook()
-				err = cooked.makeEnumAndPerformChecks()
+				err = cooked.makeTransferEnum()
 				// TODO rename this to something like a setProperties post cook method
 			}
 
