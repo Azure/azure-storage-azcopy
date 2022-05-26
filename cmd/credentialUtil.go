@@ -62,7 +62,7 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 			panic("invalid state, azcopyAppPathFolder should be initialized by root")
 		}
 		currentUserOAuthTokenManager = common.NewUserOAuthTokenManagerInstance(common.CredCacheOptions{
-			DPAPIFilePath: azcopyAppPathFolder,
+			DPAPIFilePath: common.AzcopyJobPlanFolder,
 			KeyName:       oauthLoginSessionCacheKeyName,
 			ServiceName:   oauthLoginSessionCacheServiceName,
 			AccountName:   oauthLoginSessionCacheAccountName,

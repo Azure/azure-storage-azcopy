@@ -49,7 +49,7 @@ func main() {
 	// but both logs and job plans can be put elsewhere as they can become very large
 	azcopyAppPathFolder := GetAzCopyAppPath()
 
-	if azcopyLogPathFolder == "" || azcopyJobPlanFolder == "" { // we actually make this folder only if at least one - log or plan file- needs to be here
+	if azcopyLogPathFolder == "" || azcopyJobPlanFolder == "" { // we make this folder only if at least one - log or plan file- needs to be here
 		err := os.Mkdir(azcopyAppPathFolder, os.ModeDir)
 		if err != nil && !os.IsExist(err) {
 			common.PanicIfErr(err)
