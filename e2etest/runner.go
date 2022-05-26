@@ -97,7 +97,7 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 		set("s2s-preserve-access-tier", p.s2sPreserveAccessTier, true)
 		set("preserve-posix-properties", p.preservePOSIXProperties, "")
 	} else if o == eOperation.Sync() {
-		set("preserve-posix-properties", p.preservePOSIXProperties, "")
+		set("preserve-posix-properties", p.preservePOSIXProperties, false)
 	}
 }
 
