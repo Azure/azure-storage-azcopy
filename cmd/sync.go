@@ -329,6 +329,17 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	cooked.dryrunMode = raw.dryrun
 
+	if azcopyOutputVerbosity == common.EOutputVerbosity.Quiet() || azcopyOutputVerbosity == common.EOutputVerbosity.Essential() {
+		if cooked.deleteDestination == common.EDeleteDestination.Prompt() {
+			err = fmt.Errorf("cannot set output level '%s' with delete-destination option '%s'", azcopyOutputVerbosity.String(), cooked.deleteDestination.String())
+		} else if cooked.dryrunMode {
+			err = fmt.Errorf("cannot set output level '%s' with dry-run mode", azcopyOutputVerbosity.String())
+		}
+	}
+	if err != nil {
+		return cooked, err
+	}
+
 	return cooked, nil
 }
 
@@ -718,6 +729,7 @@ func init() {
 			if err != nil {
 				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error())
 			}
+
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {

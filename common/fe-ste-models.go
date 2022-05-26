@@ -843,6 +843,28 @@ func (ct *CredentialType) Parse(s string) error {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+var EOutputVerbosity = OutputVerbosity(0)
+
+type OutputVerbosity uint8
+
+func (OutputVerbosity) Default() OutputVerbosity   { return OutputVerbosity(0) }
+func (OutputVerbosity) Essential() OutputVerbosity { return OutputVerbosity(1) } // no progress, no info, no prompts. Print everything else
+func (OutputVerbosity) Quiet() OutputVerbosity     { return OutputVerbosity(2) } // nothing at all
+
+func (qm *OutputVerbosity) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(qm), s, true, true)
+	if err == nil {
+		*qm = val.(OutputVerbosity)
+	}
+	return err
+}
+
+func (qm OutputVerbosity) String() string {
+	return enum.StringInt(qm, reflect.TypeOf(qm))
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 var EHashValidationOption = HashValidationOption(0)
 
 var DefaultHashValidationOption = EHashValidationOption.FailIfDifferent()
@@ -1495,5 +1517,3 @@ func GetClientProvidedKey(options CpkOptions) azblob.ClientProvidedKeyOptions {
 	_cpkScopeInfo := GetCpkScopeInfo(options.CpkScopeInfo)
 	return ToClientProvidedKeyOptions(_cpkInfo, _cpkScopeInfo)
 }
-
-

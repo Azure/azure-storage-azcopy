@@ -853,6 +853,17 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	cooked.dryrunMode = raw.dryrun
 
+	if azcopyOutputVerbosity == common.EOutputVerbosity.Quiet() || azcopyOutputVerbosity == common.EOutputVerbosity.Essential() {
+		if cooked.ForceWrite == common.EOverwriteOption.Prompt() {
+			err = fmt.Errorf("cannot set output level '%s' with overwrite option '%s'", azcopyOutputVerbosity.String(), cooked.ForceWrite.String())
+		} else if cooked.dryrunMode {
+			err = fmt.Errorf("cannot set output level '%s' with dry-run mode", azcopyOutputVerbosity.String())
+		}
+	}
+	if err != nil {
+		return cooked, err
+	}
+
 	return cooked, nil
 }
 
