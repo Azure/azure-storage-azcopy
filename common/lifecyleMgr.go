@@ -405,17 +405,17 @@ func (lcm *lifecycleMgr) processOutputMessage() {
 
 		if shouldQuietMessage(msgToPrint, lcm.OutputVerbosityType) {
 			lcm.processNoneOutput(msgToPrint)
-		} else {
-			switch lcm.outputFormat {
-			case EOutputFormat.Json():
-				lcm.processJSONOutput(msgToPrint)
-			case EOutputFormat.Text():
-				lcm.processTextOutput(msgToPrint)
-			case EOutputFormat.None():
-				lcm.processNoneOutput(msgToPrint)
-			default:
-				panic("unimplemented output format")
-			}
+			continue
+		}
+		switch lcm.outputFormat {
+		case EOutputFormat.Json():
+			lcm.processJSONOutput(msgToPrint)
+		case EOutputFormat.Text():
+			lcm.processTextOutput(msgToPrint)
+		case EOutputFormat.None():
+			lcm.processNoneOutput(msgToPrint)
+		default:
+			panic("unimplemented output format")
 		}
 	}
 }
