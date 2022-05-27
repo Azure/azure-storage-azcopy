@@ -254,13 +254,8 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		jobID: azcopyCurrentJobID,
 	}
 
-	err := cooked.LogVerbosity.Parse(logVerbosityRaw)
-	if err != nil {
-		return cooked, err
-	}
-
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, cooked.LogVerbosity, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, azcopyLogVerbosity, azcopyLogPathFolder, "-scanning")
 	azcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
 		azcopyScanningLogger.CloseLog()
@@ -1086,7 +1081,6 @@ type CookedCopyCmdArgs struct {
 	putMd5                   bool
 	md5ValidationOption      common.HashValidationOption
 	CheckLength              bool
-	LogVerbosity             common.LogLevel
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
 
@@ -1366,7 +1360,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		ForceIfReadOnly: cca.ForceIfReadOnly,
 		AutoDecompress:  cca.autoDecompress,
 		Priority:        common.EJobPriority.Normal(),
-		LogLevel:        cca.LogVerbosity,
+		LogLevel:        azcopyLogVerbosity,
 		ExcludeBlobType: cca.excludeBlobType,
 		BlobAttributes: common.BlobTransferAttributes{
 			BlobType:                 cca.blobType,

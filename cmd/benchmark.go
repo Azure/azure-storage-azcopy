@@ -47,13 +47,12 @@ type rawBenchmarkCmdArgs struct {
 	numOfFolders   uint
 
 	// options from flags
-	blockSizeMB  float64
-	putMd5       bool
-	checkLength  bool
-	blobType     string
-	output       string
-	logVerbosity string
-	mode         string
+	blockSizeMB float64
+	putMd5      bool
+	checkLength bool
+	blobType    string
+	output      string
+	mode        string
 }
 
 const (
@@ -167,7 +166,7 @@ func (raw rawBenchmarkCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	if !downloadMode && raw.deleteTestData {
 		// set up automatic cleanup
-		cooked.followupJobArgs, err = raw.createCleanupJobArgs(cooked.Destination, raw.logVerbosity)
+		cooked.followupJobArgs, err = raw.createCleanupJobArgs(cooked.Destination, logVerbosityRaw)
 		if err != nil {
 			return dummyCooked, err
 		}

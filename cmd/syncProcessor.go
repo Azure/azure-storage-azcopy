@@ -55,7 +55,7 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 			BlockSizeInBytes:         cca.blockSize},
 		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
 		ForceIfReadOnly:                cca.forceIfReadOnly,
-		LogLevel:                       cca.logVerbosity,
+		LogLevel:                       azcopyLogVerbosity,
 		PreserveSMBPermissions:         cca.preservePermissions,
 		PreserveSMBInfo:                cca.preserveSMBInfo,
 		S2SSourceChangeValidation:      true,
@@ -257,7 +257,7 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	p, err := InitPipeline(ctx, cca.fromTo.To(), cca.credentialInfo, cca.logVerbosity.ToPipelineLogLevel())
+	p, err := InitPipeline(ctx, cca.fromTo.To(), cca.credentialInfo, azcopyLogVerbosity.ToPipelineLogLevel())
 	if err != nil {
 		return nil, err
 	}

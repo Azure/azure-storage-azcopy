@@ -83,7 +83,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo,
 		&cca.FollowSymlinks, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties,
 		cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs,
-		cca.S2sPreserveBlobTags, cca.LogVerbosity.ToPipelineLogLevel(), cca.CpkOptions)
+		cca.S2sPreserveBlobTags, azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions)
 
 	if err != nil {
 		return nil, err
@@ -161,7 +161,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		// only create the destination container in S2S scenarios
 		if cca.FromTo.From().IsRemote() && dstContainerName != "" { // if the destination has a explicit container name
 			// Attempt to create the container. If we fail, fail silently.
-			err = cca.createDstContainer(dstContainerName, cca.Destination, ctx, existingContainers, cca.LogVerbosity)
+			err = cca.createDstContainer(dstContainerName, cca.Destination, ctx, existingContainers, azcopyLogVerbosity)
 
 			// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 			if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
@@ -195,7 +195,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						continue
 					}
 
-					err = cca.createDstContainer(bucketName, cca.Destination, ctx, existingContainers, cca.LogVerbosity)
+					err = cca.createDstContainer(bucketName, cca.Destination, ctx, existingContainers, azcopyLogVerbosity)
 
 					// if JobsAdmin is nil, we're probably in testing mode.
 					// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
@@ -218,7 +218,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				resName, err := containerResolver.ResolveName(cName)
 
 				if err == nil {
-					err = cca.createDstContainer(resName, cca.Destination, ctx, existingContainers, cca.LogVerbosity)
+					err = cca.createDstContainer(resName, cca.Destination, ctx, existingContainers, azcopyLogVerbosity)
 
 					if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 						logDstContainerCreateFailureOnce.Do(func() {

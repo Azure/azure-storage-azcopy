@@ -121,13 +121,8 @@ func (raw *rawSyncCmdArgs) validateURLIsNotServiceLevel(url string, location com
 func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked := cookedSyncCmdArgs{}
 
-	err := cooked.logVerbosity.Parse(logVerbosityRaw)
-	if err != nil {
-		return cooked, err
-	}
-
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, cooked.logVerbosity, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, azcopyLogVerbosity, azcopyLogPathFolder, "-scanning")
 	azcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
 		azcopyScanningLogger.CloseLog()
@@ -153,6 +148,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	cooked.isHNSToHNS = srcHNS && dstHNS
 
+	var err error
 	cooked.fromTo, err = ValidateFromTo(raw.src, raw.dst, raw.fromTo)
 	if err != nil {
 		return cooked, err
@@ -384,7 +380,6 @@ type cookedSyncCmdArgs struct {
 	putMd5              bool
 	md5ValidationOption common.HashValidationOption
 	blockSize           int64
-	logVerbosity        common.LogLevel
 	forceIfReadOnly     bool
 	backupMode          bool
 
