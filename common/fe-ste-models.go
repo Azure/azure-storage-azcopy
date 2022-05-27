@@ -111,40 +111,6 @@ type Version uint32
 type Status uint32
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-var EPosixPropertiesOption = PosixPropertiesOption(0)
-
-type PosixPropertiesOption uint8
-
-func (PosixPropertiesOption) None() PosixPropertiesOption                      { return 0 }
-func (PosixPropertiesOption) SpecialFilesAndProperties() PosixPropertiesOption { return 1 } // Carry over everything but referenced char/block devices
-func (PosixPropertiesOption) FullFidelity() PosixPropertiesOption              { return 2 } // Carry over referenced char/block devices
-
-func (p PosixPropertiesOption) String() string {
-	return enum.StringInt(p, reflect.TypeOf(p))
-}
-
-func (p *PosixPropertiesOption) Parse(s string) error {
-	if s == "" || strings.EqualFold(s, "false") {
-		*p = p.None()
-		return nil
-	} else if strings.EqualFold(s, "true") {
-		*p = p.FullFidelity()
-		return nil
-	}
-
-	val, err := enum.ParseInt(reflect.TypeOf(p), s, true, true)
-	if err == nil {
-		*p = val.(PosixPropertiesOption)
-	}
-	return err
-}
-
-func (p PosixPropertiesOption) IsTruthy() bool {
-	return p != p.None()
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 var EDeleteSnapshotsOption = DeleteSnapshotsOption(0)
 
 type DeleteSnapshotsOption uint8

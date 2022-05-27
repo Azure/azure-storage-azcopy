@@ -261,7 +261,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 								preprocessor,
 								getObjectNameOnly(strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)),
 								folderRelativePath,
-								common.EEntityType.Folder(), // folder stubs are treated like files in in the serial lister as well
+								common.EEntityType.Folder(),
 								resp.LastModified(),
 								resp.ContentLength(),
 								resp,
@@ -269,8 +269,6 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 								common.FromAzBlobMetadataToCommonMetadata(resp.NewMetadata()),
 								containerName,
 							)
-
-							// No need to check if this is a device, since it's a directory stub.
 
 							if t.s2sPreserveSourceTags {
 								var BlobTags *azblob.BlobTags

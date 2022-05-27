@@ -38,7 +38,6 @@ type blobAccountTraverser struct {
 	containerPattern      string
 	cachedContainers      []string
 	includeDirectoryStubs bool
-	posixPropOption       common.PosixPropertiesOption
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc

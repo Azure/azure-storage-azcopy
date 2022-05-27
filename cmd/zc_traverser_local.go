@@ -41,8 +41,6 @@ type localTraverser struct {
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
-
-	posixPropertiesOption common.PosixPropertiesOption
 }
 
 func (t *localTraverser) IsDirectory(bool) bool {

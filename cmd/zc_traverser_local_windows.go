@@ -64,7 +64,3 @@ func WrapFolder(fullpath string, stat os.FileInfo) (os.FileInfo, error) {
 		return nil, st.Error()
 	}
 }
-
-func (t *localTraverser) FileRepresentsDevice() bool {
-	return false
-}
