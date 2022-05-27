@@ -169,7 +169,8 @@ func Execute(azsAppPathFolder, logPathFolder string, jobPlanFolder string, maxFi
 	common.AzcopyJobPlanFolder = jobPlanFolder
 	azcopyMaxFileAndSocketHandles = maxFileAndSocketHandles
 	azcopyCurrentJobID = jobID
-	common.AzcopyCurrentJobLogger = common.NewJobLogger(jobID, common.ELogLevel.Debug(), logPathFolder, "")
+	common.AzcopyCurrentJobLogger = common.NewJobLogger(jobID, common.ELogLevel.Debug(), logPathFolder, "") // TODO tiverma THE BUG IS HERE
+	// we are making the logger with level DEBUG, and not changing it later
 	common.AzcopyCurrentJobLogger.OpenLog()
 
 	if err := rootCmd.Execute(); err != nil {
