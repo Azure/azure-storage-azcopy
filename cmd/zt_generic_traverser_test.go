@@ -261,7 +261,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks_ToFolder(c *chk.C) {
 
 	fileCount := 0
 	sawLinkTargetDir := false
-	c.Assert(WalkWithSymlinks(tmpDir, func(path string, fi os.FileInfo, err error) error {
+	c.Assert(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
 		c.Assert(err, chk.IsNil)
 
 		if fi.IsDir() {
@@ -276,7 +276,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks_ToFolder(c *chk.C) {
 		fileCount++
 		return nil
 	},
-		true), chk.IsNil)
+		true, nil), chk.IsNil)
 
 	// 3 files live in base, 3 files live in symlink
 	c.Assert(fileCount, chk.Equals, 6)
@@ -331,7 +331,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksBreakLoop(c *chk.C) {
 	// Only 3 files should ever be found.
 	// This is because the symlink links back to the root dir
 	fileCount := 0
-	c.Assert(WalkWithSymlinks(tmpDir, func(path string, fi os.FileInfo, err error) error {
+	c.Assert(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
 		c.Assert(err, chk.IsNil)
 
 		if fi.IsDir() {
@@ -341,7 +341,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksBreakLoop(c *chk.C) {
 		fileCount++
 		return nil
 	},
-		true), chk.IsNil)
+		true, nil), chk.IsNil)
 
 	c.Assert(fileCount, chk.Equals, 3)
 }
@@ -361,7 +361,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksDedupe(c *chk.C) {
 	// Only 6 files should ever be found.
 	// 3 in the root dir, 3 in subdir, then symlinkdir should be ignored because it's been seen.
 	fileCount := 0
-	c.Assert(WalkWithSymlinks(tmpDir, func(path string, fi os.FileInfo, err error) error {
+	c.Assert(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
 		c.Assert(err, chk.IsNil)
 
 		if fi.IsDir() {
@@ -371,7 +371,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksDedupe(c *chk.C) {
 		fileCount++
 		return nil
 	},
-		true), chk.IsNil)
+		true, nil), chk.IsNil)
 
 	c.Assert(fileCount, chk.Equals, 6)
 }
@@ -392,7 +392,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksMultitarget(c *chk.C) {
 	trySymlink(filepath.Join(tmpDir, "extradir"), filepath.Join(tmpDir, "linktolink"), c)
 
 	fileCount := 0
-	c.Assert(WalkWithSymlinks(tmpDir, func(path string, fi os.FileInfo, err error) error {
+	c.Assert(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
 		c.Assert(err, chk.IsNil)
 
 		if fi.IsDir() {
@@ -402,7 +402,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksMultitarget(c *chk.C) {
 		fileCount++
 		return nil
 	},
-		true), chk.IsNil)
+		true, nil), chk.IsNil)
 
 	// 3 files live in base, 3 files live in first symlink, second & third symlink is ignored.
 	c.Assert(fileCount, chk.Equals, 6)
@@ -425,7 +425,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksToParentAndChild(c *chk.C) {
 	trySymlink(child, filepath.Join(root1, "tochild"), c)
 
 	fileCount := 0
-	c.Assert(WalkWithSymlinks(root1, func(path string, fi os.FileInfo, err error) error {
+	c.Assert(WalkWithSymlinks(context.TODO(), root1, func(path string, fi os.FileInfo, err error) error {
 		c.Assert(err, chk.IsNil)
 
 		if fi.IsDir() {
@@ -435,7 +435,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksToParentAndChild(c *chk.C) {
 		fileCount++
 		return nil
 	},
-		true), chk.IsNil)
+		true, nil), chk.IsNil)
 
 	// 6 files total live under toroot. tochild should be ignored (or if tochild was traversed first, child will be ignored on toroot).
 	c.Assert(fileCount, chk.Equals, 6)
@@ -484,7 +484,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 		scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
 
 		// construct a local traverser
-		localTraverser := newLocalTraverser(filepath.Join(dstDirName, dstFileName), false, false, func(common.EntityType) {})
+		localTraverser := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, dstFileName), false, false, func(common.EntityType) {}, nil)
 
 		// invoke the local traversal with a dummy processor
 		localDummyProcessor := dummyProcessor{}
@@ -645,7 +645,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
-		localTraverser := newLocalTraverser(dstDirName, isRecursiveOn, false, func(common.EntityType) {})
+		localTraverser := newLocalTraverser(context.TODO(), dstDirName, isRecursiveOn, false, func(common.EntityType) {}, nil)
 
 		// invoke the local traversal with an indexer
 		// so that the results are indexed for easy validation
@@ -807,7 +807,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
-		localTraverser := newLocalTraverser(filepath.Join(dstDirName, virDirName), isRecursiveOn, false, func(common.EntityType) {})
+		localTraverser := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, virDirName), isRecursiveOn, false, func(common.EntityType) {}, nil)
 
 		// invoke the local traversal with an indexer
 		// so that the results are indexed for easy validation

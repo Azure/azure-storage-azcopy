@@ -40,7 +40,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var azcopyAppPathFolder string
+var AzcopyAppPathFolder string
 var azcopyLogPathFolder string
 var azcopyMaxFileAndSocketHandles int
 var outputFormatRaw string
@@ -156,7 +156,7 @@ var glcmSwapOnce = &sync.Once{}
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute(azsAppPathFolder, logPathFolder string, jobPlanFolder string, maxFileAndSocketHandles int, jobID common.JobID) {
-	azcopyAppPathFolder = azsAppPathFolder
+	AzcopyAppPathFolder = azsAppPathFolder
 	azcopyLogPathFolder = logPathFolder
 	common.AzcopyJobPlanFolder = jobPlanFolder
 	azcopyMaxFileAndSocketHandles = maxFileAndSocketHandles
