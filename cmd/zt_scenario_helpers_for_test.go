@@ -865,7 +865,6 @@ func getDefaultSyncRawInput(src, dst string) rawSyncCmdArgs {
 		src:                 src,
 		dst:                 dst,
 		recursive:           true,
-		logVerbosity:        defaultLogVerbosityForSync,
 		deleteDestination:   deleteDestination.String(),
 		md5ValidationOption: common.DefaultHashValidationOption.String(),
 	}
@@ -875,7 +874,6 @@ func getDefaultCopyRawInput(src string, dst string) rawCopyCmdArgs {
 	return rawCopyCmdArgs{
 		src:                            src,
 		dst:                            dst,
-		logVerbosity:                   defaultLogVerbosityForSync,
 		blobType:                       common.EBlobType.Detect().String(),
 		blockBlobTier:                  common.EBlockBlobTier.None().String(),
 		pageBlobTier:                   common.EPageBlobTier.None().String(),
@@ -900,7 +898,6 @@ func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 	return rawCopyCmdArgs{
 		src:                            src,
 		fromTo:                         fromTo.String(),
-		logVerbosity:                   defaultLogVerbosityForSync,
 		blobType:                       common.EBlobType.Detect().String(),
 		blockBlobTier:                  common.EBlockBlobTier.None().String(),
 		pageBlobTier:                   common.EPageBlobTier.None().String(),
