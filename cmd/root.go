@@ -50,11 +50,17 @@ var cancelFromStdin bool
 var azcopyOutputFormat common.OutputFormat
 var azcopyOutputVerbosity common.OutputVerbosity
 var azcopyLogVerbosity common.LogLevel
+var loggerInfo jobLoggerInfo
 var cmdLineCapMegaBitsPerSecond float64
 var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
 var azcopyScanningLogger common.ILoggerResetable
 var azcopyCurrentJobID common.JobID
+
+type jobLoggerInfo struct {
+	jobID         common.JobID
+	logFileFolder string
+}
 
 // It's not pretty that this one is read directly by credential util.
 // But doing otherwise required us passing it around in many places, even though really
@@ -101,6 +107,8 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, azcopyLogVerbosity, loggerInfo.logFileFolder, "")
+		common.AzcopyCurrentJobLogger.OpenLog()
 
 		glcm.SetForceLogging()
 
@@ -176,8 +184,7 @@ func Execute(azsAppPathFolder, logPathFolder string, jobPlanFolder string, maxFi
 	common.AzcopyJobPlanFolder = jobPlanFolder
 	azcopyMaxFileAndSocketHandles = maxFileAndSocketHandles
 	azcopyCurrentJobID = jobID
-	common.AzcopyCurrentJobLogger = common.NewJobLogger(jobID, azcopyLogVerbosity, logPathFolder, "")
-	common.AzcopyCurrentJobLogger.OpenLog()
+	loggerInfo = jobLoggerInfo{jobID, logPathFolder}
 
 	if err := rootCmd.Execute(); err != nil {
 		glcm.Error(err.Error())
