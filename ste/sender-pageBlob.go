@@ -135,7 +135,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 		metadataToApply:        props.SrcMetadata.ToAzBlobMetadata(),
 		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
 		destBlobTier:           destBlobTier,
-		filePacer:              NewNullAutoPacer(), // defer creation of real one to Prologue
+		filePacer:              newNullAutoPacer(), // defer creation of real one to Prologue
 		cpkToApply:             cpkToApply,
 		destPageRangeOptimizer: destRangeOptimizer,
 	}
@@ -250,7 +250,6 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		destBlobTier,
 		blobTags,
 		s.cpkToApply,
-		azblob.ImmutabilityPolicyOptions{},
 	); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return

@@ -30,11 +30,11 @@ import (
 	"github.com/JeffreyRichter/enum/enum"
 )
 
-// /////////
+///////////
 
 var sanitizer = common.NewAzCopyLogSanitizer() // while this is "only tests", we may as well follow good SAS redaction practices
 
-// //////
+////////
 
 type comparison struct {
 	equals bool
@@ -52,12 +52,12 @@ func equals() comparison {
 	return comparison{true}
 }
 
-// nolint
+//nolint
 func notEquals() comparison {
 	return comparison{false}
 }
 
-// /////
+///////
 
 // simplified assertion interface. Allows us to abstract away the specific test harness we are using
 // (in case we change it... again)
@@ -137,7 +137,7 @@ func (a *testingAsserter) CompactScenarioName() string {
 	return a.compactScenarioName
 }
 
-// //
+////
 
 type params struct {
 	recursive                 bool
@@ -169,9 +169,6 @@ type params struct {
 	debugSkipFiles            []string // a list of localized filepaths to skip over on the first run in the STE.
 	s2sPreserveAccessTier     bool
 	accessTier                azblob.AccessTierType
-	checkMd5                  common.HashValidationOption
-
-	destNull bool
 
 	disableParallelTesting bool
 	// looks like this for a folder transfer:
@@ -188,10 +185,10 @@ type params struct {
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level
 // TODO : Make this *actually* check with azcopy code instead of assuming azcopy's black magic.
 func (p params) allowsFolderTransfers() bool {
-	return !p.destNull && p.includePattern+p.includeAttributes+p.excludePattern+p.excludeAttributes == ""
+	return p.includePattern+p.includeAttributes+p.excludePattern+p.excludeAttributes == ""
 }
 
-// ////////////
+//////////////
 
 var eOperation = Operation(0)
 
@@ -230,7 +227,7 @@ func (o Operation) includes(item Operation) bool {
 	return false
 }
 
-// ///////////
+/////////////
 
 var eTestFromTo = TestFromTo{}
 
@@ -469,7 +466,7 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 	return result
 }
 
-// //
+////
 
 var eValidate = Validate(0)
 
@@ -487,7 +484,7 @@ func (v Validate) String() string {
 	return enum.StringInt(v, reflect.TypeOf(v))
 }
 
-// ////
+//////
 
 // hookHelper is functions that hooks can call to influence test execution
 // NOTE: this interface will have to actively evolve as we discover what we need our hooks to do.
@@ -526,7 +523,7 @@ type hookHelper interface {
 	GetDestination() resourceManager
 }
 
-// /////
+///////
 
 type hookFunc func(h hookHelper)
 

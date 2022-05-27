@@ -49,7 +49,7 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 
 		// flags
 		BlobAttributes: common.BlobTransferAttributes{
-			PreserveLastModifiedTime: cca.preserveSMBInfo, // true by default for sync so that future syncs have this information available
+			PreserveLastModifiedTime: true, // must be true for sync so that future syncs have this information available
 			PutMd5:                   cca.putMd5,
 			MD5ValidationOption:      cca.md5ValidationOption,
 			BlockSizeInBytes:         cca.blockSize},
@@ -64,8 +64,6 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 		S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
 		CpkOptions:                     cca.cpkOptions,
 		S2SPreserveBlobTags:            cca.s2sPreserveBlobTags,
-
-		S2SSourceCredentialType: cca.s2sSourceCredentialType,
 	}
 
 	reportFirstPart := func(jobStarted bool) { cca.setFirstPartOrdered() } // for compatibility with the way sync has always worked, we don't check jobStarted here
@@ -99,7 +97,7 @@ type interactiveDeleteProcessor struct {
 	// count the deletions that happened
 	incrementDeletionCount func()
 
-	// dryrunMode
+	//dryrunMode
 	dryrunMode bool
 }
 
@@ -137,11 +135,11 @@ func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else { // remove for sync
-				if d.objectTypeToDisplay == "local file" { // removing from local src
+				if d.objectTypeToDisplay == "local file" { //removing from local src
 					dryrunValue := fmt.Sprintf("DRYRUN: remove %v", common.ToShortPath(d.objectLocationToDisplay))
 					if runtime.GOOS == "windows" {
 						dryrunValue += "\\" + strings.ReplaceAll(object.relativePath, "/", "\\")
-					} else { // linux and mac
+					} else { //linux and mac
 						dryrunValue += "/" + object.relativePath
 					}
 					return dryrunValue

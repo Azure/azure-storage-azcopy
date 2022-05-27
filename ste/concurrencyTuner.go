@@ -41,23 +41,23 @@ type ConcurrencyTuner interface {
 	recordRetry()
 }
 
-type NullConcurrencyTuner struct {
-	FixedValue int
+type nullConcurrencyTuner struct {
+	fixedValue int
 }
 
-func (n *NullConcurrencyTuner) GetRecommendedConcurrency(currentMbps int, highCpuUsage bool) (newConcurrency int, reason string) {
-	return n.FixedValue, concurrencyReasonFinished
+func (n *nullConcurrencyTuner) GetRecommendedConcurrency(currentMbps int, highCpuUsage bool) (newConcurrency int, reason string) {
+	return n.fixedValue, concurrencyReasonFinished
 }
 
-func (n *NullConcurrencyTuner) RequestCallbackWhenStable(callback func()) (callbackAccepted bool) {
+func (n *nullConcurrencyTuner) RequestCallbackWhenStable(callback func()) (callbackAccepted bool) {
 	return false
 }
 
-func (n *NullConcurrencyTuner) GetFinalState() (finalReason string, finalRecommendedConcurrency int) {
-	return ConcurrencyReasonTunerDisabled, n.FixedValue
+func (n *nullConcurrencyTuner) GetFinalState() (finalReason string, finalRecommendedConcurrency int) {
+	return concurrencyReasonTunerDisabled, n.fixedValue
 }
 
-func (n *NullConcurrencyTuner) recordRetry() {
+func (n *nullConcurrencyTuner) recordRetry() {
 	// noop
 }
 
@@ -127,8 +127,8 @@ func (t *autoConcurrencyTuner) recordRetry() {
 }
 
 const (
-	ConcurrencyReasonNone          = ""
-	ConcurrencyReasonTunerDisabled = "tuner disabled" // used as the final (non-finished) state for null tuner
+	concurrencyReasonNone          = ""
+	concurrencyReasonTunerDisabled = "tuner disabled" // used as the final (non-finished) state for null tuner
 	concurrencyReasonInitial       = "initial starting point"
 	concurrencyReasonSeeking       = "seeking optimum"
 	concurrencyReasonBackoff       = "backing off"
@@ -155,7 +155,7 @@ func (t *autoConcurrencyTuner) worker() {
 	probeHigherRegardless := false
 	dontBackoffRegardless := false
 	multiplierReductionCount := 0
-	lastReason := ConcurrencyReasonNone
+	lastReason := concurrencyReasonNone
 
 	// get initial baseline throughput
 	lastSpeed, _ := t.getCurrentSpeed()

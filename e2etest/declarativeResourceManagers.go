@@ -44,7 +44,7 @@ type downloadContentOptions struct {
 	downloadFileContentOptions
 }
 
-// nolint
+//nolint
 type downloadBlobContentOptions struct {
 	containerURL azblob.ContainerURL
 	cpkInfo      common.CpkInfo
@@ -96,17 +96,13 @@ type resourceManager interface {
 	createSourceSnapshot(a asserter)
 }
 
-// /////////////
+///////////////
 
 type resourceLocal struct {
 	dirPath string
 }
 
 func (r *resourceLocal) createLocation(a asserter, s *scenario) {
-	if r.dirPath == common.Dev_Null {
-		return
-	}
-
 	r.dirPath = TestResourceFactory{}.CreateLocalDirectory(a)
 	if s.GetModifiableParameters().relativeSourcePath != "" {
 		r.appendSourcePath(s.GetModifiableParameters().relativeSourcePath, true)
@@ -114,10 +110,6 @@ func (r *resourceLocal) createLocation(a asserter, s *scenario) {
 }
 
 func (r *resourceLocal) createFiles(a asserter, s *scenario, isSource bool) {
-	if r.dirPath == common.Dev_Null {
-		return
-	}
-
 	scenarioHelper{}.generateLocalFilesFromList(a, &generateLocalFilesFromList{
 		dirPath: r.dirPath,
 		generateFromListOptions: generateFromListOptions{
@@ -128,10 +120,6 @@ func (r *resourceLocal) createFiles(a asserter, s *scenario, isSource bool) {
 }
 
 func (r *resourceLocal) createFile(a asserter, o *testObject, s *scenario, isSource bool) {
-	if r.dirPath == common.Dev_Null {
-		return
-	}
-
 	scenarioHelper{}.generateLocalFilesFromList(a, &generateLocalFilesFromList{
 		dirPath: r.dirPath,
 		generateFromListOptions: generateFromListOptions{
@@ -142,20 +130,12 @@ func (r *resourceLocal) createFile(a asserter, o *testObject, s *scenario, isSou
 }
 
 func (r *resourceLocal) cleanup(_ asserter) {
-	if r.dirPath == common.Dev_Null {
-		return
-	}
-
 	if r.dirPath != "" {
 		_ = os.RemoveAll(r.dirPath)
 	}
 }
 
 func (r *resourceLocal) getParam(stripTopDir bool, withSas bool, withFile string) string {
-	if r.dirPath == common.Dev_Null {
-		return common.Dev_Null
-	}
-
 	if !stripTopDir {
 		if withFile != "" {
 			p := path.Join(r.dirPath, withFile)
@@ -185,10 +165,6 @@ func (r *resourceLocal) appendSourcePath(filePath string, _ bool) {
 }
 
 func (r *resourceLocal) getAllProperties(a asserter) map[string]*objectProperties {
-	if r.dirPath == common.Dev_Null {
-		return make(map[string]*objectProperties)
-	}
-
 	return scenarioHelper{}.enumerateLocalProperties(a, r.dirPath)
 }
 
@@ -200,7 +176,7 @@ func (r *resourceLocal) createSourceSnapshot(a asserter) {
 	panic("Not Implemented")
 }
 
-// /////
+///////
 
 type resourceBlobContainer struct {
 	accountType  AccountType
@@ -306,7 +282,7 @@ func (r *resourceBlobContainer) createSourceSnapshot(a asserter) {
 	panic("Not Implemented")
 }
 
-// ///
+/////
 
 type resourceAzureFileShare struct {
 	accountType AccountType
@@ -402,7 +378,7 @@ func (r *resourceAzureFileShare) createSourceSnapshot(a asserter) {
 	r.snapshotID = TestResourceFactory{}.CreateNewFileShareSnapshot(a, *r.shareURL)
 }
 
-// //
+////
 
 type resourceDummy struct{}
 

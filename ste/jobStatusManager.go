@@ -26,12 +26,12 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-type JobPartCreatedMsg struct {
-	TotalTransfers uint32
-	IsFinalPart    bool
-	TotalBytesEnumerated uint64
-	FileTransfers  uint32
-	FolderTransfer uint32
+type jobPartCreatedMsg struct {
+	totalTransfers       uint32
+	isFinalPart          bool
+	totalBytesEnumerated uint64
+	fileTransfers        uint32
+	folderTransfer       uint32
 }
 
 type xferDoneMsg = common.TransferDetail
@@ -39,30 +39,31 @@ type jobStatusManager struct {
 	js          common.ListJobSummaryResponse
 	respChan    chan common.ListJobSummaryResponse
 	listReq     chan bool
-	partCreated chan JobPartCreatedMsg
+	partCreated chan jobPartCreatedMsg
 	xferDone    chan xferDoneMsg
 }
 
+var jstm jobStatusManager
+
 /* These functions should not fail */
-func (jm *jobMgr) SendJobPartCreatedMsg(msg JobPartCreatedMsg) {
-	jm.jstm.partCreated <- msg
+func (jm *jobMgr) SendJobPartCreatedMsg(msg jobPartCreatedMsg) {
+	jstm.partCreated <- msg
 }
 
 func (jm *jobMgr) SendXferDoneMsg(msg xferDoneMsg) {
-	jm.jstm.xferDone <- msg
+	jstm.xferDone <- msg
 }
 
 func (jm *jobMgr) ListJobSummary() common.ListJobSummaryResponse {
-	jm.jstm.listReq <- true
-	return <-jm.jstm.respChan
+	jstm.listReq <- true
+	return <-jstm.respChan
 }
 
 func (jm *jobMgr) ResurrectSummary(js common.ListJobSummaryResponse) {
-	jm.jstm.js = js
+	jstm.js = js
 }
 
 func (jm *jobMgr) handleStatusUpdateMessage() {
-	jstm := jm.jstm
 	js := &jstm.js
 	js.JobID = jm.jobID
 	js.CompleteJobOrdered = false
@@ -71,12 +72,12 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 	for {
 		select {
 		case msg := <-jstm.partCreated:
-			js.CompleteJobOrdered = js.CompleteJobOrdered || msg.IsFinalPart
-			js.TotalTransfers += msg.TotalTransfers
-			js.FileTransfers += msg.FileTransfers
-			js.FolderPropertyTransfers += msg.FolderTransfer
-			js.TotalBytesEnumerated += msg.TotalBytesEnumerated
-			js.TotalBytesExpected += msg.TotalBytesEnumerated
+			js.CompleteJobOrdered = js.CompleteJobOrdered || msg.isFinalPart
+			js.TotalTransfers += msg.totalTransfers
+			js.FileTransfers += msg.fileTransfers
+			js.FolderPropertyTransfers += msg.folderTransfer
+			js.TotalBytesEnumerated += msg.totalBytesEnumerated
+			js.TotalBytesExpected += msg.totalBytesEnumerated
 
 		case msg := <-jstm.xferDone:
 			msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()

@@ -23,10 +23,6 @@ import (
 
 // works for both folders and files
 func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
-	if txInfo.Destination == common.Dev_Null {
-		return nil // Do nothing.
-	}
-
 	propHolder, err := sip.GetSMBProperties()
 	if err != nil {
 		return fmt.Errorf("failed get SMB properties: %w", err)
@@ -96,10 +92,6 @@ var globalSetAclMu = &sync.Mutex{}
 
 // works for both folders and files
 func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
-	if txInfo.Destination == common.Dev_Null {
-		return nil // Do nothing.
-	}
-
 	// Let's start by getting our SDDL and parsing it.
 	sddlString, err := sip.GetSDDL()
 

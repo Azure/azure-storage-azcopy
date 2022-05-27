@@ -28,7 +28,7 @@ Copies source data to a destination location. The supported directions are:
   - Azure Files (SAS) -> Azure Files (SAS)
   - Azure Files (SAS) -> Azure Blob (SAS or OAuth authentication)
   - AWS S3 (Access Key) -> Azure Block Blob (SAS or OAuth authentication)
-  - Google Cloud Storage (Service Account Key) -> Azure Block Blob (SAS or OAuth authentication)
+  - Google Cloud Storage (Service Account Key) -> Azure Block Blob (SAS or OAuth authentication) [Preview]
 
 Please refer to the examples for more information.
 

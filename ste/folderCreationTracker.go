@@ -62,10 +62,6 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIn
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if folder == common.Dev_Null {
-		return // Never persist to dev-null
-	}
-
 	f.contents[folder] = transferIndex
 
 	// We created it before it was enumerated-- Let's register that now.
@@ -80,10 +76,6 @@ func (f *jpptFolderTracker) RecordCreation(folder string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if folder == common.Dev_Null {
-		return // Never persist to dev-null
-	}
-
 	if idx, ok := f.contents[folder]; ok {
 		// overwrite it's transfer status
 		f.plan.Transfer(idx).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
@@ -95,10 +87,6 @@ func (f *jpptFolderTracker) RecordCreation(folder string) {
 }
 
 func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.OverwriteOption, prompter common.Prompter) bool {
-	if folder == common.Dev_Null {
-		return false // Never persist to dev-null
-	}
-
 	switch overwrite {
 	case common.EOverwriteOption.True():
 		return true
@@ -145,10 +133,6 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 func (f *jpptFolderTracker) StopTracking(folder string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-
-	if folder == common.Dev_Null {
-		return // Not possible to track this
-	}
 
 	// no-op, because tracking is now handled by jppt, anyway.
 	if _, ok := f.contents[folder]; ok {

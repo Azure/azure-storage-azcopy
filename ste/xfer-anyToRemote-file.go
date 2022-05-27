@@ -65,8 +65,6 @@ func prepareDestAccountInfo(bURL azblob.BlobURL, jptm IJobPartTransferMgr, ctx c
 				getDestAccountInfoError = err
 			} else {
 				tierSetPossibleFail = true
-				glcm := common.GetLifecycleMgr()
-				glcm.Info("Transfers are likely to fail because destination does not support tiers.")
 				destAccountSKU = "failget"
 				destAccountKind = "failget"
 			}

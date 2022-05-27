@@ -23,7 +23,6 @@ package e2etest
 import (
 	"fmt"
 	"net/url"
-	"os"
 	"runtime"
 	"strings"
 
@@ -89,7 +88,6 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 			return to.name
 		}
 	})
-
 	for _, transfer := range actualTransfers {
 		if snapshotID != "" {
 			c.Assert(strings.Contains(transfer.Src, snapshotID), equals(), true)
@@ -121,10 +119,8 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 			dstRelativeFilePath, _ = url.PathUnescape(dstRelativeFilePath)
 		}
 
-		if transfer.Dst != os.DevNull { // Don't check if the destination is NUL-- It won't be correct.
-			// the relative paths should be equal
-			c.Assert(srcRelativeFilePath, equals(), dstRelativeFilePath)
-		}
+		// the relative paths should be equal
+		c.Assert(srcRelativeFilePath, equals(), dstRelativeFilePath)
 
 		// look up the path from the expected transfers, make sure it exists
 		folderMessage := ""
