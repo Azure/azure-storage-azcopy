@@ -254,7 +254,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		jobID: azcopyCurrentJobID,
 	}
 
-	err := cooked.LogVerbosity.Parse(logVerbosity)
+	err := cooked.LogVerbosity.Parse(logVerbosityRaw)
 	if err != nil {
 		return cooked, err
 	}

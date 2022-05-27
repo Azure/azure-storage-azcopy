@@ -45,10 +45,11 @@ var azcopyLogPathFolder string
 var azcopyMaxFileAndSocketHandles int
 var outputFormatRaw string
 var outputVerbosityRaw string
-var logVerbosity string
+var logVerbosityRaw string
 var cancelFromStdin bool
 var azcopyOutputFormat common.OutputFormat
 var azcopyOutputVerbosity common.OutputVerbosity
+var azcopyLogVerbosity common.LogLevel
 var cmdLineCapMegaBitsPerSecond float64
 var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
@@ -92,6 +93,11 @@ var rootCmd = &cobra.Command{
 
 		err = azcopyOutputVerbosity.Parse(outputVerbosityRaw)
 		glcm.SetOutputVerbosity(azcopyOutputVerbosity)
+		if err != nil {
+			return err
+		}
+
+		err = azcopyLogVerbosity.Parse(logVerbosityRaw)
 		if err != nil {
 			return err
 		}
@@ -170,8 +176,7 @@ func Execute(azsAppPathFolder, logPathFolder string, jobPlanFolder string, maxFi
 	common.AzcopyJobPlanFolder = jobPlanFolder
 	azcopyMaxFileAndSocketHandles = maxFileAndSocketHandles
 	azcopyCurrentJobID = jobID
-	common.AzcopyCurrentJobLogger = common.NewJobLogger(jobID, common.ELogLevel.Debug(), logPathFolder, "") // TODO tiverma THE BUG IS HERE
-	// we are making the logger with level DEBUG, and not changing it later
+	common.AzcopyCurrentJobLogger = common.NewJobLogger(jobID, azcopyLogVerbosity, logPathFolder, "")
 	common.AzcopyCurrentJobLogger.OpenLog()
 
 	if err := rootCmd.Execute(); err != nil {
@@ -196,7 +201,7 @@ func init() {
 	rootCmd.PersistentFlags().Float64Var(&cmdLineCapMegaBitsPerSecond, "cap-mbps", 0, "Caps the transfer rate, in megabits per second. Moment-by-moment throughput might vary slightly from the cap. If this option is set to zero, or it is omitted, the throughput isn't capped.")
 	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text", "Format of the command's output. The choices include: text, json. The default value is 'text'.")
 	rootCmd.PersistentFlags().StringVar(&outputVerbosityRaw, "output-level", "default", "Define the output verbosity. Available levels: essential, quiet.")
-	rootCmd.PersistentFlags().StringVar(&logVerbosity, "log-level", "INFO", "Define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default 'INFO').")
+	rootCmd.PersistentFlags().StringVar(&logVerbosityRaw, "log-level", "INFO", "Define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default 'INFO').")
 
 	rootCmd.PersistentFlags().StringVar(&cmdLineExtraSuffixesAAD, trustedSuffixesNameAAD, "", "Specifies additional domain suffixes where Azure Active Directory login tokens may be sent.  The default is '"+
 		trustedSuffixesAAD+"'. Any listed here are added to the default. For security, you should only put Microsoft Azure domains here. Separate multiple entries with semi-colons.")

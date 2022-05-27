@@ -121,7 +121,7 @@ func (raw *rawSyncCmdArgs) validateURLIsNotServiceLevel(url string, location com
 func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked := cookedSyncCmdArgs{}
 
-	err := cooked.logVerbosity.Parse(logVerbosity)
+	err := cooked.logVerbosity.Parse(logVerbosityRaw)
 	if err != nil {
 		return cooked, err
 	}
