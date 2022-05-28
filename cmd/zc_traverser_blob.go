@@ -61,6 +61,8 @@ type blobTraverser struct {
 	includeSnapshot bool
 
 	includeVersion bool
+
+	retrieveCopyInfo bool
 }
 
 func (t *blobTraverser) IsDirectory(isSource bool) bool {
@@ -240,7 +242,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 
 		for marker := (azblob.Marker{}); marker.NotDone(); {
 			lResp, err := containerURL.ListBlobsHierarchySegment(t.ctx, marker, "/", azblob.ListBlobsSegmentOptions{Prefix: currentDirPath,
-				Details: azblob.BlobListingDetails{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion}})
+				Details: azblob.BlobListingDetails{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion, Copy: t.retrieveCopyInfo}}) // TODO tiverma copy=true if async status
 			if err != nil {
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
@@ -446,7 +448,7 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 	return nil
 }
 
-func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool) (t *blobTraverser) {
+func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion, includeCopyStatus bool) (t *blobTraverser) {
 	t = &blobTraverser{
 		rawURL:                      rawURL,
 		p:                           p,
@@ -460,6 +462,7 @@ func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 		includeDeleted:              includeDeleted,
 		includeSnapshot:             includeSnapshot,
 		includeVersion:              includeVersion,
+		retrieveCopyInfo:            includeCopyStatus,
 	}
 
 	disableHierarchicalScanning := strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))

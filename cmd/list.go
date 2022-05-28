@@ -189,6 +189,15 @@ func (cooked cookedListCmdArgs) processProperties(object StoredObject) string {
 	return builder.String()
 }
 
+func (cooked cookedListCmdArgs) shouldRetrieveCopyStatus() bool {
+	for _, property := range cooked.properties {
+		if property == copyStatus {
+			return true
+		}
+	}
+	return false
+}
+
 // HandleListContainerCommand handles the list container command
 func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	// TODO: Temporarily use context.TODO(), this should be replaced with a root context from main.
@@ -221,9 +230,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		}
 	}
 
-	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, nil, nil,
-		true, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {},
-		nil, false, pipeline2.LogNone, common.CpkOptions{})
+	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, nil, nil, true, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, pipeline2.LogNone, common.CpkOptions{}, cooked.shouldRetrieveCopyStatus())
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())
