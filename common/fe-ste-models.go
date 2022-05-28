@@ -451,6 +451,7 @@ func (Location) BlobFS() Location    { return Location(5) }
 func (Location) S3() Location        { return Location(6) }
 func (Location) Benchmark() Location { return Location(7) }
 func (Location) GCP() Location       { return Location(8) }
+func (Location) BlobAsync() Location { return Location(9) }
 
 func (l Location) String() string {
 	return enum.StringInt(l, reflect.TypeOf(l))
@@ -464,6 +465,7 @@ func (Location) AllStandardLocations() []Location {
 		ELocation.File(),
 		ELocation.BlobFS(),
 		ELocation.S3(),
+		ELocation.BlobAsync(),
 		// TODO: ELocation.GCP
 	}
 }
@@ -477,7 +479,7 @@ func fromToValue(from Location, to Location) FromTo {
 
 func (l Location) IsRemote() bool {
 	switch l {
-	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3(), ELocation.GCP():
+	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3(), ELocation.GCP(), ELocation.BlobAsync():
 		return true
 	case ELocation.Local(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
 		return false
@@ -500,7 +502,7 @@ func (l Location) IsFolderAware() bool {
 	switch l {
 	case ELocation.BlobFS(), ELocation.File(), ELocation.Local():
 		return true
-	case ELocation.Blob(), ELocation.S3(), ELocation.GCP(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
+	case ELocation.Blob(), ELocation.S3(), ELocation.GCP(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown(), ELocation.BlobAsync():
 		return false
 	default:
 		panic("unexpected location, please specify if it is folder-aware")
@@ -538,6 +540,9 @@ func (FromTo) BlobFile() FromTo    { return FromTo(fromToValue(ELocation.Blob(),
 func (FromTo) FileFile() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.File())) }
 func (FromTo) S3Blob() FromTo      { return FromTo(fromToValue(ELocation.S3(), ELocation.Blob())) }
 func (FromTo) GCPBlob() FromTo     { return FromTo(fromToValue(ELocation.GCP(), ELocation.Blob())) }
+func (FromTo) BlobBlobAsync() FromTo {
+	return FromTo(fromToValue(ELocation.Blob(), ELocation.BlobAsync()))
+}
 
 // todo: to we really want these?  Starts to look like a bit of a combinatorial explosion
 func (FromTo) BenchmarkBlob() FromTo {
@@ -1495,5 +1500,3 @@ func GetClientProvidedKey(options CpkOptions) azblob.ClientProvidedKeyOptions {
 	_cpkScopeInfo := GetCpkScopeInfo(options.CpkScopeInfo)
 	return ToClientProvidedKeyOptions(_cpkInfo, _cpkScopeInfo)
 }
-
-

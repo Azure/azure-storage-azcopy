@@ -1418,7 +1418,8 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		common.EFromTo.GCPBlob(),
 		common.EFromTo.BenchmarkBlob(),
 		common.EFromTo.BenchmarkBlobFS(),
-		common.EFromTo.BenchmarkFile():
+		common.EFromTo.BenchmarkFile(),
+		common.EFromTo.BlobBlobAsync():
 
 		var e *CopyEnumerator
 		e, err = cca.initEnumerator(jobPartOrder, ctx)

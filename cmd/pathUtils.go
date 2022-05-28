@@ -60,7 +60,8 @@ func DetermineLocationLevel(location string, locationType common.Location, sourc
 		common.ELocation.File(),
 		common.ELocation.BlobFS(),
 		common.ELocation.S3(),
-		common.ELocation.GCP():
+		common.ELocation.GCP(),
+		common.ELocation.BlobAsync():
 		URL, err := url.Parse(location)
 
 		if err != nil {
@@ -231,7 +232,7 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 	//       We've already seen a similar thing happen with Blob SAS tokens and the introduction of User Delegation Keys.
 	//       It's not a breaking change to the way SAS tokens work, but a pretty major addition.
 	// TODO: Find a clever way to reduce code duplication in here. Especially the URL parsing.
-	case common.ELocation.Blob():
+	case common.ELocation.Blob(), common.ELocation.BlobAsync():
 		var baseURL *url.URL // Do not shadow err for clean return statement
 		baseURL, err = url.Parse(resource)
 
@@ -356,6 +357,7 @@ func GetContainerName(path string, location common.Location) (string, error) {
 	case common.ELocation.Local():
 		panic("attempted to get container name on local location")
 	case common.ELocation.Blob(),
+		common.ELocation.BlobAsync(),
 		common.ELocation.File(),
 		common.ELocation.BlobFS():
 		baseURL, err := url.Parse(path)

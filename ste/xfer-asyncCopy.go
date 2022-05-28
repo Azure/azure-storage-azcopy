@@ -57,7 +57,11 @@ func asyncCopyBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		jptm.ReportTransferDone()
 	}
 
-	_, err := dstBlobURL.StartCopyFromURL(jptm.Context(), srcBlobURL.URL(), azblob.Metadata{}, azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, azblob.AccessTierNone, nil)
+	ll, err := dstBlobURL.StartCopyFromURL(jptm.Context(), srcBlobURL.URL(), azblob.Metadata{}, azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, azblob.AccessTierNone, nil)
+
+	jptm.Log(pipeline.LogWarning, "ISHAAN: "+string(ll.CopyStatus())+string(ll.StatusCode()))
+	fmt.Println(string(ll.CopyStatus()))
+	fmt.Println(ll.StatusCode()) // TODO tiverma remove this
 
 	if err != nil {
 		if strErr, ok := err.(azblob.StorageError); ok {

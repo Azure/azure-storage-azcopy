@@ -36,5 +36,5 @@ var asyncCmd = &cobra.Command{
 
 func init() {
 	// add jobs command as a top level command
-	rootCmd.AddCommand(jobsCmd)
+	rootCmd.AddCommand(asyncCmd)
 }

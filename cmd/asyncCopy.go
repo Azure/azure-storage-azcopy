@@ -27,6 +27,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func (raw *rawCopyCmdArgs) setMandatoryDefaultsForSetProperties() {
+	raw.blobType = common.EBlobType.Detect().String()
+	raw.md5ValidationOption = common.DefaultHashValidationOption.String()
+	raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
+	raw.forceWrite = common.EOverwriteOption.True().String()
+	raw.preserveOwner = common.PreserveOwnerDefault
+}
+
 func init() {
 	raw := rawCopyCmdArgs{}
 
@@ -76,6 +84,8 @@ func init() {
 			} else {
 				return errors.New("wrong number of arguments, please refer to the help page on usage of this command")
 			}
+
+			raw.setMandatoryDefaultsForSetProperties()
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
@@ -103,4 +113,19 @@ func init() {
 	asyncCmd.AddCommand(asyncCopyCmd)
 
 	// -- flags --
+	asyncCopyCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Set the given location with these key-value pairs (separated by ';') as metadata.")
+	asyncCopyCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. Valid values : BlobNone, FileNone, BlobFSNone")
+	asyncCopyCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "Define the log verbosity for the log file. Available levels include: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default 'INFO')")
+	asyncCopyCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
+	asyncCopyCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "Include only these paths when setting property. "+
+		"This option does not support wildcard characters (*). Checks relative path prefix. For example: myFolder;myFolder/subDirName/file.pdf")
+	asyncCopyCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
+	asyncCopyCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "Exclude these paths when removing. "+
+		"This option does not support wildcard characters (*). Checks relative path prefix. For example: myFolder;myFolder/subDirName/file.pdf")
+	asyncCopyCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "Defines the location of text file which has the list of only files to be copied.")
+	asyncCopyCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "Changes the access tier of the blobs to the given tier")
+	asyncCopyCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "Upload page blob to Azure Storage using this blob tier. (default 'None').")
+	asyncCopyCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Look into sub-directories recursively when uploading from local file system.")
+	asyncCopyCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the file paths that would be affected by this command. This flag does not affect the actual files.")
+	asyncCopyCmd.PersistentFlags().StringVar(&raw.blobTags, "blob-tags", "", "Set tags on blobs to categorize data in your storage account (separated by '&')")
 }

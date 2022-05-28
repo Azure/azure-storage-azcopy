@@ -155,6 +155,8 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		return DeleteBlob
 	case fromTo == common.EFromTo.FileTrash():
 		return DeleteFile
+	case fromTo == common.EFromTo.BlobBlobAsync():
+		return AsyncCopy
 	default:
 		if fromTo.IsDownload() {
 			return parameterizeDownload(remoteToLocal, getDownloader(fromTo.From()))

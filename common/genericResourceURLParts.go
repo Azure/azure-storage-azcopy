@@ -27,7 +27,7 @@ func NewGenericResourceURLParts(resourceURL url.URL, location Location) GenericR
 	g := GenericResourceURLParts{location: location}
 
 	switch location {
-	case ELocation.Blob():
+	case ELocation.Blob(), ELocation.BlobAsync():
 		g.blobURLParts = azblob.NewBlobURLParts(resourceURL)
 	case ELocation.File():
 		g.fileURLParts = azfile.NewFileURLParts(resourceURL)
@@ -50,7 +50,7 @@ func NewGenericResourceURLParts(resourceURL url.URL, location Location) GenericR
 
 func (g GenericResourceURLParts) GetContainerName() string {
 	switch g.location {
-	case ELocation.Blob():
+	case ELocation.Blob(), ELocation.BlobAsync():
 		return g.blobURLParts.ContainerName
 	case ELocation.File():
 		return g.fileURLParts.ShareName
@@ -67,7 +67,7 @@ func (g GenericResourceURLParts) GetContainerName() string {
 
 func (g GenericResourceURLParts) GetObjectName() string {
 	switch g.location {
-	case ELocation.Blob():
+	case ELocation.Blob(), ELocation.BlobAsync():
 		return g.blobURLParts.BlobName
 	case ELocation.File():
 		return g.fileURLParts.DirectoryOrFilePath
