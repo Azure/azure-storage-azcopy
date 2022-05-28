@@ -65,6 +65,10 @@ func (e emptyPropertiesAdapter) AccessTier() azblob.AccessTierType {
 	return azblob.AccessTierNone
 }
 
+func (e emptyPropertiesAdapter) CopyStatus() azblob.CopyStatusType {
+	return azblob.CopyStatusNone
+}
+
 func (e emptyPropertiesAdapter) LeaseDuration() azblob.LeaseDurationType {
 	return azblob.LeaseDurationNone
 }
@@ -95,6 +99,10 @@ type blobPropertiesResponseAdapter struct {
 
 func (a blobPropertiesResponseAdapter) AccessTier() azblob.AccessTierType {
 	return azblob.AccessTierType(a.BlobGetPropertiesResponse.AccessTier())
+}
+
+func (a blobPropertiesResponseAdapter) CopyStatus() azblob.CopyStatusType {
+	return a.BlobGetPropertiesResponse.CopyStatus()
 }
 
 // blobPropertiesAdapter adapts a BlobProperties object to both the
@@ -133,6 +141,10 @@ func (a blobPropertiesAdapter) BlobType() azblob.BlobType {
 
 func (a blobPropertiesAdapter) AccessTier() azblob.AccessTierType {
 	return a.BlobProperties.AccessTier
+}
+
+func (a blobPropertiesAdapter) CopyStatus() azblob.CopyStatusType {
+	return a.BlobProperties.CopyStatus
 }
 
 // LeaseDuration returns the value for header x-ms-lease-duration.
