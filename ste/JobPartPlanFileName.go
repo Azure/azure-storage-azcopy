@@ -220,6 +220,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 
 	// Copy any strings into their respective fields
 	// do NOT copy Source/DestinationRoot.SAS, since we do NOT persist SASs
+	// TODO tiverma this is where job part plan is written
 	copy(jpph.SourceRoot[:], order.SourceRoot.Value)
 	copy(jpph.SourceExtraQuery[:], order.SourceRoot.ExtraQuery)
 	copy(jpph.DestinationRoot[:], order.DestinationRoot.Value)
