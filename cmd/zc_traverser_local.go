@@ -177,6 +177,12 @@ func (s symlinkTargetFileInfo) Name() string {
 	return s.name // override the name
 }
 
+func writeToErrorChannel(errorChannel chan ErrorFileInfo, err ErrorFileInfo) {
+	if errorChannel != nil {
+		errorChannel <- err
+	}
+}
+
 // WalkWithSymlinks is a symlinks-aware, parallelized, version of filePath.Walk.
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
@@ -213,10 +219,8 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 		// (for simplicity of coding, we don't parallelize across multiple queueItems)
 		parallel.Walk(appCtx, queueItem.fullPath, EnumerationParallelism, EnumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
 			if fileError != nil {
-				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError))
-				if errorChannel != nil {
-					errorChannel <- ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: fileError}
-				}
+				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %v", filePath, fileError))
+				writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: fileError})
 				return nil
 			}
 			computedRelativePath := strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(queueItem.fullPath))
@@ -257,41 +261,33 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				result, err := UnfurlSymlinks(filePath)
 
 				if err != nil {
-					err = fmt.Errorf("Failed to resolve symlink %s: %s", filePath, err)
+					err = fmt.Errorf("Failed to resolve symlink %s: %v", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
-					if errorChannel != nil {
-						errorChannel <- ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err}
-					}
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
 
 				result, err = filepath.Abs(result)
 				if err != nil {
-					err = fmt.Errorf("Failed to get absolute path of symlink result %s: %s", filePath, err)
+					err = fmt.Errorf("Failed to get absolute path of symlink result %s: %v", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
-					if errorChannel != nil {
-						errorChannel <- ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err}
-					}
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
 
 				slPath, err := filepath.Abs(filePath)
 				if err != nil {
-					err = fmt.Errorf("Failed to get absolute path of %s: %s", filePath, err)
+					err = fmt.Errorf("Failed to get absolute path of %s: %v", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
-					if errorChannel != nil {
-						errorChannel <- ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err}
-					}
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
 
 				rStat, err := os.Stat(result)
 				if err != nil {
-					err = fmt.Errorf("Failed to get properties of symlink target at %s: %s", result, err)
+					err = fmt.Errorf("Failed to get properties of symlink target at %s: %v", result, err)
 					WarnStdoutAndScanningLog(err.Error())
-					if errorChannel != nil {
-						errorChannel <- ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err}
-					}
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
 
@@ -332,11 +328,9 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				result, err := filepath.Abs(filePath)
 
 				if err != nil {
-					err = fmt.Errorf("Failed to get absolute path of %s: %s", filePath, err)
+					err = fmt.Errorf("Failed to get absolute path of %s: %v", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
-					if errorChannel != nil {
-						errorChannel <- ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err}
-					}
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
 
@@ -371,7 +365,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 
 	if err != nil {
-		azcopyScanningLogger.Log(pipeline.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
+		azcopyScanningLogger.Log(pipeline.LogError, fmt.Sprintf("Failed to scan path %s: %v", t.fullPath, err.Error()))
 		return fmt.Errorf("failed to scan path %s due to %s", t.fullPath, err.Error())
 	}
 
@@ -402,7 +396,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 		if t.recursive {
 			processFile := func(filePath string, fileInfo os.FileInfo, fileError error) error {
 				if fileError != nil {
-					WarnStdoutAndScanningLog(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError))
+					WarnStdoutAndScanningLog(fmt.Sprintf("Accessing %s failed with error: %v", filePath, fileError))
 					return nil
 				}
 
@@ -410,7 +404,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				if fileInfo.IsDir() {
 					newFileInfo, err := WrapFolder(filePath, fileInfo)
 					if err != nil {
-						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get last change of target at %s: %s", filePath, err))
+						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get last change of target at %s: %v", filePath, err))
 					} else {
 						// fileInfo becomes nil in case we fail to wrap folder.
 						fileInfo = newFileInfo
