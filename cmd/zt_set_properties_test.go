@@ -667,6 +667,43 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForMetadata(c *chk.C) {
 	}
 }
 
+func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForEmptyMetadata(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	for _, blobName := range []string{"top/mid/low/singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
+		// set up the container with a single blob
+		blobList := []string{blobName}
+
+		// upload the data with given accessTier
+		scenarioHelper{}.generateBlobsFromListWithAccessTier(c, containerURL, blobList, blockBlobDefaultData, azblob.AccessTierHot)
+		c.Assert(containerURL, chk.NotNil)
+
+		// set up interceptor
+		mockedRPC := interceptor{}
+		Rpc = mockedRPC.intercept
+		mockedRPC.init()
+
+		// construct the raw input to simulate user input
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		transferParams := transferParams{
+			blockBlobTier: common.EBlockBlobTier.None(),
+			pageBlobTier:  common.EPageBlobTier.None(),
+			metadata:      "",
+			blobTags:      common.BlobTags{},
+		}
+		raw := getDefaultSetPropertiesRawInput(rawBlobURLWithSAS.String(), transferParams)
+
+		runCopyAndVerify(c, raw, func(err error) {
+			c.Assert(err, chk.IsNil)
+
+			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
+			validateSetPropertiesTransfersAreScheduled(c, true, []string{""}, transferParams, mockedRPC)
+		})
+	}
+}
+
 func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerForMetadata(c *chk.C) {
 	bsu := getBSU()
 
@@ -1157,6 +1194,43 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForBlobTags(c *chk.C) {
 			pageBlobTier:  common.EPageBlobTier.None(),
 			metadata:      "",
 			blobTags:      common.BlobTags{"abc": "fgd"},
+		}
+		raw := getDefaultSetPropertiesRawInput(rawBlobURLWithSAS.String(), transferParams)
+
+		runCopyAndVerify(c, raw, func(err error) {
+			c.Assert(err, chk.IsNil)
+
+			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
+			validateSetPropertiesTransfersAreScheduled(c, true, []string{""}, transferParams, mockedRPC)
+		})
+	}
+}
+
+func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForEmptyBlobTags(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	for _, blobName := range []string{"top/mid/low/singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
+		// set up the container with a single blob
+		blobList := []string{blobName}
+
+		// upload the data with given accessTier
+		scenarioHelper{}.generateBlobsFromListWithAccessTier(c, containerURL, blobList, blockBlobDefaultData, azblob.AccessTierHot)
+		c.Assert(containerURL, chk.NotNil)
+
+		// set up interceptor
+		mockedRPC := interceptor{}
+		Rpc = mockedRPC.intercept
+		mockedRPC.init()
+
+		// construct the raw input to simulate user input
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		transferParams := transferParams{
+			blockBlobTier: common.EBlockBlobTier.None(),
+			pageBlobTier:  common.EPageBlobTier.None(),
+			metadata:      "",
+			blobTags:      common.BlobTags{},
 		}
 		raw := getDefaultSetPropertiesRawInput(rawBlobURLWithSAS.String(), transferParams)
 
