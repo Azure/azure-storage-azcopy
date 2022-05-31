@@ -18,8 +18,8 @@ func (f localFileSourceInfoProvider) GetUNIXProperties() (common.UnixStatAdapter
 		// dirfd is a null pointer, because we should only ever be passing relative paths here, and directories will be passed via transferInfo.Source.
 		// AT_SYMLINK_NOFOLLOW is not used, because we automagically resolve symlinks. TODO: Add option to not follow symlinks, and use AT_SYMLINK_NOFOLLOW when resolving is disabled.
 		err := unix.Statx(0, f.transferInfo.Source,
-			unix.AT_STATX_SYNC_AS_STAT, // We want to sync attributes to ensure correctness.
-			unix.STATX_BTIME,           // Let's pull only the special statx properties, and yank the rest from a standard stat_t call.
+			unix.AT_STATX_SYNC_AS_STAT,
+			unix.STATX_ALL,
 			&stat)
 
 		if err != nil && err != unix.ENOSYS {
