@@ -48,8 +48,10 @@ func (cca *CookedCopyCmdArgs) makeTransferEnum() error {
 	if cca.blockBlobTier != common.EBlockBlobTier.None() || cca.pageBlobTier != common.EPageBlobTier.None() {
 		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetTier()
 	}
-	if cca.metadata != "" {
+	if cca.metadata != "empty" {
 		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetMetadata()
+	} else {
+		cca.metadata = ""
 	}
 	if cca.blobTags != nil {
 		// the fact that fromto is not filenone is taken care of by the cook function
@@ -131,7 +133,7 @@ func init() {
 
 	rootCmd.AddCommand(setPropCmd)
 
-	setPropCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Set the given location with these key-value pairs (separated by ';') as metadata.")
+	setPropCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "empty", "Set the given location with these key-value pairs (separated by ';') as metadata.")
 	setPropCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. Valid values : BlobNone, FileNone, BlobFSNone")
 	setPropCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "Define the log verbosity for the log file. Available levels include: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default 'INFO')")
 	setPropCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
