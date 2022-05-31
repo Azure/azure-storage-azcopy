@@ -41,6 +41,10 @@ func (cca *CookedCopyCmdArgs) checkIfChangesPossible() error {
 		return fmt.Errorf("changing tier is not available for File Storage")
 	}
 
+	if cca.FromTo.From() == common.ELocation.BlobFS() && cca.blockBlobTier == common.EBlockBlobTier.Archive() {
+		return fmt.Errorf("tier of a BlobFS can't be set to Archive")
+	}
+
 	return nil
 }
 
