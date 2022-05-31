@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
