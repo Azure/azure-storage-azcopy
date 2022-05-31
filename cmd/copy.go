@@ -547,6 +547,9 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	cooked.metadata = raw.metadata
+	if err = validateMetadataString(cooked.metadata); err != nil {
+		return cooked, err
+	}
 	cooked.contentType = raw.contentType
 	cooked.contentEncoding = raw.contentEncoding
 	cooked.contentLanguage = raw.contentLanguage
@@ -1028,6 +1031,13 @@ func validateBlobTagsKeyValue(bt common.BlobTags) error {
 		if !isValidBlobTagsKeyValue(value) {
 			return errors.New("incorrect character set used in value: " + v)
 		}
+	}
+	return nil
+}
+
+func validateMetadataString(metadata string) error {
+	if strings.ContainsAny(metadata, " !#$%^&*()+'\"?/") {
+		return fmt.Errorf("invalid metadata: can't have spaces or special characters")
 	}
 	return nil
 }
