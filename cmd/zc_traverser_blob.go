@@ -153,9 +153,6 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			if resp.StatusCode == 403 { // Some nature of auth error-- Whatever the user is pointing at, they don't have access to, regardless of whether it's a file or a dir stub.
 				return fmt.Errorf("cannot list files due to reason %s", stgErr)
 			}
-			if resp.StatusCode == 404 {
-				return fmt.Errorf("cannot list files due to reason %s", stgErr)
-			}
 		}
 	}
 
