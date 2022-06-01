@@ -158,6 +158,7 @@ type params struct {
 	backupMode                bool
 	preserveSMBPermissions    bool
 	preserveSMBInfo           bool
+	preservePOSIXProperties   bool
 	relativeSourcePath        string
 	blobTags                  string
 	blobType                  string

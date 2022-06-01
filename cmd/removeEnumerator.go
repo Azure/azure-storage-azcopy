@@ -47,10 +47,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo,
-		nil, cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs,
-		cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false,
-		cca.LogVerbosity.ToPipelineLogLevel(), cca.CpkOptions)
+	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo, nil, cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false, cca.LogVerbosity.ToPipelineLogLevel(), cca.CpkOptions)
 
 	// report failure to create traverser
 	if err != nil {
@@ -78,7 +75,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	// (Must enumerate folders when deleting from a folder-aware location. Can't do folder deletion just based on file
 	// deletion, because that would not handle folders that were empty at the start of the job).
 	// isHNStoHNS is IGNORED here, because BlobFS locations don't take this route currently.
-	fpo, message := newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, false)
+	fpo, message := newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, false, false, cca.IncludeDirectoryStubs)
 	// do not print Info message if in dry run mode
 	if !cca.dryrunMode {
 		glcm.Info(message)

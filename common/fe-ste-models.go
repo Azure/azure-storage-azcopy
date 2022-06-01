@@ -50,7 +50,7 @@ const (
 
 	//  this is the perm that AzCopy has used throughout its preview.  So, while we considered relaxing it to 0666
 	//  we decided that the best option was to leave it as is, and only relax it if user feedback so requires.
-	DEFAULT_FILE_PERM = 0644
+	DEFAULT_FILE_PERM = 0644 // the os package will handle base-10 for us.
 
 	// Since we haven't updated the Go SDKs to handle CPK just yet, we need to detect CPK related errors
 	// and inform the user that we don't support CPK yet.
@@ -72,7 +72,7 @@ func NewJobID() JobID {
 	return JobID(NewUUID())
 }
 
-//var EmptyJobId JobID = JobID{}
+// var EmptyJobId JobID = JobID{}
 func (j JobID) IsEmpty() bool {
 	return j == JobID{}
 }
@@ -977,7 +977,7 @@ type CopyTransfer struct {
 	Source           string
 	Destination      string
 	EntityType       EntityType
-	LastModifiedTime time.Time //represents the last modified time of source which ensures that source hasn't changed while transferring
+	LastModifiedTime time.Time // represents the last modified time of source which ensures that source hasn't changed while transferring
 	SourceSize       int64     // size of the source entity in bytes.
 
 	// Properties for service to service copy (some also used in upload or download too)
@@ -1003,6 +1003,16 @@ type CopyTransfer struct {
 
 // Metadata used in AzCopy.
 type Metadata map[string]string
+
+func (m Metadata) Clone() Metadata {
+	out := make(Metadata)
+
+	for k, v := range m {
+		out[k] = v
+	}
+
+	return out
+}
 
 // ToAzBlobMetadata converts metadata to azblob's metadata.
 func (m Metadata) ToAzBlobMetadata() azblob.Metadata {
@@ -1107,9 +1117,9 @@ func (bt BlobTags) ToAzBlobTagsMap() azblob.BlobTagsMap {
 }
 
 //// FromAzBlobTagsMapToCommonBlobTags converts azblob's BlobTagsMap to common BlobTags
-//func FromAzBlobTagsMapToCommonBlobTags(azbt azblob.BlobTagsMap) BlobTags {
+// func FromAzBlobTagsMapToCommonBlobTags(azbt azblob.BlobTagsMap) BlobTags {
 //	return BlobTags(azbt)
-//}
+// }
 
 func (bt BlobTags) ToString() string {
 	lst := make([]string, 0)
@@ -1321,7 +1331,7 @@ const SizePerFileParam = "size-per-file"
 const FileCountParam = "file-count"
 const FileCountDefault = 100
 
-//BenchMarkMode enumerates values for Azcopy bench command. Valid values Upload or Download
+// BenchMarkMode enumerates values for Azcopy bench command. Valid values Upload or Download
 type BenchMarkMode uint8
 
 var EBenchMarkMode = BenchMarkMode(0)
