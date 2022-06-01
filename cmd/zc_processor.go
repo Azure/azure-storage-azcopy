@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"net/url"
 	"runtime"
 	"strings"
 
@@ -107,44 +108,49 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
+				prettySrcRelativePath, err := url.QueryUnescape(srcRelativePath)
+				common.PanicIfErr(err)
+				prettyDstRelativePath, err := url.QueryUnescape(dstRelativePath)
+				common.PanicIfErr(err)
+
 				// if remove then To() will equal to common.ELocation.Unknown()
 				if s.copyJobTemplate.FromTo.To() == common.ELocation.Unknown() { //remove
 					return fmt.Sprintf("DRYRUN: remove %v/%v",
 						s.copyJobTemplate.SourceRoot.Value,
-						srcRelativePath)
+						prettySrcRelativePath)
 				}
 				if s.copyJobTemplate.FromTo.To() == common.ELocation.None() { //set-properties
 					return fmt.Sprintf("DRYRUN: set-properties %v/%v",
 						s.copyJobTemplate.SourceRoot.Value,
-						srcRelativePath)
+						prettySrcRelativePath)
 				} else { //copy for sync
 					if s.copyJobTemplate.FromTo.From() == common.ELocation.Local() {
 						// formatting from local source
 						dryrunValue := fmt.Sprintf("DRYRUN: copy %v", common.ToShortPath(s.copyJobTemplate.SourceRoot.Value))
 						if runtime.GOOS == "windows" {
-							dryrunValue += "\\" + strings.ReplaceAll(srcRelativePath, "/", "\\")
+							dryrunValue += "\\" + strings.ReplaceAll(prettySrcRelativePath, "/", "\\")
 						} else { //linux and mac
-							dryrunValue += "/" + srcRelativePath
+							dryrunValue += "/" + prettySrcRelativePath
 						}
-						dryrunValue += fmt.Sprintf(" to %v/%v", strings.Trim(s.copyJobTemplate.DestinationRoot.Value, "/"), dstRelativePath)
+						dryrunValue += fmt.Sprintf(" to %v/%v", strings.Trim(s.copyJobTemplate.DestinationRoot.Value, "/"), prettyDstRelativePath)
 						return dryrunValue
 					} else if s.copyJobTemplate.FromTo.To() == common.ELocation.Local() {
 						// formatting to local source
 						dryrunValue := fmt.Sprintf("DRYRUN: copy %v/%v to %v",
-							strings.Trim(s.copyJobTemplate.SourceRoot.Value, "/"), srcRelativePath,
+							strings.Trim(s.copyJobTemplate.SourceRoot.Value, "/"), prettySrcRelativePath,
 							common.ToShortPath(s.copyJobTemplate.DestinationRoot.Value))
 						if runtime.GOOS == "windows" {
-							dryrunValue += "\\" + strings.ReplaceAll(dstRelativePath, "/", "\\")
+							dryrunValue += "\\" + strings.ReplaceAll(prettyDstRelativePath, "/", "\\")
 						} else { //linux and mac
-							dryrunValue += "/" + dstRelativePath
+							dryrunValue += "/" + prettyDstRelativePath
 						}
 						return dryrunValue
 					} else {
 						return fmt.Sprintf("DRYRUN: copy %v/%v to %v/%v",
 							s.copyJobTemplate.SourceRoot.Value,
-							srcRelativePath,
+							prettySrcRelativePath,
 							s.copyJobTemplate.DestinationRoot.Value,
-							dstRelativePath)
+							prettyDstRelativePath)
 					}
 				}
 			}
