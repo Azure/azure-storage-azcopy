@@ -1121,8 +1121,11 @@ func (bt BlobTags) ToString() string {
 }
 
 func ToCommonBlobTagsMap(blobTagsString string) BlobTags {
-	if blobTagsString == "" {
+	if blobTagsString == "empty" { // default empty value set by coder
 		return nil
+	}
+	if blobTagsString == "" { // empty value given by user as input (to signify clearing of tags in set-props cmd)
+		return BlobTags{}
 	}
 
 	blobTagsMap := BlobTags{}

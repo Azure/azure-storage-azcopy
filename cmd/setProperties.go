@@ -152,5 +152,5 @@ func init() {
 	setPropCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Look into sub-directories recursively when uploading from local file system.")
 	setPropCmd.PersistentFlags().StringVar(&raw.rehydratePriority, "rehydrate-priority", "Standard", "Optional flag that sets rehydrate priority for rehydration. Valid values: Standard, High. Default- standard")
 	setPropCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the file paths that would be affected by this command. This flag does not affect the actual files.")
-	setPropCmd.PersistentFlags().StringVar(&raw.blobTags, "blob-tags", "", "Set tags on blobs to categorize data in your storage account (separated by '&')")
+	setPropCmd.PersistentFlags().StringVar(&raw.blobTags, "blob-tags", "empty", "Set tags on blobs to categorize data in your storage account (separated by '&')")
 }
