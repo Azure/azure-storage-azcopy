@@ -112,10 +112,6 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			js.FolderPropertyTransfers += msg.FolderTransfer
 			js.TotalBytesEnumerated += msg.TotalBytesEnumerated
 			js.TotalBytesExpected += msg.TotalBytesEnumerated
-			if msg.IsFinalPart {
-				close(jstm.partCreated)
-				jstm.partCreated = nil
-			}
 
 		case msg, ok := <-jstm.xferDone:
 			if !ok { //Channel is closed, all transfers have been attended.
