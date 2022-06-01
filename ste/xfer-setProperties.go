@@ -12,6 +12,7 @@ import (
 )
 
 func SetProperties(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
+	jptm.ResetSourceSize() // sets source size to 0 (made to be used by setProperties command to make number of bytes transferred = 0)
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytes transferred by the size of the source.
 	if jptm.WasCanceled() {
 		jptm.ReportTransferDone()

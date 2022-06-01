@@ -93,6 +93,7 @@ type IJobPartTransferMgr interface {
 	IsSourceEncrypted() bool
 	GetS2SSourceBlobTokenCredential() azblob.TokenCredential
 	PropertiesToTransfer() common.SetPropertiesFlags
+	ResetSourceSize() // sets source size to 0 (made to be used by setProperties command to make number of bytes transferred = 0)
 }
 
 type TransferInfo struct {
@@ -539,6 +540,10 @@ func (jptm *jobPartTransferMgr) IsSourceEncrypted() bool {
 
 func (jptm *jobPartTransferMgr) PropertiesToTransfer() common.SetPropertiesFlags {
 	return jptm.jobPartMgr.PropertiesToTransfer()
+}
+
+func (jptm *jobPartTransferMgr) ResetSourceSize() {
+	jptm.jobPartMgr.Plan().Transfer(jptm.transferIndex).SourceSize = 0
 }
 
 // JobHasLowFileCount returns an estimate of whether we only have a very small number of files in the overall job
