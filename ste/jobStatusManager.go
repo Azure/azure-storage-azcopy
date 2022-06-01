@@ -38,16 +38,34 @@ type JobPartCreatedMsg struct {
 
 type xferDoneMsg = common.TransferDetail
 type jobStatusManager struct {
-	js          common.ListJobSummaryResponse
-	respChan    chan common.ListJobSummaryResponse
-	listReq     chan bool
-	partCreated chan JobPartCreatedMsg
-	xferDone    chan xferDoneMsg
-	done        chan struct{}
+	js            common.ListJobSummaryResponse
+	respChan      chan common.ListJobSummaryResponse
+	listReq       chan struct {}
+	partCreated   chan JobPartCreatedMsg
+	xferDone      chan xferDoneMsg
+	drainXferDone chan struct{}
+	statusMgrDone chan struct{}
+}
+
+func (jm *jobMgr) waitToDrainXferDone() {
+	<-jm.jstm.drainXferDone
+}
+
+func (jm *jobMgr) statusMgrClosed() bool {
+	select {
+	case <-jm.jstm.statusMgrDone:
+			return true
+	default:
+		return false
+	}
 }
 
 /* These functions should not fail */
 func (jm *jobMgr) SendJobPartCreatedMsg(msg JobPartCreatedMsg) {
+	if msg.IsFinalPart {
+		//Inform statusManager that this is all parts we've
+		close(jm.jstm.partCreated)
+	}
 	jm.jstm.partCreated <- msg
 }
 
@@ -56,8 +74,19 @@ func (jm *jobMgr) SendXferDoneMsg(msg xferDoneMsg) {
 }
 
 func (jm *jobMgr) ListJobSummary() common.ListJobSummaryResponse {
-	jm.jstm.listReq <- true
-	return <-jm.jstm.respChan
+	if jm.statusMgrClosed() {
+		return jm.jstm.js
+	}
+
+	select {
+	case jm.jstm.listReq <- struct{}{}:
+		return <-jm.jstm.respChan
+	case <-jm.jstm.statusMgrDone:
+		// StatusManager closed while we requested for an update.
+		// Return the last update. This is okay because there will
+		// be no further updates.
+		return jm.jstm.js
+	}
 }
 
 func (jm *jobMgr) ResurrectSummary(js common.ListJobSummaryResponse) {
@@ -75,18 +104,35 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 	js.JobID = jm.jobID
 	js.CompleteJobOrdered = false
 	js.ErrorMsg = ""
+	allXferDoneHandled := false
 
 	for {
 		select {
-		case msg := <-jstm.partCreated:
+		case msg, ok := <-jstm.partCreated:
+			if !ok {
+				jstm.partCreated = nil
+				continue
+			}
 			js.CompleteJobOrdered = js.CompleteJobOrdered || msg.IsFinalPart
 			js.TotalTransfers += msg.TotalTransfers
 			js.FileTransfers += msg.FileTransfers
 			js.FolderPropertyTransfers += msg.FolderTransfer
 			js.TotalBytesEnumerated += msg.TotalBytesEnumerated
 			js.TotalBytesExpected += msg.TotalBytesEnumerated
+			if msg.IsFinalPart {
+				close(jstm.partCreated)
+				jstm.partCreated = nil
+			}
 
-		case msg := <-jstm.xferDone:
+		case msg, ok := <-jstm.xferDone:
+			if !ok { //Channel is closed, all transfers have been attended.
+				jstm.xferDone = nil
+
+				//close drainXferDone so that other components can know no further updates happen
+				allXferDoneHandled = true
+				close(jstm.drainXferDone)
+			}
+
 			msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()
 			msg.Dst = common.URLStringExtension(msg.Dst).RedactSecretQueryParamForLogging()
 
@@ -115,9 +161,14 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			js.FailedTransfers = []common.TransferDetail{}
 			js.SkippedTransfers = []common.TransferDetail{}
 
-		case <-jstm.done:
-			jm.Log(pipeline.LogInfo, "Cleanup JobStatusmgr.")
-			return
+			if allXferDoneHandled {
+				close(jstm.statusMgrDone)
+				close(jstm.respChan)
+				close(jstm.listReq)
+				jstm.listReq = nil
+				jstm.respChan = nil
+				return
+			}
 		}
 	}
 }
