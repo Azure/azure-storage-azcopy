@@ -104,7 +104,6 @@ type IJobMgr interface {
 
 	// Cleanup Functions
 	DeferredCleanupJobMgr()
-	CleanupJobStatusMgr()
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -138,11 +137,11 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	jobPartProgressCh := make(chan jobPartProgressInfo)
 	var jstm jobStatusManager
 	jstm.respChan = make(chan common.ListJobSummaryResponse)
-	jstm.listReq = make(chan struct {})
+	jstm.listReq = make(chan struct{})
 	jstm.partCreated = make(chan JobPartCreatedMsg, 100)
 	jstm.xferDone = make(chan xferDoneMsg, 1000)
-	jstm.statusMgrDone = make(chan struct {})
-	jstm.drainXferDone = make(chan struct {})
+	jstm.xferDoneDrained = make(chan struct{})
+	jstm.statusMgrDone = make(chan struct{})
 	// Different logger for each job.
 	if jobLogger == nil {
 		jobLogger = common.NewJobLogger(jobID, common.ELogLevel.Debug(), logFileFolder, "" /* logFileNameSuffix */)
@@ -728,9 +727,6 @@ func (jm *jobMgr) DeferredCleanupJobMgr() {
 	// Call jm.Cancel to signal routines workdone.
 	// This will take care of any jobPartMgr release.
 	jm.Cancel()
-
-	// Cleanup the JobStatusMgr go routine.
-	jm.CleanupJobStatusMgr()
 
 	// Transfer Thread Cleanup.
 	jm.cleanupTransferRoutine()
