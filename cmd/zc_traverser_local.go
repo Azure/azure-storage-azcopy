@@ -69,7 +69,10 @@ type localTraverser struct {
 	// cfdMode is change file detection mode. How to detect the file/folder changed.
 	// Changed files can be detected on basis of ctime, ctimemtime , archiveBit or none.
 	// Only used when localTraverser is the target traverser.
-	cfdMode CFDModeFlags
+	cfdMode common.CFDMode
+
+	// In case of metadata change only, shall we transfer whole file or only metadata. This flag governs that.
+	metaDataOnlySync bool
 }
 
 func (t *localTraverser) IsDirectory(bool) bool {
@@ -536,7 +539,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 }
 
 func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan ErrorFileInfo,
-	indexerMap *folderIndexer, tqueue chan interface{}, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32, lastSyncTime time.Time, cfdModes CFDModeFlags) *localTraverser {
+	indexerMap *folderIndexer, tqueue chan interface{}, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32, lastSyncTime time.Time, cfdModes common.CFDMode, metaDataOnlySync bool) *localTraverser {
 	traverser := localTraverser{
 		fullPath:                    cleanLocalPath(fullPath),
 		recursive:                   recursive,
@@ -551,6 +554,8 @@ func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, inc
 		isSource:                 isSource,
 		lastSyncTime:             lastSyncTime,
 		maxObjectIndexerSizeInGB: maxObjectIndexerSizeInGB,
+		cfdMode:                  cfdModes,
+		metaDataOnlySync:         metaDataOnlySync,
 	}
 	return &traverser
 }

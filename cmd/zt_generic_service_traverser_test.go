@@ -60,7 +60,7 @@ func (s *genericTraverserSuite) TestBlobFSServiceTraverserWithManyObjects(c *chk
 	// Create a local traversal
 	localTraverser := newLocalTraverser(dstDirName, true, true, func(common.EntityType) {}, nil, /* errorChannel */
 		nil /* folderIndexer */, nil, /* tqueue */
-		false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, CFDModeFlags{})
+		false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, common.CFDModeFlags.NotDefined(), false /* metaDataSyncOnly */)
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()

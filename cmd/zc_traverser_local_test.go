@@ -3,7 +3,7 @@ package cmd
 import (
 	"os"
 
-	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
 )
 

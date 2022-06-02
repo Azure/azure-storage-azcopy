@@ -27,6 +27,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -44,7 +45,7 @@ type folderIndexer struct {
 	folderMap map[string]*objectIndexer
 
 	// lock should be held when reading/modifying folderMap.
-	lock sync.RWMutex
+	lock sync.Mutex
 
 	// Memory consumed in bytes by this folderIndexer, including all the objectIndexer data it stores.
 	// It's signed as it help to do sanity check.
@@ -175,6 +176,63 @@ func (i *folderIndexer) store(storedObject StoredObject) (err error) {
 	atomic.AddInt64(&i.totalSize, size)
 
 	return
+}
+
+// filesChangedInDirectory returns true in case any file in folder have ctime more than lastSyncTime.
+func (i *folderIndexer) filesChangedInDirectory(relativePath string, lastSyncTime time.Time) bool {
+	var lcRelativePath string
+	if i.isDestinationCaseInsensitive {
+		lcRelativePath = strings.ToLower(relativePath)
+	} else {
+		lcRelativePath = relativePath
+	}
+	i.lock.Lock()
+	defer i.lock.Unlock()
+	if foldermap, ok := i.folderMap[lcRelativePath]; ok {
+		for file := range foldermap.indexMap {
+			so := foldermap.indexMap[file]
+			if so.lastChangeTime.After(lastSyncTime) {
+				return true
+			}
+		}
+	} else {
+		panic(fmt.Sprintf("Folder map not present for this relativePath: %s", lcRelativePath))
+	}
+	return false
+}
+
+//
+// Given a relative path of an object this returns the StoredObject corresponding to that object.
+// This is called by the Target Traverser as it needs to lookup the StoredObject for making the
+// "should this object be sync'ed" decisions, and the StoredObject would have been added by the Source Traverser.
+// Source traverser add special entry with filename "." in a respective folder which stores storedobject of that folder.
+//
+func (i *folderIndexer) getStoredObject(relativePath string) StoredObject {
+	var lcRelativePath string
+	if i.isDestinationCaseInsensitive {
+		lcRelativePath = strings.ToLower(relativePath)
+	} else {
+		lcRelativePath = relativePath
+	}
+	lcFolderName := filepath.Dir(lcRelativePath)
+	lcFileName := filepath.Base(lcRelativePath)
+	lcFolderName = path.Join(lcFolderName, lcFileName)
+	i.lock.Lock()
+	defer i.lock.Unlock()
+
+	if folderMap, ok := i.folderMap[lcFolderName]; ok {
+		if so, ok := folderMap.indexMap["."]; ok {
+			if so.entityType != common.EEntityType.Folder() && !so.isVirtualFolder {
+				panic(fmt.Sprintf("StoredObject for relative path[%s] not of type folder", lcFolderName))
+			}
+			delete(folderMap.indexMap, ".")
+			size := storedObjectSize(so)
+			size = -size
+			atomic.AddInt64(&i.totalSize, size)
+			return so
+		}
+	}
+	panic(fmt.Sprintf("Stored Object for relative path[%s] not found", lcFolderName))
 }
 
 // getObjectIndexerMapSize return the size of map.

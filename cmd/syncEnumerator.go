@@ -104,7 +104,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		}
 	}, nil, cca.s2sPreserveBlobTags, cca.logVerbosity.ToPipelineLogLevel(), cca.cpkOptions, nil, /* errorChannel */
 		objectIndexerMap, tqueue, true /* isSource */, true, /* isSync */
-		cca.maxObjectIndexerMapSizeInGB, time.Time{} /* lastSyncTime (not used by source traverser) */, cca.cfdMode)
+		cca.maxObjectIndexerMapSizeInGB, time.Time{} /* lastSyncTime (not used by source traverser) */, cca.cfdMode, cca.metaDataOnlySync)
 
 	if err != nil {
 		return nil, err
@@ -126,7 +126,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 		}
 	}, nil, cca.s2sPreserveBlobTags, cca.logVerbosity.ToPipelineLogLevel(), cca.cpkOptions,
-		nil /* errorChannel */, objectIndexerMap /*folderIndexerMap */, tqueue, false /* isSource */, true /* isSync */, cca.maxObjectIndexerMapSizeInGB /* maxObjectIndexerSizeInGB (not used by destination traverse) */, cca.lastSyncTime /* lastSyncTime */, cca.cfdMode)
+		nil /* errorChannel */, objectIndexerMap /*folderIndexerMap */, tqueue, false /* isSource */, true, /* isSync */
+		cca.maxObjectIndexerMapSizeInGB /* maxObjectIndexerSizeInGB (not used by destination traverse) */, cca.lastSyncTime /* lastSyncTime */, cca.cfdMode, cca.metaDataOnlySync)
 	if err != nil {
 		return nil, err
 	}
