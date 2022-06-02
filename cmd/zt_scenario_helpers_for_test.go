@@ -938,7 +938,6 @@ func getDefaultSetPropertiesRawInput(src string, params transferParams) rawCopyC
 	rawArgs := rawCopyCmdArgs{
 		src:                            src,
 		fromTo:                         fromTo.String(),
-		logVerbosity:                   defaultLogVerbosityForSync,
 		blobType:                       common.EBlobType.Detect().String(),
 		blockBlobTier:                  common.EBlockBlobTier.None().String(),
 		pageBlobTier:                   common.EPageBlobTier.None().String(),
