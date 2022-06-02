@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"math"
 	"os"
 	"reflect"
@@ -1153,10 +1154,10 @@ func (bt BlobTags) ToString() string {
 }
 
 func ToCommonBlobTagsMap(blobTagsString string) BlobTags {
-	if blobTagsString == "empty" { // default empty value set by coder
+	if blobTagsString == "" { // default empty value set by coder
 		return nil
 	}
-	if blobTagsString == "" { // empty value given by user as input (to signify clearing of tags in set-props cmd)
+	if blobTagsString == cmd.FlushFlag { // empty value given by user as input (to signify clearing of tags in set-props cmd)
 		return BlobTags{}
 	}
 
@@ -1607,4 +1608,3 @@ func (rpt RehydratePriorityType) ToRehydratePriorityType() azblob.RehydratePrior
 		return azblob.RehydratePriorityStandard
 	}
 }
-

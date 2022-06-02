@@ -27,6 +27,8 @@ import (
 	"strings"
 )
 
+const FlushFlag = "flush"
+
 func (raw *rawCopyCmdArgs) setMandatoryDefaultsForSetProperties() {
 	raw.blobType = common.EBlobType.Detect().String()
 	raw.md5ValidationOption = common.DefaultHashValidationOption.String()
@@ -57,10 +59,11 @@ func (cca *CookedCopyCmdArgs) makeTransferEnum() error {
 	if cca.blockBlobTier != common.EBlockBlobTier.None() || cca.pageBlobTier != common.EPageBlobTier.None() {
 		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetTier()
 	}
-	if cca.metadata != "empty" {
+	if cca.metadata != "" {
 		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetMetadata()
-	} else {
-		cca.metadata = ""
+		if cca.metadata == FlushFlag {
+			cca.metadata = ""
+		}
 	}
 	if cca.blobTags != nil {
 		// the fact that fromto is not filenone is taken care of by the cook function
@@ -141,7 +144,7 @@ func init() {
 
 	rootCmd.AddCommand(setPropCmd)
 
-	setPropCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "empty", "Set the given location with these key-value pairs (separated by ';') as metadata.")
+	setPropCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Set the given location with these key-value pairs (separated by ';') as metadata.")
 	setPropCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. Valid values : BlobNone, FileNone, BlobFSNone")
 	setPropCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "Define the log verbosity for the log file. Available levels include: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default 'INFO')")
 	setPropCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
@@ -156,5 +159,5 @@ func init() {
 	setPropCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Look into sub-directories recursively when uploading from local file system.")
 	setPropCmd.PersistentFlags().StringVar(&raw.rehydratePriority, "rehydrate-priority", "Standard", "Optional flag that sets rehydrate priority for rehydration. Valid values: Standard, High. Default- standard")
 	setPropCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the file paths that would be affected by this command. This flag does not affect the actual files.")
-	setPropCmd.PersistentFlags().StringVar(&raw.blobTags, "blob-tags", "empty", "Set tags on blobs to categorize data in your storage account (separated by '&')")
+	setPropCmd.PersistentFlags().StringVar(&raw.blobTags, "blob-tags", "", "Set tags on blobs to categorize data in your storage account (separated by '&')")
 }
