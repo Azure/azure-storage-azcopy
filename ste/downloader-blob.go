@@ -37,16 +37,25 @@ type blobDownloader struct {
 
 	// used to avoid downloading zero ranges of page blobs
 	pageRangeOptimizer *pageRangeOptimizer
+
+	// used to avoid re-setting file mode
+	setMode bool
+
+	jptm     IJobPartTransferMgr
+	txInfo   TransferInfo
+	fileMode uint32
 }
 
 func newBlobDownloader() downloader {
 	return &blobDownloader{
 		filePacer: NewNullAutoPacer(), // defer creation of real one, if needed, to Prologue
 	}
-
 }
 
 func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
+	bd.txInfo = jptm.Info()
+	bd.jptm = jptm
+
 	if jptm.Info().SrcBlobType == azblob.BlobPageBlob {
 		// page blobs need a file-specific pacer
 		// See comments in uploader-pageBlob for the reasons, since the same reasons apply are are explained there
