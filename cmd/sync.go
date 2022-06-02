@@ -381,14 +381,14 @@ type cookedSyncCmdArgs struct {
 	excludeRegex          []string
 
 	// options
-	preservePermissions common.PreservePermissionsOption
-	preserveSMBInfo     bool
-  preservePOSIXProperties bool  // TODO tiverma what's this? Why is this part of my PR?
-	putMd5              bool
-	md5ValidationOption common.HashValidationOption
-	blockSize           int64
-	forceIfReadOnly     bool
-	backupMode          bool
+	preservePermissions     common.PreservePermissionsOption
+	preserveSMBInfo         bool
+	preservePOSIXProperties bool
+	putMd5                  bool
+	md5ValidationOption     common.HashValidationOption
+	blockSize               int64
+	forceIfReadOnly         bool
+	backupMode              bool
 
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
