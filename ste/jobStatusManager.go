@@ -120,6 +120,7 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				//close drainXferDone so that other components can know no further updates happen
 				allXferDoneHandled = true
 				close(jstm.xferDoneDrained)
+				continue
 			}
 
 			msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()
