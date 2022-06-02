@@ -24,7 +24,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"math"
 	"os"
 	"reflect"
@@ -1157,7 +1156,7 @@ func ToCommonBlobTagsMap(blobTagsString string) BlobTags {
 	if blobTagsString == "" { // default empty value set by coder
 		return nil
 	}
-	if blobTagsString == cmd.FlushFlag { // empty value given by user as input (to signify clearing of tags in set-props cmd)
+	if blobTagsString == "flush" { // empty value given by user as input (to signify clearing of tags in set-props cmd)
 		return BlobTags{}
 	}
 
