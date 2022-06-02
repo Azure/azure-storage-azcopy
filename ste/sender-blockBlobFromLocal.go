@@ -48,6 +48,7 @@ func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeli
 func (s *blockBlobUploader) Prologue(ps common.PrologueState) (destinationModified bool) {
 	if s.jptm.Info().PreservePOSIXProperties {
 		if unixSIP, ok := s.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
+			s.metadataToApply = common.Metadata(s.metadataToApply).Clone().ToAzBlobMetadata()
 			statAdapter, err := unixSIP.GetUNIXProperties()
 			if err != nil {
 				s.jptm.FailActiveSend("GetUNIXProperties", err)
