@@ -293,7 +293,7 @@ func (s *scenario) validateTransferStates() {
 		actualTransfers, err := s.state.result.GetTransferList(statusToTest)
 		s.a.AssertNoErr(err)
 
-		Validator{}.ValidateCopyTransfersAreScheduled(s.a, isSrcEncoded, isDstEncoded, srcRoot, dstRoot, expectedTransfers, actualTransfers, statusToTest, s.FromTo())
+		Validator{}.ValidateCopyTransfersAreScheduled(s.a, isSrcEncoded, isDstEncoded, srcRoot, dstRoot, expectedTransfers, actualTransfers, statusToTest, s.FromTo(), s.srcAccountType, s.destAccountType)
 		// TODO: how are we going to validate folder transfers????
 	}
 

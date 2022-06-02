@@ -40,12 +40,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var azcopyAppPathFolder string
+var AzcopyAppPathFolder string
 var azcopyLogPathFolder string
 var azcopyMaxFileAndSocketHandles int
 var outputFormatRaw string
+var outputVerbosityRaw string
 var cancelFromStdin bool
 var azcopyOutputFormat common.OutputFormat
+var azcopyOutputVerbosity common.OutputVerbosity
 var cmdLineCapMegaBitsPerSecond float64
 var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
@@ -83,6 +85,12 @@ var rootCmd = &cobra.Command{
 
 		err := azcopyOutputFormat.Parse(outputFormatRaw)
 		glcm.SetOutputFormat(azcopyOutputFormat)
+		if err != nil {
+			return err
+		}
+
+		err = azcopyOutputVerbosity.Parse(outputVerbosityRaw)
+		glcm.SetOutputVerbosity(azcopyOutputVerbosity)
 		if err != nil {
 			return err
 		}
@@ -156,7 +164,7 @@ var glcmSwapOnce = &sync.Once{}
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute(azsAppPathFolder, logPathFolder string, jobPlanFolder string, maxFileAndSocketHandles int, jobID common.JobID) {
-	azcopyAppPathFolder = azsAppPathFolder
+	AzcopyAppPathFolder = azsAppPathFolder
 	azcopyLogPathFolder = logPathFolder
 	common.AzcopyJobPlanFolder = jobPlanFolder
 	azcopyMaxFileAndSocketHandles = maxFileAndSocketHandles
@@ -185,6 +193,7 @@ func init() {
 
 	rootCmd.PersistentFlags().Float64Var(&cmdLineCapMegaBitsPerSecond, "cap-mbps", 0, "Caps the transfer rate, in megabits per second. Moment-by-moment throughput might vary slightly from the cap. If this option is set to zero, or it is omitted, the throughput isn't capped.")
 	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text", "Format of the command's output. The choices include: text, json. The default value is 'text'.")
+	rootCmd.PersistentFlags().StringVar(&outputVerbosityRaw, "output-level", "default", "Define the output verbosity. Available levels: essential, quiet.")
 
 	rootCmd.PersistentFlags().StringVar(&cmdLineExtraSuffixesAAD, trustedSuffixesNameAAD, "", "Specifies additional domain suffixes where Azure Active Directory login tokens may be sent.  The default is '"+
 		trustedSuffixesAAD+"'. Any listed here are added to the default. For security, you should only put Microsoft Azure domains here. Separate multiple entries with semi-colons.")

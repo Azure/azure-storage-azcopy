@@ -58,11 +58,11 @@ const oauthLoginSessionCacheAccountName = "AzCopyOAuthTokenCache"
 // Note: Currently, only support to have TokenManager for one user mapping to one tenantID.
 func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 	once.Do(func() {
-		if azcopyAppPathFolder == "" {
+		if AzcopyAppPathFolder == "" {
 			panic("invalid state, azcopyAppPathFolder should be initialized by root")
 		}
 		currentUserOAuthTokenManager = common.NewUserOAuthTokenManagerInstance(common.CredCacheOptions{
-			DPAPIFilePath: azcopyAppPathFolder,
+			DPAPIFilePath: AzcopyAppPathFolder,
 			KeyName:       oauthLoginSessionCacheKeyName,
 			ServiceName:   oauthLoginSessionCacheServiceName,
 			AccountName:   oauthLoginSessionCacheAccountName,

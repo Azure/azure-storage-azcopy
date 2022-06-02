@@ -188,6 +188,11 @@ func init() {
 				return errors.New("this command requires jobId to be passed as argument")
 			}
 			resumeCmdArgs.jobID = args[0]
+
+			glcm.EnableInputWatcher()
+			if cancelFromStdin {
+				glcm.EnableCancelFromStdIn()
+			}
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
