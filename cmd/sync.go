@@ -24,10 +24,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
@@ -89,6 +91,16 @@ type rawSyncCmdArgs struct {
 	cpkScopeInfo string
 	// dry run mode bool
 	dryrun bool
+
+	//
+	// Limit on size of ObjectIndexerMap in memory.
+	// This is used only by the sync process and it controls how much the source traverser can fill the ObjectIndexerMap before it has to wait
+	// for target traverser to process and empty it. This should be kept to a value less than the system RAM to avoid thrashing.
+	// If you are not interested in source traverser scanning all the files for estimation purpose you can keep it low, just enough to never have the
+	// target traverser wait for directories to scan. The only reason we would want to keep it high is to let the source complete scanning irrespective
+	// of the target traverser speed, so that the scanned information can then be used for ETA estimation.
+	//
+	maxObjectIndexerMapSizeInGB string
 }
 
 func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -103,6 +115,31 @@ func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []strin
 	}
 
 	return
+}
+
+// TODO: Need to get system available memory and check with this maxObjectIndexerMapSizeInGB. If maxObjectIndexerMapSizeInGB more than
+//       system available memory than issue warning message. If maxObjectIndexerMapSizeInGB is nil, in that case need to set it to 80% of
+//       available memory. Getting system available memory need to be done for both windows and linux.
+func (raw *rawSyncCmdArgs) parseMaxObjectIndexerMapInGB() (uint32, error) {
+
+	// Default case where user not specified any value.
+	if raw.maxObjectIndexerMapSizeInGB == "" {
+		// As of now return 2GB as maxObjectIndexerMapSizeInGB value.
+		return 2, nil
+	}
+
+	value, err := strconv.Atoi(raw.maxObjectIndexerMapSizeInGB)
+	if err != nil {
+		err = fmt.Errorf("Parsing failed for maxObjectIndexerMapSizeInGB (%s) with error: %v", raw.maxObjectIndexerMapSizeInGB, err)
+		return 0, err
+	}
+
+	if value < 0 {
+		err = fmt.Errorf("maxObjectIndexerMapSizeInGB is negative: %s", raw.maxObjectIndexerMapSizeInGB)
+		return 0, err
+	}
+
+	return uint32(value), nil
 }
 
 // it is assume that the given url has the SAS stripped, and safe to print
@@ -180,9 +217,9 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	// Do this check separately so we don't end up with a bunch of code duplication when new src/dstn are added
 	if cooked.fromTo.From() == common.ELocation.Local() {
-		cooked.source = common.ResourceString{Value: common.ToExtendedPath(cleanLocalPath(raw.src))}
+		cooked.source = common.ResourceString{Value: common.ToExtendedPath(common.CleanLocalPath(raw.src))}
 	} else if cooked.fromTo.To() == common.ELocation.Local() {
-		cooked.destination = common.ResourceString{Value: common.ToExtendedPath(cleanLocalPath(raw.dst))}
+		cooked.destination = common.ResourceString{Value: common.ToExtendedPath(common.CleanLocalPath(raw.dst))}
 	}
 
 	// we do not support service level sync yet
@@ -216,6 +253,11 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.recursive = raw.recursive
 	cooked.forceIfReadOnly = raw.forceIfReadOnly
 	if err = validateForceIfReadOnly(cooked.forceIfReadOnly, cooked.fromTo); err != nil {
+		return cooked, err
+	}
+
+	cooked.maxObjectIndexerMapSizeInGB, err = raw.parseMaxObjectIndexerMapInGB()
+	if err != nil {
 		return cooked, err
 	}
 
@@ -349,6 +391,17 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	return cooked, nil
 }
 
+type CFDModeFlags struct {
+	// Change detection flags.
+	TargetCompare bool
+	CtimeMtime    bool
+	Ctime         bool
+	ArchiveBit    bool
+
+	// MetaDataOnlySync decides if we copy entire file even when change file detection finds out that only file's metadata has changed.
+	MetaDataOnlySync bool
+}
+
 type cookedSyncCmdArgs struct {
 	// NOTE: for the 64 bit atomic functions to work on a 32 bit system, we have to guarantee the right 64-bit alignment
 	// so the 64 bit integers are placed first in the struct to avoid future breaks
@@ -431,6 +484,26 @@ type cookedSyncCmdArgs struct {
 	mirrorMode bool
 
 	dryrunMode bool
+
+	cfdMode CFDModeFlags
+
+	//
+	// Time of last sync, used by the sync process.
+	// This is used as a lower bound to find out files/dirs changed since last sync.
+	// Depending on CFDMode this will be compared with source files' ctime/mtime or
+	// the target files' ctime/mtime.
+	//
+	lastSyncTime time.Time
+
+	//
+	// Limit on size of ObjectIndexerMap in memory.
+	// This is used only by the sync process and it controls how much the source traverser can fill the ObjectIndexerMap before it has to wait
+	// for target traverser to process and empty it. This should be kept to a value less than the system RAM to avoid thrashing.
+	// If you are not interested in source traverser scanning all the files for estimation purpose you can keep it low, just enough to never have the
+	// target traverser wait for directories to scan. The only reason we would want to keep it high is to let the source complete scanning irrespective
+	// of the target traverser speed, so that the scanned information can then be used for ETA estimation.
+	//
+	maxObjectIndexerMapSizeInGB uint32
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -806,4 +879,7 @@ func init() {
 	// Deprecate the old persist-smb-permissions flag
 	syncCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files, or ADLS Gen 2 to ADLS Gen 2). For Hierarchical Namespace accounts, you will need a container SAS or OAuth token with Modify Ownership and Modify Permissions permissions. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
+
+	// Limit on size of ObjectIndexerMap in memory.
+	syncCmd.PersistentFlags().StringVar(&raw.maxObjectIndexerMapSizeInGB, "max-indexer-map-size-gb", "", "maxObjectIndexerMapSizeInGB is the limit of map size in memory, provide the value in terms of GB")
 }

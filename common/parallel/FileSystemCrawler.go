@@ -22,6 +22,7 @@ package parallel
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -47,14 +48,14 @@ type DirReader interface {
 // It does not follow symlinks.
 // The items in the CrawResult output channel are FileSystemEntry s.
 // For a wrapper that makes this look more like filepath.Walk, see parallel.Walk.
-func CrawlLocalDirectory(ctx context.Context, root string, parallelism int, reader DirReader) <-chan CrawlResult {
+func CrawlLocalDirectory(ctx context.Context, root Directory, parallelism int, reader DirReader, getObjectIndexerMapSize func() int64,
+	tqueue chan interface{}, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32) <-chan CrawlResult {
 	return Crawl(ctx,
 		root,
 		func(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry, error)) error {
 			return enumerateOneFileSystemDirectory(dir, enqueueDir, enqueueOutput, reader)
 		},
-		parallelism,
-	)
+		parallelism, getObjectIndexerMapSize, tqueue, isSource, isSync, maxObjectIndexerSizeInGB)
 }
 
 // Walk is similar to filepath.Walk.
@@ -63,7 +64,8 @@ func CrawlLocalDirectory(ctx context.Context, root string, parallelism int, read
 //    (whereas with filepath.Walk it will usually (always?) have a value).
 // 2. If the return value of walkFunc function is not nil, enumeration will always stop, not matter what the type of the error.
 //    (Unlike filepath.WalkFunc, where returning filePath.SkipDir is handled as a special case).
-func Walk(root string, parallelism int, parallelStat bool, walkFn filepath.WalkFunc) {
+func Walk(root string, parallelism int, parallelStat bool, walkFn filepath.WalkFunc,
+	getObjectIndexerMapSize func() int64, tqueue chan interface{}, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32) {
 	signalRootError := func(e error) {
 		_ = walkFn(root, nil, e)
 	}
@@ -86,19 +88,38 @@ func Walk(root string, parallelism int, parallelStat bool, walkFn filepath.WalkF
 		signalRootError(err)
 		return
 	}
+
 	err = walkFn(root, rs, nil)
 	if err != nil {
 		signalRootError(err)
 		return
 	}
+
 	_ = r.Close()
 
 	// walk the stuff inside the root
 	reader, remainingParallelism := NewDirReader(parallelism, parallelStat)
 	defer reader.Close()
 	ctx, cancel := context.WithCancel(context.Background())
-	ch := CrawlLocalDirectory(ctx, root, remainingParallelism, reader)
+	ch := CrawlLocalDirectory(ctx, root, remainingParallelism, reader, getObjectIndexerMapSize, tqueue, isSource, isSync, maxObjectIndexerSizeInGB)
 	for crawlResult := range ch {
+		if crawlResult.EnqueueToTqueue() {
+			// Do the sanity check, EnqueueToTqueue should be true in case of sync operation and traverser is source.
+			if !isSync || !isSource {
+				panic(fmt.Sprintf("Entry set for enqueue to tqueue for invalid operation, isSync[%v], isSource[%v]", isSync, isSource))
+			}
+
+			entry, err := crawlResult.Item()
+			if err != nil {
+				panic("Error set for entry which needs to be inserted to tqueue")
+			}
+			//
+			// This is a special CrawlResult which signifies that we need to enqueue the given directory to tqueue for target traverser to process.
+			//
+			tqueue <- entry
+			continue
+		}
+
 		entry, err := crawlResult.Item()
 		if err == nil {
 			fsEntry := entry.(FileSystemEntry)
@@ -126,7 +147,10 @@ func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), 
 	d, err := os.Open(dirString) // for directories, we don't need a special open with FILE_FLAG_BACKUP_SEMANTICS, because directory opening uses FindFirst which doesn't need that flag. https://blog.differentpla.net/blog/2007/05/25/findfirstfile-and-se_backup_name
 	if err != nil {
 		// FileInfo value being nil should mean that the FileSystemEntry refers to a directory.
-		enqueueOutput(FileSystemEntry{dirString, nil}, err)
+		enqueueOutput(FileSystemEntry{
+			fullPath: dirString,
+			info:     nil,
+		}, err)
 
 		// Since we have already enqueued the failed enumeration entry, return nil error to avoid duplicate queueing by workerLoop().
 		return nil

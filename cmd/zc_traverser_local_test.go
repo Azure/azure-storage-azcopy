@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 
+	"github.com/nitin-deamon/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
 )
 
@@ -21,7 +22,7 @@ func (s *localTraverserTestSuite) TestCleanLocalPath(c *chk.C) {
 	}
 
 	for orig, expected := range testCases {
-		c.Assert(cleanLocalPath(orig), chk.Equals, expected)
+		c.Assert(common.CleanLocalPath(orig), chk.Equals, expected)
 	}
 }
 
@@ -47,6 +48,6 @@ func (s *localTraverserTestSuite) TestCleanLocalPathForWindows(c *chk.C) {
 	}
 
 	for orig, expected := range testCases {
-		c.Assert(cleanLocalPath(orig), chk.Equals, expected)
+		c.Assert(common.CleanLocalPath(orig), chk.Equals, expected)
 	}
 }

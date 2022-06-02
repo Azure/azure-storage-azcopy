@@ -20,7 +20,11 @@
 
 package cmd
 
-import "strings"
+import (
+	"path/filepath"
+	"strings"
+	"time"
+)
 
 // with the help of an objectIndexer containing the source objects
 // find out the destination objects that should be transferred
@@ -36,10 +40,12 @@ type syncDestinationComparator struct {
 	sourceIndex *objectIndexer
 
 	disableComparison bool
+
+	sourceFolderIndex *folderIndexer
 }
 
-func newSyncDestinationComparator(i *objectIndexer, copyScheduler, cleaner objectProcessor, disableComparison bool) *syncDestinationComparator {
-	return &syncDestinationComparator{sourceIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, disableComparison: disableComparison}
+func newSyncDestinationComparator(i *folderIndexer, copyScheduler, cleaner objectProcessor, disableComparison bool, cfdMode CFDModeFlags, lastSyncTime time.Time) *syncDestinationComparator {
+	return &syncDestinationComparator{sourceFolderIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, disableComparison: disableComparison}
 }
 
 // it will only schedule transfers for destination objects that are present in the indexer but stale compared to the entry in the map
@@ -80,12 +86,12 @@ type syncSourceComparator struct {
 	copyTransferScheduler objectProcessor
 
 	// storing the destination objects
-	destinationIndex *objectIndexer
+	destinationIndex *folderIndexer
 
 	disableComparison bool
 }
 
-func newSyncSourceComparator(i *objectIndexer, copyScheduler objectProcessor, disableComparison bool) *syncSourceComparator {
+func newSyncSourceComparator(i *folderIndexer, copyScheduler objectProcessor, disableComparison bool) *syncSourceComparator {
 	return &syncSourceComparator{destinationIndex: i, copyTransferScheduler: copyScheduler, disableComparison: disableComparison}
 }
 
@@ -101,10 +107,10 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) err
 		relPath = strings.ToLower(relPath)
 	}
 
-	destinationObjectInMap, present := f.destinationIndex.indexMap[relPath]
+	destinationObjectInMap, present := f.destinationIndex.folderMap[filepath.Dir(relPath)].indexMap[filepath.Base(relPath)]
 
 	if present {
-		defer delete(f.destinationIndex.indexMap, relPath)
+		defer delete(f.destinationIndex.folderMap[filepath.Dir(relPath)].indexMap, relPath)
 
 		// if destination is stale, schedule source for transfer
 		if f.disableComparison || sourceObject.isMoreRecentThan(destinationObjectInMap) {

@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	pipeline2 "github.com/Azure/azure-pipeline-go/pipeline"
 
@@ -219,7 +220,9 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		}
 	}
 
-	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, nil, nil, true, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, pipeline2.LogNone, common.CpkOptions{}, nil)
+	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, nil, nil, true, false, false,
+		common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, pipeline2.LogNone, common.CpkOptions{}, nil, nil /* folderIndexer */, nil, /* tqueue*/
+		false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{} /* lastSyncTime */, CFDModeFlags{})
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())

@@ -28,6 +28,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -42,6 +43,33 @@ type localTraverser struct {
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
 	errorChannel                chan ErrorFileInfo
+
+	// Field applicable to only sync operation.
+	// isSync boolean tells whether its copy operation or sync operation.
+	isSync bool
+
+	// When localTraverser is the source traverser it populates this and when it's the target traverser it consumes this.
+	indexerMap *folderIndexer
+
+	// Communication channel between source and destination traverser.
+	// When localTraverser is the source traverser it adds scanned directories to this and
+	// when it's the target traverser it reads directories to process from this channel.
+	tqueue chan interface{}
+
+	// For sync operation this flag tells whether this is source or target.
+	isSource bool
+
+	// Limit on size of objectIndexerMap in memory.
+	maxObjectIndexerSizeInGB uint32
+
+	// lastSyncTime to detect file/folder changed since this time.
+	// Only used when localTraverser is the target traverser.
+	lastSyncTime time.Time
+
+	// cfdMode is change file detection mode. How to detect the file/folder changed.
+	// Changed files can be detected on basis of ctime, ctimemtime , archiveBit or none.
+	// Only used when localTraverser is the target traverser.
+	cfdMode CFDModeFlags
 }
 
 func (t *localTraverser) IsDirectory(bool) bool {
@@ -162,7 +190,8 @@ func (s symlinkTargetFileInfo) Name() string {
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
 // 2) Easier to test individually than to test the entire traverser.
-func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlinks bool, errorChannel chan ErrorFileInfo) (err error) {
+func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlinks bool, errorChannel chan ErrorFileInfo, getObjectIndexerMapSize func() int64,
+	tqueue chan interface{}, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32) (err error) {
 
 	// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
 	// So, what is the plan of attack?
@@ -328,7 +357,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 					return nil
 				}
 			}
-		})
+		}, getObjectIndexerMapSize, tqueue, isSource, isSync, maxObjectIndexerSizeInGB)
 	}
 	return
 }
@@ -366,6 +395,19 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 		return err
 	} else {
 		if t.recursive {
+			//
+			// getObjectIndexerMapSize() will be used (only) when localTraverser is the source traverser in the sync process.
+			// It will use it for auto-pacing to ensure the indexer size remains in check.
+			//
+			getObjectIndexerMapSize := func() int64 {
+				if t.indexerMap != nil {
+					return t.indexerMap.getObjectIndexerMapSize()
+				}
+
+				// Though t.indexerMap will be nil for the copy case, but we won't be called in that case.
+				panic("ObjectIndexerMap is nil")
+			}
+
 			processFile := func(filePath string, fileInfo os.FileInfo, fileError error) error {
 				if fileError != nil {
 					WarnStdoutAndScanningLog(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError))
@@ -415,7 +457,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			}
 
 			// note: Walk includes root, so no need here to separately create StoredObject for root (as we do for other folder-aware sources)
-			return WalkWithSymlinks(t.fullPath, processFile, t.followSymlinks, t.errorChannel)
+			return WalkWithSymlinks(t.fullPath, processFile, t.followSymlinks, t.errorChannel, getObjectIndexerMapSize, t.tqueue, t.isSource, t.isSync, t.maxObjectIndexerSizeInGB)
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath
 			// We don't transfer any directory properties here, not even the root. (Because the root's
@@ -493,13 +535,22 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	return
 }
 
-func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan ErrorFileInfo) *localTraverser {
+func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan ErrorFileInfo,
+	indexerMap *folderIndexer, tqueue chan interface{}, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32, lastSyncTime time.Time, cfdModes CFDModeFlags) *localTraverser {
 	traverser := localTraverser{
 		fullPath:                    cleanLocalPath(fullPath),
 		recursive:                   recursive,
 		followSymlinks:              followSymlinks,
 		incrementEnumerationCounter: incrementEnumerationCounter,
 		errorChannel:                errorChannel,
+
+		// Sync related fields.
+		isSync:                   isSync,
+		indexerMap:               indexerMap,
+		tqueue:                   tqueue,
+		isSource:                 isSource,
+		lastSyncTime:             lastSyncTime,
+		maxObjectIndexerSizeInGB: maxObjectIndexerSizeInGB,
 	}
 	return &traverser
 }
