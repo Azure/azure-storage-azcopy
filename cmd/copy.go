@@ -1056,9 +1056,16 @@ func validateBlobTagsKeyValue(bt common.BlobTags) error {
 }
 
 func validateMetadataString(metadata string) error {
-	if strings.ContainsAny(metadata, " !#$%^&*,<>{}|\\:.()+'\"?/") {
-		return fmt.Errorf("invalid metadata '%s': can't have spaces or special characters", metadata)
+	metadataMap, err := common.StringToMetadata(metadata)
+	if err != nil {
+		return err
 	}
+	for k, _ := range metadataMap {
+		if strings.ContainsAny(k, " !#$%^&*,<>{}|\\:.()+'\"?/") {
+			return fmt.Errorf("invalid metadata key value '%s': can't have spaces or special characters", k)
+		}
+	}
+
 	return nil
 }
 
