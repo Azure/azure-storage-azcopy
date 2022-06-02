@@ -35,7 +35,7 @@ func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPar
 		ForceIfReadOnly: cca.ForceIfReadOnly,
 
 		// flags
-		LogLevel: cca.LogVerbosity,
+		LogLevel: azcopyLogVerbosity,
 		BlobAttributes: common.BlobTransferAttributes{
 			BlockBlobTier:     cca.blockBlobTier,
 			PageBlobTier:      cca.pageBlobTier,
