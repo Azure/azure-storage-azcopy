@@ -27,8 +27,6 @@ import (
 	"strings"
 )
 
-const FlushFlag = "flush"
-
 func (raw *rawCopyCmdArgs) setMandatoryDefaultsForSetProperties() {
 	raw.blobType = common.EBlobType.Detect().String()
 	raw.md5ValidationOption = common.DefaultHashValidationOption.String()
@@ -61,7 +59,7 @@ func (cca *CookedCopyCmdArgs) makeTransferEnum() error {
 	}
 	if cca.metadata != "" {
 		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetMetadata()
-		if cca.metadata == FlushFlag {
+		if cca.metadata == common.FlushFlag {
 			cca.metadata = ""
 		}
 	}

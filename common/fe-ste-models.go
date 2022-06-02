@@ -1010,6 +1010,8 @@ type CopyTransfer struct {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Metadata used in AzCopy.
+const FlushFlag = "flush" // flush flag used for metadata and tags
+
 type Metadata map[string]string
 
 func (m Metadata) Clone() Metadata {
