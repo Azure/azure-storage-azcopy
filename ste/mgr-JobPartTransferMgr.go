@@ -349,10 +349,10 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 				 * we can have 4 blocks in core, waiting for a disk or n/w operation. Any higher block size would *sort of*
 				 * serialize n/w and disk operations, and is better avoided.
 				 */
-				if (sourceSize % common.MaxNumberOfBlocksPerBlob == 0) {
-					blockSize = sourceSize/common.MaxNumberOfBlocksPerBlob
+				if sourceSize%common.MaxNumberOfBlocksPerBlob == 0 {
+					blockSize = sourceSize / common.MaxNumberOfBlocksPerBlob
 				} else {
-					blockSize = sourceSize/common.MaxNumberOfBlocksPerBlob +1
+					blockSize = sourceSize/common.MaxNumberOfBlocksPerBlob + 1
 				}
 				break
 			}
@@ -549,7 +549,7 @@ func (jptm *jobPartTransferMgr) PropertiesToTransfer() common.SetPropertiesFlags
 }
 
 func (jptm *jobPartTransferMgr) ResetSourceSize() {
-	jptm.jobPartMgr.Plan().Transfer(jptm.transferIndex).SourceSize = 0
+	jptm.transferInfo.SourceSize = 0
 }
 
 // JobHasLowFileCount returns an estimate of whether we only have a very small number of files in the overall job
