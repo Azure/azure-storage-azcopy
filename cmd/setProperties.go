@@ -46,27 +46,39 @@ func (cca *CookedCopyCmdArgs) checkIfChangesPossible() error {
 		}
 	}
 
+	// tier of a BlobFS can't be set to Archive
 	if cca.FromTo.From() == common.ELocation.BlobFS() && cca.blockBlobTier == common.EBlockBlobTier.Archive() {
 		return fmt.Errorf("tier of a BlobFS can't be set to Archive")
+	}
+
+	// metadata can't be set if blob is set to be archived (note that tags can still be set)
+	if cca.blockBlobTier == common.EBlockBlobTier.Archive() && cca.propertiesToTransfer.ShouldTransferMetaData() {
+		return fmt.Errorf("metadata can't be set if blob is set to be archived")
 	}
 
 	return nil
 }
 
 func (cca *CookedCopyCmdArgs) makeTransferEnum() error {
+	// ACCESS TIER
 	if cca.blockBlobTier != common.EBlockBlobTier.None() || cca.pageBlobTier != common.EPageBlobTier.None() {
 		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetTier()
 	}
+
+	// METADATA
 	if cca.metadata != "" {
 		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetMetadata()
 		if strings.EqualFold(cca.metadata, common.MetadataAndBlobTagsClearFlag) {
 			cca.metadata = ""
 		}
 	}
+
+	// BLOB TAGS
 	if cca.blobTags != nil {
 		// the fact that fromto is not filenone is taken care of by the cook function
 		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetBlobTags()
 	}
+
 	return cca.checkIfChangesPossible()
 }
 
