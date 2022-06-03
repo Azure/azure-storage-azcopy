@@ -1158,7 +1158,7 @@ func ToCommonBlobTagsMap(blobTagsString string) BlobTags {
 	if blobTagsString == "" { // default empty value set by coder
 		return nil
 	}
-	if blobTagsString == MetadataAndBlobTagsClearFlag { // "clear" value given by user as input (to signify clearing of tags in set-props cmd)
+	if strings.EqualFold(blobTagsString, MetadataAndBlobTagsClearFlag) { // "clear" value given by user as input (to signify clearing of tags in set-props cmd)
 		return BlobTags{}
 	}
 

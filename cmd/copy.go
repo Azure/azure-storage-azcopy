@@ -542,7 +542,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		cooked.ListOfVersionIDs = versionsChan
 	}
 
-	if cooked.FromTo.To() == common.ELocation.None() && strings.ToLower(raw.metadata) == common.MetadataAndBlobTagsClearFlag { // in case of Blob, BlobFS and Files
+	if cooked.FromTo.To() == common.ELocation.None() && strings.EqualFold(raw.metadata, common.MetadataAndBlobTagsClearFlag) { // in case of Blob, BlobFS and Files
 		glcm.Info("*** WARNING *** Metadata will be cleared because of input --metadata=clear")
 	}
 	cooked.metadata = raw.metadata
@@ -561,7 +561,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	if !(cooked.FromTo.To() == common.ELocation.Blob() || cooked.FromTo == common.EFromTo.BlobNone() || cooked.FromTo != common.EFromTo.BlobFSNone()) && raw.blobTags != "" {
 		return cooked, errors.New("blob tags can only be set when transferring to blob storage")
 	}
-	if cooked.FromTo.To() == common.ELocation.None() && strings.ToLower(raw.blobTags) == common.MetadataAndBlobTagsClearFlag { // in case of Blob and BlobFS
+	if cooked.FromTo.To() == common.ELocation.None() && strings.EqualFold(raw.blobTags, common.MetadataAndBlobTagsClearFlag) { // in case of Blob and BlobFS
 		glcm.Info("*** WARNING *** BlobTags will be cleared because of input --blob-tags=clear")
 	}
 	blobTags := common.ToCommonBlobTagsMap(raw.blobTags)
@@ -1062,6 +1062,9 @@ func validateBlobTagsKeyValue(bt common.BlobTags) error {
 }
 
 func validateMetadataString(metadata string) error {
+	if strings.EqualFold(metadata, common.MetadataAndBlobTagsClearFlag) {
+		return nil
+	}
 	metadataMap, err := common.StringToMetadata(metadata)
 	if err != nil {
 		return err

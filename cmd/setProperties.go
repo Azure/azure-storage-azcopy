@@ -59,7 +59,7 @@ func (cca *CookedCopyCmdArgs) makeTransferEnum() error {
 	}
 	if cca.metadata != "" {
 		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetMetadata()
-		if strings.ToLower(cca.metadata) == common.MetadataAndBlobTagsClearFlag {
+		if strings.EqualFold(cca.metadata, common.MetadataAndBlobTagsClearFlag) {
 			cca.metadata = ""
 		}
 	}
