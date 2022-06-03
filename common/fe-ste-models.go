@@ -1010,7 +1010,7 @@ type CopyTransfer struct {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Metadata used in AzCopy.
-const FlushFlag = "flush" // flush flag used for metadata and tags
+const MetadataAndBlobTagsClearFlag = "clear" // clear flag used for metadata and tags
 
 type Metadata map[string]string
 
@@ -1158,7 +1158,7 @@ func ToCommonBlobTagsMap(blobTagsString string) BlobTags {
 	if blobTagsString == "" { // default empty value set by coder
 		return nil
 	}
-	if blobTagsString == "flush" { // empty value given by user as input (to signify clearing of tags in set-props cmd)
+	if blobTagsString == MetadataAndBlobTagsClearFlag { // "clear" value given by user as input (to signify clearing of tags in set-props cmd)
 		return BlobTags{}
 	}
 
