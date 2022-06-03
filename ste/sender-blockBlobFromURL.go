@@ -91,7 +91,7 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 
 		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 		// Create blob and finish.
-		if !ValidateTier(jptm, c.destBlobTier, c.destBlockBlobURL.BlobURL, c.jptm.Context()) {
+		if !ValidateTier(jptm, c.destBlobTier, c.destBlockBlobURL.BlobURL, c.jptm.Context(), false) {
 			c.destBlobTier = azblob.DefaultAccessTier
 		}
 
@@ -154,7 +154,7 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 
 		// Create blob and finish.
-		if !ValidateTier(c.jptm, c.destBlobTier, c.destBlockBlobURL.BlobURL, c.jptm.Context()) {
+		if !ValidateTier(c.jptm, c.destBlobTier, c.destBlockBlobURL.BlobURL, c.jptm.Context(), false) {
 			c.destBlobTier = azblob.DefaultAccessTier
 		}
 

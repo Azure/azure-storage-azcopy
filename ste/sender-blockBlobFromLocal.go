@@ -109,7 +109,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		// Upload the blob
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		var err error
-		if !ValidateTier(jptm, u.destBlobTier, u.destBlockBlobURL.BlobURL, u.jptm.Context()) {
+		if !ValidateTier(jptm, u.destBlobTier, u.destBlockBlobURL.BlobURL, u.jptm.Context(), false) {
 			u.destBlobTier = azblob.DefaultAccessTier
 		}
 

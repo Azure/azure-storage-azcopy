@@ -120,7 +120,7 @@ func BlobTierAllowed(destTier azblob.AccessTierType) bool {
 	}
 }
 
-func ValidateTier(jptm IJobPartTransferMgr, blobTier azblob.AccessTierType, blobURL azblob.BlobURL, ctx context.Context) (isValid bool) {
+func ValidateTier(jptm IJobPartTransferMgr, blobTier azblob.AccessTierType, blobURL azblob.BlobURL, ctx context.Context, performQuietly bool) (isValid bool) {
 
 	if jptm.IsLive() && blobTier != azblob.AccessTierNone {
 
@@ -135,13 +135,13 @@ func ValidateTier(jptm IJobPartTransferMgr, blobTier azblob.AccessTierType, blob
 
 		if tierAvailable {
 			return true
-		} else {
+		} else if !performQuietly {
 			tierNotAllowedFailure.Do(func() {
 				glcm := common.GetLifecycleMgr()
 				glcm.Info("Destination could not accommodate the tier " + string(blobTier) + ". Going ahead with the default tier. In case of service to service transfer, consider setting the flag --s2s-preserve-access-tier=false.")
 			})
-			return false
 		}
+		return false
 	} else {
 		return false
 	}

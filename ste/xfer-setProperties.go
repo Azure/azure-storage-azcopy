@@ -59,19 +59,18 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	}
 
 	PropertiesToTransfer := jptm.PropertiesToTransfer()
-	_, metadata, blobTags, _ := jptm.ResourceDstData(nil) // TODO what is this arg we're passing?
+	_, metadata, blobTags, _ := jptm.ResourceDstData(nil)
 
 	if PropertiesToTransfer.ShouldTransferTier() {
 		rehydratePriority := info.RehydratePriority
 		blockBlobTier, pageBlobTier := jptm.BlobTiers()
 
 		var err error = nil
-		if jptm.Info().SrcBlobType == azblob.BlobBlockBlob && blockBlobTier != common.EBlockBlobTier.None() && ValidateTier(jptm, blockBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context()) {
+		if jptm.Info().SrcBlobType == azblob.BlobBlockBlob && blockBlobTier != common.EBlockBlobTier.None() && ValidateTier(jptm, blockBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context(), true) {
 			_, err = srcBlobURL.SetTier(jptm.Context(), blockBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{}, rehydratePriority)
 		}
 		// cannot return true for >1, therefore only one of these will run
-		// TODO how to prevent this line from creating an INFO: statement?
-		if jptm.Info().SrcBlobType == azblob.BlobPageBlob && pageBlobTier != common.EPageBlobTier.None() && ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context()) {
+		if jptm.Info().SrcBlobType == azblob.BlobPageBlob && pageBlobTier != common.EPageBlobTier.None() && ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context(), true) {
 			_, err = srcBlobURL.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{}, rehydratePriority)
 		}
 
@@ -123,13 +122,13 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	}
 
 	PropertiesToTransfer := jptm.PropertiesToTransfer()
-	_, metadata, blobTags, _ := jptm.ResourceDstData(nil) // TODO what is this arg we're passing?
+	_, metadata, blobTags, _ := jptm.ResourceDstData(nil)
 
 	if PropertiesToTransfer.ShouldTransferTier() {
 		rehydratePriority := info.RehydratePriority
 		_, pageBlobTier := jptm.BlobTiers()
 		var err error = nil
-		if ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context()) {
+		if ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context(), false) {
 			_, err = srcBlobURL.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{}, rehydratePriority)
 		}
 
@@ -200,7 +199,6 @@ func setPropertiesFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 
 func errorHandlerForXferSetProperties(err error, jptm IJobPartTransferMgr, transferDone func(status common.TransferStatus, err error)) {
 	if strErr, ok := err.(azblob.StorageError); ok {
-		// TODO: Do we need to add more conditions? Won't happen on some snapshots and versions. Check documentation
 
 		// If the status code was 403, it means there was an authentication error, and we exit.
 		// User can resume the job if completely ordered with a new sas.

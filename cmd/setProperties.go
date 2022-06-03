@@ -129,8 +129,7 @@ func init() {
 
 			cooked, err := raw.cook()
 			if err == nil { // do this only if error is nil. We would not want to overwrite err = nil if there was error in cook()
-				err = cooked.makeTransferEnum()
-				// TODO rename this to something like a setProperties post cook method
+				err = cooked.makeTransferEnum() // makes transfer enum and performs some checks that are specific to set-properties
 			}
 
 			if err != nil {
