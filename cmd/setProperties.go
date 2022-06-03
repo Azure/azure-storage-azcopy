@@ -87,10 +87,11 @@ func init() {
 
 	setPropCmd := &cobra.Command{
 		Use:        "set-properties",
-		Aliases:    []string{"properties", "set-props", "sp"},
+		Aliases:    []string{"set-props", "sp", "setprops"},
 		SuggestFor: []string{"props", "prop", "set"},
 		Short:      setPropertiesCmdShortDescription,
 		Long:       setPropertiesCmdLongDescription,
+		Example:    setPropertiesCmdExample,
 		Args: func(cmd *cobra.Command, args []string) error {
 			// we only want one arg, which is the source
 			if len(args) != 1 {
