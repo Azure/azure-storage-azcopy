@@ -178,7 +178,20 @@ func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, id ChunkID, chunkS
 	}()
 	
 	readStart := time.Now()
-	_, err = io.ReadFull(chunkContents, buffer)
+	min := func(a, b int) int {
+		if a < b {
+		    return a
+		}
+		return b
+	}
+	const readSize = 4 * 1024 //Read in chunks of 4kb. This will pace block in more smoothly.
+	for start := 0; start < len(buffer); start += readSize {
+		end := min(start + readSize, len(buffer))
+		_, err = io.ReadFull(chunkContents, buffer[start:end])
+		if err != nil {
+			break
+		}
+	}
 	close(readDone)
 	if err != nil {
 		return err
