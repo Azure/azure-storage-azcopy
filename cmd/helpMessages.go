@@ -526,6 +526,15 @@ Run an upload that does not delete the transferred files. (These files can then 
    - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 100 --delete-test-data=false
 `
 
-const setPropertiesCmdShortDescription = "Change properties of given blob"
+// ===================================== SET-PROPERTIES COMMAND ===================================== //
 
-const setPropertiesCmdLongDescription = ""
+const setPropertiesCmdShortDescription = "Given a location, change all the valid system properties of that storage (blob or file)"
+
+// TODO tiverma still to do
+const setPropertiesCmdLongDescription = `
+Sets properties of Blob, BlobFS, and File storage. The properties currently supported by this command are:
+
+	- Tier - Blobs, BlobFS
+	- Metadata - Blobs, BlobFS, File
+	- BlobTags - Blob, BlobFS
+`

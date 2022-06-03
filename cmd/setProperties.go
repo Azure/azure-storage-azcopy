@@ -36,9 +36,14 @@ func (raw *rawCopyCmdArgs) setMandatoryDefaultsForSetProperties() {
 }
 
 func (cca *CookedCopyCmdArgs) checkIfChangesPossible() error {
-	// tier can't be set on files
-	if cca.FromTo.From() == common.ELocation.File() && (cca.blockBlobTier != common.EBlockBlobTier.None() || cca.pageBlobTier != common.EPageBlobTier.None()) {
-		return fmt.Errorf("changing tier is not available for File Storage")
+	// tier or tags can't be set on files
+	if cca.FromTo.From() == common.ELocation.File() {
+		if cca.propertiesToTransfer.ShouldTransferTier() {
+			return fmt.Errorf("changing tier is not available for File Storage")
+		}
+		if cca.propertiesToTransfer.ShouldTransferBlobTags() {
+			return fmt.Errorf("blob tags are not available for File Storage")
+		}
 	}
 
 	if cca.FromTo.From() == common.ELocation.BlobFS() && cca.blockBlobTier == common.EBlockBlobTier.Archive() {
@@ -69,11 +74,10 @@ func init() {
 
 	setPropCmd := &cobra.Command{
 		Use:        "set-properties",
-		Aliases:    []string{"properties", "set-props"},
+		Aliases:    []string{"properties", "set-props", "sp"},
 		SuggestFor: []string{"props", "prop", "set"},
-		// TODO: t-iverma: short and long descriptions
-		Short: setPropertiesCmdShortDescription,
-		Long:  setPropertiesCmdLongDescription,
+		Short:      setPropertiesCmdShortDescription,
+		Long:       setPropertiesCmdLongDescription,
 		Args: func(cmd *cobra.Command, args []string) error {
 			// we only want one arg, which is the source
 			if len(args) != 1 {
