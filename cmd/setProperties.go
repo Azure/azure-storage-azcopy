@@ -86,7 +86,7 @@ func init() {
 	raw := rawCopyCmdArgs{}
 
 	setPropCmd := &cobra.Command{
-		Use:        "set-properties",
+		Use:        "set-properties [source]",
 		Aliases:    []string{"set-props", "sp", "setprops"},
 		SuggestFor: []string{"props", "prop", "set"},
 		Short:      setPropertiesCmdShortDescription,
