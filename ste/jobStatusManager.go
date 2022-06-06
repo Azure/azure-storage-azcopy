@@ -116,7 +116,7 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			js.SkippedTransfers = []common.TransferDetail{}
 
 		case <-jstm.done:
-			fmt.Println("Cleanup JobStatusmgr")
+			jm.Log(pipeline.LogInfo, "Cleanup JobStatusmgr.")
 			return
 		}
 	}
