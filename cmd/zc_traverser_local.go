@@ -35,6 +35,8 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
 
+const MAX_SYMLINKS = 40
+
 type localTraverser struct {
 	fullPath       string
 	recursive      bool
@@ -115,7 +117,7 @@ func UnfurlSymlinks(symlinkPath string) (result string, err error) {
 			 * Either we can store all the symlink seen till now for this path or we count how many iterations to find out cyclic loop.
 			 * Choose the count method and restrict the number of links to 40. Which linux kernel adhere.
 			 */
-			if count >= 40 {
+			if count >= MAX_SYMLINKS {
 				return "", errors.New("failed to unfurl symlink: too many links")
 			}
 
