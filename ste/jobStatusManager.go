@@ -21,7 +21,6 @@
 package ste
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
