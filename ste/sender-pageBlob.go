@@ -226,7 +226,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 	}
 
 	destBlobTier := azblob.PremiumPageBlobAccessTierType(s.destBlobTier)
-	if !ValidateTier(s.jptm, s.destBlobTier, s.destPageBlobURL.BlobURL, s.jptm.Context()) {
+	if !ValidateTier(s.jptm, s.destBlobTier, s.destPageBlobURL.BlobURL, s.jptm.Context(), false) {
 		destBlobTier = azblob.DefaultPremiumBlobAccessTier
 	}
 

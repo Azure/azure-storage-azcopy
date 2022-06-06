@@ -89,6 +89,8 @@ type JobPartPlanHeader struct {
 
 	// Determine what to do with soft-deleted snapshots
 	PermanentDeleteOption common.PermanentDeleteOption
+
+	RehydratePriority common.RehydratePriorityType
 }
 
 // Status returns the job status stored in JobPartPlanHeader in thread-safe manner
@@ -325,6 +327,8 @@ type JobPartPlanDstBlob struct {
 
 	// Specifies the maximum size of block which determines the number of chunks and chunk size of a transfer
 	BlockSize int64
+
+	SetPropertiesFlags common.SetPropertiesFlags
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

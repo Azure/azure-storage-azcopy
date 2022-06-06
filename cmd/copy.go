@@ -171,6 +171,10 @@ type rawCopyCmdArgs struct {
 
 	// Optional flag that permanently deletes soft-deleted snapshots/versions
 	permanentDeleteOption string
+
+	// Optional. Indicates the priority with which to rehydrate an archived blob. Valid values are High/Standard.
+	rehydratePriority string
+	// The priority setting can be changed from Standard to High by calling Set Blob Tier with this header set to High and setting x-ms-access-tier to the same value as previously set. The priority setting cannot be lowered from High to Standard.
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -372,6 +376,14 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
+	if raw.rehydratePriority == "" {
+		raw.rehydratePriority = "standard"
+	}
+	err = cooked.rehydratePriority.Parse(raw.rehydratePriority)
+	if err != nil {
+		return cooked, err
+	}
+
 	// Everything uses the new implementation of list-of-files now.
 	// This handles both list-of-files and include-path as a list enumerator.
 	// This saves us time because we know *exactly* what we're looking for right off the bat.
@@ -530,7 +542,13 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		cooked.ListOfVersionIDs = versionsChan
 	}
 
+	if cooked.FromTo.To() == common.ELocation.None() && strings.EqualFold(raw.metadata, common.MetadataAndBlobTagsClearFlag) { // in case of Blob, BlobFS and Files
+		glcm.Info("*** WARNING *** Metadata will be cleared because of input --metadata=clear ")
+	}
 	cooked.metadata = raw.metadata
+	if err = validateMetadataString(cooked.metadata); err != nil {
+		return cooked, err
+	}
 	cooked.contentType = raw.contentType
 	cooked.contentEncoding = raw.contentEncoding
 	cooked.contentLanguage = raw.contentLanguage
@@ -540,8 +558,11 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 	cooked.disableAutoDecoding = raw.disableAutoDecoding
 
-	if cooked.FromTo.To() != common.ELocation.Blob() && raw.blobTags != "" {
+	if !(cooked.FromTo.To() == common.ELocation.Blob() || cooked.FromTo == common.EFromTo.BlobNone() || cooked.FromTo != common.EFromTo.BlobFSNone()) && raw.blobTags != "" {
 		return cooked, errors.New("blob tags can only be set when transferring to blob storage")
+	}
+	if cooked.FromTo.To() == common.ELocation.None() && strings.EqualFold(raw.blobTags, common.MetadataAndBlobTagsClearFlag) { // in case of Blob and BlobFS
+		glcm.Info("*** WARNING *** BlobTags will be cleared because of input --blob-tags=clear ")
 	}
 	blobTags := common.ToCommonBlobTagsMap(raw.blobTags)
 	err = validateBlobTagsKeyValue(blobTags)
@@ -1040,6 +1061,23 @@ func validateBlobTagsKeyValue(bt common.BlobTags) error {
 	return nil
 }
 
+func validateMetadataString(metadata string) error {
+	if strings.EqualFold(metadata, common.MetadataAndBlobTagsClearFlag) {
+		return nil
+	}
+	metadataMap, err := common.StringToMetadata(metadata)
+	if err != nil {
+		return err
+	}
+	for k, _ := range metadataMap {
+		if strings.ContainsAny(k, " !#$%^&*,<>{}|\\:.()+'\"?/") {
+			return fmt.Errorf("invalid metadata key value '%s': can't have spaces or special characters", k)
+		}
+	}
+
+	return nil
+}
+
 // represents the processed copy command input from the user
 type CookedCopyCmdArgs struct {
 	// from arguments
@@ -1171,6 +1209,12 @@ type CookedCopyCmdArgs struct {
 
 	// Optional flag that permanently deletes soft deleted blobs
 	permanentDeleteOption common.PermanentDeleteOption
+
+	// Optional flag that sets rehydrate priority for rehydration
+	rehydratePriority common.RehydratePriorityType
+
+	// Bitmasked uint checking which properties to transfer
+	propertiesToTransfer common.SetPropertiesFlags
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {
@@ -1464,6 +1508,14 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// case common.EFromTo.FileBlob():
 	// 	e := copyFileToNEnumerator(jobPartOrder)
 	// 	err = e.enumerate(cca)
+
+	case common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone(), common.EFromTo.FileNone():
+		e, createErr := setPropertiesEnumerator(cca)
+		if createErr != nil {
+			return createErr
+		}
+		err = e.enumerate()
+
 	default:
 		return fmt.Errorf("copy direction %v is not supported\n", cca.FromTo)
 	}

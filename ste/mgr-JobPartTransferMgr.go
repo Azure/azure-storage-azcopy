@@ -92,6 +92,8 @@ type IJobPartTransferMgr interface {
 	CpkScopeInfo() common.CpkScopeInfo
 	IsSourceEncrypted() bool
 	GetS2SSourceBlobTokenCredential() azblob.TokenCredential
+	PropertiesToTransfer() common.SetPropertiesFlags
+	ResetSourceSize() // sets source size to 0 (made to be used by setProperties command to make number of bytes transferred = 0)
 }
 
 type TransferInfo struct {
@@ -118,7 +120,8 @@ type TransferInfo struct {
 
 	// NumChunks is the number of chunks in which transfer will be split into while uploading the transfer.
 	// NumChunks is not used in case of AppendBlob transfer.
-	NumChunks uint16
+	NumChunks         uint16
+	RehydratePriority azblob.RehydratePriorityType
 }
 
 func (i TransferInfo) IsFolderPropertiesTransfer() bool {
@@ -346,10 +349,10 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 				 * we can have 4 blocks in core, waiting for a disk or n/w operation. Any higher block size would *sort of*
 				 * serialize n/w and disk operations, and is better avoided.
 				 */
-				if (sourceSize % common.MaxNumberOfBlocksPerBlob == 0) {
-					blockSize = sourceSize/common.MaxNumberOfBlocksPerBlob
+				if sourceSize%common.MaxNumberOfBlocksPerBlob == 0 {
+					blockSize = sourceSize / common.MaxNumberOfBlocksPerBlob
 				} else {
-					blockSize = sourceSize/common.MaxNumberOfBlocksPerBlob +1
+					blockSize = sourceSize/common.MaxNumberOfBlocksPerBlob + 1
 				}
 				break
 			}
@@ -386,8 +389,9 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 			SrcMetadata:    srcMetadata,
 			SrcBlobTags:    srcBlobTags,
 		},
-		SrcBlobType:    srcBlobType,
-		S2SSrcBlobTier: srcBlobTier,
+		SrcBlobType:       srcBlobType,
+		S2SSrcBlobTier:    srcBlobTier,
+		RehydratePriority: plan.RehydratePriority.ToRehydratePriorityType(),
 	}
 
 	return *jptm.transferInfo
@@ -538,6 +542,14 @@ func (jptm *jobPartTransferMgr) CpkScopeInfo() common.CpkScopeInfo {
 
 func (jptm *jobPartTransferMgr) IsSourceEncrypted() bool {
 	return jptm.jobPartMgr.IsSourceEncrypted()
+}
+
+func (jptm *jobPartTransferMgr) PropertiesToTransfer() common.SetPropertiesFlags {
+	return jptm.jobPartMgr.PropertiesToTransfer()
+}
+
+func (jptm *jobPartTransferMgr) ResetSourceSize() {
+	jptm.transferInfo.SourceSize = 0
 }
 
 // JobHasLowFileCount returns an estimate of whether we only have a very small number of files in the overall job

@@ -77,6 +77,7 @@ type StoredObject struct {
 	DstContainerName string
 	// access tier, only included by blob traverser.
 	blobAccessTier azblob.AccessTierType
+	archiveStatus  azblob.ArchiveStatusType
 	// metadata, included in S2S transfers
 	Metadata       common.Metadata
 	blobVersionID  string
@@ -214,6 +215,7 @@ type blobPropsProvider interface {
 	LeaseStatus() azblob.LeaseStatusType
 	LeaseDuration() azblob.LeaseDurationType
 	LeaseState() azblob.LeaseStateType
+	ArchiveStatus() azblob.ArchiveStatusType
 }
 
 // a constructor is used so that in case the StoredObject has to change, the callers would get a compilation error
@@ -233,6 +235,7 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, en
 		md5:                props.ContentMD5(),
 		blobType:           blobProps.BlobType(),
 		blobAccessTier:     blobProps.AccessTier(),
+		archiveStatus:      blobProps.ArchiveStatus(),
 		Metadata:           meta,
 		ContainerName:      containerName,
 		// Additional lease properties. To be used in listing

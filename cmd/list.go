@@ -56,12 +56,13 @@ const (
 	leaseState       validProperty = "LeaseState"
 	leaseDuration    validProperty = "LeaseDuration"
 	leaseStatus      validProperty = "LeaseStatus"
+	archiveStatus    validProperty = "ArchiveStatus"
 )
 
 // validProperties returns an array of possible values for the validProperty const type.
 func validProperties() []validProperty {
 	return []validProperty{lastModifiedTime, versionId, blobType, blobAccessTier,
-		contentType, contentEncoding, leaseState, leaseDuration, leaseStatus}
+		contentType, contentEncoding, leaseState, leaseDuration, leaseStatus, archiveStatus}
 }
 
 func (raw *rawListCmdArgs) parseProperties(rawProperties string) []validProperty {
@@ -181,6 +182,8 @@ func (cooked cookedListCmdArgs) processProperties(object StoredObject) string {
 			builder.WriteString(propertyStr + ": " + string(object.leaseStatus) + "; ")
 		case leaseDuration:
 			builder.WriteString(propertyStr + ": " + string(object.leaseDuration) + "; ")
+		case archiveStatus:
+			builder.WriteString(propertyStr + ": " + string(object.archiveStatus) + "; ")
 		}
 	}
 	return builder.String()

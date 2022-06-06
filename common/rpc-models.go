@@ -149,6 +149,7 @@ type CopyJobPartOrderRequest struct {
 	S2SInvalidMetadataHandleOption InvalidMetadataHandleOption
 	S2SPreserveBlobTags            bool
 	CpkOptions                     CpkOptions
+	SetPropertiesFlags             SetPropertiesFlags
 
 	// S2SSourceCredentialType will override CredentialInfo.CredentialType for use on the source.
 	// As a result, CredentialInfo.OAuthTokenInfo may end up being fulfilled even _if_ CredentialInfo.CredentialType is _not_ OAuth.
@@ -219,6 +220,7 @@ type BlobTransferAttributes struct {
 	DeleteSnapshotsOption    DeleteSnapshotsOption // when deleting, specify what to do with the snapshots
 	BlobTagsString           string                // when user explicitly provides blob tags
 	PermanentDeleteOption    PermanentDeleteOption // Permanently deletes soft-deleted snapshots when indicated by user
+	RehydratePriority        RehydratePriorityType // rehydrate priority of blob
 }
 
 type JobIDDetails struct {
