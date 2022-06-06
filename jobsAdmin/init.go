@@ -24,12 +24,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"io/ioutil"
 	"math"
 	"net/http"
 	"time"
-
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -477,12 +476,6 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	}
 	part0PlanStatus := part0.Plan().JobStatus()
 
-	// This is added to let FE to continue fetching the Job Progress Summary
-	// in case of resume. In case of resume, the Job is already completely
-	// ordered so the progress summary should be fetched until all job parts
-	// are iterated and have been scheduled
-	js.CompleteJobOrdered = js.CompleteJobOrdered || jm.AllTransfersScheduled()
-
 	// Add on byte count from files in flight, to get a more accurate running total
 	js.TotalBytesTransferred += jm.SuccessfulBytesInActiveFiles()
 	if js.TotalBytesExpected == 0 {
@@ -491,6 +484,12 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	} else {
 		js.PercentComplete = 100 * float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected)
 	}
+
+	// This is added to let FE to continue fetching the Job Progress Summary
+	// in case of resume. In case of resume, the Job is already completely
+	// ordered so the progress summary should be fetched until all job parts
+	// are iterated and have been scheduled
+	js.CompleteJobOrdered = js.CompleteJobOrdered || jm.AllTransfersScheduled()
 
 	js.BytesOverWire = uint64(JobsAdmin.BytesOverWire())
 
