@@ -219,10 +219,6 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 			if (fileInfo.Mode() & unsupportedFileTypes) != 0 {
 				err := fmt.Errorf("Unsupported file type %s: %v", filePath, fileInfo.Mode())
 				WarnStdoutAndScanningLog(err.Error())
-
-				if errorChannel != nil {
-					errorChannel <- ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err}
-				}
 				return nil
 			}
 
