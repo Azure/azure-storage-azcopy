@@ -47,6 +47,9 @@ func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipelin
 func (u *pageBlobUploader) Prologue(ps common.PrologueState) (destinationModified bool) {
 	if u.jptm.Info().PreservePOSIXProperties {
 		if unixSIP, ok := u.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
+			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
+			u.metadataToApply = common.Metadata(u.metadataToApply).Clone().ToAzBlobMetadata()
+
 			statAdapter, err := unixSIP.GetUNIXProperties()
 			if err != nil {
 				u.jptm.FailActiveSend("GetUNIXProperties", err)
