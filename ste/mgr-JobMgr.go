@@ -752,24 +752,6 @@ func (jm *jobMgr) cleanupChunkStatusLogger() {
 	jm.chunkStatusLogger.CloseLogger()
 }
 
-// TODO: find a better way for JobsAdmin to log (it doesn't have direct access to the job log, because it was originally designed to support multiple jobs
-func (jm *jobMgr) logJobsAdminMessages() {
-	/*
-		for {
-			select {
-			case msg := <-jobsAdmin.JobsAdmin.MessagesForJobLog():
-				prefix := ""
-				if msg.LogLevel <= pipeline.LogWarning {
-					prefix = fmt.Sprintf("%s: ", common.LogLevel(msg.LogLevel)) // so readers can find serious ones, but information ones still look uncluttered without INFO:
-				}
-				jm.Log(pipeline.LogWarning, prefix+msg.string) // use LogError here, so that it forces these to get logged, even if user is running at warning level instead of Info.  They won't have "warning" prefix, if Info level was passed in to MessagesForJobLog
-			default:
-				return
-			}
-		}
-	*/
-}
-
 // PartsDone returns the number of the Job's parts that are either completed or failed
 // func (jm *jobMgr) PartsDone() uint32 { return atomic.LoadUint32(&jm.partsDone) }
 
@@ -843,12 +825,12 @@ func (jm *jobMgr) QueueJobParts(jpm IJobPartMgr) {
 
 // deleteJobPartsMgrs remove jobPartMgrs from jobPartToJobPartMgr kv.
 func (jm *jobMgr) deleteJobPartsMgrs() {
-	jm.Log(pipeline.LogInfo, "JobPartsMgrsDelete enter")
+	jm.Log(pipeline.LogInfo, "deleteJobPartsMgrs enter")
 	jm.jobPartMgrs.Iterate(false, func(k common.PartNumber, v IJobPartMgr) {
 		v.Close()
 		delete(jm.jobPartMgrs.m, k)
 	})
-	jm.Log(pipeline.LogInfo, "JobPartsMgrsDelete exit")
+	jm.Log(pipeline.LogInfo, "deleteJobPartsMgrs exit")
 }
 
 // cleanupTransferRoutine closes all the Transfer thread.
