@@ -221,16 +221,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		}
 	}
 
-	var shouldGetProperties = false
-	if cooked.location == common.ELocation.File() {
-		for _, property := range cooked.properties { // do we want to add metadata to list cmd too?
-			if property == lastModifiedTime {
-				shouldGetProperties = true
-			}
-		}
-	}
-
-	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, nil, nil, true, shouldGetProperties, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, pipeline2.LogNone, common.CpkOptions{})
+	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, nil, nil, true, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, pipeline2.LogNone, common.CpkOptions{})
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())
