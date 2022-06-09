@@ -24,14 +24,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"io/ioutil"
 	"math"
 	"net/http"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
 var steCtx = context.Background()
