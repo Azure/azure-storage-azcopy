@@ -97,7 +97,7 @@ func (s statxTAdapter) MTime() time.Time {
 }
 
 func (s statxTAdapter) CTime() time.Time {
-	return time.Unix(s.Btime.Sec, int64(s.Ctime.Nsec))
+	return time.Unix(s.Ctime.Sec, int64(s.Ctime.Nsec))
 }
 
 type statTAdapter unix.Stat_t
