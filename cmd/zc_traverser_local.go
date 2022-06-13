@@ -261,7 +261,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				result, err := UnfurlSymlinks(filePath)
 
 				if err != nil {
-					err = fmt.Errorf("Failed to resolve symlink %s: %v", filePath, err)
+					err = fmt.Errorf("Failed to resolve symlink %s: %s", filePath, err.Error())
 					WarnStdoutAndScanningLog(err.Error())
 					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
@@ -269,7 +269,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 
 				result, err = filepath.Abs(result)
 				if err != nil {
-					err = fmt.Errorf("Failed to get absolute path of symlink result %s: %v", filePath, err)
+					err = fmt.Errorf("Failed to get absolute path of symlink result %s: %s", filePath, err.Error())
 					WarnStdoutAndScanningLog(err.Error())
 					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
@@ -277,7 +277,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 
 				slPath, err := filepath.Abs(filePath)
 				if err != nil {
-					err = fmt.Errorf("Failed to get absolute path of %s: %v", filePath, err)
+					err = fmt.Errorf("Failed to get absolute path of %s: %s", filePath, err.Error())
 					WarnStdoutAndScanningLog(err.Error())
 					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
@@ -285,7 +285,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 
 				rStat, err := os.Stat(result)
 				if err != nil {
-					err = fmt.Errorf("Failed to get properties of symlink target at %s: %v", result, err)
+					err = fmt.Errorf("Failed to get properties of symlink target at %s: %s", result, err.Error())
 					WarnStdoutAndScanningLog(err.Error())
 					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
@@ -328,7 +328,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				result, err := filepath.Abs(filePath)
 
 				if err != nil {
-					err = fmt.Errorf("Failed to get absolute path of %s: %v", filePath, err)
+					err = fmt.Errorf("Failed to get absolute path of %s: %s", filePath, err.Error())
 					WarnStdoutAndScanningLog(err.Error())
 					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
@@ -365,7 +365,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 
 	if err != nil {
-		azcopyScanningLogger.Log(pipeline.LogError, fmt.Sprintf("Failed to scan path %s: %v", t.fullPath, err.Error()))
+		azcopyScanningLogger.Log(pipeline.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
 		return fmt.Errorf("failed to scan path %s due to %s", t.fullPath, err.Error())
 	}
 
