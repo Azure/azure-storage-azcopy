@@ -378,7 +378,6 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
-
 		err := processIfPassedFilters(filters,
 			newStoredObject(
 				preprocessor,
@@ -438,24 +437,27 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					return nil
 				}
 
+				extendedProp, _ := common.GetExtendedProperties(cleanLocalPath(filePath))
+
 				if t.incrementEnumerationCounter != nil {
 					t.incrementEnumerationCounter(entityType)
 				}
-
+				so := newStoredObject(
+					preprocessor,
+					fileInfo.Name(),
+					strings.ReplaceAll(relPath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
+					entityType,
+					fileInfo.ModTime(), // get this for both files and folders, since sync needs it for both.
+					fileInfo.Size(),
+					noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
+					noBlobProps,
+					noMetdata,
+					"", // Local has no such thing as containers
+				)
+				so.lastChangeTime = extendedProp.CTime()
 				// This is an exception to the rule. We don't strip the error here, because WalkWithSymlinks catches it.
 				return processIfPassedFilters(filters,
-					newStoredObject(
-						preprocessor,
-						fileInfo.Name(),
-						strings.ReplaceAll(relPath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
-						entityType,
-						fileInfo.ModTime(), // get this for both files and folders, since sync needs it for both.
-						fileInfo.Size(),
-						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
-						noBlobProps,
-						noMetdata,
-						"", // Local has no such thing as containers
-					),
+					so,
 					processor)
 			}
 

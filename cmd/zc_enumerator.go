@@ -98,6 +98,8 @@ type StoredObject struct {
 	isVirtualFolder bool
 
 	isFolderEndMarker bool
+
+	isFinalizeAll bool
 }
 
 func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject) bool {

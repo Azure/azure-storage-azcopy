@@ -291,7 +291,7 @@ func (c *crawler) processOneDirectoryWithAutoPacer(ctx context.Context, workerIn
 			// 1. unstartedDirs is empty. This is where it will get the next directory to process.
 			// 2. mayHaveMoreDirs is true, which means we are not yet done reading from tqueue and hence more new directories may be added by source traverser.
 			//
-			for len(c.unstartedDirs) == 0 && c.mayHaveMoreDirs && ctx.Err() == nil {
+			for len(c.unstartedDirs) == 0 && (c.mayHaveMoreDirs || c.dirInProgressCount > 0) && ctx.Err() == nil {
 				c.cond.Wait()
 			}
 		} else {

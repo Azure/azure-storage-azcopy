@@ -178,7 +178,10 @@ func (i *folderIndexer) store(storedObject StoredObject) (err error) {
 	return
 }
 
-// filesChangedInDirectory returns true in case any file in folder have ctime more than lastSyncTime.
+//
+// This MUST be called only with CFDMode==Ctime and MetadataOnlySync==true. This forces caller (target traverser) to use the more efficient ListDir for
+// getting file properties in bulk instead of querying individual file properties.
+//
 func (i *folderIndexer) filesChangedInDirectory(relativePath string, lastSyncTime time.Time) bool {
 	var lcRelativePath string
 	if i.isDestinationCaseInsensitive {
@@ -225,10 +228,6 @@ func (i *folderIndexer) getStoredObject(relativePath string) StoredObject {
 			if so.entityType != common.EEntityType.Folder() && !so.isVirtualFolder {
 				panic(fmt.Sprintf("StoredObject for relative path[%s] not of type folder", lcFolderName))
 			}
-			delete(folderMap.indexMap, ".")
-			size := storedObjectSize(so)
-			size = -size
-			atomic.AddInt64(&i.totalSize, size)
 			return so
 		}
 	}

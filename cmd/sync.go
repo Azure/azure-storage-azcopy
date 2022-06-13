@@ -92,23 +92,15 @@ type rawSyncCmdArgs struct {
 	// dry run mode bool
 	dryrun bool
 
-	//
 	// Limit on size of ObjectIndexerMap in memory.
-	// This is used only by the sync process and it controls how much the source traverser can fill the ObjectIndexerMap before it has to wait
-	// for target traverser to process and empty it. This should be kept to a value less than the system RAM to avoid thrashing.
-	// If you are not interested in source traverser scanning all the files for estimation purpose you can keep it low, just enough to never have the
-	// target traverser wait for directories to scan. The only reason we would want to keep it high is to let the source complete scanning irrespective
-	// of the target traverser speed, so that the scanned information can then be used for ETA estimation.
-	//
+	// For more information, please refer to cookedSyncCmdArgs.
 	maxObjectIndexerMapSizeInGB string
 
-	// Change file detection flag. Valid Flag are TargetCompare, Ctime, CtimeMtime.
-	// TargetCompare - Default sync comparsion where target enumerated for each file. It's least optimized, but gurantee no data loss.
-	// Ctime - CTime used to detect change files/folder. Should be used where mtime not reliable.
-	// CtimeMtime - Both CTime      and MTime used to detect changed files/folder. It's most efficient in all of the cfdModes.
+	// Change file detection mode.
+	// For more information, please refer to cookedSyncCmdArgs.
 	cfdMode string
 
-	// In case of metadata change only, shall we transfer whole file or only metadata. This flag governs that.
+	// For more information, please refer to cookedSyncCmdArgs.
 	metaDataOnlySync bool
 
 	//
@@ -147,7 +139,7 @@ func (raw *rawSyncCmdArgs) parseCFDMode() common.CFDMode {
 		return common.CFDModeFlags.TargetCompare()
 	} else if cfdMode == strings.ToLower(common.CFDModeFlags.Ctime().String()) {
 		return common.CFDModeFlags.Ctime()
-	} else if cfdMode == strings.ToLower(common.CFDModeFlags.CtimeMtime().String()) && raw.lastSyncTime != "" {
+	} else if cfdMode == strings.ToLower(common.CFDModeFlags.CtimeMtime().String()) {
 		return common.CFDModeFlags.CtimeMtime()
 	} else {
 		return common.CFDModeFlags.TargetCompare()
@@ -442,17 +434,6 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	return cooked, nil
 }
 
-type CFDModeFlags struct {
-	// Change detection flags.
-	TargetCompare bool
-	CtimeMtime    bool
-	Ctime         bool
-	ArchiveBit    bool
-
-	// MetaDataOnlySync decides if we copy entire file even when change file detection finds out that only file's metadata has changed.
-	MetaDataOnlySync bool
-}
-
 type cookedSyncCmdArgs struct {
 	// NOTE: for the 64 bit atomic functions to work on a 32 bit system, we have to guarantee the right 64-bit alignment
 	// so the 64 bit integers are placed first in the struct to avoid future breaks
@@ -536,20 +517,47 @@ type cookedSyncCmdArgs struct {
 
 	dryrunMode bool
 
-	// Change file detection Mode. Valid Enums are TargetCompare, Ctime, CtimeMtime.
-	// TargetCompare - Default sync comparsion where target enumerated for each file. It's least optimized, but gurantee no data loss.
-	// Ctime - CTime used to detect change files/folder. Should be used where mtime not reliable.
-	// CtimeMtime - Both CTime      and MTime used to detect changed files/folder. It's most efficient in all of the cfdModes.
+	//
+	// Change file detection mode.
+	// This controls how target traverser decides whether a file has changed (and hence needs to be sync'ed to the target) by looking at the file
+	// properties stored in the sourceFolderIndex. Valid Enums will be TargetCompare, Ctime, CtimeMtime.
+	//
+	// TargetCompare - This is the most generic and the slowest of all. It enumerates all target directories
+	//                 and compares the children at source and target to find out if an object has changed.
+	//
+	// CtimeMtime    - Compare source file’s mtime/ctime (Unix/NFS) or LastWriteTime/ChangeTime (Windows/SMB) with LastSyncTime for detecting changed files.
+	//                 If mtime/LastWriteTime > LastSyncTime then it means both data and metadata have changed else if ctime/ChangeTime > LastSyncTime then
+	//                 only metadata has changed. For detecting changed directories this uses ctime/ChangeTime (not mtime/LastWriteTime) of the directory,
+	//                 changed directories will be enumerated in the target and every object will be compared with the source to find changes. This is needed
+	//                 to cover the case of directory renames where a completely different directory in the source can have the same name as a target directory
+	//                 and checking only mtime/LastWriteTime of children is not safe since rename of a directory won’t affect mtime of its children. If a directory
+	//                 has not changed then it’ll compare mtime/LastWriteTime and ctime/ChangeTime of its children with LastSyncTime for finding data/metadata changes,
+	//                 thus it enumerates only target directories that have changed.
+	//                 This is the most efficient of all and should be used when we safely can use it, i.e., we know that source updates ctime/mtime correctly.
+	//
+	// Ctime         - If we don’t want to depend on mtime/LastWriteTime (since it can be changed by applications) but we still don’t want to lose the advantage of
+	//                 ctime/ChangeTime which is much more dependable, we can use this mode. In this mode we use only ctime/ChangeTime to detect if there’s a change
+	//                 to a file/directory and if there’s a change, to find the exact change (data/metadata/both) we compare the file with the target. This has the
+	//                 advantage that we use the more robust ctime/ChangeTime and only for files/directories which could have potentially changed we have
+	//                 to compare with the target. This results in a much smaller set of files to enumerate at the target.
+	//
+	// So, in the order of preference we have,
+	//
+	// CtimeMtime -> Ctime -> TargetCompare.
+	//
 	cfdMode common.CFDMode
 
-	// In case of metadata change only, shall we transfer whole file or only metadata. This flag governs that.
+	//
+	// Sync only file metadata if only metadata has changed and not the file content, else for changed files both file data and metadata are sync’ed.
+	// The latter could be expensive especially for cases where user updates some file metadata (owner/mode/atime/mtime/etc) recursively. How we find out
+	// whether only metadata has changed or only data has changed, or both have changed depends on the CFDMode that controls how changed files are detected.
+	//
 	metaDataOnlySync bool
 
 	//
 	// Time of last sync, used by the sync process.
-	// This is used as a lower bound to find out files/dirs changed since last sync.
-	// Depending on CFDMode this will be compared with source files' ctime/mtime or
-	// the target files' ctime/mtime.
+	// A file/directory having ctime/mtime greater than lastSyncTime is considered "changed", though the exact interpretation depends on the CFDMode
+	// used and other variables. Depending on CFDMode this will be compared with source files' ctime/mtime and/or target files' ctime/mtime.
 	//
 	lastSyncTime time.Time
 
@@ -942,7 +950,9 @@ func init() {
 	syncCmd.PersistentFlags().StringVar(&raw.cfdMode, "cfd-mode", "TargetCompare", " cfd-mode is Change File Detection Mode. It has valid values TargetCompare(default), Ctime, CtimeMtime, ArchiveBit."+
 		"\n TargetCompare - Default sync comparsion where target enumerated for each file. It's least optimized, but gurantee no data loss."+
 		"\n Ctime - Ctime used to detect change files/folder. Should be used where mtime not reliable."+
-		"\n CtimeMtime - Both Ctime	and Mtime used to detect changed files/folder. It's most efficient in all of the cfdModes.")
+		"\n CtimeMtime - Both Ctime	and Mtime used to detect changed files/folder. It's most efficient in all of the cfdModes."+
+		"\n Note: For Ctime and CtimeMtime provide last-sync-time parameter to sync files only changed after lastSyncTime, Otherwise it will take lastSyncTime zero as default"+
+		"\n       and copy all files once again.")
 
 	// Optimization for metaData only copy case.
 	syncCmd.PersistentFlags().BoolVar(&raw.metaDataOnlySync, "metadata-only-sync", false, "Optimization to transfer only metaData in case of metadata change only.")

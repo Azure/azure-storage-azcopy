@@ -42,86 +42,161 @@ type syncDestinationComparator struct {
 	// the processor responsible for scheduling copy transfers
 	copyTransferScheduler objectProcessor
 
-	// storing the source objects
-	sourceIndex *objectIndexer
-
+	//
+	// This stores the source files and their attributes as scanned by the source traverser. Source traverser populates it using folderIndexer.store()
+	// while target traverser consumes it using syncDestinationComparator.processIfNecessary(). Note that source traverser refers to this using
+	// syncEnumerator.objectIndexer so this and syncEnumerator.objectIndexer should refer to the same folderIndexer.
+	//
 	sourceFolderIndex *folderIndexer
 
 	disableComparison bool
 
-	// Change file detection mode. Valid Enums will be TargetCompare, Ctime, CtimeMtime.
-	// TargetCompare - Default sync comparsion where target enumerated for each file. It's least optimized, but gurantee no data loss.
-	// Ctime - CTime used to detect change files/folder. Should be used where mtime not reliable.
-	// CtimeMtime - Both CTime      and MTime used to detect changed files/folder. It's most efficient in all of the cfdModes.
-	CFDMode common.CFDMode
+	// Change file detection mode.
+	// For more information, please refer to cookedSyncCmdArgs.
+	cfdMode common.CFDMode
+
+	// Time of last Sync.
+	// For more information, please refer to cookedSyncCmdArgs.
+	lastSyncTime time.Time
+
+	// For more information, please refer to cookedSyncCmdArgs.
+	metaDataOnlySync bool
 
 	//
-	// Time of last sync, used by the sync process.
-	// This is used as a lower bound to find out files/dirs changed since last sync.
-	// Depending on CFDMode this will be compared with source files' ctime/mtime or the target files' ctime/mtime.
+	// This is the number of seconds that the Target’s clock is ahead of the Source’s clock. This will be subtracted from Target’s ctime value before comparing
+	// with the Source’s ctime value when checking for “newness”. This will be set *only* for targets which do not allow setting ctime and instead set ctime to
+	// the “now” value when a file operation is executed. For targets where we set the ctime value we can safely compare for equality with the source ctime value
+	// since we would have set it to source ctime value when the target object was sync’ed, for such targets TargetCtimeSkew is set to 0.
 	//
-	lastSync time.Time
-
-	// In case of metadata change only, shall we transfer whole file or only metadata. This flag governs that.
-	MetaDataOnlySync bool
-
-	TargetCtimeSkew time.Time
+	// Note: If we choose a larger skew value, we might wrongly consider some object as needing sync, but that’s
+	//       harmless as opposes to choosing a smaller skew and missing out syncing some object that has changed.
+	//
+	TargetCtimeSkew uint
 }
 
 func newSyncDestinationComparator(i *folderIndexer, copyScheduler, cleaner objectProcessor, disableComparison bool, cfdMode common.CFDMode, lastSyncTime time.Time) *syncDestinationComparator {
 	return &syncDestinationComparator{sourceFolderIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, disableComparison: disableComparison,
-		CFDMode:  cfdMode,
-		lastSync: lastSyncTime}
+		cfdMode:      cfdMode,
+		lastSyncTime: lastSyncTime}
 }
 
-// HasFileChangedSinceLastSyncUsingLocalChecks depending on mode returns dataChanged and metadataChanged.
-// Given a file and the corresponding scanned source object, find out if we need to copy data, metadata, both, none.
+//
+// Given a file and the corresponding scanned source object, find out if we need to copy data+metadata, only metadata, or nothing.
 // This is called by TargetTraverser. It honours various sync qualifiers to make the decision, f.e., if sync
 // qualifiers allow ctime/mtime to be used for CFD it may not need to query file attributes from target.
 //
-// Note: Caller will use the returned information to decide whether to copy the storedObject to target and whether to
-// 		 copy only data, only metadata or both.
+// Note: Caller will use the returned information to decide whether to copy the storedObject to target and whether to copy only metadata,
+//       or both metadata+data.
 //
-// Note: This SHOULD NOT be called for children of "changed" directories, since for changed directories we cannot safely
-// 	     check for changed files purely by doing time based comparison. Use HasFileChangedSinceLastSyncUsingTargetCompare()
-// 		 for children of changed directories.
+// Note: This SHOULD NOT be called for children of "changed" directories, since for changed directories we cannot safely check for
+//       changed files purely by doing local-time based comparison. Use HasFileChangedSinceLastSyncUsingTargetCompare() for children
+//       of changed directories. This means it will NEVER BE CALLED for cfdMode==TargetCompare, since for that HasDirectoryChangedSinceLastSync()
+//       always returns true, i.e., all directories are treated as “changed”.
+//
+// Return: (dataChanged, metadataChanged)
+//
+// Note: Since data change usually causes metadata change too (LMT is updated at the least), caller should check dataChanged first and if that is true, sync
+//       both data+metadata, if dataChanged is not true then it should check metadataChanged and if that is true, sync only metadata, else sync nothing.
+//
 func (f *syncDestinationComparator) HasFileChangedSinceLastSyncUsingLocalChecks(so StoredObject, filePath string) (dataChange bool, metadataChange bool) {
+	// CFDMode==TargetCompare always treats target directories as “changed”, so we should never be called for that
+	if f.cfdMode == common.CFDModeFlags.TargetCompare() {
+		panic("We should not be called for CFDMode==TargetCompare")
+	}
+
 	// Changed file detection using Ctime and Mtime.
-	if f.CFDMode == common.CFDModeFlags.CtimeMtime() {
+	if f.cfdMode == common.CFDModeFlags.CtimeMtime() {
 		// File Mtime changed, which means data changed and it cause metadata change.
-		if so.lastModifiedTime.After(f.lastSync) {
+		if so.lastModifiedTime.After(f.lastSyncTime) {
 			return true, true
-		} else if so.lastChangeTime.After(f.lastSync) {
+		} else if so.lastChangeTime.After(f.lastSyncTime) {
 			// File Ctime changed only, only meta data changed.
 			return false, true
 		}
 		// File not changed at all.
 		return false, false
-	} else if f.CFDMode == common.CFDModeFlags.Ctime() {
+	} else if f.cfdMode == common.CFDModeFlags.Ctime() {
 		// Changed file detection using Ctime only.
 
 		// File changed since lastSync time. CFDMode is Ctime, so we can't rely on mtime as it can be modified by any other tool.
-		if so.lastChangeTime.After(f.lastSync) {
+		if so.lastChangeTime.After(f.lastSyncTime) {
 			// If MetaDataSync Flag is false we don't need to check for data or metadata change. We can return true in that case.
-			if !f.MetaDataOnlySync {
+			if !f.metaDataOnlySync {
 				return true, true
 			} else {
-				// Need to know whether data changed or metadata changed or both. For that we need to get properties of blob.
-				// TODO: Need to do target traverse and get the properties of blob.
-				//       Only problem with that we don't have any info about container at this point. Other point will be how much efficient this would be. As we
-				// 		 try to get properties for each blob, so if in a directory 100 files are there and 2 changed then we need to make 2 getProperties call.
-				// 		 Whereas if we do list of blob in a directory, we get all the result in one call for 5K blobs (exception to this directory stubs), where
-				//       we need to call getproperties to know the metadata.
-				return true, true
+				panic("We should not reach here, for CFDMODE==Ctime and metaDataOnlySync==true. It should be taken care with FinalizeAll flag.")
 			}
 		} else {
 			// File Ctime not changed, means no data or metadata changed.
 			return false, false
 		}
 	} else {
-		// This is the case when neither CtimeMtime or Ctime CFDMode set. So its target traverse and if we reach here
+		// This is the case when neither CtimeMtime or Ctime cfdMode set. So its target traverse and if we reach here
 		// means these entries for new files.
 		return true, true
+	}
+}
+
+//
+// This is called for two distinct scenarios:
+// For target directories that are enumerated (because the source directory was seen to have changed), it's called after all the enumerated children
+// are processed. In this case the files still present in ObjectIndexer map are the ones newly created in the source since last sync and *all* of them
+// need to be copied to target. This condition is conveyed by passing the 2nd argument (FinalizeAll) as true.
+// For target directories that are *not* enumerated (for which HasDirectoryChangedSinceLastSync() returned False), FinalizeTargetDirectory() is called
+// without processing any children. In this case the files present in ObjectIndexer map are *all* files present in the source, not just newly created ones.
+// So we have to copy only files which have changed since the last sync, also looking for whether data+metadata or only metadata has changed, but it's
+// worth calling out that since the directory is not changed, we can safely test files for changes by locally comparing ctime/mtime with LastSyncTime,
+// if the CFDMode allows that.
+// This condition is conveyed by passing the 2nd argument (FinalizeAll) as false.
+//
+func (f *syncDestinationComparator) FinalizeTargetDirectory(folderMap *objectIndexer, finalizeAll bool) {
+	var size int64
+	//
+	// Go over all objects in the source directory, enumerated by SourceTraverser, and check each object for following:
+	//
+	// 1. Does the entire object need to be synced - data+metadata?
+	// 2. Does only metadata need to be sync'ed?
+	// 3. Object is not changed since last sync, no need to update.
+	//
+
+	// For FinalizeAll flag true, we know target traverser done. Now the files left in ObjectIndexerMap are the new ones.
+	// So, we don't do any ctime and mtime comparsion.
+	if finalizeAll {
+		for file := range folderMap.indexMap {
+			if file == "." {
+				continue
+			}
+			storedObject := folderMap.indexMap[file]
+			size += storedObjectSize(storedObject)
+			delete(folderMap.indexMap, file)
+			f.copyTransferScheduler(storedObject)
+		}
+	} else {
+		// For FinalizeAll flag false, these are not the new files, we need to check whether file needs to be sync’ed and if yes,
+		// whether only metadata or both data+metadata need to be sync’ed.
+		for file := range folderMap.indexMap {
+			if file == "." {
+				continue
+			}
+			storedObject := folderMap.indexMap[file]
+			size += storedObjectSize(storedObject)
+			delete(folderMap.indexMap, file)
+			metaDataChange, dataChange := f.HasFileChangedSinceLastSyncUsingLocalChecks(storedObject, storedObject.relativePath)
+			if dataChange {
+				f.copyTransferScheduler(storedObject)
+			} else if metaDataChange {
+				// TODO: Add calls to just update meta data of file.
+			}
+
+		}
+	}
+
+
+	size = -size
+	atomic.AddInt64(&f.sourceFolderIndex.totalSize, size)
+
+	if atomic.LoadInt64(&f.sourceFolderIndex.totalSize) < 0 {
+		panic("Total Size is negative.")
 	}
 }
 
@@ -132,7 +207,7 @@ func (f *syncDestinationComparator) HasFileChangedSinceLastSyncUsingLocalChecks(
 // if file x does not exist at the source, then it is considered extra, and will be deleted
 func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredObject) error {
 	var lcFolderName, lcFileName, lcRelativePath string
-	var present bool
+	var folderPresent, present bool
 	var sourceObjectInMap StoredObject
 
 	if f.sourceFolderIndex.isDestinationCaseInsensitive {
@@ -145,145 +220,106 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 	lcFileName = filepath.Base(lcRelativePath)
 
 	f.sourceFolderIndex.lock.Lock()
+	defer f.sourceFolderIndex.lock.Unlock()
+
+	// Lets do the first thing check if End Marker received for any folder.
+	if destinationObject.isFolderEndMarker && destinationObject.entityType == common.EEntityType.Folder() {
+		// End Marker marks enumeration complete of the folder.
+		// End Marker come in following cases:-
+		// 1. Dir not present on target side, then we need to create directory and files.
+		// 2. Dir present and some files are added.
+		// 3. Dir present and some files are modified.
+		// For each case we need to process left over files in ObjectIndexerMap.
+
+		lcFolderName = path.Join(lcFolderName, lcFileName)
+		foldermap, folderPresent := f.sourceFolderIndex.folderMap[lcFolderName]
+		if !folderPresent {
+			panic(fmt.Sprintf("Folder with relativePath[%s] not present in ObjectIndexerMap", lcRelativePath))
+		}
+		f.FinalizeTargetDirectory(foldermap, destinationObject.isFinalizeAll)
+
+		// Lets delete the ObjectIndexer empty map.
+		if len(f.sourceFolderIndex.folderMap[lcFolderName].indexMap) == 0 {
+			size := int64(unsafe.Sizeof(objectIndexer{}))
+			atomic.AddInt64(&f.sourceFolderIndex.totalSize, -size)
+			delete(f.sourceFolderIndex.folderMap, lcFolderName)
+		}
+		
+		return nil
+	}
 
 	foldermap, folderPresent := f.sourceFolderIndex.folderMap[lcFolderName]
 
-	// Do the auditing of map.
-	defer func() {
-		if present {
-			delete(f.sourceFolderIndex.folderMap[lcFolderName].indexMap, lcFileName)
-		}
-		if folderPresent {
-			if len(f.sourceFolderIndex.folderMap[lcFolderName].indexMap) == 0 {
-				size := int64(unsafe.Sizeof(objectIndexer{}))
-				atomic.AddInt64(&f.sourceFolderIndex.totalSize, -size)
-				delete(f.sourceFolderIndex.folderMap, lcFolderName)
-			}
-		}
-		f.sourceFolderIndex.lock.Unlock()
-	}()
+	if !folderPresent {
+		panic(fmt.Sprintf("Folder with relativePath[%s] not present in ObjectIndexerMap", lcRelativePath))
+	}
 
 	// Folder Case.
 	if destinationObject.isVirtualFolder || destinationObject.entityType == common.EEntityType.Folder() {
 
-		if destinationObject.isFolderEndMarker {
-			var size int64
-
-			// Each folder storedObject stored in its parent directory, one exception to this is root folder.
-			// Which is stored in root folder only as "." filename. End marker come for folder present on source.
-			// NOTE: Following are the scenarios for end marker.
-			//       1. End Marker came for folder which is not present on target(only happen in case of root folder and first copy).
-			//			In that case folderPresent will be true. Otherwise this folder will be created by its parent.
-			//       2. End Marker came for folder present on target. In that case we have only newly files.
-
-			// This will happen if folder not present on target. Lets create folder first and then files.
-			if folderPresent {
-				if lcFolderName != "" {
-					panic(fmt.Sprintf("Code should not reach here, except for root folder. LcFolderName: %s", lcFolderName))
-				}
-				storedObject := foldermap.indexMap[lcFileName]
-				size += storedObjectSize(storedObject)
-				delete(foldermap.indexMap, lcFileName)
-				// This is more valid in case of azure files. Where we need to create empty folder too.
-				// So it may happen root folder is empty and target side we need to create folder under some container.
-				// As of now azcopy don't support empty folders so this is not required.
-				f.copyTransferScheduler(storedObject)
-
-				// Delete the parent map of folder if it's empty.
-				if len(f.sourceFolderIndex.folderMap[lcFolderName].indexMap) == 0 {
-					size := int64(unsafe.Sizeof(objectIndexer{}))
-					atomic.AddInt64(&f.sourceFolderIndex.totalSize, -size)
-					delete(f.sourceFolderIndex.folderMap, lcFolderName)
-				}
-			}
-
-			lcFolderName = path.Join(lcFolderName, lcFileName)
-			foldermap, folderPresent = f.sourceFolderIndex.folderMap[lcFolderName]
-			// lets copy all the files underneath in this folder which are left out.
-			// It may happen all the files present on target then there is nothing left in map, otherwise left files will be taken care.
-			if folderPresent {
-				for file := range foldermap.indexMap {
-					storedObject := foldermap.indexMap[file]
-					size += storedObjectSize(storedObject)
-					delete(foldermap.indexMap, file)
-
-					metaChange, dataChange := f.HasFileChangedSinceLastSyncUsingLocalChecks(storedObject, storedObject.relativePath)
-					if dataChange {
-						f.copyTransferScheduler(storedObject)
-					}
-					if metaChange {
-						// TODO: Add calls to just update meta data of file.
-					}
-				}
-			}
-			size = -size
-			atomic.AddInt64(&f.sourceFolderIndex.totalSize, size)
-
-			if atomic.LoadInt64(&f.sourceFolderIndex.totalSize) < 0 {
-				panic("Total Size is negative.")
-			}
-			return nil
-		} else {
-			// Folder present on source and its present on target too.
-			if folderPresent {
-				sourceObjectInMap = foldermap.indexMap[lcFileName]
-				delete(foldermap.indexMap, lcFileName)
-				size := storedObjectSize(sourceObjectInMap)
-				size = -size
-				atomic.AddInt64(&f.sourceFolderIndex.totalSize, size)
-				if sourceObjectInMap.relativePath != destinationObject.relativePath {
-					panic("Relative Path not matched")
-				}
-				if f.disableComparison || sourceObjectInMap.isMoreRecentThan(destinationObject) {
-					err := f.copyTransferScheduler(sourceObjectInMap)
-					if err != nil {
-						return err
-					}
-				}
-			} else {
-				// We detect folder not present on source, now we need to delete the folder and files underneath.
-				// TODO: Need to add call to delete the folder.
-				_ = f.destinationCleaner(destinationObject)
-			}
-			return nil
-		}
-	}
-
-	// File case.
-	if folderPresent {
 		sourceObjectInMap, present = foldermap.indexMap[lcFileName]
-
-		// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
-		if present {
+		// Lets check if entry in source is folder and entry on destination should be folder.
+		// Otherwise folder in source changed to file.
+		if present && (destinationObject.entityType == sourceObjectInMap.entityType) {
+			delete(foldermap.indexMap, lcFileName)
 			size := storedObjectSize(sourceObjectInMap)
 			size = -size
 			atomic.AddInt64(&f.sourceFolderIndex.totalSize, size)
 			if sourceObjectInMap.relativePath != destinationObject.relativePath {
 				panic("Relative Path not matched")
 			}
-			if f.disableComparison {
+			delete(f.sourceFolderIndex.folderMap[lcFolderName].indexMap, lcFileName)
+			// create the folder if not present , O/W update its meta-data.
+			if f.disableComparison || sourceObjectInMap.lastModifiedTime.UnixNano() != destinationObject.lastModifiedTime.UnixNano() ||
+				sourceObjectInMap.lastChangeTime.UnixNano() != destinationObject.lastChangeTime.UnixNano() {
 				err := f.copyTransferScheduler(sourceObjectInMap)
 				if err != nil {
 					return err
 				}
-			} else {
-				dataChanged, metadataChanged := f.HasFileChangedSinceLastSyncUsingTargetCompare(destinationObject, sourceObjectInMap)
-				if dataChanged {
-					err := f.copyTransferScheduler(sourceObjectInMap)
-					if err != nil {
-						return err
-					}
-				} else if metadataChanged {
-
-				}
 			}
-		} else {
-			_ = f.destinationCleaner(destinationObject)
+			return nil
 		}
-	} else {
-		// TODO: Need to add the delete code which distinquish between blob and file.
+
+		// We detect folder not present on source, now we need to delete the folder and files underneath.
+		// Other case will be folder at source changed to file, so we need to delete the folder in target.
+		// TODO: Need to add call to delete the folder.
 		_ = f.destinationCleaner(destinationObject)
+
+		return nil
 	}
+
+	// File case.
+	// Parent Folder present, we need to check if file exists or not.
+
+	sourceObjectInMap, present = foldermap.indexMap[lcFileName]
+
+	// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
+	if present && (sourceObjectInMap.entityType == destinationObject.entityType) {
+		// Sanity check.
+		if sourceObjectInMap.relativePath != destinationObject.relativePath {
+			panic("Relative Path not matched")
+		}
+
+		dataChanged, metadataChanged := f.HasFileChangedSinceLastSyncUsingTargetCompare(destinationObject, sourceObjectInMap)
+		if f.disableComparison || dataChanged {
+			err := f.copyTransferScheduler(sourceObjectInMap)
+			if err != nil {
+				return err
+			}
+		} else if metadataChanged {
+			// TODO: Need to add call to just update the metadata only.
+		}
+		size := storedObjectSize(sourceObjectInMap)
+		size = -size
+		atomic.AddInt64(&f.sourceFolderIndex.totalSize, size)
+		delete(f.sourceFolderIndex.folderMap[lcFolderName].indexMap, lcFileName)
+		return nil
+	}
+
+	// Parent folder not present this may happen when all the entries for that folder in folder map processed.
+	// In that case the foldemap will be deleted, so we know this file not present in source.
+	// Other case is in source file changed to folder, so we need to delete the file at destination.
+	_ = f.destinationCleaner(destinationObject)
 
 	return nil
 }
@@ -303,7 +339,7 @@ func (f *syncDestinationComparator) HasFileChangedSinceLastSyncUsingTargetCompar
 	// If mtime or size of target file is different from source file it means the file data (and metadata) has changed,
 	// else only metadata has changed.
 	//
-	if to.size != so.size || so.lastModifiedTime.After(to.lastModifiedTime) {
+	if to.size != so.size || so.lastModifiedTime.UnixNano() != to.lastModifiedTime.UnixNano() {
 		return true, true
 	} else {
 		//
@@ -315,26 +351,26 @@ func (f *syncDestinationComparator) HasFileChangedSinceLastSyncUsingTargetCompar
 		// If target object’s ctime is set by the target (f.e., NFS target) then we check if the source ctime is greater than target ctime minus the
 		// TargetCtimeSkew. If source ctime is greater then we know that the source object metadata was updated.
 		//
-		if f.TargetCtimeSkew.IsZero() {
+		if f.TargetCtimeSkew == 0 {
 			//
 			// We would have set target object’s ctime equal to source object’s ctime when we last sync’ed the object, so if it’s not equal now,
 			// it means the source object’s metadata was updated since last sync.
 			//
-			if so.lastChangeTime.After(to.lastChangeTime) {
-				if f.MetaDataOnlySync {
+			if so.lastChangeTime.UnixNano() != to.lastChangeTime.UnixNano() {
+				if f.metaDataOnlySync {
 					return false, true
 				} else {
 					return true, true
 				}
 			}
-		} else {
+		} else if so.lastChangeTime.UnixNano() > to.lastChangeTime.UnixNano()-time.Unix(int64(f.TargetCtimeSkew), 0).UnixNano() {
 			//
 			// Target object’s ctime is set locally on the target so we cannot compare for equality with the source object’s ctime.
 			// We can check if source object’s ctime was updated after target object’s ctime while accounting for the skew.
 			// Note that if we choose a larger skew value we might wrongly consider some object as needing sync, but that’s harmless as compared to
 			// choosing a smaller skew and missing out syncing some object that was changed.
 			//
-			if f.MetaDataOnlySync {
+			if f.metaDataOnlySync {
 				return false, true
 			} else {
 				return true, true

@@ -257,19 +257,23 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	return t.serialList(containerURL, blobUrlParts.ContainerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters)
 }
 
-// HasDirectoryChangedSinceLastSync checks directory changed since lastSyncTime.
-// It honours CFDMode to make the decision, f.e., if CFDMode allows ctime/mtime to be used for CFD it may not need to query
-// attributes from target. If it returns True, TargetTraverser will enumerate the directory and compare each enumerated object
-// with the source scanned objects in ObjectIndexer[] to find out if the object needs to be sync'ed.
 //
-// Note: For CFDModes that allow ctime for CFD we can avoid enumerating target dir if we know directory has not changed.
-//       This increases sync efficiency.
+// Given a directory find out if it has changed since the last sync. A “changed” directory could mean one or more of the following:
+// 1. One or more new files/subdirs created inside the directory.
+// 2. One or more files/subdirs deleted.
+// 3. Directory is renamed.
 //
-// Note: If we discover that certain sources cannot be safely trusted for ctime update we can change this to return True for them,
-//       thus falling back on the more rigorous target<->source comparison.
+// It honours CFDMode to make the decision, f.e., if CFDMode allows ctime/mtime to be used for CFD it may not need to query attributes from target.
+//
+// If it returns True, TargetTraverser will enumerate the directory and compare each enumerated object with the source scanned objects in
+// ObjectIndexer[] to find out if the object needs to be sync'ed.
+//
+// For CFDModes that allow ctime for CFD we can avoid enumerating target dir if we know directory has not changed. This increases sync efficiency.
+//
+// Note: If we discover that certain sources cannot be safely trusted for ctime update we can change this to return True for them, thus falling back
+// on the more rigorous target<->source comparison. //
 func (t *blobTraverser) HasDirectoryChangedSinceLastSync(so StoredObject, containerURL azblob.ContainerURL) bool {
-	// CFDMode is to enumerate Target and compare. So we return true in that case.
-	// This will lead to enumeration of target.
+	// Force enumeration for TargetCompare mode. For other CFDModes we enumerate a directory iff it has changed since last sync.
 	if t.cfdMode == common.CFDModeFlags.TargetCompare() {
 		return true
 	}
@@ -283,6 +287,9 @@ func (t *blobTraverser) HasDirectoryChangedSinceLastSync(so StoredObject, contai
 		if so.lastChangeTime.After(t.lastSyncTime) {
 			return true
 		} else if t.metaDataOnlySync && t.indexerMap.filesChangedInDirectory(so.relativePath, t.lastSyncTime) {
+			// Listing of blob gives properties and each list api gives 5K blobs in single rest call. So if we know any file changed on source,
+			// We should list the target. It's optimization instead of getting properties for changed files one by one get properties of all blob.
+			// As in normal scenario, there will be less than 2K files in a folder. It make sense to call list api, if any file changed on source.
 			return true
 		} else {
 			return false
@@ -312,6 +319,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 			panic("Directory entry is not string")
 		}
 
+		FinalizeAll := false
 		currentDirPath := dir.(string)
 
 		// This code for sync operation and when its target traverser.
@@ -332,6 +340,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 		}
 
 		for marker := (azblob.Marker{}); marker.NotDone(); {
+			FinalizeAll = true
 			lResp, err := containerURL.ListBlobsHierarchySegment(t.ctx, marker, "/", azblob.ListBlobsSegmentOptions{Prefix: currentDirPath,
 				Details: azblob.BlobListingDetails{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion}})
 			if err != nil {
@@ -349,7 +358,9 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 						resp, err := fblobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 						folderRelativePath := strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
 						folderRelativePath = strings.TrimPrefix(folderRelativePath, searchPrefix)
+
 						if err == nil {
+							extendedProp, _ := common.ReadStatFromMetadata(resp.NewMetadata(), resp.ContentLength())
 							storedObject := newStoredObject(
 								preprocessor,
 								getObjectNameOnly(strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)),
@@ -362,6 +373,8 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 								common.FromAzBlobMetadataToCommonMetadata(resp.NewMetadata()),
 								containerName,
 							)
+							storedObject.lastChangeTime = extendedProp.CTime()
+							storedObject.lastModifiedTime = extendedProp.MTime()
 							storedObject.isVirtualFolder = true
 							if t.s2sPreserveSourceTags {
 								var BlobTags *azblob.BlobTags
@@ -390,7 +403,9 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 				}
 
 				storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, strings.TrimPrefix(blobInfo.Name, searchPrefix), containerName)
-
+				extendedProp, _ := common.ReadStatFromMetadata(blobInfo.Metadata, *blobInfo.Properties.ContentLength)
+				storedObject.lastChangeTime = extendedProp.CTime()
+				storedObject.lastModifiedTime = extendedProp.MTime()
 				if t.s2sPreserveSourceTags && blobInfo.BlobTags != nil {
 					blobTagsMap := common.BlobTags{}
 					for _, blobTag := range blobInfo.BlobTags.BlobTagSet {
@@ -438,6 +453,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 				ContainerName:     containerName,
 				isVirtualFolder:   true,
 				isFolderEndMarker: true,
+				isFinalizeAll:     FinalizeAll,
 			}
 			enqueueOutput(storedObject, nil)
 		}
@@ -470,6 +486,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 			// This is a special CrawlResult which signifies that we need to enqueue the given directory to tqueue for target traverser to process.
 			//
 			t.tqueue <- item
+			continue
 		}
 
 		item, workerError := x.Item()
@@ -609,7 +626,8 @@ func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 		maxObjectIndexerSizeInGB: maxObjectIndexerSizeInGB,
 		metaDataOnlySync:         metaDataOnlySync,
 	}
-
+	// For testing purpose.
+	t.includeDirectoryStubs = true
 	disableHierarchicalScanning := strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))
 
 	// disableHierarchicalScanning should be true for permanent delete
