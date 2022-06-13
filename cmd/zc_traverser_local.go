@@ -219,7 +219,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 		// (for simplicity of coding, we don't parallelize across multiple queueItems)
 		parallel.Walk(appCtx, queueItem.fullPath, EnumerationParallelism, EnumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
 			if fileError != nil {
-				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %v", filePath, fileError))
+				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError.Error()))
 				writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: fileError})
 				return nil
 			}
@@ -396,7 +396,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 		if t.recursive {
 			processFile := func(filePath string, fileInfo os.FileInfo, fileError error) error {
 				if fileError != nil {
-					WarnStdoutAndScanningLog(fmt.Sprintf("Accessing %s failed with error: %v", filePath, fileError))
+					WarnStdoutAndScanningLog(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError.Error()))
 					return nil
 				}
 
@@ -404,7 +404,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				if fileInfo.IsDir() {
 					newFileInfo, err := WrapFolder(filePath, fileInfo)
 					if err != nil {
-						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get last change of target at %s: %v", filePath, err))
+						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get last change of target at %s: %s", filePath, err.Error()))
 					} else {
 						// fileInfo becomes nil in case we fail to wrap folder.
 						fileInfo = newFileInfo
