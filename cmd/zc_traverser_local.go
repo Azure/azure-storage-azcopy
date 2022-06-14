@@ -21,6 +21,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -41,9 +42,10 @@ type localTraverser struct {
 	fullPath       string
 	recursive      bool
 	followSymlinks bool
-
+	appCtx         context.Context
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
+	errorChannel                chan ErrorFileInfo
 }
 
 func (t *localTraverser) IsDirectory(bool) bool {
@@ -164,15 +166,28 @@ type symlinkTargetFileInfo struct {
 	name string
 }
 
+// ErrorFileInfo holds information about files and folders that failed enumeration.
+type ErrorFileInfo struct {
+	FilePath string
+	FileInfo os.FileInfo
+	ErrorMsg error
+}
+
 func (s symlinkTargetFileInfo) Name() string {
 	return s.name // override the name
+}
+
+func writeToErrorChannel(errorChannel chan ErrorFileInfo, err ErrorFileInfo) {
+	if errorChannel != nil {
+		errorChannel <- err
+	}
 }
 
 // WalkWithSymlinks is a symlinks-aware, parallelized, version of filePath.Walk.
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
 // 2) Easier to test individually than to test the entire traverser.
-func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlinks bool) (err error) {
+func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath.WalkFunc, followSymlinks bool, errorChannel chan ErrorFileInfo) (err error) {
 
 	// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
 	// So, what is the plan of attack?
@@ -202,9 +217,10 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 		walkQueue = walkQueue[1:]
 		// walk contents of this queueItem in parallel
 		// (for simplicity of coding, we don't parallelize across multiple queueItems)
-		parallel.Walk(queueItem.fullPath, EnumerationParallelism, EnumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
+		parallel.Walk(appCtx, queueItem.fullPath, EnumerationParallelism, EnumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
 			if fileError != nil {
-				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError))
+				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError.Error()))
+				writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: fileError})
 				return nil
 			}
 			computedRelativePath := strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(queueItem.fullPath))
@@ -245,25 +261,33 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 				result, err := UnfurlSymlinks(filePath)
 
 				if err != nil {
-					WarnStdoutAndScanningLog(fmt.Sprintf("Failed to resolve symlink %s: %s", filePath, err))
+					err = fmt.Errorf("Failed to resolve symlink %s: %s", filePath, err.Error())
+					WarnStdoutAndScanningLog(err.Error())
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
 
 				result, err = filepath.Abs(result)
 				if err != nil {
-					WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get absolute path of symlink result %s: %s", filePath, err))
+					err = fmt.Errorf("Failed to get absolute path of symlink result %s: %s", filePath, err.Error())
+					WarnStdoutAndScanningLog(err.Error())
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
 
 				slPath, err := filepath.Abs(filePath)
 				if err != nil {
-					WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
+					err = fmt.Errorf("Failed to get absolute path of %s: %s", filePath, err.Error())
+					WarnStdoutAndScanningLog(err.Error())
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
 
 				rStat, err := os.Stat(result)
 				if err != nil {
-					WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get properties of symlink target at %s: %s", result, err))
+					err = fmt.Errorf("Failed to get properties of symlink target at %s: %s", result, err.Error())
+					WarnStdoutAndScanningLog(err.Error())
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
 
@@ -304,7 +328,9 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 				result, err := filepath.Abs(filePath)
 
 				if err != nil {
-					WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
+					err = fmt.Errorf("Failed to get absolute path of %s: %s", filePath, err.Error())
+					WarnStdoutAndScanningLog(err.Error())
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
 
@@ -370,7 +396,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 		if t.recursive {
 			processFile := func(filePath string, fileInfo os.FileInfo, fileError error) error {
 				if fileError != nil {
-					WarnStdoutAndScanningLog(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError))
+					WarnStdoutAndScanningLog(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError.Error()))
 					return nil
 				}
 
@@ -378,7 +404,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				if fileInfo.IsDir() {
 					newFileInfo, err := WrapFolder(filePath, fileInfo)
 					if err != nil {
-						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get last change of target at %s: %s", filePath, err))
+						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get last change of target at %s: %s", filePath, err.Error()))
 					} else {
 						// fileInfo becomes nil in case we fail to wrap folder.
 						fileInfo = newFileInfo
@@ -417,7 +443,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			}
 
 			// note: Walk includes root, so no need here to separately create StoredObject for root (as we do for other folder-aware sources)
-			return WalkWithSymlinks(t.fullPath, processFile, t.followSymlinks)
+			return WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.followSymlinks, t.errorChannel)
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath
 			// We don't transfer any directory properties here, not even the root. (Because the root's
@@ -495,12 +521,14 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	return
 }
 
-func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter enumerationCounterFunc) *localTraverser {
+func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan ErrorFileInfo) *localTraverser {
 	traverser := localTraverser{
 		fullPath:                    cleanLocalPath(fullPath),
 		recursive:                   recursive,
 		followSymlinks:              followSymlinks,
-		incrementEnumerationCounter: incrementEnumerationCounter}
+		appCtx:                      ctx,
+		incrementEnumerationCounter: incrementEnumerationCounter,
+		errorChannel:                errorChannel}
 	return &traverser
 }
 
