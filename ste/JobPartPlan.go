@@ -80,7 +80,7 @@ type JobPartPlanHeader struct {
 	// jobStatus_doNotUse represents the current status of JobPartPlan
 	// jobStatus_doNotUse is a private member whose value can be accessed by Status and SetJobStatus
 	// jobStatus_doNotUse should not be directly accessed anywhere except by the Status and SetJobStatus
-	atomicJobStatus common.JobStatus
+	atomicJobStatus  common.JobStatus
 	atomicPartStatus common.JobStatus
 
 	// For delete operation specify what to do with snapshots
@@ -106,7 +106,7 @@ func (jpph *JobPartPlanHeader) JobPartStatus() common.JobStatus {
 
 func (jpph *JobPartPlanHeader) SetJobPartStatus(newJobStatus common.JobStatus) {
 	jpph.atomicPartStatus.AtomicStore(newJobStatus)
-} 
+}
 
 // Transfer api gives memory map JobPartPlanTransfer header for given index
 func (jpph *JobPartPlanHeader) Transfer(transferIndex uint32) *JobPartPlanTransfer {
@@ -194,8 +194,7 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
 
 // TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder
 // TODO: Refactor return type to an object
-func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType, blobTier azblob.AccessTierType,
-	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType, blobVersionID string, blobSnapshotID string, blobTags common.BlobTags) {
+func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType, blobTier azblob.AccessTierType, s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType, blobVersionID string, blobSnapshotID string, blobTags common.BlobTags, CopyID string) {
 	var err error
 	t := jpph.Transfer(transferIndex)
 
@@ -260,6 +259,11 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 		blobTagsString := jpph.getString(offset, t.SrcBlobTagsLength)
 		blobTags = common.ToCommonBlobTagsMap(blobTagsString)
 		offset += int64(t.SrcBlobTagsLength)
+	}
+
+	if t.CopyIDLength != 0 {
+		CopyID = jpph.getString(offset, t.CopyIDLength)
+		offset += int64(t.CopyIDLength)
 	}
 	return
 }
@@ -377,6 +381,7 @@ type JobPartPlanTransfer struct {
 	SrcBlobVersionIDLength      int16
 	SrcBlobSnapshotIDLength     int16
 	SrcBlobTagsLength           int16
+	CopyIDLength                int16
 
 	// Any fields below this comment are NOT constants; they may change over as the transfer is processed.
 	// Care must be taken to read/write to these fields in a thread-safe way!

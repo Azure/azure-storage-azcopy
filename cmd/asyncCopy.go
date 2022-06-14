@@ -54,7 +54,7 @@ func init() {
 					return fmt.Errorf("fatal: from-to argument required, PipeBlob (upload) or BlobPipe (download) is acceptable")
 				}
 				var userFromTo common.FromTo
-				err := userFromTo.Parse(raw.fromTo)
+				err := userFromTo.Parse(raw.fromTo) // TODO if user has not given a fromto, still compute right values. Make changes in cook method
 				if err != nil || (userFromTo != common.EFromTo.PipeBlob() && userFromTo != common.EFromTo.BlobPipe()) {
 					return fmt.Errorf("fatal: invalid from-to argument passed: %s", raw.fromTo)
 				}

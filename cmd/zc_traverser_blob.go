@@ -201,6 +201,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 		err := processIfPassedFilters(filters, storedObject, processor)
 		_, err = getProcessingError(err)
+		// return error if not nil
 
 		// short-circuit if we don't have anything else to scan and permanent delete is not on
 		if !t.includeDeleted && (isBlob || err != nil) {

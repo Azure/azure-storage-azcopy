@@ -81,6 +81,10 @@ func (e emptyPropertiesAdapter) LeaseStatus() azblob.LeaseStatusType {
 	return azblob.LeaseStatusNone
 }
 
+func (e emptyPropertiesAdapter) CopyID() string {
+	return ""
+}
+
 // md5OnlyAdapter is like emptyProperties adapter, except for the ContentMD5
 // method, for which it returns a real value
 type md5OnlyAdapter struct {
@@ -103,6 +107,10 @@ func (a blobPropertiesResponseAdapter) AccessTier() azblob.AccessTierType {
 
 func (a blobPropertiesResponseAdapter) CopyStatus() azblob.CopyStatusType {
 	return a.BlobGetPropertiesResponse.CopyStatus()
+}
+
+func (a blobPropertiesResponseAdapter) CopyID() string {
+	return a.BlobGetPropertiesResponse.CopyID()
 }
 
 // blobPropertiesAdapter adapts a BlobProperties object to both the
@@ -145,6 +153,13 @@ func (a blobPropertiesAdapter) AccessTier() azblob.AccessTierType {
 
 func (a blobPropertiesAdapter) CopyStatus() azblob.CopyStatusType {
 	return a.BlobProperties.CopyStatus
+}
+
+func (a blobPropertiesAdapter) CopyID() string {
+	if a.BlobProperties.CopyID == nil {
+		return ""
+	}
+	return *(a.BlobProperties.CopyID)
 }
 
 // LeaseDuration returns the value for header x-ms-lease-duration.

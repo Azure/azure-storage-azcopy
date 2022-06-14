@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"sync/atomic"
 	"time"
-
-	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
@@ -92,6 +92,7 @@ type IJobPartTransferMgr interface {
 	CpkScopeInfo() common.CpkScopeInfo
 	IsSourceEncrypted() bool
 	GetS2SSourceBlobTokenCredential() azblob.TokenCredential
+	WriteCopyIDToPlanFile(copyID string)
 }
 
 type TransferInfo struct {
@@ -218,6 +219,27 @@ func (jptm *jobPartTransferMgr) GetS2SSourceBlobTokenCredential() azblob.TokenCr
 	}
 }
 
+func (jptm *jobPartTransferMgr) WriteCopyIDToPlanFile(copyID string) {
+	jobID := jptm.jobPartMgr.Plan().JobID
+	jppfn := JobPartPlanFileName(fmt.Sprintf(JobPartPlanFileNameFormat, jobID.String(), 0, DataSchemaVersion))
+	planFilePath := jppfn.GetJobPartPlanPath()
+
+	file, err := os.OpenFile(planFilePath, os.O_RDWR, common.DEFAULT_FILE_PERM)
+	if err != nil {
+		panic(fmt.Errorf("couldn't open job part plan file %q: %v to write CopyID", jobID, err))
+	}
+	defer file.Close()
+
+	t := jptm.jobPartMgr.Plan().Transfer(jptm.transferIndex)
+	offset := t.SrcOffset + int64(t.SrcLength) + int64(t.DstLength) + int64(t.SrcContentTypeLength) + int64(t.SrcContentEncodingLength) + int64(t.SrcContentLanguageLength) + int64(t.SrcContentDispositionLength) + int64(t.SrcCacheControlLength) + int64(t.SrcContentMD5Length) + int64(t.SrcMetadataLength) + int64(t.SrcBlobTypeLength) + int64(t.SrcBlobTierLength) + int64(t.SrcBlobVersionIDLength) + int64(t.SrcBlobSnapshotIDLength) + int64(t.SrcBlobTagsLength)
+
+	_, err = file.WriteAt([]byte(copyID), offset)
+	if err != nil {
+		panic(fmt.Errorf("couldn't write jobID to job part plan file"))
+	}
+	// file closed due to defer
+}
+
 func (jptm *jobPartTransferMgr) GetOverwritePrompter() *overwritePrompter {
 	return jptm.jobPartMgr.getOverwritePrompter()
 }
@@ -264,7 +286,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	src, dst, _ := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
 
-	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType, versionID, snapshotID, blobTags :=
+	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType, versionID, snapshotID, blobTags, _ :=
 		plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
 	// If the length of destination SAS is greater than 0
@@ -345,10 +367,10 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 				 * we can have 4 blocks in core, waiting for a disk or n/w operation. Any higher block size would *sort of*
 				 * serialize n/w and disk operations, and is better avoided.
 				 */
-				if (sourceSize % common.MaxNumberOfBlocksPerBlob == 0) {
-					blockSize = sourceSize/common.MaxNumberOfBlocksPerBlob
+				if sourceSize%common.MaxNumberOfBlocksPerBlob == 0 {
+					blockSize = sourceSize / common.MaxNumberOfBlocksPerBlob
 				} else {
-					blockSize = sourceSize/common.MaxNumberOfBlocksPerBlob +1
+					blockSize = sourceSize/common.MaxNumberOfBlocksPerBlob + 1
 				}
 				break
 			}

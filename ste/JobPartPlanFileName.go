@@ -288,6 +288,10 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		if srcBlobTagsLength > math.MaxInt16 {
 			panic(fmt.Sprintf("The length of tags %s exceeds maximum allowed length, and cannot be processed.", order.Transfers.List[t].BlobTags))
 		}
+		copyIDLength := 0
+		if jpph.FromTo.IsAsync() {
+			copyIDLength = 36
+		}
 		// Create & initialize this transfer's Job Part Plan Transfer
 		jppt := JobPartPlanTransfer{
 			SrcOffset:      currentSrcStringOffset, // SrcOffset of the src string
@@ -310,6 +314,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			SrcBlobVersionIDLength:      int16(len(order.Transfers.List[t].BlobVersionID)),
 			SrcBlobSnapshotIDLength:     int16(len(order.Transfers.List[t].BlobSnapshotID)),
 			SrcBlobTagsLength:           int16(srcBlobTagsLength),
+			CopyIDLength:                int16(copyIDLength),
 
 			atomicTransferStatus: common.ETransferStatus.Started(), // Default
 			// ChunkNum:                getNumChunks(uint64(order.Transfers.List[t].SourceSize), uint64(data.BlockSize)),
@@ -322,7 +327,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		currentSrcStringOffset += int64(jppt.SrcLength + jppt.DstLength + jppt.SrcContentTypeLength +
 			jppt.SrcContentEncodingLength + jppt.SrcContentLanguageLength + jppt.SrcContentDispositionLength +
 			jppt.SrcCacheControlLength + jppt.SrcContentMD5Length + jppt.SrcMetadataLength +
-			jppt.SrcBlobTypeLength + jppt.SrcBlobTierLength + jppt.SrcBlobVersionIDLength + jppt.SrcBlobSnapshotIDLength + jppt.SrcBlobTagsLength)
+			jppt.SrcBlobTypeLength + jppt.SrcBlobTierLength + jppt.SrcBlobVersionIDLength + jppt.SrcBlobSnapshotIDLength + jppt.SrcBlobTagsLength + jppt.CopyIDLength)
 	}
 
 	// All the transfers were written; now write each transfer's src/dst strings
@@ -331,6 +336,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		if eof != srcDstStringsOffset[t] {
 			panic(errors.New("job plan file's EOF and the transfer's offset didn't line up; filename: " + order.Transfers.List[t].Source))
 		}
+		//TODO make space for copyID only in case of async copy
 
 		// Write the src & dst strings to the job part plan file
 		bytesWritten, err := file.WriteString(order.Transfers.List[t].Source)
@@ -408,6 +414,20 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}
+
+		if jpph.FromTo.IsAsync() {
+			//36 bytes? writing copyID
+			bytesWritten, err = file.WriteString("1f812371-a41d-49e6-b123-f4b542e851c5") // placeholder because we fill this field up later
+			common.PanicIfErr(err)
+			eof += int64(bytesWritten)
+		}
 	}
 	// the file is closed to due to defer above
+	// TODO set-props why required? Impact -- on customers? Future --do better?
+	// azcopy? not a lot of time. What's azcopy
+	// problem statement. What we don't have in azcopy rn? We support transferring data but not properties 2,3 slides WHY. N
+	// my work. WHAT (take time) with video. N
+	// conclusion. FUTURE
+	// try flowcharts and graphs over text. To help visualize. How i pulled azcopy arch into my code?
+	//
 }

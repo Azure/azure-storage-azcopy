@@ -603,6 +603,10 @@ func (ft *FromTo) AreBothFolderAware() bool {
 	return ft.From().IsFolderAware() && ft.To().IsFolderAware()
 }
 
+func (ft FromTo) IsAsync() bool {
+	return ft == EFromTo.BlobBlobAsync()
+}
+
 // TODO: deletes are not covered by the above Is* routines
 
 var BenchmarkLmt = time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC)

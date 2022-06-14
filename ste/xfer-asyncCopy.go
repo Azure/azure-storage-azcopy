@@ -57,11 +57,7 @@ func asyncCopyBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		jptm.ReportTransferDone()
 	}
 
-	ll, err := dstBlobURL.StartCopyFromURL(jptm.Context(), srcBlobURL.URL(), azblob.Metadata{}, azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, azblob.AccessTierNone, nil)
-
-	jptm.Log(pipeline.LogWarning, "ISHAAN: "+string(ll.CopyStatus())+string(ll.StatusCode()))
-	fmt.Println(string(ll.CopyStatus()))
-	fmt.Println(ll.StatusCode()) // TODO tiverma remove this
+	resp, err := dstBlobURL.StartCopyFromURL(jptm.Context(), srcBlobURL.URL(), azblob.Metadata{}, azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, azblob.AccessTierNone, nil)
 
 	if err != nil {
 		if strErr, ok := err.(azblob.StorageError); ok {
@@ -78,6 +74,7 @@ func asyncCopyBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		// in all other cases, make the transfer as failed
 		transferDone(common.ETransferStatus.Failed(), err)
 	} else {
+		jptm.WriteCopyIDToPlanFile(resp.CopyID())
 		transferDone(common.ETransferStatus.Success(), nil)
 	}
 }

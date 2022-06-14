@@ -84,6 +84,7 @@ type StoredObject struct {
 	blobSnapshotID string
 	blobDeleted    bool
 	copyStatus     azblob.CopyStatusType
+	copyID         string
 
 	// Lease information
 	leaseState    azblob.LeaseStateType
@@ -216,6 +217,7 @@ type blobPropsProvider interface {
 	LeaseDuration() azblob.LeaseDurationType
 	LeaseState() azblob.LeaseStateType
 	CopyStatus() azblob.CopyStatusType
+	CopyID() string
 }
 
 // a constructor is used so that in case the StoredObject has to change, the callers would get a compilation error
@@ -238,6 +240,7 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, en
 		Metadata:           meta,
 		ContainerName:      containerName,
 		copyStatus:         blobProps.CopyStatus(),
+		copyID:             blobProps.CopyID(),
 		// Additional lease properties. To be used in listing
 		leaseStatus:   blobProps.LeaseStatus(),
 		leaseState:    blobProps.LeaseState(),
