@@ -47,6 +47,7 @@ type copyTransferProcessor struct {
 
 	preserveAccessTier     bool
 	folderPropertiesOption common.FolderPropertyOption
+	symlinkHandlingType    common.SymlinkHandlingType
 	dryrunMode             bool
 }
 
@@ -62,6 +63,7 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 		reportFinalPartDispatched: reportFinalPartDispatched,
 		preserveAccessTier:        preserveAccessTier,
 		folderPropertiesOption:    copyJobTemplate.Fpo,
+		symlinkHandlingType:       copyJobTemplate.SymlinkHandlingType,
 		dryrunMode:                dryrunMode,
 	}
 }
@@ -73,13 +75,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 	srcRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, true)
 	dstRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, false)
 
-	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(
-		false, // sync has no --decompress option
-		srcRelativePath,
-		dstRelativePath,
-		s.preserveAccessTier,
-		s.folderPropertiesOption,
-	)
+	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath, dstRelativePath, s.preserveAccessTier, s.folderPropertiesOption, s.symlinkHandlingType)
 
 	if s.copyJobTemplate.FromTo.To() == common.ELocation.None() {
 		copyTransfer.BlobTier = s.copyJobTemplate.BlobAttributes.BlockBlobTier.ToAccessTierType()
@@ -114,22 +110,22 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 				common.PanicIfErr(err)
 
 				// if remove then To() will equal to common.ELocation.Unknown()
-				if s.copyJobTemplate.FromTo.To() == common.ELocation.Unknown() { //remove
+				if s.copyJobTemplate.FromTo.To() == common.ELocation.Unknown() { // remove
 					return fmt.Sprintf("DRYRUN: remove %v/%v",
 						s.copyJobTemplate.SourceRoot.Value,
 						prettySrcRelativePath)
 				}
-				if s.copyJobTemplate.FromTo.To() == common.ELocation.None() { //set-properties
+				if s.copyJobTemplate.FromTo.To() == common.ELocation.None() { // set-properties
 					return fmt.Sprintf("DRYRUN: set-properties %v/%v",
 						s.copyJobTemplate.SourceRoot.Value,
 						prettySrcRelativePath)
-				} else { //copy for sync
+				} else { // copy for sync
 					if s.copyJobTemplate.FromTo.From() == common.ELocation.Local() {
 						// formatting from local source
 						dryrunValue := fmt.Sprintf("DRYRUN: copy %v", common.ToShortPath(s.copyJobTemplate.SourceRoot.Value))
 						if runtime.GOOS == "windows" {
 							dryrunValue += "\\" + strings.ReplaceAll(prettySrcRelativePath, "/", "\\")
-						} else { //linux and mac
+						} else { // linux and mac
 							dryrunValue += "/" + prettySrcRelativePath
 						}
 						dryrunValue += fmt.Sprintf(" to %v/%v", strings.Trim(s.copyJobTemplate.DestinationRoot.Value, "/"), prettyDstRelativePath)
@@ -141,7 +137,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 							common.ToShortPath(s.copyJobTemplate.DestinationRoot.Value))
 						if runtime.GOOS == "windows" {
 							dryrunValue += "\\" + strings.ReplaceAll(prettyDstRelativePath, "/", "\\")
-						} else { //linux and mac
+						} else { // linux and mac
 							dryrunValue += "/" + prettyDstRelativePath
 						}
 						return dryrunValue
@@ -175,10 +171,14 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 	// so that there is at least one transfer for the final part
 	s.copyJobTemplate.Transfers.List = append(s.copyJobTemplate.Transfers.List, copyTransfer)
 	s.copyJobTemplate.Transfers.TotalSizeInBytes += uint64(copyTransfer.SourceSize)
-	if copyTransfer.EntityType == common.EEntityType.File() {
+
+	switch copyTransfer.EntityType {
+	case common.EEntityType.File():
 		s.copyJobTemplate.Transfers.FileTransferCount++
-	} else {
+	case common.EEntityType.Folder():
 		s.copyJobTemplate.Transfers.FolderTransferCount++
+	case common.EEntityType.Symlink():
+		s.copyJobTemplate.Transfers.SymlinkTransferCount++
 	}
 
 	return nil

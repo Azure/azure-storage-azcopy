@@ -152,11 +152,12 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 				return string(jsonOutput)
 			} else {
 				return fmt.Sprintf(
-					"\n\nJob %s summary\nElapsed Time (Minutes): %v\nNumber of File Transfers: %v\nNumber of Folder Property Transfers: %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nTotalBytesTransferred: %v\nFinal Job Status: %v\n",
+					"\n\nJob %s summary\nElapsed Time (Minutes): %v\nNumber of File Transfers: %v\nNumber of Folder Property Transfers: %v\nNumber of Symlink Transfers: %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nTotalBytesTransferred: %v\nFinal Job Status: %v\n",
 					summary.JobID.String(),
 					jobsAdmin.ToFixed(duration.Minutes(), 4),
 					summary.FileTransfers,
 					summary.FolderPropertyTransfers,
+					summary.SymlinkTransfers,
 					summary.TotalTransfers,
 					summary.TransfersCompleted,
 					summary.TransfersFailed,

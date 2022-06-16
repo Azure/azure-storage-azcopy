@@ -89,7 +89,7 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 }
 
 func newListTraverser(parent common.ResourceString, parentType common.Location, credential *common.CredentialInfo,
-	ctx *context.Context, recursive, followSymlinks, getProperties bool, listChan chan string,
+	ctx *context.Context, recursive bool, handleSymlinks common.SymlinkHandlingType, getProperties bool, listChan chan string,
 	includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveBlobTags bool,
 	logLevel pipeline.LogLevel, cpkOptions common.CpkOptions) ResourceTraverser {
 	var traverserGenerator childTraverserGenerator
@@ -107,7 +107,7 @@ func newListTraverser(parent common.ResourceString, parentType common.Location, 
 		}
 
 		// Construct a traverser that goes through the child
-		traverser, err := InitResourceTraverser(source, parentType, ctx, credential, &followSymlinks,
+		traverser, err := InitResourceTraverser(source, parentType, ctx, credential, handleSymlinks,
 			nil, recursive, getProperties, includeDirectoryStubs, common.EPermanentDeleteOption.None(), incrementEnumerationCounter,
 			nil, s2sPreserveBlobTags, logLevel, cpkOptions, nil /* errorChannel */)
 		if err != nil {

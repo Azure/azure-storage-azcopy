@@ -61,6 +61,7 @@ type rawSyncCmdArgs struct {
 	preserveSMBInfo         bool
 	preservePOSIXProperties bool
 	followSymlinks          bool
+	preserveSymlinks        bool
 	backupMode              bool
 	putMd5                  bool
 	md5ValidationOption     string
@@ -204,8 +205,10 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		return cooked, err
 	}
 
-	cooked.followSymlinks = raw.followSymlinks
-	if err = crossValidateSymlinksAndPermissions(cooked.followSymlinks, true /* replace with real value when available */); err != nil {
+	if err = cooked.symlinkHandling.Determine(raw.followSymlinks, raw.preserveSymlinks); err != nil {
+		return cooked, err
+	}
+	if err = crossValidateSymlinksAndPermissions(cooked.symlinkHandling, true /* replace with real value when available */); err != nil {
 		return cooked, err
 	}
 	cooked.recursive = raw.recursive
@@ -371,7 +374,7 @@ type cookedSyncCmdArgs struct {
 
 	// filters
 	recursive             bool
-	followSymlinks        bool
+	symlinkHandling       common.SymlinkHandlingType
 	includePatterns       []string
 	excludePatterns       []string
 	excludePaths          []string

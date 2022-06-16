@@ -110,24 +110,26 @@ func ConsolidatePathSeparators(path string) string {
 // Transfers describes each file/folder being transferred in a given JobPartOrder, and
 // other auxilliary details of this order.
 type Transfers struct {
-	List                []CopyTransfer
-	TotalSizeInBytes    uint64
-	FileTransferCount   uint32
-	FolderTransferCount uint32
+	List                 []CopyTransfer
+	TotalSizeInBytes     uint64
+	FileTransferCount    uint32
+	FolderTransferCount  uint32
+	SymlinkTransferCount uint32
 }
 
 // This struct represents the job info (a single part) to be sent to the storage engine
 type CopyJobPartOrderRequest struct {
-	Version         Version         // version of azcopy
-	JobID           JobID           // Guid - job identifier
-	PartNum         PartNumber      // part number of the job
-	IsFinalPart     bool            // to determine the final part for a specific job
-	ForceWrite      OverwriteOption // to determine if the existing needs to be overwritten or not. If set to true, existing blobs are overwritten
-	ForceIfReadOnly bool            // Supplements ForceWrite with addition setting for Azure Files objects with read-only attribute
-	AutoDecompress  bool            // if true, source data with encodings that represent compression are automatically decompressed when downloading
-	Priority        JobPriority     // priority of the task
-	FromTo          FromTo
-	Fpo             FolderPropertyOption // passed in from front-end to ensure that front-end and STE agree on the desired behaviour for the job
+	Version             Version         // version of azcopy
+	JobID               JobID           // Guid - job identifier
+	PartNum             PartNumber      // part number of the job
+	IsFinalPart         bool            // to determine the final part for a specific job
+	ForceWrite          OverwriteOption // to determine if the existing needs to be overwritten or not. If set to true, existing blobs are overwritten
+	ForceIfReadOnly     bool            // Supplements ForceWrite with addition setting for Azure Files objects with read-only attribute
+	AutoDecompress      bool            // if true, source data with encodings that represent compression are automatically decompressed when downloading
+	Priority            JobPriority     // priority of the task
+	FromTo              FromTo
+	Fpo                 FolderPropertyOption // passed in from front-end to ensure that front-end and STE agree on the desired behaviour for the job
+	SymlinkHandlingType SymlinkHandlingType
 	// list of blobTypes to exclude.
 	ExcludeBlobType []azblob.BlobType
 
@@ -259,6 +261,7 @@ type ListJobSummaryResponse struct {
 	// FileTransfers.
 	FileTransfers           uint32 `json:",string"`
 	FolderPropertyTransfers uint32 `json:",string"`
+	SymlinkTransfers        uint32 `json:",string"`
 
 	TransfersCompleted uint32 `json:",string"`
 	TransfersFailed    uint32 `json:",string"`

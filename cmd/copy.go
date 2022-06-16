@@ -85,6 +85,9 @@ type rawCopyCmdArgs struct {
 	legacyExclude         string // used only for warnings
 	listOfVersionIDs      string
 
+	// Indicates the user wants to upload the symlink itself, not the file on the other end
+	preserveSymlinks bool
+
 	// filters from flags
 	listOfFilesToCopy string
 	recursive         bool
@@ -326,9 +329,12 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	cooked.FromTo = fromTo
 	cooked.Recursive = raw.recursive
-	cooked.FollowSymlinks = raw.followSymlinks
 	cooked.ForceIfReadOnly = raw.forceIfReadOnly
 	if err = validateForceIfReadOnly(cooked.ForceIfReadOnly, cooked.FromTo); err != nil {
+		return cooked, err
+	}
+
+	if err = cooked.SymlinkHandling.Determine(raw.followSymlinks, raw.preserveSymlinks); err != nil {
 		return cooked, err
 	}
 
@@ -685,7 +691,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	cooked.IncludeDirectoryStubs = raw.includeDirectoryStubs || (cooked.isHNStoHNS && cooked.preservePermissions.IsTruthy())
 
-	if err = crossValidateSymlinksAndPermissions(cooked.FollowSymlinks, cooked.preservePermissions.IsTruthy()); err != nil {
+	if err = crossValidateSymlinksAndPermissions(cooked.SymlinkHandling, cooked.preservePermissions.IsTruthy()); err != nil {
 		return cooked, err
 	}
 
@@ -772,7 +778,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	case common.EFromTo.BlobLocal(),
 		common.EFromTo.FileLocal(),
 		common.EFromTo.BlobFSLocal():
-		if cooked.FollowSymlinks {
+		if cooked.SymlinkHandling.Follow() {
 			return cooked, fmt.Errorf("follow-symlinks flag is not supported while downloading")
 		}
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
@@ -806,7 +812,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while copying from service to service")
 		}
-		if cooked.FollowSymlinks {
+		if cooked.SymlinkHandling.Follow() {
 			return cooked, fmt.Errorf("follow-symlinks flag is not supported while copying from service to service")
 		}
 		// blob type is not supported if destination is not blob
@@ -973,9 +979,9 @@ func validatePreserveOwner(preserve bool, fromTo common.FromTo) error {
 	return nil
 }
 
-func crossValidateSymlinksAndPermissions(followSymlinks, preservePermissions bool) error {
-	if followSymlinks && preservePermissions {
-		return errors.New("cannot follow symlinks when preserving permissions (since the correct permission inheritance behaviour for symlink targets is undefined)")
+func crossValidateSymlinksAndPermissions(symlinkHandling common.SymlinkHandlingType, preservePermissions bool) error {
+	if symlinkHandling != common.ESymlinkHandlingType.None() && preservePermissions {
+		return errors.New("cannot handle symlinks when preserving permissions (since the correct permission inheritance behaviour for symlink targets is undefined)")
 	}
 	return nil
 }
@@ -1107,7 +1113,7 @@ type CookedCopyCmdArgs struct {
 	ListOfFilesChannel chan string // Channels are nullable.
 	Recursive          bool
 	StripTopDir        bool
-	FollowSymlinks     bool
+	SymlinkHandling    common.SymlinkHandlingType
 	ForceWrite         common.OverwriteOption // says whether we should try to overwrite
 	ForceIfReadOnly    bool                   // says whether we should _force_ any overwrites (triggered by forceWrite) to work on Azure Files objects that are set to read-only
 	autoDecompress     bool
@@ -1415,14 +1421,15 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// initialize the fields that are constant across all job part orders,
 	// and for which we have sufficient info now to set them
 	jobPartOrder := common.CopyJobPartOrderRequest{
-		JobID:           cca.jobID,
-		FromTo:          cca.FromTo,
-		ForceWrite:      cca.ForceWrite,
-		ForceIfReadOnly: cca.ForceIfReadOnly,
-		AutoDecompress:  cca.autoDecompress,
-		Priority:        common.EJobPriority.Normal(),
-		LogLevel:        azcopyLogVerbosity,
-		ExcludeBlobType: cca.excludeBlobType,
+		JobID:               cca.jobID,
+		FromTo:              cca.FromTo,
+		ForceWrite:          cca.ForceWrite,
+		ForceIfReadOnly:     cca.ForceIfReadOnly,
+		AutoDecompress:      cca.autoDecompress,
+		Priority:            common.EJobPriority.Normal(),
+		LogLevel:            azcopyLogVerbosity,
+		ExcludeBlobType:     cca.excludeBlobType,
+		SymlinkHandlingType: cca.SymlinkHandling,
 		BlobAttributes: common.BlobTransferAttributes{
 			BlobType:                 cca.blobType,
 			BlockSizeInBytes:         cca.blockSize,
@@ -1700,6 +1707,7 @@ Job %s summary
 Elapsed Time (Minutes): %v
 Number of File Transfers: %v
 Number of Folder Property Transfers: %v
+Number of Symlink Transfers: %v
 Total Number of Transfers: %v
 Number of Transfers Completed: %v
 Number of Transfers Failed: %v
@@ -1711,6 +1719,7 @@ Final Job Status: %v%s%s
 					jobsAdmin.ToFixed(duration.Minutes(), 4),
 					summary.FileTransfers,
 					summary.FolderPropertyTransfers,
+					summary.SymlinkTransfers,
 					summary.TotalTransfers,
 					summary.TransfersCompleted,
 					summary.TransfersFailed,
@@ -1942,6 +1951,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault, "Only has an effect in downloads, and only when --preserve-smb-permissions is used. If true (the default), the file Owner and Group are preserved in downloads. If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group will be based on the user running AzCopy")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", true, "For SMB-aware locations, flag will be set to true by default. Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false, "'Preserves' property info gleaned from stat or statx into object metadata.")
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveSymlinks, "preserve-symlinks", false, "If enabled, symlink destinations are preserved as the blob content, rather than uploading the file/folder on the other end of the symlink")
 	cpCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
 	cpCmd.PersistentFlags().BoolVar(&raw.backupMode, common.BackupModeFlagName, false, "Activates Windows' SeBackupPrivilege for uploads, or SeRestorePrivilege for downloads, to allow AzCopy to see read all files, regardless of their file system permissions, and to restore all permissions. Requires that the account running AzCopy already has these permissions (e.g. has Administrator rights or is a member of the 'Backup Operators' group). All this flag does is activate privileges that the account already has")
 	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob or file. (By default the hash is NOT created.) Only available when uploading.")

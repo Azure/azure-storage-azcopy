@@ -47,6 +47,8 @@ type appendBlobSenderBase struct {
 	blobTagsToApply azblob.BlobTagsMap
 	cpkToApply      azblob.ClientProvidedKeyOptions
 
+	sip ISourceInfoProvider
+
 	soleChunkFuncSemaphore *semaphore.Weighted
 }
 
@@ -91,6 +93,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 		headersToApply:         props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply:        props.SrcMetadata.ToAzBlobMetadata(),
 		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
+		sip:                    srcInfoProvider,
 		cpkToApply:             cpkToApply,
 		soleChunkFuncSemaphore: semaphore.NewWeighted(1)}, nil
 }

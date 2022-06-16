@@ -147,10 +147,11 @@ func PrintJobProgressSummary(summary common.ListJobSummaryResponse) {
 		}
 
 		return fmt.Sprintf(
-			"\nJob %s summary\nNumber of File Transfers: %v\nNumber of Folder Property Transfers: %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nPercent Complete (approx): %.1f\nFinal Job Status: %v\n",
+			"\nJob %s summary\nNumber of File Transfers: %v\nNumber of Folder Property Transfers: %v\nNumber of Symlink Transfers: %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nPercent Complete (approx): %.1f\nFinal Job Status: %v\n",
 			summary.JobID.String(),
 			summary.FileTransfers,
 			summary.FolderPropertyTransfers,
+			summary.SymlinkTransfers,
 			summary.TotalTransfers,
 			summary.TransfersCompleted,
 			summary.TransfersFailed,

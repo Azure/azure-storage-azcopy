@@ -222,7 +222,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		}
 	}
 
-	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, nil, nil,
+	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.None(), nil,
 		true, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {},
 		nil, false, pipeline.LogNone, common.CpkOptions{}, nil /* errorChannel */)
 

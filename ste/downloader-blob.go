@@ -22,6 +22,7 @@ package ste
 
 import (
 	"net/url"
+	"os"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -44,6 +45,22 @@ type blobDownloader struct {
 	jptm     IJobPartTransferMgr
 	txInfo   TransferInfo
 	fileMode uint32
+}
+
+func (bd *blobDownloader) CreateSymlink(jptm IJobPartTransferMgr) error {
+	sip, err := newBlobSourceInfoProvider(jptm)
+	if err != nil {
+		return err
+	}
+	symsip := sip.(ISymlinkBearingSourceInfoProvider) // blob always implements this
+	symlinkInfo, err := symsip.GetSymlinkPath()
+
+	// create the link
+	err = os.Symlink(symlinkInfo, jptm.Info().Destination)
+
+	// todo: write properties
+
+	return err
 }
 
 func newBlobDownloader() downloader {

@@ -83,7 +83,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.S2SPreserveBlobTags = cca.S2sPreserveBlobTags
 
 	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo,
-		&cca.FollowSymlinks, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties,
+		cca.SymlinkHandling, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties,
 		cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs,
 		cca.S2sPreserveBlobTags, azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil /* errorChannel */)
 
@@ -280,12 +280,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		srcRelPath := cca.MakeEscapedRelativePath(true, isDestDir, cca.asSubdir, object)
 		dstRelPath := cca.MakeEscapedRelativePath(false, isDestDir, cca.asSubdir, object)
 
-		transfer, shouldSendToSte := object.ToNewCopyTransfer(
-			cca.autoDecompress && cca.FromTo.IsDownload(),
-			srcRelPath, dstRelPath,
-			cca.s2sPreserveAccessTier,
-			jobPartOrder.Fpo,
-		)
+		transfer, shouldSendToSte := object.ToNewCopyTransfer(cca.autoDecompress && cca.FromTo.IsDownload(), srcRelPath, dstRelPath, cca.s2sPreserveAccessTier, jobPartOrder.Fpo, cca.SymlinkHandling)
 		if !cca.S2sPreserveBlobTags {
 			transfer.BlobTags = cca.blobTags
 		}
@@ -356,7 +351,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, nil,
+	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, common.ESymlinkHandlingType.None(),
 		nil, false, false, false, common.EPermanentDeleteOption.None(),
 		func(common.EntityType) {}, cca.ListOfVersionIDs, false, pipeline.LogNone, cca.CpkOptions, nil /* errorChannel */)
 

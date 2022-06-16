@@ -33,6 +33,10 @@ type localFileSourceInfoProvider struct {
 	transferInfo TransferInfo
 }
 
+func (f localFileSourceInfoProvider) GetSymlinkPath() (string, error) {
+	return os.Readlink(f.jptm.Info().Source)
+}
+
 func newLocalSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
 	return &localFileSourceInfoProvider{jptm, jptm.Info()}, nil
 }
