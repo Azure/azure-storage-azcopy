@@ -447,7 +447,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 			storedObject := StoredObject{
 				name:              getObjectNameOnly(strings.TrimSuffix(currentDirPath, common.AZCOPY_PATH_SEPARATOR_STRING)),
 				relativePath:      strings.TrimSuffix(currentDirPath, common.AZCOPY_PATH_SEPARATOR_STRING),
-				entityType:        common.EEntityType.File(), // folder stubs are treated like files in in the serial lister as well
+				entityType:        common.EEntityType.Folder(),
 				lastModifiedTime:  time.Time{},
 				size:              0,
 				ContainerName:     containerName,
@@ -495,11 +495,12 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 			return workerError
 		}
 
+		object := item.(StoredObject)
+
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(common.EEntityType.File())
+			t.incrementEnumerationCounter(object.entityType)
 		}
 
-		object := item.(StoredObject)
 		processErr := processIfPassedFilters(filters, object, processor)
 		_, processErr = getProcessingError(processErr)
 		if processErr != nil {

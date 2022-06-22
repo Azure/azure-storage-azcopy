@@ -98,7 +98,7 @@ func newSyncDestinationComparator(i *folderIndexer, copyScheduler, cleaner objec
 // Note: Since data change usually causes metadata change too (LMT is updated at the least), caller should check dataChanged first and if that is true, sync
 //       both data+metadata, if dataChanged is not true then it should check metadataChanged and if that is true, sync only metadata, else sync nothing.
 //
-func (f *syncDestinationComparator) HasFileChangedSinceLastSyncUsingLocalChecks(so StoredObject, filePath string) (dataChange bool, metadataChange bool) {
+func (f *syncDestinationComparator) HasFileChangedSinceLastSyncUsingLocalChecks(so StoredObject) (dataChange bool, metadataChange bool) {
 	// CFDMode==TargetCompare always treats target directories as “changed”, so we should never be called for that
 	if f.cfdMode == common.CFDModeFlags.TargetCompare() {
 		panic("We should not be called for CFDMode==TargetCompare")
@@ -149,7 +149,8 @@ func (f *syncDestinationComparator) HasFileChangedSinceLastSyncUsingLocalChecks(
 // if the CFDMode allows that.
 // This condition is conveyed by passing the 2nd argument (FinalizeAll) as false.
 //
-func (f *syncDestinationComparator) FinalizeTargetDirectory(folderMap *objectIndexer, finalizeAll bool) {
+// This function will also update the folder metaData, if changed which is in case of finalizeAll true and delete the flderMap from the ObjectIndexerMap.
+func (f *syncDestinationComparator) FinalizeTargetDirectory(folderMap *objectIndexer, finalizeAll bool, lcFolderName string) {
 	var size int64
 	//
 	// Go over all objects in the source directory, enumerated by SourceTraverser, and check each object for following:
@@ -169,32 +170,60 @@ func (f *syncDestinationComparator) FinalizeTargetDirectory(folderMap *objectInd
 			storedObject := folderMap.indexMap[file]
 			size += storedObjectSize(storedObject)
 			delete(folderMap.indexMap, file)
-			f.copyTransferScheduler(storedObject)
+			if storedObject.entityType != common.EEntityType.Folder() {
+				f.copyTransferScheduler(storedObject)
+			}
 		}
 	} else {
 		// For FinalizeAll flag false, these are not the new files, we need to check whether file needs to be sync’ed and if yes,
 		// whether only metadata or both data+metadata need to be sync’ed.
 		for file := range folderMap.indexMap {
+			storedObject := folderMap.indexMap[file]
+
+			// No need to update folder properties as its not changed.
 			if file == "." {
 				continue
 			}
-			storedObject := folderMap.indexMap[file]
+
 			size += storedObjectSize(storedObject)
 			delete(folderMap.indexMap, file)
-			metaDataChange, dataChange := f.HasFileChangedSinceLastSyncUsingLocalChecks(storedObject, storedObject.relativePath)
-			if dataChange {
-				f.copyTransferScheduler(storedObject)
-			} else if metaDataChange {
-				// TODO: Add calls to just update meta data of file.
+			if storedObject.entityType != common.EEntityType.Folder() {
+				dataChange, metaDataChange := f.HasFileChangedSinceLastSyncUsingLocalChecks(storedObject)
+				if dataChange {
+					f.copyTransferScheduler(storedObject)
+				} else if metaDataChange {
+					panic("Not yet implemented")
+				}
 			}
 
 		}
 	}
 
+	// last thing need to do the folder metaDataupdation incase of the finalizeAll true.
 
-	size = -size
-	atomic.AddInt64(&f.sourceFolderIndex.totalSize, size)
+	so, ok := folderMap.indexMap["."]
+	if !ok {
+		panic(fmt.Sprintf("Folder stored map not present"))
+	}
 
+	size += storedObjectSize(so)
+	delete(folderMap.indexMap, ".")
+	if finalizeAll {
+		f.copyTransferScheduler(so)
+	}
+
+	// lets remove the folderMap, it should be empty.
+	if len(folderMap.indexMap) != 0 {
+		for file := range folderMap.indexMap {
+			fmt.Printf("File[%s] present in directory", file)
+		}
+		panic(fmt.Sprintf("Length of folderMap[%s] should be zero", lcFolderName))
+	}
+
+	delete(f.sourceFolderIndex.folderMap, lcFolderName)
+
+	size += int64(unsafe.Sizeof(objectIndexer{}))
+	atomic.AddInt64(&f.sourceFolderIndex.totalSize, -size)
 	if atomic.LoadInt64(&f.sourceFolderIndex.totalSize) < 0 {
 		panic("Total Size is negative.")
 	}
@@ -207,76 +236,114 @@ func (f *syncDestinationComparator) FinalizeTargetDirectory(folderMap *objectInd
 // if file x does not exist at the source, then it is considered extra, and will be deleted
 func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredObject) error {
 	var lcFolderName, lcFileName, lcRelativePath string
-	var folderPresent, present bool
+	var present bool
 	var sourceObjectInMap StoredObject
 
+	//
+	// We come here with 'destinationObject' when Target traverser (parallelList() for Target=Blob) enumerates a directory from tqueue and
+	// creates and enqueues a destinationObject for each enumerated children. Target traverser also creates and enqueues a special
+	// destinationObject (with isFolderEndMarker==true) after queueing destinationObjects for all direct children of the directory.
+	// This special destinationObject is guaranteed to be queued *after* all the other children objects for the directory (if any).
+	// See below for more details on the special isFolderEndMarker object.
+	//
 	if f.sourceFolderIndex.isDestinationCaseInsensitive {
 		lcRelativePath = strings.ToLower(destinationObject.relativePath)
 	} else {
 		lcRelativePath = destinationObject.relativePath
 	}
 
+	//
+	// parent dir name, will be "." for files/dirs at the copy root.
+	//
+	// So, for lcRelativePath == "dir1/dir2",
+	// lcFolderName -> "dir1"
+	// lcFileName   -> "dir2"
+	//
+	// and for "dir1" (dir1 present at copy root),
+	// lcFolderName -> "."
+	// lcFileName   -> "dir1"
+	//
+	// Q: When will folderPresent be false below?
+	// A: Since we process every directory independently, if "dir1" is fully processed before "dir1/dir2",
+	//    when processIfNecessary() is called for "dir1/dir2" with isFolderEndMarker==true, foldermap["dir1"]
+	//    won't be found as it would have been deleted after "dir1" was fully processed, though we MUST have
+	//    foldermap["dir1/dir2"].
+	//    Also note that folderPresent MUST never be false when isFolderEndMarker==false, since target traverser
+	//    only ever enumerates directories added to tqueue by the source traverser and all such directories
+	//    MUST be added to folderMap by the source traverser.
+	//
 	lcFolderName = filepath.Dir(lcRelativePath)
 	lcFileName = filepath.Base(lcRelativePath)
 
 	f.sourceFolderIndex.lock.Lock()
 	defer f.sourceFolderIndex.lock.Unlock()
 
-	// Lets do the first thing check if End Marker received for any folder.
 	if destinationObject.isFolderEndMarker && destinationObject.entityType == common.EEntityType.Folder() {
-		// End Marker marks enumeration complete of the folder.
-		// End Marker come in following cases:-
-		// 1. Dir not present on target side, then we need to create directory and files.
-		// 2. Dir present and some files are added.
-		// 3. Dir present and some files are modified.
-		// For each case we need to process left over files in ObjectIndexerMap.
-
+		//
+		// We will see this special "end of folder" marker *after* we have seen all direct children of
+		// that directory (if any). We have the following cases:
+		// 1. destinationObject.relativePath directory does not exist in the target. In this case there won't be any children
+		//    of destinationObject.relativePath queued for us and we need to copy the directory recursively to the target.
+		// 2. destinationObject.relativePath directory exists in the target and the source directory has not "changed" since last
+		//    sync. In this case the Target traverser would have skipped enumeration of destinationObject.relativePath and hence
+		//    there won't be any children queued for us. We need to go over all its children added in sourceFolderIndex and test
+		//    them for "newness" and copy them if they are found modified after lastsync.
+		// 2. destinationObject.relativePath directory exists in the target and the source directory has "changed" since last sync.
+		//    In this case Target traverser would have enumerated the directory and queued all enumerated children for us. After all
+		//    the children it would have queued this special isFolderEndMarker object. So when we process the isFolderEndMarker object,
+		//    we would have processed all children and hence whatever is left in sourceFolderIndex for that directory are only the files
+		//    newly created in the source since last sync. We need to copy all of them to the target.
+		//
+		// Note: We join lcFolderName and lcFileName to index into folderMap[] instead of directly indexing using lcRelativePath. This is because for the root directory,
+		//       lcRelativePath will be "" but the SourceTraverser would have stored it's properties in folderMap["."], path.Join() gets us "." for root directory.
+		//
 		lcFolderName = path.Join(lcFolderName, lcFileName)
 		foldermap, folderPresent := f.sourceFolderIndex.folderMap[lcFolderName]
+
 		if !folderPresent {
 			panic(fmt.Sprintf("Folder with relativePath[%s] not present in ObjectIndexerMap", lcRelativePath))
 		}
-		f.FinalizeTargetDirectory(foldermap, destinationObject.isFinalizeAll)
 
-		// Lets delete the ObjectIndexer empty map.
-		if len(f.sourceFolderIndex.folderMap[lcFolderName].indexMap) == 0 {
-			size := int64(unsafe.Sizeof(objectIndexer{}))
-			atomic.AddInt64(&f.sourceFolderIndex.totalSize, -size)
-			delete(f.sourceFolderIndex.folderMap, lcFolderName)
-		}
-		
+		//	fmt.Printf("Finalizing directory %s (FinalizeAll=%v)\n", lcFolderName, destinationObject.isFinalizeAll)
+		f.FinalizeTargetDirectory(foldermap, destinationObject.isFinalizeAll, lcFolderName)
+
 		return nil
 	}
 
 	foldermap, folderPresent := f.sourceFolderIndex.folderMap[lcFolderName]
 
+	// sanity check folder always present till finalizer not called. If its not present then there might be some issue.
 	if !folderPresent {
 		panic(fmt.Sprintf("Folder with relativePath[%s] not present in ObjectIndexerMap", lcRelativePath))
 	}
 
 	// Folder Case.
-	if destinationObject.isVirtualFolder || destinationObject.entityType == common.EEntityType.Folder() {
+	if destinationObject.entityType == common.EEntityType.Folder() {
 
 		sourceObjectInMap, present = foldermap.indexMap[lcFileName]
-		// Lets check if entry in source is folder and entry on destination should be folder.
-		// Otherwise folder in source changed to file.
+
+		//
+		// Target also has this object and is of the same type (directory) as the source? If yes, do nothing right now. When we process this directory from tqueue and finalize it,
+		// that time we will sync the directory properties if needed. If either target does not have object with the same name or object type is different, we will need to delete it.
+		// This will be done by the f.destinationCleaner() call below. The new directory will be created in FinalizeTargetDirectory() when we go over the folderIndexer map entries.
+		// Each folder folderIndexer map has ["."] entry which represent that folder. We will delete this entry from map as it belong to its parent map but not do any action.
+		//
 		if present && (destinationObject.entityType == sourceObjectInMap.entityType) {
-			delete(foldermap.indexMap, lcFileName)
-			size := storedObjectSize(sourceObjectInMap)
-			size = -size
-			atomic.AddInt64(&f.sourceFolderIndex.totalSize, size)
+
 			if sourceObjectInMap.relativePath != destinationObject.relativePath {
-				panic("Relative Path not matched")
+				panic(fmt.Sprintf("Relative Path at source[%s] not matched with destination[%s]", sourceObjectInMap.relativePath, destinationObject.relativePath))
 			}
-			delete(f.sourceFolderIndex.folderMap[lcFolderName].indexMap, lcFileName)
-			// create the folder if not present , O/W update its meta-data.
-			if f.disableComparison || sourceObjectInMap.lastModifiedTime.UnixNano() != destinationObject.lastModifiedTime.UnixNano() ||
-				sourceObjectInMap.lastChangeTime.UnixNano() != destinationObject.lastChangeTime.UnixNano() {
-				err := f.copyTransferScheduler(sourceObjectInMap)
-				if err != nil {
-					return err
-				}
-			}
+			// In case of folder if ctime/mtime changed, lets create the folder.
+			// dataChanged, metadataChanged := f.HasFileChangedSinceLastSyncUsingTargetCompare(destinationObject, sourceObjectInMap)
+			// if f.disableComparison || dataChanged || metadataChanged {
+			// 	err := f.copyTransferScheduler(sourceObjectInMap)
+			// 	if err != nil {
+			// 		return err
+			// 	}
+			// }
+			delete(foldermap.indexMap, lcFileName)
+			atomic.AddInt64(&f.sourceFolderIndex.totalSize, -storedObjectSize(sourceObjectInMap))
+
 			return nil
 		}
 
@@ -289,15 +356,13 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 	}
 
 	// File case.
-	// Parent Folder present, we need to check if file exists or not.
-
 	sourceObjectInMap, present = foldermap.indexMap[lcFileName]
 
 	// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
 	if present && (sourceObjectInMap.entityType == destinationObject.entityType) {
 		// Sanity check.
 		if sourceObjectInMap.relativePath != destinationObject.relativePath {
-			panic("Relative Path not matched")
+			panic(fmt.Sprintf("Relative Path at source[%s] not matched with destination[%s]", sourceObjectInMap.relativePath, destinationObject.relativePath))
 		}
 
 		dataChanged, metadataChanged := f.HasFileChangedSinceLastSyncUsingTargetCompare(destinationObject, sourceObjectInMap)
@@ -309,10 +374,9 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 		} else if metadataChanged {
 			// TODO: Need to add call to just update the metadata only.
 		}
-		size := storedObjectSize(sourceObjectInMap)
-		size = -size
-		atomic.AddInt64(&f.sourceFolderIndex.totalSize, size)
-		delete(f.sourceFolderIndex.folderMap[lcFolderName].indexMap, lcFileName)
+
+		atomic.AddInt64(&f.sourceFolderIndex.totalSize, -storedObjectSize(sourceObjectInMap))
+		delete(foldermap.indexMap, lcFileName)
 		return nil
 	}
 

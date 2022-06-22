@@ -23,9 +23,10 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"runtime"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
@@ -83,6 +84,8 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 	if !shouldSendToSte {
 		return nil // skip this one
 	}
+
+	return nil
 
 	if s.dryrunMode {
 		glcm.Dryrun(func(format common.OutputFormat) string {

@@ -292,6 +292,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			transfer.BlobTags = cca.blobTags
 		}
 
+		return nil
+
 		if cca.dryrunMode && shouldSendToSte {
 			glcm.Dryrun(func(format common.OutputFormat) string {
 				if format == common.EOutputFormat.Json() {

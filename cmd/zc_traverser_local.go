@@ -437,7 +437,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					return nil
 				}
 
-				extendedProp, _ := common.GetExtendedProperties(cleanLocalPath(filePath))
+				extendedProp, _ := common.GetExtendedProperties(common.CleanLocalPath(filePath))
 
 				if t.incrementEnumerationCounter != nil {
 					t.incrementEnumerationCounter(entityType)
