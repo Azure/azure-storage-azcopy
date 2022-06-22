@@ -344,8 +344,8 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 	cooked.autoDecompress = raw.autoDecompress
 
-	if raw.autoCompress && !fromTo.IsUpload() {
-		return cooked, errors.New("automatic compression is only supported for uploads to Blob/ADLS Gen2 and Azure Files")
+	if raw.autoCompress && !fromTo.IsUpload() && runtime.GOOS != "linux" {
+		return cooked, errors.New("automatic compression is only supported for uploads to Blob/ADLS Gen2 and Azure Files on linux")
 	}
 	cooked.autoCompress = raw.autoCompress
 

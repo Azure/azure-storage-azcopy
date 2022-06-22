@@ -1,4 +1,6 @@
+#if defined(__linux__)
 #include "_cgo_export.h"
+
 
 struct archive_cookie
 archive_init(char* filename, uintptr_t client_data) {
@@ -58,3 +60,4 @@ archive_close(struct archive *a, struct archive *disk, struct archive_entry *ent
 	return ARCHIVE_OK;
 }
 
+#endif

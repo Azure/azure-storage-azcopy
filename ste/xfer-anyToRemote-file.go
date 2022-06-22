@@ -382,7 +382,7 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 		defer close(md5Channel)
 	}
 
-	var compressor *common.ArchivingReader
+	var compressor io.ReadCloser
 	if jptm.ShouldCompress() {
 		compressor, _ = common.NewArchivingReader(jptm.Info().Source, srcFile, srcSize)
 		defer func() {
