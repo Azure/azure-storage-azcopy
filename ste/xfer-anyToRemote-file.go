@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"hash"
+	"io"
 	"net/http"
 	"net/url"
 	"runtime"
@@ -381,9 +382,9 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 		defer close(md5Channel)
 	}
 
-	var compressor *common.CompressingReader
+	var compressor *common.ArchivingReader
 	if jptm.ShouldCompress() {
-		compressor = common.NewCompressingReader(srcFile, srcSize)
+		compressor, _ = common.NewArchivingReader(jptm.Info().Source, srcFile, srcSize)
 		defer func() {
 			closeErr := compressor.Close()
 			if closeErr != nil {
@@ -495,7 +496,7 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 // of the file read later (when doing a retry)
 // BTW, the reader we create here just works with a single chuck. (That's in contrast with downloads, where we have
 // to use an object that encompasses the whole file, so that it can put the chunks back into order. We don't have that requirement here.)
-func createPopulatedChunkReader(jptm IJobPartTransferMgr, sourceFileFactory common.ChunkReaderSourceFactory, id common.ChunkID, adjustedChunkSize int64, compressor *common.CompressingReader) common.SingleChunkReader {
+func createPopulatedChunkReader(jptm IJobPartTransferMgr, sourceFileFactory common.ChunkReaderSourceFactory, id common.ChunkID, adjustedChunkSize int64, compressor io.Reader) common.SingleChunkReader {
 	chunkReader := common.NewSingleChunkReader(jptm.Context(),
 		sourceFileFactory,
 		id,

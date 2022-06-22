@@ -157,10 +157,10 @@ type singleChunkReader struct {
 	isClosed bool
 
 	// if present, it indicates that the source file is being compressed, read from the compressor instead of fileReader
-	compressor *CompressingReader
+	compressor io.Reader
 }
 
-func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFactory, chunkId ChunkID, length int64, chunkLogger ChunkStatusLogger, generalLogger ILogger, slicePool ByteSlicePooler, cacheLimiter CacheLimiter, compressor *CompressingReader) SingleChunkReader {
+func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFactory, chunkId ChunkID, length int64, chunkLogger ChunkStatusLogger, generalLogger ILogger, slicePool ByteSlicePooler, cacheLimiter CacheLimiter, compressor io.Reader) SingleChunkReader {
 	if length <= 0 {
 		return &emptyChunkReader{}
 	}
