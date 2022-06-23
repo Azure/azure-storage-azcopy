@@ -21,21 +21,22 @@
 package common
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"math"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	gcpUtils "cloud.google.com/go/storage"
+	"github.com/Azure/azure-pipeline-go/pipeline"
+
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/minio/minio-go"
 	"github.com/minio/minio-go/pkg/credentials"
+	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
 )
 
 // ==============================================================================================

@@ -27,8 +27,8 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	minio "github.com/minio/minio-go"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 // Source info provider for S3

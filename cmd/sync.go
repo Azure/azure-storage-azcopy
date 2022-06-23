@@ -24,15 +24,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/shubham808/azure-storage-azcopy/v10/jobsAdmin"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/ste"
 
 	"github.com/spf13/cobra"
 )

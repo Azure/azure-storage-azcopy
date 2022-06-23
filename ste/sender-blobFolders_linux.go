@@ -1,8 +1,9 @@
+//go:build linux
 // +build linux
 
 package ste
 
-import "github.com/Azure/azure-storage-azcopy/v10/common"
+import "github.com/shubham808/azure-storage-azcopy/v10/common"
 
 func (b blobFolderSender) getExtraProperties() error {
 	if b.jptm.Info().PreservePOSIXProperties {

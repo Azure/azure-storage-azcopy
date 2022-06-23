@@ -28,9 +28,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/shubham808/azure-storage-azcopy/v10/cmd"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 ///////////////

@@ -23,13 +23,14 @@ package ste
 import (
 	"bytes"
 	"context"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io/ioutil"
 	"net/http"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 type PipelineNetworkStats struct {

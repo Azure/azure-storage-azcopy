@@ -9,7 +9,7 @@ import (
 	gcpUtils "cloud.google.com/go/storage"
 	"google.golang.org/api/iterator"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 type gcpTraverser struct {

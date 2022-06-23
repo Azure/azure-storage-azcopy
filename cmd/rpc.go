@@ -24,11 +24,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"io/ioutil"
 	"net/http"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/jobsAdmin"
+
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 // Global singleton for sending RPC requests from the frontend to the STE
@@ -55,7 +56,6 @@ func inprocSend(rpcCmd common.RpcCmd, requestData interface{}, responseData inte
 	case common.ERpcCmd.ListJobTransfers():
 		*(responseData.(*common.ListJobTransfersResponse)) = jobsAdmin.ListJobTransfers(requestData.(common.ListJobTransfersRequest))
 
-	
 	case common.ERpcCmd.PauseJob():
 		responseData = jobsAdmin.CancelPauseJobOrder(requestData.(common.JobID), common.EJobStatus.Paused())
 

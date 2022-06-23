@@ -1,11 +1,13 @@
+//go:build linux
 // +build linux
 
 package ste
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"golang.org/x/sys/unix"
 	"time"
+
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"golang.org/x/sys/unix"
 )
 
 func (f localFileSourceInfoProvider) HasUNIXProperties() bool {

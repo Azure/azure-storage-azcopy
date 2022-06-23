@@ -21,9 +21,10 @@
 package ste
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"sync"
 	"sync/atomic"
+
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 type ConcurrencyTuner interface {

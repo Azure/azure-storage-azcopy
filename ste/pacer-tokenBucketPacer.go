@@ -25,7 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 // pacer is used by callers whose activity must be controlled to a certain pace
@@ -115,7 +115,7 @@ func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCou
 		case <-time.After(modifiedSleepDuration):
 			// keep looping
 		}
-		
+
 		// If we've updated target to a NULL pacer, we'll return immediately
 		if p.targetBytesPerSecond() == 0 {
 			atomic.AddInt64(&p.atomicGrandTotal, byteCount)
@@ -153,7 +153,7 @@ func (p *tokenBucketPacer) pacerBody() {
 		select {
 		case <-p.done:
 			return
-		case newTarget = <- p.newTargetBytesPerSecond:
+		case newTarget = <-p.newTargetBytesPerSecond:
 		default:
 		}
 

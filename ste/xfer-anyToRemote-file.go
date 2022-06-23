@@ -25,7 +25,6 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"hash"
 	"net/http"
 	"net/url"
@@ -33,8 +32,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Azure/azure-storage-blob-go/azblob"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 // This code for blob tier safety is _not_ safe for multiple jobs at once.

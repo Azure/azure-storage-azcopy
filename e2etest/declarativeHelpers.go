@@ -21,13 +21,14 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-blob-go/azblob"
+
 	"github.com/JeffreyRichter/enum/enum"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 // /////////

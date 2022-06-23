@@ -23,17 +23,18 @@ package cmd
 import (
 	"context"
 	"fmt"
-	pipeline2 "github.com/Azure/azure-pipeline-go/pipeline"
 	"net/url"
 	"strings"
 
+	pipeline2 "github.com/Azure/azure-pipeline-go/pipeline"
+
 	"errors"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/ste"
 	"github.com/spf13/cobra"
 )
 

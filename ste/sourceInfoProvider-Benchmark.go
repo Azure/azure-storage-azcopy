@@ -23,7 +23,7 @@ package ste
 import (
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 type benchmarkSourceInfoProvider struct {

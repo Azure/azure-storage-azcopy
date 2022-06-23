@@ -1,11 +1,8 @@
 package cmd
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"google.golang.org/api/iterator"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,12 +10,16 @@ import (
 	"strings"
 	"time"
 
+	gcpUtils "cloud.google.com/go/storage"
+	"github.com/shubham808/azure-storage-azcopy/v10/ste"
+	"google.golang.org/api/iterator"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/JeffreyRichter/enum/enum"
+	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
 )
 

@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 package ste
@@ -11,10 +12,10 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/hillu/go-ntdll"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/sddl"
 
 	"golang.org/x/sys/windows"
 )

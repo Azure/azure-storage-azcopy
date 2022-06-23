@@ -34,10 +34,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/shubham808/azure-storage-azcopy/v10/ste"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 // sortPlanFiles is struct that implements len, swap and less than functions
@@ -75,6 +75,9 @@ var JobsAdmin interface {
 	// JobMgr returns the specified JobID's JobMgr
 	JobMgr(jobID common.JobID) (ste.IJobMgr, bool)
 	JobMgrEnsureExists(jobID common.JobID, level common.LogLevel, commandString string) ste.IJobMgr
+
+	// ChangeLogLevel change the log level for specific job.
+	ChangeLogLevel(level pipeline.LogLevel, jobId common.JobID) error
 
 	// AddJobPartMgr associates the specified JobPartMgr with the Jobs Administrator
 	//AddJobPartMgr(appContext context.Context, planFile JobPartPlanFileName) IJobPartMgr
@@ -556,7 +559,7 @@ func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint3
 	a := ste.NewPerformanceAdvisor(p, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency, dir, averageBytesPerFile, isToAzureFiles)
 	return a.GetAdvice()
 }
-	
+
 //Structs for messageHandler
 
 /* PerfAdjustment message. */
@@ -568,7 +571,7 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 	toBitsPerSec := func(megaBitsPerSec int64) int64 {
 		return megaBitsPerSec * 1000 * 1000 / 8
 	}
-	
+
 	const minIntervalBetweenPerfAdjustment = time.Minute
 	lastPerfAdjustTime := time.Now().Add(-2 * minIntervalBetweenPerfAdjustment)
 	var err error
@@ -583,23 +586,23 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 			var perfAdjustmentReq common.PerfAdjustmentReq
 
 			if time.Since(lastPerfAdjustTime) < minIntervalBetweenPerfAdjustment {
-				err = fmt.Errorf("Performance Adjustment already in progress. Please try after " + 
-						lastPerfAdjustTime.Add(minIntervalBetweenPerfAdjustment).Format(time.RFC3339))
+				err = fmt.Errorf("Performance Adjustment already in progress. Please try after " +
+					lastPerfAdjustTime.Add(minIntervalBetweenPerfAdjustment).Format(time.RFC3339))
 			}
-			
+
 			if e := json.Unmarshal([]byte(msg.Req.Value), &perfAdjustmentReq); e != nil {
 				err = fmt.Errorf("parsing %s failed with %s", msg.Req.Value, e.Error())
 			}
 
 			if perfAdjustmentReq.Throughput < 0 {
 				err = fmt.Errorf("invalid value %d for cap-mbps. cap-mpbs should be greater than 0",
-						      perfAdjustmentReq.Throughput)
+					perfAdjustmentReq.Throughput)
 			}
 
 			if err == nil {
 				lastPerfAdjustTime = time.Now()
 				ja.UpdateTargetBandwidth(toBitsPerSec(perfAdjustmentReq.Throughput))
-				
+
 				resp.Status = true
 				resp.AdjustedThroughPut = perfAdjustmentReq.Throughput
 				resp.NextAdjustmentAfter = lastPerfAdjustTime.Add(minIntervalBetweenPerfAdjustment)
@@ -611,11 +614,11 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 				resp.Err = err.Error()
 			}
 
-			msg.SetResponse(&common.LCMMsgResp {
+			msg.SetResponse(&common.LCMMsgResp{
 				TimeStamp: time.Now(),
-				MsgType: msg.Req.MsgType,
-				Value: resp,
-				Err: err,
+				MsgType:   msg.Req.MsgType,
+				Value:     resp,
+				Err:       err,
 			})
 
 			msg.Reply()
@@ -634,7 +637,7 @@ type jobIDToJobMgr struct {
 	nocopy common.NoCopy
 	lock   sync.RWMutex
 	m      map[common.JobID]ste.IJobMgr
-} 
+}
 
 func newJobIDToJobMgr() jobIDToJobMgr {
 	return jobIDToJobMgr{m: make(map[common.JobID]ste.IJobMgr)}

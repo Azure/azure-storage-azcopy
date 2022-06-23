@@ -31,10 +31,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/google/uuid"
+	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
 )
 
 // provide convenient methods to get access to test resources such as accounts, containers/shares, directories
@@ -158,7 +158,6 @@ func (TestResourceFactory) GetBlobURLWithSAS(c asserter, accountType AccountType
 func (TestResourceFactory) CreateNewContainer(c asserter, publicAccess azblob.PublicAccessType, accountType AccountType) (container azblob.ContainerURL, name string, rawURL url.URL) {
 	name = TestResourceNameGenerator{}.GenerateContainerName(c)
 	container = TestResourceFactory{}.GetBlobServiceURL(accountType).NewContainerURL(name)
-
 
 	cResp, err := container.Create(context.Background(), nil, publicAccess)
 	c.AssertNoErr(err)
