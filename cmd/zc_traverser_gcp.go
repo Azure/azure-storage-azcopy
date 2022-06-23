@@ -1,14 +1,15 @@
 package cmd
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"fmt"
-	"google.golang.org/api/iterator"
 	"net/url"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	gcpUtils "cloud.google.com/go/storage"
+	"google.golang.org/api/iterator"
+
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 type gcpTraverser struct {
@@ -123,6 +124,7 @@ func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor objectProc
 			err = processIfPassedFilters(filters,
 				storedObject,
 				processor)
+			_, err = getProcessingError(err)
 			if err != nil {
 				return err
 			}

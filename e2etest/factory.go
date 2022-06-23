@@ -31,10 +31,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/google/uuid"
+	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
 )
 
 // provide convenient methods to get access to test resources such as accounts, containers/shares, directories
@@ -241,6 +241,7 @@ func getTestName(t *testing.T) (pseudoSuite, test string) {
 	return pseudoSuite, removeUnderscores(testName)
 }
 
+//nolint
 // This function generates an entity name by concatenating the passed prefix,
 // the name of the test requesting the entity name, and the minute, second, and nanoseconds of the call.
 // This should make it easy to associate the entities with their test, uniquely identify
@@ -251,10 +252,10 @@ func generateName(c asserter, prefix string, maxLen int) string {
 	name := c.CompactScenarioName() // don't want to just use test name here, because each test contains multiple scenarios with the declarative runner
 
 	textualPortion := fmt.Sprintf("%s-%s", prefix, strings.ToLower(name))
-	currentTime := time.Now()
-	numericSuffix := fmt.Sprintf("%02d%02d%d", currentTime.Minute(), currentTime.Second(), currentTime.Nanosecond())
+	// GUIDs are less prone to overlap than times.
+	guidSuffix := uuid.New().String()
 	if maxLen > 0 {
-		maxTextLen := maxLen - len(numericSuffix)
+		maxTextLen := maxLen - len(guidSuffix)
 		if maxTextLen < 1 {
 			panic("max len too short")
 		}
@@ -262,7 +263,7 @@ func generateName(c asserter, prefix string, maxLen int) string {
 			textualPortion = textualPortion[:maxTextLen]
 		}
 	}
-	name = textualPortion + numericSuffix
+	name = textualPortion + guidSuffix
 	return name
 }
 
@@ -271,6 +272,7 @@ func (TestResourceNameGenerator) GenerateContainerName(c asserter) string {
 	return uuid.New().String()
 }
 
+//nolint
 func (TestResourceNameGenerator) generateBlobName(c asserter) string {
 	return generateName(c, blobPrefix, 0)
 }

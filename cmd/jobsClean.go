@@ -27,7 +27,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 func init() {
@@ -113,7 +113,7 @@ func handleCleanJobsCommand(givenStatus common.JobStatus) error {
 
 func blindDeleteAllJobFiles() (int, error) {
 	// get rid of the job plan files
-	numPlanFilesRemoved, err := removeFilesWithPredicate(azcopyJobPlanFolder, func(s string) bool {
+	numPlanFilesRemoved, err := removeFilesWithPredicate(common.AzcopyJobPlanFolder, func(s string) bool {
 		if strings.Contains(s, ".steV") {
 			return true
 		}

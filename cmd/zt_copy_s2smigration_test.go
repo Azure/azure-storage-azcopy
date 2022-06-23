@@ -27,9 +27,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
 )
 
@@ -76,7 +76,6 @@ func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 		src:                            src,
 		dst:                            dst,
 		recursive:                      true,
-		logVerbosity:                   defaultLogVerbosityForCopy,
 		output:                         defaultOutputFormatForCopy,
 		blobType:                       defaultBlobTypeForCopy,
 		blockBlobTier:                  defaultBlockBlobTierForCopy,
@@ -89,6 +88,7 @@ func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
 		forceWrite:                     common.EOverwriteOption.True().String(),
 		preserveOwner:                  common.PreserveOwnerDefault,
+		asSubdir:                       true,
 	}
 }
 
@@ -1296,7 +1296,7 @@ func (s *cmdIntegrationSuite) TestCopyWithDFSResource(c *chk.C) {
 	// set up the file
 	fileNameSource := generateName("file", 0)
 	fileURLSource := parentDirURLSource.NewFileURL(fileNameSource)
-	_, err = fileURLSource.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err = fileURLSource.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 
 	dirURLWithSASSource := serviceURLWithSAS.NewFileSystemURL(fsNameSource).NewDirectoryURL(parentDirNameSource)
@@ -1340,7 +1340,7 @@ func (s *cmdIntegrationSuite) TestCopyWithDFSResource(c *chk.C) {
 	// set up the file
 	fileNameSource = generateName("file2", 0)
 	fileURLSource = parentDirURLSource.NewFileURL(fileNameSource)
-	_, err = fileURLSource.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err = fileURLSource.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 
 	rawSync := getDefaultSyncRawInput(dirURLWithSASSource.String(), dirURLWithSAS.String())

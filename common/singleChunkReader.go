@@ -227,14 +227,20 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 	// Must use "relaxed" RAM limit IFF this is a retry.  Else, we can, in theory, get deadlock with all active goroutines blocked
 	// here doing retries, but no RAM _will_ become available because its
 	// all used by queued chunkfuncs (that can't be processed because all goroutines are active).
-	cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.RAMToSchedule())
+	if cr.chunkLogger != nil {
+		cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.RAMToSchedule())
+	}
+
 	err := cr.cacheLimiter.WaitUntilAdd(cr.ctx, cr.length, func() bool { return isRetry })
 	if err != nil {
 		return err
 	}
 
 	// prepare to read
-	cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.DiskIO())
+	if cr.chunkLogger != nil {
+		cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.DiskIO())
+	}
+
 	targetBuffer := cr.slicePool.RentSlice(cr.length)
 
 	// read WITHOUT holding the "close" lock.  While we don't have the lock, we mutate ONLY local variables, no instance state.
@@ -339,7 +345,7 @@ func (cr *singleChunkReader) doRead(p []byte, freeBufferOnEof bool) (n int, err 
 		return 0, err
 	}
 
-	// extra checks to be safe (originally for https://github.com/Azure/azure-storage-azcopy/issues/191)
+	// extra checks to be safe (originally for https://github.com/shubham808/azure-storage-azcopy/issues/191)
 	// No longer needed now that use/unuse lock with a mutex, but there's no harm in leaving them here
 	if cr.buffer == nil {
 		panic("unexpected nil buffer")
@@ -412,6 +418,18 @@ func (cr *singleChunkReader) Close() error {
 	// do the real work
 	cr.closeBuffer()
 	cr.isClosed = true
+
+	/*
+	 * Set chunkLogger to nil, so that chunkStatusLogger can be GC'ed.
+	 *
+	 * TODO: We should not need to explicitly set this to nil but today we have a yet-unknown ref on cr which
+	 *       is leaking this "big" chunkStatusLogger memory, so we cause that to be freed by force dropping this ref.
+	 *
+	 * Note: We are force setting this to nil and we safe guard against this by checking chunklogger not nil at respective places.
+	 *       At present this is called only from blockingPrefetch().
+	 */
+	cr.chunkLogger = nil
+
 	return nil
 }
 

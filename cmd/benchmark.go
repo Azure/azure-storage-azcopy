@@ -28,10 +28,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
 )
 
@@ -47,13 +47,12 @@ type rawBenchmarkCmdArgs struct {
 	numOfFolders   uint
 
 	// options from flags
-	blockSizeMB  float64
-	putMd5       bool
-	checkLength  bool
-	blobType     string
-	output       string
-	logVerbosity string
-	mode         string
+	blockSizeMB float64
+	putMd5      bool
+	checkLength bool
+	blobType    string
+	output      string
+	mode        string
 }
 
 const (
@@ -153,7 +152,6 @@ func (raw rawBenchmarkCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	c.CheckLength = raw.checkLength
 	c.blobType = raw.blobType
 	c.output = raw.output
-	c.logVerbosity = raw.logVerbosity
 
 	cooked, err := c.cook()
 	if err != nil {
@@ -168,7 +166,7 @@ func (raw rawBenchmarkCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	if !downloadMode && raw.deleteTestData {
 		// set up automatic cleanup
-		cooked.followupJobArgs, err = raw.createCleanupJobArgs(cooked.Destination, raw.logVerbosity)
+		cooked.followupJobArgs, err = raw.createCleanupJobArgs(cooked.Destination, logVerbosityRaw)
 		if err != nil {
 			return dummyCooked, err
 		}
@@ -225,7 +223,6 @@ func (raw rawBenchmarkCmdArgs) createCleanupJobArgs(benchmarkDest common.Resourc
 	u, _ := benchmarkDest.FullURL() // don't check error, because it was parsed already in main job
 	rc.src = u.String()             // the SOURCE for the deletion is the the dest from the benchmark
 	rc.recursive = true
-	rc.logVerbosity = logVerbosity
 
 	switch InferArgumentLocation(rc.src) {
 	case common.ELocation.Blob():
@@ -241,6 +238,7 @@ func (raw rawBenchmarkCmdArgs) createCleanupJobArgs(benchmarkDest common.Resourc
 	rc.setMandatoryDefaults()
 
 	cooked, err := rc.cook()
+	cooked.jobID = common.NewJobID() // Override the job ID that cook gave us-- That would cause us to fail deletion.
 	cooked.isCleanupJob = true
 	cooked.cleanupJobMessage = "Running cleanup job to delete files created during benchmarking"
 	return &cooked, err
@@ -344,8 +342,4 @@ func init() {
 	benchCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. (By default the hash is NOT created.) Identical to the same-named parameter in the copy command")
 	benchCmd.PersistentFlags().BoolVar(&raw.checkLength, "check-length", true, "Check the length of a file on the destination after the transfer. If there is a mismatch between source and destination, the transfer is marked as failed.")
 	benchCmd.PersistentFlags().StringVar(&raw.mode, "mode", "upload", "Defines if Azcopy should test uploads or downloads from this target. Valid values are 'upload' and 'download'. Defaulted option is 'upload'.")
-
-	// TODO use constant for default value or, better, move loglevel param to root cmd?
-	benchCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs).")
-
 }

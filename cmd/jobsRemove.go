@@ -28,7 +28,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
 )
 
@@ -75,7 +75,7 @@ func init() {
 
 func handleRemoveSingleJob(jobID common.JobID) error {
 	// get rid of the job plan files
-	numPlanFileRemoved, err := removeFilesWithPredicate(azcopyJobPlanFolder, func(s string) bool {
+	numPlanFileRemoved, err := removeFilesWithPredicate(common.AzcopyJobPlanFolder, func(s string) bool {
 		if strings.Contains(s, jobID.String()) && strings.Contains(s, ".steV") {
 			return true
 		}

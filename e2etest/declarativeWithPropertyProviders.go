@@ -23,8 +23,8 @@ package e2etest
 import (
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/cmd"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 // All the structs in this file have names starting with "with", to make the readability flow when they are used
@@ -173,10 +173,12 @@ func (w with) createObjectProperties() *objectProperties {
 // use createOnly if you want to define properties that should be used when creating an object, but not
 // used when verifying the state of the transferred object. Generally you'll have no use for this.
 // Just use "with", and the test framework will do the right thing.
+//nolint
 type createOnly struct {
 	with
 }
 
+//nolint
 func (createOnly) appliesToVerification() bool {
 	return false
 }

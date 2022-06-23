@@ -4,14 +4,15 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"io"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-pipeline-go/pipeline"
+
+	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
 	"github.com/spf13/cobra"
 )
 

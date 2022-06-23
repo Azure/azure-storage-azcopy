@@ -48,7 +48,7 @@ import (
 )
 
 // ApplicationID represents 1st party ApplicationID for AzCopy.
-//const ApplicationID = "a45c21f4-7066-40b4-97d8-14f4313c3caa" // 3rd party test ApplicationID for AzCopy.
+// const ApplicationID = "a45c21f4-7066-40b4-97d8-14f4313c3caa" // 3rd party test ApplicationID for AzCopy.
 const ApplicationID = "579a7132-0e58-4d80-b1e1-7a1e2d337859"
 
 // Resource used in azure storage OAuth authentication
@@ -100,8 +100,8 @@ func newAzcopyHTTPClient() *http.Client {
 			DisableKeepAlives:      false,
 			DisableCompression:     true,
 			MaxResponseHeaderBytes: 0,
-			//ResponseHeaderTimeout:  time.Duration{},
-			//ExpectContinueTimeout:  time.Duration{},
+			// ResponseHeaderTimeout:  time.Duration{},
+			// ExpectContinueTimeout:  time.Duration{},
 		},
 	}
 }
@@ -401,7 +401,7 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 	return &oAuthTokenInfo, nil
 }
 
-//CertLogin non-interactively logs in using a specified certificate, certificate password, and activedirectory endpoint.
+// CertLogin non-interactively logs in using a specified certificate, certificate password, and activedirectory endpoint.
 func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID string, persist bool) (*OAuthTokenInfo, error) {
 	// TODO: Global default cert flag for true non interactive login?
 	// (Also could be useful if the user has multiple certificates they want to switch between in the same file.)
@@ -418,7 +418,7 @@ func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, 
 	return oAuthTokenInfo, err
 }
 
-//GetNewTokenFromCert refreshes a token manually from a certificate.
+// GetNewTokenFromCert refreshes a token manually from a certificate.
 func (credInfo *OAuthTokenInfo) GetNewTokenFromCert(ctx context.Context) (*adal.Token, error) {
 	tokeninfo, err := certLoginNoUOTM(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint, credInfo.SPNInfo.CertPath, credInfo.SPNInfo.Secret, credInfo.ApplicationID)
 
@@ -530,6 +530,10 @@ func (uotm *UserOAuthTokenManager) getCachedTokenInfo(ctx context.Context) (*OAu
 
 // HasCachedToken returns if there is cached token in token manager.
 func (uotm *UserOAuthTokenManager) HasCachedToken() (bool, error) {
+	if uotm.stashedInfo != nil {
+		return true, nil
+	}
+
 	return uotm.credCache.HasCachedToken()
 }
 
@@ -538,7 +542,7 @@ func (uotm *UserOAuthTokenManager) RemoveCachedToken() error {
 	return uotm.credCache.RemoveCachedToken()
 }
 
-//====================================================================================
+// ====================================================================================
 
 // EnvVarOAuthTokenInfo passes oauth token info into AzCopy through environment variable.
 // Note: this is only used for testing, and not encouraged to be used in production environments.
@@ -596,7 +600,7 @@ func (uotm *UserOAuthTokenManager) getTokenInfoFromEnvVar(ctx context.Context) (
 	return tokenInfo, nil
 }
 
-//====================================================================================
+// ====================================================================================
 
 // TokenRefreshSourceTokenStore indicates enabling azcopy oauth integration through tokenstore.
 // Note: This should be only used for internal integrations.
@@ -934,7 +938,7 @@ func jsonToTokenInfo(b []byte) (*OAuthTokenInfo, error) {
 	return &OAuthTokenInfo, nil
 }
 
-//====================================================================================
+// ====================================================================================
 
 // TestOAuthInjection controls variables for OAuth testing injections
 type TestOAuthInjection struct {

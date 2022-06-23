@@ -22,14 +22,33 @@ package ste
 
 import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 type appendBlobUploader struct {
 	appendBlobSenderBase
 
 	md5Channel chan []byte
+	sip        ISourceInfoProvider
+}
+
+func (u *appendBlobUploader) Prologue(ps common.PrologueState) (destinationModified bool) {
+	if u.jptm.Info().PreservePOSIXProperties {
+		if unixSIP, ok := u.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
+			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
+			u.metadataToApply = common.Metadata(u.metadataToApply).Clone().ToAzBlobMetadata()
+
+			statAdapter, err := unixSIP.GetUNIXProperties()
+			if err != nil {
+				u.jptm.FailActiveSend("GetUNIXProperties", err)
+			}
+
+			common.AddStatToBlobMetadata(statAdapter, u.metadataToApply)
+		}
+	}
+
+	return u.appendBlobSenderBase.Prologue(ps)
 }
 
 func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
@@ -38,7 +57,7 @@ func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipel
 		return nil, err
 	}
 
-	return &appendBlobUploader{appendBlobSenderBase: *senderBase, md5Channel: newMd5Channel()}, nil
+	return &appendBlobUploader{appendBlobSenderBase: *senderBase, md5Channel: newMd5Channel(), sip: sip}, nil
 }
 
 func (u *appendBlobUploader) Md5Channel() chan<- []byte {

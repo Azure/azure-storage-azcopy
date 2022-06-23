@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
 	chk "gopkg.in/check.v1"
 )
 
@@ -141,7 +141,7 @@ func createNewFileFromFileSystem(c *chk.C, fileSystem azbfs.FileSystemURL) (file
 
 	file, name = getFileURLFromDirectory(c, dir)
 
-	cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
 

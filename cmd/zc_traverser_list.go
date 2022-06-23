@@ -23,10 +23,11 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"net/url"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-pipeline-go/pipeline"
+
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 // a meta traverser that goes through a list of paths (potentially directory entities) and scans them one by one
@@ -108,8 +109,8 @@ func newListTraverser(parent common.ResourceString, parentType common.Location, 
 
 		// Construct a traverser that goes through the child
 		traverser, err := InitResourceTraverser(source, parentType, ctx, credential, &followSymlinks,
-			nil, recursive, getProperties, includeDirectoryStubs, incrementEnumerationCounter,
-			nil, s2sPreserveBlobTags, logLevel, cpkOptions)
+			nil, recursive, getProperties, includeDirectoryStubs, common.EPermanentDeleteOption.None(), incrementEnumerationCounter,
+			nil, s2sPreserveBlobTags, logLevel, cpkOptions, nil /* errorChannel */)
 		if err != nil {
 			return nil, err
 		}

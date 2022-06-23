@@ -22,9 +22,10 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/spf13/cobra"
 	"strings"
+
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/spf13/cobra"
 )
 
 func init() {
@@ -81,6 +82,11 @@ func init() {
 			if err != nil {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 			}
+
+			if cooked.permanentDeleteOption != common.EPermanentDeleteOption.None() {
+				glcm.Info("Permanent delete is a PREVIEW feature and soft-deleted snapshots/versions will be deleted PERMANENTLY. Please proceed with caution.")
+			}
+
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
@@ -97,7 +103,6 @@ func init() {
 	rootCmd.AddCommand(deleteCmd)
 
 	deleteCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Look into sub-directories recursively when syncing between directories.")
-	deleteCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "Define the log verbosity for the log file. Available levels include: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default 'INFO')")
 	deleteCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
 	deleteCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "Include only these paths when removing. "+
 		"This option does not support wildcard characters (*). Checks relative path prefix. For example: myFolder;myFolder/subDirName/file.pdf")
@@ -110,4 +115,7 @@ func init() {
 	deleteCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-versions", "", "Specifies a file where each version id is listed on a separate line. Ensure that the source must point to a single blob and all the version ids specified in the file using this flag must belong to the source blob only. Specified version ids of the given blob will get deleted from Azure Storage.")
 	deleteCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the path files that would be removed by the command. This flag does not trigger the removal of the files.")
 	deleteCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. For Example: BlobTrash, FileTrash, BlobFSTrash")
+	deleteCmd.PersistentFlags().StringVar(&raw.permanentDeleteOption, "permanent-delete", "none", "This is a preview feature that PERMANENTLY deletes soft-deleted snapshots/versions. Possible values include 'snapshots', 'versions', 'snapshotsandversions', 'none'.")
+	deleteCmd.PersistentFlags().StringVar(&raw.includeBefore, common.IncludeBeforeFlagName, "", "Include only those files modified before or on the given date/time. The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. As of AzCopy 10.7, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
+	deleteCmd.PersistentFlags().StringVar(&raw.includeAfter, common.IncludeAfterFlagName, "", "Include only those files modified on or after the given date/time. The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. As of AzCopy 10.5, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
 }

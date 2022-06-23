@@ -23,10 +23,11 @@ package ste
 import (
 	"bytes"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
 	"runtime"
 	"time"
+
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 type AdviceType struct {
@@ -126,7 +127,7 @@ type PerformanceAdvisor struct {
 	isToAzureFiles bool
 }
 
-func NewPerformanceAdvisor(stats *pipelineNetworkStats, commandLineMbpsCap float64, mbps int64, finalReason string, finalConcurrency int, dir common.TransferDirection, avgBytesPerFile int64, isToAzureFiles bool) *PerformanceAdvisor {
+func NewPerformanceAdvisor(stats *PipelineNetworkStats, commandLineMbpsCap float64, mbps int64, finalReason string, finalConcurrency int, dir common.TransferDirection, avgBytesPerFile int64, isToAzureFiles bool) *PerformanceAdvisor {
 	p := &PerformanceAdvisor{
 		capMbps:                     commandLineMbpsCap,
 		mbps:                        mbps,
@@ -312,7 +313,7 @@ func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 					"(This is an experimental feature so, if you believe AzCopy was mistaken and CPU usage was actually fine, you can turn "+
 					"off this message by setting the environment variable %s to false.)", common.EEnvironmentVariable.AutoTuneToCpu().Name)
 			// TODO: review whether we still need the environment variable, and adjust this message if we remove it
-		case concurrencyReasonTunerDisabled:
+		case ConcurrencyReasonTunerDisabled:
 			addAdvice(EAdviceType.ConcurrencyNotTuned(),
 				"Auto-tuning of concurrency was prevented by an environment variable setting a specific concurrency value. Therefore "+
 					"AzCopy cannot tune itself to find the maximum possible throughput.")

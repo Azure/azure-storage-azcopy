@@ -31,15 +31,17 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/shubham808/azure-storage-azcopy/v10/jobsAdmin"
+
 	"github.com/minio/minio-go/pkg/s3utils"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/ste"
 )
 
 var once sync.Once
@@ -57,11 +59,11 @@ const oauthLoginSessionCacheAccountName = "AzCopyOAuthTokenCache"
 // Note: Currently, only support to have TokenManager for one user mapping to one tenantID.
 func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 	once.Do(func() {
-		if azcopyAppPathFolder == "" {
-			panic("invalid state, azcopyAppPathFolder should be initialized by root")
+		if common.AzcopyJobPlanFolder == "" {
+			panic("invalid state, AzcopyJobPlanFolder should not be an empty string")
 		}
 		currentUserOAuthTokenManager = common.NewUserOAuthTokenManagerInstance(common.CredCacheOptions{
-			DPAPIFilePath: azcopyAppPathFolder,
+			DPAPIFilePath: common.AzcopyJobPlanFolder,
 			KeyName:       oauthLoginSessionCacheKeyName,
 			ServiceName:   oauthLoginSessionCacheServiceName,
 			AccountName:   oauthLoginSessionCacheAccountName,
@@ -239,7 +241,7 @@ func getBlobFSCredentialType(ctx context.Context, blobResourceURL string, standa
 		return common.ECredentialType.Unknown(), err
 	}
 
-	//Give preference to explicitly supplied SAS tokens
+	// Give preference to explicitly supplied SAS tokens
 	sas := azbfs.NewBfsURLParts(*resourceURL).SAS
 
 	if isSASExisted := sas.Signature() != ""; isSASExisted || standaloneSAS {
@@ -274,7 +276,12 @@ func oAuthTokenExists() (oauthTokenExists bool) {
 		oauthTokenExists = true
 	}
 
-	uotm := GetUserOAuthTokenManagerInstance()
+	uotm, err := GetOAuthTokenManagerInstance()
+	if err != nil {
+		oauthTokenExists = false
+		return
+	}
+
 	if hasCachedToken, err := uotm.HasCachedToken(); hasCachedToken {
 		oauthTokenExists = true
 	} else if err != nil {
@@ -460,8 +467,8 @@ func logAuthType(ct common.CredentialType, location common.Location, isSource bo
 	message := fmt.Sprintf("Authenticating to %s using %s", resource, name)
 	if _, exists := authMessagesAlreadyLogged.Load(message); !exists {
 		authMessagesAlreadyLogged.Store(message, struct{}{}) // dedup because source is auth'd by both enumerator and STE
-		if ste.JobsAdmin != nil {
-			ste.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
+		if jobsAdmin.JobsAdmin != nil {
+			jobsAdmin.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
 		}
 		glcm.Info(message)
 	}
@@ -589,7 +596,7 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // ==============================================================================================
 func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
 	credential := common.CreateBlobCredential(ctx, credInfo, common.CredentialOpOptions{
-		//LogInfo:  glcm.Info, //Comment out for debugging
+		// LogInfo:  glcm.Info, //Comment out for debugging
 		LogError: glcm.Info,
 	})
 
@@ -626,7 +633,7 @@ const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost
 
 func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
 	credential := common.CreateBlobFSCredential(ctx, credInfo, common.CredentialOpOptions{
-		//LogInfo:  glcm.Info, //Comment out for debugging
+		// LogInfo:  glcm.Info, //Comment out for debugging
 		LogError: glcm.Info,
 	})
 

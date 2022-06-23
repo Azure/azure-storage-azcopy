@@ -26,8 +26,8 @@ import (
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 // Creates the right kind of URL to blob copier, based on the blob type of the source
@@ -75,6 +75,10 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 			srcInfoProvider.RawSource(),
 			destination,
 			fmt.Sprintf("BlobType %q is set for destination blob.", targetBlobType))
+	}
+
+	if jptm.Info().IsFolderPropertiesTransfer() {
+		return newBlobFolderSender(jptm, destination, p, pacer, srcInfoProvider)
 	}
 
 	switch targetBlobType {

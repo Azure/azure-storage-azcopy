@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"crypto/md5"
 	"fmt"
@@ -10,16 +9,18 @@ import (
 	"os"
 	"time"
 
+	gcpUtils "cloud.google.com/go/storage"
+
 	"io"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	minio "github.com/minio/minio-go"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
 )
 
@@ -274,7 +275,8 @@ func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobH
 		azblob.BlobAccessConditions{},
 		tier,
 		nil,
-		azblob.ClientProvidedKeyOptions{})
+		azblob.ClientProvidedKeyOptions{},
+		azblob.ImmutabilityPolicyOptions{})
 	if err != nil {
 		fmt.Println(fmt.Sprintf("error uploading the blob %v", err))
 		os.Exit(1)

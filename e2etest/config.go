@@ -34,6 +34,18 @@ import (
 // the general guidance is to take in as few parameters as possible
 type GlobalInputManager struct{}
 
+func (GlobalInputManager) GetServicePrincipalAuth() (tenantID string, applicationID string, clientSecret string) {
+	tenantID = os.Getenv("AZCOPY_E2E_TENANT_ID")
+	applicationID = os.Getenv("AZCOPY_E2E_APPLICATION_ID")
+	clientSecret = os.Getenv("AZCOPY_E2E_CLIENT_SECRET")
+
+	if applicationID == "" || clientSecret == "" {
+		panic("Insufficient information was supplied for service principal authentication")
+	}
+
+	return
+}
+
 func (GlobalInputManager) GetAccountAndKey(accountType AccountType) (string, string) {
 	var name, key string
 
@@ -44,6 +56,9 @@ func (GlobalInputManager) GetAccountAndKey(accountType AccountType) (string, str
 	case EAccountType.HierarchicalNamespaceEnabled():
 		name = os.Getenv("AZCOPY_E2E_ACCOUNT_NAME_HNS")
 		key = os.Getenv("AZCOPY_E2E_ACCOUNT_KEY_HNS")
+	case EAccountType.Classic():
+		name = os.Getenv("AZCOPY_E2E_CLASSIC_ACCOUNT_NAME")
+		key = os.Getenv("AZCOPY_E2E_CLASSIC_ACCOUNT_KEY")
 	default:
 		panic("Only the standard account type is supported for the moment.")
 	}
@@ -89,6 +104,7 @@ type AccountType uint8
 func (AccountType) Standard() AccountType                     { return AccountType(0) }
 func (AccountType) Premium() AccountType                      { return AccountType(1) }
 func (AccountType) HierarchicalNamespaceEnabled() AccountType { return AccountType(2) }
+func (AccountType) Classic() AccountType                      { return AccountType(3) }
 
 func (o AccountType) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))

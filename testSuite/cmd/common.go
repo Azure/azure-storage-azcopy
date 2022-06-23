@@ -1,17 +1,18 @@
 package cmd
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"fmt"
 	"net/http"
 	"os"
 	"strings"
 
+	gcpUtils "cloud.google.com/go/storage"
+
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	minio "github.com/minio/minio-go"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 // validateString compares the two strings.

@@ -29,9 +29,9 @@ type BlobFSHTTPHeaders struct {
 
 // BlobFSAccessControl represents the set of custom headers available for defining access conditions for the content.
 type BlobFSAccessControl struct {
-	Owner 		string
-	Group 		string
-	ACL   		string // Combining ACL & Permissions = invalid for SetAccessControl.
+	Owner       string
+	Group       string
+	ACL         string // Combining ACL & Permissions = invalid for SetAccessControl.
 	Permissions string
 }
 
@@ -72,18 +72,18 @@ func (f FileURL) GetParentDir() (DirectoryURL, error) {
 
 // Create creates a new file or replaces a file. Note that this method only initializes the file.
 // For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create.
-func (f FileURL) Create(ctx context.Context, headers BlobFSHTTPHeaders) (*PathCreateResponse, error) {
-	return f.CreateWithOptions(ctx, CreateFileOptions{Headers: headers})
+func (f FileURL) Create(ctx context.Context, headers BlobFSHTTPHeaders, permissions BlobFSAccessControl) (*PathCreateResponse, error) {
+	return f.CreateWithOptions(ctx, CreateFileOptions{Headers: headers}, permissions)
 }
 
 // Create creates a new file or replaces a file. Note that this method only initializes the file.
 // For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create.
-func (f FileURL) CreateWithOptions(ctx context.Context, options CreateFileOptions) (*PathCreateResponse, error) {
+func (f FileURL) CreateWithOptions(ctx context.Context, options CreateFileOptions, permissions BlobFSAccessControl) (*PathCreateResponse, error) {
 	return f.fileClient.Create(ctx, f.fileSystemName, f.path, PathResourceFile,
 		nil, PathRenameModeNone, nil, nil, nil, nil,
 		&options.Headers.CacheControl, &options.Headers.ContentType, &options.Headers.ContentEncoding,
 		&options.Headers.ContentLanguage, &options.Headers.ContentDisposition, nil, nil, nil,
-		buildMetadataString(options.Metadata), nil, nil,
+		buildMetadataString(options.Metadata), &permissions.Permissions, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil)
@@ -224,12 +224,17 @@ func (f FileURL) Rename(ctx context.Context, options RenameFileOptions) (FileURL
 		fileSystemName = &f.fileSystemName
 	}
 
-	renameSource := "/" + f.fileSystemName + "/" + f.path
-
 	urlParts := NewBfsURLParts(f.fileClient.URL())
 	urlParts.FileSystemName = *fileSystemName
 	urlParts.DirectoryOrFilePath = options.DestinationPath
+	// ensure we use our source's SAS token in the x-ms-rename-source header
+	renameSource := "/" + f.fileSystemName + "/" + f.path + "?" + urlParts.SAS.Encode()
 
+	// if we're changing our source SAS to a new SAS in the rename
+	// in the case the user wants to have limited permissions per directory: sas1 for file1 and sas2 for file2
+	if options.DestinationSas != nil && *options.DestinationSas != "" {
+		urlParts.SAS = GetSasQueryParams(*options.DestinationSas)
+	}
 	destinationFileURL := NewFileURL(urlParts.URL(), f.fileClient.Pipeline())
 
 	_, err := destinationFileURL.fileClient.Create(ctx, *fileSystemName, options.DestinationPath, PathResourceNone, nil, PathRenameModeLegacy,

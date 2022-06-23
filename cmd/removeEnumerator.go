@@ -27,11 +27,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/shubham808/azure-storage-azcopy/v10/jobsAdmin"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/ste"
 )
 
 var NothingToRemoveError = errors.New("nothing found to remove")
@@ -48,8 +50,8 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	// Include-path is handled by ListOfFilesChannel.
 	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo,
 		nil, cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs,
-		func(common.EntityType) {}, cca.ListOfVersionIDs, false,
-		cca.LogVerbosity.ToPipelineLogLevel(), cca.CpkOptions)
+		cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false,
+		azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil /* errorChannel */)
 
 	// report failure to create traverser
 	if err != nil {
@@ -59,22 +61,31 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	includeFilters := buildIncludeFilters(cca.IncludePatterns)
 	excludeFilters := buildExcludeFilters(cca.ExcludePatterns, false)
 	excludePathFilters := buildExcludeFilters(cca.ExcludePathPatterns, true)
+	includeSoftDelete := buildIncludeSoftDeleted(cca.permanentDeleteOption)
 
 	// set up the filters in the right order
 	filters := append(includeFilters, excludeFilters...)
 	filters = append(filters, excludePathFilters...)
+	filters = append(filters, includeSoftDelete...)
+	if cca.IncludeBefore != nil {
+		filters = append(filters, &IncludeBeforeDateFilter{Threshold: *cca.IncludeBefore})
+	}
+
+	if cca.IncludeAfter != nil {
+		filters = append(filters, &IncludeAfterDateFilter{Threshold: *cca.IncludeAfter})
+	}
 
 	// decide our folder transfer strategy
 	// (Must enumerate folders when deleting from a folder-aware location. Can't do folder deletion just based on file
 	// deletion, because that would not handle folders that were empty at the start of the job).
 	// isHNStoHNS is IGNORED here, because BlobFS locations don't take this route currently.
-	fpo, message := newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false)
+	fpo, message := newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, false, false, cca.IncludeDirectoryStubs)
 	// do not print Info message if in dry run mode
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
-	if ste.JobsAdmin != nil {
-		ste.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
+	if jobsAdmin.JobsAdmin != nil {
+		jobsAdmin.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
 	}
 
 	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo)
@@ -111,7 +122,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 // TODO this simple remove command is only here to support the scenario temporarily
 // Ultimately, this code can be merged into the newRemoveEnumerator
 func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
-	ctx := context.Background()
+	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// return an error if the unsupported options are passed in
 	if len(cca.InitModularFilters()) > 0 {
@@ -125,7 +136,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 	}
 
 	// create bfs pipeline
-	p, err := createBlobFSPipeline(ctx, cca.credentialInfo, cca.LogVerbosity.ToPipelineLogLevel())
+	p, err := createBlobFSPipeline(ctx, cca.credentialInfo, azcopyLogVerbosity.ToPipelineLogLevel())
 	if err != nil {
 		return err
 	}

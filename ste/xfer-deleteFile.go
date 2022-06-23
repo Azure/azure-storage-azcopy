@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 func DeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {

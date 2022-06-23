@@ -24,16 +24,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"net/url"
 	"os"
 	"path"
 	"runtime"
 	"strings"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/ste"
 )
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
@@ -49,21 +50,24 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 
 		// flags
 		BlobAttributes: common.BlobTransferAttributes{
-			PreserveLastModifiedTime: true, // must be true for sync so that future syncs have this information available
+			PreserveLastModifiedTime: cca.preserveSMBInfo, // true by default for sync so that future syncs have this information available
 			PutMd5:                   cca.putMd5,
 			MD5ValidationOption:      cca.md5ValidationOption,
 			BlockSizeInBytes:         cca.blockSize},
 		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
 		ForceIfReadOnly:                cca.forceIfReadOnly,
-		LogLevel:                       cca.logVerbosity,
+		LogLevel:                       azcopyLogVerbosity,
 		PreserveSMBPermissions:         cca.preservePermissions,
 		PreserveSMBInfo:                cca.preserveSMBInfo,
+		PreservePOSIXProperties:        cca.preservePOSIXProperties,
 		S2SSourceChangeValidation:      true,
 		DestLengthValidation:           true,
 		S2SGetPropertiesInBackend:      true,
 		S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
 		CpkOptions:                     cca.cpkOptions,
 		S2SPreserveBlobTags:            cca.s2sPreserveBlobTags,
+
+		S2SSourceCredentialType: cca.s2sSourceCredentialType,
 	}
 
 	reportFirstPart := func(jobStarted bool) { cca.setFirstPartOrdered() } // for compatibility with the way sync has always worked, we don't check jobStarted here
@@ -97,7 +101,7 @@ type interactiveDeleteProcessor struct {
 	// count the deletions that happened
 	incrementDeletionCount func()
 
-	//dryrunMode
+	// dryrunMode
 	dryrunMode bool
 }
 
@@ -135,11 +139,11 @@ func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else { // remove for sync
-				if d.objectTypeToDisplay == "local file" { //removing from local src
+				if d.objectTypeToDisplay == "local file" { // removing from local src
 					dryrunValue := fmt.Sprintf("DRYRUN: remove %v", common.ToShortPath(d.objectLocationToDisplay))
 					if runtime.GOOS == "windows" {
 						dryrunValue += "\\" + strings.ReplaceAll(object.relativePath, "/", "\\")
-					} else { //linux and mac
+					} else { // linux and mac
 						dryrunValue += "/" + object.relativePath
 					}
 					return dryrunValue
@@ -255,7 +259,7 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	p, err := InitPipeline(ctx, cca.fromTo.To(), cca.credentialInfo, cca.logVerbosity.ToPipelineLogLevel())
+	p, err := InitPipeline(ctx, cca.fromTo.To(), cca.credentialInfo, azcopyLogVerbosity.ToPipelineLogLevel())
 	if err != nil {
 		return nil, err
 	}

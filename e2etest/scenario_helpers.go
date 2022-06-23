@@ -35,12 +35,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/minio/minio-go"
+	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
+	"github.com/shubham808/azure-storage-azcopy/v10/sddl"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 const defaultFileSize = 1024
@@ -48,11 +49,12 @@ const defaultStringFileSize = "1k"
 
 type scenarioHelper struct{}
 
+// nolint
 var specialNames = []string{
 	"打麻将.txt",
 	"wow such space so much space",
 	"打%%#%@#%麻将.txt",
-	//"saywut.pdf?yo=bla&WUWUWU=foo&sig=yyy", // TODO this breaks on windows, figure out a way to add it only for tests on Unix
+	// "saywut.pdf?yo=bla&WUWUWU=foo&sig=yyy", // TODO this breaks on windows, figure out a way to add it only for tests on Unix
 	"coração",
 	"আপনার নাম কি",
 	"%4509%4254$85140&",
@@ -63,6 +65,7 @@ var specialNames = []string{
 }
 
 // note: this is to emulate the list-of-files flag
+// nolint
 func (scenarioHelper) generateListOfFiles(c asserter, fileList []string) (path string) {
 	parentDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
 	c.AssertNoErr(err)
@@ -79,6 +82,7 @@ func (scenarioHelper) generateListOfFiles(c asserter, fileList []string) (path s
 	return
 }
 
+// nolint
 func (scenarioHelper) generateLocalDirectory(c asserter) (dstDirName string) {
 	dstDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
 	c.AssertNoErr(err)
@@ -177,8 +181,8 @@ func (s scenarioHelper) enumerateLocalProperties(a asserter, dirpath string) map
 			lastWriteTime:      &lastWriteTime,
 			smbAttributes:      pSmbAttributes,
 			smbPermissionsSddl: pSmbPermissionsSddl,
-			//contentHeaders don't exist on local file system
-			//nameValueMetadata doesn't exist on local file system
+			// contentHeaders don't exist on local file system
+			// nameValueMetadata doesn't exist on local file system
 		}
 
 		result[relPath] = &props
@@ -188,6 +192,7 @@ func (s scenarioHelper) enumerateLocalProperties(a asserter, dirpath string) map
 	return result
 }
 
+// nolint
 func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c asserter, dirPath string, prefix string) (fileList []string) {
 	fileList = make([]string, 50)
 	for i := 0; i < 10; i++ {
@@ -211,13 +216,14 @@ func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c asserter, dirPath
 	return
 }
 
-// make 50 blobs with random names
-// 10 of them at the top level
-// 10 of them in sub dir "sub1"
-// 10 of them in sub dir "sub2"
-// 10 of them in deeper sub dir "sub1/sub3/sub5"
-// 10 of them with special characters
+// nolint
 func (scenarioHelper) generateCommonRemoteScenarioForBlob(c asserter, containerURL azblob.ContainerURL, prefix string) (blobList []string) {
+	// make 50 blobs with random names
+	// 10 of them at the top level
+	// 10 of them in sub dir "sub1"
+	// 10 of them in sub dir "sub2"
+	// 10 of them in deeper sub dir "sub1/sub3/sub5"
+	// 10 of them with special characters
 	blobList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
@@ -239,6 +245,7 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlob(c asserter, containerU
 	return
 }
 
+// nolint
 func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(c asserter, filesystemURL azbfs.FileSystemURL, prefix string) (pathList []string) {
 	pathList = make([]string, 50)
 
@@ -261,6 +268,7 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(c asserter, filesyst
 	return
 }
 
+// nolint
 func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c asserter, shareURL azfile.ShareURL, prefix string) (fileList []string) {
 	fileList = make([]string, 50)
 
@@ -283,6 +291,7 @@ func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c asserter, share
 	return
 }
 
+// nolint
 func (s scenarioHelper) generateBlobContainersAndBlobsFromLists(c asserter, serviceURL azblob.ServiceURL, containerList []string, blobList []*testObject) {
 	for _, containerName := range containerList {
 		curl := serviceURL.NewContainerURL(containerName)
@@ -298,6 +307,7 @@ func (s scenarioHelper) generateBlobContainersAndBlobsFromLists(c asserter, serv
 	}
 }
 
+// nolint
 func (s scenarioHelper) generateFileSharesAndFilesFromLists(c asserter, serviceURL azfile.ServiceURL, shareList []string, fileList []*testObject) {
 	for _, shareName := range shareList {
 		sURL := serviceURL.NewShareURL(shareName)
@@ -312,6 +322,7 @@ func (s scenarioHelper) generateFileSharesAndFilesFromLists(c asserter, serviceU
 	}
 }
 
+// nolint
 func (s scenarioHelper) generateFilesystemsAndFilesFromLists(c asserter, serviceURL azbfs.ServiceURL, fsList []string, fileList []string, data string) {
 	for _, filesystemName := range fsList {
 		fsURL := serviceURL.NewFileSystemURL(filesystemName)
@@ -322,6 +333,7 @@ func (s scenarioHelper) generateFilesystemsAndFilesFromLists(c asserter, service
 	}
 }
 
+// nolint
 func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c asserter, s3Client *minio.Client, bucketList []string, objectList []string, data string) {
 	for _, bucketName := range bucketList {
 		err := s3Client.MakeBucket(bucketName, "")
@@ -342,6 +354,7 @@ type generateBlobFromListOptions struct {
 	containerURL azblob.ContainerURL
 	cpkInfo      common.CpkInfo
 	cpkScopeInfo common.CpkScopeInfo
+	accessTier   azblob.AccessTierType
 	generateFromListOptions
 }
 
@@ -376,21 +389,26 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 		case common.EBlobType.BlockBlob(), common.EBlobType.Detect():
 			bb := options.containerURL.NewBlockBlobURL(b.name)
 
+			if options.accessTier == "" {
+				options.accessTier = azblob.DefaultAccessTier
+			}
+
 			cResp, err := bb.Upload(ctx,
 				reader,
 				headers,
 				ad.toMetadata(),
 				azblob.BlobAccessConditions{},
-				azblob.DefaultAccessTier,
+				options.accessTier,
 				tags,
 				common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo),
+				azblob.ImmutabilityPolicyOptions{},
 			)
 
 			c.AssertNoErr(err)
 			c.Assert(cResp.StatusCode(), equals(), 201)
 		case common.EBlobType.PageBlob():
 			pb := options.containerURL.NewPageBlobURL(b.name)
-			cResp, err := pb.Create(ctx, reader.Size(), 0, headers, ad.toMetadata(), azblob.BlobAccessConditions{}, azblob.DefaultPremiumBlobAccessTier, tags, common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo))
+			cResp, err := pb.Create(ctx, reader.Size(), 0, headers, ad.toMetadata(), azblob.BlobAccessConditions{}, azblob.DefaultPremiumBlobAccessTier, tags, common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo), azblob.ImmutabilityPolicyOptions{})
 			c.AssertNoErr(err)
 			c.Assert(cResp.StatusCode(), equals(), 201)
 
@@ -399,7 +417,7 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 			c.Assert(pbUpResp.StatusCode(), equals(), 201)
 		case common.EBlobType.AppendBlob():
 			ab := options.containerURL.NewAppendBlobURL(b.name)
-			cResp, err := ab.Create(ctx, headers, ad.toMetadata(), azblob.BlobAccessConditions{}, tags, common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo))
+			cResp, err := ab.Create(ctx, headers, ad.toMetadata(), azblob.BlobAccessConditions{}, tags, common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo), azblob.ImmutabilityPolicyOptions{})
 			c.AssertNoErr(err)
 			c.Assert(cResp.StatusCode(), equals(), 201)
 
@@ -510,9 +528,10 @@ func (s scenarioHelper) downloadBlobContent(a asserter, options downloadContentO
 	return destData[:]
 }
 
+// nolint
 func (scenarioHelper) generatePageBlobsFromList(c asserter, containerURL azblob.ContainerURL, blobList []string, data string) {
 	for _, blobName := range blobList {
-		//Create the blob (PUT blob)
+		// Create the blob (PUT blob)
 		blob := containerURL.NewPageBlobURL(blobName)
 		cResp, err := blob.Create(ctx,
 			int64(len(data)),
@@ -525,11 +544,12 @@ func (scenarioHelper) generatePageBlobsFromList(c asserter, containerURL azblob.
 			azblob.DefaultPremiumBlobAccessTier,
 			nil,
 			azblob.ClientProvidedKeyOptions{},
+			azblob.ImmutabilityPolicyOptions{},
 		)
 		c.AssertNoErr(err)
 		c.Assert(cResp.StatusCode(), equals(), 201)
 
-		//Create the page (PUT page)
+		// Create the page (PUT page)
 		uResp, err := blob.UploadPages(ctx,
 			0,
 			strings.NewReader(data),
@@ -545,9 +565,10 @@ func (scenarioHelper) generatePageBlobsFromList(c asserter, containerURL azblob.
 	time.Sleep(time.Millisecond * 1050)
 }
 
+// nolint
 func (scenarioHelper) generateAppendBlobsFromList(c asserter, containerURL azblob.ContainerURL, blobList []string, data string) {
 	for _, blobName := range blobList {
-		//Create the blob (PUT blob)
+		// Create the blob (PUT blob)
 		blob := containerURL.NewAppendBlobURL(blobName)
 		cResp, err := blob.Create(ctx,
 			azblob.BlobHTTPHeaders{
@@ -557,11 +578,12 @@ func (scenarioHelper) generateAppendBlobsFromList(c asserter, containerURL azblo
 			azblob.BlobAccessConditions{},
 			nil,
 			azblob.ClientProvidedKeyOptions{},
+			azblob.ImmutabilityPolicyOptions{},
 		)
 		c.AssertNoErr(err)
 		c.Assert(cResp.StatusCode(), equals(), 201)
 
-		//Append a block (PUT block)
+		// Append a block (PUT block)
 		uResp, err := blob.AppendBlock(ctx,
 			strings.NewReader(data),
 			azblob.AppendBlobAccessConditions{},
@@ -574,15 +596,17 @@ func (scenarioHelper) generateAppendBlobsFromList(c asserter, containerURL azblo
 	time.Sleep(time.Millisecond * 1050)
 }
 
+// nolint
 func (scenarioHelper) generateBlockBlobWithAccessTier(c asserter, containerURL azblob.ContainerURL, blobName string, accessTier azblob.AccessTierType) {
 	blob := containerURL.NewBlockBlobURL(blobName)
 	cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
-		nil, azblob.BlobAccessConditions{}, accessTier, nil, azblob.ClientProvidedKeyOptions{})
+		nil, azblob.BlobAccessConditions{}, accessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
 	c.AssertNoErr(err)
 	c.Assert(cResp.StatusCode(), equals(), 201)
 }
 
 // create the demanded objects
+// nolint
 func (scenarioHelper) generateObjects(c asserter, client *minio.Client, bucketName string, objectList []string) {
 	size := int64(len(objectDefaultData))
 	for _, objectName := range objectList {
@@ -593,6 +617,7 @@ func (scenarioHelper) generateObjects(c asserter, client *minio.Client, bucketNa
 }
 
 // create the demanded files
+// nolint
 func (scenarioHelper) generateFlatFiles(c asserter, shareURL azfile.ShareURL, fileList []string) {
 	for _, fileName := range fileList {
 		file := shareURL.NewRootDirectoryURL().NewFileURL(fileName)
@@ -604,13 +629,14 @@ func (scenarioHelper) generateFlatFiles(c asserter, shareURL azfile.ShareURL, fi
 	time.Sleep(time.Millisecond * 1050)
 }
 
-// make 50 objects with random names
-// 10 of them at the top level
-// 10 of them in sub dir "sub1"
-// 10 of them in sub dir "sub2"
-// 10 of them in deeper sub dir "sub1/sub3/sub5"
-// 10 of them with special characters
+// nolint
 func (scenarioHelper) generateCommonRemoteScenarioForS3(c asserter, client *minio.Client, bucketName string, prefix string, returnObjectListWithBucketName bool) (objectList []string) {
+	// make 50 objects with random names
+	// 10 of them at the top level
+	// 10 of them in sub dir "sub1"
+	// 10 of them in sub dir "sub2"
+	// 10 of them in deeper sub dir "sub1/sub3/sub5"
+	// 10 of them with special characters
 	objectList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
@@ -667,6 +693,19 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			if f.creationProperties.smbPermissionsSddl != nil || f.creationProperties.smbAttributes != nil {
 				_, err := dir.SetProperties(ctx, ad.toHeaders(c, options.shareURL).SMBProperties)
 				c.AssertNoErr(err)
+
+				if f.creationProperties.smbPermissionsSddl != nil {
+					prop, err := dir.GetProperties(ctx)
+					c.AssertNoErr(err)
+
+					perm, err := options.shareURL.GetPermission(ctx, prop.FilePermissionKey())
+					c.AssertNoErr(err)
+
+					dest, _ := sddl.ParseSDDL(perm.Permission)
+					source, _ := sddl.ParseSDDL(*f.creationProperties.smbPermissionsSddl)
+
+					c.Assert(dest.Compare(source), equals(), true)
+				}
 			}
 
 			// set other properties
@@ -693,16 +732,46 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			}
 			f.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
 
-			//if f.verificationProperties.contentHeaders == nil {
+			// if f.verificationProperties.contentHeaders == nil {
 			//	f.verificationProperties.contentHeaders = &contentHeaders{}
-			//}
-			//f.verificationProperties.contentHeaders.contentMD5 = contentMD5[:]
+			// }
+			// f.verificationProperties.contentHeaders.contentMD5 = contentMD5[:]
 			headers := ad.toHeaders(c, options.shareURL)
 			headers.ContentMD5 = contentMD5[:]
 
 			cResp, err := file.Create(ctx, fileSize, headers, ad.toMetadata())
 			c.AssertNoErr(err)
 			c.Assert(cResp.StatusCode(), equals(), 201)
+
+			if f.creationProperties.smbPermissionsSddl != nil || f.creationProperties.smbAttributes != nil {
+				/*
+					via Jason Shay:
+					Providing securityKey/SDDL during 'PUT File' and 'PUT Properties' can and will provide different results/semantics.
+					This is true for the REST PUT commands, as well as locally when providing a SECURITY_DESCRIPTOR in the SECURITY_ATTRIBUTES structure in the CreateFile() call.
+					In both cases of file creation (CreateFile() and REST PUT File), the actual security descriptor applied to the file can undergo some changes as compared to the input.
+
+					SetProperties() (and NtSetSecurityObject) use update semantics, so it should store what you provide it (with a couple exceptions).
+					And on the cloud share, you would need 'Set Properties' to be called as a final step, to save the final ACLs with 'update' semantics.
+
+
+				*/
+
+				_, err := file.SetHTTPHeaders(ctx, headers)
+				c.AssertNoErr(err)
+
+				if f.creationProperties.smbPermissionsSddl != nil {
+					prop, err := file.GetProperties(ctx)
+					c.AssertNoErr(err)
+
+					perm, err := options.shareURL.GetPermission(ctx, prop.FilePermissionKey())
+					c.AssertNoErr(err)
+
+					dest, _ := sddl.ParseSDDL(perm.Permission)
+					source, _ := sddl.ParseSDDL(*f.creationProperties.smbPermissionsSddl)
+
+					c.Assert(dest.Compare(source), equals(), true)
+				}
+			}
 
 			_, err = file.UploadRange(context.Background(), 0, contentR, nil)
 			if err == nil {
@@ -836,16 +905,18 @@ func (s scenarioHelper) downloadFileContent(a asserter, options downloadContentO
 	defer retryReader.Close() // The client must close the response body when finished with it
 
 	destData, err := ioutil.ReadAll(retryReader)
+	a.AssertNoErr(err)
 	downloadResp.Body(azfile.RetryReaderOptions{})
 	return destData
 }
 
+// nolint
 func (scenarioHelper) generateBFSPathsFromList(c asserter, filesystemURL azbfs.FileSystemURL, fileList []string) {
 	for _, bfsPath := range fileList {
 		file := filesystemURL.NewRootDirectoryURL().NewFileURL(bfsPath)
 
 		// Create the file
-		cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+		cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 		c.AssertNoErr(err)
 		c.Assert(cResp.StatusCode(), equals(), 201)
 
@@ -871,6 +942,7 @@ func (scenarioHelper) convertListToMap(list []*testObject, converter func(*testO
 	return lookupMap
 }
 
+// nolint
 func (scenarioHelper) shaveOffPrefix(list []string, prefix string) []string {
 	cleanList := make([]string, len(list))
 	for i, item := range list {
@@ -879,6 +951,7 @@ func (scenarioHelper) shaveOffPrefix(list []string, prefix string) []string {
 	return cleanList
 }
 
+// nolint
 func (scenarioHelper) addPrefix(list []string, prefix string) []string {
 	modifiedList := make([]string, len(list))
 	for i, item := range list {
@@ -887,6 +960,7 @@ func (scenarioHelper) addPrefix(list []string, prefix string) []string {
 	return modifiedList
 }
 
+// nolint
 func (scenarioHelper) getRawContainerURLWithSAS(c asserter, containerName string) url.URL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
@@ -895,6 +969,7 @@ func (scenarioHelper) getRawContainerURLWithSAS(c asserter, containerName string
 	return containerURLWithSAS.URL()
 }
 
+// nolint
 func (scenarioHelper) getRawBlobURLWithSAS(c asserter, containerName string, blobName string) url.URL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
@@ -904,6 +979,7 @@ func (scenarioHelper) getRawBlobURLWithSAS(c asserter, containerName string, blo
 	return blobURLWithSAS.URL()
 }
 
+// nolint
 func (scenarioHelper) getRawBlobServiceURLWithSAS(c asserter) url.URL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
@@ -912,6 +988,7 @@ func (scenarioHelper) getRawBlobServiceURLWithSAS(c asserter) url.URL {
 	return getBlobServiceURLWithSAS(c, *credential).URL()
 }
 
+// nolint
 func (scenarioHelper) getRawFileServiceURLWithSAS(c asserter) url.URL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
@@ -920,6 +997,7 @@ func (scenarioHelper) getRawFileServiceURLWithSAS(c asserter) url.URL {
 	return getFileServiceURLWithSAS(c, *credential).URL()
 }
 
+// nolint
 func (scenarioHelper) getRawAdlsServiceURLWithSAS(c asserter) azbfs.ServiceURL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential := azbfs.NewSharedKeyCredential(accountName, accountKey)
@@ -927,6 +1005,7 @@ func (scenarioHelper) getRawAdlsServiceURLWithSAS(c asserter) azbfs.ServiceURL {
 	return getAdlsServiceURLWithSAS(c, *credential)
 }
 
+// nolint
 func (scenarioHelper) getBlobServiceURL(c asserter) azblob.ServiceURL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
@@ -940,6 +1019,7 @@ func (scenarioHelper) getBlobServiceURL(c asserter) azblob.ServiceURL {
 	return azblob.NewServiceURL(*fullURL, azblob.NewPipeline(credential, azblob.PipelineOptions{}))
 }
 
+// nolint
 func (s scenarioHelper) getContainerURL(c asserter, containerName string) azblob.ContainerURL {
 	serviceURL := s.getBlobServiceURL(c)
 	containerURL := serviceURL.NewContainerURL(containerName)
@@ -947,6 +1027,7 @@ func (s scenarioHelper) getContainerURL(c asserter, containerName string) azblob
 	return containerURL
 }
 
+// nolint
 func (scenarioHelper) getRawS3AccountURL(c asserter, region string) url.URL {
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com", common.IffString(region == "", "", "-"+region))
 
@@ -957,6 +1038,7 @@ func (scenarioHelper) getRawS3AccountURL(c asserter, region string) url.URL {
 }
 
 // TODO: Possibly add virtual-hosted-style and dual stack support. Currently use path style for testing.
+// nolint
 func (scenarioHelper) getRawS3BucketURL(c asserter, region string, bucketName string) url.URL {
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s", common.IffString(region == "", "", "-"+region), bucketName)
 
@@ -966,6 +1048,7 @@ func (scenarioHelper) getRawS3BucketURL(c asserter, region string, bucketName st
 	return *fullURL
 }
 
+// nolint
 func (scenarioHelper) getRawS3ObjectURL(c asserter, region string, bucketName string, objectName string) url.URL {
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s/%s", common.IffString(region == "", "", "-"+region), bucketName, objectName)
 
@@ -975,6 +1058,7 @@ func (scenarioHelper) getRawS3ObjectURL(c asserter, region string, bucketName st
 	return *fullURL
 }
 
+// nolint
 func (scenarioHelper) getRawFileURLWithSAS(c asserter, shareName string, fileName string) url.URL {
 	credential, err := getGenericCredentialForFile("")
 	c.AssertNoErr(err)
@@ -983,26 +1067,11 @@ func (scenarioHelper) getRawFileURLWithSAS(c asserter, shareName string, fileNam
 	return fileURLWithSAS.URL()
 }
 
+// nolint
 func (scenarioHelper) getRawShareURLWithSAS(c asserter, shareName string) url.URL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
 	c.AssertNoErr(err)
 	shareURLWithSAS := getShareURLWithSAS(c, *credential, shareName)
 	return shareURLWithSAS.URL()
-}
-
-//func (scenarioHelper) blobExists(blobURL azblob.BlobURL) bool {
-//	_, err := blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
-//	if err == nil {
-//		return true
-//	}
-//	return false
-//}
-
-func (scenarioHelper) containerExists(containerURL azblob.ContainerURL) bool {
-	_, err := containerURL.GetProperties(context.Background(), azblob.LeaseAccessConditions{})
-	if err == nil {
-		return true
-	}
-	return false
 }

@@ -21,8 +21,8 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 var noContentProps = emptyPropertiesAdapter{}
@@ -65,6 +65,10 @@ func (e emptyPropertiesAdapter) AccessTier() azblob.AccessTierType {
 	return azblob.AccessTierNone
 }
 
+func (e emptyPropertiesAdapter) ArchiveStatus() azblob.ArchiveStatusType {
+	return azblob.ArchiveStatusNone
+}
+
 func (e emptyPropertiesAdapter) LeaseDuration() azblob.LeaseDurationType {
 	return azblob.LeaseDurationNone
 }
@@ -95,6 +99,10 @@ type blobPropertiesResponseAdapter struct {
 
 func (a blobPropertiesResponseAdapter) AccessTier() azblob.AccessTierType {
 	return azblob.AccessTierType(a.BlobGetPropertiesResponse.AccessTier())
+}
+
+func (a blobPropertiesResponseAdapter) ArchiveStatus() azblob.ArchiveStatusType {
+	return azblob.ArchiveStatusType(a.BlobGetPropertiesResponse.ArchiveStatus())
 }
 
 // blobPropertiesAdapter adapts a BlobProperties object to both the
@@ -148,4 +156,8 @@ func (a blobPropertiesAdapter) LeaseState() azblob.LeaseStateType {
 // LeaseStatus returns the value for header x-ms-lease-status.
 func (a blobPropertiesAdapter) LeaseStatus() azblob.LeaseStatusType {
 	return a.BlobProperties.LeaseStatus
+}
+
+func (a blobPropertiesAdapter) ArchiveStatus() azblob.ArchiveStatusType {
+	return a.BlobProperties.ArchiveStatus
 }

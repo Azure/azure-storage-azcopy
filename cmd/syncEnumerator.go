@@ -25,12 +25,14 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"strings"
 	"sync/atomic"
+
+	"github.com/shubham808/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
@@ -44,7 +46,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	}
 
 	if cca.fromTo.IsS2S() {
-		if cca.fromTo.From() != common.ELocation.S3() {
+		if cca.fromTo.From() != common.ELocation.S3() && cca.fromTo.From() != common.ELocation.Blob() { // blob and S3 don't necessarily require SAS tokens (S3 w/ access key, blob w/ copysourceauthorization)
 			// Adding files here seems like an odd case, but since files can't be public
 			// the second half of this if statement does not hurt.
 
@@ -55,14 +57,15 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	}
 
 	// TODO: enable symlink support in a future release after evaluating the implications
+	// TODO: Consider passing an errorChannel so that enumeration errors during sync can be conveyed to the caller.
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
 	sourceTraverser, err := InitResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, nil,
-		nil, cca.recursive, true, cca.isHNSToHNS, func(entityType common.EntityType) {
+		nil, cca.recursive, true, cca.isHNSToHNS, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			}
-		}, nil, cca.s2sPreserveBlobTags, cca.logVerbosity.ToPipelineLogLevel(), cca.cpkOptions)
+		}, nil, cca.s2sPreserveBlobTags, azcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, nil /* errorChannel */)
 
 	if err != nil {
 		return nil, err
@@ -79,19 +82,19 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
-	destinationTraverser, err := InitResourceTraverser(cca.destination, cca.fromTo.To(), &ctx, &dstCredInfo, nil, nil, cca.recursive, true, cca.isHNSToHNS, func(entityType common.EntityType) {
+	destinationTraverser, err := InitResourceTraverser(cca.destination, cca.fromTo.To(), &ctx, &dstCredInfo, nil, nil, cca.recursive, true, cca.isHNSToHNS, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 		}
-	}, nil, cca.s2sPreserveBlobTags, cca.logVerbosity.ToPipelineLogLevel(), cca.cpkOptions)
+	}, nil, cca.s2sPreserveBlobTags, azcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, nil /* errorChannel */)
 	if err != nil {
 		return nil, err
 	}
 
 	// verify that the traversers are targeting the same type of resources
 	if sourceTraverser.IsDirectory(true) != destinationTraverser.IsDirectory(true) {
-		return nil, errors.New("sync must happen between source and destination of the same type," +
-			" e.g. either file <-> file, or directory/container <-> directory/container")
+		return nil, errors.New("trying to sync between different resource types (either file <-> directory or directory <-> file) which is not allowed." +
+			"sync must happen between source and destination of the same type, e.g. either file <-> file or directory <-> directory")
 	}
 
 	// set up the filters in the right order
@@ -111,24 +114,24 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		filters = append(filters, excludeAttrFilters...)
 	}
 
-	//includeRegex
+	// includeRegex
 	filters = append(filters, buildRegexFilters(cca.includeRegex, true)...)
 	filters = append(filters, buildRegexFilters(cca.excludeRegex, false)...)
 
 	// after making all filters, log any search prefix computed from them
-	if ste.JobsAdmin != nil {
+	if jobsAdmin.JobsAdmin != nil {
 		if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(cca.recursive); prefixFilter != "" {
-			ste.JobsAdmin.LogToJobLog("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, pipeline.LogInfo) // "May be used" because we don't know here which enumerators will use it
+			jobsAdmin.JobsAdmin.LogToJobLog("Search prefix, which may be used to optimize scanning, is: "+prefixFilter, pipeline.LogInfo) // "May be used" because we don't know here which enumerators will use it
 		}
 	}
 
 	// decide our folder transfer strategy
-	fpo, folderMessage := newFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.isHNSToHNS) // sync always acts like stripTopDir=true
+	fpo, folderMessage := newFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), false, cca.isHNSToHNS, strings.EqualFold(cca.destination.Value, common.Dev_Null), false) // sync always acts like stripTopDir=true
 	if !cca.dryrunMode {
 		glcm.Info(folderMessage)
 	}
-	if ste.JobsAdmin != nil {
-		ste.JobsAdmin.LogToJobLog(folderMessage, pipeline.LogInfo)
+	if jobsAdmin.JobsAdmin != nil {
+		jobsAdmin.JobsAdmin.LogToJobLog(folderMessage, pipeline.LogInfo)
 	}
 
 	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo)

@@ -27,13 +27,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/shubham808/azure-storage-azcopy/v10/jobsAdmin"
 
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 const (
@@ -129,11 +129,11 @@ func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, u
 	}
 	// Need to get the resource properties and verify if it is a file or directory
 	dirURL := azbfs.NewDirectoryURL(*url, p)
-	isDir, err := dirURL.IsDirectory(context.Background())
+	isDir, err := dirURL.IsDirectory(ctx)
 
 	if err != nil {
-		if ste.JobsAdmin != nil {
-			ste.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to check if destination is a folder or a file (ADLSg2). Assuming the destination is a file: %s", err), pipeline.LogWarning)
+		if jobsAdmin.JobsAdmin != nil {
+			jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to check if destination is a folder or a file (ADLSg2). Assuming the destination is a file: %s", err), pipeline.LogWarning)
 		}
 	}
 
@@ -150,8 +150,8 @@ func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *ur
 	directoryURL := azfile.NewDirectoryURL(*url, p)
 	_, err := directoryURL.GetProperties(ctx)
 	if err != nil {
-		if ste.JobsAdmin != nil {
-			ste.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err), pipeline.LogWarning)
+		if jobsAdmin.JobsAdmin != nil {
+			jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err), pipeline.LogWarning)
 		}
 
 		return false

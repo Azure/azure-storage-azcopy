@@ -24,7 +24,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 // the interceptor gathers/saves the job part orders for validation
@@ -80,6 +80,16 @@ type mockedLifecycleManager struct {
 	exitLog      chan string
 	dryrunLog    chan string
 	outputFormat common.OutputFormat
+}
+
+func (m *mockedLifecycleManager) DownloadToTempPath() bool {
+	return false
+}
+
+func (m *mockedLifecycleManager) ReportAllJobPartsDone() {
+}
+
+func (m *mockedLifecycleManager) SetOutputVerbosity(mode common.OutputVerbosity) {
 }
 
 func (m *mockedLifecycleManager) Progress(o common.OutputBuilder) {
@@ -165,6 +175,10 @@ func (*mockedLifecycleManager) GatherAllLogs(channel chan string) (result []stri
 	}
 
 	return
+}
+
+func (*mockedLifecycleManager) MsgHandlerChannel() <-chan *common.LCMMsg {
+	return nil
 }
 
 type dummyProcessor struct {

@@ -28,7 +28,7 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 type urlToPageBlobCopier struct {
@@ -52,8 +52,7 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipe
 			destBlobTier = blobSrcInfoProvider.BlobTier()
 
 			// capture the necessary info so that we can perform optimizations later
-			pageRangeOptimizer = newPageRangeOptimizer(azblob.NewPageBlobURL(*srcURL, p),
-				context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion))
+			pageRangeOptimizer = newPageRangeOptimizer(azblob.NewPageBlobURL(*srcURL, p), jptm.Context())
 		}
 	}
 
@@ -112,7 +111,7 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		// set the latest service version from sdk as service version in the context, to use UploadPagesFromURL API.
 		// AND enrich the context for 503 (ServerBusy) detection
 		enrichedContext := withRetryNotification(
-			context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion),
+			c.jptm.Context(),
 			c.filePacer)
 
 		// upload the page (including application of global pacing. We don't have a separate wait reason for global pacing
@@ -123,7 +122,7 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		}
 		_, err := c.destPageBlobURL.UploadPagesFromURL(
 			enrichedContext, c.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize, nil,
-			azblob.PageBlobAccessConditions{}, azblob.ModifiedAccessConditions{}, c.cpkToApply)
+			azblob.PageBlobAccessConditions{}, azblob.ModifiedAccessConditions{}, c.cpkToApply, c.jptm.GetS2SSourceBlobTokenCredential())
 		if err != nil {
 			c.jptm.FailActiveS2SCopy("Uploading page from URL", err)
 			return

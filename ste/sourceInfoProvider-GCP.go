@@ -1,14 +1,15 @@
 package ste
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"golang.org/x/oauth2/google"
 	"io/ioutil"
 	"net/url"
 	"time"
+
+	gcpUtils "cloud.google.com/go/storage"
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"golang.org/x/oauth2/google"
 )
 
 type gcpSourceInfoProvider struct {

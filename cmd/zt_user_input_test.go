@@ -1,5 +1,3 @@
-// +build linux
-
 // Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,43 +21,38 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-
 	chk "gopkg.in/check.v1"
 )
 
-type loadCmdTestSuite struct{}
+func (s *cmdIntegrationSuite) TestCPKEncryptionInputTest(c *chk.C) {
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
 
-var _ = chk.Suite(&loadCmdTestSuite{})
+	dirPath := "this/is/a/dummy/path"
+	rawDFSEndpointWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
+	raw := getDefaultRawCopyInput(dirPath, rawDFSEndpointWithSAS.String())
+	raw.recursive = true
+	raw.cpkInfo = true
 
-func (s *loadCmdTestSuite) TestParsingRawArgs(c *chk.C) {
-	sampleAccountName := "accountname"
-	sampleContainerName := "cont"
-	sampleSAS := "st=2019-09-23T07%3A06%3A55Z&se=2019-09-24T07%3A06%3A55Z&sp=racwdl&sv=2018-03-28&sr=c&sig=FGDUz8Jb1F%2Fsh%2FLKdX1IBYQR5n5LKfk46GRAeVDYeW4%3D"
-	raw := rawLoadCmdArgs{
-		src:        os.TempDir(),
-		dst:        fmt.Sprintf("https://%s.blob.core.windows.net/%s?%s", sampleAccountName, sampleContainerName, sampleSAS),
-		newSession: true,
-		statePath:  "/usr/dir/state",
-	}
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.NotNil)
+		c.Assert(err.Error(), StringContains, "client provided keys (CPK) based encryption is only supported with blob endpoints (blob.core.windows.net)")
+	})
 
-	cooked, err := raw.cook()
+	mockedRPC.reset()
+	raw.cpkInfo = false
+	raw.cpkScopeInfo = "dummyscope"
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.NotNil)
+		c.Assert(err.Error(), StringContains, "client provided keys (CPK) based encryption is only supported with blob endpoints (blob.core.windows.net)")
+	})
+
+	rawContainerURL := scenarioHelper{}.getContainerURL(c, "testcpkcontainer")
+	raw2 := getDefaultRawCopyInput(dirPath, rawContainerURL.String())
+	raw2.recursive = true
+	raw2.cpkInfo = true
+
+	_, err := raw2.cook()
 	c.Assert(err, chk.IsNil)
-
-	// validate the straightforward args
-	cleanedSrc, err := filepath.Abs(raw.src)
-	c.Assert(err, chk.IsNil)
-
-	c.Assert(cooked.src, chk.Equals, cleanedSrc)
-	c.Assert(cooked.newSession, chk.Equals, raw.newSession)
-	c.Assert(cooked.statePath, chk.Equals, raw.statePath)
-
-	// check the dst related args
-	c.Assert(cooked.dstAccount, chk.Equals, sampleAccountName)
-	c.Assert(cooked.dstContainer, chk.Equals, sampleContainerName)
-
-	// the order of sas query params gets mingled
-	c.Assert(len(cooked.dstSAS), chk.Equals, len(sampleSAS))
 }

@@ -21,7 +21,7 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
@@ -36,8 +36,8 @@ func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart in
 		ForceIfReadOnly: cca.ForceIfReadOnly,
 
 		// flags
-		LogLevel:       cca.LogVerbosity,
-		BlobAttributes: common.BlobTransferAttributes{DeleteSnapshotsOption: cca.deleteSnapshotsOption},
+		LogLevel:       azcopyLogVerbosity,
+		BlobAttributes: common.BlobTransferAttributes{DeleteSnapshotsOption: cca.deleteSnapshotsOption, PermanentDeleteOption: cca.permanentDeleteOption},
 	}
 
 	reportFirstPart := func(jobStarted bool) {

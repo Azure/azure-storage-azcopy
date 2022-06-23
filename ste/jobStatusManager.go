@@ -23,15 +23,17 @@ package ste
 import (
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-pipeline-go/pipeline"
+
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
-type jobPartCreatedMsg struct {
-	totalTransfers       uint32
-	isFinalPart          bool
-	totalBytesEnumerated uint64
-	fileTransfers        uint32
-	folderTransfer       uint32
+type JobPartCreatedMsg struct {
+	TotalTransfers       uint32
+	IsFinalPart          bool
+	TotalBytesEnumerated uint64
+	FileTransfers        uint32
+	FolderTransfer       uint32
 }
 
 type xferDoneMsg = common.TransferDetail
@@ -39,31 +41,36 @@ type jobStatusManager struct {
 	js          common.ListJobSummaryResponse
 	respChan    chan common.ListJobSummaryResponse
 	listReq     chan bool
-	partCreated chan jobPartCreatedMsg
+	partCreated chan JobPartCreatedMsg
 	xferDone    chan xferDoneMsg
+	done        chan struct{}
 }
 
-var jstm jobStatusManager
-
 /* These functions should not fail */
-func (jm *jobMgr) SendJobPartCreatedMsg(msg jobPartCreatedMsg) {
-	jstm.partCreated <- msg
+func (jm *jobMgr) SendJobPartCreatedMsg(msg JobPartCreatedMsg) {
+	jm.jstm.partCreated <- msg
 }
 
 func (jm *jobMgr) SendXferDoneMsg(msg xferDoneMsg) {
-	jstm.xferDone <- msg
+	jm.jstm.xferDone <- msg
 }
 
 func (jm *jobMgr) ListJobSummary() common.ListJobSummaryResponse {
-	jstm.listReq <- true
-	return <-jstm.respChan
+	jm.jstm.listReq <- true
+	return <-jm.jstm.respChan
 }
 
 func (jm *jobMgr) ResurrectSummary(js common.ListJobSummaryResponse) {
-	jstm.js = js
+	jm.jstm.js = js
+}
+
+func (jm *jobMgr) CleanupJobStatusMgr() {
+	jm.Log(pipeline.LogInfo, "CleanJobStatusMgr called.")
+	jm.jstm.done <- struct{}{}
 }
 
 func (jm *jobMgr) handleStatusUpdateMessage() {
+	jstm := jm.jstm
 	js := &jstm.js
 	js.JobID = jm.jobID
 	js.CompleteJobOrdered = false
@@ -72,12 +79,12 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 	for {
 		select {
 		case msg := <-jstm.partCreated:
-			js.CompleteJobOrdered = js.CompleteJobOrdered || msg.isFinalPart
-			js.TotalTransfers += msg.totalTransfers
-			js.FileTransfers += msg.fileTransfers
-			js.FolderPropertyTransfers += msg.folderTransfer
-			js.TotalBytesEnumerated += msg.totalBytesEnumerated
-			js.TotalBytesExpected += msg.totalBytesEnumerated
+			js.CompleteJobOrdered = js.CompleteJobOrdered || msg.IsFinalPart
+			js.TotalTransfers += msg.TotalTransfers
+			js.FileTransfers += msg.FileTransfers
+			js.FolderPropertyTransfers += msg.FolderTransfer
+			js.TotalBytesEnumerated += msg.TotalBytesEnumerated
+			js.TotalBytesExpected += msg.TotalBytesEnumerated
 
 		case msg := <-jstm.xferDone:
 			msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()
@@ -107,6 +114,10 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			// There is no need to keep sending the same items over and over again
 			js.FailedTransfers = []common.TransferDetail{}
 			js.SkippedTransfers = []common.TransferDetail{}
+
+		case <-jstm.done:
+			jm.Log(pipeline.LogInfo, "Cleanup JobStatusmgr.")
+			return
 		}
 	}
 }

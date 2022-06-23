@@ -9,8 +9,8 @@ import (
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/pkg/errors"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 // ----- LOCATION LEVEL HANDLING -----
@@ -221,7 +221,8 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 	case common.ELocation.GCP():
 		return resource, "", nil
 	case common.ELocation.Benchmark(), // cover for benchmark as we generate data for that
-		common.ELocation.Unknown(): // cover for unknown as we treat that as garbage
+		common.ELocation.Unknown(), // cover for unknown as we treat that as garbage
+		common.ELocation.None():
 		// Local and S3 don't feature URL-embedded tokens
 		return resource, "", nil
 

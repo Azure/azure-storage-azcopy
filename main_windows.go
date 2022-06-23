@@ -23,7 +23,6 @@ package main
 import (
 	"math"
 	"net/http"
-	"os"
 	"os/exec"
 	"path"
 	"strings"
@@ -31,7 +30,7 @@ import (
 
 	"github.com/minio/minio-go"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
 func osModifyProcessCommand(cmd *exec.Cmd) *exec.Cmd {
@@ -61,9 +60,7 @@ func GetAzCopyAppPath() string {
 	lcm := common.GetLifecycleMgr()
 	userProfile := lcm.GetEnvironmentVariable(common.EEnvironmentVariable.UserDir())
 	azcopyAppDataFolder := strings.ReplaceAll(path.Join(userProfile, ".azcopy"), "/", `\`)
-	if err := os.Mkdir(azcopyAppDataFolder, os.ModeDir); err != nil && !os.IsExist(err) {
-		return ""
-	}
+
 	return azcopyAppDataFolder
 }
 

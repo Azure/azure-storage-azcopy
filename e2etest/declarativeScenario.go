@@ -29,22 +29,24 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/sddl"
 )
 
 // E.g. if we have enumerationSuite/TestFooBar/Copy-LocalBlob the scenario is "Copy-LocalBlob"
 // A scenario is treated as a sub-test by our declarative test runner
 type scenario struct {
 	// scenario config properties
-	accountType         AccountType
+	srcAccountType      AccountType
+	destAccountType     AccountType
 	subtestName         string
 	compactScenarioName string
 	fullScenarioName    string
 	operation           Operation
 	validate            Validate
 	fromTo              common.FromTo
+	credTypes           [2]common.CredentialType
 	p                   params
 	hs                  hooks
 	fs                  testFiles
@@ -110,12 +112,16 @@ func (s *scenario) Run() {
 	if s.a.Failed() {
 		return // no point in doing more validation
 	}
-	s.validateProperties()
-	if s.a.Failed() {
-		return // no point in doing more validation
-	}
-	if s.validate&eValidate.AutoPlusContent() != 0 {
-		s.validateContent()
+
+	if !s.p.destNull {
+		s.validateProperties()
+		if s.a.Failed() {
+			return // no point in doing more validation
+		}
+
+		if s.validate&eValidate.AutoPlusContent() != 0 {
+			s.validateContent()
+		}
 	}
 
 	s.runHook(s.hs.afterValidation)
@@ -123,7 +129,7 @@ func (s *scenario) Run() {
 
 func (s *scenario) runHook(h hookFunc) bool {
 	if h == nil {
-		return true //nothing to do. So "successful"
+		return true // nothing to do. So "successful"
 	}
 
 	// run the hook, passing ourself in as the implementation of hookHelper interface
@@ -133,17 +139,21 @@ func (s *scenario) runHook(h hookFunc) bool {
 }
 
 func (s *scenario) assignSourceAndDest() {
-	createTestResource := func(loc common.Location) resourceManager {
+	createTestResource := func(loc common.Location, isSourceAcc bool) resourceManager {
 		// TODO: handle account to account (multi-container) scenarios
 		switch loc {
 		case common.ELocation.Local():
-			return &resourceLocal{}
+			return &resourceLocal{common.IffString(s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
 		case common.ELocation.File():
-			return &resourceAzureFileShare{accountType: s.accountType}
+			return &resourceAzureFileShare{accountType: s.srcAccountType}
 		case common.ELocation.Blob():
 			// TODO: handle the multi-container (whole account) scenario
 			// TODO: handle wider variety of account types
-			return &resourceBlobContainer{accountType: s.accountType}
+			if isSourceAcc {
+				return &resourceBlobContainer{accountType: s.srcAccountType}
+			} else {
+				return &resourceBlobContainer{accountType: s.destAccountType}
+			}
 		case common.ELocation.BlobFS():
 			s.a.Error("Not implementd yet for blob FS")
 			return &resourceDummy{}
@@ -157,8 +167,8 @@ func (s *scenario) assignSourceAndDest() {
 		}
 	}
 
-	s.state.source = createTestResource(s.fromTo.From())
-	s.state.dest = createTestResource(s.fromTo.To())
+	s.state.source = createTestResource(s.fromTo.From(), true)
+	s.state.dest = createTestResource(s.fromTo.To(), false)
 }
 
 func (s *scenario) runAzCopy() {
@@ -166,7 +176,7 @@ func (s *scenario) runAzCopy() {
 	defer close(s.chToStdin)
 
 	r := newTestRunner()
-	r.SetAllFlags(s.p)
+	r.SetAllFlags(s.p, s.operation)
 
 	// use the general-purpose "after start" mechanism, provided by execDebuggableWithOutput,
 	// for the _specific_ purpose of running beforeOpenFirstFile, if that hook exists.
@@ -180,18 +190,26 @@ func (s *scenario) runAzCopy() {
 		}
 	}
 
-	// run AzCopy
-	const useSas = true // TODO: support other auth options (see params of RunTest)
 	tf := s.GetTestFiles()
-	var srcUseSas = tf.sourcePublic == azblob.PublicAccessNone
+	// run AzCopy
 	result, wasClean, err := r.ExecuteAzCopyCommand(
 		s.operation,
-		s.state.source.getParam(s.stripTopDir, srcUseSas, tf.objectTarget),
-		s.state.dest.getParam(false, useSas, tf.objectTarget),
+		s.state.source.getParam(s.stripTopDir, s.credTypes[0] == common.ECredentialType.Anonymous(), tf.objectTarget),
+		s.state.dest.getParam(false, s.credTypes[1] == common.ECredentialType.Anonymous(), common.IffString(tf.destTarget != "", tf.destTarget, tf.objectTarget)),
+		s.credTypes[0] == common.ECredentialType.OAuthToken() || s.credTypes[1] == common.ECredentialType.OAuthToken(), // needsOAuth
 		afterStart, s.chToStdin)
 
 	if !wasClean {
 		s.a.AssertNoErr(err, "running AzCopy")
+	}
+
+	// Generally, a cancellation is done when auth fails.
+	if result.finalStatus.JobStatus == common.EJobStatus.Cancelled() {
+		for _, v := range result.finalStatus.FailedTransfers {
+			if v.ErrorCode == 403 {
+				s.a.Error("authorization failed, perhaps SPN auth or the SAS token is bad?")
+			}
+		}
 	}
 
 	s.state.result = &result
@@ -225,6 +243,7 @@ func (s *scenario) resumeAzCopy() {
 		eOperation.Resume(),
 		s.state.result.jobID.String(),
 		"",
+		false,
 		afterStart,
 		s.chToStdin,
 	)
@@ -274,7 +293,7 @@ func (s *scenario) validateTransferStates() {
 		actualTransfers, err := s.state.result.GetTransferList(statusToTest)
 		s.a.AssertNoErr(err)
 
-		Validator{}.ValidateCopyTransfersAreScheduled(s.a, isSrcEncoded, isDstEncoded, srcRoot, dstRoot, expectedTransfers, actualTransfers, statusToTest, s.FromTo())
+		Validator{}.ValidateCopyTransfersAreScheduled(s.a, isSrcEncoded, isDstEncoded, srcRoot, dstRoot, expectedTransfers, actualTransfers, statusToTest, s.FromTo(), s.srcAccountType, s.destAccountType)
 		// TODO: how are we going to validate folder transfers????
 	}
 
@@ -296,6 +315,8 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 	// compute dest, taking into account our stripToDir rules
 	addedDirAtDest = ""
 	areBothContainerLike := s.state.source.isContainerLike() && s.state.dest.isContainerLike()
+
+	tf := s.GetTestFiles()
 	if s.stripTopDir || s.operation == eOperation.Sync() || areBothContainerLike {
 		// Sync always acts like stripTopDir is true.
 		// For copies between two container-like locations, we don't expect the root directory to be transferred, regardless of stripTopDir.
@@ -303,13 +324,17 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 		// of that kind.
 		expectRootFolder = false
 	} else if s.fromTo.From().IsLocal() {
-		if s.GetTestFiles().objectTarget == "" {
+		if tf.objectTarget == "" && tf.destTarget == "" {
 			addedDirAtDest = filepath.Base(srcRoot)
+		} else if tf.destTarget != "" {
+			addedDirAtDest = tf.destTarget
 		}
 		dstRoot = fmt.Sprintf("%s%c%s", dstRoot, os.PathSeparator, addedDirAtDest)
 	} else {
-		if s.GetTestFiles().objectTarget == "" {
+		if tf.objectTarget == "" && tf.destTarget == "" {
 			addedDirAtDest = path.Base(srcRoot)
+		} else if tf.destTarget != "" {
+			addedDirAtDest = tf.destTarget
 		}
 		dstRoot = fmt.Sprintf("%s/%s", dstRoot, addedDirAtDest)
 	}
@@ -351,7 +376,7 @@ func (s *scenario) validateProperties() {
 			// TODO: JohnR: need to remove the strip top dir prefix from the map (and normalize the delimiters)
 			//    since currently uploads fail here
 			var rawPaths []string
-			for rawPath, _ := range destProps {
+			for rawPath := range destProps {
 				rawPaths = append(rawPaths, rawPath)
 			}
 			s.a.Error(fmt.Sprintf("could not find expected file %s in keys %v", destName, rawPaths))
@@ -385,7 +410,7 @@ func (s *scenario) validateSMBPermissionsByValue(expected, actual string, objNam
 	actualSDDL, err := sddl.ParseSDDL(actual)
 	s.a.AssertNoErr(err)
 
-	s.a.Assert(actualSDDL.PortableString(), equals(), expectedSDDL.PortableString(), "On object "+objName)
+	s.a.Assert(expectedSDDL.Compare(actualSDDL), equals(), true)
 }
 
 func (s *scenario) validateContent() {
@@ -416,7 +441,7 @@ func (s *scenario) validateContent() {
 	}
 }
 
-//// Individual property validation routines
+// // Individual property validation routines
 
 func (s *scenario) validateMetadata(expected, actual map[string]string, isFolder bool) {
 	if isFolder { // hdi_isfolder is service-relevant metadata, not something we'd be testing for. This can pop up when specifying a folder() on blob.
@@ -538,6 +563,7 @@ func (s *scenario) validateLastWriteTime(expected, actual *time.Time) {
 		expected, actual))
 }
 
+// nolint
 func (s *scenario) validateSMBAttrs(expected, actual *uint32) {
 	if expected == nil {
 		// These properties were not explicitly stated for verification
@@ -561,7 +587,7 @@ func (s *scenario) cleanup() {
 	}
 }
 
-/// support the hookHelper functions. These are use by our hooks to modify the state, or resources, of the running test
+// / support the hookHelper functions. These are use by our hooks to modify the state, or resources, of the running test
 
 func (s *scenario) FromTo() common.FromTo {
 	return s.fromTo
