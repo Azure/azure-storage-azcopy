@@ -540,28 +540,28 @@ Sets properties of Blob, BlobFS, and File storage. The properties currently supp
 
 const setPropertiesCmdExample = `
 Change tier of blob to hot:
-	- azcopy setprops "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --block-blob-tier=hot
+	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --block-blob-tier=hot
 
 Change tier of blob from archive to cool with rehydrate priority set to high:
-	- azcopy setprops "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --block-blob-tier=cool --rehydrate-priority=high
+	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --block-blob-tier=cool --rehydrate-priority=high
 
 Change tier of all files in a directory to archive:
-	- azcopy setprops "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --block-blob-tier=archive --recursive=true
+	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --block-blob-tier=archive --recursive=true
 
 Change metadata of blob to {key = "abc", val = "def"} and {key = "ghi", val = "jkl"}:
-	- azcopy setprops "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --metadata=abc=def;ghi=jkl
+	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --metadata=abc=def;ghi=jkl
 
 Change metadata of all files in a directory to {key = "abc", val = "def"} and {key = "ghi", val = "jkl"}:
-	- azcopy setprops "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --metadata=abc=def;ghi=jkl --recursive=true
+	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --metadata=abc=def;ghi=jkl --recursive=true
 
 Clear all existing metadata of blob:
-	- azcopy setprops "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --metadata=clear
+	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --metadata=clear
 
 Change blob-tags of blob to {key = "abc", val = "def"} and {key = "ghi", val = "jkl"}:
-	- azcopy setprops "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --blob-tags=abc=def&ghi=jkl
+	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --blob-tags=abc=def&ghi=jkl
 	- While setting tags on the blobs, there are additional permissions('t' for tags) in SAS without which the service will give authorization error back.
 
 Clear all existing blob-tags of blob:
-	- azcopy setprops "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --blob-tags=clear
+	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --blob-tags=clear
 	- While setting tags on the blobs, there are additional permissions('t' for tags) in SAS without which the service will give authorization error back.
 `
