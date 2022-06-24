@@ -1,7 +1,6 @@
-// +build windows darwin
-package common
-import "C"
+// +build !linux
 
+package common
 
 type ArchivingReader struct {
 }
@@ -17,6 +16,3 @@ func (c *ArchivingReader) Read(p []byte) (n int, err error) {
 func (c *ArchivingReader) Close() error {
 	return nil
 }
-
-
-

@@ -1,10 +1,22 @@
 // +build linux
+
 package common
 
 
-//#cgo LDFLAGS: -larchive
-//#include <archive.h>
-//#include "archivingReader.h"
+/*
+#cgo LDFLAGS: -larchive
+#include <archive.h>
+#include <archive_entry.h>
+
+typedef const void *const_void_ptr;
+extern ssize_t pipeWrite(struct archive *a, void *client_data,  const void *buff, size_t len);
+
+static inline int 
+archive_write_open_pipe(struct archive *a, uintptr_t writerHandle) {
+	return archive_write_open2(a, (void*)writerHandle, NULL, pipeWrite, NULL, NULL);
+};
+
+*/
 import "C"
 
 import (
@@ -126,6 +138,7 @@ func (c *ArchivingReader) Close() error {
 }
 
 //====================================================================================================
+const archiveOk = 0
 
 type archiver struct {
 	writerHandle  cgo.Handle //this will hold pointer to the io.Writer given to archiver
@@ -150,11 +163,34 @@ func newArchiver(srcPath string, w io.Writer) (*archiver, error) {
 }
 
 func (a *archiver) Init(srcPath string) error {
-	ret := C.archive_init(C.CString(srcPath), C.uintptr_t(a.writerHandle));
-	if ret.err != 0 {
-		return a.Error()
+	dst := C.archive_write_new();
+	toError := func (a *C.struct_archive) (error) {
+		return errors.New(C.GoString(C.archive_error_string(a)))
 	}
-	a.dst, a.src, a.entry = ret.a, ret.disk, ret.entry;
+
+	if err := C.archive_write_set_format_pax_restricted(dst); err != archiveOk {
+		return toError(dst)
+	}
+
+	if err := C.archive_write_open_pipe(dst, C.uintptr_t(a.writerHandle)); err != archiveOk {
+		return toError(dst)
+	}
+
+	C.archive_write_set_bytes_in_last_block(dst,1)
+
+	disk  := C.archive_read_disk_new();
+
+	if err := C.archive_read_disk_open(disk, C.CString(srcPath)); err != archiveOk {
+		return toError(disk)
+	}
+
+	entry := C.archive_entry_new()
+
+	if err := C.archive_read_next_header2(disk, entry); err != archiveOk {
+		return toError(disk)
+	}
+
+	a.dst, a.src, a.entry = dst, disk, entry
 
 	return nil
 }
@@ -181,7 +217,11 @@ func (a *archiver) Write(p []byte) (int, error) {
 }
 
 func (a *archiver) Close() error {
-	C.archive_close(a.dst, a.src, a.entry);
+	C.archive_entry_free(a.entry)
+	C.archive_write_close(a.dst)
+	C.archive_write_free(a.dst)
+	C.archive_read_close(a.src)
+	C.archive_read_free(a.src)
 	a.writerHandle.Delete()
 	return nil
 }
@@ -191,8 +231,8 @@ func (a *archiver) Error() error {
 	return errors.New(s)
 }
 
-//export buffer_write
-func buffer_write(_ *C.struct_archive, clientData unsafe.Pointer, data C.const_void_ptr, length C.size_t) (C.ssize_t) {
+//export pipeWrite
+func pipeWrite(_ *C.struct_archive, clientData unsafe.Pointer, data C.const_void_ptr, length C.size_t) (C.ssize_t) {
 	w := cgo.Handle(clientData).Value().(io.Writer)
 	src := unsafe.Slice((*byte)(data), length);
 
