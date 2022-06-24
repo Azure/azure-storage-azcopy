@@ -536,7 +536,7 @@ func tryDeleteFile(info TransferInfo, jptm IJobPartTransferMgr) {
 // download to a temp path we return a temp paht in format
 // /actual/parent/path/.azDownload-<jobID>-<actualFileName>
 func (info *TransferInfo) getDownloadPath() string {
-	if common.GetLifecycleMgr().DownloadToTempPath() {
+	if common.GetLifecycleMgr().DownloadToTempPath() && info.SourceSize > 0 { // 0-byte files don't need a rename.
 		parent, fileName := filepath.Split(info.Destination)
 		fileName = fmt.Sprintf(azcopyTempDownloadPrefix, info.JobID.String()) + fileName
 		return filepath.Join(parent, fileName)

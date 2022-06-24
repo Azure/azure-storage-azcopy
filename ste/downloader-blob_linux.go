@@ -3,6 +3,7 @@
 package ste
 
 import (
+	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"golang.org/x/sys/unix"
 	"io"
@@ -88,17 +89,10 @@ func (bd *blobDownloader) ApplyUnixProperties(adapter common.UnixStatAdapter) (s
 	// At this point, mode has already been applied. Let's work out what we need to apply, and apply the rest.
 
 	// First, grab our file descriptor and such.
-	f, err := os.OpenFile(bd.txInfo.Destination, syscall.O_RDONLY|syscall.O_NONBLOCK, os.ModeType)
-	if err != nil {
-		return "open file", err
-	}
-
-	var fi os.FileInfo
-	fi, err = f.Stat() // grab the base stats
+	fi, err := os.Stat(bd.txInfo.Destination)
 	if err != nil {
 		return "stat", err
 	}
-	_ = f.Close()
 
 	// At this point, mode has already been applied. Let's work out what we need to apply, and apply the rest.
 	if adapter.Extended() {
@@ -164,34 +158,6 @@ func (bd *blobDownloader) ApplyUnixProperties(adapter common.UnixStatAdapter) (s
 	}
 
 	return
-
-	// if adapter.Extended() {
-	// 	var stat *syscall.Stat_t
-	// 	stat = fi.Sys().(*syscall.Stat_t)
-	// 	mask := adapter.StatxMask()
-	//
-	// 	// todo: this is being troublesome.
-	// 	attr := adapter.Attribute()
-	// 	_, _, err = syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), uintptr(unix.FS_IOC_SETFLAGS), uintptr(attr))
-	// 	if err != nil {
-	// 		return "ioctl setflags", err
-	// 	}
-	// }
-	//
-	// err = os.Chmod(bd.txInfo.Destination, os.FileMode(adapter.FileMode())) // only write permissions
-	// if err != nil {
-	// 	return "chmod", err
-	// }
-	// err = os.Chown(bd.txInfo.Destination, int(adapter.Owner()), int(adapter.Group()))
-	// if err != nil {
-	// 	return "chown", err
-	// }
-	// err = os.Chtimes(bd.txInfo.Destination, adapter.ATime(), adapter.MTime())
-	// if err != nil {
-	// 	return "chtimes", err
-	// }
-
-	return
 }
 
 func (bd *blobDownloader) SetFolderProperties(jptm IJobPartTransferMgr) error {
@@ -208,9 +174,11 @@ func (bd *blobDownloader) SetFolderProperties(jptm IJobPartTransferMgr) error {
 		if err != nil {
 			return err
 		}
-		_, err = bd.ApplyUnixProperties(props)
+		stage, err := bd.ApplyUnixProperties(props)
 
-		return err
+		if err != nil {
+			return fmt.Errorf("set unix properties: %s; %w", stage, err)
+		}
 	}
 
 	return nil
