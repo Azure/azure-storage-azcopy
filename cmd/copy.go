@@ -1214,17 +1214,17 @@ type CookedCopyCmdArgs struct {
 	// defines whether first part has been ordered or not.
 	// 0 means first part is not ordered and 1 means first part is ordered.
 	atomicFirstPartOrdered uint32
-}
-
-// setFirstPartOrdered sets the value of atomicFirstPartOrdered to 1
-func (cca *CookedCopyCmdArgs) setFirstPartOrdered() {
-	atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
 
 	// Optional flag that sets rehydrate priority for rehydration
 	rehydratePriority common.RehydratePriorityType
 
 	// Bitmasked uint checking which properties to transfer
 	propertiesToTransfer common.SetPropertiesFlags
+}
+
+// setFirstPartOrdered sets the value of atomicFirstPartOrdered to 1
+func (cca *CookedCopyCmdArgs) setFirstPartOrdered() {
+	atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {
