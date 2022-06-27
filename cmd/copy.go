@@ -682,7 +682,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	// --as-subdir is OK on all sources and destinations, but additional verification has to be done down the line. (e.g. https://account.blob.core.windows.net is not a valid root)
-	cooked.asSubdir = raw.asSubdir
+	cooked.AsSubdir = raw.asSubdir
 
 	cooked.IncludeDirectoryStubs = raw.includeDirectoryStubs || (cooked.isHNStoHNS && cooked.preservePermissions.IsTruthy())
 
@@ -696,7 +696,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	// Make sure the given input is the one of the enums given by the blob SDK
-	err = cooked.permanentDeleteOption.Parse(raw.permanentDeleteOption)
+	err = cooked.PermanentDeleteOption.Parse(raw.permanentDeleteOption)
 	if err != nil {
 		return cooked, err
 	}
@@ -1169,7 +1169,7 @@ type CookedCopyCmdArgs struct {
 	backupMode bool
 
 	// Whether to rename/share the root
-	asSubdir bool
+	AsSubdir bool
 
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
 	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
@@ -1209,7 +1209,7 @@ type CookedCopyCmdArgs struct {
 	CpkOptions common.CpkOptions
 
 	// Optional flag that permanently deletes soft deleted blobs
-	permanentDeleteOption common.PermanentDeleteOption
+	PermanentDeleteOption common.PermanentDeleteOption
 
 	// Optional flag that sets rehydrate priority for rehydration
 	rehydratePriority common.RehydratePriorityType

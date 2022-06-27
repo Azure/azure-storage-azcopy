@@ -83,7 +83,7 @@ func init() {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 			}
 
-			if cooked.permanentDeleteOption != common.EPermanentDeleteOption.None() {
+			if cooked.PermanentDeleteOption != common.EPermanentDeleteOption.None() {
 				glcm.Info("Permanent delete is a PREVIEW feature and soft-deleted snapshots/versions will be deleted PERMANENTLY. Please proceed with caution.")
 			}
 

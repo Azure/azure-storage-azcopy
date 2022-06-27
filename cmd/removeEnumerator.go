@@ -50,7 +50,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	// Include-path is handled by ListOfFilesChannel.
 	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo,
 		nil, cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs,
-		cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false,
+		cca.PermanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false,
 		azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil /* errorChannel */)
 
 	// report failure to create traverser
@@ -61,7 +61,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	includeFilters := buildIncludeFilters(cca.IncludePatterns)
 	excludeFilters := buildExcludeFilters(cca.ExcludePatterns, false)
 	excludePathFilters := buildExcludeFilters(cca.ExcludePathPatterns, true)
-	includeSoftDelete := buildIncludeSoftDeleted(cca.permanentDeleteOption)
+	includeSoftDelete := buildIncludeSoftDeleted(cca.PermanentDeleteOption)
 
 	// set up the filters in the right order
 	filters := append(includeFilters, excludeFilters...)
