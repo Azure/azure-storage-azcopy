@@ -643,6 +643,8 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			isCancelling := jobStatus == common.EJobStatus.Cancelling()
 			shouldComplete := allKnownPartsDone && (haveFinalPart || isCancelling)
 			if shouldComplete {
+				// Inform StatusManager that all parts are done.
+				close(jm.jstm.xferDone)
 				// Wait  for all XferDone messages to be processed by statusManager. Front end
 				// depends on JobStatus to determine if we've to quit job. Setting it here without
 				// draining XferDone will make it report incorrect statistics.
