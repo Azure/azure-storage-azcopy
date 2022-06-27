@@ -84,7 +84,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo,
 		&cca.FollowSymlinks, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties,
-		cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs,
+		cca.IncludeDirectoryStubs, cca.PermanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs,
 		cca.S2sPreserveBlobTags, azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil /* errorChannel */)
 
 	if err != nil {
@@ -131,7 +131,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, errors.New("cannot transfer individual files/folders to the root of a service. Add a container or directory to the destination URL")
 	}
 
-	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Service() && !cca.asSubdir {
+	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Service() && !cca.AsSubdir {
 		return nil, errors.New("cannot use --as-subdir=false with a service level destination")
 	}
 
@@ -277,8 +277,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			}
 		}
 
-		srcRelPath := cca.MakeEscapedRelativePath(true, isDestDir, cca.asSubdir, object)
-		dstRelPath := cca.MakeEscapedRelativePath(false, isDestDir, cca.asSubdir, object)
+		srcRelPath := cca.MakeEscapedRelativePath(true, isDestDir, cca.AsSubdir, object)
+		dstRelPath := cca.MakeEscapedRelativePath(false, isDestDir, cca.AsSubdir, object)
 
 		transfer, shouldSendToSte := object.ToNewCopyTransfer(
 			cca.autoDecompress && cca.FromTo.IsDownload(),
@@ -431,7 +431,7 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []ObjectFilter {
 		}
 	}
 
-	switch cca.permanentDeleteOption {
+	switch cca.PermanentDeleteOption {
 	case common.EPermanentDeleteOption.Snapshots():
 		filters = append(filters, &permDeleteFilter{deleteSnapshots: true})
 	case common.EPermanentDeleteOption.Versions():
@@ -603,7 +603,7 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 	return path
 }
 
-func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool, asSubdir bool, object StoredObject) (relativePath string) {
+func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool, AsSubdir bool, object StoredObject) (relativePath string) {
 	// write straight to /dev/null, do not determine a indirect path
 	if !source && cca.Destination.Value == common.Dev_Null {
 		return "" // ignore path encode rules
@@ -634,7 +634,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 	}
 
 	// user is not placing the source as a subdir
-	if object.isSourceRootFolder() && !asSubdir {
+	if object.isSourceRootFolder() && !AsSubdir {
 		relativePath = ""
 	}
 
@@ -647,7 +647,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 
 	if common.IffString(source, object.ContainerName, object.DstContainerName) != "" {
 		relativePath = `/` + common.IffString(source, object.ContainerName, object.DstContainerName) + relativePath
-	} else if !source && !cca.StripTopDir && cca.asSubdir { // Avoid doing this where the root is shared or renamed.
+	} else if !source && !cca.StripTopDir && cca.AsSubdir { // Avoid doing this where the root is shared or renamed.
 		// We ONLY need to do this adjustment to the destination.
 		// The source SAS has already been removed. No need to convert it to a URL or whatever.
 		// Save to a directory
