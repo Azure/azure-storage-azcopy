@@ -104,7 +104,6 @@ type IJobMgr interface {
 
 	// Cleanup Functions
 	DeferredCleanupJobMgr()
-	CleanupJobStatusMgr()
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -138,10 +137,11 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	jobPartProgressCh := make(chan jobPartProgressInfo)
 	var jstm jobStatusManager
 	jstm.respChan = make(chan common.ListJobSummaryResponse)
-	jstm.listReq = make(chan bool)
+	jstm.listReq = make(chan struct{})
 	jstm.partCreated = make(chan JobPartCreatedMsg, 100)
 	jstm.xferDone = make(chan xferDoneMsg, 1000)
-	jstm.done = make(chan struct{}, 1)
+	jstm.xferDoneDrained = make(chan struct{})
+	jstm.statusMgrDone = make(chan struct{})
 	// Different logger for each job.
 	if jobLogger == nil {
 		jobLogger = common.NewJobLogger(jobID, common.ELogLevel.Debug(), logFileFolder, "" /* logFileNameSuffix */)
@@ -643,6 +643,12 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			isCancelling := jobStatus == common.EJobStatus.Cancelling()
 			shouldComplete := allKnownPartsDone && (haveFinalPart || isCancelling)
 			if shouldComplete {
+				// Inform StatusManager that all parts are done.
+				close(jm.jstm.xferDone)
+				// Wait  for all XferDone messages to be processed by statusManager. Front end
+				// depends on JobStatus to determine if we've to quit job. Setting it here without
+				// draining XferDone will make it report incorrect statistics.
+				jm.waitToDrainXferDone()
 				partDescription := "all parts of entire Job"
 				if !haveFinalPart {
 					partDescription = "known parts of incomplete Job"
@@ -723,9 +729,6 @@ func (jm *jobMgr) DeferredCleanupJobMgr() {
 	// Call jm.Cancel to signal routines workdone.
 	// This will take care of any jobPartMgr release.
 	jm.Cancel()
-
-	// Cleanup the JobStatusMgr go routine.
-	jm.CleanupJobStatusMgr()
 
 	// Transfer Thread Cleanup.
 	jm.cleanupTransferRoutine()
