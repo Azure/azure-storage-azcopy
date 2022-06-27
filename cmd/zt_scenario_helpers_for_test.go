@@ -52,7 +52,7 @@ var specialNames = []string{
 	"打麻将.txt",
 	"wow such space so much space",
 	"打%%#%@#%麻将.txt",
-	//"saywut.pdf?yo=bla&WUWUWU=foo&sig=yyy", // TODO this breaks on windows, figure out a way to add it only for tests on Unix
+	// "saywut.pdf?yo=bla&WUWUWU=foo&sig=yyy", // TODO this breaks on windows, figure out a way to add it only for tests on Unix
 	"coração",
 	"আপনার নাম কি",
 	"%4509%4254$85140&",
@@ -330,7 +330,7 @@ func (scenarioHelper) generateBlobsFromList(c *chk.C, containerURL azblob.Contai
 	for _, blobName := range blobList {
 		blob := containerURL.NewBlockBlobURL(blobName)
 		cResp, err := blob.Upload(ctx, strings.NewReader(data), azblob.BlobHTTPHeaders{},
-			nil, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{})
+			nil, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
 		c.Assert(err, chk.IsNil)
 		c.Assert(cResp.StatusCode(), chk.Equals, 201)
 	}
@@ -341,7 +341,7 @@ func (scenarioHelper) generateBlobsFromList(c *chk.C, containerURL azblob.Contai
 
 func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string) {
 	for _, blobName := range blobList {
-		//Create the blob (PUT blob)
+		// Create the blob (PUT blob)
 		blob := containerURL.NewPageBlobURL(blobName)
 		cResp, err := blob.Create(ctx,
 			int64(len(data)),
@@ -354,11 +354,12 @@ func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.Co
 			azblob.DefaultPremiumBlobAccessTier,
 			nil,
 			azblob.ClientProvidedKeyOptions{},
+			azblob.ImmutabilityPolicyOptions{},
 		)
 		c.Assert(err, chk.IsNil)
 		c.Assert(cResp.StatusCode(), chk.Equals, 201)
 
-		//Create the page (PUT page)
+		// Create the page (PUT page)
 		uResp, err := blob.UploadPages(ctx,
 			0,
 			strings.NewReader(data),
@@ -376,7 +377,7 @@ func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.Co
 
 func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string) {
 	for _, blobName := range blobList {
-		//Create the blob (PUT blob)
+		// Create the blob (PUT blob)
 		blob := containerURL.NewAppendBlobURL(blobName)
 		cResp, err := blob.Create(ctx,
 			azblob.BlobHTTPHeaders{
@@ -386,11 +387,12 @@ func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.
 			azblob.BlobAccessConditions{},
 			nil,
 			azblob.ClientProvidedKeyOptions{},
+			azblob.ImmutabilityPolicyOptions{},
 		)
 		c.Assert(err, chk.IsNil)
 		c.Assert(cResp.StatusCode(), chk.Equals, 201)
 
-		//Append a block (PUT block)
+		// Append a block (PUT block)
 		uResp, err := blob.AppendBlock(ctx,
 			strings.NewReader(data),
 			azblob.AppendBlobAccessConditions{},
@@ -407,7 +409,7 @@ func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.
 func (scenarioHelper) generateBlockBlobWithAccessTier(c *chk.C, containerURL azblob.ContainerURL, blobName string, accessTier azblob.AccessTierType) {
 	blob := containerURL.NewBlockBlobURL(blobName)
 	cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
-		nil, azblob.BlobAccessConditions{}, accessTier, nil, azblob.ClientProvidedKeyOptions{})
+		nil, azblob.BlobAccessConditions{}, accessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
 }
@@ -766,6 +768,9 @@ func runSyncAndVerify(c *chk.C, raw rawSyncCmdArgs, verifier func(err error)) {
 func runCopyAndVerify(c *chk.C, raw rawCopyCmdArgs, verifier func(err error)) {
 	// the simulated user input should parse properly
 	cooked, err := raw.cook()
+	if err == nil {
+		err = cooked.makeTransferEnum()
+	}
 	if err != nil {
 		verifier(err)
 		return
@@ -851,9 +856,9 @@ func validateRemoveTransfersAreScheduled(c *chk.C, isSrcEncoded bool, expectedTr
 
 		delete(lookupMap, srcRelativeFilePath)
 	}
-	//if len(lookupMap) > 0 {
+	// if len(lookupMap) > 0 {
 	//	panic("set breakpoint here to debug")
-	//}
+	// }
 }
 
 func getDefaultSyncRawInput(src, dst string) rawSyncCmdArgs {
@@ -863,7 +868,6 @@ func getDefaultSyncRawInput(src, dst string) rawSyncCmdArgs {
 		src:                 src,
 		dst:                 dst,
 		recursive:           true,
-		logVerbosity:        defaultLogVerbosityForSync,
 		deleteDestination:   deleteDestination.String(),
 		md5ValidationOption: common.DefaultHashValidationOption.String(),
 	}
@@ -873,7 +877,6 @@ func getDefaultCopyRawInput(src string, dst string) rawCopyCmdArgs {
 	return rawCopyCmdArgs{
 		src:                            src,
 		dst:                            dst,
-		logVerbosity:                   defaultLogVerbosityForSync,
 		blobType:                       common.EBlobType.Detect().String(),
 		blockBlobTier:                  common.EBlockBlobTier.None().String(),
 		pageBlobTier:                   common.EPageBlobTier.None().String(),
@@ -898,7 +901,6 @@ func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 	return rawCopyCmdArgs{
 		src:                            src,
 		fromTo:                         fromTo.String(),
-		logVerbosity:                   defaultLogVerbosityForSync,
 		blobType:                       common.EBlobType.Detect().String(),
 		blockBlobTier:                  common.EBlockBlobTier.None().String(),
 		pageBlobTier:                   common.EPageBlobTier.None().String(),
@@ -908,4 +910,56 @@ func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 		preserveOwner:                  common.PreserveOwnerDefault,
 		includeDirectoryStubs:          true,
 	}
+}
+
+func getDefaultSetPropertiesRawInput(src string, params transferParams) rawCopyCmdArgs {
+	fromTo := common.EFromTo.BlobNone()
+	srcURL, _ := url.Parse(src)
+
+	srcLocationType := InferArgumentLocation(src)
+	switch srcLocationType {
+	case common.ELocation.Blob():
+		fromTo = common.EFromTo.BlobNone()
+	case common.ELocation.BlobFS():
+		fromTo = common.EFromTo.BlobFSNone()
+	case common.ELocation.File():
+		fromTo = common.EFromTo.FileNone()
+	default:
+		panic(fmt.Sprintf("invalid source type %s to delete. azcopy support removing blobs/files/adls gen2", srcLocationType.String()))
+
+	}
+
+	if strings.Contains(srcURL.Host, "file") {
+		fromTo = common.EFromTo.FileNone()
+	} else if strings.Contains(srcURL.Host, "dfs") {
+		fromTo = common.EFromTo.BlobFSNone()
+	}
+
+	rawArgs := rawCopyCmdArgs{
+		src:                            src,
+		fromTo:                         fromTo.String(),
+		blobType:                       common.EBlobType.Detect().String(),
+		blockBlobTier:                  common.EBlockBlobTier.None().String(),
+		pageBlobTier:                   common.EPageBlobTier.None().String(),
+		md5ValidationOption:            common.DefaultHashValidationOption.String(),
+		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
+		forceWrite:                     common.EOverwriteOption.True().String(),
+		preserveOwner:                  common.PreserveOwnerDefault,
+		includeDirectoryStubs:          true,
+	}
+
+	if params.blockBlobTier != common.EBlockBlobTier.None() {
+		rawArgs.blockBlobTier = params.blockBlobTier.String()
+	}
+	if params.pageBlobTier != common.EPageBlobTier.None() {
+		rawArgs.pageBlobTier = params.pageBlobTier.String()
+	}
+	if params.metadata != "" {
+		rawArgs.metadata = params.metadata
+	}
+	if params.blobTags != nil {
+		rawArgs.blobTags = params.blobTags.ToString()
+	}
+
+	return rawArgs
 }

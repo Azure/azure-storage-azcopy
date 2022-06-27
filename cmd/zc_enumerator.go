@@ -77,6 +77,7 @@ type StoredObject struct {
 	DstContainerName string
 	// access tier, only included by blob traverser.
 	blobAccessTier azblob.AccessTierType
+	archiveStatus  azblob.ArchiveStatusType
 	// metadata, included in S2S transfers
 	Metadata       common.Metadata
 	blobVersionID  string
@@ -214,6 +215,7 @@ type blobPropsProvider interface {
 	LeaseStatus() azblob.LeaseStatusType
 	LeaseDuration() azblob.LeaseDurationType
 	LeaseState() azblob.LeaseStateType
+	ArchiveStatus() azblob.ArchiveStatusType
 }
 
 // a constructor is used so that in case the StoredObject has to change, the callers would get a compilation error
@@ -233,6 +235,7 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, en
 		md5:                props.ContentMD5(),
 		blobType:           blobProps.BlobType(),
 		blobAccessTier:     blobProps.AccessTier(),
+		archiveStatus:      blobProps.ArchiveStatus(),
 		Metadata:           meta,
 		ContainerName:      containerName,
 		// Additional lease properties. To be used in listing
@@ -304,11 +307,12 @@ type enumerationCounterFunc func(entityType common.EntityType)
 // ctx, pipeline are only required for remote resources.
 // followSymlinks is only required for local resources (defaults to false)
 // errorOnDirWOutRecursive is used by copy.
-
+// If errorChannel is non-nil, all errors encountered during enumeration will be conveyed through this channel.
+// To avoid slowdowns, use a buffered channel of enough capacity.
 func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context,
 	credential *common.CredentialInfo, followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties,
 	includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string,
-	s2sPreserveBlobTags bool, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions) (ResourceTraverser, error) {
+	s2sPreserveBlobTags bool, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo) (ResourceTraverser, error) {
 	var output ResourceTraverser
 	var p *pipeline.Pipeline
 
@@ -392,7 +396,11 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 			output = newListTraverser(baseResource, location, nil, nil, recursive, toFollow, getProperties,
 				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions)
 		} else {
-			output = newLocalTraverser(resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter)
+			if ctx != nil {
+				output = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter, errorChannel)
+			} else {
+				output = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter, errorChannel)
+			}
 		}
 	case common.ELocation.Benchmark():
 		ben, err := newBenchmarkTraverser(resource.Value, incrementEnumerationCounter)

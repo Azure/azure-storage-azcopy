@@ -1,6 +1,22 @@
 
 # Change Log
 
+## Version 10.15.0
+
+### New features
+
+1. Added support for OAuth forwarding when performing Blob -> Blob copy.
+2. Allow users to dynamically change the bandwidth cap via messages through the STDIN.
+3. GCS ->  Blob is now GA.
+4. Enable MinIO(S3) logs in DEBUG mode. 
+6. Upgraded Go version to 1.17.9.
+
+### Bug fixes
+1. Resolved alignment of atomicSuccessfulBytesInActiveFiles.
+2. Fixed issue where last-write-time was still getting persisted even when --preserve-smb-info is false.
+3. Fixed issue where concurrency was always AUTO for Azure Files despite explicit override.
+4. Removed outdated load command following the deprecation of the cflsload package.
+
 ## Version 10.14.1
 
 ### Bug fixes

@@ -650,7 +650,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SADLSDirectory(c *chk.C) {
 
 	// create an ADLS Gen2 directory at the source with the exact same name as the vdir
 	_, err := srcContainerURL.NewBlockBlobURL(vdirName).Upload(context.Background(), bytes.NewReader(nil),
-		azblob.BlobHTTPHeaders{}, azblob.Metadata{"hdi_isfolder": "true"}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{})
+		azblob.BlobHTTPHeaders{}, azblob.Metadata{"hdi_isfolder": "true"}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
 	c.Assert(err, chk.IsNil)
 
 	// set up interceptor
@@ -684,7 +684,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SADLSDirectory(c *chk.C) {
 	})
 }
 
-//testing multiple include regular expression
+// testing multiple include regular expression
 func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeRegexFlag(c *chk.C) {
 	bsu := getBSU()
 	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
@@ -717,7 +717,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeRegexFlag(c *chk.C) {
 		c.Assert(err, chk.IsNil)
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
-		//comparing is names of files, since not in order need to sort each string and the compare them
+		// comparing is names of files, since not in order need to sort each string and the compare them
 		actualTransfer := []string{}
 		for i := 0; i < len(mockedRPC.transfers); i++ {
 			actualTransfer = append(actualTransfer, strings.Trim(mockedRPC.transfers[i].Source, "/"))
@@ -807,7 +807,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeAndExcludeRegexFlag(c *chk.C
 		c.Assert(err, chk.IsNil)
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobsToInclude))
-		//comparing is names of files, since not in order need to sort each string and the compare them
+		// comparing is names of files, since not in order need to sort each string and the compare them
 		actualTransfer := []string{}
 		for i := 0; i < len(mockedRPC.transfers); i++ {
 			actualTransfer = append(actualTransfer, strings.Trim(mockedRPC.transfers[i].Source, "/"))
@@ -823,13 +823,13 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeAndExcludeRegexFlag(c *chk.C
 func (s *cmdIntegrationSuite) TestDryrunSyncBlobtoBlob(c *chk.C) {
 	bsu := getBSU()
 
-	//set up src container
+	// set up src container
 	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
 	defer deleteContainer(c, srcContainerURL)
 	blobsToInclude := []string{"AzURE2.jpeg", "sub1/aTestOne.txt", "sub1/sub2/testTwo.pdf"}
 	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, blobsToInclude, blockBlobDefaultData)
 
-	//set up dst container
+	// set up dst container
 	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
 	defer deleteContainer(c, dstContainerURL)
 	blobsToDelete := []string{"testThree.jpeg"}
@@ -873,11 +873,11 @@ func (s *cmdIntegrationSuite) TestDryrunSyncBlobtoBlob(c *chk.C) {
 func (s *cmdIntegrationSuite) TestDryrunSyncBlobtoBlobJson(c *chk.C) {
 	bsu := getBSU()
 
-	//set up src container
+	// set up src container
 	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
 	defer deleteContainer(c, srcContainerURL)
 
-	//set up dst container
+	// set up dst container
 	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
 	defer deleteContainer(c, dstContainerURL)
 	blobsToDelete := []string{"testThree.jpeg"}

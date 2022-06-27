@@ -45,6 +45,8 @@ var validCredTypesPerLocation = map[common.Location][]common.CredentialType{
 }
 
 var allCredentialTypes []common.CredentialType = nil
+
+// var oAuthOnly = []common.CredentialType{common.ECredentialType.OAuthToken()}
 var anonymousAuthOnly = []common.CredentialType{common.ECredentialType.Anonymous()}
 
 func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredentialTypesSrc, requestedCredentialTypesDst []common.CredentialType) [][2]common.CredentialType {
@@ -71,7 +73,7 @@ func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredential
 
 	// determine source types
 	var sourceTypes []common.CredentialType
-	if fromTo.IsS2S() {
+	if fromTo.IsS2S() && fromTo != common.EFromTo.BlobBlob() {
 		// source must always be anonymous-- no exceptions until OAuth over S2S is introduced.
 		sourceTypes = []common.CredentialType{common.ECredentialType.Anonymous()}
 	} else {

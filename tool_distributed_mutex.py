@@ -5,10 +5,10 @@ import random
 # note that the track 2 python SDK is being used here
 from azure.storage.blob import (
     BlobClient,
-    LeaseClient,
+    BlobLeaseClient,
 )
 
-from azure.core import (
+from azure.core.exceptions import (
     HttpResponseError,
 )
 
@@ -31,7 +31,7 @@ def process():
     action, mutex_url = get_raw_input()
 
     # check whether the blob exists, if not quit right away to avoid wasting time
-    blob_client = BlobClient(mutex_url)
+    blob_client = BlobClient.from_blob_url(mutex_url)
     try:
         blob_client.get_blob_properties()
         print("INFO: validated mutex url")
@@ -39,7 +39,7 @@ def process():
         raise ValueError('please provide an existing and valid blob URL, failed to get properties with error: ' + e)
 
     # get a handle on the lease
-    lease_client = LeaseClient(blob_client)
+    lease_client = BlobLeaseClient(blob_client)
     if action == UNLOCK:
         # make the lease free as soon as possible
         lease_client.break_lease(lease_break_period=1)

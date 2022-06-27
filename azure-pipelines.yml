@@ -29,7 +29,7 @@ jobs:
         env:
           GO111MODULE: 'on'
         inputs:
-          version: '1.16.14'
+          version: '1.17.9'
 
       - script: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.43.0
@@ -94,7 +94,7 @@ jobs:
     steps:
       - task: GoTool@0
         inputs:
-          version: '1.16.14'
+          version: '1.17.9'
 
       # Running E2E Tests on Linux - AMD64
       - script: |
@@ -176,16 +176,14 @@ jobs:
       - task: GoTool@0
         name: 'Set_up_Golang'
         inputs:
-          version: '1.16.14'
+          version: '1.17.9'
       - task: DownloadSecureFile@1
         name: ciGCSServiceAccountKey
         displayName: 'Download GCS Service Account Key'
         inputs:
           secureFile: 'ci-gcs-dev.json'
       - script: |
-          pip install azure-storage-blob==12.0.0b3
-          # the recent release 1.0.0b4 has a breaking change
-          pip install azure-core==1.0.0b3
+          pip install azure-storage-blob==12.12.0
           # acquire the mutex before running live tests to avoid conflicts
           python ./tool_distributed_mutex.py lock "$(MUTEX_URL)"
           # set the variable to indicate that the mutex was actually acquired
@@ -241,9 +239,7 @@ jobs:
           S2S_SRC_GCP_SERVICE_URL: $(S2S_SRC_GCP_SERVICE_URL)
           SHARE_SAS_URL: $(SHARE_SAS_URL)
       - script: |
-          pip install azure-storage-blob==12.0.0b3
-          # the recent release 1.0.0b4 has a breaking change
-          pip install azure-core==1.0.0b3
+          pip install azure-storage-blob==12.12.0
           python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"
         name: 'Release_the_distributed_mutex'
         # this runs even if the job was canceled (only if the mutex was acquired by this job)

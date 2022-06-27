@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"log"
 	"net/url"
 	"os"
@@ -14,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
@@ -35,16 +36,35 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	if err != nil {
 		return nil, err
 		// If S2S and source takes OAuthToken as its cred type (OR) source takes anonymous as its cred type, but it's not public and there's no SAS
-	} else if cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() &&
-		(srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() ||
+	} else if cca.FromTo.IsS2S() &&
+		((srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() && cca.FromTo.To() != common.ELocation.Blob()) || // Blob can forward OAuth tokens
 			(srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && !isPublic && cca.Source.SAS == "")) {
-		// TODO: Generate a SAS token if it's blob -> *
-		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource")
+		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource, or the destination is blob storage")
+	}
+
+	if cca.Source.SAS != "" && cca.FromTo.IsS2S() && jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+		glcm.Info("Authentication: If the source and destination accounts are in the same AAD tenant & the user/spn/msi has appropriate permissions on both, the source SAS token is not required and OAuth can be used round-trip.")
+	}
+
+	if cca.FromTo.IsS2S() {
+		jobPartOrder.S2SSourceCredentialType = srcCredInfo.CredentialType
+	}
+
+	if jobPartOrder.S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
+		uotm := GetUserOAuthTokenManagerInstance()
+		// get token from env var or cache
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+			return nil, err
+		} else {
+			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
+			jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo
+		}
 	}
 
 	jobPartOrder.CpkOptions = cca.CpkOptions
 	jobPartOrder.PreserveSMBPermissions = cca.preservePermissions
 	jobPartOrder.PreserveSMBInfo = cca.preserveSMBInfo
+	jobPartOrder.PreservePOSIXProperties = cca.preservePOSIXProperties
 
 	// Infer on download so that we get LMT and MD5 on files download
 	// On S2S transfers the following rules apply:
@@ -63,7 +83,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo,
 		&cca.FollowSymlinks, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties,
 		cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs,
-		cca.S2sPreserveBlobTags, cca.LogVerbosity.ToPipelineLogLevel(), cca.CpkOptions)
+		cca.S2sPreserveBlobTags, azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil /* errorChannel */)
 
 	if err != nil {
 		return nil, err
@@ -141,7 +161,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		// only create the destination container in S2S scenarios
 		if cca.FromTo.From().IsRemote() && dstContainerName != "" { // if the destination has a explicit container name
 			// Attempt to create the container. If we fail, fail silently.
-			err = cca.createDstContainer(dstContainerName, cca.Destination, ctx, existingContainers, cca.LogVerbosity)
+			err = cca.createDstContainer(dstContainerName, cca.Destination, ctx, existingContainers, azcopyLogVerbosity)
 
 			// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 			if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
@@ -175,7 +195,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						continue
 					}
 
-					err = cca.createDstContainer(bucketName, cca.Destination, ctx, existingContainers, cca.LogVerbosity)
+					err = cca.createDstContainer(bucketName, cca.Destination, ctx, existingContainers, azcopyLogVerbosity)
 
 					// if JobsAdmin is nil, we're probably in testing mode.
 					// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
@@ -198,7 +218,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				resName, err := containerResolver.ResolveName(cName)
 
 				if err == nil {
-					err = cca.createDstContainer(resName, cca.Destination, ctx, existingContainers, cca.LogVerbosity)
+					err = cca.createDstContainer(resName, cca.Destination, ctx, existingContainers, azcopyLogVerbosity)
 
 					if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 						logDstContainerCreateFailureOnce.Do(func() {
@@ -216,7 +236,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.isHNStoHNS, strings.EqualFold(cca.Destination.Value, common.Dev_Null))
+	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, cca.isHNStoHNS, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
@@ -342,7 +362,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 
 	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, nil,
 		nil, false, false, false, common.EPermanentDeleteOption.None(),
-		func(common.EntityType) {}, cca.ListOfVersionIDs, false, pipeline.LogNone, cca.CpkOptions)
+		func(common.EntityType) {}, cca.ListOfVersionIDs, false, pipeline.LogNone, cca.CpkOptions, nil /* errorChannel */)
 
 	if err != nil {
 		return false
@@ -664,7 +684,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 }
 
 // we assume that preserveSmbPermissions and preserveSmbInfo have already been validated, such that they are only true if both resource types support them
-func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preserveSmbPermissions, isDfsDfs, isDstNull bool) (common.FolderPropertyOption, string) {
+func newFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preserveSmbPermissions, preservePosixProperties, isDfsDfs, isDstNull, includeDirectoryStubs bool) (common.FolderPropertyOption, string) {
 
 	getSuffix := func(willProcess bool) string {
 		willProcessString := common.IffString(willProcess, "will be processed", "will not be processed")
@@ -682,7 +702,7 @@ func newFolderPropertyOption(fromTo common.FromTo, recursive bool, stripTopDir b
 		}
 	}
 
-	bothFolderAware := (fromTo.AreBothFolderAware() || isDfsDfs) && !isDstNull // Copying folders to dev null doesn't make sense.
+	bothFolderAware := (fromTo.AreBothFolderAware() || isDfsDfs || preservePosixProperties || includeDirectoryStubs) && !isDstNull
 	isRemoveFromFolderAware := fromTo == common.EFromTo.FileTrash()
 	if bothFolderAware || isRemoveFromFolderAware {
 		if !recursive {

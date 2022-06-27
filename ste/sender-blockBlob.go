@@ -195,7 +195,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", blockIDs))
 
 		// commit the blocks.
-		if !ValidateTier(jptm, s.destBlobTier, s.destBlockBlobURL.BlobURL, s.jptm.Context()) {
+		if !ValidateTier(jptm, s.destBlobTier, s.destBlockBlobURL.BlobURL, s.jptm.Context(), false) {
 			s.destBlobTier = azblob.DefaultAccessTier
 		}
 
@@ -211,7 +211,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 			destBlobTier = azblob.AccessTierNone
 		}
 
-		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, destBlobTier, blobTags, s.cpkToApply); err != nil {
+		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, destBlobTier, blobTags, s.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
 			jptm.FailActiveSend("Committing block list", err)
 			return
 		}
