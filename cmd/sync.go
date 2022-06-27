@@ -65,6 +65,7 @@ type rawSyncCmdArgs struct {
 	preserveSMBPermissions    bool // deprecated and synonymous with preservePermissions
 	preserveOwner             bool
 	preserveSMBInfo           bool
+	preservePOSIXProperties   bool
 	followSymlinks            bool
 	backupMode                bool
 	putMd5                    bool

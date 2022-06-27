@@ -406,10 +406,10 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []ObjectFilter {
 		filters = append(filters, &regexFilter{patterns: cca.excludeRegex, isIncluded: false})
 	}
 
-	if len(cca.excludeBlobType) != 0 {
+	if len(cca.ExcludeBlobType) != 0 {
 		excludeSet := map[azblob.BlobType]bool{}
 
-		for _, v := range cca.excludeBlobType {
+		for _, v := range cca.ExcludeBlobType {
 			excludeSet[v] = true
 		}
 
