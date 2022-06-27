@@ -30,11 +30,9 @@ type BucketToContainerNameResolver interface {
 func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) (*CopyEnumerator, error) {
 	var traverser ResourceTraverser
 
-	srcCredInfo := common.CredentialInfo{}
-	var isPublic bool
-	var err error
+	srcCredInfo, isPublic, err := GetCredentialInfoForLocation(ctx, cca.FromTo.From(), cca.Source.Value, cca.Source.SAS, true, cca.CpkOptions)
 
-	if srcCredInfo, isPublic, err = GetCredentialInfoForLocation(ctx, cca.FromTo.From(), cca.Source.Value, cca.Source.SAS, true, cca.CpkOptions); err != nil {
+	if err != nil {
 		return nil, err
 		// If S2S and source takes OAuthToken as its cred type (OR) source takes anonymous as its cred type, but it's not public and there's no SAS
 	} else if cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() &&
@@ -226,6 +224,11 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		jobsAdmin.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
 	}
 
+	reportFirstPart := func(jobStarted bool) { cca.setFirstPartOrdered() } // need these values for copy transfer processor
+	reportFinalPart := func() { cca.isEnumerationComplete = true }
+
+	transferScheduler := newCopyTransferProcessor(&jobPartOrder, NumOfFilesPerDispatchJobPart, cca.Source, cca.Destination, reportFirstPart, reportFinalPart, cca.s2sPreserveAccessTier, cca.dryrunMode)
+
 	processor := func(object StoredObject) error {
 		// Start by resolving the name and creating the container
 		if object.ContainerName != "" {
@@ -259,6 +262,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 		srcRelPath := cca.MakeEscapedRelativePath(true, isDestDir, cca.asSubdir, object)
 		dstRelPath := cca.MakeEscapedRelativePath(false, isDestDir, cca.asSubdir, object)
+		object.relativePath = srcRelPath // set rel path in stored object
 
 		transfer, shouldSendToSte := object.ToNewCopyTransfer(
 			cca.autoDecompress && cca.FromTo.IsDownload(),
@@ -311,7 +315,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		}
 
 		if shouldSendToSte {
-			return addTransfer(&jobPartOrder, transfer, cca)
+			return transferScheduler.scheduleCopyTransfer(object)
 		}
 		return nil
 	}
