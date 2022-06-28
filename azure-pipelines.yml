@@ -50,7 +50,9 @@ jobs:
           curl -O https://www.libarchive.org/downloads/libarchive-3.6.1.tar.gz
           tar -xzf libarchive-3.6.1.tar.gz
           cd libarchive-3.6.1
-          make && make install
+          sudo ./configure
+          sudo make
+          sudo make install
           GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
           GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
           GOARCH=arm64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
