@@ -111,6 +111,8 @@ func init() {
 				switch srcLocationType {
 				case common.ELocation.Blob():
 					raw.fromTo = common.EFromTo.BlobNone().String()
+				case common.ELocation.BlobFS():
+					raw.fromTo = common.EFromTo.BlobFSNone().String()
 				case common.ELocation.File():
 					raw.fromTo = common.EFromTo.FileNone().String()
 				default:
