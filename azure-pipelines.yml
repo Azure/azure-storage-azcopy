@@ -32,6 +32,15 @@ jobs:
           version: '1.17.11'
 
       - script: |
+          curl -O https://www.libarchive.org/downloads/libarchive-3.6.1.tar.gz
+          tar -xzf libarchive-3.6.1.tar.gz
+          cd libarchive-3.6.1
+          sudo ./configure
+          sudo make
+          sudo make install
+          cd -
+      
+      - script: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.43.0
           echo 'Installation complete' 
           ./bin/golangci-lint --version 
@@ -47,13 +56,6 @@ jobs:
         workingDirectory: $(System.DefaultWorkingDirectory)
 
       - script: |
-          curl -O https://www.libarchive.org/downloads/libarchive-3.6.1.tar.gz
-          tar -xzf libarchive-3.6.1.tar.gz
-          cd libarchive-3.6.1
-          sudo ./configure
-          sudo make
-          sudo make install
-          cd -
           GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
           GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
           GOARCH=arm64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
