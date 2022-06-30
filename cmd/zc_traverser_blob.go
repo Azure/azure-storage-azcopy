@@ -72,7 +72,7 @@ func (t *blobTraverser) IsDirectory(isSource bool) bool {
 		return isDirDirect
 	}
 
-	_, isSingleBlob, _, err := t.getPropertiesIfSingleBlob()
+	_, _, isDirStub, err := t.getPropertiesIfSingleBlob()
 
 	if stgErr, ok := err.(azblob.StorageError); ok {
 		// We know for sure this is a single blob still, let it walk on through to the traverser.
@@ -81,7 +81,29 @@ func (t *blobTraverser) IsDirectory(isSource bool) bool {
 		}
 	}
 
-	return !isSingleBlob
+	if err == nil {
+		return isDirStub
+	}
+
+	blobURLParts := azblob.NewBlobURLParts(*t.rawURL)
+	containerRawURL := copyHandlerUtil{}.getContainerUrl(blobURLParts)
+	containerURL := azblob.NewContainerURL(containerRawURL, t.p)
+	searchPrefix := strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING) + common.AZCOPY_PATH_SEPARATOR_STRING
+	resp, err := containerURL.ListBlobsFlatSegment(t.ctx, azblob.Marker{}, azblob.ListBlobsSegmentOptions{Prefix: searchPrefix, MaxResults: 1})
+	if err != nil {
+		if azcopyScanningLogger != nil {
+			msg := fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err)
+			azcopyScanningLogger.Log(pipeline.LogError, msg)
+		}
+		return false
+	}
+
+	if len(resp.Segment.BlobItems) == 0 {
+		//Not a directory
+		return false
+	}
+
+	return true
 }
 
 func (t *blobTraverser) getPropertiesIfSingleBlob() (props *azblob.BlobGetPropertiesResponse, isBlob bool, isDirStub bool, err error) {
