@@ -51,7 +51,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo,
 		nil, cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs,
 		cca.PermanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false,
-		azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil /* errorChannel */)
+		AzcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil /* errorChannel */)
 
 	// report failure to create traverser
 	if err != nil {
@@ -136,7 +136,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 	}
 
 	// create bfs pipeline
-	p, err := createBlobFSPipeline(ctx, cca.credentialInfo, azcopyLogVerbosity.ToPipelineLogLevel())
+	p, err := createBlobFSPipeline(ctx, cca.credentialInfo, AzcopyLogVerbosity.ToPipelineLogLevel())
 	if err != nil {
 		return err
 	}

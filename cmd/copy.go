@@ -262,7 +262,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, azcopyLogVerbosity, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, AzcopyLogVerbosity, azcopyLogPathFolder, "-scanning")
 	azcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
 		azcopyScanningLogger.CloseLog()
@@ -1422,7 +1422,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		ForceIfReadOnly: cca.ForceIfReadOnly,
 		AutoDecompress:  cca.autoDecompress,
 		Priority:        common.EJobPriority.Normal(),
-		LogLevel:        azcopyLogVerbosity,
+		LogLevel:        AzcopyLogVerbosity,
 		ExcludeBlobType: cca.excludeBlobType,
 		BlobAttributes: common.BlobTransferAttributes{
 			BlobType:                 cca.blobType,
