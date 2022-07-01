@@ -36,7 +36,7 @@ func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart in
 		ForceIfReadOnly: cca.ForceIfReadOnly,
 
 		// flags
-		LogLevel:       azcopyLogVerbosity,
+		LogLevel:       AzcopyLogVerbosity,
 		BlobAttributes: common.BlobTransferAttributes{DeleteSnapshotsOption: cca.deleteSnapshotsOption, PermanentDeleteOption: cca.PermanentDeleteOption},
 	}
 
