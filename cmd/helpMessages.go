@@ -536,6 +536,7 @@ Sets properties of Blob, BlobFS, and File storage. The properties currently supp
 	Blobs -> Tier, Metadata, Tags
 	BlobFS -> Tier, Metadata, Tags
 	Files -> Metadata
+Note: dfs endpoints will be replaced by blob endpoints.
 `
 
 const setPropertiesCmdExample = `
