@@ -736,37 +736,7 @@ func GetJobLCMWrapper(jobID common.JobID) common.LifecycleMgr {
 
 // ListJobs returns the jobId of all the jobs existing in the current instance of azcopy
 func ListJobs(givenStatus common.JobStatus) common.ListJobsResponse {
-	// Resurrect all the Jobs from the existing JobPart Plan files
-	JobsAdmin.ResurrectJobParts()
-	// building the ListJobsResponse for sending response back to front-end
-	jobIds := JobsAdmin.JobIDs()
-	// Silently ignore if no JobIDs are present.
-	if len(jobIds) == 0 {
-		return common.ListJobsResponse{}
-	}
-	listJobResponse := common.ListJobsResponse{JobIDDetails: []common.JobIDDetails{}}
-	for _, jobId := range jobIds {
-		jm, found := JobsAdmin.JobMgr(jobId)
-		if !found {
-			continue
-		}
-		jpm, found := jm.JobPartMgr(0)
-		if !found {
-			continue
-		}
-		if givenStatus == common.EJobStatus.All() || givenStatus == jpm.Plan().JobStatus() {
-			listJobResponse.JobIDDetails = append(listJobResponse.JobIDDetails,
-				common.JobIDDetails{JobId: jobId, CommandString: jpm.Plan().CommandString(),
-					StartTime: jpm.Plan().StartTime, JobStatus: jpm.Plan().JobStatus()})
-		}
-
-		// Close the job part managers and the log.
-		jm.IterateJobParts(false, func(k common.PartNumber, v ste.IJobPartMgr) {
-			v.Close()
-		})
-		jm.CloseLog()
-	}
-	return listJobResponse
+	return JobsAdmin.ListJobs(givenStatus)
 }
 
 // GetJobFromTo api returns the job FromTo info.
