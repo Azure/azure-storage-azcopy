@@ -252,6 +252,11 @@ func (jptm *jobPartTransferMgr) ShouldDecompress() bool {
 }
 
 func (jptm *jobPartTransferMgr) GetSourceCompressionType() (common.CompressionType, error) {
+	contentType := jptm.Info().SrcHTTPHeaders.ContentType
+	if contentType == "application/x-tar"  {
+		return common.ECompressionType.TarArchive(), nil
+	}
+
 	encoding := jptm.Info().SrcHTTPHeaders.ContentEncoding
 	return common.GetCompressionType(encoding)
 }

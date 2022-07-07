@@ -1329,6 +1329,7 @@ type CompressionType uint8
 func (CompressionType) None() CompressionType        { return CompressionType(0) }
 func (CompressionType) ZLib() CompressionType        { return CompressionType(1) }
 func (CompressionType) GZip() CompressionType        { return CompressionType(2) }
+func (CompressionType) TarArchive() CompressionType  { return CompressionType(3) }
 func (CompressionType) Unsupported() CompressionType { return CompressionType(255) }
 
 func (ct CompressionType) String() string {

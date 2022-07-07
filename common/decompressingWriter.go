@@ -21,16 +21,40 @@
 package common
 
 import (
+	"archive/tar"
 	"compress/gzip"
 	"compress/zlib"
 	"errors"
 	"io"
+	"sync"
 	"time"
 )
 
 type decompressingWriter struct {
 	pipeWriter  *io.PipeWriter
 	workerError chan error
+}
+
+type tarWrapper struct {
+	hdrDone sync.Once
+	r *tar.Reader
+}
+
+func (t *tarWrapper) Read(p []byte) (int, error) {
+	var hdrErr error
+	t.hdrDone.Do(func() {
+		_, hdrErr = t.r.Next();
+	})
+
+	if hdrErr != nil {
+		return 0, hdrErr
+	}
+
+	return t.r.Read(p)
+}
+
+func (_ *tarWrapper) Close() error { 
+	return nil
 }
 
 const decompressingWriterCopyBufferSize = 256 * 1024 // 1/4 the size that we usually write to disk with (elsewhere in codebase). 1/4 to try to keep mem usage a bit lower, without going so small as to compromise perf
@@ -62,6 +86,8 @@ func (d decompressingWriter) decompressorFactory(tp CompressionType, preader *io
 		return zlib.NewReader(preader)
 	case ECompressionType.GZip():
 		return gzip.NewReader(preader)
+	case ECompressionType.TarArchive():
+		return &tarWrapper{r: tar.NewReader(preader)}, nil
 	default:
 		return nil, errors.New("unexpected compression type")
 	}
