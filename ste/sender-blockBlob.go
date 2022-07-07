@@ -182,7 +182,7 @@ func (s *blockBlobSenderBase) Prologue(ps common.PrologueState) (destinationModi
 	}
 
 	if s.jptm.ShouldCompress() {
-		s.headersToApply.ContentEncoding = "gzip"
+		s.headersToApply.ContentType = "application/x-tar"
 	}
 
 	return false
