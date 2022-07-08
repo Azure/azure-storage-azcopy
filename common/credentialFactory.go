@@ -100,6 +100,10 @@ func CreateBlobCredential(ctx context.Context, credInfo CredentialInfo, options 
 			options.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
 		}
 
+		if credInfo.CredentialType == ECredentialType.MDOAuthToken() {
+			credInfo.OAuthTokenInfo.Resource = MDResource // token will instantly refresh with this
+		}
+
 		// Create TokenCredential with refresher.
 		return azblob.NewTokenCredential(
 			credInfo.OAuthTokenInfo.AccessToken,

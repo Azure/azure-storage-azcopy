@@ -215,8 +215,9 @@ func (jptm *jobPartTransferMgr) GetS2SSourceBlobTokenCredential() azblob.TokenCr
 		Cancel:   jpm.jobMgr.Cancel,
 	}
 
-	if jpm.jobMgr.getInMemoryTransitJobState().S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
-		return common.CreateBlobCredential(jptm.Context(), jptm.jobPartMgr.(*jobPartMgr).jobMgr.getInMemoryTransitJobState().CredentialInfo.WithType(common.ECredentialType.OAuthToken()), credOption).(azblob.TokenCredential)
+	cType := jpm.jobMgr.getInMemoryTransitJobState().S2SSourceCredentialType
+	if cType.IsAzureOAuth() {
+		return common.CreateBlobCredential(jptm.Context(), jptm.jobPartMgr.(*jobPartMgr).jobMgr.getInMemoryTransitJobState().CredentialInfo.WithType(cType), credOption).(azblob.TokenCredential)
 	} else {
 		return nil
 	}

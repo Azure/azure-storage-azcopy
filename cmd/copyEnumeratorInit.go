@@ -50,16 +50,16 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	if cca.FromTo.IsS2S() {
 		jobPartOrder.S2SSourceCredentialType = srcCredInfo.CredentialType
-	}
 
-	if jobPartOrder.S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
-		uotm := GetUserOAuthTokenManagerInstance()
-		// get token from env var or cache
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return nil, err
-		} else {
-			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
-			jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo
+		if jobPartOrder.S2SSourceCredentialType.IsAzureOAuth() {
+			uotm := GetUserOAuthTokenManagerInstance()
+			// get token from env var or cache
+			if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+				return nil, err
+			} else {
+				cca.credentialInfo.OAuthTokenInfo = *tokenInfo
+				jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo
+			}
 		}
 	}
 

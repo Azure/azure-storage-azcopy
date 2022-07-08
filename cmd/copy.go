@@ -1409,19 +1409,6 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			return err
 		} else {
 			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
-
-			if cca.credentialInfo.CredentialType == common.ECredentialType.MDOAuthToken() {
-
-				cca.credentialInfo.OAuthTokenInfo.Token.Resource = common.MDResource
-
-				ti, err := cca.credentialInfo.OAuthTokenInfo.Refresh(ctx)
-
-				if err != nil {
-					return err
-				}
-
-				cca.credentialInfo.OAuthTokenInfo.Token = *ti
-			}
 		}
 	}
 

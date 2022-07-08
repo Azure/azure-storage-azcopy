@@ -135,11 +135,15 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 // 4. If there is OAuth token info passed from env var, indicating using token credential. (Note: this is only for testing)
 // 5. Otherwise use anonymous credential.
 // The implementation logic follows above rule, and adjusts sequence to save web request(for verifying public resource).
-func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePublic bool, standaloneSAS bool, cpkOptions common.CpkOptions) (common.CredentialType, bool, error) {
+func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePublic bool, standaloneSAS string, cpkOptions common.CpkOptions) (common.CredentialType, bool, error) {
 	resourceURL, err := url.Parse(blobResourceURL)
 
 	if err != nil {
 		return common.ECredentialType.Unknown(), false, errors.New("provided blob resource string is not in URL format")
+	}
+
+	if standaloneSAS != "" {
+		resourceURL.RawQuery = standaloneSAS
 	}
 
 	sas := azblob.NewBlobURLParts(*resourceURL).SAS
@@ -147,7 +151,46 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 	canBePublic = canBePublic && !isMDAccount // MD accounts cannot be public.
 
 	// If SAS existed, return anonymous credential type.
-	if isSASExisted := sas.Signature() != ""; !isMDAccount && (isSASExisted || standaloneSAS) {
+	if isSASExisted := sas.Signature() != ""; isSASExisted {
+		if isMDAccount {
+			// Ping the account anyway, and discern if we need OAuth.
+			p := azblob.NewPipeline(
+				azblob.NewAnonymousCredential(),
+				azblob.PipelineOptions{
+					Retry: azblob.RetryOptions{
+						Policy:        azblob.RetryPolicyExponential,
+						MaxTries:      ste.UploadMaxTries,
+						TryTimeout:    ste.UploadTryTimeout,
+						RetryDelay:    ste.UploadRetryDelay,
+						MaxRetryDelay: ste.UploadMaxRetryDelay,
+					},
+					RequestLog: azblob.RequestLogOptions{
+						SyslogDisabled: common.IsForceLoggingDisabled(),
+					},
+				})
+
+			clientProvidedKey := azblob.ClientProvidedKeyOptions{}
+			if cpkOptions.IsSourceEncrypted {
+				clientProvidedKey = common.GetClientProvidedKey(cpkOptions)
+			}
+
+			bURL := azblob.NewBlobURL(*resourceURL, p)
+			_, err := bURL.GetProperties(ctx, azblob.BlobAccessConditions{}, clientProvidedKey)
+
+			if err != nil {
+				if stgErr, ok := err.(azblob.StorageError); ok {
+					if httpResp := stgErr.Response(); httpResp.StatusCode == 401 {
+						challenge := httpResp.Header.Get("WWW-Authenticate")
+						if strings.Contains(challenge, common.MDResource) {
+							return common.ECredentialType.MDOAuthToken(), false, nil
+						}
+					}
+				}
+
+				return common.ECredentialType.Unknown(), false, err
+			}
+		}
+
 		return common.ECredentialType.Anonymous(), false, nil
 	}
 
@@ -501,7 +544,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		case common.ELocation.Local(), common.ELocation.Benchmark():
 			credType = common.ECredentialType.Anonymous()
 		case common.ELocation.Blob():
-			credType, isPublic, err = getBlobCredentialType(ctx, resource, isSource, resourceSAS != "", cpkOptions)
+			credType, isPublic, err = getBlobCredentialType(ctx, resource, isSource, resourceSAS, cpkOptions)
 			if azErr, ok := err.(common.AzError); ok && azErr.Equals(common.EAzError.LoginCredMissing()) {
 				_, autoLoginErr := GetOAuthTokenManagerInstance()
 				if autoLoginErr == nil {
@@ -546,9 +589,9 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	}
 
 	// We may not always use the OAuth token on Managed Disks. As such, we should change to the type indicating the potential for use.
-	if mdAccount && credType == common.ECredentialType.OAuthToken() {
-		credType = common.ECredentialType.MDOAuthToken()
-	}
+	// if mdAccount && credType == common.ECredentialType.OAuthToken() {
+	// 	credType = common.ECredentialType.MDOAuthToken()
+	// }
 
 	if err = checkAuthSafeForTarget(credType, resource, cmdLineExtraSuffixesAAD, location); err != nil {
 		return common.ECredentialType.Unknown(), false, err
@@ -613,15 +656,10 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // pipeline factory methods
 // ==============================================================================================
 func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
-	credential := pipeline.Factory(common.CreateBlobCredential(ctx, credInfo, common.CredentialOpOptions{
-		//LogInfo:  glcm.Info, //Comment out for debugging
+	credential := common.CreateBlobCredential(ctx, credInfo, common.CredentialOpOptions{
+		// LogInfo:  glcm.Info, //Comment out for debugging
 		LogError: glcm.Info,
-	}))
-
-	// Wrap the OAuth token in a tester factory
-	if credInfo.CredentialType == common.ECredentialType.MDOAuthToken() {
-		credential = ste.NewMDOAuthCredentialWrapper(credential.(azblob.Credential))
-	}
+	})
 
 	logOption := pipeline.LogOptions{}
 	if azcopyScanningLogger != nil {
