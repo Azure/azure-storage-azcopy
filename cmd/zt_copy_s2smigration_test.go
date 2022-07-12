@@ -114,7 +114,7 @@ func validateS2STransfersAreScheduled(c *chk.C, srcDirName string, dstDirName st
 		srcRelativeFilePath, _ := url.PathUnescape(transfer.Source)
 		dstRelativeFilePath, _ := url.PathUnescape(transfer.Destination)
 
-		unescapedSrcDir, _ := url.PathUnescape(srcDirName)
+		/*unescapedSrcDir, _ := url.PathUnescape(srcDirName)
 		unescapedDstDir, _ := url.PathUnescape(dstDirName)
 
 		srcRelativeFilePath = strings.Replace(srcRelativeFilePath, unescapedSrcDir, "", 1)
@@ -123,7 +123,7 @@ func validateS2STransfersAreScheduled(c *chk.C, srcDirName string, dstDirName st
 			// Thing we were searching for is bigger than what we are searching in, due to ending end a /
 			// Happens for root dir
 			dstRelativeFilePath = ""
-		}
+		}*/
 
 		if debugMode {
 			fmt.Println("srcRelativeFilePath: ", srcRelativeFilePath)
