@@ -528,13 +528,13 @@ Run an upload that does not delete the transferred files. (These files can then 
 
 // ===================================== SET-PROPERTIES COMMAND ===================================== //
 
-const setPropertiesCmdShortDescription = "Given a location, change all the valid system properties of that storage (blob or file)"
+const setPropertiesCmdShortDescription = "(Preview) Given a location, change all the valid system properties of that storage (blob or file)"
 
 const setPropertiesCmdLongDescription = `
-Sets properties of Blob, BlobFS, and File storage. The properties currently supported by this command are:
+(Preview) Sets properties of Blob, ADLS Gen2, and File storage. The properties currently supported by this command are:
 
 	Blobs -> Tier, Metadata, Tags
-	BlobFS -> Tier, Metadata, Tags
+	ADLS Gen2 -> Tier, Metadata, Tags
 	Files -> Metadata
 Note: dfs endpoints will be replaced by blob endpoints.
 `
