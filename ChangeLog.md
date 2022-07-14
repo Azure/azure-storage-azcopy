@@ -1,6 +1,23 @@
 
 # Change Log
 
+## Version 10.16.0
+
+### New features
+
+1. Added time-based flag for remove to include files modified before/after certain date/time.
+2. Added --output-level flag which allows users to set output verbosity.
+3. Added --preserve-posix-properties flag that allows user to persist the results of statx(2)/stat(2) syscall on upload.
+4. Implemented setprops command that allows users to set specific properties of Blobs, BlobFS, and Files.
+
+### Bug fixes
+1. Fixed [issue 1506](https://github.com/Azure/azure-storage-azcopy/issues/1506): Added input watcher to resolve issue since job could not be resumed.
+2. Fixed [issue 1794](https://github.com/Azure/azure-storage-azcopy/issues/1794): Moved log-level to root.go so log-level arguments do not get ignored.
+3. Fixed [issue 1824](https://github.com/Azure/azure-storage-azcopy/issues/1824): Avoid creating .azcopy under HOME if plan/log location is specified elsewhere.
+4. Fixed [isue 1830](https://github.com/Azure/azure-storage-azcopy/issues/1830), [issue 1412](https://github.com/Azure/azure-storage-azcopy/issues/1418), and [issue 873](https://github.com/Azure/azure-storage-azcopy/issues/873): Improved error message for when AzCopy cannot determine if source is directory.
+5. Fixed [issue 1777](https://github.com/Azure/azure-storage-azcopy/issues/1777): Fixed job list to handle respective output-type correctly. 
+6. Fixed win64 alignment issue.
+
 ## Version 10.15.0
 
 ### New features
