@@ -9,6 +9,7 @@
 2. Added --output-level flag which allows users to set output verbosity.
 3. Added --preserve-posix-properties flag that allows user to persist the results of statx(2)/stat(2) syscall on upload.
 4. Implemented setprops command that allows users to set specific properties of Blobs, BlobFS, and Files.
+5. Implemented multi-auth for managed disks (SAS+OAuth) when the managed disk export account requests it.
 
 ### Bug fixes
 1. Fixed [issue 1506](https://github.com/Azure/azure-storage-azcopy/issues/1506): Added input watcher to resolve issue since job could not be resumed.
