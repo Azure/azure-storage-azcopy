@@ -832,11 +832,16 @@ type CredentialType uint8
 
 func (CredentialType) Unknown() CredentialType              { return CredentialType(0) }
 func (CredentialType) OAuthToken() CredentialType           { return CredentialType(1) } // For Azure, OAuth
+func (CredentialType) MDOAuthToken() CredentialType         { return CredentialType(7) } // For Azure MD impexp
 func (CredentialType) Anonymous() CredentialType            { return CredentialType(2) } // For Azure, SAS or public.
 func (CredentialType) SharedKey() CredentialType            { return CredentialType(3) } // For Azure, SharedKey
 func (CredentialType) S3AccessKey() CredentialType          { return CredentialType(4) } // For S3, AccessKeyID and SecretAccessKey
 func (CredentialType) GoogleAppCredentials() CredentialType { return CredentialType(5) }
 func (CredentialType) S3PublicBucket() CredentialType       { return CredentialType(6) } // For S3, Anon Credentials & public bucket
+
+func (ct CredentialType) IsAzureOAuth() bool {
+	return ct == ct.OAuthToken() || ct == ct.MDOAuthToken()
+}
 
 func (ct CredentialType) String() string {
 	return enum.StringInt(ct, reflect.TypeOf(ct))
