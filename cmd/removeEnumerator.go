@@ -25,8 +25,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
@@ -50,7 +51,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo,
 		nil, cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs,
 		cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false,
-		cca.LogVerbosity.ToPipelineLogLevel(), cca.CpkOptions)
+		azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil /* errorChannel */)
 
 	// report failure to create traverser
 	if err != nil {
@@ -66,12 +67,19 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	filters := append(includeFilters, excludeFilters...)
 	filters = append(filters, excludePathFilters...)
 	filters = append(filters, includeSoftDelete...)
+	if cca.IncludeBefore != nil {
+		filters = append(filters, &IncludeBeforeDateFilter{Threshold: *cca.IncludeBefore})
+	}
+
+	if cca.IncludeAfter != nil {
+		filters = append(filters, &IncludeAfterDateFilter{Threshold: *cca.IncludeAfter})
+	}
 
 	// decide our folder transfer strategy
 	// (Must enumerate folders when deleting from a folder-aware location. Can't do folder deletion just based on file
 	// deletion, because that would not handle folders that were empty at the start of the job).
 	// isHNStoHNS is IGNORED here, because BlobFS locations don't take this route currently.
-	fpo, message := newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, false)
+	fpo, message := newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, false, false, cca.IncludeDirectoryStubs)
 	// do not print Info message if in dry run mode
 	if !cca.dryrunMode {
 		glcm.Info(message)
@@ -128,7 +136,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 	}
 
 	// create bfs pipeline
-	p, err := createBlobFSPipeline(ctx, cca.credentialInfo, cca.LogVerbosity.ToPipelineLogLevel())
+	p, err := createBlobFSPipeline(ctx, cca.credentialInfo, azcopyLogVerbosity.ToPipelineLogLevel())
 	if err != nil {
 		return err
 	}

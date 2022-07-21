@@ -1,3 +1,4 @@
+//go:build linux || darwin
 // +build linux darwin
 
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
@@ -24,7 +25,6 @@ package main
 
 import (
 	"math"
-	"os"
 	"path"
 	"syscall"
 
@@ -74,8 +74,5 @@ func GetAzCopyAppPath() string {
 	lcm := common.GetLifecycleMgr()
 	localAppData := lcm.GetEnvironmentVariable(common.EEnvironmentVariable.UserDir())
 	azcopyAppDataFolder := path.Join(localAppData, ".azcopy")
-	if err := os.Mkdir(azcopyAppDataFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
-		return ""
-	}
 	return azcopyAppDataFolder
 }

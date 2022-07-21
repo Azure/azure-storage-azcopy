@@ -24,14 +24,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"io/ioutil"
 	"math"
 	"net/http"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
 var steCtx = context.Background()
@@ -735,37 +736,7 @@ func GetJobLCMWrapper(jobID common.JobID) common.LifecycleMgr {
 
 // ListJobs returns the jobId of all the jobs existing in the current instance of azcopy
 func ListJobs(givenStatus common.JobStatus) common.ListJobsResponse {
-	// Resurrect all the Jobs from the existing JobPart Plan files
-	JobsAdmin.ResurrectJobParts()
-	// building the ListJobsResponse for sending response back to front-end
-	jobIds := JobsAdmin.JobIDs()
-	// Silently ignore if no JobIDs are present.
-	if len(jobIds) == 0 {
-		return common.ListJobsResponse{}
-	}
-	listJobResponse := common.ListJobsResponse{JobIDDetails: []common.JobIDDetails{}}
-	for _, jobId := range jobIds {
-		jm, found := JobsAdmin.JobMgr(jobId)
-		if !found {
-			continue
-		}
-		jpm, found := jm.JobPartMgr(0)
-		if !found {
-			continue
-		}
-		if givenStatus == common.EJobStatus.All() || givenStatus == jpm.Plan().JobStatus() {
-			listJobResponse.JobIDDetails = append(listJobResponse.JobIDDetails,
-				common.JobIDDetails{JobId: jobId, CommandString: jpm.Plan().CommandString(),
-					StartTime: jpm.Plan().StartTime, JobStatus: jpm.Plan().JobStatus()})
-		}
-
-		// Close the job part managers and the log.
-		jm.IterateJobParts(false, func(k common.PartNumber, v ste.IJobPartMgr) {
-			v.Close()
-		})
-		jm.CloseLog()
-	}
-	return listJobResponse
+	return JobsAdmin.ListJobs(givenStatus)
 }
 
 // GetJobFromTo api returns the job FromTo info.
@@ -776,7 +747,7 @@ func GetJobFromTo(r common.GetJobFromToRequest) common.GetJobFromToResponse {
 		// Search the plan files in Azcopy folder and resurrect the Job.
 		if !JobsAdmin.ResurrectJob(r.JobID, EMPTY_SAS_STRING, EMPTY_SAS_STRING) {
 			return common.GetJobFromToResponse{
-				ErrorMsg: fmt.Sprintf("no job with JobID %v exists", r.JobID),
+				ErrorMsg: fmt.Sprintf("Job with JobID %v does not exist or is invalid", r.JobID),
 			}
 		}
 		jm, _ = JobsAdmin.JobMgr(r.JobID)

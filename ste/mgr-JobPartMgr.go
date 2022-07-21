@@ -62,6 +62,7 @@ type IJobPartMgr interface {
 	IsSourceEncrypted() bool
 	/* Status Manager Updates */
 	SendXferDoneMsg(msg xferDoneMsg)
+	PropertiesToTransfer() common.SetPropertiesFlags
 }
 
 type serviceAPIVersionOverride struct{}
@@ -314,6 +315,10 @@ type jobPartMgr struct {
 	cpkOptions common.CpkOptions
 
 	closeOnCompletion chan struct{}
+
+	SetPropertiesFlags common.SetPropertiesFlags
+
+	RehydratePriority common.RehydratePriorityType
 }
 
 func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {
@@ -391,6 +396,9 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		CpkScopeInfo:      string(dstData.CpkScopeInfo[:dstData.CpkScopeInfoLength]),
 		IsSourceEncrypted: dstData.IsSourceEncrypted,
 	}
+
+	jpm.SetPropertiesFlags = dstData.SetPropertiesFlags
+	jpm.RehydratePriority = plan.RehydratePriority
 
 	jpm.preserveLastModifiedTime = plan.DstLocalData.PreserveLastModifiedTime
 
@@ -609,7 +617,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	// Create pipeline for data transfer.
 	switch fromTo {
 	case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(), common.EFromTo.BenchmarkBlob(),
-		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob(), common.EFromTo.GCPBlob():
+		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob(), common.EFromTo.GCPBlob(), common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone():
 		credential := common.CreateBlobCredential(ctx, credInfo, credOption)
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 		jpm.pipeline = NewBlobPipeline(
@@ -660,7 +668,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.jobMgr.PipelineNetworkStats())
 	// Create pipeline for Azure File.
 	case common.EFromTo.FileTrash(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile(), common.EFromTo.BenchmarkFile(),
-		common.EFromTo.FileFile(), common.EFromTo.BlobFile():
+		common.EFromTo.FileFile(), common.EFromTo.BlobFile(), common.EFromTo.FileNone():
 		jpm.pipeline = NewFilePipeline(
 			azfile.NewAnonymousCredential(),
 			azfile.PipelineOptions{
@@ -795,6 +803,10 @@ func (jpm *jobPartMgr) IsSourceEncrypted() bool {
 	return jpm.cpkOptions.IsSourceEncrypted
 }
 
+func (jpm *jobPartMgr) PropertiesToTransfer() common.SetPropertiesFlags {
+	return jpm.SetPropertiesFlags
+}
+
 func (jpm *jobPartMgr) ShouldPutMd5() bool {
 	return jpm.putMd5
 }
@@ -877,6 +889,18 @@ func (jpm *jobPartMgr) Close() {
 	jpm.httpHeaders = common.ResourceHTTPHeaders{}
 	jpm.metadata = common.Metadata{}
 	jpm.preserveLastModifiedTime = false
+
+	/*
+	 * Set pipeline to nil, so that jpm/JobMgr can be GC'ed.
+	 *
+	 * TODO: We should not need to explicitly set this to nil but today we have a yet-unknown ref on pipeline which
+	 *       is leaking JobMgr memory, so we cause that to be freed by force dropping this ref.
+	 *
+	 * Note: Force setting this to nil can technically result in crashes since the containing object is still around,
+	 *       but we should be protected against that since we do this Close in a deferred manner, at least few minutes after the job completes.
+	 */
+	jpm.pipeline = nil
+
 	// TODO: Delete file?
 	/*if err := os.Remove(jpm.planFile.Name()); err != nil {
 		jpm.Panic(fmt.Errorf("error removing Job Part Plan file %s. Error=%v", jpm.planFile.Name(), err))

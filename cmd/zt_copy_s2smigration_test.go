@@ -76,7 +76,6 @@ func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 		src:                            src,
 		dst:                            dst,
 		recursive:                      true,
-		logVerbosity:                   defaultLogVerbosityForCopy,
 		output:                         defaultOutputFormatForCopy,
 		blobType:                       defaultBlobTypeForCopy,
 		blockBlobTier:                  defaultBlockBlobTierForCopy,

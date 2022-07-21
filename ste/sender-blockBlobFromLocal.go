@@ -45,6 +45,25 @@ func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeli
 	return &blockBlobUploader{blockBlobSenderBase: *senderBase, md5Channel: newMd5Channel()}, nil
 }
 
+func (s *blockBlobUploader) Prologue(ps common.PrologueState) (destinationModified bool) {
+	if s.jptm.Info().PreservePOSIXProperties {
+
+		if unixSIP, ok := s.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
+			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
+			s.metadataToApply = common.Metadata(s.metadataToApply).Clone().ToAzBlobMetadata()
+
+			statAdapter, err := unixSIP.GetUNIXProperties()
+			if err != nil {
+				s.jptm.FailActiveSend("GetUNIXProperties", err)
+			}
+
+			common.AddStatToBlobMetadata(statAdapter, s.metadataToApply)
+		}
+	}
+
+	return s.blockBlobSenderBase.Prologue(ps)
+}
+
 func (u *blockBlobUploader) Md5Channel() chan<- []byte {
 	return u.md5Channel
 }
@@ -94,7 +113,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		// Upload the blob
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		var err error
-		if !ValidateTier(jptm, u.destBlobTier, u.destBlockBlobURL.BlobURL, u.jptm.Context()) {
+		if !ValidateTier(jptm, u.destBlobTier, u.destBlockBlobURL.BlobURL, u.jptm.Context(), false) {
 			u.destBlobTier = azblob.DefaultAccessTier
 		}
 

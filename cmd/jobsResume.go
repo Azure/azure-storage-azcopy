@@ -188,6 +188,11 @@ func init() {
 				return errors.New("this command requires jobId to be passed as argument")
 			}
 			resumeCmdArgs.jobID = args[0]
+
+			glcm.EnableInputWatcher()
+			if cancelFromStdin {
+				glcm.EnableCancelFromStdIn()
+			}
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
@@ -288,7 +293,7 @@ func (rca resumeCmdArgs) process() error {
 		destinationSAS: rca.DestinationSAS,
 	}, common.CpkOptions{}); err != nil {
 		return err
-	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+	} else if credentialInfo.CredentialType.IsAzureOAuth() {
 		uotm := GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {

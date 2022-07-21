@@ -53,6 +53,7 @@ const ApplicationID = "579a7132-0e58-4d80-b1e1-7a1e2d337859"
 
 // Resource used in azure storage OAuth authentication
 const Resource = "https://storage.azure.com"
+const MDResource = "https://disk.azure.com/" // There must be a trailing slash-- The service checks explicitly for "https://disk.azure.com/"
 const DefaultTenantID = "common"
 const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
 const IMDSAPIVersionArcVM = "2019-11-01"
@@ -167,7 +168,7 @@ func (uotm *UserOAuthTokenManager) MSILogin(ctx context.Context, identityInfo Id
 }
 
 // secretLoginNoUOTM non-interactively logs in with a client secret.
-func secretLoginNoUOTM(tenantID, activeDirectoryEndpoint, secret, applicationID string) (*OAuthTokenInfo, error) {
+func secretLoginNoUOTM(tenantID, activeDirectoryEndpoint, secret, applicationID, resource string) (*OAuthTokenInfo, error) {
 	if tenantID == "" {
 		tenantID = DefaultTenantID
 	}
@@ -194,7 +195,7 @@ func secretLoginNoUOTM(tenantID, activeDirectoryEndpoint, secret, applicationID 
 		*oauthConfig,
 		applicationID,
 		secret,
-		Resource,
+		resource,
 	)
 	if err != nil {
 		return nil, err
@@ -220,7 +221,7 @@ func secretLoginNoUOTM(tenantID, activeDirectoryEndpoint, secret, applicationID 
 
 // SecretLogin is a UOTM shell for secretLoginNoUOTM.
 func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint, secret, applicationID string, persist bool) (*OAuthTokenInfo, error) {
-	oAuthTokenInfo, err := secretLoginNoUOTM(tenantID, activeDirectoryEndpoint, secret, applicationID)
+	oAuthTokenInfo, err := secretLoginNoUOTM(tenantID, activeDirectoryEndpoint, secret, applicationID, Resource)
 
 	if err != nil {
 		return nil, err
@@ -239,7 +240,12 @@ func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint
 
 // GetNewTokenFromSecret is a refresh shell for secretLoginNoUOTM
 func (credInfo *OAuthTokenInfo) GetNewTokenFromSecret(ctx context.Context) (*adal.Token, error) {
-	tokeninfo, err := secretLoginNoUOTM(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint, credInfo.SPNInfo.Secret, credInfo.ApplicationID)
+	targetResource := Resource
+	if credInfo.Token.Resource != "" && credInfo.Token.Resource != targetResource {
+		targetResource = credInfo.Token.Resource
+	}
+
+	tokeninfo, err := secretLoginNoUOTM(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint, credInfo.SPNInfo.Secret, credInfo.ApplicationID, targetResource)
 
 	if err != nil {
 		return nil, err
@@ -273,7 +279,7 @@ func readPKCSBlock(block *pem.Block, secret []byte, parseFunc func([]byte) (inte
 	return pk, err
 }
 
-func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID string) (*OAuthTokenInfo, error) {
+func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID, resource string) (*OAuthTokenInfo, error) {
 	if tenantID == "" {
 		tenantID = DefaultTenantID
 	}
@@ -376,7 +382,7 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 		applicationID,
 		cert,
 		p,
-		Resource,
+		resource,
 	)
 	if err != nil {
 		return nil, err
@@ -405,7 +411,7 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID string, persist bool) (*OAuthTokenInfo, error) {
 	// TODO: Global default cert flag for true non interactive login?
 	// (Also could be useful if the user has multiple certificates they want to switch between in the same file.)
-	oAuthTokenInfo, err := certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID)
+	oAuthTokenInfo, err := certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID, Resource)
 	uotm.stashedInfo = oAuthTokenInfo
 
 	if persist && err == nil {
@@ -420,7 +426,12 @@ func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, 
 
 // GetNewTokenFromCert refreshes a token manually from a certificate.
 func (credInfo *OAuthTokenInfo) GetNewTokenFromCert(ctx context.Context) (*adal.Token, error) {
-	tokeninfo, err := certLoginNoUOTM(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint, credInfo.SPNInfo.CertPath, credInfo.SPNInfo.Secret, credInfo.ApplicationID)
+	targetResource := Resource
+	if credInfo.Token.Resource != "" && credInfo.Token.Resource != targetResource {
+		targetResource = credInfo.Token.Resource
+	}
+
+	tokeninfo, err := certLoginNoUOTM(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint, credInfo.SPNInfo.CertPath, credInfo.SPNInfo.Secret, credInfo.ApplicationID, targetResource)
 
 	if err != nil {
 		return nil, err
@@ -779,11 +790,16 @@ func fixupTokenJson(bytes []byte) []byte {
 // Without this change, if some router is configured to not return "ICMP unreachable" then it will take 30 secs to timeout and increase the response time.
 // We are additionally checking Arc first, and then Azure VM because Arc endpoint is local so as to further reduce the response time of the Azure VM IMDS endpoint.
 func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.Token, error) {
+	targetResource := Resource
+	if credInfo.Token.Resource != "" && credInfo.Token.Resource != targetResource {
+		targetResource = credInfo.Token.Resource
+	}
+
 	// Try Arc VM
-	req, resp, errArcVM := credInfo.queryIMDS(ctx, MSIEndpointArcVM, Resource, IMDSAPIVersionArcVM)
+	req, resp, errArcVM := credInfo.queryIMDS(ctx, MSIEndpointArcVM, targetResource, IMDSAPIVersionArcVM)
 	if errArcVM != nil {
 		// Try Azure VM since there was an error in trying Arc VM
-		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(ctx, MSIEndpointAzureVM, Resource, IMDSAPIVersionAzureVM)
+		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(ctx, MSIEndpointAzureVM, targetResource, IMDSAPIVersionAzureVM)
 		if errAzureVM != nil {
 			var serr syscall.Errno
 			if errors.As(errArcVM, &serr) {
@@ -814,7 +830,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 		req, resp = reqAzureVM, respAzureVM
 	} else if !isValidArcResponse(resp) {
 		// Not valid response from ARC IMDS endpoint. Perhaps some other process listening on it. Try Azure IMDS endpoint as fallback option.
-		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(ctx, MSIEndpointAzureVM, Resource, IMDSAPIVersionAzureVM)
+		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(ctx, MSIEndpointAzureVM, targetResource, IMDSAPIVersionAzureVM)
 		if errAzureVM != nil {
 			// Neither Arc nor Azure VM IMDS endpoint available. Can't use MSI.
 			return nil, fmt.Errorf("invalid response received from Arc IMDS endpoint (%s), probably some unknown process listening. If this an Azure VM, please check whether MSI is enabled, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm: %v", MSIEndpointArcVM, errAzureVM)
@@ -891,6 +907,11 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 
 // RefreshTokenWithUserCredential gets new token with user credential through refresh.
 func (credInfo *OAuthTokenInfo) RefreshTokenWithUserCredential(ctx context.Context) (*adal.Token, error) {
+	targetResource := Resource
+	if credInfo.Token.Resource != "" && credInfo.Token.Resource != targetResource {
+		targetResource = credInfo.Token.Resource
+	}
+
 	oauthConfig, err := adal.NewOAuthConfig(credInfo.ActiveDirectoryEndpoint, credInfo.Tenant)
 	if err != nil {
 		return nil, err
@@ -901,7 +922,7 @@ func (credInfo *OAuthTokenInfo) RefreshTokenWithUserCredential(ctx context.Conte
 	spt, err := adal.NewServicePrincipalTokenFromManualToken(
 		*oauthConfig,
 		IffString(credInfo.ClientID != "", credInfo.ClientID, ApplicationID),
-		Resource,
+		targetResource,
 		credInfo.Token)
 	if err != nil {
 		return nil, err

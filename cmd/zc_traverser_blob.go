@@ -72,7 +72,7 @@ func (t *blobTraverser) IsDirectory(isSource bool) bool {
 		return isDirDirect
 	}
 
-	_, isSingleBlob, _, err := t.getPropertiesIfSingleBlob()
+	_, _, isDirStub, err := t.getPropertiesIfSingleBlob()
 
 	if stgErr, ok := err.(azblob.StorageError); ok {
 		// We know for sure this is a single blob still, let it walk on through to the traverser.
@@ -81,7 +81,29 @@ func (t *blobTraverser) IsDirectory(isSource bool) bool {
 		}
 	}
 
-	return !isSingleBlob
+	if err == nil {
+		return isDirStub
+	}
+
+	blobURLParts := azblob.NewBlobURLParts(*t.rawURL)
+	containerRawURL := copyHandlerUtil{}.getContainerUrl(blobURLParts)
+	containerURL := azblob.NewContainerURL(containerRawURL, t.p)
+	searchPrefix := strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING) + common.AZCOPY_PATH_SEPARATOR_STRING
+	resp, err := containerURL.ListBlobsFlatSegment(t.ctx, azblob.Marker{}, azblob.ListBlobsSegmentOptions{Prefix: searchPrefix, MaxResults: 1})
+	if err != nil {
+		if azcopyScanningLogger != nil {
+			msg := fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err)
+			azcopyScanningLogger.Log(pipeline.LogError, msg)
+		}
+		return false
+	}
+
+	if len(resp.Segment.BlobItems) == 0 {
+		//Not a directory
+		return false
+	}
+
+	return true
 }
 
 func (t *blobTraverser) getPropertiesIfSingleBlob() (props *azblob.BlobGetPropertiesResponse, isBlob bool, isDirStub bool, err error) {
@@ -175,7 +197,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			preprocessor,
 			getObjectNameOnly(strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
 			"",
-			common.EEntityType.File(),
+			common.EntityType(common.IffUint8(isBlob, uint8(common.EEntityType.File()), uint8(common.EEntityType.Folder()))),
 			blobProperties.LastModified(),
 			blobProperties.ContentLength(),
 			blobProperties,
@@ -261,7 +283,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 								preprocessor,
 								getObjectNameOnly(strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)),
 								folderRelativePath,
-								common.EEntityType.File(), // folder stubs are treated like files in in the serial lister as well
+								common.EEntityType.Folder(),
 								resp.LastModified(),
 								resp.ContentLength(),
 								resp,
@@ -269,6 +291,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 								common.FromAzBlobMetadataToCommonMetadata(resp.NewMetadata()),
 								containerName,
 							)
+							storedObject.archiveStatus = azblob.ArchiveStatusType(resp.ArchiveStatus())
 
 							if t.s2sPreserveSourceTags {
 								var BlobTags *azblob.BlobTags
@@ -363,11 +386,13 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 
 func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, blobInfo azblob.BlobItemInternal, relativePath string, containerName string) StoredObject {
 	adapter := blobPropertiesAdapter{blobInfo.Properties}
+
+	_, isFolder := blobInfo.Metadata["hdi_isfolder"]
 	object := newStoredObject(
 		preprocessor,
 		getObjectNameOnly(blobInfo.Name),
 		relativePath,
-		common.EEntityType.File(),
+		common.EntityType(common.IffUint8(isFolder, uint8(common.EEntityType.Folder()), uint8(common.EEntityType.File()))),
 		blobInfo.Properties.LastModified,
 		*blobInfo.Properties.ContentLength,
 		adapter,

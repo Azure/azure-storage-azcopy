@@ -117,7 +117,6 @@ type rawCopyCmdArgs struct {
 	blockBlobTier string
 	pageBlobTier  string
 	output        string // TODO: Is this unused now? replaced with param at root level?
-	logVerbosity  string
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType string
 	// Opt-in flag to persist SMB ACLs to Azure Files.
@@ -129,6 +128,8 @@ type rawCopyCmdArgs struct {
 	// Opt-in flag to persist additional SMB properties to Azure Files. Named ...info instead of ...properties
 	// because the latter was similar enough to preserveSMBPermissions to induce user error
 	preserveSMBInfo bool
+	// Opt-in flag to persist additional POSIX properties
+	preservePOSIXProperties bool
 	// Opt-in flag to preserve the blob index tags during service to service transfer.
 	s2sPreserveBlobTags bool
 	// Flag to enable Window's special privileges
@@ -170,6 +171,10 @@ type rawCopyCmdArgs struct {
 
 	// Optional flag that permanently deletes soft-deleted snapshots/versions
 	permanentDeleteOption string
+
+	// Optional. Indicates the priority with which to rehydrate an archived blob. Valid values are High/Standard.
+	rehydratePriority string
+	// The priority setting can be changed from Standard to High by calling Set Blob Tier with this header set to High and setting x-ms-access-tier to the same value as previously set. The priority setting cannot be lowered from High to Standard.
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -255,13 +260,8 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		jobID: azcopyCurrentJobID,
 	}
 
-	err := cooked.LogVerbosity.Parse(raw.logVerbosity)
-	if err != nil {
-		return cooked, err
-	}
-
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, cooked.LogVerbosity, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, azcopyLogVerbosity, azcopyLogPathFolder, "-scanning")
 	azcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
 		azcopyScanningLogger.CloseLog()
@@ -372,6 +372,14 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 	err = cooked.pageBlobTier.Parse(raw.pageBlobTier)
+	if err != nil {
+		return cooked, err
+	}
+
+	if raw.rehydratePriority == "" {
+		raw.rehydratePriority = "standard"
+	}
+	err = cooked.rehydratePriority.Parse(raw.rehydratePriority)
 	if err != nil {
 		return cooked, err
 	}
@@ -534,7 +542,13 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		cooked.ListOfVersionIDs = versionsChan
 	}
 
+	if cooked.FromTo.To() == common.ELocation.None() && strings.EqualFold(raw.metadata, common.MetadataAndBlobTagsClearFlag) { // in case of Blob, BlobFS and Files
+		glcm.Info("*** WARNING *** Metadata will be cleared because of input --metadata=clear ")
+	}
 	cooked.metadata = raw.metadata
+	if err = validateMetadataString(cooked.metadata); err != nil {
+		return cooked, err
+	}
 	cooked.contentType = raw.contentType
 	cooked.contentEncoding = raw.contentEncoding
 	cooked.contentLanguage = raw.contentLanguage
@@ -544,8 +558,11 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 	cooked.disableAutoDecoding = raw.disableAutoDecoding
 
-	if cooked.FromTo.To() != common.ELocation.Blob() && raw.blobTags != "" {
+	if !(cooked.FromTo.To() == common.ELocation.Blob() || cooked.FromTo == common.EFromTo.BlobNone() || cooked.FromTo != common.EFromTo.BlobFSNone()) && raw.blobTags != "" {
 		return cooked, errors.New("blob tags can only be set when transferring to blob storage")
+	}
+	if cooked.FromTo.To() == common.ELocation.None() && strings.EqualFold(raw.blobTags, common.MetadataAndBlobTagsClearFlag) { // in case of Blob and BlobFS
+		glcm.Info("*** WARNING *** BlobTags will be cleared because of input --blob-tags=clear ")
 	}
 	blobTags := common.ToCommonBlobTagsMap(raw.blobTags)
 	err = validateBlobTagsKeyValue(blobTags)
@@ -636,6 +653,11 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	// If user has explicitly specified not to copy SMB Information, set cooked.preserveSMBInfo to false
 	if !raw.preserveSMBInfo {
 		cooked.preserveSMBInfo = false
+	}
+
+	cooked.preservePOSIXProperties = raw.preservePOSIXProperties
+	if cooked.preservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.FromTo) {
+		return cooked, fmt.Errorf("in order to use --preserve-posix-properties, both the source and destination must be POSIX-aware (Linux->Blob, Blob->Linux, Blob->Blob)")
 	}
 
 	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.FromTo, &cooked.ForceWrite, "preserve-smb-info"); err != nil {
@@ -853,6 +875,17 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	cooked.dryrunMode = raw.dryrun
 
+	if azcopyOutputVerbosity == common.EOutputVerbosity.Quiet() || azcopyOutputVerbosity == common.EOutputVerbosity.Essential() {
+		if cooked.ForceWrite == common.EOverwriteOption.Prompt() {
+			err = fmt.Errorf("cannot set output level '%s' with overwrite option '%s'", azcopyOutputVerbosity.String(), cooked.ForceWrite.String())
+		} else if cooked.dryrunMode {
+			err = fmt.Errorf("cannot set output level '%s' with dry-run mode", azcopyOutputVerbosity.String())
+		}
+	}
+	if err != nil {
+		return cooked, err
+	}
+
 	return cooked, nil
 }
 
@@ -905,6 +938,14 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 	} else {
 		return false
 	}
+}
+
+func areBothLocationsPOSIXAware(fromTo common.FromTo) bool {
+	// POSIX properties are stored in blob metadata-- They don't need a special persistence strategy for BlobBlob.
+	return runtime.GOOS == "linux" && (
+	// fromTo == common.EFromTo.BlobLocal() || TODO
+	fromTo == common.EFromTo.LocalBlob()) ||
+		fromTo == common.EFromTo.BlobBlob()
 }
 
 func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, overwrite *common.OverwriteOption, flagName string) error {
@@ -1020,6 +1061,23 @@ func validateBlobTagsKeyValue(bt common.BlobTags) error {
 	return nil
 }
 
+func validateMetadataString(metadata string) error {
+	if strings.EqualFold(metadata, common.MetadataAndBlobTagsClearFlag) {
+		return nil
+	}
+	metadataMap, err := common.StringToMetadata(metadata)
+	if err != nil {
+		return err
+	}
+	for k, _ := range metadataMap {
+		if strings.ContainsAny(k, " !#$%^&*,<>{}|\\:.()+'\"?/") {
+			return fmt.Errorf("invalid metadata key value '%s': can't have spaces or special characters", k)
+		}
+	}
+
+	return nil
+}
+
 // represents the processed copy command input from the user
 type CookedCopyCmdArgs struct {
 	// from arguments
@@ -1076,7 +1134,6 @@ type CookedCopyCmdArgs struct {
 	putMd5                   bool
 	md5ValidationOption      common.HashValidationOption
 	CheckLength              bool
-	LogVerbosity             common.LogLevel
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
 
@@ -1104,6 +1161,8 @@ type CookedCopyCmdArgs struct {
 	preservePermissions common.PreservePermissionsOption
 	// Whether the user wants to preserve the SMB properties ...
 	preserveSMBInfo bool
+	// Whether the user wants to preserve the POSIX properties ...
+	preservePOSIXProperties bool
 
 	// Whether to enable Windows special privileges
 	backupMode bool
@@ -1150,6 +1209,12 @@ type CookedCopyCmdArgs struct {
 
 	// Optional flag that permanently deletes soft deleted blobs
 	permanentDeleteOption common.PermanentDeleteOption
+
+	// Optional flag that sets rehydrate priority for rehydration
+	rehydratePriority common.RehydratePriorityType
+
+	// Bitmasked uint checking which properties to transfer
+	propertiesToTransfer common.SetPropertiesFlags
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {
@@ -1337,7 +1402,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
-	if cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+	if cca.credentialInfo.CredentialType.IsAzureOAuth() {
 		uotm := GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
@@ -1356,7 +1421,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		ForceIfReadOnly: cca.ForceIfReadOnly,
 		AutoDecompress:  cca.autoDecompress,
 		Priority:        common.EJobPriority.Normal(),
-		LogLevel:        cca.LogVerbosity,
+		LogLevel:        azcopyLogVerbosity,
 		ExcludeBlobType: cca.excludeBlobType,
 		BlobAttributes: common.BlobTransferAttributes{
 			BlobType:                 cca.blobType,
@@ -1443,6 +1508,14 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// case common.EFromTo.FileBlob():
 	// 	e := copyFileToNEnumerator(jobPartOrder)
 	// 	err = e.enumerate(cca)
+
+	case common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone(), common.EFromTo.FileNone():
+		e, createErr := setPropertiesEnumerator(cca)
+		if createErr != nil {
+			return createErr
+		}
+		err = e.enumerate()
+
 	default:
 		return fmt.Errorf("copy direction %v is not supported\n", cca.FromTo)
 	}
@@ -1852,7 +1925,6 @@ func init() {
 		"or the account. Use of this flag is not applicable for copying data from non azure-service to service. More than one blob should be separated by ';'. ")
 	// options change how the transfers are performed
 	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage, and downloading from Azure Storage. The default value is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
-	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "Define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default 'INFO').")
 	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "Defines the type of blob at the destination. This is used for uploading blobs and when copying between accounts (default 'Detect'). Valid values include 'Detect', 'BlockBlob', 'PageBlob', and 'AppendBlob'. "+
 		"When copying between accounts, a value of 'Detect' causes AzCopy to use the type of source blob to determine the type of the destination blob. When uploading a file, 'Detect' determines if the file is a VHD or a VHDX file based on the file extension. If the file is either a VHD or VHDX file, AzCopy treats the file as a page blob.")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier.")
@@ -1869,6 +1941,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.asSubdir, "as-subdir", true, "True by default. Places folder sources as subdirectories under the destination.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault, "Only has an effect in downloads, and only when --preserve-smb-permissions is used. If true (the default), the file Owner and Group are preserved in downloads. If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group will be based on the user running AzCopy")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", true, "For SMB-aware locations, flag will be set to true by default. Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
+	cpCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false, "'Preserves' property info gleaned from stat or statx into object metadata.")
 	cpCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
 	cpCmd.PersistentFlags().BoolVar(&raw.backupMode, common.BackupModeFlagName, false, "Activates Windows' SeBackupPrivilege for uploads, or SeRestorePrivilege for downloads, to allow AzCopy to see read all files, regardless of their file system permissions, and to restore all permissions. Requires that the account running AzCopy already has these permissions (e.g. has Administrator rights or is a member of the 'Backup Operators' group). All this flag does is activate privileges that the account already has")
 	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob or file. (By default the hash is NOT created.) Only available when uploading.")

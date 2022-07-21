@@ -45,7 +45,6 @@ type rawSyncCmdArgs struct {
 
 	// options from flags
 	blockSizeMB           float64
-	logVerbosity          string
 	include               string
 	exclude               string
 	excludePath           string
@@ -56,14 +55,15 @@ type rawSyncCmdArgs struct {
 	includeRegex          string
 	excludeRegex          string
 
-	preservePermissions    bool
-	preserveSMBPermissions bool // deprecated and synonymous with preservePermissions
-	preserveOwner          bool
-	preserveSMBInfo        bool
-	followSymlinks         bool
-	backupMode             bool
-	putMd5                 bool
-	md5ValidationOption    string
+	preservePermissions     bool
+	preserveSMBPermissions  bool // deprecated and synonymous with preservePermissions
+	preserveOwner           bool
+	preserveSMBInfo         bool
+	preservePOSIXProperties bool
+	followSymlinks          bool
+	backupMode              bool
+	putMd5                  bool
+	md5ValidationOption     string
 	// this flag indicates the user agreement with respect to deleting the extra files at the destination
 	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
 	// otherwise the user is prompted to make a decision
@@ -122,13 +122,8 @@ func (raw *rawSyncCmdArgs) validateURLIsNotServiceLevel(url string, location com
 func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked := cookedSyncCmdArgs{}
 
-	err := cooked.logVerbosity.Parse(raw.logVerbosity)
-	if err != nil {
-		return cooked, err
-	}
-
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, cooked.logVerbosity, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, azcopyLogVerbosity, azcopyLogPathFolder, "-scanning")
 	azcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
 		azcopyScanningLogger.CloseLog()
@@ -154,6 +149,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	cooked.isHNSToHNS = srcHNS && dstHNS
 
+	var err error
 	cooked.fromTo, err = ValidateFromTo(raw.src, raw.dst, raw.fromTo)
 	if err != nil {
 		return cooked, err
@@ -270,6 +266,11 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		cooked.isHNSToHNS = true // override HNS settings, since if a user is tx'ing blob->blob and copying permissions, it's DEFINITELY going to be HNS (since perms don't exist w/o HNS).
 	}
 
+	cooked.preservePOSIXProperties = raw.preservePOSIXProperties
+	if cooked.preservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.fromTo) {
+		return cooked, fmt.Errorf("in order to use --preserve-posix-properties, both the source and destination must be POSIX-aware (valid pairings are Linux->Blob, Blob->Linux, Blob->Blob)")
+	}
+
 	cooked.putMd5 = raw.putMd5
 	if err = validatePutMd5(cooked.putMd5, cooked.fromTo); err != nil {
 		return cooked, err
@@ -329,6 +330,17 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	cooked.dryrunMode = raw.dryrun
 
+	if azcopyOutputVerbosity == common.EOutputVerbosity.Quiet() || azcopyOutputVerbosity == common.EOutputVerbosity.Essential() {
+		if cooked.deleteDestination == common.EDeleteDestination.Prompt() {
+			err = fmt.Errorf("cannot set output level '%s' with delete-destination option '%s'", azcopyOutputVerbosity.String(), cooked.deleteDestination.String())
+		} else if cooked.dryrunMode {
+			err = fmt.Errorf("cannot set output level '%s' with dry-run mode", azcopyOutputVerbosity.String())
+		}
+	}
+	if err != nil {
+		return cooked, err
+	}
+
 	return cooked, nil
 }
 
@@ -369,14 +381,14 @@ type cookedSyncCmdArgs struct {
 	excludeRegex          []string
 
 	// options
-	preservePermissions common.PreservePermissionsOption
-	preserveSMBInfo     bool
-	putMd5              bool
-	md5ValidationOption common.HashValidationOption
-	blockSize           int64
-	logVerbosity        common.LogLevel
-	forceIfReadOnly     bool
-	backupMode          bool
+	preservePermissions     common.PreservePermissionsOption
+	preserveSMBInfo         bool
+	preservePOSIXProperties bool
+	putMd5                  bool
+	md5ValidationOption     common.HashValidationOption
+	blockSize               int64
+	forceIfReadOnly         bool
+	backupMode              bool
 
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
@@ -718,6 +730,7 @@ func init() {
 			if err != nil {
 				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error())
 			}
+
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
@@ -739,6 +752,7 @@ func init() {
 	// smb info/permissions can be persisted in the scenario of File -> File
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Azure Files). This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", true, "For SMB-aware locations, flag will be set to true by default. Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Azure Files). This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is not preserved for folders. ")
+	syncCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false, "'Preserves' property info gleaned from stat or statx into object metadata.")
 
 	// TODO: enable when we support local <-> File
 	// syncCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
@@ -754,7 +768,6 @@ func init() {
 	syncCmd.PersistentFlags().StringVar(&raw.excludeFileAttributes, "exclude-attributes", "", "(Windows only) Exclude files whose attributes match the attribute list. For example: A;S;R")
 	syncCmd.PersistentFlags().StringVar(&raw.includeRegex, "include-regex", "", "Include the relative path of the files that match with the regular expressions. Separate regular expressions with ';'.")
 	syncCmd.PersistentFlags().StringVar(&raw.excludeRegex, "exclude-regex", "", "Exclude the relative path of the files that match with the regular expressions. Separate regular expressions with ';'.")
-	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "Define the log verbosity for the log file, available levels: INFO(all requests and responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default INFO).")
 	syncCmd.PersistentFlags().StringVar(&raw.deleteDestination, "delete-destination", "false", "Defines whether to delete extra files from the destination that are not present at the source. Could be set to true, false, or prompt. "+
 		"If set to prompt, the user will be asked a question before scheduling files and blobs for deletion. (default 'false').")
 	syncCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob or file. (By default the hash is NOT created.) Only available when uploading.")

@@ -24,7 +24,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -34,6 +33,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -99,6 +100,10 @@ var JobsAdmin interface {
 	TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32, fromTo common.FromTo, dir common.TransferDirection, p *ste.PipelineNetworkStats) []common.PerformanceAdvice
 
 	SetConcurrencySettingsToAuto()
+
+	// JobMgrCleanUp do the JobMgr cleanup.
+	JobMgrCleanUp(jobId common.JobID)
+	ListJobs(givenStatus common.JobStatus) common.ListJobsResponse
 }
 
 func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {
@@ -241,19 +246,20 @@ type jobsAdmin struct {
 	logger                             common.ILoggerCloser
 	jobIDToJobMgr                      jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
 	// Other global state can be stored in more fields here...
-	logDir                      string // Where log files are stored
-	planDir                     string // Initialize to directory where Job Part Plans are stored
-	appCtx                      context.Context
-	pacer                       ste.PacerAdmin
-	slicePool                   common.ByteSlicePooler
-	cacheLimiter                common.CacheLimiter
-	fileCountLimiter            common.CacheLimiter
-	concurrencyTuner   ste.ConcurrencyTuner
-	commandLineMbpsCap float64
+	logDir                  string // Where log files are stored
+	planDir                 string // Initialize to directory where Job Part Plans are stored
+	appCtx                  context.Context
+	pacer                   ste.PacerAdmin
+	slicePool               common.ByteSlicePooler
+	cacheLimiter            common.CacheLimiter
+	fileCountLimiter        common.CacheLimiter
+	concurrencyTuner        ste.ConcurrencyTuner
+	commandLineMbpsCap      float64
 	provideBenchmarkResults bool
 	cpuMonitor              common.CPUMonitor
 	jobLogger               common.ILoggerResetable
 }
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func (ja *jobsAdmin) NewJobPartPlanFileName(jobID common.JobID, partNumber common.PartNumber) ste.JobPartPlanFileName {
@@ -296,6 +302,39 @@ func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
 		})
 }
 
+// JobMgrCleanup cleans up the jobMgr identified by the given jobId. It undoes what NewJobMgr() does, basically it does the following:
+// 1. Stop all go routines started to process this job.
+// 2. Release the memory allocated for this JobMgr instance.
+// Note: this is not thread safe and only one goroutine should call this for a job.
+func (ja *jobsAdmin) JobMgrCleanUp(jobId common.JobID) {
+	// First thing get the jobMgr.
+	jm, found := ja.JobMgr(jobId)
+
+	if found {
+		/*
+		 * Change log level to Info, so that we can capture these messages in job log file.
+		 * These log messages useful in debuggability and tells till what stage cleanup done.
+		 */
+		jm.Log(pipeline.LogInfo, "JobMgrCleanUp Enter")
+
+		// Delete the jobMgr from jobIDtoJobMgr map, so that next call will fail.
+		ja.DeleteJob(jobId)
+
+		jm.Log(pipeline.LogInfo, "Job deleted from jobMgr map")
+
+		/*
+		 * Rest of jobMgr related cleanup done by DeferredCleanupJobMgr function.
+		 * Now that we have removed the jobMgr from the map, no new caller will find it and hence cannot start any
+		 * new activity using the jobMgr. We cleanup the resources of the jobMgr in a deferred manner as a safety net
+		 * to allow processing any messages that may be in transit.
+		 *
+		 * NOTE: This is not really required but we don't want to miss any in-transit messages as some of the TODOs in
+		 *               the code suggest.
+		 */
+		go jm.DeferredCleanupJobMgr()
+	}
+}
+
 func (ja *jobsAdmin) BytesOverWire() int64 {
 	return ja.pacer.GetTotalTraffic()
 }
@@ -323,12 +362,12 @@ func (ja *jobsAdmin) SuccessfulBytesInActiveFiles() uint64 {
 
 func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string) bool {
 	// Search the existing plan files for the PartPlans for the given jobId
-	// only the files which have JobId has prefix and DataSchemaVersion as Suffix
+	// only the files which are not empty and have JobId has prefix and DataSchemaVersion as Suffix
 	// are include in the result
 	files := func(prefix, ext string) []os.FileInfo {
 		var files []os.FileInfo
 		filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
-			if !fileInfo.IsDir() && strings.HasPrefix(fileInfo.Name(), prefix) && strings.HasSuffix(fileInfo.Name(), ext) {
+			if !fileInfo.IsDir() && fileInfo.Size() != 0 && strings.HasPrefix(fileInfo.Name(), prefix) && strings.HasSuffix(fileInfo.Name(), ext) {
 				files = append(files, fileInfo)
 			}
 			return nil
@@ -365,7 +404,7 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 	files := func(ext string) []os.FileInfo {
 		var files []os.FileInfo
 		filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
-			if !fileInfo.IsDir() && strings.HasSuffix(fileInfo.Name(), ext) {
+			if !fileInfo.IsDir() && fileInfo.Size() != 0 && strings.HasSuffix(fileInfo.Name(), ext) {
 				files = append(files, fileInfo)
 			}
 			return nil
@@ -385,6 +424,42 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
 		jm.AddJobPart(partNum, planFile, mmf, EMPTY_SAS_STRING, EMPTY_SAS_STRING, false, nil)
 	}
+}
+
+func (ja *jobsAdmin) ListJobs(givenStatus common.JobStatus) common.ListJobsResponse {
+	ret := common.ListJobsResponse{JobIDDetails: []common.JobIDDetails{}}
+	files := func(ext string) []os.FileInfo {
+		var files []os.FileInfo
+		filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
+			if !fileInfo.IsDir() && strings.HasSuffix(fileInfo.Name(), ext) {
+				files = append(files, fileInfo)
+			}
+			return nil
+		})
+		return files
+	}(fmt.Sprintf(".steV%d", ste.DataSchemaVersion))
+
+	// TODO : sort the file.
+	for f := 0; f < len(files); f++ {
+		planFile := ste.JobPartPlanFileName(files[f].Name())
+		jobID, partNum, err := planFile.Parse()
+		if err != nil || partNum != 0 { // Summary is in 0th JobPart
+			continue
+		}
+
+		mmf := planFile.Map()
+		jpph := mmf.Plan()
+
+		if givenStatus == common.EJobStatus.All() || givenStatus == jpph.JobStatus() {
+			ret.JobIDDetails = append(ret.JobIDDetails,
+				common.JobIDDetails{JobId: jobID, CommandString: jpph.CommandString(),
+				StartTime: jpph.StartTime, JobStatus: jpph.JobStatus()})
+		}
+
+		mmf.Unmap()
+	}
+
+	return ret
 }
 
 func (ja *jobsAdmin) SetConcurrencySettingsToAuto() {
@@ -507,6 +582,13 @@ func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint3
 	a := ste.NewPerformanceAdvisor(p, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency, dir, averageBytesPerFile, isToAzureFiles)
 	return a.GetAdvice()
 }
+	
+//Structs for messageHandler
+
+/* PerfAdjustment message. */
+type jaPerfAdjustmentMsg struct {
+	Throughput int64 `json:"cap-mbps,string"`
+}
 
 func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 	toBitsPerSec := func(megaBitsPerSec int64) int64 {
@@ -516,7 +598,7 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 	const minIntervalBetweenPerfAdjustment = time.Minute
 	lastPerfAdjustTime := time.Now().Add(-2 * minIntervalBetweenPerfAdjustment)
 	var err error
-	
+
 	for {
 		msg := <-inputChan
 		var msgType common.LCMMsgType
@@ -534,7 +616,7 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 			if e := json.Unmarshal([]byte(msg.Req.Value), &perfAdjustmentReq); e != nil {
 				err = fmt.Errorf("parsing %s failed with %s", msg.Req.Value, e.Error())
 			}
-			
+
 			if perfAdjustmentReq.Throughput < 0 {
 				err = fmt.Errorf("invalid value %d for cap-mbps. cap-mpbs should be greater than 0",
 						      perfAdjustmentReq.Throughput)

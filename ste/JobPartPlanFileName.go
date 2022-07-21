@@ -201,13 +201,15 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			CpkInfo:                  order.CpkOptions.CpkInfo,
 			CpkScopeInfoLength:       uint16(len(order.CpkOptions.CpkScopeInfo)),
 			IsSourceEncrypted:        order.CpkOptions.IsSourceEncrypted,
+			SetPropertiesFlags:       order.SetPropertiesFlags,
 		},
 		DstLocalData: JobPartPlanDstLocal{
 			PreserveLastModifiedTime: order.BlobAttributes.PreserveLastModifiedTime,
 			MD5VerificationOption:    order.BlobAttributes.MD5ValidationOption, // here because it relates to downloads (file destination)
 		},
-		PreservePermissions: order.PreserveSMBPermissions,
-		PreserveSMBInfo:     order.PreserveSMBInfo,
+		PreservePermissions:     order.PreserveSMBPermissions,
+		PreserveSMBInfo:         order.PreserveSMBInfo,
+		PreservePOSIXProperties: order.PreservePOSIXProperties,
 		// For S2S copy, per JobPartPlan info
 		S2SGetPropertiesInBackend:      order.S2SGetPropertiesInBackend,
 		S2SSourceChangeValidation:      order.S2SSourceChangeValidation,
@@ -216,6 +218,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		atomicJobStatus:                common.EJobStatus.InProgress(), // We default to InProgress
 		DeleteSnapshotsOption:          order.BlobAttributes.DeleteSnapshotsOption,
 		PermanentDeleteOption:          order.BlobAttributes.PermanentDeleteOption,
+		RehydratePriority:              order.BlobAttributes.RehydratePriority,
 	}
 
 	// Copy any strings into their respective fields

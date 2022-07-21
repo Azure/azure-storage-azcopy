@@ -95,6 +95,9 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 	set("check-md5", p.checkMd5.String(), "FailIfDifferent")
 	if o == eOperation.Copy() {
 		set("s2s-preserve-access-tier", p.s2sPreserveAccessTier, true)
+		set("preserve-posix-properties", p.preservePOSIXProperties, "")
+	} else if o == eOperation.Sync() {
+		set("preserve-posix-properties", p.preservePOSIXProperties, false)
 	}
 }
 
