@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -89,6 +90,20 @@ type rawSyncCmdArgs struct {
 	cpkScopeInfo string
 	// dry run mode bool
 	dryrun bool
+
+	// Limit on size of ObjectIndexerMap in memory.
+	// For more information, please refer to cookedSyncCmdArgs.
+	maxObjectIndexerMapSizeInGB string
+
+	// Change file detection mode.
+	// For more information, please refer to cookedSyncCmdArgs.
+	cfdMode string
+
+	// For more information, please refer to cookedSyncCmdArgs.
+	metaDataOnlySync bool
+
+	// This is the time of last sync in ISO8601 format. For more information, please refer to cookedSyncCmdArgs.
+	lastSyncTime string
 }
 
 func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -103,6 +118,45 @@ func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []strin
 	}
 
 	return
+}
+
+func (raw *rawSyncCmdArgs) parseCFDMode() (common.CFDMode, error) {
+	cfdMode := strings.ToLower(raw.cfdMode)
+	if cfdMode == strings.ToLower(common.CFDModeFlags.TargetCompare().String()) || cfdMode == "" {
+		return common.CFDModeFlags.TargetCompare(), nil
+	} else if cfdMode == strings.ToLower(common.CFDModeFlags.CtimeMtime().String()) {
+		return common.CFDModeFlags.CtimeMtime(), nil
+	} else if cfdMode == strings.ToLower(common.CFDModeFlags.Ctime().String()) {
+		return common.CFDModeFlags.Ctime(), nil
+	} else {
+		err := fmt.Errorf("Invalid value for cfd-mode: %s", raw.cfdMode)
+		return common.CFDModeFlags.Ctime().NotDefined(), err
+	}
+}
+
+// TODO: Need to get system available memory and check with this maxObjectIndexerMapSizeInGB. If maxObjectIndexerMapSizeInGB more than
+//       system available memory than issue warning message. If maxObjectIndexerMapSizeInGB is nil, in that case need to set it to 80% of
+//       available memory. Getting system available memory need to be done for both windows and linux.
+func (raw *rawSyncCmdArgs) parseMaxObjectIndexerMapInGB() (uint32, error) {
+
+	// Default case where user not specified any value.
+	if raw.maxObjectIndexerMapSizeInGB == "" {
+		// As of now return 2GB as maxObjectIndexerMapSizeInGB value.
+		return 2, nil
+	}
+
+	value, err := strconv.Atoi(raw.maxObjectIndexerMapSizeInGB)
+	if err != nil {
+		err = fmt.Errorf("Parsing failed for maxObjectIndexerMapSizeInGB (%s) with error: %v", raw.maxObjectIndexerMapSizeInGB, err)
+		return 0, err
+	}
+
+	if value < 0 {
+		err = fmt.Errorf("maxObjectIndexerMapSizeInGB is negative: %s", raw.maxObjectIndexerMapSizeInGB)
+		return 0, err
+	}
+
+	return uint32(value), nil
 }
 
 // it is assume that the given url has the SAS stripped, and safe to print
@@ -176,9 +230,9 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	// Do this check separately so we don't end up with a bunch of code duplication when new src/dstn are added
 	if cooked.fromTo.From() == common.ELocation.Local() {
-		cooked.source = common.ResourceString{Value: common.ToExtendedPath(cleanLocalPath(raw.src))}
+		cooked.source = common.ResourceString{Value: common.ToExtendedPath(common.CleanLocalPath(raw.src))}
 	} else if cooked.fromTo.To() == common.ELocation.Local() {
-		cooked.destination = common.ResourceString{Value: common.ToExtendedPath(cleanLocalPath(raw.dst))}
+		cooked.destination = common.ResourceString{Value: common.ToExtendedPath(common.CleanLocalPath(raw.dst))}
 	}
 
 	// we do not support service level sync yet
@@ -214,6 +268,35 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	if err = validateForceIfReadOnly(cooked.forceIfReadOnly, cooked.fromTo); err != nil {
 		return cooked, err
 	}
+
+	// Process the change file detection mode for Sync operation.
+	cooked.cfdMode, err = raw.parseCFDMode()
+	if err != nil {
+		return cooked, err
+	}
+
+	// Parse lastSyncTime for comparsion.
+	if raw.lastSyncTime != "" {
+		cooked.lastSyncTime, err = parseISO8601(raw.lastSyncTime, true)
+		if err != nil {
+			return cooked, err
+		}
+	} else {
+		if cooked.cfdMode == common.CFDModeFlags.TargetCompare() {
+			cooked.lastSyncTime = time.Time{}
+		} else {
+			err := fmt.Errorf("CFDMode[%s] requires valid last sync time", cooked.cfdMode.String())
+			return cooked, err
+		}
+	}
+
+	cooked.maxObjectIndexerMapSizeInGB, err = raw.parseMaxObjectIndexerMapInGB()
+	if err != nil {
+		return cooked, err
+	}
+
+	// TODO: Till we don't have API's to update the metaDataOnly. Lets keep this flag false.
+	cooked.metaDataOnlySync = false
 
 	cooked.backupMode = raw.backupMode
 	if err = validateBackupMode(cooked.backupMode, cooked.fromTo); err != nil {
@@ -426,6 +509,72 @@ type cookedSyncCmdArgs struct {
 	mirrorMode bool
 
 	dryrunMode bool
+
+	//
+	// Change file detection mode.
+	// This controls how target traverser decides whether a file has changed (and hence needs to be sync'ed to the target) by looking at the file
+	// properties stored in the sourceFolderIndex. Valid Enums will be TargetCompare, Ctime, CtimeMtime.
+	//
+	// TargetCompare - This is the most generic and the slowest of all. It enumerates all target directories
+	//                 and compares the children at source and target to find out if an object has changed.
+	//
+	// CtimeMtime    - Compare source file’s mtime/ctime (Unix/NFS) or LastWriteTime/ChangeTime (Windows/SMB) with LastSyncTime for detecting changed files.
+	//                 If mtime/LastWriteTime > LastSyncTime then it means both data and metadata have changed else if ctime/ChangeTime > LastSyncTime then
+	//                 only metadata has changed. For detecting changed directories this uses ctime/ChangeTime (not mtime/LastWriteTime) of the directory,
+	//                 changed directories will be enumerated in the target and every object will be compared with the source to find changes. This is needed
+	//                 to cover the case of directory renames where a completely different directory in the source can have the same name as a target directory
+	//                 and checking only mtime/LastWriteTime of children is not safe since rename of a directory won’t affect mtime of its children. If a directory
+	//                 has not changed then it’ll compare mtime/LastWriteTime and ctime/ChangeTime of its children with LastSyncTime for finding data/metadata changes,
+	//                 thus it enumerates only target directories that have changed.
+	//                 This is the most efficient of all and should be used when we safely can use it, i.e., we know that source updates ctime/mtime correctly.
+	//
+	// Ctime         - If we don’t want to depend on mtime/LastWriteTime (since it can be changed by applications) but we still don’t want to lose the advantage of
+	//                 ctime/ChangeTime which is much more dependable, we can use this mode. In this mode we use only ctime/ChangeTime to detect if there’s a change
+	//                 to a file/directory and if there’s a change, to find the exact change (data/metadata/both) we compare the file with the target. This has the
+	//                 advantage that we use the more robust ctime/ChangeTime and only for files/directories which could have potentially changed we have
+	//                 to compare with the target. This results in a much smaller set of files to enumerate at the target.
+	//
+	// So, in the order of preference we have,
+	//
+	// CtimeMtime -> Ctime -> TargetCompare.
+	//
+	cfdMode common.CFDMode
+
+	//
+	// Sync only file metadata if only metadata has changed and not the file content, else for changed files both file data and metadata are sync’ed.
+	// The latter could be expensive especially for cases where user updates some file metadata (owner/mode/atime/mtime/etc) recursively. How we find out
+	// whether only metadata has changed or only data has changed, or both have changed depends on the CFDMode that controls how changed files are detected.
+	//
+	metaDataOnlySync bool
+
+	//
+	// This is the time of last sync in ISO8601 format. This is compared with the source files' ctime/mtime value to find out if they have changed
+	// since the last sync and hence need to be copied. It's not used if the CFDMode is anything other than CTimeMTime and CTime, since in other
+	// CFDModes it's not considered safe to trust file times and we need to compare every file with target to find out which files have changed.
+	// There are a few subtelties that caller should be aware of:
+	//
+	// Since sync takes finite time, this should be set to the start of sync and not any later, else files that changed in the source while the
+	// last sync was running may be (incorrectly) skipped in this sync. Infact, to correctly account for any time skew between the machine running AzCopy
+	// and the machine hosting the source filesystem (if they are different, f.e., when the source is an NFS/SMB mount) this should be set to few seconds
+	// in the past. 60 seconds is a good value for skew adjustment. A larger skew value could cause more data to be sync'ed while a smaller skew value may
+	// cause us to miss some changed files, latter is obviously not desirable. If we are not sure what skew value to use, it's best to create a temp file
+	// on the source and compare its ctime with the nodes time and use that as a baseline.
+	//
+	// Time of last sync, used by the sync process.
+	// A file/directory having ctime/mtime greater than lastSyncTime is considered "changed", though the exact interpretation depends on the CFDMode
+	// used and other variables. Depending on CFDMode this will be compared with source files' ctime/mtime and/or target files' ctime/mtime.
+	//
+	lastSyncTime time.Time
+
+	//
+	// Limit on size of ObjectIndexerMap in memory.
+	// This is used only by the sync process and it controls how much the source traverser can fill the ObjectIndexerMap before it has to wait
+	// for target traverser to process and empty it. This should be kept to a value less than the system RAM to avoid thrashing.
+	// If you are not interested in source traverser scanning all the files for estimation purpose you can keep it low, just enough to never have the
+	// target traverser wait for directories to scan. The only reason we would want to keep it high is to let the source complete scanning irrespective
+	// of the target traverser speed, so that the scanned information can then be used for ETA estimation.
+	//
+	maxObjectIndexerMapSizeInGB uint32
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -800,4 +949,21 @@ func init() {
 	// Deprecate the old persist-smb-permissions flag
 	syncCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files, or ADLS Gen 2 to ADLS Gen 2). For Hierarchical Namespace accounts, you will need a container SAS or OAuth token with Modify Ownership and Modify Permissions permissions. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
+
+	// Changed file detection mode.
+	syncCmd.PersistentFlags().StringVar(&raw.cfdMode, "cfd-mode", "TargetCompare", " cfd-mode is Change File Detection Mode. It has valid values TargetCompare(default), Ctime, CtimeMtime."+
+		"\n TargetCompare - Default sync comparsion where target enumerated for each file. It's least optimized, but gurantee no data loss."+
+		"\n Ctime - Ctime used to detect change files/folder. Should be used where mtime not reliable."+
+		"\n CtimeMtime - Both Ctime	and Mtime used to detect changed files/folder. It's most efficient in all of the cfdModes."+
+		"\n Note: For Ctime and CtimeMtime provide last-sync-time parameter to sync files only changed after lastSyncTime, Otherwise it will take lastSyncTime zero as default"+
+		"\n       and copy all files once again.")
+
+	// Optimization for metaData only copy case.
+	syncCmd.PersistentFlags().BoolVar(&raw.metaDataOnlySync, "metadata-only-sync", false, "Optimization to transfer only metaData in case of metadata change only.")
+
+	// Time from which file change detection done.
+	syncCmd.PersistentFlags().StringVar(&raw.lastSyncTime, "last-sync-time", "", "Include files modified after lastSyncTime. Supported time format ISO8601, f.e. 2020-06-13T09:15:54+05:30")
+
+	// Limit on size of ObjectIndexerMap in memory.
+	syncCmd.PersistentFlags().StringVar(&raw.maxObjectIndexerMapSizeInGB, "max-indexer-map-size-gb", "", "maxObjectIndexerMapSizeInGB is the limit of map size in memory, provide the value in terms of GB")
 }

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"time"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -58,7 +59,9 @@ func (s *genericTraverserSuite) TestBlobFSServiceTraverserWithManyObjects(c *chk
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, objectList)
 
 	// Create a local traversal
-	localTraverser := newLocalTraverser(context.TODO(), dstDirName, true, true, func(common.EntityType) {}, nil)
+	localTraverser := newLocalTraverser(context.TODO(), dstDirName, true, true, func(common.EntityType) {}, nil,
+		nil /* folderIndexer */, nil, /* tqueue */
+		false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, CFDModeFlags{})
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
@@ -174,7 +177,9 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, objectList)
 
 	// Create a local traversal
-	localTraverser := newLocalTraverser(context.TODO(), dstDirName, true, true, func(common.EntityType) {}, nil)
+	localTraverser := newLocalTraverser(context.TODO(), dstDirName, true, true, func(common.EntityType) {}, nil,
+		nil /* folderIndexer */, nil, /* tqueue */
+		false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, CFDModeFlags{})
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
@@ -358,7 +363,9 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, objectList)
 
 	// Create a local traversal
-	localTraverser := newLocalTraverser(context.TODO(), dstDirName, true, true, func(common.EntityType) {}, nil)
+	localTraverser := newLocalTraverser(context.TODO(), dstDirName, true, true, func(common.EntityType) {}, nil,
+		nil /* folderIndexer */, nil, /* tqueue */
+		false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, CFDModeFlags{})
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()

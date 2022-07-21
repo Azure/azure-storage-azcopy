@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
@@ -110,7 +111,10 @@ func newListTraverser(parent common.ResourceString, parentType common.Location, 
 		// Construct a traverser that goes through the child
 		traverser, err := InitResourceTraverser(source, parentType, ctx, credential, &followSymlinks,
 			nil, recursive, getProperties, includeDirectoryStubs, common.EPermanentDeleteOption.None(), incrementEnumerationCounter,
-			nil, s2sPreserveBlobTags, logLevel, cpkOptions, nil /* errorChannel */)
+			nil, s2sPreserveBlobTags, logLevel, cpkOptions, nil, /* errorChannel */
+			nil /* folderIndexer */, nil, /* tqueue */
+			false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{} /* lastSyncTime */, common.CFDModeFlags.NotDefined(), false /* metaDataOnlySync */)
+
 		if err != nil {
 			return nil, err
 		}

@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/shubham808/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -51,7 +52,9 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo,
 		nil, cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs,
 		cca.PermanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false,
-		AzcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil /* errorChannel */)
+		AzcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil, /* errorChannel */
+		nil /* folderIndexer */, nil, /* tqueue*/
+		false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{} /* lastSyncTime */, common.CFDModeFlags.NotDefined(), false /* metaDataOnlySync */)
 
 	// report failure to create traverser
 	if err != nil {

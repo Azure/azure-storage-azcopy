@@ -29,6 +29,7 @@ import (
 	"path"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -251,7 +252,7 @@ func (l *localFileDeleter) deleteFile(object StoredObject) error {
 	return nil
 }
 
-func newSyncDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor, error) {
+func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, stopDeleteWorkers chan struct{}) (*interactiveDeleteProcessor, error) {
 	rawURL, err := cca.destination.FullURL()
 	if err != nil {
 		return nil, err
@@ -264,24 +265,155 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor
 		return nil, err
 	}
 
-	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, p, ctx, cca.fromTo.To()).delete,
+	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, p, ctx, cca.fromTo.To(), stopDeleteWorkers).delete,
 		cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount, cca.dryrunMode), nil
 }
 
 type remoteResourceDeleter struct {
-	rootURL        *url.URL
-	p              pipeline.Pipeline
-	ctx            context.Context
-	targetLocation common.Location
+	rootURL                  *url.URL
+	p                        pipeline.Pipeline
+	ctx                      context.Context
+	targetLocation           common.Location
+	blobDeleteChan           chan interface{}
+	enumerationDone          chan struct{}
+	deleteDirEnumerationChan chan string
 }
 
-func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx context.Context, targetLocation common.Location) *remoteResourceDeleter {
-	return &remoteResourceDeleter{
+func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx context.Context, targetLocation common.Location, enumDone chan struct{}) *remoteResourceDeleter {
+	remote := &remoteResourceDeleter{
 		rootURL:        rawRootURL,
 		p:              p,
 		ctx:            ctx,
 		targetLocation: targetLocation,
+		// This channel keep the blobURL to be deleted.
+		blobDeleteChan:           make(chan interface{}, 1000*1000),
+		deleteDirEnumerationChan: make(chan string, 1000),
+
+		// This channel to inform the enumeration complete, workers can stop.
+		enumerationDone: enumDone,
 	}
+	go remote.startDeleteWorkers(ctx)
+	return remote
+}
+
+// deleteWorker reads the entry from deleteChan and deletes them.
+func (b *remoteResourceDeleter) deleteWorker(ctx context.Context, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for {
+		select {
+		case blobURL, ok := <-b.blobDeleteChan:
+			if !ok {
+				// Delete workers exit when blobDeleteChan is closed by startDeleteWorkers(), which it does when it receives the "exit signal" on the enumerationDone channel,
+				// queued by finalize() after target traversal is done.
+				return
+			}
+			// TODO: we are not checking error as of now. We can enqueue those error to errChan.
+			//       errChan can be plunbed to error channel for sync. Like we done for copy to know errors at time of enumeration.
+			_, err := blobURL.(azblob.BlobURL).Delete(ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
+			if err != nil {
+				fmt.Printf("Blob[%s] deletion failed with error: %v\n", blobURL.(azblob.BlobURL).String(), err)
+			}
+
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// deleteWorker reads the entry from deleteChan and deletes them.
+func (b *remoteResourceDeleter) deleteDirEnumerationWorker(ctx context.Context, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for {
+		select {
+		case dirPath, ok := <-b.deleteDirEnumerationChan:
+			if !ok {
+				// DeleteDirEnumeration workers exit when deleteDirEnumChan is closed by startDeleteWorkers(), which it does when it receives the "exit signal" on the enumerationDone channel,
+				// queued by finalize() after target traversal is done.
+				return
+			}
+			b.deleteFolder(dirPath)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+const numDeleteWorkers = 64
+const numDeleteDirEnumWorkers = 4
+
+// startDeleteWorkers start workers and wait for them to finish.
+func (b *remoteResourceDeleter) startDeleteWorkers(ctx context.Context) {
+	// wait group for deleteWorkers.
+	var wg sync.WaitGroup
+
+	// Wait group for directory enumeration workers.
+	var dirEnumWg sync.WaitGroup
+
+	for i := 0; i < numDeleteDirEnumWorkers; i++ {
+		dirEnumWg.Add(1)
+		go b.deleteDirEnumerationWorker(ctx, &dirEnumWg)
+	}
+
+	for i := 0; i < numDeleteWorkers; i++ {
+		wg.Add(1)
+		go b.deleteWorker(ctx, &wg)
+	}
+
+	// Wait for "exit signal" from finalize(), which will be queued when target traverser is done.
+	select {
+	case <-b.enumerationDone:
+		close(b.deleteDirEnumerationChan)
+	case <-ctx.Done():
+		break
+	}
+
+	fmt.Printf("Waiting for deleteDirEnumeration workers to finish\n")
+	dirEnumWg.Wait()
+	fmt.Printf("deleteDirEnumeration workers done\n")
+	// Flag "all directory enumeration workers exited" to delete workers. So that they process all queued files and exit.
+	close(b.blobDeleteChan)
+
+	fmt.Printf("Waiting for deleteWorkers to return\n")
+	wg.Wait()
+	fmt.Printf("deleteWorkers Done\n")
+
+	// Flag "all deleted workers exited" to finalize(). It'll proceed on receiving this signal.
+	close(b.enumerationDone)
+}
+
+// deleteFolder list the files and add them to deleteChan for deletion.
+func (b *remoteResourceDeleter) deleteFolder(dirPath string) error {
+	// sanity check on dirPath.
+	if dirPath == "" {
+		err := fmt.Errorf("cmd::deleteFolder called with empty directory path.")
+		panic(err.Error())
+		return err
+	}
+
+	blobURLParts := azblob.NewBlobURLParts(*b.rootURL)
+	containerRawURL := copyHandlerUtil{}.getContainerUrl(blobURLParts)
+	containerURL := azblob.NewContainerURL(containerRawURL, b.p)
+
+	for marker := (azblob.Marker{}); marker.NotDone(); {
+		resp, err := containerURL.ListBlobsHierarchySegment(context.TODO(), marker, "", azblob.ListBlobsSegmentOptions{Prefix: dirPath, Details: azblob.BlobListingDetails{
+			Metadata: false,
+			Deleted:  false,
+		}})
+
+		if err != nil {
+			fmt.Printf("Folder[%s] Delete failed with error: %v", dirPath, err)
+			return err
+		}
+
+		for _, blobInfo := range resp.Segment.BlobItems {
+			// Deleting the blobs underneath the folder, once there is no blob. Folder will be deleted automatically.
+			blobURL := containerURL.NewBlobURL(blobInfo.Name)
+			b.blobDeleteChan <- blobURL
+		}
+		marker = resp.NextMarker
+	}
+
+	return nil
 }
 
 func (b *remoteResourceDeleter) delete(object StoredObject) error {
@@ -305,9 +437,44 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			panic("not implemented, check your code")
 		}
 	} else {
-		if shouldSyncRemoveFolders() {
-			panic("folder deletion enabled but not implemented")
+		switch b.targetLocation {
+		case common.ELocation.Blob():
+			//
+			// Let's delete the metaData blob representing the folder inline and rest of folder contents
+			// asynchronously by delete workers. This is done to avoid a race condition in the scenario where,
+			// since last sync, this folder is deleted and a new file is created with same name.
+			// If we defer the metaData blob deletion to the async workers, the deletion may get scheduled after
+			// file creation, which will yield undesired results.
+			// To avoid this situation, we delete the metaData blob inline so that the file creation can later
+			// happen w/o any issues. Rest of the files under the folder can be safely deleted asynchronously as
+			// no file/dir with those names need to be created again.
+			//
+			blobURLParts := azblob.NewBlobURLParts(*b.rootURL)
+			blobURLParts.BlobName = path.Join(blobURLParts.BlobName, object.relativePath)
+			blobURL := azblob.NewBlobURL(blobURLParts.URL(), b.p)
+			_, err := blobURL.Delete(b.ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
+			if err != nil {
+				if stgErr, ok := err.(azblob.StorageError); ok {
+					if stgErr.ServiceCode() != azblob.ServiceCodeBlobNotFound {
+						fmt.Printf("Deletion of metablob[%s] representing folder failed with error: %v", object.relativePath, err)
+					}
+				} else {
+					fmt.Printf("Deletion of metablob[%s] representing folder failed with error: %v", object.relativePath, err)
+				}
+			}
+
+			//
+			// Schedule recursive deletion of files/folders under this folder.
+			// This is the prefix we should use to list files and directories underneath this folder.
+			//
+			dirPath := common.CleanLocalPath(object.relativePath) + "/"
+			b.deleteDirEnumerationChan <- dirPath
+			return nil
+		default:
+			if shouldSyncRemoveFolders() {
+				panic("folder deletion enabled but not implemented")
+			}
+			return nil
 		}
-		return nil
 	}
 }

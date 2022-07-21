@@ -21,8 +21,9 @@
 package cmd
 
 import (
-	chk "gopkg.in/check.v1"
 	"time"
+
+	chk "gopkg.in/check.v1"
 )
 
 type syncComparatorSuite struct{}
@@ -35,7 +36,7 @@ func (s *syncComparatorSuite) TestSyncSourceComparator(c *chk.C) {
 	destMD5 := []byte{'d'}
 
 	// set up the indexer as well as the source comparator
-	indexer := newObjectIndexer()
+	indexer := newfolderIndexer()
 	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process, false)
 
 	// create a sample destination object
@@ -63,7 +64,7 @@ func (s *syncComparatorSuite) TestSyncSourceComparator(c *chk.C) {
 	// check the source object was indeed scheduled
 	c.Assert(len(dummyCopyScheduler.record), chk.Equals, 1)
 	c.Assert(dummyCopyScheduler.record[0].md5, chk.DeepEquals, srcMD5)
-	c.Assert(len(indexer.indexMap), chk.Equals, 0)
+	c.Assert(len(indexer.folderMap), chk.Equals, 0)
 
 	// reset the processor so that it's empty
 	dummyCopyScheduler = dummyProcessor{}
@@ -78,7 +79,7 @@ func (s *syncComparatorSuite) TestSyncSourceComparator(c *chk.C) {
 
 	// check no source object was scheduled
 	c.Assert(len(dummyCopyScheduler.record), chk.Equals, 0)
-	c.Assert(len(indexer.indexMap), chk.Equals, 0)
+	c.Assert(len(indexer.folderMap), chk.Equals, 0)
 }
 
 func (s *syncComparatorSuite) TestSyncSrcCompDisableComparator(c *chk.C) {
@@ -87,7 +88,7 @@ func (s *syncComparatorSuite) TestSyncSrcCompDisableComparator(c *chk.C) {
 	destMD5 := []byte{'d'}
 
 	// set up the indexer as well as the source comparator
-	indexer := newObjectIndexer()
+	indexer := newfolderIndexer()
 	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process, true)
 
 	// test the comparator in case a given source object is not present at the destination
@@ -125,7 +126,7 @@ func (s *syncComparatorSuite) TestSyncSrcCompDisableComparator(c *chk.C) {
 		compareErr = sourceComparator.processIfNecessary(sourceStoredObjects[key])
 		c.Assert(compareErr, chk.Equals, nil)
 		c.Assert(len(dummyCopyScheduler.record), chk.Equals, key+1)
-		c.Assert(len(indexer.indexMap), chk.Equals, 0)
+		c.Assert(len(indexer.folderMap), chk.Equals, 0)
 	}
 }
 
@@ -136,8 +137,8 @@ func (s *syncComparatorSuite) TestSyncDestinationComparator(c *chk.C) {
 	destMD5 := []byte{'d'}
 
 	// set up the indexer as well as the destination comparator
-	indexer := newObjectIndexer()
-	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, false)
+	indexer := newfolderIndexer()
+	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, false, CFDModeFlags{}, time.Time{})
 
 	// create a sample source object
 	sampleSourceObject := StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now(), md5: srcMD5}
@@ -193,8 +194,8 @@ func (s *syncComparatorSuite) TestSyncDestCompDisableComparison(c *chk.C) {
 	destMD5 := []byte{'d'}
 
 	// set up the indexer as well as the destination comparator
-	indexer := newObjectIndexer()
-	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, true)
+	indexer := newfolderIndexer()
+	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, true, CFDModeFlags{}, time.Time{})
 
 	// create a sample source object
 	currTime := time.Now()

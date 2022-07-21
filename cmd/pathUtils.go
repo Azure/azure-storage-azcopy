@@ -103,7 +103,7 @@ func GetResourceRoot(resource string, location common.Location) (resourceBase st
 		common.ELocation.Benchmark(): // do nothing
 		return resource, nil
 	case common.ELocation.Local():
-		return cleanLocalPath(getPathBeforeFirstWildcard(resource)), nil
+		return common.CleanLocalPath(getPathBeforeFirstWildcard(resource)), nil
 
 	//noinspection GoNilness
 	case common.ELocation.Blob():
@@ -204,7 +204,7 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 		if resource == common.Dev_Null {
 			return resource, "", nil // don't mess with the special dev-null path, at all
 		}
-		return cleanLocalPath(common.ToExtendedPath(resource)), "", nil
+		return common.CleanLocalPath(common.ToExtendedPath(resource)), "", nil
 	case common.ELocation.Pipe():
 		return resource, "", nil
 	case common.ELocation.S3():

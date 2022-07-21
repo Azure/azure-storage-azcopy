@@ -29,7 +29,7 @@ type InputObject interface{}
 type OutputObject interface{}
 
 type transformer struct {
-	input       <-chan CrawlResult // TODO: would have liked this to be of InputObject, but it made our usage messy.  Not sure of right solution to that yet. For now, using CrawlResult ties us to transforming result of crawl
+	input       []chan CrawlResult // TODO: would have liked this to be of InputObject, but it made our usage messy.  Not sure of right solution to that yet. For now, using CrawlResult ties us to transforming result of crawl
 	output      chan TransformResult
 	workerBody  TransformFunc
 	parallelism int
@@ -48,7 +48,7 @@ func (r TransformResult) Item() (interface{}, error) {
 type TransformFunc func(input InputObject) (OutputObject, error)
 
 // transformation will stop when input is closed
-func Transform(ctx context.Context, input <-chan CrawlResult, worker TransformFunc, parallelism int) <-chan TransformResult {
+func Transform(ctx context.Context, input []chan CrawlResult, worker TransformFunc, parallelism int) <-chan TransformResult {
 	t := &transformer{
 		input:       input,
 		output:      make(chan TransformResult, 1000),
@@ -63,23 +63,30 @@ func (t *transformer) runWorkersToCompletion(ctx context.Context) {
 	wg := &sync.WaitGroup{}
 	for i := 0; i < t.parallelism; i++ {
 		wg.Add(1)
-		go t.workerLoop(ctx, wg)
+		go t.workerLoop(ctx, wg, i)
 	}
 	wg.Wait()
 	close(t.output)
 }
 
-func (t *transformer) workerLoop(ctx context.Context, wg *sync.WaitGroup) {
+func (t *transformer) workerLoop(ctx context.Context, wg *sync.WaitGroup, index int) {
 	defer wg.Done()
 
-	for t.processOneObject(ctx) {
+	for t.processOneObject(ctx, index) {
 	}
 }
 
-func (t *transformer) processOneObject(ctx context.Context) bool {
-
+func (t *transformer) processOneObject(ctx context.Context, index int) bool {
+	//
+	// Which of the t.input channels should this transform worker use for conveying its enumeration to the
+	// processing goroutines. We divide the number of transform workers uniformly into number of available
+	// processing channels.
+	// Note: Ideally threads should be <= channels. If that's not the case it will cause some issues.
+	//       Need to revisit this change as number of threads more than channels.
+	//
+	chanIdx := index % len(t.input)
 	select {
-	case rawObject, ok := <-t.input:
+	case rawObject, ok := <-t.input[chanIdx]:
 		if ok {
 			in, err := rawObject.Item() // unpack it
 			if err != nil {

@@ -584,7 +584,7 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 			if newCount >= progressFrequencyThreshold && !cancelCalled {
 				// report less on progress  - to save on the CPU costs of doing so and because, if there are this many files,
 				// its going to be a long job anyway, so no need to report so often
-				wait = 2 * time.Minute
+				wait = 2 * time.Second
 				if oldCount < progressFrequencyThreshold {
 					lcm.Info(fmt.Sprintf("Reducing progress output frequency to %v, because there are over %d files", wait, progressFrequencyThreshold))
 				}
