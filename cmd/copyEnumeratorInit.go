@@ -28,6 +28,12 @@ type BucketToContainerNameResolver interface {
 	ResolveName(bucketName string) (string, error)
 }
 
+type DummyBucketToContainerResolver struct {}
+
+func (_ DummyBucketToContainerResolver) ResolveName(bucketName string) (string, error) {
+	return bucketName, nil
+}
+
 func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) (*CopyEnumerator, error) {
 	var traverser ResourceTraverser
 
@@ -143,9 +149,12 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// Create a Remote resource resolver
 	// Giving it nothing to work with as new names will be added as we traverse.
 	var containerResolver BucketToContainerNameResolver
-	containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
+	containerResolver = DummyBucketToContainerResolver{}
+	if cca.FromTo == common.EFromTo.S3Blob() {
+		containerResolver = NewS3BucketNameToAzureResourcesResolver()
+	}
 	if cca.FromTo == common.EFromTo.GCPBlob() {
-		containerResolver = NewGCPBucketNameToAzureResourcesResolver(nil)
+		containerResolver = NewGCPBucketNameToAzureResourcesResolver()
 	}
 	existingContainers := make(map[string]bool)
 	var logDstContainerCreateFailureOnce sync.Once
@@ -177,19 +186,13 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			if acctTraverser, ok := traverser.(AccountTraverser); ok && dstLevel == ELocationLevel.Service() {
 				containers, err := acctTraverser.listContainers()
 
-				if err != nil {
-					return nil, fmt.Errorf("failed to list containers: %s", err)
-				}
-
-				// Resolve all container names up front.
-				// If we were to resolve on-the-fly, then name order would affect the results inconsistently.
 				if cca.FromTo == common.EFromTo.S3Blob() {
-					containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
+					containerResolver = NewS3BucketNameToAzureResourcesResolver()
 				} else if cca.FromTo == common.EFromTo.GCPBlob() {
-					containerResolver = NewGCPBucketNameToAzureResourcesResolver(containers)
+					containerResolver = NewGCPBucketNameToAzureResourcesResolver()
 				}
 
-				for _, v := range containers {
+				for v := range containers {
 					bucketName, err := containerResolver.ResolveName(v)
 
 					if err != nil {
@@ -210,6 +213,11 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						seenFailedContainers[bucketName] = true
 					}
 				}
+				
+				if err != nil {
+					return nil, fmt.Errorf("failed to list containers: %s", err)
+				}
+
 			} else {
 				cName, err := GetContainerName(cca.Source.Value, cca.FromTo.From())
 

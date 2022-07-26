@@ -28,12 +28,29 @@ func (t *gcpServiceTraverser) IsDirectory(isSource bool) bool {
 	return true //Account traversals are inherently folder based
 }
 
-func (t *gcpServiceTraverser) listContainers() ([]string, error) {
+func (t *gcpServiceTraverser) listContainers() (chan string, chan error) {
+	buckets := make(chan string, 100) //S3 supports a max of 100 buckets per account
+	e := make(chan error)
 
-	if len(t.cachedBuckets) == 0 {
+	go func() {
+		var err error = nil
+		defer func() {
+			close(buckets)
+			e <- err
+			close(e)
+		}()
+
+		if len(t.cachedBuckets) != 0 {
+			for _, v := range t.cachedBuckets {
+				buckets <- v
+			}
+			return
+		}
+
 		bucketList := make([]string, 0)
 		if projectID == "" {
-			return nil, fmt.Errorf("ProjectID cannot be empty. Ensure that environment variable GOOGLE_CLOUD_PROJECT is not empty")
+			err = fmt.Errorf("ProjectID cannot be empty. Ensure that environment variable GOOGLE_CLOUD_PROJECT is not empty")
+			return
 		}
 		ctx := context.Background()
 		it := t.gcpClient.Buckets(ctx, projectID)
@@ -42,39 +59,38 @@ func (t *gcpServiceTraverser) listContainers() ([]string, error) {
 			if err == iterator.Done {
 				break
 			} else if err != nil {
-				return nil, err
+				return
 			}
 			if t.bucketPattern != "" {
 				if ok, err := containerNameMatchesPattern(battrs.Name, t.bucketPattern); err != nil {
-					return nil, err
+					return
 				} else if !ok {
 					continue
 				}
 			}
+
+			buckets <- battrs.Name
 			bucketList = append(bucketList, battrs.Name)
 		}
 		t.cachedBuckets = bucketList
-		return bucketList, nil
-	} else {
-		return t.cachedBuckets, nil
-	}
+		return
+	}()
+
+	return buckets, e
 }
 
 func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
-	bucketList, err := t.listContainers()
+	bucketList, errChan := t.listContainers()
 
-	if err != nil {
-		return err
-	}
-
-	for _, v := range bucketList {
+	for v := range bucketList {
 		tmpGCPURL := t.gcpURL
 		tmpGCPURL.BucketName = v
 		urlResult := tmpGCPURL.URL()
 		bucketTraverser, err := newGCPTraverser(&urlResult, t.ctx, true, t.getProperties, t.incrementEnumerationCounter)
 
 		if err != nil {
-			return err
+			WarnStdoutAndScanningLog(fmt.Sprintf("skip enumerating the bucket %q, could not enumerate: %s", v, err.Error()))
+			continue
 		}
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
@@ -89,7 +105,7 @@ func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor obj
 			continue
 		}
 	}
-	return nil
+	return <-errChan
 }
 
 func newGCPServiceTraverser(rawURL *url.URL, ctx context.Context, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (*gcpServiceTraverser, error) {

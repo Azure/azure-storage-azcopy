@@ -40,19 +40,12 @@ const gcpBucketNameMaxLength = 63
 
 var gcpBucketNameResolveError = "fail to resolve GCP bucket name"
 
-func NewGCPBucketNameToAzureResourcesResolver(gcpBucketNames []string) *GCPBucketNameToAzureResourcesResolver {
+func NewGCPBucketNameToAzureResourcesResolver() *GCPBucketNameToAzureResourcesResolver {
 	gcpResolver := GCPBucketNameToAzureResourcesResolver{
 		bucketNameResolvingMap: make(map[string]string),
 		collisionDetectionMap:  make(map[string]struct{}),
 	}
 
-	for _, bucketName := range gcpBucketNames {
-		gcpResolver.bucketNameResolvingMap[bucketName] = ""
-	}
-
-	for _, bucketName := range gcpBucketNames {
-		_, _ = gcpResolver.ResolveName(bucketName)
-	}
 	return &gcpResolver
 }
 

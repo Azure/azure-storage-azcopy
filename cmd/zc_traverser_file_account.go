@@ -46,8 +46,25 @@ func (t *fileAccountTraverser) IsDirectory(isSource bool) bool {
 	return true // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
-func (t *fileAccountTraverser) listContainers() ([]string, error) {
-	if len(t.cachedShares) == 0 {
+func (t *fileAccountTraverser) listContainers() (chan string, chan error) {
+	shares := make(chan string, 5000)
+	e := make(chan error)
+
+	go func() {
+		var err error = nil
+		defer func() {
+			close(shares)
+			e <- err
+			close(e)
+		}()
+
+		if len(t.cachedShares) != 0 {
+			for _, v := range t.cachedShares {
+				shares <- v
+			}
+			return
+		}
+
 		marker := azfile.Marker{}
 		shareList := make([]string, 0)
 
@@ -55,7 +72,7 @@ func (t *fileAccountTraverser) listContainers() ([]string, error) {
 			resp, err := t.accountURL.ListSharesSegment(t.ctx, marker, azfile.ListSharesOptions{})
 
 			if err != nil {
-				return nil, err
+				return
 			}
 
 			for _, v := range resp.ShareItems {
@@ -63,13 +80,14 @@ func (t *fileAccountTraverser) listContainers() ([]string, error) {
 				if t.sharePattern != "" {
 					if ok, err := containerNameMatchesPattern(v.Name, t.sharePattern); err != nil {
 						// Break if the pattern is invalid
-						return nil, err
+						return
 					} else if !ok {
 						// Ignore the share if it doesn't match the pattern.
 						continue
 					}
 				}
 
+				shares <- v.Name
 				shareList = append(shareList, v.Name)
 			}
 
@@ -77,27 +95,23 @@ func (t *fileAccountTraverser) listContainers() ([]string, error) {
 		}
 
 		t.cachedShares = shareList
-		return shareList, nil
-	} else {
-		return t.cachedShares, nil
-	}
+		return
+	}()
+
+	return shares, e
 }
 
 func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 	// listContainers will return the cached share list if shares have already been listed by this traverser.
-	shareList, err := t.listContainers()
+	shareList, errChan := t.listContainers()
 
-	if err != nil {
-		return err
-	}
-
-	for _, v := range shareList {
+	for v := range shareList {
 		shareURL := t.accountURL.NewShareURL(v).URL()
 		shareTraverser := newFileTraverser(&shareURL, t.p, t.ctx, true, t.getProperties, t.incrementEnumerationCounter)
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
-		err = shareTraverser.Traverse(preprocessorForThisChild, processor, filters)
+		err := shareTraverser.Traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
 			WarnStdoutAndScanningLog(fmt.Sprintf("failed to list files in share %s: %s", v, err))
@@ -105,7 +119,7 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 		}
 	}
 
-	return nil
+	return <-errChan
 }
 
 func newFileAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (t *fileAccountTraverser) {

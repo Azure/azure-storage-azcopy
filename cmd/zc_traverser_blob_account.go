@@ -51,9 +51,26 @@ func (t *blobAccountTraverser) IsDirectory(_ bool) bool {
 	return true // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
-func (t *blobAccountTraverser) listContainers() ([]string, error) {
+func (t *blobAccountTraverser) listContainers() (chan string, chan error) {
+	containers := make(chan string, 5000)
+	e := make(chan error)
+
 	// a nil list also returns 0
-	if len(t.cachedContainers) == 0 {
+	go func() {
+		var err error = nil
+		defer func() {
+			close(containers)
+			e <- err
+			close(e)
+		}()
+
+		if len(t.cachedContainers) != 0 {
+			for _, v := range t.cachedContainers {
+				containers <-v
+			}
+			return
+		}
+
 		marker := azblob.Marker{}
 		cList := make([]string, 0)
 
@@ -61,7 +78,7 @@ func (t *blobAccountTraverser) listContainers() ([]string, error) {
 			resp, err := t.accountURL.ListContainersSegment(t.ctx, marker, azblob.ListContainersSegmentOptions{})
 
 			if err != nil {
-				return nil, err
+				return
 			}
 
 			for _, v := range resp.ContainerItems {
@@ -69,13 +86,14 @@ func (t *blobAccountTraverser) listContainers() ([]string, error) {
 				if t.containerPattern != "" {
 					if ok, err := containerNameMatchesPattern(v.Name, t.containerPattern); err != nil {
 						// Break if the pattern is invalid
-						return nil, err
+						return
 					} else if !ok {
 						// Ignore the container if it doesn't match the pattern.
 						continue
 					}
 				}
 
+				containers <- v.Name
 				cList = append(cList, v.Name)
 			}
 
@@ -83,28 +101,23 @@ func (t *blobAccountTraverser) listContainers() ([]string, error) {
 		}
 
 		t.cachedContainers = cList
+		return
+	}()
 
-		return cList, nil
-	} else {
-		return t.cachedContainers, nil
-	}
+	return containers, e
 }
 
 func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 	// listContainers will return the cached container list if containers have already been listed by this traverser.
-	cList, err := t.listContainers()
+	cList, errChan := t.listContainers()
 
-	if err != nil {
-		return err
-	}
-
-	for _, v := range cList {
+	for v := range cList {
 		containerURL := t.accountURL.NewContainerURL(v).URL()
 		containerTraverser := newBlobTraverser(&containerURL, t.p, t.ctx, true, t.includeDirectoryStubs, t.incrementEnumerationCounter, t.s2sPreserveSourceTags, t.cpkOptions, false, false, false)
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
-		err = containerTraverser.Traverse(preprocessorForThisChild, processor, filters)
+		err := containerTraverser.Traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
 			WarnStdoutAndScanningLog(fmt.Sprintf("failed to list blobs in container %s: %s", v, err))
@@ -112,7 +125,7 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 		}
 	}
 
-	return nil
+	return <- errChan
 }
 
 func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions) (t *blobAccountTraverser) {

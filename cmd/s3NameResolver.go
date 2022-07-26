@@ -63,19 +63,10 @@ var s3BucketNameResolveError = "fail to resolve s3 bucket name"
 // NewS3BucketNameToAzureResourcesResolver creates S3BucketNameToAzureResourcesResolver.
 // Users can provide bucket names upfront and on-demand via ResolveName.
 // Previously resolved names will be returned outright by ResolveName.
-func NewS3BucketNameToAzureResourcesResolver(s3BucketNames []string) *S3BucketNameToAzureResourcesResolver {
+func NewS3BucketNameToAzureResourcesResolver() *S3BucketNameToAzureResourcesResolver {
 	s3Resolver := S3BucketNameToAzureResourcesResolver{
 		bucketNameResolvingMap: make(map[string]string),
 		collisionDetectionMap:  make(map[string]struct{}),
-	}
-
-	// Set resolving map to empty so all get resolved in the next for loop.
-	for _, bucketName := range s3BucketNames {
-		s3Resolver.bucketNameResolvingMap[bucketName] = ""
-	}
-
-	for _, bucketName := range s3BucketNames {
-		_, _ = s3Resolver.ResolveName(bucketName)
 	}
 
 	return &s3Resolver

@@ -273,7 +273,7 @@ type ResourceTraverser interface {
 
 type AccountTraverser interface {
 	ResourceTraverser
-	listContainers() ([]string, error)
+	listContainers() (chan string, chan error)
 }
 
 // basically rename a function and change the order of inputs just to make what's happening clearer

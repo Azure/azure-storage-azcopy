@@ -52,8 +52,25 @@ func (t *s3ServiceTraverser) IsDirectory(isSource bool) bool {
 	return true // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
-func (t *s3ServiceTraverser) listContainers() ([]string, error) {
-	if len(t.cachedBuckets) == 0 {
+func (t *s3ServiceTraverser) listContainers() (chan string, chan error) {
+	buckets := make(chan string, 100) //S3 supports a max of 100 buckets per account
+	e := make(chan error)
+
+	go func() {
+		var err error = nil
+		defer func() {
+			close(buckets)
+			e <- err
+			close(e)
+		}()
+	
+		if len(t.cachedBuckets) != 0 {
+			for _, v := range t.cachedBuckets {
+				buckets <- v
+			}
+			return
+		}
+
 		bucketList := make([]string, 0)
 		bucketInfo, err := t.s3Client.ListBuckets()
 		if err == nil {
@@ -62,34 +79,31 @@ func (t *s3ServiceTraverser) listContainers() ([]string, error) {
 				if t.bucketPattern != "" {
 					if ok, err := containerNameMatchesPattern(v.Name, t.bucketPattern); err != nil {
 						// Break if the pattern is invalid
-						return nil, err
+						return
 					} else if !ok {
 						// Ignore the bucket if it does not match the pattern
 						continue
 					}
 				}
 
+				buckets <- v.Name
 				bucketList = append(bucketList, v.Name)
 			}
 		} else {
-			return nil, err
+			return
 		}
 
 		t.cachedBuckets = bucketList
-		return bucketList, nil
-	} else {
-		return t.cachedBuckets, nil
-	}
+		return
+	}()
+
+	return buckets, e
 }
 
 func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
-	bucketList, err := t.listContainers()
+	bucketList, errChan := t.listContainers()
 
-	if err != nil {
-		return err
-	}
-
-	for _, v := range bucketList {
+	for v := range bucketList {
 		tmpS3URL := t.s3URL
 		tmpS3URL.BucketName = v
 		urlResult := tmpS3URL.URL()
@@ -97,7 +111,8 @@ func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor obje
 		bucketTraverser, err := newS3Traverser(credentialInfo.CredentialType, &urlResult, t.ctx, true, t.getProperties, t.incrementEnumerationCounter)
 
 		if err != nil {
-			return err
+			WarnStdoutAndScanningLog(fmt.Sprintf("skip enumerating bucket %q, could not enumerate %s", v, err.Error()))
+			continue
 		}
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
@@ -121,7 +136,7 @@ func (t *s3ServiceTraverser) Traverse(preprocessor objectMorpher, processor obje
 	}
 
 	t.s3Client.TraceOff()
-	return nil
+	return <-errChan
 }
 
 func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (t *s3ServiceTraverser, err error) {

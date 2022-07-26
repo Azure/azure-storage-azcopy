@@ -48,9 +48,25 @@ func (t *BlobFSAccountTraverser) IsDirectory(isSource bool) bool {
 	return true // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
-func (t *BlobFSAccountTraverser) listContainers() ([]string, error) {
+func (t *BlobFSAccountTraverser) listContainers() (chan string, chan error) {
+	fileSystems := make(chan string, 5000)
+	e := make(chan error)
+
 	// a nil list also returns 0
-	if len(t.cachedFileSystems) == 0 {
+	go func() {
+		var err error = nil
+		defer func() {
+			close(fileSystems)
+			e <- err
+			close(e)
+		}()
+
+		if len(t.cachedFileSystems) != 0 {
+			for _, v := range(t.cachedFileSystems) {
+				fileSystems <- v
+			}
+		}
+
 		marker := ""
 		fsList := make([]string, 0)
 
@@ -58,7 +74,7 @@ func (t *BlobFSAccountTraverser) listContainers() ([]string, error) {
 			resp, err := t.accountURL.ListFilesystemsSegment(t.ctx, &marker)
 
 			if err != nil {
-				return nil, err
+				return
 			}
 
 			for _, v := range resp.Filesystems {
@@ -76,13 +92,14 @@ func (t *BlobFSAccountTraverser) listContainers() ([]string, error) {
 				// match against the filesystem name pattern if present
 				if t.fileSystemPattern != "" {
 					if ok, err := containerNameMatchesPattern(fsName, t.fileSystemPattern); err != nil {
-						return nil, err
+						return
 					} else if !ok {
 						// ignore any filesystems that don't match
 						continue
 					}
 				}
 
+				fileSystems <- fsName
 				fsList = append(fsList, fsName)
 			}
 
@@ -93,23 +110,23 @@ func (t *BlobFSAccountTraverser) listContainers() ([]string, error) {
 		}
 
 		t.cachedFileSystems = fsList
-		return fsList, nil
-	} else {
-		return t.cachedFileSystems, nil
-	}
+		return
+	}() 
+
+	return fileSystems, e
 }
 
 func (t *BlobFSAccountTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 	// listContainers will return the cached filesystem list if filesystems have already been listed by this traverser.
-	fsList, err := t.listContainers()
+	fsList, errChan := t.listContainers()
 
-	for _, v := range fsList {
+	for v := range fsList {
 		fileSystemURL := t.accountURL.NewFileSystemURL(v).URL()
 		fileSystemTraverser := newBlobFSTraverser(&fileSystemURL, t.p, t.ctx, true, t.incrementEnumerationCounter)
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
-		err = fileSystemTraverser.Traverse(preprocessorForThisChild, processor, filters)
+		err := fileSystemTraverser.Traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
 			WarnStdoutAndScanningLog(fmt.Sprintf("failed to list files in filesystem %s: %s", v, err))
@@ -117,7 +134,7 @@ func (t *BlobFSAccountTraverser) Traverse(preprocessor objectMorpher, processor 
 		}
 	}
 
-	return nil
+	return <-errChan
 }
 
 func newBlobFSAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, incrementEnumerationCounter enumerationCounterFunc) (t *BlobFSAccountTraverser) {
