@@ -17,8 +17,14 @@ type ARMAsyncResponse struct {
 	Status    string `json:"status"`
 
 	// Set Properties to a pointer of your target struct, encoding/json will handle the magic.
-	Properties interface{} `json:"properties"`
-	Name       string      `json:"name"`
+	Properties interface{}   `json:"properties"`
+	Name       string        `json:"name"`
+	Error      ARMAsyncError `json:"error"`
+}
+
+type ARMAsyncError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }
 
 const (
@@ -71,7 +77,23 @@ func ResolveAzureAsyncOperation(OAuth *adal.ServicePrincipalToken, uri string, p
 		}
 
 		if armResp.Status == ARMStatusSucceeded || armResp.Status == ARMStatusCanceled || armResp.Status == ARMStatusFailed {
-			return
+			switch armResp.Status {
+			case ARMStatusFailed:
+				var code, message string
+				if armResp.Error.Code != "" {
+					code = fmt.Sprintf(" (code %s)", armResp.Error.Code)
+				}
+
+				if armResp.Error.Message != "" {
+					message = fmt.Sprintf(": %s", armResp.Error.Message)
+				}
+
+				return nil, fmt.Errorf("ARM job exited with failed status%s%s", code, message)
+			case ARMStatusCanceled:
+				return nil, fmt.Errorf("ARM async job was canceled")
+			default:
+				return
+			}
 		}
 
 		retryAfter := resp.Header.Get("Retry-after")

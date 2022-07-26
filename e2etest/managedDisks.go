@@ -124,7 +124,14 @@ func (config *ManagedDiskConfig) RevokeAccess() error {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
 
-	if resp.StatusCode != 200 && resp.StatusCode != 202 {
+	if resp.StatusCode != 200 {
+		if resp.StatusCode == 202 {
+			newTarget := resp.Header.Get("Azure-Asyncoperation")
+			_, err := ResolveAzureAsyncOperation(config.oauth, newTarget, nil)
+
+			return err
+		}
+
 		rBody, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			return fmt.Errorf("failed to read response body (resp code %d): %w", resp.StatusCode, err)
