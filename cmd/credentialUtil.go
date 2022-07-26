@@ -182,6 +182,11 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 					if httpResp := stgErr.Response(); httpResp.StatusCode == 401 {
 						challenge := httpResp.Header.Get("WWW-Authenticate")
 						if strings.Contains(challenge, common.MDResource) {
+							if !oAuthTokenExists() {
+								return common.ECredentialType.Unknown(), false,
+									common.NewAzError(common.EAzError.LoginCredMissing(), "No SAS token or OAuth token is present and the resource is not public")
+							}
+
 							return common.ECredentialType.MDOAuthToken(), false, nil
 						}
 					}

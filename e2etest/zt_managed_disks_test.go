@@ -20,5 +20,52 @@
 
 package e2etest
 
+import (
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"testing"
+)
+
 // Purpose: Tests for the special cases that relate to moving managed disks (default local VHD to page blob; special handling for
 //     md- and md-impex URLs.
+
+func TestManagedDisks_NoOAuthRequired(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.BlobLocal()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{},
+		nil,
+		testFiles{
+			shouldTransfer: []interface{}{
+				"",
+			},
+		}, // Managed disks will always have a transfer target of ""
+		EAccountType.Standard(),
+		EAccountType.StdManagedDisk(),
+		"",
+	)
+}
+
+func TestManagedDisks_OAuthRequired(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.BlobLocal(), common.EFromTo.BlobBlob()), // It's relevant to test blobblob since this interfaces with x-ms-copysourceauthorization
+		eValidate.Auto(),
+		[]common.CredentialType{common.ECredentialType.MDOAuthToken()},
+		anonymousAuthOnly,
+		params{},
+		nil,
+		testFiles{
+			shouldTransfer: []interface{}{
+				"",
+			},
+		}, // Managed disks will always have a transfer target of ""
+		EAccountType.Standard(),
+		EAccountType.OAuthManagedDisk(),
+		"",
+	)
+}

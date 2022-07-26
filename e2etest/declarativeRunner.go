@@ -36,7 +36,7 @@ import (
 var validCredTypesPerLocation = map[common.Location][]common.CredentialType{
 	common.ELocation.Unknown(): {common.ECredentialType.Unknown(), common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()}, // Delete!
 	common.ELocation.File():    {common.ECredentialType.Anonymous()},
-	common.ELocation.Blob():    {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
+	common.ELocation.Blob():    {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken(), common.ECredentialType.MDOAuthToken()},
 	common.ELocation.BlobFS():  {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()}, // todo: currently, account key auth isn't even supported in e2e tests.
 	common.ELocation.Local():   {common.ECredentialType.Anonymous()},
 	common.ELocation.Pipe():    {common.ECredentialType.Anonymous()},
@@ -46,10 +46,10 @@ var validCredTypesPerLocation = map[common.Location][]common.CredentialType{
 
 var allCredentialTypes []common.CredentialType = nil
 
-// var oAuthOnly = []common.CredentialType{common.ECredentialType.OAuthToken()}
+var oAuthOnly = []common.CredentialType{common.ECredentialType.OAuthToken()}
 var anonymousAuthOnly = []common.CredentialType{common.ECredentialType.Anonymous()}
 
-func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredentialTypesSrc, requestedCredentialTypesDst []common.CredentialType) [][2]common.CredentialType {
+func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredentialTypesSrc, requestedCredentialTypesDst []common.CredentialType, accountTypes []AccountType) [][2]common.CredentialType {
 	output := make([][2]common.CredentialType, 0)
 
 	credIsRequested := func(cType common.CredentialType, dst bool) bool {
@@ -81,7 +81,15 @@ func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredential
 	}
 
 	for _, srcCredType := range sourceTypes {
+		if srcCredType == common.ECredentialType.MDOAuthToken() && accountTypes[0] != EAccountType.OAuthManagedDisk() {
+			continue // invalid selection
+		}
+
 		for _, dstCredType := range validCredTypesPerLocation[fromTo.To()] {
+			if dstCredType == common.ECredentialType.MDOAuthToken() && accountTypes[1] != EAccountType.OAuthManagedDisk() {
+				continue // invalid selection
+			}
+
 			// make sure the user asked for this.
 			if !(credIsRequested(srcCredType, false) && credIsRequested(dstCredType, true)) {
 				continue
@@ -101,20 +109,20 @@ func RunScenarios(
 	operations Operation,
 	testFromTo TestFromTo,
 	validate Validate, // TODO: do we really want the test author to have to nominate which validation should happen?  Pros: better perf of tests. Cons: they have to tell us, and if they tell us wrong test may not test what they think it tests
-	// _ interface{}, // TODO if we want it??, blockBLobsOnly or specifc/all blob types
+// _ interface{}, // TODO if we want it??, blockBLobsOnly or specifc/all blob types
 
-	// It would be a pain to list out every combo by hand,
-	// In addition to the fact that not every credential type is sensible.
-	// Thus, the E2E framework takes in a requested set of credential types, and applies them where sensible.
-	// This allows you to make tests use OAuth only, SAS only, etc.
+// It would be a pain to list out every combo by hand,
+// In addition to the fact that not every credential type is sensible.
+// Thus, the E2E framework takes in a requested set of credential types, and applies them where sensible.
+// This allows you to make tests use OAuth only, SAS only, etc.
 	requestedCredentialTypesSrc []common.CredentialType,
 	requestedCredentialTypesDst []common.CredentialType,
 	p params,
 	hs *hooks,
 	fs testFiles,
-	// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
+// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
 	destAccountType AccountType,
-	accountType AccountType,
+	srcAccountType AccountType,
 	scenarioSuffix string) {
 	// enable this if we want parents in parallel: t.Parallel()
 
@@ -140,7 +148,7 @@ func RunScenarios(
 			}
 			seenFromTos[fromTo] = true
 
-			credentialTypes := getValidCredCombinationsForFromTo(fromTo, requestedCredentialTypesSrc, requestedCredentialTypesDst)
+			credentialTypes := getValidCredCombinationsForFromTo(fromTo, requestedCredentialTypesSrc, requestedCredentialTypesDst, []AccountType{srcAccountType, destAccountType})
 
 			for _, credTypes := range credentialTypes {
 				// Create unique name for generating container names
@@ -159,7 +167,7 @@ func RunScenarios(
 				}
 
 				s := scenario{
-					srcAccountType:      accountType,
+					srcAccountType:      srcAccountType,
 					destAccountType:     destAccountType,
 					subtestName:         subtestName,
 					compactScenarioName: compactScenarioName,
