@@ -183,41 +183,12 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				seenFailedContainers[dstContainerName] = true
 			}
 		} else if cca.FromTo.From().IsRemote() { // if the destination has implicit container names
-			if acctTraverser, ok := traverser.(AccountTraverser); ok && dstLevel == ELocationLevel.Service() {
-				containers, err := acctTraverser.listContainers()
-
+			if _, ok := traverser.(AccountTraverser); ok && dstLevel == ELocationLevel.Service() {
 				if cca.FromTo == common.EFromTo.S3Blob() {
 					containerResolver = NewS3BucketNameToAzureResourcesResolver()
 				} else if cca.FromTo == common.EFromTo.GCPBlob() {
 					containerResolver = NewGCPBucketNameToAzureResourcesResolver()
 				}
-
-				for v := range containers {
-					bucketName, err := containerResolver.ResolveName(v)
-
-					if err != nil {
-						// Silently ignore the failure; it'll get logged later.
-						continue
-					}
-
-					err = cca.createDstContainer(bucketName, cca.Destination, ctx, existingContainers, azcopyLogVerbosity)
-
-					// if JobsAdmin is nil, we're probably in testing mode.
-					// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
-					// check against seenFailedContainers so we don't spam the job log with initialization failed errors
-					if _, ok := seenFailedContainers[bucketName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
-						logDstContainerCreateFailureOnce.Do(func() {
-							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
-						})
-						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", bucketName, err), pipeline.LogWarning)
-						seenFailedContainers[bucketName] = true
-					}
-				}
-				
-				if err != nil {
-					return nil, fmt.Errorf("failed to list containers: %s", err)
-				}
-
 			} else {
 				cName, err := GetContainerName(cca.Source.Value, cca.FromTo.From())
 
@@ -262,6 +233,22 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			// if a destination container name is not specified OR copying service to container/folder, append the src container name.
 			if cName == "" || (srcLevel == ELocationLevel.Service() && dstLevel > ELocationLevel.Service()) {
 				cName, err = containerResolver.ResolveName(object.ContainerName)
+
+				//attempt creating a container. We'll not create it multiple times.
+				err = cca.createDstContainer(cName, cca.Destination, ctx, existingContainers, azcopyLogVerbosity)
+
+				// if JobsAdmin is nil, we're probably in testing mode.
+				// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
+				// check against seenFailedContainers so we don't spam the job log with initialization failed errors
+				if _, ok := seenFailedContainers[cName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
+					logDstContainerCreateFailureOnce.Do(func() {
+						glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
+					})
+					jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", bucketName, err), pipeline.LogWarning)
+					seenFailedContainers[cName] = true
+				}
+			}
+
 
 				if err != nil {
 					if _, ok := seenFailedContainers[object.ContainerName]; !ok {
