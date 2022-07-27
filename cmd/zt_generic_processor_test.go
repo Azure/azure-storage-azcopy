@@ -57,7 +57,7 @@ func (processorTestSuiteHelper) getExpectedTransferFromStoredObjectList(storedOb
 }
 
 func (processorTestSuiteHelper) getCopyJobTemplate() *common.CopyJobPartOrderRequest {
-	return &common.CopyJobPartOrderRequest{Fpo: common.EFolderPropertiesOption.NoFolders(), SymlinkHandlingType: common.ESymlinkHandlingType.None()}
+	return &common.CopyJobPartOrderRequest{Fpo: common.EFolderPropertiesOption.NoFolders(), SymlinkHandlingType: common.ESymlinkHandlingType.Skip()}
 }
 
 func (s *genericProcessorSuite) TestCopyTransferProcessorMultipleFiles(c *chk.C) {

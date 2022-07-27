@@ -66,7 +66,7 @@ func (s *blobSymlinkSender) SendSymlink(linkData string) error {
 	if err != nil {
 		return fmt.Errorf("when getting additional folder properties: %w", err)
 	}
-	s.metadataToApply["is_symlink"] = "true" // For BlobFuse
+	s.metadataToApply["is_symlink"] = "true"
 
 	_, err = s.destBlockBlobURL.Upload(s.jptm.Context(), strings.NewReader(linkData), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, s.destBlobTier, s.blobTagsToApply, s.cpkToApply, azblob.ImmutabilityPolicyOptions{})
 	return err
@@ -126,6 +126,5 @@ type dummySymlinkS2SCopier struct {
 }
 
 func (d dummySymlinkS2SCopier) GenerateCopyFunc(chunkID common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
-	// TODO implement me
-	panic("implement me")
+	panic("this sender only sends folders.")
 }

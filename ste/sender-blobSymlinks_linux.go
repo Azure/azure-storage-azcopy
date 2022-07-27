@@ -1,7 +1,9 @@
 package ste
 
 import (
+	"errors"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"os"
 )
 
 func (s *blobSymlinkSender) getExtraProperties() error {
@@ -13,6 +15,10 @@ func (s *blobSymlinkSender) getExtraProperties() error {
 			statAdapter, err := unixSIP.GetUNIXProperties()
 			if err != nil {
 				return err
+			}
+
+			if !((os.FileMode(statAdapter.FileMode()) & os.ModeSymlink) == os.ModeSymlink) { // sanity check this is actually targeting the symlink
+				return errors.New("sanity check: GetUNIXProperties did not return symlink properties")
 			}
 
 			common.AddStatToBlobMetadata(statAdapter, s.metadataToApply)

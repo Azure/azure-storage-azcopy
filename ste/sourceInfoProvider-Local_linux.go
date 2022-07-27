@@ -15,10 +15,15 @@ func (f localFileSourceInfoProvider) HasUNIXProperties() bool {
 func (f localFileSourceInfoProvider) GetUNIXProperties() (common.UnixStatAdapter, error) {
 	{ // attempt to call statx, if ENOSYS is returned, statx is unavailable
 		var stat unix.Statx_t
+
+		statxFlags := unix.AT_STATX_SYNC_AS_STAT
+		if f.EntityType() == common.EEntityType.Symlink() {
+			statxFlags |= unix.AT_SYMLINK_NOFOLLOW
+		}
 		// dirfd is a null pointer, because we should only ever be passing relative paths here, and directories will be passed via transferInfo.Source.
 		// AT_SYMLINK_NOFOLLOW is not used, because we automagically resolve symlinks. TODO: Add option to not follow symlinks, and use AT_SYMLINK_NOFOLLOW when resolving is disabled.
 		err := unix.Statx(0, f.transferInfo.Source,
-			unix.AT_STATX_SYNC_AS_STAT,
+			statxFlags,
 			unix.STATX_ALL,
 			&stat)
 

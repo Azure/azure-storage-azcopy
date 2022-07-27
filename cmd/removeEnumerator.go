@@ -49,7 +49,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 
 	// Include-path is handled by ListOfFilesChannel.
 	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo,
-		common.ESymlinkHandlingType.None(), cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs,
+		common.ESymlinkHandlingType.Skip(), cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs,
 		cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false,
 		azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil /* errorChannel */)
 

@@ -980,7 +980,7 @@ func validatePreserveOwner(preserve bool, fromTo common.FromTo) error {
 }
 
 func crossValidateSymlinksAndPermissions(symlinkHandling common.SymlinkHandlingType, preservePermissions bool) error {
-	if symlinkHandling != common.ESymlinkHandlingType.None() && preservePermissions {
+	if symlinkHandling != common.ESymlinkHandlingType.Skip() && preservePermissions {
 		return errors.New("cannot handle symlinks when preserving permissions (since the correct permission inheritance behaviour for symlink targets is undefined)")
 	}
 	return nil

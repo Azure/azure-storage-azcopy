@@ -134,7 +134,7 @@ func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyO
 // We use this, so that we can easily test for compatibility in the sync deletion code (which expects an objectProcessor)
 func newFpoAwareProcessor(fpo common.FolderPropertyOption, inner objectProcessor) objectProcessor {
 	return func(s StoredObject) error {
-		if s.isCompatibleWithEntitySettings(fpo, common.ESymlinkHandlingType.None()) {
+		if s.isCompatibleWithEntitySettings(fpo, common.ESymlinkHandlingType.Skip()) {
 			return inner(s)
 		} else {
 			return nil // nothing went wrong, because we didn't do anything

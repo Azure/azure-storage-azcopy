@@ -1621,7 +1621,7 @@ type eSymlinkHandlingType uint8
 
 var ESymlinkHandlingType = eSymlinkHandlingType(0)
 
-func (eSymlinkHandlingType) None() SymlinkHandlingType     { return SymlinkHandlingType(0) }
+func (eSymlinkHandlingType) Skip() SymlinkHandlingType     { return SymlinkHandlingType(0) }
 func (eSymlinkHandlingType) Follow() SymlinkHandlingType   { return SymlinkHandlingType(1) } // Upload what's on the other hand of the symlink
 func (eSymlinkHandlingType) Preserve() SymlinkHandlingType { return SymlinkHandlingType(2) } // Copy the link
 

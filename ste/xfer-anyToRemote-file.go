@@ -178,15 +178,12 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 		}
 	}
 
-	switch info.EntityType {
-	case common.EEntityType.Folder():
+	if info.IsFolderPropertiesTransfer() {
 		anyToRemote_folder(jptm, info, p, pacer, senderFactory, sipf)
-	case common.EEntityType.File():
-		anyToRemote_file(jptm, info, p, pacer, senderFactory, sipf)
-	case common.EEntityType.Symlink():
+	} else if info.EntityType == common.EEntityType.Symlink() {
 		anyToRemote_symlink(jptm, info, p, pacer, senderFactory, sipf)
-	default:
-		panic("Unknown entity type!")
+	} else {
+		anyToRemote_file(jptm, info, p, pacer, senderFactory, sipf)
 	}
 }
 

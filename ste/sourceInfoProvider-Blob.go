@@ -36,7 +36,7 @@ type blobSourceInfoProvider struct {
 	defaultRemoteSourceInfoProvider
 }
 
-func (p *blobSourceInfoProvider) GetSymlinkPath() (string, error) {
+func (p *blobSourceInfoProvider) ReadLink() (string, error) {
 	uri, err := p.PreSignedSourceURL()
 	if err != nil {
 		return "", err

@@ -101,7 +101,7 @@ type IUNIXPropertyBearingSourceInfoProvider interface {
 type ISymlinkBearingSourceInfoProvider interface {
 	ISourceInfoProvider
 
-	GetSymlinkPath() (string, error)
+	ReadLink() (string, error)
 }
 
 type ICustomLocalOpener interface {

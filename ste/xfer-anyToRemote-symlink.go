@@ -30,6 +30,15 @@ func anyToRemote_symlink(jptm IJobPartTransferMgr, info TransferInfo, p pipeline
 		jptm.LogSendError(info.Source, info.Destination, "source info provider implementation does not support symlinks", 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
+		return
+	}
+
+	path, err := symSIP.ReadLink()
+	if err != nil {
+		jptm.FailActiveSend("getting symlink path", err)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
 	}
 
 	baseSender, err := senderFactory(jptm, info.Destination, p, pacer, srcInfoProvider)
@@ -37,13 +46,6 @@ func anyToRemote_symlink(jptm IJobPartTransferMgr, info TransferInfo, p pipeline
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
-		return
-	}
-
-	path, err := symSIP.GetSymlinkPath()
-	if err != nil {
-		jptm.FailActiveSend("getting symlink path", err)
-		commonSenderCompletion(jptm, baseSender, info)
 		return
 	}
 

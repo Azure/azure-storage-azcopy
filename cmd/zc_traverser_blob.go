@@ -171,22 +171,11 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			azcopyScanningLogger.Log(pipeline.LogDebug, "Detected the root as a blob.")
 		}
 
-		getEntityType := func() common.EntityType {
-			meta := blobProperties.NewMetadata()
-			if _, isfolder := meta["hdi_isfolder"]; isfolder {
-				return common.EEntityType.Folder()
-			} else if _, isSymlink := meta["is_symlink"]; isSymlink {
-				return common.EEntityType.Symlink()
-			}
-
-			return common.EEntityType.File()
-		}
-
 		storedObject := newStoredObject(
 			preprocessor,
 			getObjectNameOnly(strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
 			"",
-			getEntityType(),
+			getEntityType(blobProperties.NewMetadata()),
 			blobProperties.LastModified(),
 			blobProperties.ContentLength(),
 			blobProperties,
@@ -372,25 +361,24 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 
 	return nil
 }
+func getEntityType(blobInfo azblob.Metadata) common.EntityType {
+	if _, isfolder := blobInfo["hdi_isfolder"]; isfolder {
+		return common.EEntityType.Folder()
+	} else if _, isSymlink := blobInfo["is_symlink"]; isSymlink {
+		return common.EEntityType.Symlink()
+	}
+
+	return common.EEntityType.File()
+}
 
 func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, blobInfo azblob.BlobItemInternal, relativePath string, containerName string) StoredObject {
 	adapter := blobPropertiesAdapter{blobInfo.Properties}
-
-	getEntityType := func() common.EntityType {
-		if _, isfolder := blobInfo.Metadata["hdi_isfolder"]; isfolder {
-			return common.EEntityType.Folder()
-		} else if _, isSymlink := blobInfo.Metadata["is_symlink"]; isSymlink {
-			return common.EEntityType.Symlink()
-		}
-
-		return common.EEntityType.File()
-	}
 
 	object := newStoredObject(
 		preprocessor,
 		getObjectNameOnly(blobInfo.Name),
 		relativePath,
-		getEntityType(),
+		getEntityType(blobInfo.Metadata),
 		blobInfo.Properties.LastModified,
 		*blobInfo.Properties.ContentLength,
 		adapter,
