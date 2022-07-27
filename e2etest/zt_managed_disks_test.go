@@ -36,7 +36,9 @@ func TestManagedDisks_NoOAuthRequired(t *testing.T) {
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,
-		params{},
+		params{
+			disableParallelTesting: true,
+		},
 		nil,
 		testFiles{
 			shouldTransfer: []interface{}{
@@ -57,7 +59,9 @@ func TestManagedDisks_OAuthRequired(t *testing.T) {
 		eValidate.Auto(),
 		[]common.CredentialType{common.ECredentialType.MDOAuthToken()},
 		anonymousAuthOnly,
-		params{},
+		params{
+			disableParallelTesting: true, // testing is implemented with a single managed disk
+		},
 		nil,
 		testFiles{
 			shouldTransfer: []interface{}{
