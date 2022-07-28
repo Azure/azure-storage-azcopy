@@ -208,6 +208,9 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
+		_, status, msg := ErrorEx{err}.ErrorCodeAndString()
+		jptm.SetErrorMessage(msg)
+		jptm.SetErrorCode(int32(status))
 		jptm.ReportTransferDone()
 		return
 	}
@@ -219,6 +222,9 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
+		_, status, msg := ErrorEx{err}.ErrorCodeAndString()
+		jptm.SetErrorMessage(msg)
+		jptm.SetErrorCode(int32(status))
 		jptm.ReportTransferDone()
 		return
 	}
@@ -241,6 +247,9 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 		if existenceErr != nil {
 			jptm.LogSendError(info.Source, info.Destination, "Could not check destination file existence. "+existenceErr.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed()) // is a real failure, not just a SkippedFileAlreadyExists, in this case
+			_, status, msg := ErrorEx{existenceErr}.ErrorCodeAndString()
+			jptm.SetErrorMessage(msg)
+			jptm.SetErrorCode(int32(status))
 			jptm.ReportTransferDone()
 			return
 		}
@@ -285,6 +294,9 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 			}
 			jptm.LogSendError(info.Source, info.Destination, "Couldn't open source. "+err.Error()+suffix, 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
+			_, status, msg := ErrorEx{err}.ErrorCodeAndString()
+			jptm.SetErrorMessage(msg)
+			jptm.SetErrorCode(int32(status))
 			jptm.ReportTransferDone()
 			return
 		}
@@ -301,12 +313,16 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 		if err != nil {
 			jptm.LogSendError(info.Source, info.Destination, "Couldn't get source's last modified time-"+err.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
+			_, status, msg := ErrorEx{err}.ErrorCodeAndString()
+			jptm.SetErrorMessage(msg)
+			jptm.SetErrorCode(int32(status))
 			jptm.ReportTransferDone()
 			return
 		}
 		if !lmt.Equal(jptm.LastModifiedTime()) {
 			jptm.LogSendError(info.Source, info.Destination, "File modified since transfer scheduled", 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.SetErrorMessage("File modified since transfer scheduled")
 			jptm.ReportTransferDone()
 			return
 		}
@@ -321,6 +337,9 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
+		_, status, msg := ErrorEx{err}.ErrorCodeAndString()
+		jptm.SetErrorMessage(msg)
+		jptm.SetErrorCode(int32(status))
 		jptm.ReportTransferDone()
 		return
 	}
