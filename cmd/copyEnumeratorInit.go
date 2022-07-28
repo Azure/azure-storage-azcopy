@@ -247,8 +247,6 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", bucketName, err), pipeline.LogWarning)
 					seenFailedContainers[cName] = true
 				}
-			}
-
 
 				if err != nil {
 					if _, ok := seenFailedContainers[object.ContainerName]; !ok {
