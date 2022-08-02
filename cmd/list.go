@@ -227,7 +227,8 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		true, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {},
 		nil, false, pipeline.LogNone, common.CpkOptions{}, nil, /* errorChannel */
 		nil /* folderIndexer */, nil, /* tqueue*/
-		false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{} /* lastSyncTime */, common.CFDModeFlags.NotDefined(), false /* metaDataOnlySync */)
+		false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, /* lastSyncTime */
+		common.CFDModeFlags.NotDefined(), false /* metaDataOnlySync */, nil /* scannerLogger */)
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())

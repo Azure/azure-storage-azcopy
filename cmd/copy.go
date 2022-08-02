@@ -656,8 +656,8 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		cooked.preserveSMBInfo = false
 	}
 
-	cooked.preservePOSIXProperties = raw.preservePOSIXProperties
-	if cooked.preservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.FromTo) {
+	cooked.PreservePOSIXProperties = raw.preservePOSIXProperties
+	if cooked.PreservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.FromTo) {
 		return cooked, fmt.Errorf("in order to use --preserve-posix-properties, both the source and destination must be POSIX-aware (Linux->Blob, Blob->Linux, Blob->Blob)")
 	}
 
@@ -1163,7 +1163,7 @@ type CookedCopyCmdArgs struct {
 	// Whether the user wants to preserve the SMB properties ...
 	preserveSMBInfo bool
 	// Whether the user wants to preserve the POSIX properties ...
-	preservePOSIXProperties bool
+	PreservePOSIXProperties bool
 
 	// Whether to enable Windows special privileges
 	backupMode bool

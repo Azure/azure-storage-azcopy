@@ -326,7 +326,8 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 	credential *common.CredentialInfo, followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties,
 	includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string,
 	s2sPreserveBlobTags bool, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo,
-	indexerMap *folderIndexer, tqueue chan interface{}, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32, lastSyncTime time.Time, cfdMode common.CFDMode, metaDataOnlySync bool) (ResourceTraverser, error) {
+	indexerMap *folderIndexer, tqueue chan interface{}, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32, lastSyncTime time.Time, cfdMode common.CFDMode,
+	metaDataOnlySync bool, scannerLogger common.ILoggerResetable) (ResourceTraverser, error) {
 	var output ResourceTraverser
 	var p *pipeline.Pipeline
 
@@ -412,10 +413,10 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		} else {
 			if ctx != nil {
 				output = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter, errorChannel, indexerMap, tqueue,
-					isSource, isSync, maxObjectIndexerSizeInGB, lastSyncTime, cfdMode, metaDataOnlySync)
+					isSource, isSync, maxObjectIndexerSizeInGB, lastSyncTime, cfdMode, metaDataOnlySync, scannerLogger)
 			} else {
 				output = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter, errorChannel, indexerMap, tqueue,
-					isSource, isSync, maxObjectIndexerSizeInGB, lastSyncTime, cfdMode, metaDataOnlySync)
+					isSource, isSync, maxObjectIndexerSizeInGB, lastSyncTime, cfdMode, metaDataOnlySync, scannerLogger)
 			}
 		}
 	case common.ELocation.Benchmark():
@@ -451,7 +452,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		} else {
 			// TODO: Need to add error channel in case of blob traverse.
 			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted,
-				includeSnapshot, includeVersion, indexerMap, tqueue, isSource, isSync, maxObjectIndexerSizeInGB, lastSyncTime, cfdMode, metaDataOnlySync)
+				includeSnapshot, includeVersion, indexerMap, tqueue, isSource, isSync, maxObjectIndexerSizeInGB, lastSyncTime, cfdMode, metaDataOnlySync, scannerLogger)
 
 		}
 	case common.ELocation.File():

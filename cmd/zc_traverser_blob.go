@@ -88,6 +88,9 @@ type blobTraverser struct {
 
 	// see cookedSyncCmdArgs.metaDataOnlySync for details.
 	metaDataOnlySync bool
+
+	// scannerLogger to log scanning error.
+	scannerLogger common.ILoggerResetable
 }
 
 func (t *blobTraverser) IsDirectory(isSource bool) bool {
@@ -194,7 +197,10 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			panic("isBlob should never be set if getting properties is an error")
 		}
 
-		if azcopyScanningLogger != nil {
+		err := fmt.Errorf("Detected the root[%v] as a blob.", t.rawURL)
+		if t.scannerLogger != nil {
+			t.scannerLogger.Log(pipeline.LogDebug, err.Error())
+		} else if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(pipeline.LogDebug, "Detected the root as a blob.")
 		}
 
@@ -224,7 +230,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
 
-		err := processIfPassedFilters(filters, storedObject, processor)
+		err = processIfPassedFilters(filters, storedObject, processor)
 		_, err = getProcessingError(err)
 
 		// short-circuit if we don't have anything else to scan and permanent delete is not on
@@ -695,7 +701,7 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 
 func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool,
 	cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool, indexerMap *folderIndexer, tqueue chan interface{}, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32,
-	lastSyncTime time.Time, cfdMode common.CFDMode, metaDataOnlySync bool) (t *blobTraverser) {
+	lastSyncTime time.Time, cfdMode common.CFDMode, metaDataOnlySync bool, scannerLogger common.ILoggerResetable) (t *blobTraverser) {
 	t = &blobTraverser{
 		rawURL:                      rawURL,
 		p:                           p,
@@ -719,6 +725,7 @@ func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 		cfdMode:                  cfdMode,
 		maxObjectIndexerSizeInGB: maxObjectIndexerSizeInGB,
 		metaDataOnlySync:         metaDataOnlySync,
+		scannerLogger:            scannerLogger,
 	}
 
 	disableHierarchicalScanning := strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))
