@@ -412,7 +412,6 @@ func (b *remoteResourceDeleter) deleteFolder(dirPath string) error {
 		}
 		marker = resp.NextMarker
 	}
-
 	return nil
 }
 

@@ -670,7 +670,7 @@ func newSyncEnumerator(primaryTraverser, secondaryTraverser ResourceTraverser, i
 	}
 }
 
-func (e *syncEnumerator) enumerate() (err error) {
+func (e *syncEnumerator) Enumerate() (err error) {
 	/*
 	 * This is the new streaming directory-at-a-time sync processor. It starts the source and target traversers simultaneously where source
 	 * traverser feeds the target traverser with directories to process and target traverser processes one directory at a time looking for

@@ -38,7 +38,7 @@ import (
 
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
 
-func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *syncEnumerator, err error) {
+func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *syncEnumerator, err error) {
 
 	srcCredInfo, srcIsPublic, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true, cca.cpkOptions)
 
@@ -94,6 +94,11 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// set up the map, so that the source/destination can be compared
 	objectIndexerMap := newfolderIndexer()
 
+	sourceScannerLogger := common.NewJobLogger(cca.jobID, AzcopyLogVerbosity, AzcopyAppPathFolder, "-source-scanning")
+	sourceScannerLogger.OpenLog()
+
+	destinationScannerLogger := common.NewJobLogger(cca.jobID, AzcopyLogVerbosity, AzcopyAppPathFolder, "-destination-scanning")
+	destinationScannerLogger.OpenLog()
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// TODO: Consider passing an errorChannel so that enumeration errors during sync can be conveyed to the caller.
 	// GetProperties is enabled by default as sync supports both upload and download.
@@ -104,7 +109,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			}
 		}, nil, cca.s2sPreserveBlobTags, AzcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, nil /* errorChannel */, objectIndexerMap, tqueue, true /* isSource */, true, /* isSync */
-		cca.maxObjectIndexerMapSizeInGB, time.Time{} /* lastSyncTime (not used by source traverser) */, cca.cfdMode, cca.metaDataOnlySync, nil /* scannerLogger */)
+		cca.maxObjectIndexerMapSizeInGB, time.Time{} /* lastSyncTime (not used by source traverser) */, cca.cfdMode, cca.metaDataOnlySync, sourceScannerLogger /* scannerLogger */)
 
 	if err != nil {
 		return nil, err
@@ -127,7 +132,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		}
 	}, nil, cca.s2sPreserveBlobTags, AzcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, nil /* errorChannel */, objectIndexerMap /*folderIndexerMap */, tqueue, false, /* isSource */
 		true /* isSync */, cca.maxObjectIndexerMapSizeInGB /* maxObjectIndexerSizeInGB (not used by destination traverse) */, cca.lastSyncTime /* lastSyncTime */, cca.cfdMode, cca.metaDataOnlySync,
-		nil /*scannerLogger */)
+		destinationScannerLogger /*scannerLogger */)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +231,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 				return err
 			}
 
-			quitIfInSync(jobInitiated, cca.getDeletionCount() > 0, cca)
+			quitIfInSync(jobInitiated, cca.GetDeletionCount() > 0, cca)
 			cca.setScanningComplete()
 			return nil
 		}
@@ -268,7 +273,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 				return err
 			}
 
-			quitIfInSync(jobInitiated, cca.getDeletionCount() > 0, cca)
+			quitIfInSync(jobInitiated, cca.GetDeletionCount() > 0, cca)
 			cca.setScanningComplete()
 			return nil
 		}
