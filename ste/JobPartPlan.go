@@ -13,7 +13,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 16
+const DataSchemaVersion common.Version = 17
 
 const (
 	CustomHeaderMaxBytes = 256
@@ -21,7 +21,7 @@ const (
 	BlobTagsMaxByte      = 4000
 )
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 type JobPartPlanMMF common.MMF
 
@@ -32,7 +32,7 @@ func (mmf *JobPartPlanMMF) Plan() *JobPartPlanHeader {
 }
 func (mmf *JobPartPlanMMF) Unmap() { (*common.MMF)(mmf).Unmap() }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // JobPartPlanHeader represents the header of Job Part's memory-mapped file
 type JobPartPlanHeader struct {
@@ -63,8 +63,9 @@ type JobPartPlanHeader struct {
 	DstBlobData            JobPartPlanDstBlob  // Additional data for blob destinations
 	DstLocalData           JobPartPlanDstLocal // Additional data for local destinations
 
-	PreservePermissions common.PreservePermissionsOption
-	PreserveSMBInfo     bool
+	PreservePermissions     common.PreservePermissionsOption
+	PreserveSMBInfo         bool
+	PreservePOSIXProperties bool
 	// S2SGetPropertiesInBackend represents whether to enable get S3 objects' or Azure files' properties during s2s copy in backend.
 	S2SGetPropertiesInBackend bool
 	// S2SSourceChangeValidation represents whether user wants to check if source has changed after enumerating.
@@ -80,10 +81,16 @@ type JobPartPlanHeader struct {
 	// jobStatus_doNotUse represents the current status of JobPartPlan
 	// jobStatus_doNotUse is a private member whose value can be accessed by Status and SetJobStatus
 	// jobStatus_doNotUse should not be directly accessed anywhere except by the Status and SetJobStatus
-	atomicJobStatus common.JobStatus
+	atomicJobStatus  common.JobStatus
+	atomicPartStatus common.JobStatus
 
 	// For delete operation specify what to do with snapshots
 	DeleteSnapshotsOption common.DeleteSnapshotsOption
+
+	// Determine what to do with soft-deleted snapshots
+	PermanentDeleteOption common.PermanentDeleteOption
+
+	RehydratePriority common.RehydratePriorityType
 }
 
 // Status returns the job status stored in JobPartPlanHeader in thread-safe manner
@@ -94,6 +101,14 @@ func (jpph *JobPartPlanHeader) JobStatus() common.JobStatus {
 // SetJobStatus sets the job status in JobPartPlanHeader in thread-safe manner
 func (jpph *JobPartPlanHeader) SetJobStatus(newJobStatus common.JobStatus) {
 	jpph.atomicJobStatus.AtomicStore(newJobStatus)
+}
+
+func (jpph *JobPartPlanHeader) JobPartStatus() common.JobStatus {
+	return jpph.atomicPartStatus.AtomicLoad()
+}
+
+func (jpph *JobPartPlanHeader) SetJobPartStatus(newJobStatus common.JobStatus) {
+	jpph.atomicPartStatus.AtomicStore(newJobStatus)
 }
 
 // Transfer api gives memory map JobPartPlanTransfer header for given index
@@ -183,7 +198,7 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
 // TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder
 // TODO: Refactor return type to an object
 func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType, blobTier azblob.AccessTierType,
-	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType, blobVersionID string, blobTags common.BlobTags) {
+	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType, blobVersionID string, blobSnapshotID string, blobTags common.BlobTags) {
 	var err error
 	t := jpph.Transfer(transferIndex)
 
@@ -240,6 +255,10 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 		blobVersionID = jpph.getString(offset, t.SrcBlobVersionIDLength)
 		offset += int64(t.SrcBlobVersionIDLength)
 	}
+	if t.SrcBlobSnapshotIDLength != 0 {
+		blobSnapshotID = jpph.getString(offset, t.SrcBlobSnapshotIDLength)
+		offset += int64(t.SrcBlobSnapshotIDLength)
+	}
 	if t.SrcBlobTagsLength != 0 {
 		blobTagsString := jpph.getString(offset, t.SrcBlobTagsLength)
 		blobTags = common.ToCommonBlobTagsMap(blobTagsString)
@@ -248,7 +267,7 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 	return
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // JobPartPlanDstBlob holds additional settings required when the destination is a blob
 type JobPartPlanDstBlob struct {
@@ -308,9 +327,11 @@ type JobPartPlanDstBlob struct {
 
 	// Specifies the maximum size of block which determines the number of chunks and chunk size of a transfer
 	BlockSize int64
+
+	SetPropertiesFlags common.SetPropertiesFlags
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // jobPartPlanDstLocal holds additional settings required when the destination is a local file
 type JobPartPlanDstLocal struct {
@@ -323,7 +344,7 @@ type JobPartPlanDstLocal struct {
 	MD5VerificationOption common.HashValidationOption
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // JobPartPlanTransfer represent the header of Job Part's Transfer in Memory Map File
 type JobPartPlanTransfer struct {
@@ -336,7 +357,7 @@ type JobPartPlanTransfer struct {
 	// DstLength represents the actual length of destination string for specific transfer
 	DstLength int16
 	// ChunkCount represents the num of chunks a transfer is split into
-	//ChunkCount uint16	// TODO: Remove this, we need to determine it at runtime
+	// ChunkCount uint16	// TODO: Remove this, we need to determine it at runtime
 	// EntityType indicates whether this is a file or a folder
 	// We use a dedicated field for this because the alternative (of doing something fancy the names) was too complex and error-prone
 	EntityType common.EntityType
@@ -359,6 +380,7 @@ type JobPartPlanTransfer struct {
 	SrcBlobTypeLength           int16
 	SrcBlobTierLength           int16
 	SrcBlobVersionIDLength      int16
+	SrcBlobSnapshotIDLength     int16
 	SrcBlobTagsLength           int16
 
 	// Any fields below this comment are NOT constants; they may change over as the transfer is processed.

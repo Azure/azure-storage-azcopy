@@ -50,7 +50,7 @@ const (
 
 	//  this is the perm that AzCopy has used throughout its preview.  So, while we considered relaxing it to 0666
 	//  we decided that the best option was to leave it as is, and only relax it if user feedback so requires.
-	DEFAULT_FILE_PERM = 0644
+	DEFAULT_FILE_PERM = 0644 // the os package will handle base-10 for us.
 
 	// Since we haven't updated the Go SDKs to handle CPK just yet, we need to detect CPK related errors
 	// and inform the user that we don't support CPK yet.
@@ -72,7 +72,7 @@ func NewJobID() JobID {
 	return JobID(NewUUID())
 }
 
-//var EmptyJobId JobID = JobID{}
+// var EmptyJobId JobID = JobID{}
 func (j JobID) IsEmpty() bool {
 	return j == JobID{}
 }
@@ -143,6 +143,43 @@ func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() azblob.DeleteSnapsh
 	}
 
 	return azblob.DeleteSnapshotsOptionType(strings.ToLower(d.String()))
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+var EPermanentDeleteOption = PermanentDeleteOption(3) // Default to "None"
+
+type PermanentDeleteOption uint8
+
+func (PermanentDeleteOption) Snapshots() PermanentDeleteOption { return PermanentDeleteOption(0) }
+func (PermanentDeleteOption) Versions() PermanentDeleteOption  { return PermanentDeleteOption(1) }
+func (PermanentDeleteOption) SnapshotsAndVersions() PermanentDeleteOption {
+	return PermanentDeleteOption(2)
+}
+func (PermanentDeleteOption) None() PermanentDeleteOption { return PermanentDeleteOption(3) }
+
+func (p *PermanentDeleteOption) Parse(s string) error {
+	// allow empty to mean "None"
+	if s == "" {
+		*p = EPermanentDeleteOption.None()
+		return nil
+	}
+
+	val, err := enum.Parse(reflect.TypeOf(p), s, true)
+	if err == nil {
+		*p = val.(PermanentDeleteOption)
+	}
+	return err
+}
+
+func (p PermanentDeleteOption) String() string {
+	return enum.StringInt(p, reflect.TypeOf(p))
+}
+
+func (p PermanentDeleteOption) ToPermanentDeleteOptionType() azblob.BlobDeleteType {
+	if p == EPermanentDeleteOption.None() {
+		return azblob.BlobDeleteNone
+	}
+	return azblob.BlobDeletePermanent
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -414,6 +451,7 @@ func (Location) BlobFS() Location    { return Location(5) }
 func (Location) S3() Location        { return Location(6) }
 func (Location) Benchmark() Location { return Location(7) }
 func (Location) GCP() Location       { return Location(8) }
+func (Location) None() Location      { return Location(9) } // None is used in case we're transferring properties
 
 func (l Location) String() string {
 	return enum.StringInt(l, reflect.TypeOf(l))
@@ -442,7 +480,7 @@ func (l Location) IsRemote() bool {
 	switch l {
 	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3(), ELocation.GCP():
 		return true
-	case ELocation.Local(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
+	case ELocation.Local(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown(), ELocation.None():
 		return false
 	default:
 		panic("unexpected location, please specify if it is remote")
@@ -463,7 +501,7 @@ func (l Location) IsFolderAware() bool {
 	switch l {
 	case ELocation.BlobFS(), ELocation.File(), ELocation.Local():
 		return true
-	case ELocation.Blob(), ELocation.S3(), ELocation.GCP(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
+	case ELocation.Blob(), ELocation.S3(), ELocation.GCP(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown(), ELocation.None():
 		return false
 	default:
 		panic("unexpected location, please specify if it is folder-aware")
@@ -501,6 +539,9 @@ func (FromTo) BlobFile() FromTo    { return FromTo(fromToValue(ELocation.Blob(),
 func (FromTo) FileFile() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.File())) }
 func (FromTo) S3Blob() FromTo      { return FromTo(fromToValue(ELocation.S3(), ELocation.Blob())) }
 func (FromTo) GCPBlob() FromTo     { return FromTo(fromToValue(ELocation.GCP(), ELocation.Blob())) }
+func (FromTo) BlobNone() FromTo    { return fromToValue(ELocation.Blob(), ELocation.None()) }
+func (FromTo) BlobFSNone() FromTo  { return fromToValue(ELocation.BlobFS(), ELocation.None()) }
+func (FromTo) FileNone() FromTo    { return fromToValue(ELocation.File(), ELocation.None()) }
 
 // todo: to we really want these?  Starts to look like a bit of a combinatorial explosion
 func (FromTo) BenchmarkBlob() FromTo {
@@ -559,6 +600,10 @@ func (ft *FromTo) IsUpload() bool {
 
 func (ft *FromTo) AreBothFolderAware() bool {
 	return ft.From().IsFolderAware() && ft.To().IsFolderAware()
+}
+
+func (ft *FromTo) IsPropertyOnlyTransfer() bool {
+	return *ft == EFromTo.BlobNone() || *ft == EFromTo.BlobFSNone() || *ft == EFromTo.FileNone()
 }
 
 // TODO: deletes are not covered by the above Is* routines
@@ -787,11 +832,16 @@ type CredentialType uint8
 
 func (CredentialType) Unknown() CredentialType              { return CredentialType(0) }
 func (CredentialType) OAuthToken() CredentialType           { return CredentialType(1) } // For Azure, OAuth
+func (CredentialType) MDOAuthToken() CredentialType         { return CredentialType(7) } // For Azure MD impexp
 func (CredentialType) Anonymous() CredentialType            { return CredentialType(2) } // For Azure, SAS or public.
 func (CredentialType) SharedKey() CredentialType            { return CredentialType(3) } // For Azure, SharedKey
 func (CredentialType) S3AccessKey() CredentialType          { return CredentialType(4) } // For S3, AccessKeyID and SecretAccessKey
 func (CredentialType) GoogleAppCredentials() CredentialType { return CredentialType(5) }
 func (CredentialType) S3PublicBucket() CredentialType       { return CredentialType(6) } // For S3, Anon Credentials & public bucket
+
+func (ct CredentialType) IsAzureOAuth() bool {
+	return ct == ct.OAuthToken() || ct == ct.MDOAuthToken()
+}
 
 func (ct CredentialType) String() string {
 	return enum.StringInt(ct, reflect.TypeOf(ct))
@@ -802,6 +852,28 @@ func (ct *CredentialType) Parse(s string) error {
 		*ct = val.(CredentialType)
 	}
 	return err
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var EOutputVerbosity = OutputVerbosity(0)
+
+type OutputVerbosity uint8
+
+func (OutputVerbosity) Default() OutputVerbosity   { return OutputVerbosity(0) }
+func (OutputVerbosity) Essential() OutputVerbosity { return OutputVerbosity(1) } // no progress, no info, no prompts. Print everything else
+func (OutputVerbosity) Quiet() OutputVerbosity     { return OutputVerbosity(2) } // nothing at all
+
+func (qm *OutputVerbosity) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(qm), s, true, true)
+	if err == nil {
+		*qm = val.(OutputVerbosity)
+	}
+	return err
+}
+
+func (qm OutputVerbosity) String() string {
+	return enum.StringInt(qm, reflect.TypeOf(qm))
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -918,7 +990,7 @@ type CopyTransfer struct {
 	Source           string
 	Destination      string
 	EntityType       EntityType
-	LastModifiedTime time.Time //represents the last modified time of source which ensures that source hasn't changed while transferring
+	LastModifiedTime time.Time // represents the last modified time of source which ensures that source hasn't changed while transferring
 	SourceSize       int64     // size of the source entity in bytes.
 
 	// Properties for service to service copy (some also used in upload or download too)
@@ -936,12 +1008,26 @@ type CopyTransfer struct {
 	BlobVersionID string
 	// Blob index tags categorize data in your storage account utilizing key-value tag attributes
 	BlobTags BlobTags
+
+	BlobSnapshotID string
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Metadata used in AzCopy.
+const MetadataAndBlobTagsClearFlag = "clear" // clear flag used for metadata and tags
+
 type Metadata map[string]string
+
+func (m Metadata) Clone() Metadata {
+	out := make(Metadata)
+
+	for k, v := range m {
+		out[k] = v
+	}
+
+	return out
+}
 
 // ToAzBlobMetadata converts metadata to azblob's metadata.
 func (m Metadata) ToAzBlobMetadata() azblob.Metadata {
@@ -984,6 +1070,21 @@ func UnMarshalToCommonMetadata(metadataString string) (Metadata, error) {
 	}
 
 	return result, nil
+}
+
+func StringToMetadata(metadataString string) (Metadata, error) {
+	metadataMap := Metadata{}
+	if len(metadataString) > 0 {
+		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
+			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+			// what if '=' not present?
+			if len(kv) != 2 {
+				return metadataMap, fmt.Errorf("invalid metadata string passed")
+			}
+			metadataMap[kv[0]] = kv[1]
+		}
+	}
+	return metadataMap, nil
 }
 
 // isValidMetadataKey checks if the given string is a valid metadata key for Azure.
@@ -1046,9 +1147,9 @@ func (bt BlobTags) ToAzBlobTagsMap() azblob.BlobTagsMap {
 }
 
 //// FromAzBlobTagsMapToCommonBlobTags converts azblob's BlobTagsMap to common BlobTags
-//func FromAzBlobTagsMapToCommonBlobTags(azbt azblob.BlobTagsMap) BlobTags {
+// func FromAzBlobTagsMapToCommonBlobTags(azbt azblob.BlobTagsMap) BlobTags {
 //	return BlobTags(azbt)
-//}
+// }
 
 func (bt BlobTags) ToString() string {
 	lst := make([]string, 0)
@@ -1059,8 +1160,11 @@ func (bt BlobTags) ToString() string {
 }
 
 func ToCommonBlobTagsMap(blobTagsString string) BlobTags {
-	if blobTagsString == "" {
+	if blobTagsString == "" { // default empty value set by coder
 		return nil
+	}
+	if strings.EqualFold(blobTagsString, MetadataAndBlobTagsClearFlag) { // "clear" value given by user as input (to signify clearing of tags in set-props cmd)
+		return BlobTags{}
 	}
 
 	blobTagsMap := BlobTags{}
@@ -1260,7 +1364,7 @@ const SizePerFileParam = "size-per-file"
 const FileCountParam = "file-count"
 const FileCountDefault = 100
 
-//BenchMarkMode enumerates values for Azcopy bench command. Valid values Upload or Download
+// BenchMarkMode enumerates values for Azcopy bench command. Valid values Upload or Download
 type BenchMarkMode uint8
 
 var EBenchMarkMode = BenchMarkMode(0)
@@ -1455,4 +1559,58 @@ func GetClientProvidedKey(options CpkOptions) azblob.ClientProvidedKeyOptions {
 	_cpkInfo := GetCpkInfo(options.CpkInfo)
 	_cpkScopeInfo := GetCpkScopeInfo(options.CpkScopeInfo)
 	return ToClientProvidedKeyOptions(_cpkInfo, _cpkScopeInfo)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+type SetPropertiesFlags uint32 // [0000000000...32 times]
+
+var ESetPropertiesFlags = SetPropertiesFlags(0)
+
+// functions to set values
+func (SetPropertiesFlags) None() SetPropertiesFlags        { return SetPropertiesFlags(0) }
+func (SetPropertiesFlags) SetTier() SetPropertiesFlags     { return SetPropertiesFlags(1) }
+func (SetPropertiesFlags) SetMetadata() SetPropertiesFlags { return SetPropertiesFlags(2) }
+func (SetPropertiesFlags) SetBlobTags() SetPropertiesFlags { return SetPropertiesFlags(4) }
+
+// functions to get values (to be used in sde)
+// If Y is inside X then X & Y == Y
+func (op *SetPropertiesFlags) ShouldTransferTier() bool {
+	return (*op)&ESetPropertiesFlags.SetTier() == ESetPropertiesFlags.SetTier()
+}
+func (op *SetPropertiesFlags) ShouldTransferMetaData() bool {
+	return (*op)&ESetPropertiesFlags.SetMetadata() == ESetPropertiesFlags.SetMetadata()
+}
+func (op *SetPropertiesFlags) ShouldTransferBlobTags() bool {
+	return (*op)&ESetPropertiesFlags.SetBlobTags() == ESetPropertiesFlags.SetBlobTags()
+}
+
+////////////////////////////////////////////////////////////////////////////////
+type RehydratePriorityType uint8
+
+var ERehydratePriorityType = RehydratePriorityType(0) // setting default as none
+
+func (RehydratePriorityType) None() RehydratePriorityType     { return RehydratePriorityType(0) }
+func (RehydratePriorityType) Standard() RehydratePriorityType { return RehydratePriorityType(1) }
+func (RehydratePriorityType) High() RehydratePriorityType     { return RehydratePriorityType(2) }
+
+func (rpt *RehydratePriorityType) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(rpt), s, true, true)
+	if err == nil {
+		*rpt = val.(RehydratePriorityType)
+	}
+	return err
+}
+func (rpt RehydratePriorityType) String() string {
+	return enum.StringInt(rpt, reflect.TypeOf(rpt))
+}
+
+func (rpt RehydratePriorityType) ToRehydratePriorityType() azblob.RehydratePriorityType {
+	switch rpt {
+	case ERehydratePriorityType.None(), ERehydratePriorityType.Standard():
+		return azblob.RehydratePriorityStandard
+	case ERehydratePriorityType.High():
+		return azblob.RehydratePriorityHigh
+	default:
+		return azblob.RehydratePriorityStandard
+	}
 }

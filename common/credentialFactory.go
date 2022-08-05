@@ -21,14 +21,16 @@
 package common
 
 import (
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"math"
 	"strings"
 	"sync"
 	"time"
+
+	gcpUtils "cloud.google.com/go/storage"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -93,9 +95,13 @@ func (o CredentialOpOptions) cancel() {
 func CreateBlobCredential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) azblob.Credential {
 	credential := azblob.NewAnonymousCredential()
 
-	if credInfo.CredentialType == ECredentialType.OAuthToken() {
+	if credInfo.CredentialType.IsAzureOAuth() {
 		if credInfo.OAuthTokenInfo.IsEmpty() {
 			options.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
+		}
+
+		if credInfo.CredentialType == ECredentialType.MDOAuthToken() {
+			credInfo.OAuthTokenInfo.Resource = MDResource // token will instantly refresh with this
 		}
 
 		// Create TokenCredential with refresher.
@@ -237,7 +243,7 @@ func refreshBlobFSToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCred
 // ==============================================================================================
 // S3 credential related factory methods
 // ==============================================================================================
-func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions) (*minio.Client, error) {
+func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions, logger ILogger) (*minio.Client, error) {
 	if credInfo.CredentialType == ECredentialType.S3PublicBucket() {
 		cred := credentials.NewStatic("", "", "", credentials.SignatureAnonymous)
 		return minio.NewWithOptions(credInfo.S3CredentialInfo.Endpoint, &minio.Options{Creds: cred, Secure: true, Region: credInfo.S3CredentialInfo.Region})
@@ -247,8 +253,12 @@ func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option Credent
 	if err != nil {
 		return nil, err
 	}
+	s3Client, err := minio.NewWithCredentials(credInfo.S3CredentialInfo.Endpoint, credential, true, credInfo.S3CredentialInfo.Region)
 
-	return minio.NewWithCredentials(credInfo.S3CredentialInfo.Endpoint, credential, true, credInfo.S3CredentialInfo.Region)
+	if logger != nil {
+		s3Client.TraceOn(NewS3HTTPTraceLogger(logger, pipeline.LogDebug))
+	}
+	return s3Client, err
 }
 
 type S3ClientFactory struct {
@@ -264,7 +274,7 @@ func NewS3ClientFactory() S3ClientFactory {
 }
 
 // GetS3Client gets S3 client from pool, or create a new S3 client if no client created for specific credInfo.
-func (f *S3ClientFactory) GetS3Client(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions) (*minio.Client, error) {
+func (f *S3ClientFactory) GetS3Client(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions, logger ILogger) (*minio.Client, error) {
 	f.lock.RLock()
 	s3Client, ok := f.s3Clients[credInfo]
 	f.lock.RUnlock()
@@ -276,7 +286,7 @@ func (f *S3ClientFactory) GetS3Client(ctx context.Context, credInfo CredentialIn
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	if s3Client, ok := f.s3Clients[credInfo]; !ok {
-		newS3Client, err := CreateS3Client(ctx, credInfo, option)
+		newS3Client, err := CreateS3Client(ctx, credInfo, option, logger)
 		if err != nil {
 			return nil, err
 		}

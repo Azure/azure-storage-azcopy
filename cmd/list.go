@@ -24,9 +24,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	pipeline2 "github.com/Azure/azure-pipeline-go/pipeline"
 	"strconv"
 	"strings"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/spf13/cobra"
 
@@ -56,12 +57,13 @@ const (
 	leaseState       validProperty = "LeaseState"
 	leaseDuration    validProperty = "LeaseDuration"
 	leaseStatus      validProperty = "LeaseStatus"
+	archiveStatus    validProperty = "ArchiveStatus"
 )
 
 // validProperties returns an array of possible values for the validProperty const type.
 func validProperties() []validProperty {
 	return []validProperty{lastModifiedTime, versionId, blobType, blobAccessTier,
-		contentType, contentEncoding, leaseState, leaseDuration, leaseStatus}
+		contentType, contentEncoding, leaseState, leaseDuration, leaseStatus, archiveStatus}
 }
 
 func (raw *rawListCmdArgs) parseProperties(rawProperties string) []validProperty {
@@ -181,6 +183,8 @@ func (cooked cookedListCmdArgs) processProperties(object StoredObject) string {
 			builder.WriteString(propertyStr + ": " + string(object.leaseStatus) + "; ")
 		case leaseDuration:
 			builder.WriteString(propertyStr + ": " + string(object.leaseDuration) + "; ")
+		case archiveStatus:
+			builder.WriteString(propertyStr + ": " + string(object.archiveStatus) + "; ")
 		}
 	}
 	return builder.String()
@@ -209,7 +213,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
 	} else if cooked.location == cooked.location.File() && source.SAS == "" {
 		return errors.New("azure files requires a SAS token for authentication")
-	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+	} else if credentialInfo.CredentialType.IsAzureOAuth() {
 		uotm := GetUserOAuthTokenManagerInstance()
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
@@ -219,8 +223,8 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	}
 
 	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, nil, nil,
-		true, false, false, func(common.EntityType) {},
-		nil, false, pipeline2.LogNone, common.CpkOptions{})
+		true, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {},
+		nil, false, pipeline.LogNone, common.CpkOptions{}, nil /* errorChannel */)
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())

@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"net/url"
 	"os"
 	"runtime"
@@ -39,18 +40,27 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var azcopyAppPathFolder string
+var AzcopyAppPathFolder string
 var azcopyLogPathFolder string
-var azcopyJobPlanFolder string
 var azcopyMaxFileAndSocketHandles int
 var outputFormatRaw string
+var outputVerbosityRaw string
+var logVerbosityRaw string
 var cancelFromStdin bool
 var azcopyOutputFormat common.OutputFormat
+var azcopyOutputVerbosity common.OutputVerbosity
+var azcopyLogVerbosity common.LogLevel
+var loggerInfo jobLoggerInfo
 var cmdLineCapMegaBitsPerSecond float64
 var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
 var azcopyScanningLogger common.ILoggerResetable
 var azcopyCurrentJobID common.JobID
+
+type jobLoggerInfo struct {
+	jobID         common.JobID
+	logFileFolder string
+}
 
 // It's not pretty that this one is read directly by credential util.
 // But doing otherwise required us passing it around in many places, even though really
@@ -87,6 +97,19 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
+		err = azcopyOutputVerbosity.Parse(outputVerbosityRaw)
+		glcm.SetOutputVerbosity(azcopyOutputVerbosity)
+		if err != nil {
+			return err
+		}
+
+		err = azcopyLogVerbosity.Parse(logVerbosityRaw)
+		if err != nil {
+			return err
+		}
+		common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, azcopyLogVerbosity, loggerInfo.logFileFolder, "")
+		common.AzcopyCurrentJobLogger.OpenLog()
+
 		glcm.SetForceLogging()
 
 		// warn Windows users re quoting (since our docs all use single quotes, but CMD needs double)
@@ -111,11 +134,11 @@ var rootCmd = &cobra.Command{
 
 		// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
 		concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles, preferToAutoTuneGRs)
-		err = ste.MainSTE(concurrencySettings, float64(cmdLineCapMegaBitsPerSecond), azcopyJobPlanFolder, azcopyLogPathFolder, providePerformanceAdvice)
+		err = jobsAdmin.MainSTE(concurrencySettings, float64(cmdLineCapMegaBitsPerSecond), common.AzcopyJobPlanFolder, azcopyLogPathFolder, providePerformanceAdvice)
 		if err != nil {
 			return err
 		}
-	        EnumerationParallelism = concurrencySettings.EnumerationPoolSize.Value
+		EnumerationParallelism = concurrencySettings.EnumerationPoolSize.Value
 		EnumerationParallelStatFiles = concurrencySettings.ParallelStatFiles.Value
 
 		// Log a clear ISO 8601-formatted start time, so it can be read and use in the --include-after parameter
@@ -126,7 +149,7 @@ var rootCmd = &cobra.Command{
 		startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
 			common.IncludeBeforeFlagName, IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
 			common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
-		ste.JobsAdmin.LogToJobLog(startTimeMessage, pipeline.LogInfo)
+		jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, pipeline.LogInfo)
 
 		// spawn a routine to fetch and compare the local application's version against the latest version available
 		// if there's a newer version that can be used, then write the suggestion to stderr
@@ -155,12 +178,13 @@ var glcmSwapOnce = &sync.Once{}
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
-func Execute(azsAppPathFolder, logPathFolder string, jobPlanFolder string, maxFileAndSocketHandles int) {
-	azcopyAppPathFolder = azsAppPathFolder
+
+func Execute(logPathFolder, jobPlanFolder string, maxFileAndSocketHandles int, jobID common.JobID) {
 	azcopyLogPathFolder = logPathFolder
-	azcopyJobPlanFolder = jobPlanFolder
+	common.AzcopyJobPlanFolder = jobPlanFolder
 	azcopyMaxFileAndSocketHandles = maxFileAndSocketHandles
-	azcopyCurrentJobID = common.NewJobID()
+	azcopyCurrentJobID = jobID
+	loggerInfo = jobLoggerInfo{jobID, logPathFolder}
 
 	if err := rootCmd.Execute(); err != nil {
 		glcm.Error(err.Error())
@@ -183,6 +207,8 @@ func init() {
 
 	rootCmd.PersistentFlags().Float64Var(&cmdLineCapMegaBitsPerSecond, "cap-mbps", 0, "Caps the transfer rate, in megabits per second. Moment-by-moment throughput might vary slightly from the cap. If this option is set to zero, or it is omitted, the throughput isn't capped.")
 	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text", "Format of the command's output. The choices include: text, json. The default value is 'text'.")
+	rootCmd.PersistentFlags().StringVar(&outputVerbosityRaw, "output-level", "default", "Define the output verbosity. Available levels: essential, quiet.")
+	rootCmd.PersistentFlags().StringVar(&logVerbosityRaw, "log-level", "INFO", "Define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default 'INFO').")
 
 	rootCmd.PersistentFlags().StringVar(&cmdLineExtraSuffixesAAD, trustedSuffixesNameAAD, "", "Specifies additional domain suffixes where Azure Active Directory login tokens may be sent.  The default is '"+
 		trustedSuffixesAAD+"'. Any listed here are added to the default. For security, you should only put Microsoft Azure domains here. Separate multiple entries with semi-colons.")

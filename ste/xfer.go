@@ -36,6 +36,7 @@ import (
 const UploadMaxTries = 20
 const UploadRetryDelay = time.Second * 1
 const UploadMaxRetryDelay = time.Second * 60
+
 var UploadTryTimeout = time.Minute * 15
 var ADLSFlushThreshold uint32 = 7500 // The # of blocks to flush at a time-- Implemented only for CI.
 
@@ -149,11 +150,13 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	}
 
 	// main computeJobXfer logic
-	switch {
-	case fromTo == common.EFromTo.BlobTrash():
+	switch fromTo {
+	case common.EFromTo.BlobTrash():
 		return DeleteBlob
-	case fromTo == common.EFromTo.FileTrash():
+	case common.EFromTo.FileTrash():
 		return DeleteFile
+	case common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone(), common.EFromTo.FileNone():
+		return SetProperties
 	default:
 		if fromTo.IsDownload() {
 			return parameterizeDownload(remoteToLocal, getDownloader(fromTo.From()))

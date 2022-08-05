@@ -195,7 +195,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", blockIDs))
 
 		// commit the blocks.
-		if !ValidateTier(jptm, s.destBlobTier, s.destBlockBlobURL.BlobURL, s.jptm.Context()) {
+		if !ValidateTier(jptm, s.destBlobTier, s.destBlockBlobURL.BlobURL, s.jptm.Context(), false) {
 			s.destBlobTier = azblob.DefaultAccessTier
 		}
 
@@ -211,7 +211,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 			destBlobTier = azblob.AccessTierNone
 		}
 
-		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, destBlobTier, blobTags, s.cpkToApply); err != nil {
+		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, destBlobTier, blobTags, s.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
 			jptm.FailActiveSend("Committing block list", err)
 			return
 		}
@@ -251,7 +251,7 @@ func (s *blockBlobSenderBase) Cleanup() {
 	if jptm.IsDeadInflight() && atomic.LoadInt32(&s.atomicChunksWritten) != 0 {
 		// there is a possibility that some uncommitted blocks will be there
 		// Delete the uncommitted blobs
-		deletionContext, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
+		deletionContext, cancelFn := context.WithTimeout(context.WithValue(context.Background(), ServiceAPIVersionOverride, DefaultServiceApiVersion), 30*time.Second)
 		defer cancelFn()
 		if jptm.WasCanceled() {
 			// If we cancelled, and the only blocks that exist are uncommitted, then clean them up.

@@ -70,21 +70,15 @@ const SigAzure = azbfs.SigAzure
 const SigXAmzForAws = azbfs.SigXAmzForAws
 
 func RedactSecretQueryParam(rawQuery, queryKeyNeedRedact string) (bool, string) {
-	rawQuery = strings.ToLower(rawQuery) // lowercase the string so we can look for ?[queryKeyNeedRedact] and &[queryKeyNeedRedact]=
-	sigFound := strings.Contains(rawQuery, "?"+queryKeyNeedRedact+"=")
-	if !sigFound {
-		sigFound = strings.Contains(rawQuery, "&"+queryKeyNeedRedact+"=")
-		if !sigFound {
-			return sigFound, rawQuery // [?|&][queryKeyNeedRedact]= not found; return same rawQuery passed in (no memory allocation)
-		}
-	}
-	// [?|&][queryKeyNeedRedact]= found, redact its value
 	values, _ := url.ParseQuery(rawQuery)
-	for name := range values {
-		if strings.EqualFold(name, queryKeyNeedRedact) {
-			values[name] = []string{"REDACTED"}
+	sigFound := false
+	for param := range values {
+		if strings.EqualFold(strings.ToLower(param), queryKeyNeedRedact) {
+			sigFound = true
+			values[param] = []string{"REDACTED"}
 		}
 	}
+
 	return sigFound, values.Encode()
 }
 

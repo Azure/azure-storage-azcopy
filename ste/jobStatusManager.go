@@ -26,60 +26,103 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-type jobPartCreatedMsg struct {
-	totalTransfers       uint32
-	isFinalPart          bool
-	totalBytesEnumerated uint64
-	fileTransfers        uint32
-	folderTransfer       uint32
+type JobPartCreatedMsg struct {
+	TotalTransfers       uint32
+	IsFinalPart          bool
+	TotalBytesEnumerated uint64
+	FileTransfers        uint32
+	FolderTransfer       uint32
 }
 
 type xferDoneMsg = common.TransferDetail
 type jobStatusManager struct {
-	js          common.ListJobSummaryResponse
-	respChan    chan common.ListJobSummaryResponse
-	listReq     chan bool
-	partCreated chan jobPartCreatedMsg
-	xferDone    chan xferDoneMsg
+	js              common.ListJobSummaryResponse
+	respChan        chan common.ListJobSummaryResponse
+	listReq         chan struct{}
+	partCreated     chan JobPartCreatedMsg
+	xferDone        chan xferDoneMsg
+	xferDoneDrained chan struct{} // To signal that all xferDone have been processed
+	statusMgrDone   chan struct{} // To signal statusManager has closed
 }
 
-var jstm jobStatusManager
+func (jm *jobMgr) waitToDrainXferDone() {
+	<-jm.jstm.xferDoneDrained
+}
+
+func (jm *jobMgr) statusMgrClosed() bool {
+	select {
+	case <-jm.jstm.statusMgrDone:
+		return true
+	default:
+		return false
+	}
+}
 
 /* These functions should not fail */
-func (jm *jobMgr) SendJobPartCreatedMsg(msg jobPartCreatedMsg) {
-	jstm.partCreated <- msg
+func (jm *jobMgr) SendJobPartCreatedMsg(msg JobPartCreatedMsg) {
+	jm.jstm.partCreated <- msg
+	if msg.IsFinalPart {
+		//Inform statusManager that this is all parts we've
+		close(jm.jstm.partCreated)
+	}
 }
 
 func (jm *jobMgr) SendXferDoneMsg(msg xferDoneMsg) {
-	jstm.xferDone <- msg
+	jm.jstm.xferDone <- msg
 }
 
 func (jm *jobMgr) ListJobSummary() common.ListJobSummaryResponse {
-	jstm.listReq <- true
-	return <-jstm.respChan
+	if jm.statusMgrClosed() {
+		return jm.jstm.js
+	}
+
+	select {
+	case jm.jstm.listReq <- struct{}{}:
+		return <-jm.jstm.respChan
+	case <-jm.jstm.statusMgrDone:
+		// StatusManager closed while we requested for an update.
+		// Return the last update. This is okay because there will
+		// be no further updates.
+		return jm.jstm.js
+	}
 }
 
 func (jm *jobMgr) ResurrectSummary(js common.ListJobSummaryResponse) {
-	jstm.js = js
+	jm.jstm.js = js
 }
 
 func (jm *jobMgr) handleStatusUpdateMessage() {
+	jstm := jm.jstm
 	js := &jstm.js
 	js.JobID = jm.jobID
 	js.CompleteJobOrdered = false
 	js.ErrorMsg = ""
+	allXferDoneHandled := false
 
 	for {
 		select {
-		case msg := <-jstm.partCreated:
-			js.CompleteJobOrdered = js.CompleteJobOrdered || msg.isFinalPart
-			js.TotalTransfers += msg.totalTransfers
-			js.FileTransfers += msg.fileTransfers
-			js.FolderPropertyTransfers += msg.folderTransfer
-			js.TotalBytesEnumerated += msg.totalBytesEnumerated
-			js.TotalBytesExpected += msg.totalBytesEnumerated
+		case msg, ok := <-jstm.partCreated:
+			if !ok {
+				jstm.partCreated = nil
+				continue
+			}
+			js.CompleteJobOrdered = js.CompleteJobOrdered || msg.IsFinalPart
+			js.TotalTransfers += msg.TotalTransfers
+			js.FileTransfers += msg.FileTransfers
+			js.FolderPropertyTransfers += msg.FolderTransfer
+			js.TotalBytesEnumerated += msg.TotalBytesEnumerated
+			js.TotalBytesExpected += msg.TotalBytesEnumerated
 
-		case msg := <-jstm.xferDone:
+		case msg, ok := <-jstm.xferDone:
+			if !ok { //Channel is closed, all transfers have been attended.
+				jstm.xferDone = nil
+
+				//close drainXferDone so that other components can know no further updates happen
+				allXferDoneHandled = true
+				close(jstm.xferDoneDrained)
+				continue
+			}
+
 			msg.Src = common.URLStringExtension(msg.Src).RedactSecretQueryParamForLogging()
 			msg.Dst = common.URLStringExtension(msg.Dst).RedactSecretQueryParamForLogging()
 
@@ -107,6 +150,15 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			// There is no need to keep sending the same items over and over again
 			js.FailedTransfers = []common.TransferDetail{}
 			js.SkippedTransfers = []common.TransferDetail{}
+
+			if allXferDoneHandled {
+				close(jstm.statusMgrDone)
+				close(jstm.respChan)
+				close(jstm.listReq)
+				jstm.listReq = nil
+				jstm.respChan = nil
+				return
+			}
 		}
 	}
 }

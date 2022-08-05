@@ -2,7 +2,11 @@ package azbfs_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	chk "gopkg.in/check.v1"
@@ -127,7 +131,7 @@ func (dus *DirectoryUrlSuite) TestCreateDirectoryAndFiles(c *chk.C) {
 
 	// Create fileUrl from directoryUrl and create file inside the directory
 	fileUrl, _ := getFileURLFromDirectory(c, dirUrl)
-	fresp, err := fileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{})
+	fresp, err := fileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	defer delFile(c, fileUrl)
 
 	c.Assert(err, chk.IsNil)
@@ -237,7 +241,7 @@ func (dus *DirectoryUrlSuite) TestDirectoryStructure(c *chk.C) {
 
 	// Create a file inside directory
 	fileUrl, _ := getFileURLFromDirectory(c, dirUrl)
-	fresp, err := fileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{})
+	fresp, err := fileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	defer delFile(c, fileUrl)
 
 	c.Assert(err, chk.IsNil)
@@ -250,7 +254,7 @@ func (dus *DirectoryUrlSuite) TestDirectoryStructure(c *chk.C) {
 
 	// create a file inside the sub-dir created above
 	subDirfileUrl, _ := getFileURLFromDirectory(c, subDirUrl)
-	fresp, err = subDirfileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{})
+	fresp, err = subDirfileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	defer delFile(c, subDirfileUrl)
 
 	c.Assert(err, chk.IsNil)
@@ -292,7 +296,7 @@ func (dus *DirectoryUrlSuite) TestListDirectoryWithSpaces(c *chk.C) {
 
 	// Create a file inside directory
 	fileUrl, _ := getFileURLFromDirectory(c, dirUrl)
-	_, err = fileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{})
+	_, err = fileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	defer delFile(c, fileUrl)
 
 	// list the directory created above.
@@ -394,7 +398,7 @@ func (dus *DirectoryUrlSuite) TestSetACL(c *chk.C) {
 
 	// Create a file
 	fileUrl := dirURL.NewFileURL("foo.bar")
-	_, err = fileUrl.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err = fileUrl.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 
 	// Grab it's default ACLs
@@ -415,4 +419,99 @@ func (dus *DirectoryUrlSuite) TestSetACL(c *chk.C) {
 	c.Assert(fileAccessToValidate, chk.Equals, fileAccess)
 
 	// Don't bother testing the root ACLs, since it calls into the directoryclient
+}
+
+func (s *FileURLSuite) TestRenameDirectoryWithSas(c *chk.C) {
+	name, key := getAccountAndKey()
+	credential := azbfs.NewSharedKeyCredential(name, key)
+	sasQueryParams, err := azbfs.AccountSASSignatureValues{
+		Protocol:      azbfs.SASProtocolHTTPS,
+		ExpiryTime:    time.Now().Add(48 * time.Hour),
+		Permissions:   azbfs.AccountSASPermissions{Read: true, List: true, Write: true, Delete: true, Add: true, Create: true, Update: true, Process: true}.String(),
+		Services:      azbfs.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
+		ResourceTypes: azbfs.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
+	}.NewSASQueryParameters(credential)
+	c.Assert(err, chk.IsNil)
+
+	qp := sasQueryParams.Encode()
+	rawURL := fmt.Sprintf("https://%s.dfs.core.windows.net/?%s",
+		credential.AccountName(), qp)
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
+
+	fsu := azbfs.NewServiceURL(*fullURL, azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{}))
+
+	fileSystemURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fileSystemURL)
+
+	dirURL, dirName := createNewDirectoryFromFileSystem(c, fileSystemURL)
+	dirRename := dirName + "rename"
+
+	renamedDirURL, err := dirURL.Rename(context.Background(), azbfs.RenameDirectoryOptions{DestinationPath: dirRename})
+	c.Assert(renamedDirURL, chk.NotNil)
+	c.Assert(err, chk.IsNil)
+
+	// Check that the old directory does not exist
+	getPropertiesResp, err := dirURL.GetProperties(context.Background())
+	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	c.Assert(getPropertiesResp, chk.IsNil)
+
+	// Check that the renamed directory does exist
+	getPropertiesResp, err = renamedDirURL.GetProperties(context.Background())
+	c.Assert(getPropertiesResp.StatusCode(), chk.Equals, http.StatusOK)
+	c.Assert(err, chk.IsNil)
+}
+
+func (s *FileURLSuite) TestRenameDirectoryWithDestinationSas(c *chk.C) {
+	name, key := getAccountAndKey()
+	credential := azbfs.NewSharedKeyCredential(name, key)
+	sourceSasQueryParams, err := azbfs.AccountSASSignatureValues{
+		Protocol:      azbfs.SASProtocolHTTPS,
+		ExpiryTime:    time.Now().Add(48 * time.Hour),
+		Permissions:   azbfs.AccountSASPermissions{Read: true, List: true, Write: true, Delete: true, Add: true, Create: true, Update: true, Process: true}.String(),
+		Services:      azbfs.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
+		ResourceTypes: azbfs.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
+	}.NewSASQueryParameters(credential)
+	c.Assert(err, chk.IsNil)
+	destinationSasQueryParams, err := azbfs.AccountSASSignatureValues{
+		Protocol:      azbfs.SASProtocolHTTPS,
+		ExpiryTime:    time.Now().Add(24 * time.Hour),
+		Permissions:   azbfs.AccountSASPermissions{Read: true, Write: true, Delete: true, Add: true, Create: true, Update: true, Process: true}.String(),
+		Services:      azbfs.AccountSASServices{File: true, Blob: true}.String(),
+		ResourceTypes: azbfs.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
+	}.NewSASQueryParameters(credential)
+	c.Assert(err, chk.IsNil)
+
+	sourceQp := sourceSasQueryParams.Encode()
+	destQp := destinationSasQueryParams.Encode()
+	rawURL := fmt.Sprintf("https://%s.dfs.core.windows.net/?%s",
+		credential.AccountName(), sourceQp)
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
+
+	fsu := azbfs.NewServiceURL(*fullURL, azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{}))
+
+	fileSystemURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fileSystemURL)
+
+	dirURL, dirName := createNewDirectoryFromFileSystem(c, fileSystemURL)
+	dirRename := dirName + "rename"
+
+	renamedDirURL, err := dirURL.Rename(
+		context.Background(), azbfs.RenameDirectoryOptions{DestinationPath: dirRename, DestinationSas: &destQp})
+	c.Assert(renamedDirURL, chk.NotNil)
+	c.Assert(err, chk.IsNil)
+	found := strings.Contains(renamedDirURL.String(), destQp)
+	// make sure the correct SAS is used
+	c.Assert(found, chk.Equals, true)
+
+	// Check that the old directory does not exist
+	getPropertiesResp, err := dirURL.GetProperties(context.Background())
+	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	c.Assert(getPropertiesResp, chk.IsNil)
+
+	// Check that the renamed directory does exist
+	getPropertiesResp, err = renamedDirURL.GetProperties(context.Background())
+	c.Assert(getPropertiesResp.StatusCode(), chk.Equals, http.StatusOK)
+	c.Assert(err, chk.IsNil)
 }

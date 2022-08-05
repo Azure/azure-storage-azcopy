@@ -65,6 +65,8 @@ func prepareDestAccountInfo(bURL azblob.BlobURL, jptm IJobPartTransferMgr, ctx c
 				getDestAccountInfoError = err
 			} else {
 				tierSetPossibleFail = true
+				glcm := common.GetLifecycleMgr()
+				glcm.Info("Transfers are likely to fail because destination does not support tiers.")
 				destAccountSKU = "failget"
 				destAccountKind = "failget"
 			}
@@ -108,6 +110,9 @@ func BlobTierAllowed(destTier azblob.AccessTierType) bool {
 		// Any other storage type would have to be file storage, and we can't set tier there.
 		panic("Cannot set tier on azure files.")
 	} else {
+		if destAccountKind == "Storage" { // Tier setting not allowed on classic accounts
+			return false
+		}
 		// Standard storage account. If it's Hot, Cool, or Archive, we're A-OK.
 		// Page blobs, however, don't have an access tier on Standard accounts.
 		// However, this is also OK, because the pageblob sender code prevents us from using a standard access tier type.
@@ -115,11 +120,9 @@ func BlobTierAllowed(destTier azblob.AccessTierType) bool {
 	}
 }
 
-func ValidateTier(jptm IJobPartTransferMgr, blobTier azblob.AccessTierType, blobURL azblob.BlobURL, ctx context.Context) (isValid bool) {
+func ValidateTier(jptm IJobPartTransferMgr, blobTier azblob.AccessTierType, blobURL azblob.BlobURL, ctx context.Context, performQuietly bool) (isValid bool) {
 
 	if jptm.IsLive() && blobTier != azblob.AccessTierNone {
-		// Set the latest service version from sdk as service version in the context.
-		ctxWithLatestServiceVersion := context.WithValue(ctx, ServiceAPIVersionOverride, azblob.ServiceVersion)
 
 		// Let's check if we can confirm we'll be able to check the destination blob's account info.
 		// A SAS token, even with write-only permissions is enough. OR, OAuth with the account owner.
@@ -127,18 +130,18 @@ func ValidateTier(jptm IJobPartTransferMgr, blobTier azblob.AccessTierType, blob
 		destParts := azblob.NewBlobURLParts(blobURL.URL())
 		mustGet := destParts.SAS.Encode() != ""
 
-		prepareDestAccountInfo(blobURL, jptm, ctxWithLatestServiceVersion, mustGet)
+		prepareDestAccountInfo(blobURL, jptm, ctx, mustGet)
 		tierAvailable := BlobTierAllowed(blobTier)
 
 		if tierAvailable {
 			return true
-		} else {
+		} else if !performQuietly {
 			tierNotAllowedFailure.Do(func() {
 				glcm := common.GetLifecycleMgr()
 				glcm.Info("Destination could not accommodate the tier " + string(blobTier) + ". Going ahead with the default tier. In case of service to service transfer, consider setting the flag --s2s-preserve-access-tier=false.")
 			})
-			return false
 		}
+		return false
 	} else {
 		return false
 	}

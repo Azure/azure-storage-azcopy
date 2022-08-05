@@ -52,7 +52,7 @@ var isLaunchedByDebugger = func() bool {
 	return false
 }()
 
-func (t *TestRunner) SetAllFlags(p params) {
+func (t *TestRunner) SetAllFlags(p params, o Operation) {
 	set := func(key string, value interface{}, dflt interface{}, formats ...string) {
 		if value == dflt {
 			return // nothing to do. The flag is not supposed to be set
@@ -68,6 +68,7 @@ func (t *TestRunner) SetAllFlags(p params) {
 
 	// TODO: TODO: nakulkar-msft there will be many more to add here
 	set("recursive", p.recursive, false)
+	set("as-subdir", !p.invertedAsSubdir, true)
 	set("include-path", p.includePath, "")
 	set("exclude-path", p.excludePath, "")
 	set("include-pattern", p.includePattern, "")
@@ -91,6 +92,13 @@ func (t *TestRunner) SetAllFlags(p params) {
 	set("cpk-by-value", p.cpkByValue, false)
 	set("is-object-dir", p.isObjectDir, false)
 	set("debug-skip-files", strings.Join(p.debugSkipFiles, ";"), "")
+	set("check-md5", p.checkMd5.String(), "FailIfDifferent")
+	if o == eOperation.Copy() {
+		set("s2s-preserve-access-tier", p.s2sPreserveAccessTier, true)
+		set("preserve-posix-properties", p.preservePOSIXProperties, "")
+	} else if o == eOperation.Sync() {
+		set("preserve-posix-properties", p.preservePOSIXProperties, false)
+	}
 }
 
 func (t *TestRunner) SetAwaitOpenFlag() {
@@ -108,12 +116,17 @@ func (t *TestRunner) computeArgs() []string {
 
 // execCommandWithOutput replaces Go's exec.Command().Output, but appends an extra parameter and
 // breaks up the c.Run() call into its component parts. Both changes are to assist debugging
-func (t *TestRunner) execDebuggableWithOutput(name string, args []string, afterStart func() string, chToStdin <-chan string) ([]byte, error) {
+func (t *TestRunner) execDebuggableWithOutput(name string, args []string, env []string, afterStart func() string, chToStdin <-chan string) ([]byte, error) {
 	debug := isLaunchedByDebugger
 	if debug {
 		args = append(args, "--await-continue")
 	}
 	c := exec.Command(name, args...)
+
+	// add environment variables
+	if env != nil {
+		c.Env = env
+	}
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -125,7 +138,7 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string, afterS
 	c.Stdout = &stdout
 	c.Stderr = &stderr
 
-	//instead of err := c.Run(), we do the following
+	// instead of err := c.Run(), we do the following
 	runErr := c.Start()
 	if runErr == nil {
 		defer func() {
@@ -171,7 +184,7 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string, afterS
 	return stdout.Bytes(), runErr
 }
 
-func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, afterStart func() string, chToStdin <-chan string) (CopyOrSyncCommandResult, bool, error) {
+func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, needsOAuth bool, afterStart func() string, chToStdin <-chan string) (CopyOrSyncCommandResult, bool, error) {
 	capLen := func(b []byte) []byte {
 		if len(b) < 1024 {
 			return b
@@ -201,7 +214,27 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 		args = args[:3]
 	}
 	args = append(args, t.computeArgs()...)
-	out, err := t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args, afterStart, chToStdin)
+
+	// pass along existing environment variables (because $HOME doesn't come along if we just use the OAuth vars, that can be troublesome!)
+	env := make([]string, len(os.Environ()))
+	copy(env, os.Environ())
+
+	// paste in OAuth environment variables
+	if needsOAuth {
+		tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
+
+		env = append(env,
+			"AZCOPY_AUTO_LOGIN_TYPE=SPN",
+			"AZCOPY_SPA_APPLICATION_ID="+appId,
+			"AZCOPY_SPA_CLIENT_SECRET="+clientSecret,
+		)
+
+		if tenId != "" {
+			env = append(env, "AZCOPY_TENANT_ID="+tenId)
+		}
+	}
+
+	out, err := t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args, env, afterStart, chToStdin)
 
 	wasClean := true
 	stdErr := make([]byte, 0)

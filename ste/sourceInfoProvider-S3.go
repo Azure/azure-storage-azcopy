@@ -68,20 +68,17 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 	} else {
 		p.credType = common.ECredentialType.S3AccessKey()
 	}
-	p.s3Client, err = s3ClientFactory.GetS3Client(
-		p.jptm.Context(),
-		common.CredentialInfo{
-			CredentialType: p.credType,
-			S3CredentialInfo: common.S3CredentialInfo{
-				Endpoint: p.s3URLPart.Endpoint,
-				Region:   p.s3URLPart.Region,
-			},
+	p.s3Client, err = s3ClientFactory.GetS3Client(p.jptm.Context(), common.CredentialInfo{
+		CredentialType: p.credType,
+		S3CredentialInfo: common.S3CredentialInfo{
+			Endpoint: p.s3URLPart.Endpoint,
+			Region:   p.s3URLPart.Region,
 		},
-		common.CredentialOpOptions{
-			LogInfo:  func(str string) { p.jptm.Log(pipeline.LogInfo, str) },
-			LogError: func(str string) { p.jptm.Log(pipeline.LogError, str) },
-			Panic:    func(err error) { panic(err) },
-		})
+	}, common.CredentialOpOptions{
+		LogInfo:  func(str string) { p.jptm.Log(pipeline.LogInfo, str) },
+		LogError: func(str string) { p.jptm.Log(pipeline.LogError, str) },
+		Panic:    func(err error) { panic(err) },
+	}, jptm)
 	if err != nil {
 		return nil, err
 	}

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	//"crypto/md5"
@@ -14,10 +16,11 @@ import (
 	"net/url"
 	//"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	chk "gopkg.in/check.v1" // go get gopkg.in/check.v1
 	"io/ioutil"
 	"net/http"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	chk "gopkg.in/check.v1" // go get gopkg.in/check.v1
 )
 
 type FileURLSuite struct{}
@@ -50,7 +53,7 @@ func (s *FileURLSuite) TestFileCreateDelete(c *chk.C) {
 	// Create and delete file in root directory.
 	file, _ := getFileURLFromFileSystem(c, fsURL)
 
-	cResp, err := file.Create(context.Background(), azbfs.BlobFSHTTPHeaders{})
+	cResp, err := file.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.Response().StatusCode, chk.Equals, http.StatusCreated)
 	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
@@ -72,7 +75,7 @@ func (s *FileURLSuite) TestFileCreateDelete(c *chk.C) {
 	// Create and delete file in named directory.
 	file, _ = getFileURLFromDirectory(c, dirURL)
 
-	cResp, err = file.Create(context.Background(), azbfs.BlobFSHTTPHeaders{})
+	cResp, err = file.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.Response().StatusCode, chk.Equals, http.StatusCreated)
 	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
@@ -89,6 +92,22 @@ func (s *FileURLSuite) TestFileCreateDelete(c *chk.C) {
 	c.Assert(delResp.Date(), chk.Not(chk.Equals), "")
 }
 
+func (s *FileURLSuite) TestFileCreateWithPermissions(c *chk.C) {
+	fsu := getBfsServiceURL()
+	fsURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fsURL)
+
+	// Create and delete file in root directory.
+	file, _ := getFileURLFromFileSystem(c, fsURL)
+
+	_, err := file.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{Permissions: "0444"})
+	defer delFile(c, file)
+
+	getResp, err := file.GetAccessControl(context.Background())
+	c.Assert(err, chk.IsNil)
+	c.Assert(getResp.Permissions, chk.Equals, "r--r-----")
+}
+
 func (s *FileURLSuite) TestFileCreateDeleteNonExistingParent(c *chk.C) {
 	fsu := getBfsServiceURL()
 	fsURL, _ := createNewFileSystem(c, fsu)
@@ -99,7 +118,7 @@ func (s *FileURLSuite) TestFileCreateDeleteNonExistingParent(c *chk.C) {
 	file, _ := getFileURLFromDirectory(c, dirNotExist)
 
 	// Verify that the file was created even though its parent directory does not exist yet
-	cResp, err := file.Create(context.Background(), azbfs.BlobFSHTTPHeaders{})
+	cResp, err := file.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.Response().StatusCode, chk.Equals, http.StatusCreated)
 	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
@@ -124,7 +143,7 @@ func (s *FileURLSuite) TestFileCreateWithMetadataDelete(c *chk.C) {
 	metadata := make(map[string]string)
 	metadata["foo"] = "bar"
 
-	cResp, err := file.CreateWithOptions(context.Background(), azbfs.CreateFileOptions{Metadata: metadata})
+	cResp, err := file.CreateWithOptions(context.Background(), azbfs.CreateFileOptions{Metadata: metadata}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.Response().StatusCode, chk.Equals, http.StatusCreated)
 	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
@@ -378,6 +397,103 @@ func (s *FileURLSuite) TestRenameFile(c *chk.C) {
 	renamedFileURL, err := fileURL.Rename(context.Background(), azbfs.RenameFileOptions{DestinationPath: fileRename})
 	c.Assert(renamedFileURL, chk.NotNil)
 	c.Assert(err, chk.IsNil)
+
+	// Check that the old file does not exist
+	getPropertiesResp, err := fileURL.GetProperties(context.Background())
+	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	c.Assert(getPropertiesResp, chk.IsNil)
+
+	// Check that the renamed file does exist
+	getPropertiesResp, err = renamedFileURL.GetProperties(context.Background())
+	c.Assert(getPropertiesResp.StatusCode(), chk.Equals, http.StatusOK)
+	c.Assert(err, chk.IsNil)
+}
+
+func (s *FileURLSuite) TestRenameFileWithSas(c *chk.C) {
+	name, key := getAccountAndKey()
+	credential := azbfs.NewSharedKeyCredential(name, key)
+	sasQueryParams, err := azbfs.AccountSASSignatureValues{
+		Protocol:      azbfs.SASProtocolHTTPS,
+		ExpiryTime:    time.Now().Add(48 * time.Hour),
+		Permissions:   azbfs.AccountSASPermissions{Read: true, List: true, Write: true, Delete: true, Add: true, Create: true, Update: true, Process: true}.String(),
+		Services:      azbfs.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
+		ResourceTypes: azbfs.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
+	}.NewSASQueryParameters(credential)
+	c.Assert(err, chk.IsNil)
+
+	qp := sasQueryParams.Encode()
+	rawURL := fmt.Sprintf("https://%s.dfs.core.windows.net/?%s",
+		credential.AccountName(), qp)
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
+
+	fsu := azbfs.NewServiceURL(*fullURL, azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{}))
+
+	fileSystemURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fileSystemURL)
+
+	fileURL, fileName := createNewFileFromFileSystem(c, fileSystemURL)
+	fileRename := fileName + "rename"
+
+	renamedFileURL, err := fileURL.Rename(context.Background(), azbfs.RenameFileOptions{DestinationPath: fileRename})
+	c.Assert(renamedFileURL, chk.NotNil)
+	c.Assert(err, chk.IsNil)
+
+	// Check that the old file does not exist
+	getPropertiesResp, err := fileURL.GetProperties(context.Background())
+	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	c.Assert(getPropertiesResp, chk.IsNil)
+
+	// Check that the renamed file does exist
+	getPropertiesResp, err = renamedFileURL.GetProperties(context.Background())
+	c.Assert(getPropertiesResp.StatusCode(), chk.Equals, http.StatusOK)
+	c.Assert(err, chk.IsNil)
+}
+
+func (s *FileURLSuite) TestRenameFileWithDestinationSas(c *chk.C) {
+	name, key := getAccountAndKey()
+	credential := azbfs.NewSharedKeyCredential(name, key)
+	sourceSasQueryParams, err := azbfs.AccountSASSignatureValues{
+		Protocol:      azbfs.SASProtocolHTTPS,
+		ExpiryTime:    time.Now().Add(48 * time.Hour),
+		Permissions:   azbfs.AccountSASPermissions{Read: true, List: true, Write: true, Delete: true, Add: true, Create: true, Update: true, Process: true}.String(),
+		Services:      azbfs.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
+		ResourceTypes: azbfs.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
+	}.NewSASQueryParameters(credential)
+	c.Assert(err, chk.IsNil)
+
+	// new SAS
+	destinationSasQueryParams, err := azbfs.AccountSASSignatureValues{
+		Protocol:      azbfs.SASProtocolHTTPS,
+		ExpiryTime:    time.Now().Add(24 * time.Hour),
+		Permissions:   azbfs.AccountSASPermissions{Read: true, Write: true, Delete: true, Add: true, Create: true, Update: true, Process: true}.String(),
+		Services:      azbfs.AccountSASServices{File: true, Blob: true}.String(),
+		ResourceTypes: azbfs.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
+	}.NewSASQueryParameters(credential)
+	c.Assert(err, chk.IsNil)
+
+	sourceQp := sourceSasQueryParams.Encode()
+	destQp := destinationSasQueryParams.Encode()
+	rawURL := fmt.Sprintf("https://%s.dfs.core.windows.net/?%s",
+		credential.AccountName(), sourceQp)
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
+
+	fsu := azbfs.NewServiceURL(*fullURL, azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{}))
+
+	fileSystemURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fileSystemURL)
+
+	fileURL, fileName := createNewFileFromFileSystem(c, fileSystemURL)
+	fileRename := fileName + "rename"
+
+	renamedFileURL, err := fileURL.Rename(
+		context.Background(), azbfs.RenameFileOptions{DestinationPath: fileRename, DestinationSas: &destQp})
+	c.Assert(renamedFileURL, chk.NotNil)
+	c.Assert(err, chk.IsNil)
+	found := strings.Contains(renamedFileURL.String(), destQp)
+	// make sure the correct SAS is used
+	c.Assert(found, chk.Equals, true)
 
 	// Check that the old file does not exist
 	getPropertiesResp, err := fileURL.GetProperties(context.Background())

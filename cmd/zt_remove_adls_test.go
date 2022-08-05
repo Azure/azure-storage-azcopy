@@ -22,10 +22,11 @@ package cmd
 
 import (
 	"context"
+	"strings"
+
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
-	"strings"
 )
 
 func createFileSystem(c *chk.C) (azbfs.ServiceURL, azbfs.FileSystemURL, string, string, azbfs.DirectoryURL) { // get service SAS for raw input
@@ -56,7 +57,7 @@ func (s *cmdIntegrationSuite) TestRemoveFilesystem(c *chk.C) {
 	serviceURLWithSAS, fsURL, fsName, _, dirURL := createFileSystem(c)
 
 	fileURL := dirURL.NewFileURL(generateName("file", 0))
-	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 
 	// removing the filesystem
@@ -83,7 +84,7 @@ func (s *cmdIntegrationSuite) TestRemoveDirectory(c *chk.C) {
 	serviceURLWithSAS, _, fsName, dirName, dirURL := createFileSystem(c)
 
 	fileURL := dirURL.NewFileURL(generateName("file", 0))
-	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 
 	// trying to remove the dir with recursive=false should fail
@@ -116,7 +117,7 @@ func (s *cmdIntegrationSuite) TestRemoveFile(c *chk.C) {
 	// set up the file to be deleted
 	fileName := generateName("file", 0)
 	fileURL := parentDirURL.NewFileURL(fileName)
-	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 
 	// delete single file
@@ -144,13 +145,13 @@ func (s *cmdIntegrationSuite) TestRemoveListOfALDSFilesAndDirectories(c *chk.C) 
 
 	fileName1 := generateName("file1", 0)
 	fileURL1 := parentDirURL.NewFileURL(fileName1)
-	_, err := fileURL1.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err := fileURL1.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 
 	// set up the second file to be deleted, it sits at the top level
 	fileName2 := generateName("file2", 0)
 	fileURL2 := fsURL.NewRootDirectoryURL().NewFileURL(fileName2)
-	_, err = fileURL2.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err = fileURL2.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 
 	// make the input for list-of-files
@@ -192,7 +193,7 @@ func (s *cmdIntegrationSuite) TestRemoveListOfALDSFilesWithIncludeExclude(c *chk
 	// set up the second file to be deleted, it sits at the top level
 	fileName := generateName("file", 0)
 	fileURL := fsURL.NewRootDirectoryURL().NewFileURL(fileName)
-	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 
 	// make the input for list-of-files
@@ -230,7 +231,7 @@ func (s *cmdIntegrationSuite) TestRemoveFilesystemWithFromTo(c *chk.C) {
 	serviceURLWithSAS, fsURL, fsName, _, dirURL := createFileSystem(c)
 
 	fileURL := dirURL.NewFileURL(generateName("file", 0))
-	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 
 	// removing the filesystem
@@ -258,7 +259,7 @@ func (s *cmdIntegrationSuite) TestRemoveDirectoryWithFromTo(c *chk.C) {
 	serviceURLWithSAS, _, fsName, dirName, dirURL := createFileSystem(c)
 
 	fileURL := dirURL.NewFileURL(generateName("file", 0))
-	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 
 	// trying to remove the dir with recursive=false should fail
@@ -295,7 +296,7 @@ func (s *cmdIntegrationSuite) TestRemoveFileWithFromTo(c *chk.C) {
 	// set up the file to be deleted
 	fileName := generateName("file", 0)
 	fileURL := parentDirURL.NewFileURL(fileName)
-	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 
 	// delete single file
@@ -324,13 +325,13 @@ func (s *cmdIntegrationSuite) TestRemoveListOfALDSFilesAndDirectoriesWithFromTo(
 
 	fileName1 := generateName("file1", 0)
 	fileURL1 := parentDirURL.NewFileURL(fileName1)
-	_, err := fileURL1.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err := fileURL1.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 
 	// set up the second file to be deleted, it sits at the top level
 	fileName2 := generateName("file2", 0)
 	fileURL2 := fsURL.NewRootDirectoryURL().NewFileURL(fileName2)
-	_, err = fileURL2.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	_, err = fileURL2.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 	c.Assert(err, chk.IsNil)
 
 	// make the input for list-of-files

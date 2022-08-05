@@ -4,10 +4,11 @@ import (
 	"context"
 	"os"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	chk "gopkg.in/check.v1"
 	"net/http"
 	"net/url"
+
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	chk "gopkg.in/check.v1"
 )
 
 type FileSystemURLSuite struct{}
@@ -70,7 +71,7 @@ func (s *FileSystemURLSuite) TestFileSystemList(c *chk.C) {
 	dirUrl.Create(context.Background(), true)
 
 	fileUrl, fileName := getFileURLFromFileSystem(c, fileSystemURL)
-	fileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{})
+	fileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 
 	// List
 	paths, err := fileSystemURL.ListPaths(context.Background(), azbfs.ListPathsFilesystemOptions{Recursive: false})

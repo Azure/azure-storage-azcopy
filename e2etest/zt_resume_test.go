@@ -9,7 +9,7 @@ import (
 )
 
 func TestResume_Generic(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync()|eOperation.Resume(), eTestFromTo.AllSync(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync()|eOperation.Resume(), eTestFromTo.AllSync(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 		debugSkipFiles: []string{
 			"/fileb",
@@ -25,7 +25,7 @@ func TestResume_Generic(t *testing.T) {
 			f("filec"),
 			f("filed"),
 		},
-	}, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func GenerateLargeResumeScenario() (debugSkipFiles []string, allFiles []interface{}, err error) {
@@ -59,14 +59,14 @@ func TestResume_LargeGeneric(t *testing.T) {
 		t.FailNow()
 	}
 
-	RunScenarios(t, eOperation.CopyAndSync()|eOperation.Resume(), eTestFromTo.AllSync(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync()|eOperation.Resume(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:      true,
 		debugSkipFiles: toSkip,
 	}, nil, testFiles{
 		defaultSize: "1K",
 
 		shouldTransfer: allFiles,
-	}, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestResume_PublicSource_BlobTarget(t *testing.T) {
@@ -78,6 +78,8 @@ func TestResume_PublicSource_BlobTarget(t *testing.T) {
 		eOperation.Copy()|eOperation.Resume(),
 		eTestFromTo.Other(common.EFromTo.BlobBlob(), common.EFromTo.BlobLocal()),
 		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
 		params{
 			recursive:      true,
 			debugSkipFiles: []string{";"}, // skip the only file is ;
@@ -92,7 +94,7 @@ func TestResume_PublicSource_BlobTarget(t *testing.T) {
 				f("a.txt"),
 			},
 		},
-		EAccountType.Standard(), "",
+		EAccountType.Standard(), EAccountType.Standard(), "",
 	)
 }
 
@@ -102,6 +104,8 @@ func TestResume_PublicSource_ContainerTarget(t *testing.T) {
 		eOperation.CopyAndSync()|eOperation.Resume(),
 		eTestFromTo.Other(common.EFromTo.BlobBlob(), common.EFromTo.BlobLocal()),
 		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
 		params{
 			recursive:      true,
 			debugSkipFiles: []string{"a.txt"}, // skip the only file is ;
@@ -117,6 +121,6 @@ func TestResume_PublicSource_ContainerTarget(t *testing.T) {
 				f("foo/bar.txt"),
 			},
 		},
-		EAccountType.Standard(), "",
+		EAccountType.Standard(), EAccountType.Standard(), "",
 	)
 }

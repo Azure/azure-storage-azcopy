@@ -28,7 +28,7 @@ Copies source data to a destination location. The supported directions are:
   - Azure Files (SAS) -> Azure Files (SAS)
   - Azure Files (SAS) -> Azure Blob (SAS or OAuth authentication)
   - AWS S3 (Access Key) -> Azure Block Blob (SAS or OAuth authentication)
-  - Google Cloud Storage (Service Account Key) -> Azure Block Blob (SAS or OAuth authentication) [Preview]
+  - Google Cloud Storage (Service Account Key) -> Azure Block Blob (SAS or OAuth authentication)
 
 Please refer to the examples for more information.
 
@@ -134,7 +134,7 @@ Copy a single blob to another blob by using a SAS token.
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
 
-Copy a single blob to another blob by using a SAS token and an OAuth token. You have to use a SAS token at the end of the source account URL, but the destination account doesn't need one if you log into AzCopy by using the azcopy login command. 
+Copy a single blob to another blob by using a SAS token and an OAuth token. You have to use a SAS token at the end of the source account URL if you do not have the right permissions to read it with the identity used for login. 
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]"
 
@@ -524,4 +524,45 @@ Run a benchmark test that downloads existing files from a target
 Run an upload that does not delete the transferred files. (These files can then serve as the payload for a download test)
 
    - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 100 --delete-test-data=false
+`
+
+// ===================================== SET-PROPERTIES COMMAND ===================================== //
+
+const setPropertiesCmdShortDescription = "(Preview) Given a location, change all the valid system properties of that storage (blob or file)"
+
+const setPropertiesCmdLongDescription = `
+(Preview) Sets properties of Blob, ADLS Gen2, and File storage. The properties currently supported by this command are:
+
+	Blobs -> Tier, Metadata, Tags
+	ADLS Gen2 -> Tier, Metadata, Tags
+	Files -> Metadata
+Note: dfs endpoints will be replaced by blob endpoints.
+`
+
+const setPropertiesCmdExample = `
+Change tier of blob to hot:
+	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --block-blob-tier=hot
+
+Change tier of blob from archive to cool with rehydrate priority set to high:
+	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --block-blob-tier=cool --rehydrate-priority=high
+
+Change tier of all files in a directory to archive:
+	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --block-blob-tier=archive --recursive=true
+
+Change metadata of blob to {key = "abc", val = "def"} and {key = "ghi", val = "jkl"}:
+	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --metadata=abc=def;ghi=jkl
+
+Change metadata of all files in a directory to {key = "abc", val = "def"} and {key = "ghi", val = "jkl"}:
+	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --metadata=abc=def;ghi=jkl --recursive=true
+
+Clear all existing metadata of blob:
+	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --metadata=clear
+
+Change blob-tags of blob to {key = "abc", val = "def"} and {key = "ghi", val = "jkl"}:
+	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --blob-tags=abc=def&ghi=jkl
+	- While setting tags on the blobs, there are additional permissions('t' for tags) in SAS without which the service will give authorization error back.
+
+Clear all existing blob-tags of blob:
+	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --blob-tags=clear
+	- While setting tags on the blobs, there are additional permissions('t' for tags) in SAS without which the service will give authorization error back.
 `

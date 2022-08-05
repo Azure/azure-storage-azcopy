@@ -21,25 +21,31 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
+
+const MAX_SYMLINKS_TO_FOLLOW = 40
 
 type localTraverser struct {
 	fullPath       string
 	recursive      bool
 	followSymlinks bool
-
+	appCtx         context.Context
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
+	errorChannel                chan ErrorFileInfo
 }
 
 func (t *localTraverser) IsDirectory(bool) bool {
@@ -71,7 +77,13 @@ func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
 }
 
 func UnfurlSymlinks(symlinkPath string) (result string, err error) {
+	var count uint32
 	unfurlingPlan := []string{symlinkPath}
+
+	// We need to do some special UNC path handling for windows.
+	if runtime.GOOS != "windows" {
+		return filepath.EvalSymlinks(symlinkPath)
+	}
 
 	for len(unfurlingPlan) > 0 {
 		item := unfurlingPlan[0]
@@ -92,7 +104,7 @@ func UnfurlSymlinks(symlinkPath string) (result string, err error) {
 			// Previously, we'd try to detect if the read link was a relative path by appending and starting the item
 			// However, it seems to be a fairly unlikely and hard to reproduce scenario upon investigation (Couldn't manage to reproduce the scenario)
 			// So it was dropped. However, on the off chance, we'll still do it if syntactically it makes sense.
-			if len(result) == 0 || result[0] == '.' { // A relative path being "" or "." likely (and in the latter case, on our officially supported OSes, always) means that it's just the same folder.
+			if result == "" || result == "." { // A relative path being "" or "." likely (and in the latter case, on our officially supported OSes, always) means that it's just the same folder.
 				result = filepath.Dir(item)
 			} else if !os.IsPathSeparator(result[0]) { // We can assume that a relative path won't start with a separator
 				possiblyResult := filepath.Join(filepath.Dir(item), result)
@@ -103,12 +115,21 @@ func UnfurlSymlinks(symlinkPath string) (result string, err error) {
 
 			result = common.ToExtendedPath(result)
 
+			/*
+			 * Either we can store all the symlink seen till now for this path or we count how many iterations to find out cyclic loop.
+			 * Choose the count method and restrict the number of links to 40. Which linux kernel adhere.
+			 */
+			if count >= MAX_SYMLINKS_TO_FOLLOW {
+				return "", errors.New("failed to unfurl symlink: too many links")
+			}
+
 			unfurlingPlan = append(unfurlingPlan, result)
 		} else {
 			return item, nil
 		}
 
 		unfurlingPlan = unfurlingPlan[1:]
+		count++
 	}
 
 	return "", errors.New("failed to unfurl symlink: exited loop early")
@@ -145,15 +166,28 @@ type symlinkTargetFileInfo struct {
 	name string
 }
 
+// ErrorFileInfo holds information about files and folders that failed enumeration.
+type ErrorFileInfo struct {
+	FilePath string
+	FileInfo os.FileInfo
+	ErrorMsg error
+}
+
 func (s symlinkTargetFileInfo) Name() string {
 	return s.name // override the name
+}
+
+func writeToErrorChannel(errorChannel chan ErrorFileInfo, err ErrorFileInfo) {
+	if errorChannel != nil {
+		errorChannel <- err
+	}
 }
 
 // WalkWithSymlinks is a symlinks-aware, parallelized, version of filePath.Walk.
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
 // 2) Easier to test individually than to test the entire traverser.
-func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlinks bool) (err error) {
+func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath.WalkFunc, followSymlinks bool, errorChannel chan ErrorFileInfo) (err error) {
 
 	// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
 	// So, what is the plan of attack?
@@ -183,9 +217,10 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 		walkQueue = walkQueue[1:]
 		// walk contents of this queueItem in parallel
 		// (for simplicity of coding, we don't parallelize across multiple queueItems)
-		parallel.Walk(queueItem.fullPath, EnumerationParallelism, EnumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
+		parallel.Walk(appCtx, queueItem.fullPath, EnumerationParallelism, EnumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
 			if fileError != nil {
-				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError))
+				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError.Error()))
+				writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: fileError})
 				return nil
 			}
 			computedRelativePath := strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(queueItem.fullPath))
@@ -196,32 +231,63 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 				computedRelativePath = ""
 			}
 
+			// TODO: Later we might want to transfer these special files as such.
+			unsupportedFileTypes := (os.ModeSocket | os.ModeNamedPipe | os.ModeIrregular | os.ModeDevice)
+
+			if fileInfo == nil {
+				err := fmt.Errorf("fileInfo is nil for file %s", filePath)
+				WarnStdoutAndScanningLog(err.Error())
+				return nil
+			}
+
+			if (fileInfo.Mode() & unsupportedFileTypes) != 0 {
+				err := fmt.Errorf("Unsupported file type %s: %v", filePath, fileInfo.Mode())
+				WarnStdoutAndScanningLog(err.Error())
+				return nil
+			}
+
 			if fileInfo.Mode()&os.ModeSymlink != 0 {
 				if !followSymlinks {
 					return nil // skip it
 				}
+
+				/*
+				 * There is one case where symlink can point to outside of sharepoint(symlink is absolute path). In that case
+				 * we need to throw error. Its very unlikely same file or folder present on the agent side.
+				 * In that case it anywaythrow the error.
+				 *
+				 * TODO: Need to handle this case.
+				 */
 				result, err := UnfurlSymlinks(filePath)
 
 				if err != nil {
-					WarnStdoutAndScanningLog(fmt.Sprintf("Failed to resolve symlink %s: %s", filePath, err))
+					err = fmt.Errorf("Failed to resolve symlink %s: %s", filePath, err.Error())
+					WarnStdoutAndScanningLog(err.Error())
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
 
 				result, err = filepath.Abs(result)
 				if err != nil {
-					WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get absolute path of symlink result %s: %s", filePath, err))
+					err = fmt.Errorf("Failed to get absolute path of symlink result %s: %s", filePath, err.Error())
+					WarnStdoutAndScanningLog(err.Error())
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
 
 				slPath, err := filepath.Abs(filePath)
 				if err != nil {
-					WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
+					err = fmt.Errorf("Failed to get absolute path of %s: %s", filePath, err.Error())
+					WarnStdoutAndScanningLog(err.Error())
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
 
 				rStat, err := os.Stat(result)
 				if err != nil {
-					WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get properties of symlink target at %s: %s", result, err))
+					err = fmt.Errorf("Failed to get properties of symlink target at %s: %s", result, err.Error())
+					WarnStdoutAndScanningLog(err.Error())
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
 
@@ -245,24 +311,16 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 						WarnStdoutAndScanningLog(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
 					}
 				} else {
-					WarnStdoutAndScanningLog(fmt.Sprintf("Symlinks to individual files are not currently supported, so will ignore file at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
-					// TODO: remove the above info call and enable the below, with suitable multi-OS testing
-					//    including enable the test: TestWalkWithSymlinks_ToFile
-					/*
-							// It's a symlink to a file. Just process the file because there's no danger of cycles with links to individual files.
-							// (this does create the inconsistency that if there are two symlinks to the same file we will process it twice,
-							// but if there are two symlinks to the same directory we will process it only once. Because only directories are
-							// deduped to break cycles.  For now, we are living with the inconsistency. The alternative would be to "burn" more
-							// RAM by putting filepaths into seenDirs too, but that could be a non-trivial amount of RAM in big directories trees).
+					// It's a symlink to a file and we handle cyclic symlinks.
+					// (this does create the inconsistency that if there are two symlinks to the same file we will process it twice,
+					// but if there are two symlinks to the same directory we will process it only once. Because only directories are
+					// deduped to break cycles.  For now, we are living with the inconsistency. The alternative would be to "burn" more
+					// RAM by putting filepaths into seenDirs too, but that could be a non-trivial amount of RAM in big directories trees).
+					targetFi := symlinkTargetFileInfo{rStat, fileInfo.Name()}
 
-							// TODO: this code here won't handle the case of (file-type symlink) -> (another file-type symlink) -> file
-						    //    But do we WANT to handle that?  (since it opens us to risk of file->file cycles, and we are deliberately NOT
-						    //    putting files in our map, to reduce RAM usage).  Maybe just detect if the target of a file symlink its itself a symlink
-						    //    and skip those cases with an error message?
-							// Make file info that has name of source, and stats of dest (to mirror what os.Stat calls on source will give us later)
-							targetFi := symlinkTargetFileInfo{rStat, fileInfo.Name()}
-							return walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), targetFi, fileError)
-					*/
+					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), targetFi, fileError)
+					_, err = getProcessingError(err)
+					return err
 				}
 				return nil
 			} else {
@@ -270,7 +328,9 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc, followSymlink
 				result, err := filepath.Abs(filePath)
 
 				if err != nil {
-					WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
+					err = fmt.Errorf("Failed to get absolute path of %s: %s", filePath, err.Error())
+					WarnStdoutAndScanningLog(err.Error())
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
 
@@ -305,7 +365,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 
 	if err != nil {
-		return fmt.Errorf("cannot scan the path %s, please verify that it is a valid", t.fullPath)
+		azcopyScanningLogger.Log(pipeline.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
+		return fmt.Errorf("failed to scan path %s due to %s", t.fullPath, err.Error())
 	}
 
 	// if the path is a single file, then pass it through the filters and send to processor
@@ -335,15 +396,18 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 		if t.recursive {
 			processFile := func(filePath string, fileInfo os.FileInfo, fileError error) error {
 				if fileError != nil {
-					WarnStdoutAndScanningLog(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError))
+					WarnStdoutAndScanningLog(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError.Error()))
 					return nil
 				}
 
 				var entityType common.EntityType
 				if fileInfo.IsDir() {
-					fileInfo, err = WrapFolder(filePath, fileInfo)
+					newFileInfo, err := WrapFolder(filePath, fileInfo)
 					if err != nil {
-						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get last change of target at %s: %s", filePath, err))
+						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get last change of target at %s: %s", filePath, err.Error()))
+					} else {
+						// fileInfo becomes nil in case we fail to wrap folder.
+						fileInfo = newFileInfo
 					}
 
 					entityType = common.EEntityType.Folder()
@@ -379,7 +443,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			}
 
 			// note: Walk includes root, so no need here to separately create StoredObject for root (as we do for other folder-aware sources)
-			return WalkWithSymlinks(t.fullPath, processFile, t.followSymlinks)
+			return WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.followSymlinks, t.errorChannel)
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath
 			// We don't transfer any directory properties here, not even the root. (Because the root's
@@ -457,12 +521,14 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	return
 }
 
-func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter enumerationCounterFunc) *localTraverser {
+func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan ErrorFileInfo) *localTraverser {
 	traverser := localTraverser{
 		fullPath:                    cleanLocalPath(fullPath),
 		recursive:                   recursive,
 		followSymlinks:              followSymlinks,
-		incrementEnumerationCounter: incrementEnumerationCounter}
+		appCtx:                      ctx,
+		incrementEnumerationCounter: incrementEnumerationCounter,
+		errorChannel:                errorChannel}
 	return &traverser
 }
 

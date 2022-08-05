@@ -1,6 +1,72 @@
 
 # Change Log
 
+## Version 10.16.0
+
+### New features
+
+1. Added time-based flag for remove to include files modified before/after certain date/time.
+2. Added --output-level flag which allows users to set output verbosity.
+3. Added --preserve-posix-properties flag that allows user to persist the results of statx(2)/stat(2) syscall on upload.
+4. Implemented setprops command that allows users to set specific properties of Blobs, BlobFS, and Files.
+5. Implemented multi-auth for managed disks (SAS+OAuth) when the managed disk export account requests it.
+
+### Bug fixes
+1. Fixed [issue 1506](https://github.com/Azure/azure-storage-azcopy/issues/1506): Added input watcher to resolve issue since job could not be resumed.
+2. Fixed [issue 1794](https://github.com/Azure/azure-storage-azcopy/issues/1794): Moved log-level to root.go so log-level arguments do not get ignored.
+3. Fixed [issue 1824](https://github.com/Azure/azure-storage-azcopy/issues/1824): Avoid creating .azcopy under HOME if plan/log location is specified elsewhere.
+4. Fixed [isue 1830](https://github.com/Azure/azure-storage-azcopy/issues/1830), [issue 1412](https://github.com/Azure/azure-storage-azcopy/issues/1418), and [issue 873](https://github.com/Azure/azure-storage-azcopy/issues/873): Improved error message for when AzCopy cannot determine if source is directory.
+5. Fixed [issue 1777](https://github.com/Azure/azure-storage-azcopy/issues/1777): Fixed job list to handle respective output-type correctly. 
+6. Fixed win64 alignment issue.
+
+## Version 10.15.0
+
+### New features
+
+1. Added support for OAuth forwarding when performing Blob -> Blob copy.
+2. Allow users to dynamically change the bandwidth cap via messages through the STDIN.
+3. GCS ->  Blob is now GA.
+4. Enable MinIO(S3) logs in DEBUG mode. 
+6. Upgraded Go version to 1.17.9.
+
+### Bug fixes
+1. Resolved alignment of atomicSuccessfulBytesInActiveFiles.
+2. Fixed issue where last-write-time was still getting persisted even when --preserve-smb-info is false.
+3. Fixed issue where concurrency was always AUTO for Azure Files despite explicit override.
+4. Removed outdated load command following the deprecation of the cflsload package.
+
+## Version 10.14.1
+
+### Bug fixes
+1. Fixed issue #1625 where a panic occurs during sync scanning. 
+2. Fixed remove issue when account has versioning enabled. 
+
+## Version 10.14.0
+
+### New features
+1. Feature to [permanently delete](https://docs.microsoft.com/en-us/rest/api/storageservices/delete-blob#remarks) soft-deleted
+   snapshots/versions of the blobs has been added (preview). `--permanent-delete=none/snapshots/version/snapshotsandversions`.
+2. Feature to preserve properties and ACLs when copying to Azure file share root directory.
+3. Pin all APIs to use the default service version `2020-04-08` and let users decide the service version via
+   `AZCOPY_DEFAULT_SERVICE_API_VERSION` environment variable. Previously, few APIs were not respecting the `AZCOPY_DEFAULT_SERVICE_API_VERSION` environment variable.
+
+### Bug fixes
+1. Fixed issue in which AzCopy failed to copy to classic blob container with `preserve blob access tier`.
+2. Fixed [issue 1630](https://github.com/Azure/azure-storage-azcopy/issues/1630) : AzCopy created extra empty
+   directories at destination while performing S2S transfer from one ADLS Gen2 account to another ADLS Gen2 account.
+3. Changed the way AzCopy was using to obtain and set ACLs to ensure accuracy.
+4. Clarify error message for `azcopy sync` when source or destination cannot be detected.
+5. Report error when client provided key(CPK) encryption is applied to DFS endpoint.
+6. Fixed [issue 1596](https://github.com/Azure/azure-storage-azcopy/issues/1596) : AzCopy failed to transfer files 
+   (with '/.' in their path) from AWS S3 to Azure blob storage.
+7. Fixed [issue 1474](https://github.com/Azure/azure-storage-azcopy/issues/1474) : AzCopy panicked when trying to re-create an already open plan file.
+8. Improved handling of Auth error against single file.
+9. Fixed [issue 1640](https://github.com/Azure/azure-storage-azcopy/issues/1640) : Recursive copy from GCS bucket to Azure container failed 
+   with `FileIgnored` error when using `--exclude-path`.
+10. Fixed [issue 1655](https://github.com/Azure/azure-storage-azcopy/issues/1655) : AzCopy panicked when using `--include-before` flag.
+11. Fixed [issue 1609](https://github.com/Azure/azure-storage-azcopy/issues/1609) : `blockid` converted to lower case in AzCopy logs.
+12. Fixed [issue 1643](https://github.com/Azure/azure-storage-azcopy/issues/1643), [issue 1661](https://github.com/Azure/azure-storage-azcopy/issues/1661) : Updated Golang version to `1.16.10` to fix security vulnerabilities in Golang packages. 
+
 ## Version 10.13.0
 
 ### New features

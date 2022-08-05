@@ -22,7 +22,6 @@ package ste
 
 import (
 	"bytes"
-	"context"
 	"net/url"
 	"sync/atomic"
 
@@ -92,7 +91,7 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 
 		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 		// Create blob and finish.
-		if !ValidateTier(jptm, c.destBlobTier, c.destBlockBlobURL.BlobURL, c.jptm.Context()) {
+		if !ValidateTier(jptm, c.destBlobTier, c.destBlockBlobURL.BlobURL, c.jptm.Context(), false) {
 			c.destBlobTier = azblob.DefaultAccessTier
 		}
 
@@ -108,7 +107,7 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 			destBlobTier = azblob.AccessTierNone
 		}
 
-		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.headersToApply, c.metadataToApply, azblob.BlobAccessConditions{}, destBlobTier, blobTags, c.cpkToApply); err != nil {
+		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.headersToApply, c.metadataToApply, azblob.BlobAccessConditions{}, destBlobTier, blobTags, c.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
 			jptm.FailActiveSend("Creating empty blob", err)
 			return
 		}
@@ -135,14 +134,11 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 		// step 3: put block to remote
 		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 
-		// Set the latest service version from sdk as service version in the context, to use StageBlockFromURL API
-		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
-		_, err := c.destBlockBlobURL.StageBlockFromURL(ctxWithLatestServiceVersion, encodedBlockID, c.srcURL,
-			id.OffsetInFile(), adjustedChunkSize, azblob.LeaseAccessConditions{}, azblob.ModifiedAccessConditions{}, c.cpkToApply)
+		_, err := c.destBlockBlobURL.StageBlockFromURL(c.jptm.Context(), encodedBlockID, c.srcURL,
+			id.OffsetInFile(), adjustedChunkSize, azblob.LeaseAccessConditions{}, azblob.ModifiedAccessConditions{}, c.cpkToApply, c.jptm.GetS2SSourceBlobTokenCredential())
 		if err != nil {
 			c.jptm.FailActiveSend("Staging block from URL", err)
 			return
@@ -157,10 +153,8 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 
 		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 
-		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-
 		// Create blob and finish.
-		if !ValidateTier(c.jptm, c.destBlobTier, c.destBlockBlobURL.BlobURL, c.jptm.Context()) {
+		if !ValidateTier(c.jptm, c.destBlobTier, c.destBlockBlobURL.BlobURL, c.jptm.Context(), false) {
 			c.destBlobTier = azblob.DefaultAccessTier
 		}
 
@@ -180,9 +174,9 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
 
-		_, err := c.destBlockBlobURL.PutBlobFromURL(ctxWithLatestServiceVersion, c.headersToApply, c.srcURL, c.metadataToApply,
+		_, err := c.destBlockBlobURL.PutBlobFromURL(c.jptm.Context(), c.headersToApply, c.srcURL, c.metadataToApply,
 			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil, nil, destBlobTier, blobTags,
-			c.cpkToApply)
+			c.cpkToApply, c.jptm.GetS2SSourceBlobTokenCredential())
 
 		if err != nil {
 			c.jptm.FailActiveSend("Put Blob from URL", err)
@@ -201,8 +195,7 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 
 // GetDestinationLength gets the destination length.
 func (c *urlToBlockBlobCopier) GetDestinationLength() (int64, error) {
-	ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-	properties, err := c.destBlockBlobURL.GetProperties(ctxWithLatestServiceVersion, azblob.BlobAccessConditions{}, c.cpkToApply)
+	properties, err := c.destBlockBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{}, c.cpkToApply)
 	if err != nil {
 		return -1, err
 	}

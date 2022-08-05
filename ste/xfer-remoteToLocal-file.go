@@ -110,6 +110,17 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 	// step 4a: mark destination as modified before we take our first action there (which is to create the destination file)
 	jptm.SetDestinationIsModified()
 
+	writeThrough := false
+	// TODO: consider cases where we might set it to true. It might give more predictable and understandable disk throughput.
+	//    But can't be used in the cases shown in the if statement below (one of which is only pseudocode, at this stage)
+	//      if fileSize <= 1*1024*1024 || jptm.JobHasLowFileCount() || <is a short-running job> {
+	//        // but, for very small files, testing indicates that we can need it in at least some cases. (Presumably just can't get enough queue depth to physical disk without it.)
+	//        // And also, for very low file counts, we also need it. Presumably for same reasons of queue depth (given our sequential write strategy as at March 2019)
+	//        // And for very short-running jobs, it looks and feels faster for the user to just let the OS cache flush out after the job appears to have finished.
+	//        writeThrough = false
+	//    }
+
+	var dstFile io.WriteCloser
 	// step 4b: special handling for empty files
 	if fileSize == 0 {
 		if strings.EqualFold(info.Destination, common.Dev_Null) {
@@ -135,15 +146,6 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 	}
 
 	// step 4c: normal file creation when source has content
-	writeThrough := false
-	// TODO: consider cases where we might set it to true. It might give more predictable and understandable disk throughput.
-	//    But can't be used in the cases shown in the if statement below (one of which is only pseudocode, at this stage)
-	//      if fileSize <= 1*1024*1024 || jptm.JobHasLowFileCount() || <is a short-running job> {
-	//        // but, for very small files, testing indicates that we can need it in at least some cases. (Presumably just can't get enough queue depth to physical disk without it.)
-	//        // And also, for very low file counts, we also need it. Presumably for same reasons of queue depth (given our sequential write strategy as at March 2019)
-	//        // And for very short-running jobs, it looks and feels faster for the user to just let the OS cache flush out after the job appears to have finished.
-	//        writeThrough = false
-	//    }
 
 	failFileCreation := func(err error) {
 		jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
@@ -158,7 +160,6 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		return
 	}
 
-	var dstFile io.WriteCloser
 	if strings.EqualFold(info.Destination, common.Dev_Null) {
 		// the user wants to discard the downloaded data
 		dstFile = devNullWriter{}
@@ -171,7 +172,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		// to correct name.
 		pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.CreateLocalFile())
-		dstFile, err = createDestinationFile(jptm, info.getTempDownloadPath(), fileSize, writeThrough)
+		dstFile, err = createDestinationFile(jptm, info.getDownloadPath(), fileSize, writeThrough)
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 		if err != nil {
 			failFileCreation(err)
@@ -342,7 +343,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 
 			// check length if enabled (except for dev null and decompression case, where that's impossible)
 			if info.DestLengthValidation && info.Destination != common.Dev_Null && !jptm.ShouldDecompress() {
-				fi, err := common.OSStat(info.getTempDownloadPath())
+				fi, err := common.OSStat(info.getDownloadPath())
 
 				if err != nil {
 					jptm.FailActiveDownload("Download length check", err)
@@ -351,14 +352,16 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 				}
 			}
 
-			//Rename back to original name. At this point, we're sure the file is completely
-			//downloaded and not corrupt. Infact, post this point we should only log errors and
-			//not fail the transfer.
-			if err == nil && !strings.EqualFold(info.Destination, common.Dev_Null) {
-				renameErr := os.Rename(info.getTempDownloadPath(), info.Destination)
+			// check if we need to rename back to original name. At this point, we're sure the file is completely
+			// downloaded and not corrupt. Infact, post this point we should only log errors and
+			// not fail the transfer.
+			renameNecessary := !strings.EqualFold(info.getDownloadPath(), info.Destination) &&
+				!strings.EqualFold(info.Destination, common.Dev_Null)
+			if err == nil && renameNecessary {
+				renameErr := os.Rename(info.getDownloadPath(), info.Destination)
 				if renameErr != nil {
 					jptm.LogError(info.Destination, fmt.Sprintf(
-						"Failed to rename. File at %s", info.getTempDownloadPath()), renameErr)
+						"Failed to rename. File at %s", info.getDownloadPath()), renameErr)
 				}
 			}
 		}
@@ -461,19 +464,23 @@ func tryDeleteFile(info TransferInfo, jptm IJobPartTransferMgr) {
 		return
 	}
 
-	err := deleteFile(info.getTempDownloadPath())
+	err := deleteFile(info.getDownloadPath())
 	if err != nil {
 		// If there was an error deleting the file, log the error
 		jptm.LogError(info.Destination, "Delete File Error ", err)
 	}
 }
 
-//Returns the path of temp file to be downloaded. The paths is in format
+// Returns the path of file to be downloaded. If we want to
+// download to a temp path we return a temp paht in format
 // /actual/parent/path/.azDownload-<jobID>-<actualFileName>
-func (info *TransferInfo) getTempDownloadPath() string {
-	parent, fileName := filepath.Split(info.Destination)
-	fileName = fmt.Sprintf(azcopyTempDownloadPrefix, info.JobID.String()) + fileName
-	return filepath.Join(parent, fileName)
+func (info *TransferInfo) getDownloadPath() string {
+	if common.GetLifecycleMgr().DownloadToTempPath() {
+		parent, fileName := filepath.Split(info.Destination)
+		fileName = fmt.Sprintf(azcopyTempDownloadPrefix, info.JobID.String()) + fileName
+		return filepath.Join(parent, fileName)
+	}
+	return info.Destination
 }
 
 // conforms to io.Writer and io.Closer

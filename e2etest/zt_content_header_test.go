@@ -29,7 +29,7 @@ var fileExtensions = []string{".exe", ".cpp", ".java", ".py", ".go", ".mp3", ".m
 
 func TestHeader_SourceLocal(t *testing.T) {
 	extensionsMap := GetContentTypeMap(fileExtensions)
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1M",
@@ -42,12 +42,12 @@ func TestHeader_SourceLocal(t *testing.T) {
 			f("file5.mp4", with{contentType: extensionsMap[".mp4"]}),
 			f("file6.xlsx", with{contentType: extensionsMap[".xlsx"]}),
 		},
-	}, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestHeader_SourceLocalEmptyFiles(t *testing.T) {
 	extensionsMap := GetContentTypeMap(fileExtensions)
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "0K",
@@ -60,12 +60,12 @@ func TestHeader_SourceLocalEmptyFiles(t *testing.T) {
 			f("file3.mp4", with{contentType: extensionsMap[".mp4"]}),
 			f("file5.xlsx", with{contentType: extensionsMap[".xlsx"]}),
 		},
-	}, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestHeader_AllS2S(t *testing.T) {
 	extensionsMap := GetContentTypeMap(fileExtensions)
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllS2S(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllS2S(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1K",
@@ -78,13 +78,13 @@ func TestHeader_AllS2S(t *testing.T) {
 			f("file3.mp4", with{contentType: extensionsMap[".mp4"]}),
 			f("file5.xlsx", with{contentType: extensionsMap[".xlsx"]}),
 		},
-	}, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 // TODO: AutoPlusContent is not thread-safe. Look into that.
 func TestHeader_SourceBlobEmptyBlob(t *testing.T) {
 	extensionsMap := GetContentTypeMap(fileExtensions)
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "0K",
@@ -97,5 +97,5 @@ func TestHeader_SourceBlobEmptyBlob(t *testing.T) {
 			f("file3.mp4", with{contentType: extensionsMap[".mp4"]}),
 			f("file5.xlsx", with{contentType: extensionsMap[".xlsx"]}),
 		},
-	}, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }

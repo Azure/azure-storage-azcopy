@@ -30,7 +30,7 @@ import (
 //   and those specified on the command line
 
 func TestProperties_NameValueMetadataIsPreservedS2S(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1K",
@@ -38,13 +38,12 @@ func TestProperties_NameValueMetadataIsPreservedS2S(t *testing.T) {
 			f("filea", with{nameValueMetadata: map[string]string{"foo": "abc", "bar": "def"}}),
 			folder("fold1", with{nameValueMetadata: map[string]string{"other": "xyz"}}),
 		},
-	}, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestProperties_NameValueMetadataCanBeUploaded(t *testing.T) {
 	expectedMap := map[string]string{"foo": "abc", "bar": "def"}
-
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllUploads(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllUploads(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 		metadata:  "foo=abc;bar=def",
 	}, nil, testFiles{
@@ -53,11 +52,11 @@ func TestProperties_NameValueMetadataCanBeUploaded(t *testing.T) {
 			folder("", verifyOnly{with{nameValueMetadata: expectedMap}}), // root folder
 			f("filea", verifyOnly{with{nameValueMetadata: expectedMap}}),
 		},
-	}, EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestProperties_HNSACLs(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:              true,
 		preserveSMBPermissions: true, // this flag is deprecated, but still held over to avoid breaking.
 	}, nil, testFiles{
@@ -72,5 +71,5 @@ func TestProperties_HNSACLs(t *testing.T) {
 			folder("d", with{adlsPermissionsACL: "user::rwx,group::rwx,other::-wx"}),
 			f("d/filed", with{adlsPermissionsACL: "user::rwx,group::rwx,other::rwx"}),
 		},
-	}, EAccountType.HierarchicalNamespaceEnabled(), "")
+	}, EAccountType.HierarchicalNamespaceEnabled(), EAccountType.HierarchicalNamespaceEnabled(), "")
 }

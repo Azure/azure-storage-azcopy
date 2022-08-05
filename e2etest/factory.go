@@ -159,6 +159,7 @@ func (TestResourceFactory) CreateNewContainer(c asserter, publicAccess azblob.Pu
 	name = TestResourceNameGenerator{}.GenerateContainerName(c)
 	container = TestResourceFactory{}.GetBlobServiceURL(accountType).NewContainerURL(name)
 
+
 	cResp, err := container.Create(context.Background(), nil, publicAccess)
 	c.AssertNoErr(err)
 	c.Assert(cResp.StatusCode(), equals(), 201)
@@ -241,6 +242,7 @@ func getTestName(t *testing.T) (pseudoSuite, test string) {
 	return pseudoSuite, removeUnderscores(testName)
 }
 
+//nolint
 // This function generates an entity name by concatenating the passed prefix,
 // the name of the test requesting the entity name, and the minute, second, and nanoseconds of the call.
 // This should make it easy to associate the entities with their test, uniquely identify
@@ -251,10 +253,10 @@ func generateName(c asserter, prefix string, maxLen int) string {
 	name := c.CompactScenarioName() // don't want to just use test name here, because each test contains multiple scenarios with the declarative runner
 
 	textualPortion := fmt.Sprintf("%s-%s", prefix, strings.ToLower(name))
-	currentTime := time.Now()
-	numericSuffix := fmt.Sprintf("%02d%02d%d", currentTime.Minute(), currentTime.Second(), currentTime.Nanosecond())
+	// GUIDs are less prone to overlap than times.
+	guidSuffix := uuid.New().String()
 	if maxLen > 0 {
-		maxTextLen := maxLen - len(numericSuffix)
+		maxTextLen := maxLen - len(guidSuffix)
 		if maxTextLen < 1 {
 			panic("max len too short")
 		}
@@ -262,7 +264,7 @@ func generateName(c asserter, prefix string, maxLen int) string {
 			textualPortion = textualPortion[:maxTextLen]
 		}
 	}
-	name = textualPortion + numericSuffix
+	name = textualPortion + guidSuffix
 	return name
 }
 
@@ -271,6 +273,7 @@ func (TestResourceNameGenerator) GenerateContainerName(c asserter) string {
 	return uuid.New().String()
 }
 
+//nolint
 func (TestResourceNameGenerator) generateBlobName(c asserter) string {
 	return generateName(c, blobPrefix, 0)
 }

@@ -357,6 +357,43 @@ func (_ IncludeBeforeDateFilter) FormatAsUTC(t time.Time) string {
 	return formatAsUTC(t)
 }
 
+type permDeleteFilter struct {
+	deleteSnapshots bool
+	deleteVersions  bool
+}
+
+func (s *permDeleteFilter) DoesSupportThisOS() (msg string, supported bool) {
+	return "", true
+}
+
+func (s *permDeleteFilter) AppliesOnlyToFiles() bool {
+	return false
+}
+
+func (s *permDeleteFilter) DoesPass(storedObject StoredObject) bool {
+	if (s.deleteVersions && s.deleteSnapshots) && storedObject.blobDeleted && (storedObject.blobVersionID != "" || storedObject.blobSnapshotID != "") {
+		return true
+	} else if s.deleteSnapshots && storedObject.blobDeleted && storedObject.blobSnapshotID != "" {
+		return true
+	} else if s.deleteVersions && storedObject.blobDeleted && storedObject.blobVersionID != "" {
+		return true
+	}
+	return false
+}
+
+func buildIncludeSoftDeleted(permanentDeleteOption common.PermanentDeleteOption) []ObjectFilter {
+	filters := make([]ObjectFilter, 0)
+	switch permanentDeleteOption {
+	case common.EPermanentDeleteOption.Snapshots():
+		filters = append(filters, &permDeleteFilter{deleteSnapshots: true})
+	case common.EPermanentDeleteOption.Versions():
+		filters = append(filters, &permDeleteFilter{deleteVersions: true})
+	case common.EPermanentDeleteOption.SnapshotsAndVersions():
+		filters = append(filters, &permDeleteFilter{deleteSnapshots: true, deleteVersions: true})
+	}
+	return filters
+}
+
 // parseISO8601 parses ISO 8601 dates. This routine is needed because GoLang's time.Parse* routines require all expected
 // elements to be present.  I.e. you can't specify just a date, and have the time default to 00:00. But ISO 8601 requires
 // that and, for usability, that's what we want.  (So that users can omit the whole time, or at least the seconds portion of it, if they wish)

@@ -91,7 +91,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 
 	// due to the REST parity feature added in 2019-02-02, the File APIs are no longer backward compatible
 	// so we must use the latest SDK version to stay safe
-	ctx := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azfile.ServiceVersion)
+	// TODO: Should we get rid of this one?
 
 	props, err := sip.Properties()
 	if err != nil {
@@ -112,7 +112,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		numChunks:       numChunks,
 		pipeline:        p,
 		pacer:           pacer,
-		ctx:             ctx,
+		ctx:             jptm.Context(),
 		headersToApply:  props.SrcHTTPHeaders.ToAzFileHTTPHeaders(),
 		sip:             sip,
 		metadataToApply: props.SrcMetadata.ToAzFileMetadata(),
@@ -272,7 +272,13 @@ func (u *azureFileSenderBase) addPermissionsToHeaders(info TransferInfo, destUrl
 		// If we didn't do the workaround, then let's get the SDDL and put it later.
 		if u.headersToApply.PermissionKey == nil || *u.headersToApply.PermissionKey == "" {
 			pString, err := sddlSIP.GetSDDL()
-			u.headersToApply.PermissionString = &pString
+
+			// Sending "" to the service is invalid, but the service will return it sometimes (e.g. on file shares)
+			// Thus, we'll let the files SDK fill in "inherit" for us, so the service is happy.
+			if pString != "" {
+				u.headersToApply.PermissionString = &pString
+			}
+
 			if err != nil {
 				return "Getting permissions", err
 			}
@@ -346,7 +352,7 @@ func (u *azureFileSenderBase) Cleanup() {
 		// transfer was either failed or cancelled
 		// the file created in share needs to be deleted, since it's
 		// contents will be at an unknown stage of partial completeness
-		deletionContext, cancelFn := context.WithTimeout(context.Background(), 2*time.Minute)
+		deletionContext, cancelFn := context.WithTimeout(context.WithValue(context.Background(), ServiceAPIVersionOverride, DefaultServiceApiVersion), 2*time.Minute)
 		defer cancelFn()
 		_, err := u.fileURL().Delete(deletionContext)
 		if err != nil {

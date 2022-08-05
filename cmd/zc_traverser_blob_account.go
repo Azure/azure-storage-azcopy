@@ -100,8 +100,7 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 
 	for _, v := range cList {
 		containerURL := t.accountURL.NewContainerURL(v).URL()
-		containerTraverser := newBlobTraverser(&containerURL, t.p, t.ctx, true,
-			t.includeDirectoryStubs, t.incrementEnumerationCounter, t.s2sPreserveSourceTags, t.cpkOptions)
+		containerTraverser := newBlobTraverser(&containerURL, t.p, t.ctx, true, t.includeDirectoryStubs, t.incrementEnumerationCounter, t.s2sPreserveSourceTags, t.cpkOptions, false, false, false)
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
@@ -116,9 +115,7 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
-	includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc,
-	s2sPreserveSourceTags bool, cpkOptions common.CpkOptions) (t *blobAccountTraverser) {
+func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions) (t *blobAccountTraverser) {
 	bURLParts := azblob.NewBlobURLParts(*rawURL)
 	cPattern := bURLParts.ContainerName
 
