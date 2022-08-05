@@ -254,7 +254,10 @@ func (raw *RawSyncCmdArgs) Cook() (cookedSyncCmdArgs, error) {
 	}
 
 	// use the globally generated JobID
-	cooked.jobID = azcopyCurrentJobID
+	cooked.jobID = raw.AzcopyCurrentJobID
+	if raw.AzcopyCurrentJobID.IsEmpty() {
+		cooked.jobID = azcopyCurrentJobID
+	}
 
 	cooked.blockSize, err = blockSizeInBytes(raw.BlockSizeMB)
 	if err != nil {
