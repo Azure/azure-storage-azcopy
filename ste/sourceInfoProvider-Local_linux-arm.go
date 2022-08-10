@@ -115,13 +115,13 @@ func (s statTAdapter) AttributeMask() uint64 {
 
 func (s statTAdapter) BTime() time.Time {
 	return time.Time{}
-}*/
+}
 
 func (s statTAdapter) NLink() uint64 {
 	return uint64(s.Nlink)
 }
 
-/*func (s statTAdapter) Owner() uint32 {
+func (s statTAdapter) Owner() uint32 {
 	return s.Uid
 }
 
