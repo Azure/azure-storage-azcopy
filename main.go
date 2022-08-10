@@ -23,6 +23,8 @@ package main
 import (
 	"log"
 	"math/rand"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"path"
 	"runtime"
@@ -38,6 +40,12 @@ import (
 var glcm = common.GetLifecycleMgr()
 
 func main() {
+	// Start pprof server for convenient profiling, if needed.
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+		// It'll never reach here in success case.
+	}()
+
 	pipeline.SetLogSanitizer(common.NewAzCopyLogSanitizer()) // make sure SyslogDisabled logs get secrets redacted
 
 	rand.Seed(time.Now().UnixNano()) // make sure our random numbers actually are random (but remember, use crypto/rand for anything where strong/reliable randomness is required
@@ -93,6 +101,11 @@ func main() {
 // But our "survivors" add up to many GB, so its hard for users to be confident that we don't have
 // a memory leak (since with that default setting new GCs are very rare in our case). So configure them to be more frequent.
 func configureGC() {
+	// For xdatamove, we don't want gc to be running so aggressive.
+	// This change not required here, as we set default gc our side, adding here so that when running perf
+	// test with this code base, don't see any discrepancies.
+	return
+
 	go func() {
 		time.Sleep(20 * time.Second) // wait a little, so that our initial pool of buffers can get allocated without heaps of (unnecessary) GC activity
 		debug.SetGCPercent(20)       // activate more aggressive/frequent GC than the default

@@ -143,14 +143,20 @@ func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, para
 		}
 	}
 
+	//
+	// We set the channel size large enough to not cause bubbles in the pipeline and small enough to not
+	// cause excessive memory usage causing GC stress.
+	// Even at a very ambitious rate of 10K files/sec, channel size of 100K keeps 10 secs worth of work
+	// for the downstream pipeline elements. In that time, the scanner threads can duly replenish it.
+	//
 	if isSync && isSource {
 		c.output = make([]chan CrawlResult, numOfParallelProcess)
 		for i := 0; i < len(c.output); i++ {
-			c.output[i] = make(chan CrawlResult, 100*1000)
+			c.output[i] = make(chan CrawlResult, (100*1000)/len(c.output))
 		}
 	} else {
 		c.output = make([]chan CrawlResult, 1)
-		c.output[0] = make(chan CrawlResult, 1000*1000)
+		c.output[0] = make(chan CrawlResult, 100*1000)
 	}
 
 	if isSync {
@@ -228,7 +234,7 @@ func (c *crawler) workerLoop(ctx context.Context, wg *sync.WaitGroup, workerInde
 	}
 }
 
-const maxQueueDirectories = 1000 * 1000
+const maxQueueDirectories = 100 * 1000
 
 //
 // readTqueue() dequeues directory names added by the source traverser and appends them to unstartedDirs.
@@ -244,14 +250,14 @@ func (c *crawler) readTqueue() {
 		//
 		// Lets put backpressure on source to slow down, otherwise c.unstartedDirs will keep growing and and cause memory pressure on system.
 		// Once unstartedDirs crosses the limit we let it drain to 80% of the limit to avoid pointelessely sleeping on every other iteration.
-		// 20% of maxQueueDirectories is 200K directories. Even the fastest target will take multiple seconds to process these many directories,
+		// 20% of maxQueueDirectories is 20K directories. Even the fastest target will take multiple seconds to process these many directories,
 		// so we can safely add a largish sleep.
 		//
 		if len(c.unstartedDirs) > maxQueueDirectories {
 			for len(c.unstartedDirs) > maxQueueDirectories*0.8 {
 				fmt.Printf("Number of directories in unstartedDirs queue reached high water mark (%v): %v", maxQueueDirectories*0.8, len(c.unstartedDirs))
 				c.cond.L.Unlock()
-				time.Sleep(1000 * time.Millisecond)
+				time.Sleep(100 * time.Millisecond)
 				c.cond.L.Lock()
 			}
 		}

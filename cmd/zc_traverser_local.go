@@ -486,19 +486,6 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					t.incrementEnumerationCounter(entityType)
 				}
 
-				//
-				// parallel.DotSpecialGUID is a special filename to represent ".", we use it
-				// for safely transporting ".", safe against path cleaning functions. Filesystem
-				// doesn't understand it, so translate back before asking the filesystem for
-				// properties.
-				//
-				path := strings.ReplaceAll(filePath, parallel.DotSpecialGUID, ".")
-
-				extendedProp, err := common.GetExtendedProperties(common.CleanLocalPath(path))
-				if err != nil {
-					fmt.Printf("GetExtendedProperties for file path[%s] returned error: %v", path, err)
-				}
-
 				so := newStoredObject(
 					preprocessor,
 					fileInfo.Name(),
@@ -512,7 +499,22 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					"", // Local has no such thing as containers
 				)
 
-				so.lastChangeTime = extendedProp.CTime()
+				if t.isSync {
+					//
+					// parallel.DotSpecialGUID is a special filename to represent ".", we use it
+					// for safely transporting ".", safe against path cleaning functions. Filesystem
+					// doesn't understand it, so translate back before asking the filesystem for
+					// properties. This is only used by the sync engine.
+					//
+					path := strings.ReplaceAll(filePath, parallel.DotSpecialGUID, ".")
+
+					extendedProp, err := common.GetExtendedProperties(common.CleanLocalPath(path))
+					if err != nil {
+						fmt.Printf("GetExtendedProperties for file path[%s] returned error: %v", path, err)
+					}
+
+					so.lastChangeTime = extendedProp.CTime()
+				}
 
 				// This is an exception to the rule. We don't strip the error here, because WalkWithSymlinks catches it.
 				return processIfPassedFilters(filters,

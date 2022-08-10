@@ -113,12 +113,24 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	commandString string, logFileFolder string, tuner ConcurrencyTuner,
 	pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
 	jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
-	const channelSize = 100000
+	//
+	// Max ChunkReader goroutines can be 3000 (but typically ~200), even with so many chunk readers, each chunk reader
+	// has an average ~7 chunks to send before this channel needs to be filled. Even assuming very fast target RTT, of
+	// say 2msec, this means ~15msec before all of them running together can empty the channel. This should be enough
+	// time for transfer threads to replenish this channel hence we don't need this channel to be overly large.
+	// Another way to look at this is, if we have all large files, so we can have 20000*4MB worth of data to be sent
+	// This is 80GB of data, which will easily take 10s of seconds even with very fast pipe to target.
+	// OTOH if we consider all small files, we are talking of 20000 files, even with a good 10K files/sec, it'll take
+	// 2 secs for the channel to be emptied.
+	//
+	const channelSize = 20000
+
 	// PartsChannelSize defines the number of JobParts which can be placed into the
 	// parts channel. Any JobPart which comes from FE and partChannel is full,
 	// has to wait and enumeration of transfer gets blocked till then.
+	// Each job part is 10K files, so this amounts to 10M files which should be more than enough.
 	// TODO : PartsChannelSize Needs to be discussed and can change.
-	const PartsChannelSize = 10000
+	const PartsChannelSize = 1000
 
 	// partsCh is the channel in which all JobParts are put
 	// for scheduling transfers. When the next JobPart order arrives
@@ -147,6 +159,10 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	if jobLogger == nil {
 		jobLogger = common.NewJobLogger(jobID, common.ELogLevel.Debug(), logFileFolder, "" /* logFileNameSuffix */)
 		jobLogger.OpenLog()
+		// Set the log level to Error, as azcopy try to write logs inline which cause performance issues.
+		// This change is not required for xdatamove, as we by default set log level to Error only.
+		// Adding here so that when running perf test with this code base, don't see any discrepancies.
+		jobLogger.ChangeLogLevel(pipeline.LogError)
 	}
 
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
@@ -192,7 +208,9 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	jm.Reset(appCtx, commandString)
 	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
 	// the Channel and schedules the transfers of that JobPart.
+
 	go jm.scheduleJobParts()
+
 	// In addition to the main pool (which is governed ja.poolSizer), we spin up a separate set of workers to process initiation of transfers
 	// (so that transfer initiation can't starve out progress on already-scheduled chunks.
 	// (Not sure whether that can really happen, but this protects against it anyway.)
@@ -210,6 +228,55 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 func (jm *jobMgr) ChangeLogLevel(level pipeline.LogLevel) {
 	if jm.logger != nil {
 		jm.logger.ChangeLogLevel(level)
+	}
+}
+
+// calculateTransferThreadDelayInMsec checks the chunk channel, if its
+// full then sleep for sometime, so that next it will get ample room to add chunks to
+// chunk channel. It will help in streamline the pipeline as well back pressure the
+// scheduleTransfer thread (which read from the plan file and add job Parts).
+func (jm *jobMgr) calculateTransferThreadDelayInMsec() int {
+	total := cap(jm.xferChannels.normalChunckCh)
+
+	// It's risky to sleep, if channel size is too small.
+	if total <= 1000 {
+		return 0
+	}
+
+	used := len(jm.xferChannels.normalChunckCh)
+	emptyPercent := ((total - used) * 100) / total
+	if emptyPercent < 10 {
+		return 20
+	} else if emptyPercent < 20 {
+		return 10
+	} else {
+		// Don't sleep as we have enough space to fill, and the consumer may not have enough items to process.
+		return 0
+	}
+}
+
+// calculateJobPartThreadDelayInMsec jobPartThread read from plan file and add entries to the
+// transfer threads channel to schedule the transfer. So if finds the transfer threads channel is near full,
+// then it should sleep for sometime.
+func (jm *jobMgr) calculateJobPartThreadDelayInMsec(ch chan<- IJobPartTransferMgr) int {
+	total := cap(ch)
+
+	// It's risky to sleep, if channel size is too small.
+	if total <= 1000 {
+		return 0
+	}
+
+	used := len(ch)
+	emptyPercent := ((total - used) * 100) / total
+	if emptyPercent < 5 {
+		return 50
+	} else if emptyPercent < 10 {
+		return 20
+	} else if emptyPercent < 20 {
+		return 10
+	} else {
+		// Don't sleep as we have enough space to fill, and the consumer may not have enough items to process.
+		return 0
 	}
 }
 
@@ -807,6 +874,12 @@ func (jm *jobMgr) ScheduleTransfer(priority common.JobPriority, jptm IJobPartTra
 	case common.EJobPriority.Normal():
 		// jptm.SetChunkChannel(ja.xferChannels.normalChunckCh)
 		jm.coordinatorChannels.normalTransferCh <- jptm
+
+		// Check the channel "fullness" and decide how much to sleep.
+		sleepTimeInMsec := jm.calculateJobPartThreadDelayInMsec(jm.coordinatorChannels.normalTransferCh)
+		if sleepTimeInMsec > 0 {
+			time.Sleep(time.Duration(sleepTimeInMsec) * time.Millisecond)
+		}
 	case common.EJobPriority.Low():
 		// jptm.SetChunkChannel(ja.xferChannels.lowChunkCh)
 		jm.coordinatorChannels.lowTransferCh <- jptm
@@ -1020,6 +1093,10 @@ func (jm *jobMgr) transferProcessor(workerID int) {
 				jptm.Log(pipeline.LogInfo, fmt.Sprintf("has worker %d which is processing TRANSFER %d", workerID, jptm.(*jobPartTransferMgr).transferIndex))
 			}
 			jptm.StartJobXfer()
+			sleepTimeInMsec := jm.calculateTransferThreadDelayInMsec()
+			if sleepTimeInMsec > 0 {
+				time.Sleep(time.Duration(sleepTimeInMsec) * time.Millisecond)
+			}
 		}
 	}
 
