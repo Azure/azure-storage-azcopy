@@ -3,13 +3,7 @@
 
 package ste
 
-import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"golang.org/x/sys/unix"
-	"time"
-)
-
-func (f localFileSourceInfoProvider) HasUNIXProperties() bool {
+/*func (f localFileSourceInfoProvider) HasUNIXProperties() bool {
 	return true
 }
 
@@ -121,13 +115,13 @@ func (s statTAdapter) AttributeMask() uint64 {
 
 func (s statTAdapter) BTime() time.Time {
 	return time.Time{}
-}
+}*/
 
 func (s statTAdapter) NLink() uint32 {
 	return s.Nlink
 }
 
-func (s statTAdapter) Owner() uint32 {
+/*func (s statTAdapter) Owner() uint32 {
 	return s.Uid
 }
 
@@ -162,3 +156,4 @@ func (s statTAdapter) MTime() time.Time {
 func (s statTAdapter) CTime() time.Time {
 	return time.Unix(s.Ctim.Unix())
 }
+*/
