@@ -21,9 +21,10 @@
 package common
 
 import (
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"regexp"
 	"strings"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 // azCopyLogSanitizer performs string-replacement based log redaction
@@ -79,7 +80,6 @@ func (s *azCopyLogSanitizer) redact(msg, key string) string {
 	// to see how many redactions are from here (with the -'s) and how many
 	// are from the old code (without -'s).
 	const redacted = "-REDACTED-"
-
 	return sensitiveRegexMap[key].ReplaceAllString(msg, "$1"+redacted)
 }
 
