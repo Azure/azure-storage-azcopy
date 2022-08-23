@@ -23,7 +23,7 @@ package common
 import (
 	"context"
 	"net/url"
-	"path"
+	"strings"
 	"sync"
 )
 
@@ -123,14 +123,14 @@ func (s *standardFolderDeletionManager) clean(u *url.URL) *url.URL {
 // getParent drops final part of path (not using use path.Dir because it messes with the // in URLs)
 func (s *standardFolderDeletionManager) getParent(u *url.URL) (*url.URL, bool) {
 	if len(u.Path) == 0 || u.Path == "/" {
-		return nil, false // path is already empty, so we can't go up another level
+		return u, false // path is already empty, so we can't go up another level
 	}
 
 	// trim off last portion of path (or all of the path, if it only has one component)
 	out := s.clean(u)
-	out.Path = path.Dir(out.Path)
+	out.Path = out.Path[:strings.LastIndex(out.Path, "/")]
 	if out.RawPath != "" {
-		out.RawPath = path.Dir(out.RawPath)
+		out.RawPath = out.Path[:strings.LastIndex(out.RawPath, "/")]
 	}
 	return out, true
 }
