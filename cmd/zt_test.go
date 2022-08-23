@@ -647,8 +647,13 @@ func cleanGCPAccount(c *chk.C, client *gcpUtils.Client) {
 	it := client.Buckets(ctx, projectID)
 	for {
 		battrs, err := it.Next()
-		if err == iterator.Done {
-			break
+		if err != nil {
+			if err == iterator.Done {
+				break
+			}
+
+			c.Assert(err, chk.Equals, nil)
+			return
 		}
 		deleteGCPBucket(c, client, battrs.Name, false)
 	}
