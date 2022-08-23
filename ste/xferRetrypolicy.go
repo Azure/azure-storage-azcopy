@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -392,6 +393,12 @@ func NewBlobXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 				switch {
 				case err == nil:
 					action = "NoRetry: successful HTTP request" // no error
+				case response.Response().StatusCode == http.StatusBadRequest:
+					if os.Getenv("AZCOPY_DISABLE_RETRY_ALWAYS") == "" {
+						action="Retry: Custom request"
+					} else {
+						action="NoRetry"
+					}
 
 				case !tryingPrimary && response != nil && response.Response() != nil && response.Response().StatusCode == http.StatusNotFound:
 					// If attempt was against the secondary & it returned a StatusNotFound (404), then
