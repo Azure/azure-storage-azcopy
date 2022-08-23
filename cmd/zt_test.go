@@ -595,13 +595,18 @@ func deleteGCPBucket(c *chk.C, client *gcpUtils.Client, bucketName string, waitQ
 	it := bucket.Objects(ctx, &gcpUtils.Query{Prefix: ""})
 	for {
 		attrs, err := it.Next()
-		if err == iterator.Done {
-			break
+		if err != nil { // if Next returns an error other than iterator.Done, all subsequent calls will return the same error.
+			if err == iterator.Done {
+				break
+			}
+
+			c.Log("Failed to clear GCS bucket:", err) // todo: maybe this code should be more resilient
+			return
 		}
 		if err == nil {
 			err = bucket.Object(attrs.Name).Delete(nil)
 			if err != nil {
-				c.Log("Could not clear GCS Buckets.")
+				c.Log("Could not clear GCS Buckets:", err) // todo: maybe this code should be more resilient
 				return
 			}
 		}
