@@ -62,6 +62,8 @@ type XferRetryOptions struct {
 	// NOTE: Before setting this field, make sure you understand the issues around reading stale & potentially-inconsistent
 	// data at this webpage: https://docs.microsoft.com/en-us/azure/storage/common/storage-designing-ha-apps-with-ragrs
 	RetryReadsFromSecondaryHost string // Comment this our for non-Blob SDKs
+
+	RetryBadRequestCustom bool
 }
 
 func (o XferRetryOptions) retryReadsFromSecondaryHost() string {
@@ -394,7 +396,7 @@ func NewBlobXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 				case err == nil:
 					action = "NoRetry: successful HTTP request" // no error
 				case response.Response().StatusCode == http.StatusBadRequest:
-					if os.Getenv("AZCOPY_DISABLE_RETRY_ALWAYS") == "" {
+					if o.RetryBadRequestCustom && os.Getenv("AZCOPY_DISABLE_TRANSFER_RETRY_BAD_REQUEST") == "" {
 						action="Retry: Custom request"
 					} else {
 						action="NoRetry"
