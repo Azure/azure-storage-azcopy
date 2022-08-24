@@ -70,9 +70,11 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 			uint32(len(buf)),
 			&bufLen)
 
-		// mitigate weirdness with 0 buflen on success with a NAS source
-		if status == ntdll.STATUS_SUCCESS && bufLen == 0 {
-			bufLen = uint32(len(buf))
+		// get real buffer length, since what's returned by ntquerysecurityobject is questionable for STATUS_SUCCESS
+		if status == ntdll.STATUS_SUCCESS {
+			sd := (*windows.SECURITY_DESCRIPTOR)(unsafe.Pointer(&buf[0])) // ntdll.SecurityDescriptor is equivalent
+
+			bufLen = sd.Length()
 			needValidate = true
 		}
 
