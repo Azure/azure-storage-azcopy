@@ -395,11 +395,11 @@ func NewBlobXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 				switch {
 				case err == nil:
 					action = "NoRetry: successful HTTP request" // no error
-				case response.Response().StatusCode == http.StatusBadRequest:
+				case response.Response() != nil && response.Response().StatusCode == http.StatusBadRequest:
 					if o.RetryBadRequestCustom && os.Getenv("AZCOPY_DISABLE_TRANSFER_RETRY_BAD_REQUEST") == "" {
-						action="Retry: Custom request"
+						action = "Retry: Custom request"
 					} else {
-						action="NoRetry"
+						action = "NoRetry"
 					}
 
 				case !tryingPrimary && response != nil && response.Response() != nil && response.Response().StatusCode == http.StatusNotFound:
