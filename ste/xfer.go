@@ -22,6 +22,7 @@ package ste
 
 import (
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -33,7 +34,7 @@ import (
 )
 
 // upload related
-const UploadMaxTries = 20
+var UploadMaxTries = getUploadTryCount()
 const UploadRetryDelay = time.Second * 1
 const UploadMaxRetryDelay = time.Second * 60
 
@@ -64,6 +65,14 @@ type newJobXfer func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer
 type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer, df downloaderFactory)
 type newJobXferWithSenderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer, sf senderFactory, sipf sourceInfoProviderFactory)
 
+func getUploadTryCount() int32 {
+	ret := int32(20)
+	overrideString := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.MaxRetryCount())
+	if overrideVal, err := strconv.ParseInt(overrideString, 10, 32); overrideString != "" && err == nil {
+		ret = int32(overrideVal)
+	}
+	return ret;
+}
 // Takes a multi-purpose download function, and makes it ready to user with a specific type of downloader
 func parameterizeDownload(targetFunction newJobXferWithDownloaderFactory, df downloaderFactory) newJobXfer {
 	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer) {

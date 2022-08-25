@@ -70,6 +70,7 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.CPKEncryptionKeySHA256(),
 	EEnvironmentVariable.DisableSyslog(),
 	EEnvironmentVariable.MimeMapping(),
+	EEnvironmentVariable.MaxRetryCount(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
@@ -367,5 +368,13 @@ func (EnvironmentVariable) DownloadToTempPath() EnvironmentVariable {
 		Name:         "AZCOPY_DOWNLOAD_TO_TEMP_PATH",
 		DefaultValue: "true",
 		Description:  "Configures azcopy to download to a temp path before actual download. Allowed values are true/false",
+	}
+}
+
+func (EnvironmentVariable) MaxRetryCount() EnvironmentVariable {
+	return EnvironmentVariable {
+		Name:		"AZCOPY_MAX_RETRY_COUNT",
+		DefaultValue:	"20",
+		Description:	"Configures number of times a failed http request is retried.",
 	}
 }

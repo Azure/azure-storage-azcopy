@@ -543,8 +543,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 		MaxTries:      UploadMaxTries, // TODO: Consider to unify options.
 		TryTimeout:    UploadTryTimeout,
 		RetryDelay:    UploadRetryDelay,
-		MaxRetryDelay: UploadMaxRetryDelay,
-		RetryBadRequestCustom: true,}
+		MaxRetryDelay: UploadMaxRetryDelay}
 
 	var statsAccForSip *PipelineNetworkStats = nil // we don't accumulate stats on the source info provider
 
