@@ -264,7 +264,7 @@ func NewChunkStatusLogger(jobID JobID, cpuMon CPUMonitor, logFileFolder string, 
 	logger := &chunkStatusLogger{
 		counts:         make([]int64, numWaitReasons()),
 		outputEnabled:  enableOutput,
-		unsavedEntries: make(chan *chunkWaitState, 1000000),
+		unsavedEntries: make(chan *chunkWaitState, 100000),
 		flushDone:      make(chan struct{}),
 		cpuMonitor:     cpuMon,
 	}
@@ -300,7 +300,12 @@ func (csl *chunkStatusLogger) LogChunkStatus(id ChunkID, reason WaitReason) {
 		return
 	}
 
-	csl.unsavedEntries <- &chunkWaitState{ChunkID: id, reason: reason, waitStart: time.Now()}
+	// This change done specific to xdatamove to reduce the log verbosity.
+	// We need chunk entries with done entries to verify what all files transferred.
+	// chunk-log file indeed work as success copy-log for us.
+	if reason == EWaitReason.ChunkDone() || reason == EWaitReason.Cancelled() {
+		csl.unsavedEntries <- &chunkWaitState{ChunkID: id, reason: reason, waitStart: time.Now()}
+	}
 }
 
 func (csl *chunkStatusLogger) FlushLog() {
