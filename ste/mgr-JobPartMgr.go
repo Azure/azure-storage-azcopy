@@ -407,7 +407,10 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 	jpm.priority = plan.Priority
 
-	jpm.createPipelines(jobCtx) // pipeline is created per job part manager
+	// Create pipeline only if there is any item that needs to be transferred.
+	// Otherwise, it results in token refresh calls in quick succession multiple times in case of resume.
+	// This does not go well with ARC IMDS.
+	createDone := false
 
 	// *** Schedule this job part's transfers ***
 	for t := uint32(0); t < plan.NumTransfers; t++ {
@@ -416,6 +419,11 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		if ts == common.ETransferStatus.Success() {
 			jpm.ReportTransferDone(ts) // Don't schedule an already-completed/failed transfer
 			continue
+		}
+
+		if !createDone {
+			jpm.createPipelines(jobCtx) // pipeline is created per job part manager
+			createDone = true
 		}
 
 		// If the transfer was failed, then while rescheduling the transfer marking it Started.
