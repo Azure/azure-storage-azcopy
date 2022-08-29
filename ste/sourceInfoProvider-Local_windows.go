@@ -70,6 +70,15 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 			uint32(len(buf)),
 			&bufLen)
 
+		/*
+			On certain older versions of Windows/Server and certain SAN/SMB emulator software,
+			on any status but STATUS_BUFFER_TOO_SMALL, bufLen will be returned as 0.
+
+			CallWithExpandingBuffer does not handle this correctly.
+			Thus, we have to attain the real length of the security descriptor and correct the output,
+			otherwise we panic due to an OOB error on the array.
+		*/
+
 		// get real buffer length, since what's returned by ntquerysecurityobject is questionable for STATUS_SUCCESS
 		if status == ntdll.STATUS_SUCCESS {
 			sd := (*windows.SECURITY_DESCRIPTOR)(unsafe.Pointer(&buf[0])) // ntdll.SecurityDescriptor is equivalent
