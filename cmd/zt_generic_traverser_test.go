@@ -459,7 +459,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	s3Enabled := err == nil && !isS3Disabled()
 	gcpClient, err := createGCPClientWithGCSSDK()
-	gcpEnabled := err == nil && gcpTestsDisabled()
+	gcpEnabled := err == nil && !gcpTestsDisabled()
 	var bucketName string
 	var bucketNameGCP string
 	if s3Enabled {
