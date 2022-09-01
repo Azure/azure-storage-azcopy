@@ -94,6 +94,7 @@ type IJobPartTransferMgr interface {
 	GetS2SSourceBlobTokenCredential() azblob.TokenCredential
 	PropertiesToTransfer() common.SetPropertiesFlags
 	ResetSourceSize() // sets source size to 0 (made to be used by setProperties command to make number of bytes transferred = 0)
+	SuccessfulBytesTransferred() int64
 }
 
 type TransferInfo struct {
@@ -971,4 +972,8 @@ func (jptm *jobPartTransferMgr) ShouldInferContentType() bool {
 	// For local files, even if the file size is 0B, we try to infer the content based on file extension
 	fromTo := jptm.FromTo()
 	return fromTo.From() == common.ELocation.Local()
+}
+
+func (jptm *jobPartTransferMgr) SuccessfulBytesTransferred() int64 {
+	return atomic.LoadInt64(&jptm.atomicSuccessfulBytes)
 }
