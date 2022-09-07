@@ -184,11 +184,38 @@ type realSeenPathsRecorder struct {
 	m map[string]struct{}
 }
 
+type symlinkTargetSeenPathsRecorder struct {
+	m map[string]string
+}
+
 func (r *realSeenPathsRecorder) Record(path string) {
 	r.m[path] = struct{}{}
 }
 func (r *realSeenPathsRecorder) HasSeen(path string) bool {
 	_, ok := r.m[path]
+	return ok
+}
+
+// This entry will be deleted only once scanning is done, if there is no loop for this symlink-target.
+// Hopefully there will not be too many directory symlinks, so memory will not be problem.
+// In case of loop, it will be deleted in HasSeen method.
+func (r *symlinkTargetSeenPathsRecorder) Record(symlink, target string) {
+	if value, ok := r.m[symlink]; ok {
+		// We should never be called more than once for the same symlink.
+		panic(fmt.Sprintf("Symlink(%s) already present with target(%s)", symlink, value))
+	}
+	r.m[symlink] = target
+}
+
+func (r *symlinkTargetSeenPathsRecorder) HasSeen(symlink, target string) bool {
+	value, ok := r.m[symlink]
+	if ok {
+		if value != target {
+			// We should not be called for same symlink pointing to two different targets.
+			panic(fmt.Sprintf("For symlink(%s) target is (%s), but expected(%s)", symlink, value, target))
+		}
+		delete(r.m, symlink)
+	}
 	return ok
 }
 
@@ -234,9 +261,9 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 	// do NOT put fullPath: true into the map at this time, because we want to match the semantics of filepath.Walk, where the walkfunc is called for the root
 	// When following symlinks, our current implementation tracks folders and files.  Which may consume GB's of RAM when there are 10s of millions of files.
 	var seenPaths seenPathsRecorder = &nullSeenPathsRecorder{} // uses no RAM
-	if followSymlinks {
-		seenPaths = &realSeenPathsRecorder{make(map[string]struct{})} // have to use the RAM if we are dealing with symlinks, to prevent cycles
-	}
+
+	// This will be used only when followSymlinks is true.
+	var seenSymlinkTargets = &symlinkTargetSeenPathsRecorder{make(map[string]string)}
 
 	for len(walkQueue) > 0 {
 		queueItem := walkQueue[0]
@@ -326,14 +353,15 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				}
 
 				if rStat.IsDir() {
-					if !seenPaths.HasSeen(result) {
+					// We need to check if we already seen symlink->directory mapping, to avoid loops where file pointing to its parent or file pointing to directory and
+					// underneath file again pointing to this symlink. This will lead to never ending circular loop.
+					if !seenSymlinkTargets.HasSeen(slPath, result) {
 						err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
 						// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
 						skipped, err := getProcessingError(err)
 
 						if !skipped { // Don't go any deeper (or record it) if we skipped it.
-							seenPaths.Record(common.ToExtendedPath(result))
-							seenPaths.Record(common.ToExtendedPath(slPath)) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
+							seenSymlinkTargets.Record(slPath, result)
 							walkQueue = append(walkQueue, walkItem{
 								fullPath:     result,
 								relativeBase: computedRelativePath,
@@ -342,7 +370,8 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 						// enumerate the FOLDER now (since its presence in seenDirs will prevent its properties getting enumerated later)
 						return err
 					} else {
-						err = fmt.Errorf("Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath))
+						// Directory loop detected where symlink pointing to directory and files underneath again pointing to this same link.
+						err = fmt.Errorf("[Directory Loop Detected] Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath))
 						writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					}
 				} else {
