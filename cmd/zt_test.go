@@ -600,13 +600,15 @@ func deleteGCPBucket(c *chk.C, client *gcpUtils.Client, bucketName string, waitQ
 				break
 			}
 
-			c.Log("Failed to clear GCS bucket:", err) // todo: maybe this code should be more resilient
+			// Failure during listing
+			c.Assert(err, chk.Equals, nil)
 			return
 		}
 		if err == nil {
 			err = bucket.Object(attrs.Name).Delete(nil)
 			if err != nil {
-				c.Log("Could not clear GCS Buckets:", err) // todo: maybe this code should be more resilient
+				// Failure cleaning bucket
+				c.Assert(err, chk.Equals, nil)
 				return
 			}
 		}
