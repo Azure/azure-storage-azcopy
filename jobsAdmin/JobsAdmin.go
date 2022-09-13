@@ -545,7 +545,7 @@ func (ja *jobsAdmin) LogToJobLog(msg string, level pipeline.LogLevel) {
 	if level <= pipeline.LogWarning {
 		prefix = fmt.Sprintf("%s: ", common.LogLevel(level)) // so readers can find serious ones, but information ones still look uncluttered without INFO:
 	}
-	ja.jobLogger.Log(pipeline.LogWarning, prefix+msg) // use LogError here, so that it forces these to get logged, even if user is running at warning level instead of Info.  They won't have "warning" prefix, if Info level was passed in to MessagesForJobLog
+	ja.jobLogger.Log(level, prefix+msg)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
