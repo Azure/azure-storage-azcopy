@@ -70,6 +70,7 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.CPKEncryptionKeySHA256(),
 	EEnvironmentVariable.DisableSyslog(),
 	EEnvironmentVariable.MimeMapping(),
+	EEnvironmentVariable.DownloadToTempPath(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
