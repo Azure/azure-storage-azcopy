@@ -60,6 +60,7 @@ type IJobPartTransferMgr interface {
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
 	SourceProviderPipeline() pipeline.Pipeline
+	SourceCredential() pipeline.Factory
 	FailActiveUpload(where string, err error)
 	FailActiveDownload(where string, err error)
 	FailActiveUploadWithStatus(where string, err error, failureStatus common.TransferStatus)
@@ -206,20 +207,16 @@ type jobPartTransferMgr struct {
 }
 
 func (jptm *jobPartTransferMgr) GetS2SSourceBlobTokenCredential() azblob.TokenCredential {
-	jpm := jptm.jobPartMgr.(*jobPartMgr)
-	credOption := common.CredentialOpOptions{
-		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
-		LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
-		Panic:    jpm.Panic,
-		CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
-		Cancel:   jpm.jobMgr.Cancel,
-	}
+	cred := jptm.SourceCredential()
 
-	cType := jpm.jobMgr.getInMemoryTransitJobState().S2SSourceCredentialType
-	if cType.IsAzureOAuth() {
-		return common.CreateBlobCredential(jptm.Context(), jptm.jobPartMgr.(*jobPartMgr).jobMgr.getInMemoryTransitJobState().CredentialInfo.WithType(cType), credOption).(azblob.TokenCredential)
-	} else {
+	if cred == nil {
 		return nil
+	} else {
+		if tc, ok := cred.(azblob.TokenCredential); ok {
+			return tc
+		} else {
+			return nil
+		}
 	}
 }
 
@@ -951,6 +948,10 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 
 func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {
 	return jptm.jobPartMgr.SourceProviderPipeline()
+}
+
+func (jptm *jobPartTransferMgr) SourceCredential() pipeline.Factory {
+	return jptm.jobPartMgr.SourceCredential()
 }
 
 func (jptm *jobPartTransferMgr) SecurityInfoPersistenceManager() *securityInfoPersistenceManager {

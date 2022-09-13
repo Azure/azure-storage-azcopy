@@ -179,7 +179,7 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 
 			if err != nil {
 				if stgErr, ok := err.(azblob.StorageError); ok {
-					if httpResp := stgErr.Response(); httpResp.StatusCode == 401 {
+					if httpResp := stgErr.Response(); httpResp.StatusCode == 401 || httpResp.StatusCode == 403 { // *sometimes* the service can return 403s.
 						challenge := httpResp.Header.Get("WWW-Authenticate")
 						if strings.Contains(challenge, common.MDResource) {
 							if !oAuthTokenExists() {
@@ -192,7 +192,7 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 					}
 				}
 
-				return common.ECredentialType.Unknown(), false, err
+				return common.ECredentialType.Unknown(), false, fmt.Errorf("unexpected response for managed disk authorization check: %w", err)
 			}
 		}
 
