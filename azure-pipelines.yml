@@ -20,7 +20,7 @@ jobs:
           imageName: 'ubuntu-20.04'
           type: 'linux'
         MacOS:
-          imageName: 'macOS-10.15'
+          imageName: 'macos-11'
           type: 'mac-os'
     pool:
       vmImage: $(imageName)
@@ -86,7 +86,7 @@ jobs:
           imageName: 'windows-2019'
           type: 'windows'
         MacOS:
-          imageName: 'macOS-10.15'
+          imageName: 'macos-11'
           type: 'mac-os'
     pool:
       vmImage: $(imageName)
