@@ -27,7 +27,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -83,7 +82,6 @@ func (s *scenario) Run() {
 			s.uploadLogs(logDir)
 			s.a.(*testingAsserter).t.Log("uploaded logs for job " + s.state.result.jobID.String() + " to container azcopylogs in account " + os.Getenv("AZCOPY_E2E_ACCOUNT_NAME"))
 		}
-		s.cleanupLogs(logDir)
 	}()
 
 	// setup scenario
@@ -144,45 +142,8 @@ func (s *scenario) Run() {
 	s.runHook(s.hs.afterValidation)
 }
 
-func (s *scenario) cleanupLogs(logDir string) {
-	s.a.Assert(os.RemoveAll(logDir), equals(), nil, "cleanup of log files")
-}
-
 func (s *scenario) uploadLogs(logDir string) {
-	container := TestResourceFactory{}.GetBlobServiceURL(EAccountType.Standard()).NewContainerURL("azcopylogs")
-	_, err := container.Create(ctx, nil, azblob.PublicAccessNone)
-
-	if err != nil {
-		if stgErr, ok := err.(azblob.StorageError); ok && stgErr.ServiceCode() == azblob.ServiceCodeContainerAlreadyExists {
-		} else {
-			s.a.Assert(err, equals(), nil, "failed to ensure log container exists")
-			return // cannot upload logs
-		}
-	}
-
-	entries, err := os.ReadDir(logDir)
-	s.a.Assert(err, equals(), nil, "failed to read log directory")
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		if !strings.HasSuffix(entry.Name(), ".log") {
-			continue
-		}
-
-		file, err := os.Open(filepath.Join(logDir, entry.Name()))
-		if err != nil {
-			s.a.Assert(err, equals(), nil, "failed to open log file "+entry.Name())
-			continue
-		}
-
-		bURL := container.NewBlockBlobURL(s.state.result.jobID.String() + "/" + entry.Name())
-		_, err = azblob.UploadFileToBlockBlob(ctx, file, bURL, azblob.UploadToBlockBlobOptions{})
-		s.a.Assert(err, equals(), nil, "failed to upload log file "+entry.Name())
-
-		s.a.Assert(file.Close(), equals(), nil, "failed to close file "+entry.Name()+" after upload")
-	}
+	s.a.Assert(os.Rename(logDir, filepath.Join(os.Getenv("AZCOPY_E2E_LOG_OUTPUT"), s.state.result.jobID.String())), equals(), nil)
 }
 
 func (s *scenario) runHook(h hookFunc) bool {
