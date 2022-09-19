@@ -184,7 +184,7 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string, env []
 	return stdout.Bytes(), runErr
 }
 
-func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, needsOAuth bool, afterStart func() string, chToStdin <-chan string) (CopyOrSyncCommandResult, bool, error) {
+func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, needsOAuth bool, afterStart func() string, chToStdin <-chan string, logDir string) (CopyOrSyncCommandResult, bool, error) {
 	capLen := func(b []byte) []byte {
 		if len(b) < 1024 {
 			return b
@@ -232,6 +232,10 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 		if tenId != "" {
 			env = append(env, "AZCOPY_TENANT_ID="+tenId)
 		}
+	}
+
+	if logDir != "" {
+		env = append(env, "AZCOPY_LOG_LOCATION="+logDir)
 	}
 
 	out, err := t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args, env, afterStart, chToStdin)
