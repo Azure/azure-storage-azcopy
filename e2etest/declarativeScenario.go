@@ -78,9 +78,14 @@ func (s *scenario) Run() {
 	}
 	azcopyRan := false
 	defer func() {
-		if azcopyRan {
+		err := os.MkdirAll(os.Getenv("AZCOPY_E2E_LOG_OUTPUT"), os.ModePerm|os.ModeDir)
+		if err != nil {
+			s.a.Assert(err, equals(), nil)
+			return
+		}
+		if azcopyRan && s.a.Failed() {
 			s.uploadLogs(logDir)
-			s.a.(*testingAsserter).t.Log("uploaded logs for job " + s.state.result.jobID.String() + " to container azcopylogs in account " + os.Getenv("AZCOPY_E2E_ACCOUNT_NAME"))
+			s.a.(*testingAsserter).t.Log("uploaded logs for job " + s.state.result.jobID.String() + " as an artifact")
 		}
 	}()
 
@@ -143,6 +148,9 @@ func (s *scenario) Run() {
 }
 
 func (s *scenario) uploadLogs(logDir string) {
+	if s.state.result == nil {
+		return // nothing to upload
+	}
 	s.a.Assert(os.Rename(logDir, filepath.Join(os.Getenv("AZCOPY_E2E_LOG_OUTPUT"), s.state.result.jobID.String())), equals(), nil)
 }
 
