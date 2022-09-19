@@ -60,12 +60,12 @@ func main() {
 	// the user can optionally put the plan files somewhere else
 	if azcopyJobPlanFolder == "" {
 		// make the app path folder ".azcopy" first so we can make a plans folder in it
-		if err := os.Mkdir(azcopyAppPathFolder, os.ModeDir); err != nil && !os.IsExist(err) {
+		if err := os.MkdirAll(azcopyAppPathFolder, os.ModeDir); err != nil && !os.IsExist(err) {
 			common.PanicIfErr(err)
 		}
 		azcopyJobPlanFolder = path.Join(azcopyAppPathFolder, "plans")
 	}
-	if err := os.Mkdir(azcopyJobPlanFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
+	if err := os.MkdirAll(azcopyJobPlanFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
 		common.PanicIfErr(err)
 	}
 
