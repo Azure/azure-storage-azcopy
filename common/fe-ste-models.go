@@ -670,6 +670,11 @@ var ETransferStatus = TransferStatus(0)
 
 type TransferStatus int32 // Must be 32-bit for atomic operations; negative #s represent a specific failure code
 
+func (t TransferStatus) StatusLocked() bool { // Is an overwrite necessary to change tx status?
+	// Any kind of failure, or success is considered "locked in".
+	return t <= ETransferStatus.Failed() || t == ETransferStatus.Success()
+}
+
 // Transfer is ready to transfer and not started transferring yet
 func (TransferStatus) NotStarted() TransferStatus { return TransferStatus(0) }
 
