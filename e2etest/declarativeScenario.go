@@ -71,20 +71,25 @@ func (s *scenario) Run() {
 	defer s.cleanup()
 
 	// setup runner
-	logDir, err := os.MkdirTemp("", "")
+	azcopyDir, err := os.MkdirTemp("", "")
 	if err != nil {
 		s.a.Error(err.Error())
 		return
 	}
 	azcopyRan := false
 	defer func() {
+		if os.Getenv("AZCOPY_E2E_LOG_OUTPUT") == "" {
+			s.a.Assert(os.RemoveAll(azcopyDir), equals(), nil)
+			return // no need, just delete logdir
+		}
+
 		err := os.MkdirAll(os.Getenv("AZCOPY_E2E_LOG_OUTPUT"), os.ModePerm|os.ModeDir)
 		if err != nil {
 			s.a.Assert(err, equals(), nil)
 			return
 		}
 		if azcopyRan && s.a.Failed() {
-			s.uploadLogs(logDir)
+			s.uploadLogs(azcopyDir)
 			s.a.(*testingAsserter).t.Log("uploaded logs for job " + s.state.result.jobID.String() + " as an artifact")
 		}
 	}()
@@ -106,14 +111,14 @@ func (s *scenario) Run() {
 
 	// execute
 	azcopyRan = true
-	s.runAzCopy(logDir)
+	s.runAzCopy(azcopyDir)
 	if s.a.Failed() {
 		return // execution failed. No point in running validation
 	}
 
 	// resume if needed
 	if s.needResume {
-		tx, err := s.state.result.GetTransferList(common.ETransferStatus.Cancelled())
+		tx, err := s.state.result.GetTransferList(common.ETransferStatus.Cancelled(), azcopyDir)
 		s.a.AssertNoErr(err, "Failed to get transfer list for Cancelled")
 		s.a.Assert(len(tx), equals(), len(s.p.debugSkipFiles), "Job cancel didn't completely work")
 
@@ -121,14 +126,14 @@ func (s *scenario) Run() {
 			return
 		}
 
-		s.resumeAzCopy(logDir)
+		s.resumeAzCopy(azcopyDir)
 	}
 	if s.a.Failed() {
 		return // resume failed. No point in running validation
 	}
 
 	// check
-	s.validateTransferStates()
+	s.validateTransferStates(azcopyDir)
 	if s.a.Failed() {
 		return // no point in doing more validation
 	}
@@ -148,7 +153,7 @@ func (s *scenario) Run() {
 }
 
 func (s *scenario) uploadLogs(logDir string) {
-	if s.state.result == nil {
+	if s.state.result == nil || os.Getenv("AZCOPY_E2E_LOG_OUTPUT") == "" {
 		return // nothing to upload
 	}
 	s.a.Assert(os.Rename(logDir, filepath.Join(os.Getenv("AZCOPY_E2E_LOG_OUTPUT"), s.state.result.jobID.String())), equals(), nil)
@@ -295,7 +300,7 @@ func (s *scenario) validateRemove() {
 		}
 	}
 }
-func (s *scenario) validateTransferStates() {
+func (s *scenario) validateTransferStates(azcopyDir string) {
 	if s.operation == eOperation.Remove() {
 		s.validateRemove()
 		return
@@ -318,7 +323,7 @@ func (s *scenario) validateTransferStates() {
 		//       Is that OK? (Not sure what to do if it's not, because azcopy jobs show, apparently doesn't offer us a way to get the skipped list)
 	} {
 		expectedTransfers := s.fs.getForStatus(statusToTest, expectFolders, expectRootFolder)
-		actualTransfers, err := s.state.result.GetTransferList(statusToTest)
+		actualTransfers, err := s.state.result.GetTransferList(statusToTest, azcopyDir)
 		s.a.AssertNoErr(err)
 
 		Validator{}.ValidateCopyTransfersAreScheduled(s.a, isSrcEncoded, isDstEncoded, srcRoot, dstRoot, expectedTransfers, actualTransfers, statusToTest, s.FromTo(), s.srcAccountType, s.destAccountType)
