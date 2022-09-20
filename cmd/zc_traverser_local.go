@@ -30,7 +30,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -236,42 +235,6 @@ func (s symlinkTargetFileInfo) Name() string {
 	return s.name // override the name
 }
 
-func isSymbolicLinkCauseLoop(slPath string) (bool, error) {
-	if runtime.GOOS != "linux" {
-		panic("Not valid for windows os")
-	}
-
-	// Lets get the stat of symbolic link pointed to.
-	tStat, err := os.Stat(slPath)
-	if err != nil {
-		fmt.Printf("Error in lstat: %v\n", err)
-		return false, err
-	}
-
-	tgtInode := tStat.Sys().(*syscall.Stat_t).Ino
-	for {
-		slPath = filepath.Dir(slPath)
-		if slPath != "" {
-			stat, err := os.Stat(slPath)
-			if err != nil {
-				fmt.Printf("Stat of file(%s) failed with error: %v\n", slPath, err)
-				return false, err
-			}
-
-			if tgtInode == stat.Sys().(*syscall.Stat_t).Ino {
-				fmt.Printf("Target inode(%v) of slPath(%s) and inode(%v)\n", tgtInode, slPath, stat.Sys().(*syscall.Stat_t).Ino)
-				return true, nil
-			}
-
-			if slPath == "/" {
-				return false, nil
-			}
-		} else {
-			return false, nil
-		}
-	}
-}
-
 // WalkWithSymlinks is a symlinks-aware, parallelized, version of filePath.Walk.
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
@@ -300,7 +263,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 	var seenPaths seenPathsRecorder = &nullSeenPathsRecorder{} // uses no RAM
 
 	// This will be used only when followSymlinks is true.
-	// var seenSymlinkTargets = &symlinkTargetSeenPathsRecorder{make(map[string]string)}
+	var seenSymlinkTargets = &symlinkTargetSeenPathsRecorder{make(map[string]string)}
 
 	for len(walkQueue) > 0 {
 		queueItem := walkQueue[0]
@@ -390,21 +353,15 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				}
 
 				if rStat.IsDir() {
-					if ok, err := isSymbolicLinkCauseLoop(slPath); err != nil {
-						err = fmt.Errorf("isSymbolicLinkCauseLoop failed with error: %v", err)
-						writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
-						return err
-					} else if ok {
-						// Directory loop detected where symlink pointing to directory and files underneath again pointing to this same link.
-						err = fmt.Errorf("[Directory Loop Detected] Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath))
-						writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
-						return nil
-					} else {
+					// We need to check if we already seen symlink->directory mapping, to avoid loops where file pointing to its parent or file pointing to directory and
+					// underneath file again pointing to this symlink. This will lead to never ending circular loop.
+					if !seenSymlinkTargets.HasSeen(slPath, result) {
 						err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
 						// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
 						skipped, err := getProcessingError(err)
 
 						if !skipped { // Don't go any deeper (or record it) if we skipped it.
+							seenSymlinkTargets.Record(slPath, result)
 							walkQueue = append(walkQueue, walkItem{
 								fullPath:     result,
 								relativeBase: computedRelativePath,
@@ -412,6 +369,10 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 						}
 						// enumerate the FOLDER now (since its presence in seenDirs will prevent its properties getting enumerated later)
 						return err
+					} else {
+						// Directory loop detected where symlink pointing to directory and files underneath again pointing to this same link.
+						err = fmt.Errorf("[Directory Loop Detected] Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath))
+						writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					}
 				} else {
 					// It's a symlink to a file and we handle cyclic symlinks.
