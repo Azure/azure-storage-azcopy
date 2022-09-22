@@ -30,6 +30,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -235,6 +236,57 @@ func (s symlinkTargetFileInfo) Name() string {
 	return s.name // override the name
 }
 
+// checkSymlinkCausesDirectoryLoop will inspect the symlink provided and check if it can cause a
+// directory loop. Caller will typically call it only for symlinks that point to a directory.
+// It simply finds the inode of the symlink target directory and checks if that matches with any
+// of the ancestor directory in the symlink path. If yes it means that the symlink is pointing into
+// one of its ancestors and hence traversing that will cause a filesystem loop.
+func checkSymlinkCausesDirectoryLoop(absSymlinkPath string) (bool, error) {
+	if runtime.GOOS != "linux" {
+		// It should work for all Unix OS'es, but since we have tested only on Linux let's enforce that.
+		panic("checkSymlinkCausesDirectoryLoop not supported for this OS")
+	}
+
+	if !filepath.IsAbs(absSymlinkPath) {
+		panic(fmt.Sprintf("checkSymlinkCausesDirectoryLoop failed, symlink path not an absolute path(%s)", absSymlinkPath))
+	}
+
+	// Stat() the symlink target directory to find its inode.
+	tgtStat, err := os.Stat(absSymlinkPath)
+	if err != nil {
+		fmt.Printf("os.Stat(%s) failed: %v\n", absSymlinkPath, err)
+		return false, err
+	}
+
+	if tgtStat.Mode()&os.ModeDir == 0 {
+		panic("checkSymlinkCausesDirectoryLoop must only be called for a symlink pointing to a directory")
+	}
+
+	// Save the target directory inode and then check each ancestor starting from the most recent,
+	// to see if any of the ancestor directories have the same inode, if yes, it's a loop.
+	tgtInode := tgtStat.Sys().(*syscall.Stat_t).Ino
+	tmpPath := absSymlinkPath
+	for {
+		tmpPath = filepath.Dir(tmpPath)
+
+		stat, err := os.Stat(tmpPath)
+		if err != nil {
+			fmt.Printf("os.Stat(%s) failed: %v\n", tmpPath, err)
+			return false, err
+		}
+
+		if tgtInode == stat.Sys().(*syscall.Stat_t).Ino {
+			fmt.Printf("Symlink (%s) points to its ancestor (%s), matching inode is %d\n", absSymlinkPath, tmpPath, tgtInode)
+			return true, nil
+		}
+
+		if tmpPath == "/" {
+			return false, nil
+		}
+
+	}
+}
+
 // WalkWithSymlinks is a symlinks-aware, parallelized, version of filePath.Walk.
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
@@ -261,9 +313,6 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 	// do NOT put fullPath: true into the map at this time, because we want to match the semantics of filepath.Walk, where the walkfunc is called for the root
 	// When following symlinks, our current implementation tracks folders and files.  Which may consume GB's of RAM when there are 10s of millions of files.
 	var seenPaths seenPathsRecorder = &nullSeenPathsRecorder{} // uses no RAM
-
-	// This will be used only when followSymlinks is true.
-	var seenSymlinkTargets = &symlinkTargetSeenPathsRecorder{make(map[string]string)}
 
 	for len(walkQueue) > 0 {
 		queueItem := walkQueue[0]
@@ -353,15 +402,25 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				}
 
 				if rStat.IsDir() {
-					// We need to check if we already seen symlink->directory mapping, to avoid loops where file pointing to its parent or file pointing to directory and
-					// underneath file again pointing to this symlink. This will lead to never ending circular loop.
-					if !seenSymlinkTargets.HasSeen(slPath, result) {
+					/*
+					 * Symlink pointing to a directory has the potential of causing filesystem loops by pointing
+					 * to one of its ancestor directories.
+					 * Skip the symlink if it causes one, else queue it for scanning.
+					 */
+					if ok, err := checkSymlinkCausesDirectoryLoop(slPath); err != nil {
+						err = fmt.Errorf("checkSymlinkCausesDirectoryLoop failed with error: %v", err)
+						writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+						return err
+					} else if ok {
+						err = fmt.Errorf("[Directory Loop Detected] %s -> %s, skipping", slPath, result)
+						writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+						return nil
+					} else {
 						err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
 						// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
 						skipped, err := getProcessingError(err)
 
 						if !skipped { // Don't go any deeper (or record it) if we skipped it.
-							seenSymlinkTargets.Record(slPath, result)
 							walkQueue = append(walkQueue, walkItem{
 								fullPath:     result,
 								relativeBase: computedRelativePath,
@@ -369,10 +428,6 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 						}
 						// enumerate the FOLDER now (since its presence in seenDirs will prevent its properties getting enumerated later)
 						return err
-					} else {
-						// Directory loop detected where symlink pointing to directory and files underneath again pointing to this same link.
-						err = fmt.Errorf("[Directory Loop Detected] Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath))
-						writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					}
 				} else {
 					// It's a symlink to a file and we handle cyclic symlinks.
