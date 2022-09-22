@@ -72,7 +72,7 @@ func (t *blobTraverser) IsDirectory(isSource bool) bool {
 		return isDirDirect
 	}
 
-	_, _, isDirStub, err := t.getPropertiesIfSingleBlob()
+	_, isBlob, isDirStub, err := t.getPropertiesIfSingleBlob()
 
 	if stgErr, ok := err.(azblob.StorageError); ok {
 		// We know for sure this is a single blob still, let it walk on through to the traverser.
@@ -99,8 +99,8 @@ func (t *blobTraverser) IsDirectory(isSource bool) bool {
 	}
 
 	if len(resp.Segment.BlobItems) == 0 {
-		//Not a directory
-		return false
+		// classic behaviour: if it's not a blob, and it's not a directory stub, treat it like a directory.
+		return !isBlob
 	}
 
 	return true
