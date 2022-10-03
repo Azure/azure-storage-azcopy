@@ -1488,14 +1488,14 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		var e *CopyEnumerator
 		e, err = cca.initEnumerator(jobPartOrder, ctx)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to initialize enumerator: %w", err)
 		}
 
 		err = e.enumerate()
 	case common.EFromTo.BlobTrash(), common.EFromTo.FileTrash():
 		e, createErr := newRemoveEnumerator(cca)
 		if createErr != nil {
-			return createErr
+			return fmt.Errorf("failed to initialize enumerator: %w", createErr)
 		}
 
 		err = e.enumerate()
@@ -1512,7 +1512,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	case common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone(), common.EFromTo.FileNone():
 		e, createErr := setPropertiesEnumerator(cca)
 		if createErr != nil {
-			return createErr
+			return fmt.Errorf("failed to initialize enumerator: %w", createErr)
 		}
 		err = e.enumerate()
 
