@@ -1,6 +1,18 @@
 
 # Change Log
 
+## Version 10.16.1
+
+### Documentation changes
+
+1. `all` was historically an available status option for `jobs show` but is now documented.
+
+### Bug Fixes
+
+1. Fixed a hard crash when persisting ACLs from remote filesystems on Windows.
+2. Fixed a hard crash when deleting folders containing a `%` in the name from Azure Files.
+3. Fixed a bug which made Managed Disks data access authentication mode unusable with auto login. 
+
 ## Version 10.16.0
 
 ### New features
