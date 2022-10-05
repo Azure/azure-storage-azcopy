@@ -48,15 +48,37 @@ jobs:
 
       - script: |
           GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
+        displayName: 'Generate Linux AMD64'
+        condition: eq(variables.type, 'linux')
+
+      - script: |
           GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
+        displayName: 'Generate Linux AMD64 SE Integration'
+        condition: eq(variables.type, 'linux')
+
+      - script: |
           GOARCH=arm64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
+        displayName: 'Generate Linux ARM64'
+        condition: eq(variables.type, 'linux')
 
+      - script: |
           GOARCH=amd64 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
-          GOARCH=386 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
-          GOARCH=arm GOARM=7 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_v7_arm.exe"
+        displayName: 'Generate Windows AMD64'
+        condition: eq(variables.type, 'windows')
 
+      - script: |
+          GOARCH=386 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
+        displayName: 'Generate Windows i386'
+        condition: eq(variables.type, 'windows')
+
+      - script: |
+          GOARCH=arm GOARM=7 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_v7_arm.exe"
+        displayName: 'Generate Windows ARM'
+        condition: eq(variables.type, 'windows')
+
+      - script: |
           cp NOTICE.txt $(Build.ArtifactStagingDirectory)
-        displayName: 'Generate Linux And Windows Build'
+        displayName: 'Copy NOTICE.txt'
         condition: eq(variables.type, 'linux')
 
       - script: |
