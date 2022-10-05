@@ -70,6 +70,17 @@ type scenarioState struct {
 func (s *scenario) Run() {
 	defer s.cleanup()
 
+	// First, validate the accounts make sense for the source/dests
+	if s.srcAccountType.IsBlobOnly() {
+		s.a.Assert(s.fromTo.From(), equals(), common.ELocation.Blob())
+	}
+
+	if s.destAccountType.IsBlobOnly() {
+		s.a.Assert(s.destAccountType, notEquals(), EAccountType.StdManagedDisk(), "Upload is not supported in MD testing yet")
+		s.a.Assert(s.destAccountType, notEquals(), EAccountType.OAuthManagedDisk(), "Upload is not supported in MD testing yet")
+		s.a.Assert(s.fromTo.To(), equals(), common.ELocation.Blob())
+	}
+
 	// setup
 	s.assignSourceAndDest() // what/where are they
 	s.state.source.createLocation(s.a, s)
@@ -140,6 +151,13 @@ func (s *scenario) runHook(h hookFunc) bool {
 
 func (s *scenario) assignSourceAndDest() {
 	createTestResource := func(loc common.Location, isSourceAcc bool) resourceManager {
+		var accType AccountType
+		if isSourceAcc {
+			accType = s.srcAccountType
+		} else {
+			accType = s.destAccountType
+		}
+
 		// TODO: handle account to account (multi-container) scenarios
 		switch loc {
 		case common.ELocation.Local():
@@ -149,6 +167,12 @@ func (s *scenario) assignSourceAndDest() {
 		case common.ELocation.Blob():
 			// TODO: handle the multi-container (whole account) scenario
 			// TODO: handle wider variety of account types
+			if accType.IsManagedDisk() {
+				mdCfg, err := GlobalInputManager{}.GetMDConfig(accType)
+				s.a.AssertNoErr(err)
+				return &resourceManagedDisk{config: *mdCfg}
+			}
+
 			if isSourceAcc {
 				return &resourceBlobContainer{accountType: s.srcAccountType}
 			} else {
@@ -190,13 +214,17 @@ func (s *scenario) runAzCopy() {
 		}
 	}
 
+	needsSAS := func(credType common.CredentialType) bool {
+		return credType == common.ECredentialType.Anonymous() || credType == common.ECredentialType.MDOAuthToken()
+	}
+
 	tf := s.GetTestFiles()
 	// run AzCopy
 	result, wasClean, err := r.ExecuteAzCopyCommand(
 		s.operation,
-		s.state.source.getParam(s.stripTopDir, s.credTypes[0] == common.ECredentialType.Anonymous(), tf.objectTarget),
-		s.state.dest.getParam(false, s.credTypes[1] == common.ECredentialType.Anonymous(), common.IffString(tf.destTarget != "", tf.destTarget, tf.objectTarget)),
-		s.credTypes[0] == common.ECredentialType.OAuthToken() || s.credTypes[1] == common.ECredentialType.OAuthToken(), // needsOAuth
+		s.state.source.getParam(s.stripTopDir, needsSAS(s.credTypes[0]), tf.objectTarget),
+		s.state.dest.getParam(false, needsSAS(s.credTypes[1]), common.IffString(tf.destTarget != "", tf.destTarget, tf.objectTarget)),
+		s.credTypes[0].IsAzureOAuth() || s.credTypes[1].IsAzureOAuth(), // needsOAuth
 		afterStart, s.chToStdin)
 
 	if !wasClean {
@@ -207,7 +235,7 @@ func (s *scenario) runAzCopy() {
 	if result.finalStatus.JobStatus == common.EJobStatus.Cancelled() {
 		for _, v := range result.finalStatus.FailedTransfers {
 			if v.ErrorCode == 403 {
-				s.a.Error("authorization failed, perhaps SPN auth or the SAS token is bad?")
+				s.a.Error("Job " + result.jobID.String() + " authorization failed, perhaps SPN auth or the SAS token is bad?")
 			}
 		}
 	}
