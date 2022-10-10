@@ -26,7 +26,7 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/url"
 	"os"
 	"path"
@@ -67,7 +67,7 @@ var specialNames = []string{
 // note: this is to emulate the list-of-files flag
 // nolint
 func (scenarioHelper) generateListOfFiles(c asserter, fileList []string) (path string) {
-	parentDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
+	parentDirName, err := os.MkdirTemp("", "AzCopyLocalTest")
 	c.AssertNoErr(err)
 
 	// create the file
@@ -77,14 +77,14 @@ func (scenarioHelper) generateListOfFiles(c asserter, fileList []string) (path s
 
 	// pipe content into it
 	content := strings.Join(fileList, "\n")
-	err = ioutil.WriteFile(path, []byte(content), common.DEFAULT_FILE_PERM)
+	err = os.WriteFile(path, []byte(content), common.DEFAULT_FILE_PERM)
 	c.AssertNoErr(err)
 	return
 }
 
 // nolint
 func (scenarioHelper) generateLocalDirectory(c asserter) (dstDirName string) {
-	dstDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
+	dstDirName, err := os.MkdirTemp("", "AzCopyLocalTest")
 	c.AssertNoErr(err)
 	return
 }
@@ -101,7 +101,7 @@ func (scenarioHelper) generateLocalFile(filePath string, fileSize int) ([]byte, 
 	}
 
 	// write to file and return the data
-	err = ioutil.WriteFile(filePath, bigBuff, common.DEFAULT_FILE_PERM)
+	err = os.WriteFile(filePath, bigBuff, common.DEFAULT_FILE_PERM)
 	return bigBuff, err
 }
 
@@ -523,7 +523,7 @@ func (s scenarioHelper) downloadBlobContent(a asserter, options downloadContentO
 	retryReader := downloadResp.Body(azblob.RetryReaderOptions{})
 	defer retryReader.Close()
 
-	destData, err := ioutil.ReadAll(retryReader)
+	destData, err := io.ReadAll(retryReader)
 	a.AssertNoErr(err)
 	return destData[:]
 }
@@ -904,7 +904,7 @@ func (s scenarioHelper) downloadFileContent(a asserter, options downloadContentO
 	retryReader := downloadResp.Body(azfile.RetryReaderOptions{})
 	defer retryReader.Close() // The client must close the response body when finished with it
 
-	destData, err := ioutil.ReadAll(retryReader)
+	destData, err := io.ReadAll(retryReader)
 	a.AssertNoErr(err)
 	downloadResp.Body(azfile.RetryReaderOptions{})
 	return destData
