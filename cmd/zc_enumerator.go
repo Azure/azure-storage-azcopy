@@ -47,12 +47,13 @@ import (
 // we can add more properties if needed, as this is easily extensible
 // ** DO NOT instantiate directly, always use newStoredObject ** (to make sure its fully populated and any preprocessor method runs)
 type StoredObject struct {
-	name             string
-	entityType       common.EntityType
-	lastModifiedTime time.Time
-	size             int64
-	md5              []byte
-	blobType         azblob.BlobType // will be "None" when unknown or not applicable
+	name                string
+	entityType          common.EntityType
+	lastModifiedTime    time.Time
+	smbLastModifiedTime time.Time
+	size                int64
+	md5                 []byte
+	blobType            azblob.BlobType // will be "None" when unknown or not applicable
 
 	// all of these will be empty when unknown or not applicable.
 	contentDisposition string
@@ -92,7 +93,16 @@ type StoredObject struct {
 }
 
 func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject) bool {
-	return s.lastModifiedTime.After(storedObject2.lastModifiedTime)
+	lmtA := s.lastModifiedTime
+	if !s.smbLastModifiedTime.IsZero() {
+		lmtA = s.smbLastModifiedTime
+	}
+	lmtB := storedObject2.lastModifiedTime
+	if !storedObject2.smbLastModifiedTime.IsZero() {
+		lmtB = storedObject2.smbLastModifiedTime
+	}
+
+	return lmtA.After(lmtB)
 }
 
 func (s *StoredObject) isSingleSourceFile() bool {
@@ -569,7 +579,9 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 type objectProcessor func(storedObject StoredObject) error
 
 // TODO: consider making objectMorpher an interface, not a func, and having newStoredObject take an array of them, instead of just one
-//   Might be easier to debug
+//
+//	Might be easier to debug
+//
 // modifies a StoredObject, but does NOT process it.  Used for modifications, such as pre-pending a parent path
 type objectMorpher func(storedObject *StoredObject)
 
