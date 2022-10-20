@@ -258,10 +258,10 @@ func (i *folderIndexer) traverse(processor objectProcessor, filters []ObjectFilt
 		panic(fmt.Sprintf("\n Total Size should be zero. Size: %v", atomic.LoadInt64(&i.totalSize)))
 	}
 
-	for _, folder := range i.folderMap {
+	for folder, objectIndexerMap := range i.folderMap {
 		found = true
-		fmt.Printf("\n Folder with relative path[%s] still in map", folder.indexMap["."].relativePath)
-		for _, value := range folder.indexMap {
+		fmt.Printf("\n Folder with relative path[%s] still in map", folder)
+		for _, value := range objectIndexerMap.indexMap {
 			fmt.Printf("\n File with relative path[%s] still in map", value.relativePath)
 		}
 	}

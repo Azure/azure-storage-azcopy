@@ -71,8 +71,8 @@ type blobTraverser struct {
 	// Hierarchical map of files and folders seen on source side.
 	indexerMap *folderIndexer
 
-	// Communication channel between source and destination traverser.
-	tqueue chan interface{}
+	// child-after-parent ordered communication channel between source and destination traverser.
+	orderedTqueue parallel.OrderedTqueueInterface
 
 	// For sync operation this flag tells whether this is source or target.
 	isSource bool
@@ -529,12 +529,12 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 
 	// initiate parallel scanning, starting at the root path
 	workerContext, cancelWorkers := context.WithCancel(t.ctx)
-	channels := parallel.Crawl(workerContext, searchPrefix+extraSearchPrefix, enumerateOneDir, EnumerationParallelism, func() int64 {
+	channels := parallel.Crawl(workerContext, searchPrefix+extraSearchPrefix, "" /* relBase */, enumerateOneDir, EnumerationParallelism, func() int64 {
 		if t.indexerMap != nil {
 			return t.indexerMap.getObjectIndexerMapSize()
 		}
 		panic("ObjectIndexerMap is nil")
-	}, t.tqueue, t.isSource, t.isSync, t.maxObjectIndexerSizeInGB)
+	}, t.orderedTqueue, t.isSource, t.isSync, t.maxObjectIndexerSizeInGB)
 
 	errChan := make(chan error, len(channels))
 	var wg sync.WaitGroup
@@ -553,15 +553,17 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 						panic(fmt.Sprintf("Entry set for enqueue to tqueue for invalid operation, isSync[%v], isSource[%v]", t.isSync, t.isSource))
 					}
 
-					item, err := x.Item()
+					_, err := x.Item()
 					if err != nil {
 						panic(fmt.Sprintf("Error set for entry which needs to be inserted to tqueue: %v", err))
 					}
 
 					//
-					// This is a special CrawlResult which signifies that we need to enqueue the given directory to tqueue for target traverser to process.
+					// This is a special CrawlResult which signifies that we need to enqueue the given directory to tqueue for
+					// target traverser to process. Tell orderedTqueue so that it can add it in a proper child-after-parent
+					// order.
 					//
-					t.tqueue <- item
+					t.orderedTqueue.MarkProcessed(x.Idx())
 					continue
 				}
 
@@ -600,6 +602,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 		go processFunc(i)
 	}
 	wg.Wait()
+
 	fmt.Printf("Done processing of blob traverser channels")
 	if len(errChan) > 0 {
 		err := <-errChan
@@ -700,7 +703,7 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 }
 
 func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool,
-	cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool, indexerMap *folderIndexer, tqueue chan interface{}, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32,
+	cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool, indexerMap *folderIndexer, orderedTqueue parallel.OrderedTqueueInterface, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32,
 	lastSyncTime time.Time, cfdMode common.CFDMode, metaDataOnlySync bool, scannerLogger common.ILoggerResetable) (t *blobTraverser) {
 	t = &blobTraverser{
 		rawURL:                      rawURL,
@@ -719,7 +722,7 @@ func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 		// Sync related fields.
 		isSync:                   isSync,
 		indexerMap:               indexerMap,
-		tqueue:                   tqueue,
+		orderedTqueue:            orderedTqueue,
 		isSource:                 isSource,
 		lastSyncTime:             lastSyncTime,
 		cfdMode:                  cfdMode,

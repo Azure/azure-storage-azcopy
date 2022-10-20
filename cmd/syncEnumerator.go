@@ -26,9 +26,11 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/shubham808/azure-storage-azcopy/v10/common/parallel"
 	"github.com/shubham808/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -37,6 +39,167 @@ import (
 )
 
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
+
+//
+// orderedTqueue is an ordered tqueue which implements strict child-after-parent ordering of directory
+// entries added to tqueue (communication channel source traverser uses to communicate to-be-traversed
+// directories to the target traverser). Note that it is crucial for target traverser to always process
+// directory entries in strict child-after-parent order for correct handling of non-direct subdirectories
+// rename.
+// It contains the raw tqueue and other stuff needed to facilitate ordered addition of directory entries
+// to the raw tqueue.
+//
+// - What exactly do we want to achieve?
+//   Scanner threads (default count 16) process directories and add then to any of the 4 channels which
+//   are processed by Walk(). Though scanner threads will only scan a child after fully scanning its parent,
+//   but since the scanner threads after scanning, add the directories to one of he 4 channels the directories
+//   may get picked from these 4 channels in such a way that child is picked before the parent. This may cause
+//   child directory to be added to tqueue before its parent directory. This is what we want to avoid.
+//
+// - How does orderedTqueue help in that?
+//   Since scanner threads always add directories correctly in strict child-after-parent order to the 4 channels,
+//   but they get reordered since the threads processing those 4 channels may pick them in arbitrary order, we
+//   have the scanner threads, apart from adding the scanned directories to the 4 channels, also add an entry to
+//   orderedTqueue.dir in a serialized fashion so that entries in orderedTqueue.dir are added strictly in
+//   child-after-parent order. Now when the threads process entries from the 4 channels they just mark the
+//   corresponding entry in orderedTqueue.dir as "processed". A separate thread just goes over orderedTqueue.dir
+//   and takes out entries from the head which are "processed" and adds them to orderedTqueue.tqueue.
+//   It stops and waits when it encounters an head entry which is not marked "processed". This ensures that we add
+//   entries to orderedTqueue.tqueue only in strict child-after-parent order.
+//
+// - How does Source Traverser interact with orderedTqueue?
+//   Source traverser MUST call orderedTqueue.Enqueue() in strict child-after-parent order.
+//   Multiple parallel source traverser threads can safely call orderedTqueue.Enqueue() in parallel.
+//
+// - How does Target Traverser interact with orderedTqueue?
+//   Target traverser can simply dequeue directory entries from the raw orderedTqueue.tqueue.
+//   The entries in tqueue are guaranteed to be in strict child-after-parent order.
+//
+type orderedTqueue struct {
+	// Index in circular buffer where the reader should read the next entry from.
+	readIdx int32
+
+	// Index in circular buffer where the writer should write the next entry to.
+	writeIdx int32
+
+	// size of circular buffer.
+	size int32
+
+	// Number of entries available for the reader. count==0 signifies queue empty condition whereas count==size signifies queue full condition.
+	count int32
+
+	// circular buffer where source traverser adds entries in strict child-after-parent order.
+	dir []parallel.DirectoryEntry
+
+	lock sync.Mutex
+
+	// Raw tqueue that contains entries in strict child-after-parent order, target traverser reads from here.
+	tqueue chan interface{}
+}
+
+//
+// Source traverser MUST call Enqueue() in strict child-after-parent order to add entries to tqueue.
+// It returns the index in the circular buffer where the directory entry is added. This index must be
+// conveyed along with the CrawlResult so that MarkProcessed() can mark the appropriate entry as processed.
+//
+func (t *orderedTqueue) Enqueue(dir parallel.DirectoryEntry) int32 {
+	for {
+		t.lock.Lock()
+
+		// Is circular buffer full?
+		if t.count == t.size {
+			if t.writeIdx != t.readIdx {
+				panic(fmt.Sprintf("WriteIdx(%v) and ReadIdx(%v) not same for circular buffer of size(%v) full", t.writeIdx, t.readIdx, t.count))
+			}
+
+			// Needs to wait as no room available.
+			t.lock.Unlock()
+
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+
+		// Add to the next available slot.
+		entryIdx := t.writeIdx
+		t.dir[entryIdx] = parallel.ProcessDirEntry{
+			Item:         dir,
+			ProcessState: false,
+		}
+
+		// Increment writeIdx to point to next free slot.
+		t.writeIdx += 1
+		if t.writeIdx >= t.size {
+			panic(fmt.Sprintf("Invalid value of writeIdx(%v) of circular buffer size(%v)",
+				t.writeIdx, t.size))
+		}
+
+		// One more entry in circular buffer.
+		t.count += 1
+
+		// sanity check count should never cross the size of buffer.
+		if t.count > t.size {
+			panic(fmt.Sprintf("Circular buffer count(%v) more than size(%v), for writeIdx(%v) and readIdx(%v)",
+				t.count, t.size, t.writeIdx, t.readIdx))
+		}
+
+		// reached end of buffer lets rollover to start.
+		if t.writeIdx == t.size {
+			t.writeIdx = 0
+		}
+
+		t.lock.Unlock()
+		return entryIdx
+	}
+}
+
+func (t *orderedTqueue) GetTqueue() chan interface{} {
+	return t.tqueue
+}
+
+// SourceTraverser processing threads will call MarkProcessed when they dequeue special "tqueue" entry.
+func (t *orderedTqueue) MarkProcessed(idx int32) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	// Sanity Check
+	if idx >= t.size || idx < 0 {
+		panic(fmt.Sprintf("Invalid value of idx(%v) for circular buffer size(%v)",
+			idx, t.size))
+	}
+
+	// Mark entry at idx as processed.
+	if entry, ok := t.dir[idx].(parallel.ProcessDirEntry); ok {
+		entry.ProcessState = true
+		t.dir[idx] = entry
+	} else {
+		panic("Not valid")
+	}
+
+	// After marking this entry as processed, we might have a contiguous set of processed entries, add all of them to tqueue.
+	for t.count != 0 {
+		if entry, ok := t.dir[t.readIdx].(parallel.ProcessDirEntry); ok {
+			if entry.ProcessState {
+				t.count -= 1
+				if t.count < 0 {
+					panic("orderedTqueue.count less than zero, something wrong")
+				}
+
+				// Add to tqueue in strict child-after-parent order.
+				t.tqueue <- entry.Item
+
+				t.readIdx++
+				// Reached end of the buffer, lets rollover to start.
+				if t.readIdx == t.size {
+					t.readIdx = 0
+				}
+			} else {
+				break
+			}
+		} else {
+			panic("Not Valid Entry")
+		}
+	}
+}
 
 func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *syncEnumerator, err error) {
 
@@ -89,7 +252,11 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *s
 	//
 	// TODO: See how it performs with experimentation on real workloads.
 	// TODO: See if we can make this a function of maxObjectIndexerSizeInGB
-	tqueue := make(chan interface{}, 1000*1000)
+	orderedTqueue := &orderedTqueue{
+		size:   100 * 1000,
+		tqueue: make(chan interface{}, 1000*1000),
+		dir:    make([]parallel.DirectoryEntry, 100*1000),
+	}
 
 	// set up the map, so that the source/destination can be compared
 	objectIndexerMap := newfolderIndexer()
@@ -103,12 +270,12 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *s
 	// TODO: Consider passing an errorChannel so that enumeration errors during sync can be conveyed to the caller.
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
-	sourceTraverser, err := InitResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, nil,
+	sourceTraverser, err := InitResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks,
 		nil, cca.recursive, true, cca.isHNSToHNS, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			}
-		}, nil, cca.s2sPreserveBlobTags, AzcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, nil /* errorChannel */, objectIndexerMap, tqueue, true /* isSource */, true, /* isSync */
+		}, nil, cca.s2sPreserveBlobTags, AzcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, nil /* errorChannel */, objectIndexerMap, orderedTqueue, true /* isSource */, true, /* isSync */
 		cca.maxObjectIndexerMapSizeInGB, time.Time{} /* lastSyncTime (not used by source traverser) */, cca.cfdMode, cca.metaDataOnlySync, sourceScannerLogger /* scannerLogger */)
 
 	if err != nil {
@@ -130,7 +297,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *s
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 		}
-	}, nil, cca.s2sPreserveBlobTags, AzcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, nil /* errorChannel */, objectIndexerMap /*folderIndexerMap */, tqueue, false, /* isSource */
+	}, nil, cca.s2sPreserveBlobTags, AzcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, nil /* errorChannel */, objectIndexerMap /*folderIndexerMap */, orderedTqueue, false, /* isSource */
 		true /* isSync */, cca.maxObjectIndexerMapSizeInGB /* maxObjectIndexerSizeInGB (not used by destination traverse) */, cca.lastSyncTime /* lastSyncTime */, cca.cfdMode, cca.metaDataOnlySync,
 		destinationScannerLogger /*scannerLogger */)
 	if err != nil {
@@ -236,7 +403,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *s
 			return nil
 		}
 
-		return newSyncEnumerator(sourceTraverser, destinationTraverser, objectIndexerMap, filters, comparator, finalize, tqueue), nil
+		return newSyncEnumerator(sourceTraverser, destinationTraverser, objectIndexerMap, filters, comparator, finalize, orderedTqueue), nil
 	default:
 		objectIndexerMap.isDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
 		// in all other cases (download and S2S), the destination is scanned/indexed first
@@ -278,7 +445,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *s
 			return nil
 		}
 
-		return newSyncEnumerator(destinationTraverser, sourceTraverser, objectIndexerMap, filters, comparator, finalize, tqueue), nil
+		return newSyncEnumerator(destinationTraverser, sourceTraverser, objectIndexerMap, filters, comparator, finalize, orderedTqueue), nil
 	}
 }
 

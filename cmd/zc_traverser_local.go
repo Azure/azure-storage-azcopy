@@ -56,10 +56,10 @@ type localTraverser struct {
 	// When localTraverser is the source traverser it populates this and when it's the target traverser it consumes this.
 	indexerMap *folderIndexer
 
-	// Communication channel between source and destination traverser.
+	// child-after-parent ordered communication channel between source and destination traverser.
 	// When localTraverser is the source traverser it adds scanned directories to this and
 	// when it's the target traverser it reads directories to process from this channel.
-	tqueue chan interface{}
+	orderedTqueue parallel.OrderedTqueueInterface
 
 	// For sync operation this flag tells whether this is source or target.
 	isSource bool
@@ -292,7 +292,7 @@ func checkSymlinkCausesDirectoryLoop(absSymlinkPath string) (bool, error) {
 // 1) Cleaner code
 // 2) Easier to test individually than to test the entire traverser.
 func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath.WalkFunc, followSymlinks bool, errorChannel chan ErrorFileInfo, getObjectIndexerMapSize func() int64,
-	tqueue chan interface{}, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32, scannerLogger common.ILoggerResetable) (err error) {
+	orderedTqueue parallel.OrderedTqueueInterface, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32, scannerLogger common.ILoggerResetable) (err error) {
 
 	// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
 	// So, what is the plan of attack?
@@ -319,7 +319,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 		walkQueue = walkQueue[1:]
 		// walk contents of this queueItem in parallel
 		// (for simplicity of coding, we don't parallelize across multiple queueItems)
-		parallel.Walk(appCtx, queueItem.fullPath, EnumerationParallelism, EnumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
+		parallel.Walk(appCtx, queueItem.fullPath, queueItem.relativeBase, EnumerationParallelism, EnumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
 
 			writeToErrorChannel := func(err ErrorFileInfo) {
 				if scannerLogger != nil {
@@ -477,7 +477,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 					return nil
 				}
 			}
-		}, getObjectIndexerMapSize, tqueue, isSource, isSync, maxObjectIndexerSizeInGB)
+		}, getObjectIndexerMapSize, orderedTqueue, isSource, isSync, maxObjectIndexerSizeInGB)
 	}
 	return
 }
@@ -606,7 +606,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			}
 
 			// note: Walk includes root, so no need here to separately create StoredObject for root (as we do for other folder-aware sources)
-			return WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.followSymlinks, t.errorChannel, getObjectIndexerMapSize, t.tqueue, t.isSource,
+			return WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.followSymlinks, t.errorChannel, getObjectIndexerMapSize, t.orderedTqueue, t.isSource,
 				t.isSync, t.maxObjectIndexerSizeInGB, t.scannerLogger)
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath
@@ -686,7 +686,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 }
 
 func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan ErrorFileInfo,
-	indexerMap *folderIndexer, tqueue chan interface{}, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32, lastSyncTime time.Time, cfdModes common.CFDMode, metaDataOnlySync bool,
+	indexerMap *folderIndexer, orderedTqueue parallel.OrderedTqueueInterface, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32, lastSyncTime time.Time, cfdModes common.CFDMode, metaDataOnlySync bool,
 	scannerLogger common.ILoggerResetable) *localTraverser {
 	// No need to validate sync parameters here as it will be done crawler.
 	traverser := localTraverser{
@@ -700,7 +700,7 @@ func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, fol
 		// Sync related fields.
 		isSync:                   isSync,
 		indexerMap:               indexerMap,
-		tqueue:                   tqueue,
+		orderedTqueue:            orderedTqueue,
 		isSource:                 isSource,
 		lastSyncTime:             lastSyncTime,
 		maxObjectIndexerSizeInGB: maxObjectIndexerSizeInGB,

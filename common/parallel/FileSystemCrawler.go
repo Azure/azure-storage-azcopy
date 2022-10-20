@@ -50,15 +50,15 @@ type DirReader interface {
 // It does not follow symlinks.
 // The items in the CrawResult output channel are FileSystemEntry s.
 // For a wrapper that makes this look more like filepath.Walk, see parallel.Walk.
-func CrawlLocalDirectory(ctx context.Context, root Directory, parallelism int, reader DirReader, getObjectIndexerMapSize func() int64,
-	tqueue chan interface{}, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32) []chan CrawlResult {
+func CrawlLocalDirectory(ctx context.Context, root Directory, relBase Directory, parallelism int, reader DirReader, getObjectIndexerMapSize func() int64,
+	orderedTqueue OrderedTqueueInterface, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32) []chan CrawlResult {
 	sourceTraverser := isSync && isSource
 	return Crawl(ctx,
-		root,
+		root, relBase,
 		func(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry, error)) error {
 			return enumerateOneFileSystemDirectory(dir, enqueueDir, enqueueOutput, reader, sourceTraverser)
 		},
-		parallelism, getObjectIndexerMapSize, tqueue, isSource, isSync, maxObjectIndexerSizeInGB)
+		parallelism, getObjectIndexerMapSize, orderedTqueue, isSource, isSync, maxObjectIndexerSizeInGB)
 }
 
 // Walk is similar to filepath.Walk.
@@ -67,41 +67,45 @@ func CrawlLocalDirectory(ctx context.Context, root Directory, parallelism int, r
 //    (whereas with filepath.Walk it will usually (always?) have a value).
 // 2. If the return value of walkFunc function is not nil, enumeration will always stop, not matter what the type of the error.
 //    (Unlike filepath.WalkFunc, where returning filePath.SkipDir is handled as a special case).
-func Walk(appCtx context.Context, root string, parallelism int, parallelStat bool, walkFn filepath.WalkFunc,
-	getObjectIndexerMapSize func() int64, tqueue chan interface{}, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32) {
+func Walk(appCtx context.Context, root string, relBase string, parallelism int, parallelStat bool, walkFn filepath.WalkFunc,
+	getObjectIndexerMapSize func() int64, orderedTqueue OrderedTqueueInterface, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32) {
 	var ctx context.Context
 	var cancel context.CancelFunc
 	signalRootError := func(e error) {
 		_ = walkFn(root, nil, e)
 	}
 
-	root, err := filepath.Abs(root)
-	if err != nil {
-		signalRootError(err)
-		return
-	}
+	// relBase is not empty only in case of follow-symlinks. Where symlink pointing to directory traversed separately and
+	// this following code cause wrong entries created in ObjectIndexer Map.
+	// Main intention of following code to check if accessing root folder having any issue or not.
+	if relBase == "" {
+		root, err := filepath.Abs(root)
+		if err != nil {
+			signalRootError(err)
+			return
+		}
 
-	// Call walkfunc on the root.  This is necessary for compatibility with filePath.Walk
-	// TODO: add at a test that CrawlLocalDirectory does NOT include the root (i.e. add test to define that behaviour)
-	r, err := os.Open(root) // for directories, we don't need a special open with FILE_FLAG_BACKUP_SEMANTICS, because directory opening uses FindFirst which doesn't need that flag. https://blog.differentpla.net/blog/2007/05/25/findfirstfile-and-se_backup_name
-	if err != nil {
-		signalRootError(err)
-		return
-	}
-	rs, err := r.Stat()
-	if err != nil {
-		signalRootError(err)
-		return
-	}
+		// Call walkfunc on the root.  This is necessary for compatibility with filePath.Walk
+		// TODO: add at a test that CrawlLocalDirectory does NOT include the root (i.e. add test to define that behaviour)
+		r, err := os.Open(root) // for directories, we don't need a special open with FILE_FLAG_BACKUP_SEMANTICS, because directory opening uses FindFirst which doesn't need that flag. https://blog.differentpla.net/blog/2007/05/25/findfirstfile-and-se_backup_name
+		if err != nil {
+			signalRootError(err)
+			return
+		}
+		rs, err := r.Stat()
+		if err != nil {
+			signalRootError(err)
+			return
+		}
 
-	err = walkFn(root, rs, nil)
-	if err != nil {
-		signalRootError(err)
-		return
+		err = walkFn(root, rs, nil)
+		if err != nil {
+			signalRootError(err)
+			return
+		}
+
+		_ = r.Close()
 	}
-
-	_ = r.Close()
-
 	// walk the stuff inside the root
 	reader, remainingParallelism := NewDirReader(parallelism, parallelStat)
 	defer reader.Close()
@@ -116,7 +120,7 @@ func Walk(appCtx context.Context, root string, parallelism int, parallelStat boo
 	// *same* channel so a goroutine is guaranteed to see EnqueueToTqueue entry for the directory after seeing all the
 	// chidlren of the directory.
 	//
-	channels := CrawlLocalDirectory(ctx, root, remainingParallelism, reader, getObjectIndexerMapSize, tqueue, isSource, isSync, maxObjectIndexerSizeInGB)
+	channels := CrawlLocalDirectory(ctx, root, relBase, remainingParallelism, reader, getObjectIndexerMapSize, orderedTqueue, isSource, isSync, maxObjectIndexerSizeInGB)
 
 	errChan := make(chan struct{}, len(channels))
 	var wg sync.WaitGroup
@@ -136,15 +140,13 @@ func Walk(appCtx context.Context, root string, parallelism int, parallelStat boo
 						panic(fmt.Sprintf("Entry set for enqueue to tqueue for invalid operation, isSync[%v], isSource[%v]", isSync, isSource))
 					}
 
-					entry, err := crawlResult.Item()
-					if err != nil {
-						panic("Error set for entry which needs to be inserted to tqueue")
-					}
+					//
+					// This is a special CrawlResult which signifies that we need to enqueue the given directory to tqueue for
+					// target traverser to process. Tell orderedTqueue so that it can add it in a proper child-after-parent
+					// order.
+					//
+					orderedTqueue.MarkProcessed(crawlResult.Idx())
 
-					//
-					// This is a special CrawlResult which signifies that we need to enqueue the given directory to tqueue for target traverser to process.
-					//
-					tqueue <- entry
 					continue
 				}
 
@@ -181,10 +183,9 @@ func Walk(appCtx context.Context, root string, parallelism int, parallelStat boo
 		wg.Add(1)
 		go processFunc(i)
 	}
-
 	wg.Wait()
 
-	fmt.Printf("Done processing of local traverser channels")
+	fmt.Printf("Done processing of local traverser channels, root(%s), relBase(%s)\n", root, relBase)
 }
 
 // This dummy GUID used to represent ".", Why need to use this guid ?

@@ -37,6 +37,7 @@ import (
 
 	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
 	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/shubham808/azure-storage-azcopy/v10/common/parallel"
 )
 
 // -------------------------------------- Component Definitions -------------------------------------- \\
@@ -320,13 +321,13 @@ type enumerationCounterFunc func(entityType common.EntityType)
 // errorOnDirWOutRecursive is used by copy.
 // If errorChannel is non-nil, all errors encountered during enumeration will be conveyed through this channel.
 // To avoid slowdowns, use a buffered channel of enough capacity.
-// tqueue is communication channel b/w source and destination and required in case of sync, maxObjectIndexerSizeInGB for auto pacing.
+// orderedTqueue is communication channel b/w source and destination and required in case of sync, maxObjectIndexerSizeInGB for auto pacing.
 // lastSyncTime and CFDModeFlags for change detection.
 func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context,
 	credential *common.CredentialInfo, followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties,
 	includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string,
 	s2sPreserveBlobTags bool, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo,
-	indexerMap *folderIndexer, tqueue chan interface{}, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32, lastSyncTime time.Time, cfdMode common.CFDMode,
+	indexerMap *folderIndexer, orderedTqueue parallel.OrderedTqueueInterface, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32, lastSyncTime time.Time, cfdMode common.CFDMode,
 	metaDataOnlySync bool, scannerLogger common.ILoggerResetable) (ResourceTraverser, error) {
 	var output ResourceTraverser
 	var p *pipeline.Pipeline
@@ -412,10 +413,10 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions)
 		} else {
 			if ctx != nil {
-				output = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter, errorChannel, indexerMap, tqueue,
+				output = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter, errorChannel, indexerMap, orderedTqueue,
 					isSource, isSync, maxObjectIndexerSizeInGB, lastSyncTime, cfdMode, metaDataOnlySync, scannerLogger)
 			} else {
-				output = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter, errorChannel, indexerMap, tqueue,
+				output = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter, errorChannel, indexerMap, orderedTqueue,
 					isSource, isSync, maxObjectIndexerSizeInGB, lastSyncTime, cfdMode, metaDataOnlySync, scannerLogger)
 			}
 		}
@@ -452,7 +453,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		} else {
 			// TODO: Need to add error channel in case of blob traverse.
 			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted,
-				includeSnapshot, includeVersion, indexerMap, tqueue, isSource, isSync, maxObjectIndexerSizeInGB, lastSyncTime, cfdMode, metaDataOnlySync, scannerLogger)
+				includeSnapshot, includeVersion, indexerMap, orderedTqueue, isSource, isSync, maxObjectIndexerSizeInGB, lastSyncTime, cfdMode, metaDataOnlySync, scannerLogger)
 
 		}
 	case common.ELocation.File():
@@ -651,14 +652,14 @@ type syncEnumerator struct {
 	// a finalizer that is always called if the enumeration finishes properly
 	finalize func() error
 
-	// tqueue is a commnication channel between source and target traverser. tqueue channel added to syncEnumerator should be the same
+	// orderedTqueue is a commnication channel between source and target traverser. orderedTqueue channel added to syncEnumerator should be the same
 	// one that's added to source and target traverser objects. Source traverser will close this once enumeration done, so that target
 	// traverser will come to know about source done with enumeration.
-	tqueue chan interface{}
+	orderedTqueue *orderedTqueue
 }
 
 func newSyncEnumerator(primaryTraverser, secondaryTraverser ResourceTraverser, indexer *folderIndexer,
-	filters []ObjectFilter, comparator objectProcessor, finalize func() error, tqueue chan interface{}) *syncEnumerator {
+	filters []ObjectFilter, comparator objectProcessor, finalize func() error, orderedTqueue *orderedTqueue) *syncEnumerator {
 	return &syncEnumerator{
 		primaryTraverser:   primaryTraverser,
 		secondaryTraverser: secondaryTraverser,
@@ -666,7 +667,7 @@ func newSyncEnumerator(primaryTraverser, secondaryTraverser ResourceTraverser, i
 		filters:            filters,
 		objectComparator:   comparator,
 		finalize:           finalize,
-		tqueue:             tqueue,
+		orderedTqueue:      orderedTqueue,
 	}
 }
 
@@ -685,10 +686,10 @@ func (e *syncEnumerator) Enumerate() (err error) {
 	go func() {
 		defer wg.Done()
 		perr = e.primaryTraverser.Traverse(noPreProccessor, e.objectIndexer.store, e.filters)
-
 		// Source traverser done with enumeration, lets close channel. It will signal the destination traverser about end of enumeration.
 		fmt.Printf("Closing the tqueue communication channel between source and target")
-		close(e.tqueue)
+
+		close(e.orderedTqueue.tqueue)
 		return
 	}()
 

@@ -182,7 +182,7 @@ func (f *syncDestinationComparator) FinalizeTargetDirectory(relativeDir string, 
 	delete(f.sourceFolderIndex.folderMap, lcFolderName)
 
 	f.sourceFolderIndex.lock.Unlock()
-	//fmt.Printf("Finalizing directory %s (FinalizeAll=%v)\n", relativeDir, finalizeAll)
+	// fmt.Printf("Finalizing directory %s (FinalizeAll=%v)\n", relativeDir, finalizeAll)
 
 	//
 	// Go over all objects in the source directory, enumerated by SourceTraverser, and check each object for following:

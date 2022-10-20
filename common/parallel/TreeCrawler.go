@@ -45,27 +45,50 @@ type crawler struct {
 	workerBody  EnumerateOneDirFunc
 	parallelism int
 	cond        *sync.Cond
+
 	// the following are protected by cond (and must only be accessed when cond.L is held)
 	unstartedDirs      []Directory // not a channel, because channels have length limits, and those get in our way
 	dirInProgressCount int64
 	lastAutoShutdown   time.Time
 	root               Directory
 
+	//
+	// relBase used to construct relative path wrt to symlink.
+	// f.e. dir1/sym1 -> dir2
+	// dir2 has following childrens directory
+	// dir2/dir3
+	// dir2/dir4
+	// then relative path of these children become
+	// dir1/sym1/dir3, dir1/sym1/dir4 and these what target traverser need to check.
+	//
+	relBase Directory
+
 	// Fields applicable only to sync operation.
 	isSync                  bool
 	getObjectIndexerMapSize func() int64
 
-	// Its communication channel not exactly queue, as soon as we get something on this channel we pop it and append to
-	// unstartedDirs (that's target queue).
-	tqueue chan interface{}
-
 	isSource                 bool
 	maxObjectIndexerSizeInGB uint32
 	mayHaveMoreDirs          bool
+
+	orderedTqueue OrderedTqueueInterface
 }
 
 type Directory interface{}
 type DirectoryEntry interface{}
+
+type ProcessDirEntry struct {
+	Item         DirectoryEntry
+	ProcessState bool
+}
+
+type OrderedTqueueInterface interface {
+	MarkProcessed(int32)
+	Enqueue(DirectoryEntry) int32
+	GetTqueue() chan interface{}
+}
+
+type DirProcessor CrawlResult
 
 type CrawlResult struct {
 	item DirectoryEntry
@@ -78,6 +101,9 @@ type CrawlResult struct {
 	// it completes enumeration and stores it's entries in ObjectIndexerMap.
 	//
 	enqueueToTqueue bool
+
+	// This is the index in orderedTqueue. It helps in setting status of directory in processDirToTqueue.
+	index int32
 }
 
 func (r CrawlResult) EnqueueToTqueue() bool {
@@ -88,6 +114,10 @@ func (r CrawlResult) Item() (interface{}, error) {
 	return r.item, r.err
 }
 
+func (r CrawlResult) Idx() int32 {
+	return r.index
+}
+
 // Maximum target traverser threads.
 const maxTargetTraverserThreads = 256
 
@@ -96,13 +126,13 @@ type EnumerateOneDirFunc func(dir Directory, enqueueDir func(Directory), enqueue
 
 // Crawl crawls an abstract directory tree, using the supplied enumeration function.  May be use for whatever
 // that function can enumerate (i.e. not necessarily a local file system, just anything tree-structured)
-// getObjectIndexerMapSize func returns in-memory map size, tqueue is channel between source and target enumeration.
+// getObjectIndexerMapSize func returns in-memory map size, orderedTqueue is channel between source and target enumeration.
 // isSource tells whether its source or target traverser.
 // isSync flag tells whether its sync or copy operation.
 // maxObjectIndexerSizeInGB is configurable value tells how much maximum memory ObjectIndexerMap can occupy.
-// We choose tqueue large enough to not become the bottleneck and hence maxObjectIndexerSizeInGB should be the only
+// We choose "orderedTqueue::tqueue" large enough to not become the bottleneck and hence maxObjectIndexerSizeInGB should be the only
 // one controlling the source traverser speed.
-func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int, getObjectIndexerMapSize func() int64, tqueue chan interface{}, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32) []chan CrawlResult {
+func Crawl(ctx context.Context, root Directory, relBase Directory, worker EnumerateOneDirFunc, parallelism int, getObjectIndexerMapSize func() int64, orderedTqueue OrderedTqueueInterface, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32) []chan CrawlResult {
 	//
 	// We cannot have more processor threads than scanner threads as each scanner thread queues its crawl results
 	// to a specific processor thread.
@@ -118,11 +148,11 @@ func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, para
 		parallelism: parallelism,
 		cond:        sync.NewCond(&sync.Mutex{}),
 		root:        root,
-
+		relBase:     relBase,
 		// Sync related parameters.
 		isSync:                   isSync,
 		getObjectIndexerMapSize:  getObjectIndexerMapSize,
-		tqueue:                   tqueue,
+		orderedTqueue:            orderedTqueue,
 		isSource:                 isSource,
 		maxObjectIndexerSizeInGB: maxObjectIndexerSizeInGB,
 	}
@@ -160,9 +190,9 @@ func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, para
 	}
 
 	if isSync {
-		if tqueue == nil {
-			// Both source and target traversers need tqueue, source traverser writes to it and target traverser reads from it.
-			panic("Source/Destination traverser has nil tqueue!")
+		if orderedTqueue == nil {
+			// Both source and target traversers need orderedTqueue, source traverser writes to it and target traverser reads from it.
+			panic("Source/Destination traverser has nil orderedTqueue!")
 		}
 	}
 
@@ -198,6 +228,7 @@ func (c *crawler) start(ctx context.Context, root Directory) {
 
 	c.runWorkersToCompletion(ctx)
 
+	// Close all processing channels.
 	for i := 0; i < len(c.output); i++ {
 		close(c.output[i])
 	}
@@ -244,8 +275,8 @@ const maxQueueDirectories = 100 * 1000
 // directories from tqueue which will put a back pressure on the source traverser.
 //
 func (c *crawler) readTqueue() {
-
-	for tDir := range c.tqueue {
+	tqueue := c.orderedTqueue.GetTqueue()
+	for tDir := range tqueue {
 		c.cond.L.Lock()
 		//
 		// Lets put backpressure on source to slow down, otherwise c.unstartedDirs will keep growing and and cause memory pressure on system.
@@ -422,32 +453,46 @@ func (c *crawler) processOneDirectoryWithAutoPacer(ctx context.Context, workerIn
 
 	bodyErr := c.workerBody(toExamine, addDir, addOutput) // this is the worker body supplied by our caller
 
-	// finally, update shared state (inside the lock)
-	c.cond.L.Lock()
-	defer c.cond.L.Unlock()
-
 	//
 	// Source traverser MUST add all completed directories to tqueue, for target traverser to process.
 	// Note that c.workerBody() above would have completed enumeration of 'toExamine' dir and hence this is
 	// the right time to add it to tqueue.
 	//
+	// Note: As we have more than 1 processing thread at source side, it may happen child directory may be processed
+	//       first and parent processed later. To maintain child-after-parent, we add the directory entries to single circular buffer,
+	//       which process directory in received order and add to tqueue.
+	//
 	if c.isSync && c.isSource {
 		if _, ok := toExamine.(string); ok {
 			if _, ok := c.root.(string); ok {
 				//
-				// Add a special CrawlResult telling caller to enqueue this directory to tqueue for processing by the target traverser.
-				// Note that we don't enqueue it here but instead ask the caller to enqueue, to ensure that we add a directory to tqueue
-				// only after all the directory children have been added to the objectIndexer map.
+				// Add a special CrawlResult telling caller to mark this directory processed.
 				//
+				// Note that we don't enqueue it here but instead ask the caller to mark this directory processed only after all the directory children have
+				// been added to the objectIndexer map. After which enqueueProcesedDirsToTqueue will enqueue to tqueue for processing by the target traverser.
+				//
+				entry := common.GenerateFullPath(c.relBase.(string), common.RelativePath(toExamine.(string), c.root.(string)))
+				end := c.orderedTqueue.Enqueue(entry)
+
+				// Send it to processing channel.
 				c.output[chanIdx] <- CrawlResult{
-					item:            common.RelativePath(toExamine.(string), c.root.(string)),
+					item:            common.GenerateFullPath(c.relBase.(string), common.RelativePath(toExamine.(string), c.root.(string))),
 					enqueueToTqueue: true,
+					index:           end,
 				}
+			} else {
+				panic("root is not string type")
 			}
 		} else {
 			panic("toExamine not string type")
 		}
+	}
 
+	// finally, update shared state (inside the lock)
+	c.cond.L.Lock()
+	defer c.cond.L.Unlock()
+
+	if c.isSync && c.isSource {
 		c.unstartedDirs = append(c.unstartedDirs, foundDirectories...)
 	} else if !c.isSync {
 		// This is the regular copy case.
