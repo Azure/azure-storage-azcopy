@@ -61,6 +61,9 @@ type localTraverser struct {
 	// when it's the target traverser it reads directories to process from this channel.
 	orderedTqueue parallel.OrderedTqueueInterface
 
+	// Map for checking rename directories, so that complete sub-tree can be enumerated.
+	possiblyRenamedMap *possiblyRenamedMap
+
 	// For sync operation this flag tells whether this is source or target.
 	isSource bool
 
@@ -598,6 +601,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					}
 
 					so.lastChangeTime = extendedProp.CTime()
+					so.inode = extendedProp.INode()
 				}
 
 				// This is an exception to the rule. We don't strip the error here, because WalkWithSymlinks catches it.
@@ -686,7 +690,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 }
 
 func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan ErrorFileInfo,
-	indexerMap *folderIndexer, orderedTqueue parallel.OrderedTqueueInterface, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32, lastSyncTime time.Time, cfdModes common.CFDMode, metaDataOnlySync bool,
+	indexerMap *folderIndexer, possiblyRenamedMap *possiblyRenamedMap, orderedTqueue parallel.OrderedTqueueInterface, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32, lastSyncTime time.Time, cfdModes common.CFDMode, metaDataOnlySync bool,
 	scannerLogger common.ILoggerResetable) *localTraverser {
 	// No need to validate sync parameters here as it will be done crawler.
 	traverser := localTraverser{
@@ -701,6 +705,7 @@ func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, fol
 		isSync:                   isSync,
 		indexerMap:               indexerMap,
 		orderedTqueue:            orderedTqueue,
+		possiblyRenamedMap:       possiblyRenamedMap,
 		isSource:                 isSource,
 		lastSyncTime:             lastSyncTime,
 		maxObjectIndexerSizeInGB: maxObjectIndexerSizeInGB,

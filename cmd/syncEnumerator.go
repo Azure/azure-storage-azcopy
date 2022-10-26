@@ -261,6 +261,9 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *s
 	// set up the map, so that the source/destination can be compared
 	objectIndexerMap := newfolderIndexer()
 
+	// set up the rename map, so that the rename can be detected.
+	possiblyRenamedMap := newPossiblyRenamedMap()
+
 	sourceScannerLogger := common.NewJobLogger(cca.jobID, AzcopyLogVerbosity, AzcopyAppPathFolder, "-source-scanning")
 	sourceScannerLogger.OpenLog()
 
@@ -275,7 +278,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *s
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			}
-		}, nil, cca.s2sPreserveBlobTags, AzcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, nil /* errorChannel */, objectIndexerMap, orderedTqueue, true /* isSource */, true, /* isSync */
+		}, nil, cca.s2sPreserveBlobTags, AzcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, nil /* errorChannel */, objectIndexerMap, nil /* possiblyRenamedMap */, orderedTqueue, true /* isSource */, true, /* isSync */
 		cca.maxObjectIndexerMapSizeInGB, time.Time{} /* lastSyncTime (not used by source traverser) */, cca.cfdMode, cca.metaDataOnlySync, sourceScannerLogger /* scannerLogger */)
 
 	if err != nil {
@@ -297,7 +300,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *s
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 		}
-	}, nil, cca.s2sPreserveBlobTags, AzcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, nil /* errorChannel */, objectIndexerMap /*folderIndexerMap */, orderedTqueue, false, /* isSource */
+	}, nil, cca.s2sPreserveBlobTags, AzcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, nil /* errorChannel */, objectIndexerMap /*folderIndexerMap */, possiblyRenamedMap, orderedTqueue, false, /* isSource */
 		true /* isSync */, cca.maxObjectIndexerMapSizeInGB /* maxObjectIndexerSizeInGB (not used by destination traverse) */, cca.lastSyncTime /* lastSyncTime */, cca.cfdMode, cca.metaDataOnlySync,
 		destinationScannerLogger /*scannerLogger */)
 	if err != nil {
@@ -374,7 +377,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *s
 		// when uploading, we can delete remote objects immediately, because as we traverse the remote location
 		// we ALREADY have available a complete map of everything that exists locally
 		// so as soon as we see a remote destination object we can know whether it exists in the local source
-		comparator = newSyncDestinationComparator(objectIndexerMap, transferScheduler.scheduleCopyTransfer, destCleanerFunc, cca.mirrorMode, cca.cfdMode, cca.lastSyncTime).processIfNecessary
+		comparator = newSyncDestinationComparator(objectIndexerMap, possiblyRenamedMap, transferScheduler.scheduleCopyTransfer, destCleanerFunc, cca.mirrorMode, cca.cfdMode, cca.lastSyncTime).processIfNecessary
 		finalize = func() error {
 			//
 			// Now that target traverser is done processing, there cannot be any more "delete jobs", tell
@@ -406,6 +409,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *s
 		return newSyncEnumerator(sourceTraverser, destinationTraverser, objectIndexerMap, filters, comparator, finalize, orderedTqueue), nil
 	default:
 		objectIndexerMap.isDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
+		possiblyRenamedMap.isDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
 		// in all other cases (download and S2S), the destination is scanned/indexed first
 		// then the source is scanned and filtered based on what the destination contains
 		comparator = newSyncSourceComparator(objectIndexerMap, transferScheduler.scheduleCopyTransfer, cca.mirrorMode).processIfNecessary

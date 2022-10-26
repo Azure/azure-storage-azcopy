@@ -245,6 +245,37 @@ func (i *folderIndexer) getStoredObject(relativePath string) StoredObject {
 	panic(fmt.Sprintf("Stored Object for relative path[%s] and folderName[%s] not found", relativePath, lcFolderName))
 }
 
+//
+// Given the relative path of a directory this returns whether directory exist in ObjectIndexerMap or not.
+//
+func (i *folderIndexer) directoryNotYetProcessed(relativePath string) bool {
+	var lcRelativePath, lcFolderName string
+
+	if i.isDestinationCaseInsensitive {
+		lcRelativePath = strings.ToLower(relativePath)
+	} else {
+		lcRelativePath = relativePath
+	}
+
+	//
+	// Note: For the root directory, lcRelativePath will be "" but the SourceTraverser would have stored it's properties in folderMap["."], so that's why this conversion.
+	//       For other path we can directly use the lcRelativePath to index the folderMap[].
+	//
+	if lcRelativePath == "" {
+		lcFolderName = "."
+	} else {
+		lcFolderName = lcRelativePath
+	}
+
+	i.lock.RLock()
+	defer i.lock.RUnlock()
+
+	if _, ok := i.folderMap[lcFolderName]; ok {
+		return true
+	}
+	return false
+}
+
 // getObjectIndexerMapSize return the size of map.
 func (i *folderIndexer) getObjectIndexerMapSize() int64 {
 	return atomic.LoadInt64(&i.totalSize)
@@ -321,4 +352,88 @@ func (i *objectIndexer) traverse(processor objectProcessor, filters []ObjectFilt
 		}
 	}
 	return
+}
+
+// Structure to store possibly renamed directories, used by hasAnAncestorThatIsPossiblyRenamed() which
+// tells if any of the ancestors of a source directory could have been possibly
+// renamed. For any “possibly renamed” directory we must enumerate all
+// the children/grandchildren target directories to ensure that we copy all
+// their children correctly, even though the ctime/mtime of those directories
+// won’t be more than LastSyncTime.
+type possiblyRenamedMap struct {
+	folderMap map[string]struct{}
+
+	lock sync.RWMutex
+
+	// isDestinationCaseInsensitive is true when the destination is case-insensitive
+	// In Windows, both paths D:\path\to\dir and D:\Path\TO\DiR point to the same resource.
+	// Apple File System (APFS) can be configured to be case-sensitive or case-insensitive.
+	// So for such locations, the key in the indexMap will be lowercase to avoid infinite syncing.
+	isDestinationCaseInsensitive bool
+}
+
+// Once we know the sync source, isDestinationCaseInsensitive must be set appropriately.
+func newPossiblyRenamedMap() *possiblyRenamedMap {
+	return &possiblyRenamedMap{folderMap: make(map[string]struct{})}
+}
+
+// process the given stored object by indexing it using its relative path
+func (i *possiblyRenamedMap) store(storedObject StoredObject) (err error) {
+	var lcRelativePath string
+
+	if i.isDestinationCaseInsensitive {
+		lcRelativePath = strings.ToLower(storedObject.relativePath)
+	} else {
+		lcRelativePath = storedObject.relativePath
+	}
+
+	//
+	// Let's check if any of it's ancestor already exist in possibleRenameMap or not.
+	// If already exist then return, otherwise add to possibleRenameMap. As hasAnAncestorThatIsPossiblyRenamed()
+	// function checks for all the ancestors of a directory, so we are good even if this exact directory is not
+	// in possiblyRenamedMap as long as one of its ancestor is present in possiblyRenamedMap.
+	// In return, it reduces the memory usage of map.
+	//
+	ancestorDir := lcRelativePath
+	if ancestorDir == "" {
+		panic("possiblyRenamedMap called for root folder.")
+	}
+
+	i.lock.RLock()
+	for {
+		ancestorDir = filepath.Dir(ancestorDir)
+		if ancestorDir == "." {
+			// None of the ancestor is in possiblyRenamedMap, we need to add this.
+			break
+		}
+		if _, ok := i.folderMap[ancestorDir]; ok {
+			i.lock.RUnlock()
+			return
+		}
+	}
+	i.lock.RUnlock()
+
+	i.lock.Lock()
+	defer i.lock.Unlock()
+
+	fmt.Printf("Adding directory(%s) to possiblyRenamedMap\n", lcRelativePath)
+	i.folderMap[lcRelativePath] = struct{}{}
+
+	return
+}
+
+// Checks whether passed directory path is present in possiblyRenamedMap.
+func (i *possiblyRenamedMap) exists(relativePath string) bool {
+	if i.isDestinationCaseInsensitive {
+		relativePath = strings.ToLower(relativePath)
+	}
+
+	i.lock.RLock()
+	defer i.lock.RUnlock()
+
+	if _, ok := i.folderMap[relativePath]; ok {
+		return true
+	}
+
+	return false
 }

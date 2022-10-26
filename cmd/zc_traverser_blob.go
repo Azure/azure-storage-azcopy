@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -73,6 +74,9 @@ type blobTraverser struct {
 
 	// child-after-parent ordered communication channel between source and destination traverser.
 	orderedTqueue parallel.OrderedTqueueInterface
+
+	// Map for checking rename directories, so that complete sub-tree can be enumerated.
+	possiblyRenamedMap *possiblyRenamedMap
 
 	// For sync operation this flag tells whether this is source or target.
 	isSource bool
@@ -265,6 +269,114 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 }
 
 //
+// waitTillAllAncestorsAreProcessed will block the calling thread till all
+// ancestors of 'currentDirPath' are processed and removed from ObjectIndexerMap.
+// f.e., if 'currentDirPath' is "a/b/c/d", then it'll wait till there are any of the
+// following directories present in the ObjectIndexerMap.
+// "", "a", "a/b", "a/b/c"
+//
+// This will be called by TargetTraverser to ensure that it processes a
+// directory from tqueue only after all its ancestors. The reason being that
+// unless we process every ancestor of a directory we cannot safely conclude
+// if any of the ancestors could be the result of a rename. Note that if a
+// directory has any ancestor that is renamed, it means that the directory
+// MUST be enumerated in order to copy its contents and hence we must know
+// that when we process the directory from tqueue.
+//
+func (t *blobTraverser) waitTillAllAncestorsAreProcessed(currentDirPath string) {
+	//
+	// In TargetCompare mode we enumerate all directories anyways so no
+	// need for any special handling for renames.
+	//
+	if t.cfdMode == common.CFDModeFlags.TargetCompare() {
+		return
+	}
+
+	//
+	// Empty currentDirPath represents root folder, root folder has no ancestors, so no need to wait.
+	//
+	if currentDirPath == "" {
+		return
+	}
+
+	//
+	// Wait for the parent to be processed by the Target Traverser.
+	// As a directory is processed it'll be removed from t.indexerMap.folderMap[], so we know that the directory
+	// is processed by waiting till it's no more present in t.indexerMap.folderMap[].
+	// Since parent processing would have in turn waited for its parent and so on, we just need to wait for the
+	// immediate parent to be sure that all ancestors of currentDirPath are processed by Target Traverser.
+	//
+	parent := filepath.Dir(currentDirPath)
+
+	//
+	// waitCount to track how much time spent waiting for directory to be processed.
+	//
+	waitCount := 0
+	for {
+		if t.indexerMap.directoryNotYetProcessed(parent) {
+			time.Sleep(10 * time.Millisecond)
+			waitCount++
+			fmt.Printf("currentDir(%s) parent(%s) still not processed after iteration[%v]\n", currentDirPath, parent, waitCount)
+		} else {
+			// parent directory processed by target traverser, now it can safely proceed with this directory.
+			break
+		}
+
+		//
+		// In most practical case it should be small wait, but to be safe lets use a fairly large wait.
+		// If directory still not processed it means some bug.
+		//
+		if waitCount > 3600*100 {
+			panic(fmt.Sprintf("currentDir(%s) parent(%s) still not processed after 3600 secs\n", currentDirPath, parent))
+		}
+	}
+
+	// Sanity check, If parent of currentDirPath processed from ObjectIndexerMap, GrandParent entry should also be processed.
+	if parent != "." {
+		grandParent := filepath.Dir(parent)
+		if t.indexerMap.directoryNotYetProcessed(grandParent) {
+			panic(fmt.Sprintf("We should not never reach here, where for child(%s), parent(%s) entry processed, "+
+				"but grandParent(%s) entry still present in ObjectIndexerMap", currentDirPath, parent, grandParent))
+		}
+	}
+}
+
+//
+// hasAnAncestorThatIsPossiblyRenamed checks all ancestors of 'currentDirPath' starting
+// from the immediate parent and walking upwards till the root and returns
+// true if any of the ancestor is present in 'possiblyRenamedMap'.
+// Directories are added to 'possiblyRenamedMap' in two places:
+// 1. For directories that exist in the target, it's added to
+//    'possiblyRenamedMap' if the target directory's inode is
+//    different from source directory's inode.
+// 2. For directories that don't exist in the target, all of them are added
+//    to 'possiblyRenamedMap'. It could very well be a new directory but
+//    that doesn't cause any additional overhead since new directories
+//    are anyway attempted enumeration.
+//
+// Note: This must never be called for CFDmode==TargetCompare.
+//
+func (t *blobTraverser) hasAnAncestorThatIsPossiblyRenamed(currentDirPath string) bool {
+	if t.cfdMode == common.CFDModeFlags.TargetCompare() {
+		panic(fmt.Sprintf("hasAnAncestorThatIsPossiblyRenamed called for currentDirPath(%s) with TargetCompare", currentDirPath))
+	}
+
+	//
+	// "" signifies root, root does not have any ancestor and hence cannot be renamed.
+	//
+	if currentDirPath == "" {
+		return false
+	}
+
+	for ; currentDirPath != "."; currentDirPath = filepath.Dir(currentDirPath) {
+		if t.possiblyRenamedMap.exists(currentDirPath) {
+			return true
+		}
+	}
+	return false
+}
+
+//
 // Given a directory find out if it has changed since the last sync. A “changed” directory could mean one or more of the following:
 // 1. One or more new files/subdirs created inside the directory.
 // 2. One or more files/subdirs deleted.
@@ -279,7 +391,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 //
 // Note: If we discover that certain sources cannot be safely trusted for ctime update we can change this to return True for them, thus falling back
 // on the more rigorous target<->source comparison. //
-func (t *blobTraverser) HasDirectoryChangedSinceLastSync(currentDirPath string) bool {
+func (t *blobTraverser) hasDirectoryChangedSinceLastSync(currentDirPath string) bool {
 	// Get the storedObject for currentDirPath to compare Ctime, Mtime for different mode.
 	// Although we don't need for CFDMode == TargetCompare, but need for sanity check.
 	so := t.indexerMap.getStoredObject(currentDirPath)
@@ -358,6 +470,15 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 		// This code for sync operation and when its target traverser.
 		if targetTraverser {
 			//
+			// Don't proceed with processing this directory right away, wait till all of its ancestors are processed. We do this by periodically
+			// checking ObjectIndexerMap to make sure there are no ancestors left in the ObjectIndexerMap.
+			// This is important because as ancestor directories are processed from tqueue it may cause new directories to be added to
+			// "possiblyRenamedMap" which we will need to correctly process this directory.
+			// For CFDMode == TargetCompare, this should be a no-op.
+			//
+			t.waitTillAllAncestorsAreProcessed(currentDirPath)
+
+			//
 			// If source directory has not changed since last sync, then we don't really need to enumerate the target. SourceTraverser would have enumerated
 			// this directory and added all the children in ObjectIndexer map. We just need to go over these objects and find out which of these need to be
 			// sync'ed to target and sync them appropriately (data+metadata or only metadata).
@@ -367,7 +488,11 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 			// files with same names as in the target could be entirely different files. This forces us to enumerate the target directory if the source
 			// directory is seen to have changed, since we don’t know if it was renamed, in which case we must enumerate the target directory.
 			//
-			if !t.HasDirectoryChangedSinceLastSync(currentDirPath) {
+			// We additionally check hasAnAncestorThatIsPossiblyRenamed() which returns True if any of the ancestors of ‘currentDirPath’ could have been possibly
+			// renamed. For any “possibly renamed” directory we must enumerate all the children/grandchildren target directories to ensure that we copy all
+			// their children correctly, even though the ctime/mtime of those directories won’t be more than LastSyncTime.
+			//
+			if !t.hasDirectoryChangedSinceLastSync(currentDirPath) && !t.hasAnAncestorThatIsPossiblyRenamed(currentDirPath) {
 				goto FinalizeDirectory
 			}
 
@@ -445,6 +570,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 							storedObject.archiveStatus = azblob.ArchiveStatusType(resp.ArchiveStatus())
 							storedObject.lastChangeTime = extendedProp.CTime()
 							storedObject.lastModifiedTime = extendedProp.MTime()
+							storedObject.inode = extendedProp.INode()
 							if t.s2sPreserveSourceTags {
 								var BlobTags *azblob.BlobTags
 								BlobTags, err = fblobURL.GetTags(t.ctx, nil)
@@ -703,7 +829,7 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 }
 
 func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool,
-	cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool, indexerMap *folderIndexer, orderedTqueue parallel.OrderedTqueueInterface, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32,
+	cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool, indexerMap *folderIndexer, possiblyRenamedMap *possiblyRenamedMap, orderedTqueue parallel.OrderedTqueueInterface, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32,
 	lastSyncTime time.Time, cfdMode common.CFDMode, metaDataOnlySync bool, scannerLogger common.ILoggerResetable) (t *blobTraverser) {
 	t = &blobTraverser{
 		rawURL:                      rawURL,
@@ -723,6 +849,7 @@ func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 		isSync:                   isSync,
 		indexerMap:               indexerMap,
 		orderedTqueue:            orderedTqueue,
+		possiblyRenamedMap:       possiblyRenamedMap,
 		isSource:                 isSource,
 		lastSyncTime:             lastSyncTime,
 		cfdMode:                  cfdMode,

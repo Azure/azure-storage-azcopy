@@ -53,6 +53,7 @@ type StoredObject struct {
 	entityType       common.EntityType
 	lastModifiedTime time.Time
 	lastChangeTime   time.Time
+	inode            uint64
 	size             int64
 	md5              []byte
 	blobType         azblob.BlobType // will be "None" when unknown or not applicable
@@ -327,7 +328,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 	credential *common.CredentialInfo, followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties,
 	includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string,
 	s2sPreserveBlobTags bool, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo,
-	indexerMap *folderIndexer, orderedTqueue parallel.OrderedTqueueInterface, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32, lastSyncTime time.Time, cfdMode common.CFDMode,
+	indexerMap *folderIndexer, possiblyRenamedMap *possiblyRenamedMap, orderedTqueue parallel.OrderedTqueueInterface, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32, lastSyncTime time.Time, cfdMode common.CFDMode,
 	metaDataOnlySync bool, scannerLogger common.ILoggerResetable) (ResourceTraverser, error) {
 	var output ResourceTraverser
 	var p *pipeline.Pipeline
@@ -413,10 +414,10 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions)
 		} else {
 			if ctx != nil {
-				output = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter, errorChannel, indexerMap, orderedTqueue,
+				output = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter, errorChannel, indexerMap, possiblyRenamedMap, orderedTqueue,
 					isSource, isSync, maxObjectIndexerSizeInGB, lastSyncTime, cfdMode, metaDataOnlySync, scannerLogger)
 			} else {
-				output = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter, errorChannel, indexerMap, orderedTqueue,
+				output = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter, errorChannel, indexerMap, possiblyRenamedMap, orderedTqueue,
 					isSource, isSync, maxObjectIndexerSizeInGB, lastSyncTime, cfdMode, metaDataOnlySync, scannerLogger)
 			}
 		}
@@ -453,7 +454,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		} else {
 			// TODO: Need to add error channel in case of blob traverse.
 			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted,
-				includeSnapshot, includeVersion, indexerMap, orderedTqueue, isSource, isSync, maxObjectIndexerSizeInGB, lastSyncTime, cfdMode, metaDataOnlySync, scannerLogger)
+				includeSnapshot, includeVersion, indexerMap, possiblyRenamedMap, orderedTqueue, isSource, isSync, maxObjectIndexerSizeInGB, lastSyncTime, cfdMode, metaDataOnlySync, scannerLogger)
 
 		}
 	case common.ELocation.File():

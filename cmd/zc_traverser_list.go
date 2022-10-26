@@ -112,7 +112,7 @@ func newListTraverser(parent common.ResourceString, parentType common.Location, 
 		traverser, err := InitResourceTraverser(source, parentType, ctx, credential, &followSymlinks,
 			nil, recursive, getProperties, includeDirectoryStubs, common.EPermanentDeleteOption.None(), incrementEnumerationCounter,
 			nil, s2sPreserveBlobTags, logLevel, cpkOptions, nil, /* errorChannel */
-			nil /* folderIndexer */, nil, /* tqueue */
+			nil /* folderIndexer */, nil /* possiblyRenamedMap */, nil, /* tqueue */
 			false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{} /* lastSyncTime */, common.CFDModeFlags.NotDefined(), false /* metaDataOnlySync */, nil /* scannerLogger */)
 
 		if err != nil {

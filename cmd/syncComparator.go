@@ -48,6 +48,8 @@ type syncDestinationComparator struct {
 	//
 	sourceFolderIndex *folderIndexer
 
+	possiblyRenamedMap *possiblyRenamedMap
+
 	disableComparison bool
 
 	// Change file detection mode.
@@ -73,10 +75,11 @@ type syncDestinationComparator struct {
 	TargetCtimeSkew uint
 }
 
-func newSyncDestinationComparator(i *folderIndexer, copyScheduler, cleaner objectProcessor, disableComparison bool, cfdMode common.CFDMode, lastSyncTime time.Time) *syncDestinationComparator {
+func newSyncDestinationComparator(i *folderIndexer, possiblyRenamedMap *possiblyRenamedMap, copyScheduler, cleaner objectProcessor, disableComparison bool, cfdMode common.CFDMode, lastSyncTime time.Time) *syncDestinationComparator {
 	return &syncDestinationComparator{sourceFolderIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, disableComparison: disableComparison,
-		cfdMode:      cfdMode,
-		lastSyncTime: lastSyncTime}
+		cfdMode:            cfdMode,
+		possiblyRenamedMap: possiblyRenamedMap,
+		lastSyncTime:       lastSyncTime}
 }
 
 //
@@ -256,6 +259,19 @@ func (f *syncDestinationComparator) FinalizeTargetDirectory(relativeDir string, 
 			dataChange = false
 		}
 
+		//
+		// finalizeAll==true implies that storedObject is newly created in the source.
+		// This directory could have been possibly renamed in the source after the last sync.
+		// It could very well be a new directory created on source after the last sync, but that doesn't
+		// cause any additional overhead as new directories would need to be enumerated anyways.
+		//
+		if finalizeAll == true && storedObject.entityType == common.EEntityType.Folder() {
+			fmt.Printf("Directory(%s) not present on target, possibly it's renamed\n", storedObject.relativePath)
+
+			// Add to "possibly renamed" map.
+			f.possiblyRenamedMap.store(storedObject)
+		}
+
 		if dataChange {
 			// For folders, this should create a new empty folder if not present.
 			f.copyTransferScheduler(storedObject)
@@ -391,6 +407,26 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 			if sourceObjectInMap.relativePath != destinationObject.relativePath {
 				panic(fmt.Sprintf("Relative Path at source[%s] not matched with destination[%s]", sourceObjectInMap.relativePath, destinationObject.relativePath))
 			}
+
+			//
+			// For every enumerated target directory, we must compare the inode to check if the source directory was renamed since
+			// the last sync. If a directory is renamed, all its children and grandchildren need to be enumerated at the target, for
+			// safely copying (grand)children directories.
+			//
+
+			// Inode should be set for both source and destination.
+			if destinationObject.inode == 0 || sourceObjectInMap.inode == 0 {
+				panic(fmt.Sprintf("Either destinationObject inode(%v) or sourceObjectInMap inode(%v) is not set for relativePath(%s)\n",
+					destinationObject.inode, sourceObjectInMap.inode, destinationObject.relativePath))
+			}
+
+			if destinationObject.inode != sourceObjectInMap.inode {
+				fmt.Printf("DestinationDir(%s, %v) inode not match with sourceDir(%s, %v), possibly it's rename\n",
+					destinationObject.relativePath, destinationObject.inode, sourceObjectInMap.relativePath, sourceObjectInMap.inode)
+
+				f.possiblyRenamedMap.store(sourceObjectInMap)
+			}
+
 			delete(foldermap.indexMap, lcFileName)
 			atomic.AddInt64(&f.sourceFolderIndex.totalSize, -storedObjectSize(sourceObjectInMap))
 
