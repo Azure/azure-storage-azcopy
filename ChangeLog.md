@@ -1,6 +1,14 @@
 
 # Change Log
 
+## Version 10.16.2
+
+### Bug Fixes
+
+1. Fixed an issue where sync would always re-download files as we were comparing against the service LMT, not the SMB LMT
+2. Fixed a crash when copying objects service to service using a user delegation SAS token
+3. Fixed a crash when deleting folders that may have a raw path string
+
 ## Version 10.16.1
 
 ### Documentation changes
