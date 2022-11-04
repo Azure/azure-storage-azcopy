@@ -266,7 +266,7 @@ func (raw *RawSyncCmdArgs) Cook() (cookedSyncCmdArgs, error) {
 	}
 
 	cooked.followSymlinks = raw.FollowSymlinks
-	if err = crossValidateSymlinksAndPermissions(cooked.followSymlinks, true /* replace with real value when available */); err != nil {
+	if err = crossValidateSymlinksAndPermissions(cooked.followSymlinks, raw.PreservePermissions /* replace with real value when available */); err != nil {
 		return cooked, err
 	}
 
