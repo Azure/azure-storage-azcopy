@@ -163,14 +163,15 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		// only create the destination container in S2S scenarios
 		if cca.FromTo.From().IsRemote() && dstContainerName != "" { // if the destination has a explicit container name
 			// Attempt to create the container. If we fail, fail silently.
-			err = cca.createDstContainer(dstContainerName, cca.Destination, ctx, existingContainers, azcopyLogVerbosity)
+			err = cca.createDstContainer(dstContainerName, cca.Destination, ctx, existingContainers, common.ELogLevel.None())
 
 			// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 			if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 				logDstContainerCreateFailureOnce.Do(func() {
 					glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 				})
-				jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err), pipeline.LogWarning)
+				jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to create destination container %s. The transfer will continue if the container exists", dstContainerName), pipeline.LogWarning)
+				jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Error %s", err), pipeline.LogDebug)
 				seenFailedContainers[dstContainerName] = true
 			}
 		} else if cca.FromTo.From().IsRemote() { // if the destination has implicit container names
@@ -197,7 +198,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						continue
 					}
 
-					err = cca.createDstContainer(bucketName, cca.Destination, ctx, existingContainers, azcopyLogVerbosity)
+					err = cca.createDstContainer(bucketName, cca.Destination, ctx, existingContainers, common.ELogLevel.None())
 
 					// if JobsAdmin is nil, we're probably in testing mode.
 					// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
@@ -206,7 +207,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						logDstContainerCreateFailureOnce.Do(func() {
 							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
-						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", bucketName, err), pipeline.LogWarning)
+						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail).", bucketName), pipeline.LogWarning)
+						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Error %s", err), pipeline.LogDebug)
 						seenFailedContainers[bucketName] = true
 					}
 				}
@@ -220,13 +222,14 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				resName, err := containerResolver.ResolveName(cName)
 
 				if err == nil {
-					err = cca.createDstContainer(resName, cca.Destination, ctx, existingContainers, azcopyLogVerbosity)
+					err = cca.createDstContainer(resName, cca.Destination, ctx, existingContainers, common.ELogLevel.None())
 
 					if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 						logDstContainerCreateFailureOnce.Do(func() {
 							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
-						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err), pipeline.LogWarning)
+						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail).", resName), pipeline.LogWarning)
+						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Error %s", err), pipeline.LogDebug)
 						seenFailedContainers[dstContainerName] = true
 					}
 				}

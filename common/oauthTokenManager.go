@@ -774,6 +774,11 @@ func fixupTokenJson(bytes []byte) []byte {
 	separatorString := `"not_before":"`
 	stringSlice := strings.Split(byteSliceToString, separatorString)
 
+	// OIDC token issuer returns an integer for "not_before" and not a string
+	if len(stringSlice) == 1 {
+		return bytes
+	}
+
 	if stringSlice[1][0] != '"' {
 		return bytes
 	}

@@ -123,6 +123,9 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 			if file.creationProperties.smbPermissionsSddl != nil {
 				osScenarioHelper{}.setFileSDDLString(c, filepath.Join(options.dirPath, file.name), *file.creationProperties.smbPermissionsSddl)
 			}
+			if file.creationProperties.lastWriteTime != nil {
+				c.AssertNoErr(os.Chtimes(filepath.Join(options.dirPath, file.name), time.Now(), *file.creationProperties.lastWriteTime), "set times")
+			}
 		} else {
 			sourceData, err := s.generateLocalFile(
 				filepath.Join(options.dirPath, file.name),
@@ -140,6 +143,9 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 
 			if file.creationProperties.smbPermissionsSddl != nil {
 				osScenarioHelper{}.setFileSDDLString(c, filepath.Join(options.dirPath, file.name), *file.creationProperties.smbPermissionsSddl)
+			}
+			if file.creationProperties.lastWriteTime != nil {
+				c.AssertNoErr(os.Chtimes(filepath.Join(options.dirPath, file.name), time.Now(), *file.creationProperties.lastWriteTime), "set times")
 			}
 		}
 	}
@@ -690,7 +696,7 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 				c.AssertNoErr(err)
 			}
 
-			if f.creationProperties.smbPermissionsSddl != nil || f.creationProperties.smbAttributes != nil {
+			if f.creationProperties.smbPermissionsSddl != nil || f.creationProperties.smbAttributes != nil || f.creationProperties.lastWriteTime != nil {
 				_, err := dir.SetProperties(ctx, ad.toHeaders(c, options.shareURL).SMBProperties)
 				c.AssertNoErr(err)
 
@@ -743,7 +749,12 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			c.AssertNoErr(err)
 			c.Assert(cResp.StatusCode(), equals(), 201)
 
-			if f.creationProperties.smbPermissionsSddl != nil || f.creationProperties.smbAttributes != nil {
+			_, err = file.UploadRange(context.Background(), 0, contentR, nil)
+			if err == nil {
+				c.Failed()
+			}
+
+			if f.creationProperties.smbPermissionsSddl != nil || f.creationProperties.smbAttributes != nil || f.creationProperties.lastWriteTime != nil {
 				/*
 					via Jason Shay:
 					Providing securityKey/SDDL during 'PUT File' and 'PUT Properties' can and will provide different results/semantics.
@@ -771,11 +782,6 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 
 					c.Assert(dest.Compare(source), equals(), true)
 				}
-			}
-
-			_, err = file.UploadRange(context.Background(), 0, contentR, nil)
-			if err == nil {
-				c.Failed()
 			}
 
 			// TODO: do we want to put some random content into it?

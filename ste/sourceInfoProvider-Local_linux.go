@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package ste
@@ -123,7 +124,7 @@ func (s statTAdapter) BTime() time.Time {
 }
 
 func (s statTAdapter) NLink() uint64 {
-	return s.Nlink
+	return uint64(s.Nlink) // On amd64, this is a uint64. On arm64, this is a uint32. Do not remove this typecast.
 }
 
 func (s statTAdapter) Owner() uint32 {
