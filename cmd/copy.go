@@ -943,8 +943,8 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 func areBothLocationsPOSIXAware(fromTo common.FromTo) bool {
 	// POSIX properties are stored in blob metadata-- They don't need a special persistence strategy for BlobBlob.
 	return runtime.GOOS == "linux" && (
-		// fromTo == common.EFromTo.BlobLocal() || TODO
-		fromTo == common.EFromTo.LocalBlob()) ||
+	// fromTo == common.EFromTo.BlobLocal() || TODO
+	fromTo == common.EFromTo.LocalBlob()) ||
 		fromTo == common.EFromTo.BlobBlob()
 }
 
@@ -1701,9 +1701,12 @@ Elapsed Time (Minutes): %v
 Number of File Transfers: %v
 Number of Folder Property Transfers: %v
 Total Number of Transfers: %v
-Number of Transfers Completed: %v
-Number of Transfers Failed: %v
-Number of Transfers Skipped: %v
+Number of File Transfers Completed: %v
+Number of Folder Transfers Completed: %v
+Number of File Transfers Failed: %v
+Number of Folder Transfers Failed: %v
+Number of File Transfers Skipped: %v
+Number of Folder Transfers Skipped: %v
 TotalBytesTransferred: %v
 Final Job Status: %v%s%s
 `,
@@ -1712,9 +1715,12 @@ Final Job Status: %v%s%s
 					summary.FileTransfers,
 					summary.FolderPropertyTransfers,
 					summary.TotalTransfers,
-					summary.TransfersCompleted,
-					summary.TransfersFailed,
-					summary.TransfersSkipped,
+					summary.TransfersCompleted-summary.FoldersCompleted,
+					summary.FoldersCompleted,
+					summary.TransfersFailed-summary.FoldersFailed,
+					summary.FoldersFailed,
+					summary.TransfersSkipped-summary.FoldersSkipped,
+					summary.FoldersSkipped,
 					summary.TotalBytesTransferred,
 					summary.JobStatus,
 					screenStats,
