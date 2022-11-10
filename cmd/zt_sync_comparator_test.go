@@ -137,7 +137,7 @@ func (s *syncComparatorSuite) TestSyncDestinationComparator(c *chk.C) {
 
 	// set up the indexer as well as the destination comparator
 	indexer := newObjectIndexer()
-	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, false)
+	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, false, false)
 
 	// create a sample source object
 	sampleSourceObject := StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now(), md5: srcMD5}
@@ -194,7 +194,7 @@ func (s *syncComparatorSuite) TestSyncDestCompDisableComparison(c *chk.C) {
 
 	// set up the indexer as well as the destination comparator
 	indexer := newObjectIndexer()
-	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, true)
+	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, false, true)
 
 	// create a sample source object
 	currTime := time.Now()
@@ -203,7 +203,7 @@ func (s *syncComparatorSuite) TestSyncDestCompDisableComparison(c *chk.C) {
 		{name: "test2", relativePath: "/usr/test2", lastModifiedTime: currTime, md5: srcMD5},
 	}
 
-	//onlyAtSrc := StoredObject{name: "only_at_src", relativePath: "/usr/only_at_src", lastModifiedTime: currTime, md5: destMD5}
+	// onlyAtSrc := StoredObject{name: "only_at_src", relativePath: "/usr/only_at_src", lastModifiedTime: currTime, md5: destMD5}
 
 	destinationStoredObjects := []StoredObject{
 		// file whose last modified time is greater than that of source
