@@ -56,20 +56,22 @@ func TestProperties_NameValueMetadataCanBeUploaded(t *testing.T) {
 }
 
 func TestProperties_HNSACLs(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
-		recursive:              true,
-		preserveSMBPermissions: true, // this flag is deprecated, but still held over to avoid breaking.
-	}, nil, testFiles{
-		defaultSize: "1K",
-		shouldTransfer: []interface{}{
-			folder(""),
-			f("filea", with{adlsPermissionsACL: "user::rwx,group::rwx,other::r--"}),
-			folder("a", with{adlsPermissionsACL: "user::rwx,group::rwx,other::-w-"}),
-			f("a/fileb", with{adlsPermissionsACL: "user::rwx,group::rwx,other::--x"}),
-			folder("a/b", with{adlsPermissionsACL: "user::rwx,group::rwx,other::rw-"}),
-			f("a/b/filec", with{adlsPermissionsACL: "user::rwx,group::rwx,other::r-x"}),
-			folder("d", with{adlsPermissionsACL: "user::rwx,group::rwx,other::-wx"}),
-			f("d/filed", with{adlsPermissionsACL: "user::rwx,group::rwx,other::rwx"}),
-		},
-	}, EAccountType.HierarchicalNamespaceEnabled(), EAccountType.HierarchicalNamespaceEnabled(), "")
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(),
+		[]common.CredentialType{common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
+		[]common.CredentialType{common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()}, params{
+			recursive:              true,
+			preserveSMBPermissions: true, // this flag is deprecated, but still held over to avoid breaking.
+		}, nil, testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("filea", with{adlsPermissionsACL: "user::rwx,group::rwx,other::r--"}),
+				folder("a", with{adlsPermissionsACL: "user::rwx,group::rwx,other::-w-"}),
+				f("a/fileb", with{adlsPermissionsACL: "user::rwx,group::rwx,other::--x"}),
+				folder("a/b", with{adlsPermissionsACL: "user::rwx,group::rwx,other::rw-"}),
+				f("a/b/filec", with{adlsPermissionsACL: "user::rwx,group::rwx,other::r-x"}),
+				folder("d", with{adlsPermissionsACL: "user::rwx,group::rwx,other::-wx"}),
+				f("d/filed", with{adlsPermissionsACL: "user::rwx,group::rwx,other::rwx"}),
+			},
+		}, EAccountType.HierarchicalNamespaceEnabled(), EAccountType.HierarchicalNamespaceEnabled(), "")
 }

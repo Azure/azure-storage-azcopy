@@ -581,8 +581,9 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 
 		// Consider the ADLSG2->ADLSG2 ACLs case
 		if fromTo == common.EFromTo.BlobBlob() && jpm.Plan().PreservePermissions.IsTruthy() {
+			credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
 			jpm.secondarySourceProviderPipeline = NewBlobFSPipeline(
-				azbfs.NewAnonymousCredential(),
+				credential,
 				azbfs.PipelineOptions{
 					Log: jpm.jobMgr.PipelineLogInfo(),
 					Telemetry: azbfs.TelemetryOptions{
