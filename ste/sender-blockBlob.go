@@ -273,6 +273,17 @@ func (s *blockBlobSenderBase) Cleanup() {
 	}
 }
 
+//Currently we've common Metadata Copier across all senders for block blob.
+func (s *blockBlobSenderBase) GenerateCopyMetadata(id common.ChunkID) chunkFunc {
+	return createChunkFunc(true, s.jptm, id, func() {
+		_, err := s.destBlockBlobURL.SetMetadata(s.jptm.Context(), s.metadataToApply, azblob.BlobAccessConditions{}, s.cpkToApply)	
+		if err != nil {
+			s.jptm.FailActiveSend("Creating empty blob", err)
+			return
+		}
+	})
+}
+
 func (s *blockBlobSenderBase) setBlockID(index int32, value string) {
 	s.muBlockIDs.Lock()
 	defer s.muBlockIDs.Unlock()
