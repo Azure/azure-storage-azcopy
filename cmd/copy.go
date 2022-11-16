@@ -943,8 +943,8 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 func areBothLocationsPOSIXAware(fromTo common.FromTo) bool {
 	// POSIX properties are stored in blob metadata-- They don't need a special persistence strategy for BlobBlob.
 	return runtime.GOOS == "linux" && (
-		// fromTo == common.EFromTo.BlobLocal() || TODO
-		fromTo == common.EFromTo.LocalBlob()) ||
+	// fromTo == common.EFromTo.BlobLocal() || TODO
+	fromTo == common.EFromTo.LocalBlob()) ||
 		fromTo == common.EFromTo.BlobBlob()
 }
 
@@ -1301,7 +1301,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
 	}
 
-	blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: ste.MaxRetryPerDownloadBody})
+	blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: ste.MaxRetryPerDownloadBody, ClientProvidedKeyOptions: clientProvidedKey})
 	defer blobBody.Close()
 
 	// step 4: pipe everything into Stdout
