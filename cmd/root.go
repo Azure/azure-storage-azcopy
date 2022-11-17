@@ -292,7 +292,7 @@ func beginDetectNewVersion() chan struct{} {
 			executableName := executablePathSegments[len(executablePathSegments)-1]
 
 			// output in info mode instead of stderr, as it was crashing CI jobs of some people
-			glcm.Info(executableName + ": A newer version " + remoteVersion + " is available to download\n")
+			glcm.Info(executableName + " " + common.AzcopyVersion + ": A newer version " + remoteVersion + " is available to download\n")
 		}
 
 		// let caller know we have finished, if they want to know
