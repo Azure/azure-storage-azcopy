@@ -80,11 +80,17 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 	var err error
 	autoOAuth.Do(func() {
 		var lca loginCmdArgs
-		if glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AutoLoginType()) == "" {
-			err = errors.New("no login type specified")
+		autoLoginType := strings.ToUpper(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AutoLoginType()))
+		if autoLoginType == "" {
+			glcm.Info("Autologin not specified.")
 			return
 		}
 
+		if autoLoginType != "SPN" && autoLoginType != "MSI" && autoLoginType != "DEVICE" {
+			glcm.Error("Invalid Auto-login type specified.")
+			return
+		}
+		
 		if tenantID := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.TenantID()); tenantID != "" {
 			lca.tenantID = tenantID
 		}
@@ -113,7 +119,9 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 		}
 
 		lca.persistToken = false
-		err = lca.process()
+		if err = lca.process(); err != nil {
+			glcm.Error(fmt.Sprintf("Failed to perform Auto-login: %v.", err.Error()))
+		}
 	})
 
 	if err != nil {
@@ -550,13 +558,6 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 			credType = common.ECredentialType.Anonymous()
 		case common.ELocation.Blob():
 			credType, isPublic, err = getBlobCredentialType(ctx, resource, isSource, resourceSAS, cpkOptions)
-			if azErr, ok := err.(common.AzError); ok && azErr.Equals(common.EAzError.LoginCredMissing()) {
-				_, autoLoginErr := GetOAuthTokenManagerInstance()
-				if autoLoginErr == nil {
-					err = nil // Autologin succeeded, reset original error
-					credType, isPublic = common.ECredentialType.OAuthToken(), false
-				}
-			}
 			if err != nil {
 				return common.ECredentialType.Unknown(), false, err
 			}
@@ -566,13 +567,6 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 			}
 		case common.ELocation.BlobFS():
 			credType, err = getBlobFSCredentialType(ctx, resource, resourceSAS != "")
-			if azErr, ok := err.(common.AzError); ok && azErr.Equals(common.EAzError.LoginCredMissing()) {
-				_, autoLoginErr := GetOAuthTokenManagerInstance()
-				if autoLoginErr == nil {
-					err = nil // Autologin succeeded, reset original error
-					credType, isPublic = common.ECredentialType.OAuthToken(), false
-				}
-			}
 			if err != nil {
 				return common.ECredentialType.Unknown(), false, err
 			}
