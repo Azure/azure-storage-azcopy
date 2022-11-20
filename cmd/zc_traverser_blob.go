@@ -190,56 +190,68 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		}
 	}
 
-	// schedule the blob in two cases:
-	// 	1. either we are targeting a single blob and the URL wasn't explicitly pointed to a virtual dir
-	//	2. either we are scanning recursively with includeDirectoryStubs set to true,
-	//	   then we add the stub blob that represents the directory
-	if (isBlob && !strings.HasSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)) ||
-		(t.includeDirectoryStubs && isDirStub && t.recursive) {
-		// sanity checking so highlighting doesn't highlight things we're not worried about.
-		if blobProperties == nil {
-			panic("isBlob should never be set if getting properties is an error")
-		}
-
-		err := fmt.Errorf("Detected the root[%v] as a blob.", t.rawURL)
-		if t.scannerLogger != nil {
-			t.scannerLogger.Log(pipeline.LogDebug, err.Error())
-		} else if azcopyScanningLogger != nil {
-			azcopyScanningLogger.Log(pipeline.LogDebug, "Detected the root as a blob.")
-		}
-
-		storedObject := newStoredObject(
-			preprocessor,
-			getObjectNameOnly(strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
-			"",
-			common.EntityType(common.IffUint8(isBlob, uint8(common.EEntityType.File()), uint8(common.EEntityType.Folder()))),
-			blobProperties.LastModified(),
-			blobProperties.ContentLength(),
-			blobProperties,
-			blobPropertiesResponseAdapter{blobProperties},
-			common.FromAzBlobMetadataToCommonMetadata(blobProperties.NewMetadata()), // .NewMetadata() seems odd to call, but it does actually retrieve the metadata from the blob properties.
-			blobUrlParts.ContainerName,
-		)
-
-		if t.s2sPreserveSourceTags {
-			blobTagsMap, err := t.getBlobTags()
-			if err != nil {
-				panic("Couldn't fetch blob tags due to error: " + err.Error())
+	//
+	// In case of sync, target enumeration driven by source. Source first make an entry to indexerMap then tell target
+	// traverser to process that directory. Whereas this code breaks that logic. It cause 2 major issue to sync engine.
+	// 1. It may happen target traverser try to process root entry, whereas source still need to add entry to indexerMap.
+	// 2. Root entry will be processed twice which cause deletion of entry from indexerMap.
+	//
+	// Note: This code do the error checking and process root directory or file. It's ok to skip this step for sync
+	//       as we do the processing of root directory or file in parallelList function. It's just delayed by one function
+	//       call.
+	//
+	if !t.isSync {
+		// schedule the blob in two cases:
+		// 	1. either we are targeting a single blob and the URL wasn't explicitly pointed to a virtual dir
+		//	2. either we are scanning recursively with includeDirectoryStubs set to true,
+		//	   then we add the stub blob that represents the directory
+		if (isBlob && !strings.HasSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)) ||
+			(t.includeDirectoryStubs && isDirStub && t.recursive) {
+			// sanity checking so highlighting doesn't highlight things we're not worried about.
+			if blobProperties == nil {
+				panic("isBlob should never be set if getting properties is an error")
 			}
-			if len(blobTagsMap) > 0 {
-				storedObject.blobTags = blobTagsMap
+
+			err := fmt.Errorf("Detected the root[%v] as a blob.", t.rawURL)
+			if t.scannerLogger != nil {
+				t.scannerLogger.Log(pipeline.LogDebug, err.Error())
+			} else if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(pipeline.LogDebug, "Detected the root as a blob.")
 			}
-		}
-		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(common.EEntityType.File())
-		}
 
-		err = processIfPassedFilters(filters, storedObject, processor)
-		_, err = getProcessingError(err)
+			storedObject := newStoredObject(
+				preprocessor,
+				getObjectNameOnly(strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
+				"",
+				common.EntityType(common.IffUint8(isBlob, uint8(common.EEntityType.File()), uint8(common.EEntityType.Folder()))),
+				blobProperties.LastModified(),
+				blobProperties.ContentLength(),
+				blobProperties,
+				blobPropertiesResponseAdapter{blobProperties},
+				common.FromAzBlobMetadataToCommonMetadata(blobProperties.NewMetadata()), // .NewMetadata() seems odd to call, but it does actually retrieve the metadata from the blob properties.
+				blobUrlParts.ContainerName,
+			)
 
-		// short-circuit if we don't have anything else to scan and permanent delete is not on
-		if !t.includeDeleted && (isBlob || err != nil) {
-			return err
+			if t.s2sPreserveSourceTags {
+				blobTagsMap, err := t.getBlobTags()
+				if err != nil {
+					panic("Couldn't fetch blob tags due to error: " + err.Error())
+				}
+				if len(blobTagsMap) > 0 {
+					storedObject.blobTags = blobTagsMap
+				}
+			}
+			if t.incrementEnumerationCounter != nil {
+				t.incrementEnumerationCounter(common.EEntityType.File())
+			}
+
+			err = processIfPassedFilters(filters, storedObject, processor)
+			_, err = getProcessingError(err)
+
+			// short-circuit if we don't have anything else to scan and permanent delete is not on
+			if !t.includeDeleted && (isBlob || err != nil) {
+				return err
+			}
 		}
 	}
 
@@ -467,6 +479,11 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 		FinalizeAll := false
 		currentDirPath := dir.(string)
 
+		// XDM App create lease blob in root directory. This lease blob need to be excluded from the list of blobs.
+		// Otherwise SyncEngine deletes this blob as it's not present on source side. As an optimization we check lease blob
+		// only in root folder.
+		checkForXDMLeaseBlob := targetTraverser && currentDirPath == ""
+
 		// This code for sync operation and when its target traverser.
 		if targetTraverser {
 			//
@@ -532,8 +549,19 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 		//       FinalizeDirectory and create a "end of folder" marker to be sent to processIfNecessary(). processIfNecessary() will perform the target directory creation.
 		//
 		for marker := (azblob.Marker{}); marker.NotDone(); {
+			prefix := currentDirPath
 
-			lResp, err := containerURL.ListBlobsHierarchySegment(t.ctx, marker, "/", azblob.ListBlobsSegmentOptions{Prefix: currentDirPath,
+			// If searchPrefix is present, it means user provided the sub-path. This is the place we need to look for files.
+			// root.Url contains path till container, to search files under subPath we need to add it as prefix. Otherwise it tries to list
+			// files under container.
+			if targetTraverser && searchPrefix != "" {
+				prefix = filepath.Join(searchPrefix, currentDirPath)
+
+				// filepath.Join truncate last forward slash we need to add it again.
+				prefix = prefix + "/"
+			}
+
+			lResp, err := containerURL.ListBlobsHierarchySegment(t.ctx, marker, "/", azblob.ListBlobsSegmentOptions{Prefix: prefix,
 				Details: azblob.BlobListingDetails{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion}})
 			if err != nil {
 				return fmt.Errorf("cannot list files due to reason %s", err)
@@ -594,6 +622,11 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 			for _, blobInfo := range lResp.Segment.BlobItems {
 				// if the blob represents a hdi folder, then skip it
 				if t.doesBlobRepresentAFolder(blobInfo.Metadata) {
+					continue
+				}
+
+				// Check if the blob represents XDM lease blob or not.
+				if checkForXDMLeaseBlob && t.doesBlobRepresentXdmLeaseBlob(filepath.Base(blobInfo.Name)) {
 					continue
 				}
 
@@ -761,6 +794,11 @@ func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 		object.blobVersionID = *blobInfo.VersionID
 	}
 	return object
+}
+
+// doesBlobRepresentXdmLeaseBlob verifies whether it's XdataMove app created Lease Blob or not.
+func (t *blobTraverser) doesBlobRepresentXdmLeaseBlob(blobName string) bool {
+	return blobName == common.XDM_LEASE_BLOB_NAME
 }
 
 func (t *blobTraverser) doesBlobRepresentAFolder(metadata azblob.Metadata) bool {

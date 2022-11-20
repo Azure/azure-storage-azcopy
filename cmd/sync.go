@@ -216,15 +216,15 @@ func (raw *RawSyncCmdArgs) Cook() (cookedSyncCmdArgs, error) {
 	case common.EFromTo.Unknown():
 		return cooked, fmt.Errorf("Unable to infer the source '%s' / destination '%s'. ", raw.Src, raw.Dst)
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile():
-		cooked.destination, err = SplitResourceString(raw.Dst, cooked.fromTo.To())
+		cooked.Destination, err = SplitResourceString(raw.Dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
 	case common.EFromTo.BlobLocal(), common.EFromTo.FileLocal():
-		cooked.source, err = SplitResourceString(raw.Src, cooked.fromTo.From())
+		cooked.Source, err = SplitResourceString(raw.Src, cooked.fromTo.From())
 		common.PanicIfErr(err)
 	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.BlobFile(), common.EFromTo.FileBlob():
-		cooked.destination, err = SplitResourceString(raw.Dst, cooked.fromTo.To())
+		cooked.Destination, err = SplitResourceString(raw.Dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
-		cooked.source, err = SplitResourceString(raw.Src, cooked.fromTo.From())
+		cooked.Source, err = SplitResourceString(raw.Src, cooked.fromTo.From())
 		common.PanicIfErr(err)
 	default:
 		return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.Src, raw.Dst, cooked.fromTo)
@@ -232,14 +232,14 @@ func (raw *RawSyncCmdArgs) Cook() (cookedSyncCmdArgs, error) {
 
 	// Do this check separately so we don't end up with a bunch of code duplication when new src/dstn are added
 	if cooked.fromTo.From() == common.ELocation.Local() {
-		cooked.source = common.ResourceString{Value: common.ToExtendedPath(common.CleanLocalPath(raw.Src))}
+		cooked.Source = common.ResourceString{Value: common.ToExtendedPath(common.CleanLocalPath(raw.Src))}
 	} else if cooked.fromTo.To() == common.ELocation.Local() {
-		cooked.destination = common.ResourceString{Value: common.ToExtendedPath(common.CleanLocalPath(raw.Dst))}
+		cooked.Destination = common.ResourceString{Value: common.ToExtendedPath(common.CleanLocalPath(raw.Dst))}
 	}
 
 	// we do not support service level sync yet
 	if cooked.fromTo.From().IsRemote() {
-		err = raw.validateURLIsNotServiceLevel(cooked.source.Value, cooked.fromTo.From())
+		err = raw.validateURLIsNotServiceLevel(cooked.Source.Value, cooked.fromTo.From())
 		if err != nil {
 			return cooked, err
 		}
@@ -247,7 +247,7 @@ func (raw *RawSyncCmdArgs) Cook() (cookedSyncCmdArgs, error) {
 
 	// we do not support service level sync yet
 	if cooked.fromTo.To().IsRemote() {
-		err = raw.validateURLIsNotServiceLevel(cooked.destination.Value, cooked.fromTo.To())
+		err = raw.validateURLIsNotServiceLevel(cooked.Destination.Value, cooked.fromTo.To())
 		if err != nil {
 			return cooked, err
 		}
@@ -304,6 +304,16 @@ func (raw *RawSyncCmdArgs) Cook() (cookedSyncCmdArgs, error) {
 
 	// TODO: Till we don't have API's to update the metaDataOnly. Lets keep this flag false.
 	cooked.metaDataOnlySync = false
+
+	// This check is in-line with copy mode.
+	// Note: * can be filename in that case, which means user want to copy file with name "*". For files we don't copy
+	//      top directory. So it will not break any functionality.
+	if cooked.fromTo.From() == common.ELocation.Local() && strings.HasSuffix(cooked.Source.ValueLocal(), "/*") {
+		cooked.StripTopDir = true
+		cooked.Source.Value = strings.TrimSuffix(cooked.Source.Value, "/*")
+	} else {
+		cooked.StripTopDir = false
+	}
 
 	cooked.backupMode = raw.backupMode
 	if err = validateBackupMode(cooked.backupMode, cooked.fromTo); err != nil {
@@ -453,8 +463,8 @@ type cookedSyncCmdArgs struct {
 	// deletion count keeps track of how many extra files from the destination were removed
 	atomicDeletionCount uint32
 
-	source                  common.ResourceString
-	destination             common.ResourceString
+	Source                  common.ResourceString
+	Destination             common.ResourceString
 	fromTo                  common.FromTo
 	credentialInfo          common.CredentialInfo
 	s2sSourceCredentialType common.CredentialType
@@ -516,6 +526,20 @@ type cookedSyncCmdArgs struct {
 	mirrorMode bool
 
 	dryrunMode bool
+
+	// Whether we want top dir to be included in target or not. If it's true, we skip copying top directory at source, only
+	// underneath files will be coped.
+	// If source has following directory structure
+	// dir1/file1.txt
+	// dir1/file2.txt
+	// In case of StripTopDir is true, after transfer target looks like this:-
+	// accountName.blob.core.windows.net/container/file1.txt
+	// accountName.blob.core.windows.net/container/file2.txt
+	//
+	// In case of StripTopDir is false, after transfer target looks like this:-
+	// accountName.blob.core.windows.net/container/dir1/file1.txt
+	// accountName.blob.core.windows.net/container/dir1/file2.txt
+	StripTopDir bool
 
 	//
 	// Change file detection mode.
@@ -819,13 +843,13 @@ func (cca *cookedSyncCmdArgs) CredentialInfo(ctx context.Context) error {
 
 	// Verifies credential type and initializes credential info.
 	// Note that this is for the destination.
-	cca.credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false, cca.cpkOptions)
+	cca.credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.Destination.Value, cca.Destination.SAS, false, cca.cpkOptions)
 
 	if err != nil {
 		return err
 	}
 
-	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true, cca.cpkOptions)
+	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.Source.Value, cca.Source.SAS, true, cca.cpkOptions)
 
 	if err != nil {
 		return err

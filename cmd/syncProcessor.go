@@ -45,8 +45,8 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 		CommandString:   cca.commandString,
 		FromTo:          cca.fromTo,
 		Fpo:             fpo,
-		SourceRoot:      cca.source.CloneWithConsolidatedSeparators(),
-		DestinationRoot: cca.destination.CloneWithConsolidatedSeparators(),
+		SourceRoot:      cca.Source.CloneWithConsolidatedSeparators(),
+		DestinationRoot: cca.Destination.CloneWithConsolidatedSeparators(),
 		CredentialInfo:  cca.credentialInfo,
 
 		// flags
@@ -76,7 +76,7 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
-	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.source, cca.destination,
+	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.Source, cca.Destination,
 		reportFirstPart, reportFinalPart, cca.preserveAccessTier, cca.dryrunMode)
 }
 
@@ -217,8 +217,8 @@ func newInteractiveDeleteProcessor(deleter objectProcessor, deleteDestination co
 }
 
 func newSyncLocalDeleteProcessor(cca *cookedSyncCmdArgs) *interactiveDeleteProcessor {
-	localDeleter := localFileDeleter{rootPath: cca.destination.ValueLocal()}
-	return newInteractiveDeleteProcessor(localDeleter.deleteFile, cca.deleteDestination, "local file", cca.destination, cca.incrementDeletionCount, cca.dryrunMode)
+	localDeleter := localFileDeleter{rootPath: cca.Destination.ValueLocal()}
+	return newInteractiveDeleteProcessor(localDeleter.deleteFile, cca.deleteDestination, "local file", cca.Destination, cca.incrementDeletionCount, cca.dryrunMode)
 }
 
 type localFileDeleter struct {
@@ -253,7 +253,7 @@ func (l *localFileDeleter) deleteFile(object StoredObject) error {
 }
 
 func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, stopDeleteWorkers chan struct{}) (*interactiveDeleteProcessor, error) {
-	rawURL, err := cca.destination.FullURL()
+	rawURL, err := cca.Destination.FullURL()
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +266,7 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, stopDeleteWorkers chan struc
 	}
 
 	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, p, ctx, cca.fromTo.To(), stopDeleteWorkers).delete,
-		cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount, cca.dryrunMode), nil
+		cca.deleteDestination, cca.fromTo.To().String(), cca.Destination, cca.incrementDeletionCount, cca.dryrunMode), nil
 }
 
 type remoteResourceDeleter struct {
@@ -463,10 +463,11 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			}
 
 			//
-			// Schedule recursive deletion of files/folders under this folder.
+			// Schedule recursive deletion of files/folders under this folder. blobURLParts.BlobName represents
+			// meta blob for folder and BlobName contains the absolute path of folder.
 			// This is the prefix we should use to list files and directories underneath this folder.
 			//
-			dirPath := common.CleanLocalPath(object.relativePath) + "/"
+			dirPath := blobURLParts.BlobName + "/"
 			b.deleteDirEnumerationChan <- dirPath
 			return nil
 		default:
