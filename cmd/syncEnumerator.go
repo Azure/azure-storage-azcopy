@@ -22,7 +22,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"runtime"
 	"strings"
@@ -143,7 +142,7 @@ func (t *orderedTqueue) Enqueue(dir parallel.DirectoryEntry) int32 {
 
 		// Increment writeIdx to point to next free slot.
 		t.writeIdx += 1
-		if t.writeIdx >= t.size {
+		if t.writeIdx > t.size {
 			panic(fmt.Sprintf("Invalid value of writeIdx(%v) of circular buffer size(%v)",
 				t.writeIdx, t.size))
 		}
@@ -341,12 +340,6 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *s
 		destinationScannerLogger /*scannerLogger */)
 	if err != nil {
 		return nil, err
-	}
-
-	// verify that the traversers are targeting the same type of resources
-	if sourceTraverser.IsDirectory(true) != destinationTraverser.IsDirectory(true) {
-		return nil, errors.New("trying to sync between different resource types (either file <-> directory or directory <-> file) which is not allowed." +
-			"sync must happen between source and destination of the same type, e.g. either file <-> file or directory <-> directory")
 	}
 
 	// set up the filters in the right order
