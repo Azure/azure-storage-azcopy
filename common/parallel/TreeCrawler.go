@@ -83,7 +83,7 @@ type ProcessDirEntry struct {
 }
 
 type OrderedTqueueInterface interface {
-	MarkProcessed(int32)
+	MarkProcessed(int32, interface{})
 	Enqueue(DirectoryEntry) int32
 	GetTqueue() chan interface{}
 }

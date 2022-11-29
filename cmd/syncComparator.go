@@ -28,6 +28,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/shubham808/azure-storage-azcopy/v10/common"
 )
 
@@ -73,13 +74,16 @@ type syncDestinationComparator struct {
 	//       harmless as opposes to choosing a smaller skew and missing out syncing some object that has changed.
 	//
 	TargetCtimeSkew uint
+
+	scannerLogger common.ILoggerResetable
 }
 
-func newSyncDestinationComparator(i *folderIndexer, possiblyRenamedMap *possiblyRenamedMap, copyScheduler, cleaner objectProcessor, disableComparison bool, cfdMode common.CFDMode, lastSyncTime time.Time) *syncDestinationComparator {
+func newSyncDestinationComparator(i *folderIndexer, possiblyRenamedMap *possiblyRenamedMap, copyScheduler, cleaner objectProcessor, disableComparison bool, cfdMode common.CFDMode, lastSyncTime time.Time, scannerLogger common.ILoggerResetable) *syncDestinationComparator {
 	return &syncDestinationComparator{sourceFolderIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, disableComparison: disableComparison,
 		cfdMode:            cfdMode,
 		possiblyRenamedMap: possiblyRenamedMap,
-		lastSyncTime:       lastSyncTime}
+		lastSyncTime:       lastSyncTime,
+		scannerLogger:      scannerLogger}
 }
 
 //
@@ -185,7 +189,7 @@ func (f *syncDestinationComparator) FinalizeTargetDirectory(relativeDir string, 
 	delete(f.sourceFolderIndex.folderMap, lcFolderName)
 
 	f.sourceFolderIndex.lock.Unlock()
-	// fmt.Printf("Finalizing directory %s (FinalizeAll=%v)\n", relativeDir, finalizeAll)
+	f.scannerLogger.Log(pipeline.LogInfo, fmt.Sprintf("Finalizing directory %s (FinalizeAll=%v)\n", relativeDir, finalizeAll))
 
 	//
 	// Go over all objects in the source directory, enumerated by SourceTraverser, and check each object for following:
@@ -265,8 +269,8 @@ func (f *syncDestinationComparator) FinalizeTargetDirectory(relativeDir string, 
 		// It could very well be a new directory created on source after the last sync, but that doesn't
 		// cause any additional overhead as new directories would need to be enumerated anyways.
 		//
-		if finalizeAll == true && storedObject.entityType == common.EEntityType.Folder() {
-			fmt.Printf("Directory(%s) not present on target, possibly it's renamed\n", storedObject.relativePath)
+		if f.possiblyRenamedMap != nil && finalizeAll == true && storedObject.entityType == common.EEntityType.Folder() {
+			f.scannerLogger.Log(pipeline.LogInfo, fmt.Sprintf("Directory(%s) not present on target, possibly it's renamed", storedObject.relativePath))
 
 			// Add to "possibly renamed" map.
 			f.possiblyRenamedMap.store(storedObject)
@@ -420,9 +424,9 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 					destinationObject.inode, sourceObjectInMap.inode, destinationObject.relativePath))
 			}
 
-			if destinationObject.inode != sourceObjectInMap.inode {
-				fmt.Printf("DestinationDir(%s, %v) inode not match with sourceDir(%s, %v), possibly it's rename\n",
-					destinationObject.relativePath, destinationObject.inode, sourceObjectInMap.relativePath, sourceObjectInMap.inode)
+			if destinationObject.inode != sourceObjectInMap.inode && f.possiblyRenamedMap != nil {
+				f.scannerLogger.Log(pipeline.LogInfo, fmt.Sprintf("DestinationDir(%s, %v) inode not match with sourceDir(%s, %v), possibly it's rename",
+					destinationObject.relativePath, destinationObject.inode, sourceObjectInMap.relativePath, sourceObjectInMap.inode))
 
 				f.possiblyRenamedMap.store(sourceObjectInMap)
 			}

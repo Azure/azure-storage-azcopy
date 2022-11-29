@@ -145,7 +145,8 @@ func Walk(appCtx context.Context, root string, relBase string, parallelism int, 
 					// target traverser to process. Tell orderedTqueue so that it can add it in a proper child-after-parent
 					// order.
 					//
-					orderedTqueue.MarkProcessed(crawlResult.Idx())
+					entry , _ := crawlResult.Item()
+					orderedTqueue.MarkProcessed(crawlResult.Idx(), entry)
 
 					continue
 				}

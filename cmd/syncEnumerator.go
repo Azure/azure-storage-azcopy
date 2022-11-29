@@ -95,6 +95,10 @@ type orderedTqueue struct {
 
 	// Raw tqueue that contains entries in strict child-after-parent order, target traverser reads from here.
 	tqueue chan interface{}
+
+	// doNotEnforceChildAfterParent if set will not enforce child-after-parent through the Enqueue() and MarkProcessed() methods.
+	// This will be set by callers who don't need the strict child-after-parent ordering (f.e. CFDMode=TargetCompare doesn't need it).
+	doNotEnforceChildAfterParent bool
 }
 
 //
@@ -104,7 +108,18 @@ type orderedTqueue struct {
 //
 func (t *orderedTqueue) Enqueue(dir parallel.DirectoryEntry) int32 {
 	for {
+
+		// If child-after-parent ordering is not needed then we don't need to do anything in Enqueue(),
+		// this directory will be added to tqueue by MarkProcessed().
+		if t.doNotEnforceChildAfterParent {
+			return 0
+		}
+
 		t.lock.Lock()
+
+		if t.size == 0 || cap(t.dir) == 0 {
+			panic(fmt.Sprintf("Size(%v) or capacity of circular buffer(%v) is zero", t.size, cap(t.dir)))
+		}
 
 		// Is circular buffer full?
 		if t.count == t.size {
@@ -157,7 +172,15 @@ func (t *orderedTqueue) GetTqueue() chan interface{} {
 }
 
 // SourceTraverser processing threads will call MarkProcessed when they dequeue special "tqueue" entry.
-func (t *orderedTqueue) MarkProcessed(idx int32) {
+func (t *orderedTqueue) MarkProcessed(idx int32, item interface{}) {
+	// If child-after-parent ordering is not needed, we don't need to wait for the parent directory
+	// to be added to tqueue, a child can be added as soon as it is ready (we got the special "tqueue" entry
+	// for the directory), even if it means adding a child before parent to tqueue.
+	if t.doNotEnforceChildAfterParent {
+		t.tqueue <- item
+		return
+	}
+
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -199,6 +222,13 @@ func (t *orderedTqueue) MarkProcessed(idx int32) {
 			panic("Not Valid Entry")
 		}
 	}
+}
+
+// TargetCompare doesn't need any special rename handling, for the rest we
+// maintain possiblyRenamedMap to track directories which could have been renamed and
+// hence need to be enumerated on the target.q
+func (cca *cookedSyncCmdArgs) ShouldConsultPossiblyRenamedMap() bool {
+	return cca.cfdMode != common.CFDModeFlags.TargetCompare()
 }
 
 func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *syncEnumerator, err error) {
@@ -252,17 +282,23 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *s
 	//
 	// TODO: See how it performs with experimentation on real workloads.
 	// TODO: See if we can make this a function of maxObjectIndexerSizeInGB
-	orderedTqueue := &orderedTqueue{
-		size:   100 * 1000,
-		tqueue: make(chan interface{}, 1000*1000),
-		dir:    make([]parallel.DirectoryEntry, 100*1000),
+	orderedTqueue := &orderedTqueue{}
+	var possiblyRenamedMap *possiblyRenamedMap
+
+	if !cca.ShouldConsultPossiblyRenamedMap() {
+		orderedTqueue.tqueue = make(chan interface{}, 1000*1000)
+		orderedTqueue.doNotEnforceChildAfterParent = true
+	} else {
+		orderedTqueue.tqueue = make(chan interface{}, 1000*1000)
+		orderedTqueue.size = 100 * 1000
+		orderedTqueue.dir = make([]parallel.DirectoryEntry, orderedTqueue.size)
+
+		// set up the rename map, so that the rename can be detected.
+		possiblyRenamedMap = newPossiblyRenamedMap()
 	}
 
 	// set up the map, so that the source/destination can be compared
 	objectIndexerMap := newfolderIndexer()
-
-	// set up the rename map, so that the rename can be detected.
-	possiblyRenamedMap := newPossiblyRenamedMap()
 
 	sourceScannerLogger := common.NewJobLogger(cca.jobID, AzcopyLogVerbosity, AzcopyAppPathFolder, "-source-scanning")
 	sourceScannerLogger.OpenLog()
@@ -377,7 +413,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *s
 		// when uploading, we can delete remote objects immediately, because as we traverse the remote location
 		// we ALREADY have available a complete map of everything that exists locally
 		// so as soon as we see a remote destination object we can know whether it exists in the local source
-		comparator = newSyncDestinationComparator(objectIndexerMap, possiblyRenamedMap, transferScheduler.scheduleCopyTransfer, destCleanerFunc, cca.mirrorMode, cca.cfdMode, cca.lastSyncTime).processIfNecessary
+		comparator = newSyncDestinationComparator(objectIndexerMap, possiblyRenamedMap, transferScheduler.scheduleCopyTransfer, destCleanerFunc, cca.mirrorMode, cca.cfdMode, cca.lastSyncTime, destinationScannerLogger).processIfNecessary
 		finalize = func() error {
 			//
 			// Now that target traverser is done processing, there cannot be any more "delete jobs", tell

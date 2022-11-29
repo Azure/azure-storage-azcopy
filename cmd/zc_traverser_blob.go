@@ -297,13 +297,16 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 //
 func (t *blobTraverser) waitTillAllAncestorsAreProcessed(currentDirPath string) {
 	//
-	// In TargetCompare mode we enumerate all directories anyways so no
-	// need for any special handling for renames.
+	// If possiblyRenamedMap is nil then we are not doing the special rename handling, hence
+	// directories can be processed in any order (no need to wait for ancestors).
 	//
-	if t.cfdMode == common.CFDModeFlags.TargetCompare() {
+	if t.possiblyRenamedMap == nil {
 		return
 	}
 
+	if t.cfdMode == common.CFDModeFlags.TargetCompare() {
+		panic("waitTillAllAncestorsAreProcessed() MUST NOT be called for TargetCompare mode!")
+	}
 	//
 	// Empty currentDirPath represents root folder, root folder has no ancestors, so no need to wait.
 	//
@@ -328,7 +331,7 @@ func (t *blobTraverser) waitTillAllAncestorsAreProcessed(currentDirPath string) 
 		if t.indexerMap.directoryNotYetProcessed(parent) {
 			time.Sleep(10 * time.Millisecond)
 			waitCount++
-			fmt.Printf("currentDir(%s) parent(%s) still not processed after iteration[%v]\n", currentDirPath, parent, waitCount)
+			t.scannerLogger.Log(pipeline.LogInfo, fmt.Sprintf("currentDir(%s) parent(%s) still not processed after iteration[%v]", currentDirPath, parent, waitCount))
 		} else {
 			// parent directory processed by target traverser, now it can safely proceed with this directory.
 			break
@@ -371,6 +374,12 @@ func (t *blobTraverser) waitTillAllAncestorsAreProcessed(currentDirPath string) 
 func (t *blobTraverser) hasAnAncestorThatIsPossiblyRenamed(currentDirPath string) bool {
 	if t.cfdMode == common.CFDModeFlags.TargetCompare() {
 		panic(fmt.Sprintf("hasAnAncestorThatIsPossiblyRenamed called for currentDirPath(%s) with TargetCompare", currentDirPath))
+	}
+
+	// possiblyRenamedMap can be nil. As of now we have possiblyRenamedMap to detect any potential rename.
+	// In future, we may use different approach to detect rename as optimization.
+	if t.possiblyRenamedMap == nil {
+		return false
 	}
 
 	//
@@ -722,7 +731,8 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 					// target traverser to process. Tell orderedTqueue so that it can add it in a proper child-after-parent
 					// order.
 					//
-					t.orderedTqueue.MarkProcessed(x.Idx())
+					item, _ := x.Item()
+					t.orderedTqueue.MarkProcessed(x.Idx(), item)
 					continue
 				}
 

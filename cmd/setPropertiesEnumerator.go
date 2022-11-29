@@ -54,7 +54,8 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 		cca.PermanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false,
 		AzcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil, /* errorChannel */
 		nil /* folderIndexer */, nil /* possiblyRenamedMap */, nil, /* tqueue*/
-		false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{} /* lastSyncTime */, common.CFDModeFlags.NotDefined(), false /*metaDataOnlySync*/, nil /* scannerLogger */)
+		false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, /* lastSyncTime */
+		common.CFDModeFlags.NotDefined(), false /*metaDataOnlySync*/, nil /* scannerLogger */)
 
 	// report failure to create traverser
 	if err != nil {
