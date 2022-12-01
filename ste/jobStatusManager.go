@@ -62,7 +62,7 @@ func (jm *jobMgr) statusMgrClosed() bool {
 func (jm *jobMgr) SendJobPartCreatedMsg(msg JobPartCreatedMsg) {
 	jm.jstm.partCreated <- msg
 	if msg.IsFinalPart {
-		//Inform statusManager that this is all parts we've
+		// Inform statusManager that this is all parts we've
 		close(jm.jstm.partCreated)
 	}
 }
@@ -114,10 +114,10 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			js.TotalBytesExpected += msg.TotalBytesEnumerated
 
 		case msg, ok := <-jstm.xferDone:
-			if !ok { //Channel is closed, all transfers have been attended.
+			if !ok { // Channel is closed, all transfers have been attended.
 				jstm.xferDone = nil
 
-				//close drainXferDone so that other components can know no further updates happen
+				// close drainXferDone so that other components can know no further updates happen
 				allXferDoneHandled = true
 				close(jstm.xferDoneDrained)
 				continue
@@ -128,15 +128,24 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 
 			switch msg.TransferStatus {
 			case common.ETransferStatus.Success():
+				if msg.IsFolderProperties {
+					js.FoldersCompleted++
+				}
 				js.TransfersCompleted++
 				js.TotalBytesTransferred += msg.TransferSize
 			case common.ETransferStatus.Failed(),
 				common.ETransferStatus.TierAvailabilityCheckFailure(),
 				common.ETransferStatus.BlobTierFailure():
+				if msg.IsFolderProperties {
+					js.FoldersFailed++
+				}
 				js.TransfersFailed++
 				js.FailedTransfers = append(js.FailedTransfers, msg)
 			case common.ETransferStatus.SkippedEntityAlreadyExists(),
 				common.ETransferStatus.SkippedBlobHasSnapshots():
+				if msg.IsFolderProperties {
+					js.FoldersSkipped++
+				}
 				js.TransfersSkipped++
 				js.SkippedTransfers = append(js.SkippedTransfers, msg)
 			}
