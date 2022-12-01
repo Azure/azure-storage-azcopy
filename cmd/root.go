@@ -56,6 +56,7 @@ var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
 var azcopyScanningLogger common.ILoggerResetable
 var azcopyCurrentJobID common.JobID
+var azcopySkipVersionCheck bool
 
 type jobLoggerInfo struct {
 	jobID         common.JobID
@@ -151,12 +152,14 @@ var rootCmd = &cobra.Command{
 			common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
 		jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, pipeline.LogInfo)
 
-		// spawn a routine to fetch and compare the local application's version against the latest version available
-		// if there's a newer version that can be used, then write the suggestion to stderr
-		// however if this takes too long the message won't get printed
-		// Note: this function is necessary for non-help, non-login commands, since they don't reach the corresponding
-		// beginDetectNewVersion call in Execute (below)
-		beginDetectNewVersion()
+		if !azcopySkipVersionCheck {
+			// spawn a routine to fetch and compare the local application's version against the latest version available
+			// if there's a newer version that can be used, then write the suggestion to stderr
+			// however if this takes too long the message won't get printed
+			// Note: this function is necessary for non-help, non-login commands, since they don't reach the corresponding
+			// beginDetectNewVersion call in Execute (below)
+			beginDetectNewVersion()
+		}
 
 		if debugSkipFiles != "" {
 			for _, v := range strings.Split(debugSkipFiles, ";") {
@@ -212,6 +215,8 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cmdLineExtraSuffixesAAD, trustedSuffixesNameAAD, "", "Specifies additional domain suffixes where Azure Active Directory login tokens may be sent.  The default is '"+
 		trustedSuffixesAAD+"'. Any listed here are added to the default. For security, you should only put Microsoft Azure domains here. Separate multiple entries with semi-colons.")
+
+	rootCmd.PersistentFlags().BoolVar(&azcopySkipVersionCheck, "skip-version-check", false, "Do not perform the version check at startup. Intended for automation scenarios & airgapped use.")
 
 	// Note: this is due to Windows not supporting signals properly
 	rootCmd.PersistentFlags().BoolVar(&cancelFromStdin, "cancel-from-stdin", false, "Used by partner teams to send in `cancel` through stdin to stop a job.")
