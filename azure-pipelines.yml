@@ -87,7 +87,7 @@ jobs:
         condition: eq(variables.type, 'mac-os')
 
       - script: |
-          GOARCH=arm64 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64"
+          GOARCH=arm64 CGO_ENABLED=1 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64"
         displayName: 'Generate MacOS Build'
         condition: eq(variables.type, 'mac-os')
 
