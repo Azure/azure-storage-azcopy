@@ -1111,7 +1111,9 @@ type CookedCopyCmdArgs struct {
 	FollowSymlinks     bool
 	ForceWrite         common.OverwriteOption // says whether we should try to overwrite
 	ForceIfReadOnly    bool                   // says whether we should _force_ any overwrites (triggered by forceWrite) to work on Azure Files objects that are set to read-only
-	autoDecompress     bool
+	IsSourceDir        bool
+
+	autoDecompress bool
 
 	// options from flags
 	blockSize int64
@@ -1670,7 +1672,8 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 			// indicate whether constrained by disk or not
 			isBenchmark := cca.FromTo.From() == common.ELocation.Benchmark()
 			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, isBenchmark)
-			if !cca.Recursive && summary.TotalTransfers == 0 {
+			// if it is not a dir (i.e its a single file) and no transfers occured - file not found - fail
+			if !cca.IsSourceDir && summary.TotalTransfers == 0 {
 				summary.TransfersFailed += 1
 			}
 			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
