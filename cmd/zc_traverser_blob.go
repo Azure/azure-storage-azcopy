@@ -270,11 +270,6 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		searchPrefix += common.AZCOPY_PATH_SEPARATOR_STRING
 	}
 
-	//// if getProperties=false, we need to include the root item in the listing
-	//if !t.getProperties {
-	//	searchPrefix = strings.TrimSuffix(searchPrefix, common.AZCOPY_PATH_SEPARATOR_STRING)
-	//}
-
 	// as a performance optimization, get an extra prefix to do pre-filtering. It's typically the start portion of a blob name.
 	extraSearchPrefix := FilterSet(filters).GetEnumerationPreFilter(t.recursive)
 
