@@ -512,7 +512,7 @@ func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 	jpm.jobMgr.ScheduleTransfer(jpm.priority, jptm)
 }
 
-func (jpm *jobPartMgr) createPipelines(ctx context.Context, getCredential bool, credential pipeline.Factory) {
+func (jpm *jobPartMgr) createPipelines(ctx context.Context, getSourceCredential bool, credential pipeline.Factory) {
 	if atomic.SwapUint32(&jpm.atomicPipelinesInitedIndicator, 1) != 0 {
 		panic("init client and pipelines for same jobPartMgr twice")
 	}
@@ -561,7 +561,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, getCredential bool, 
 				CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
 				Cancel:   jpm.jobMgr.Cancel,
 			}
-			if getCredential {
+			if getSourceCredential {
 				sourceCred = common.CreateBlobCredential(ctx, jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType), credOption)
 				jpm.sourceCredential = sourceCred
 			} else {
@@ -627,7 +627,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, getCredential bool, 
 	case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(), common.EFromTo.BenchmarkBlob(),
 		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob(), common.EFromTo.GCPBlob(), common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone():
 		var cred azblob.Credential
-		if getCredential {
+		if getSourceCredential {
 			cred = common.CreateBlobCredential(ctx, credInfo, credOption)
 		} else {
 			cred = credential.(azblob.Credential)
