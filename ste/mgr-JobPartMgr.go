@@ -28,7 +28,7 @@ var DebugSkipFiles = make(map[string]bool)
 
 type IJobPartMgr interface {
 	Plan() *JobPartPlanHeader
-	ScheduleTransfers(jobCtx context.Context, getCredential bool, credential pipeline.Factory)
+	ScheduleTransfers(jobCtx context.Context, getSourceCredential bool, credential pipeline.Factory)
 	StartJobXfer(jptm IJobPartTransferMgr)
 	ReportTransferDone(status common.TransferStatus) uint32
 	GetOverwriteOption() common.OverwriteOption
@@ -340,7 +340,7 @@ func (jpm *jobPartMgr) Plan() *JobPartPlanHeader {
 }
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
-func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, getCredential bool, credential pipeline.Factory) {
+func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, getSourceCredential bool, credential pipeline.Factory) {
 	jobCtx = context.WithValue(jobCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
 	jpm.atomicTransfersDone = 0 // Reset the # of transfers done back to 0
 	// partplan file is opened and mapped when job part is added
@@ -409,7 +409,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, getCredential b
 
 	jpm.priority = plan.Priority
 
-	jpm.createPipelines(jobCtx, getCredential, credential) // pipeline is created per job part manager
+	jpm.createPipelines(jobCtx, getSourceCredential, credential) // pipeline is created per job part manager
 
 	// *** Schedule this job part's transfers ***
 	for t := uint32(0); t < plan.NumTransfers; t++ {
