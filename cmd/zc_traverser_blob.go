@@ -61,6 +61,8 @@ type blobTraverser struct {
 	includeSnapshot bool
 
 	includeVersion bool
+
+	getProperties bool
 }
 
 func (t *blobTraverser) IsDirectory(isSource bool) bool {
@@ -162,18 +164,33 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	blobProperties, isBlob, isDirStub, propErr := t.getPropertiesIfSingleBlob()
 
 	if stgErr, ok := propErr.(azblob.StorageError); ok {
+
 		// Don't error out unless it's a CPK error just yet
 		// If it's a CPK error, we know it's a single blob and that we can't get the properties on it anyway.
 		if stgErr.ServiceCode() == common.CPK_ERROR_SERVICE_CODE {
-			return errors.New("this blob uses customer provided encryption keys (CPK). At the moment, AzCopy does not support CPK-encrypted blobs. " +
-				"If you wish to make use of this blob, we recommend using one of the Azure Storage SDKs")
+			if t.getProperties {
+				return errors.New("this blob uses customer provided encryption keys (CPK). At the moment, AzCopy does not support CPK-encrypted blobs. " +
+					"If you wish to make use of this blob, we recommend using one of the Azure Storage SDKs")
+			} else {
+				blobProperties = &azblob.BlobGetPropertiesResponse{}
+				isBlob = true
+				isDirStub = true
+				propErr = nil
+			}
 		}
 
 		if resp := stgErr.Response(); resp == nil {
 			return fmt.Errorf("cannot list files due to reason %s", stgErr)
 		} else {
 			if resp.StatusCode == 403 { // Some nature of auth error-- Whatever the user is pointing at, they don't have access to, regardless of whether it's a file or a dir stub.
-				return fmt.Errorf("cannot list files due to reason %s", stgErr)
+				if t.getProperties {
+					return fmt.Errorf("cannot list files due to reason %s", stgErr)
+				} else {
+					blobProperties = &azblob.BlobGetPropertiesResponse{}
+					isBlob = true
+					isDirStub = true
+					propErr = nil
+				}
 			}
 		}
 	}
@@ -192,19 +209,29 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(pipeline.LogDebug, "Detected the root as a blob.")
 		}
-
-		storedObject := newStoredObject(
-			preprocessor,
-			getObjectNameOnly(strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
-			"",
-			common.EntityType(common.IffUint8(isBlob, uint8(common.EEntityType.File()), uint8(common.EEntityType.Folder()))),
-			blobProperties.LastModified(),
-			blobProperties.ContentLength(),
-			blobProperties,
-			blobPropertiesResponseAdapter{blobProperties},
-			common.FromAzBlobMetadataToCommonMetadata(blobProperties.NewMetadata()), // .NewMetadata() seems odd to call, but it does actually retrieve the metadata from the blob properties.
-			blobUrlParts.ContainerName,
-		)
+		var storedObject StoredObject
+		if t.getProperties {
+			storedObject = newStoredObject(
+				preprocessor,
+				getObjectNameOnly(strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
+				"",
+				common.EntityType(common.IffUint8(isBlob, uint8(common.EEntityType.File()), uint8(common.EEntityType.Folder()))),
+				blobProperties.LastModified(),
+				blobProperties.ContentLength(),
+				blobProperties,
+				blobPropertiesResponseAdapter{blobProperties},
+				common.FromAzBlobMetadataToCommonMetadata(blobProperties.NewMetadata()), // .NewMetadata() seems odd to call, but it does actually retrieve the metadata from the blob properties.
+				blobUrlParts.ContainerName,
+			)
+		} else {
+			storedObject = newRemoveStoredObject(
+				preprocessor,
+				getObjectNameOnly(strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
+				"",
+				common.EntityType(common.IffUint8(isBlob, uint8(common.EEntityType.File()), uint8(common.EEntityType.Folder()))),
+				blobUrlParts.ContainerName,
+			)
+		}
 
 		if t.s2sPreserveSourceTags {
 			blobTagsMap, err := t.getBlobTags()
@@ -242,6 +269,11 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	if searchPrefix != "" && !strings.HasSuffix(searchPrefix, common.AZCOPY_PATH_SEPARATOR_STRING) && !t.includeSnapshot && !t.includeDeleted {
 		searchPrefix += common.AZCOPY_PATH_SEPARATOR_STRING
 	}
+
+	//// if getProperties=false, we need to include the root item in the listing
+	//if !t.getProperties {
+	//	searchPrefix = strings.TrimSuffix(searchPrefix, common.AZCOPY_PATH_SEPARATOR_STRING)
+	//}
 
 	// as a performance optimization, get an extra prefix to do pre-filtering. It's typically the start portion of a blob name.
 	extraSearchPrefix := FilterSet(filters).GetEnumerationPreFilter(t.recursive)
@@ -471,7 +503,7 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 	return nil
 }
 
-func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool) (t *blobTraverser) {
+func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion, getProperties bool) (t *blobTraverser) {
 	t = &blobTraverser{
 		rawURL:                      rawURL,
 		p:                           p,
@@ -485,6 +517,7 @@ func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 		includeDeleted:              includeDeleted,
 		includeSnapshot:             includeSnapshot,
 		includeVersion:              includeVersion,
+		getProperties:               getProperties,
 	}
 
 	disableHierarchicalScanning := strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))

@@ -228,6 +228,10 @@ type blobPropsProvider interface {
 	ArchiveStatus() azblob.ArchiveStatusType
 }
 
+func newRemoveStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, containerName string) StoredObject {
+	return newStoredObject(morpher, name, relativePath, entityType, time.Now(), 0, noContentProps, noBlobProps, noMetdata, containerName)
+}
+
 // a constructor is used so that in case the StoredObject has to change, the callers would get a compilation error
 // and it forces all necessary properties to be always supplied and not forgotten
 func newStoredObject(morpher objectMorpher, name string, relativePath string, entityType common.EntityType, lmt time.Time, size int64, props contentPropsProvider, blobProps blobPropsProvider, meta common.Metadata, containerName string) StoredObject {
@@ -443,7 +447,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		} else if listOfVersionIds != nil {
 			output = newBlobVersionsTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
-			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion)
+			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion, getProperties)
 		}
 	case common.ELocation.File():
 		resourceURL, err := resource.FullURL()
