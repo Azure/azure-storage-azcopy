@@ -28,7 +28,7 @@ var DebugSkipFiles = make(map[string]bool)
 
 type IJobPartMgr interface {
 	Plan() *JobPartPlanHeader
-	ScheduleTransfers(jobCtx context.Context)
+	ScheduleTransfers(jobCtx context.Context, getCredential bool, credential pipeline.Factory)
 	StartJobXfer(jptm IJobPartTransferMgr)
 	ReportTransferDone(status common.TransferStatus) uint32
 	GetOverwriteOption() common.OverwriteOption
@@ -340,7 +340,7 @@ func (jpm *jobPartMgr) Plan() *JobPartPlanHeader {
 }
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
-func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
+func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, getCredential bool, credential pipeline.Factory) {
 	jobCtx = context.WithValue(jobCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
 	jpm.atomicTransfersDone = 0 // Reset the # of transfers done back to 0
 	// partplan file is opened and mapped when job part is added
@@ -409,7 +409,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 	jpm.priority = plan.Priority
 
-	jpm.createPipelines(jobCtx) // pipeline is created per job part manager
+	jpm.createPipelines(jobCtx, getCredential, credential) // pipeline is created per job part manager
 
 	// *** Schedule this job part's transfers ***
 	for t := uint32(0); t < plan.NumTransfers; t++ {
@@ -512,7 +512,7 @@ func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 	jpm.jobMgr.ScheduleTransfer(jpm.priority, jptm)
 }
 
-func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
+func (jpm *jobPartMgr) createPipelines(ctx context.Context, getCredential bool, credential pipeline.Factory) {
 	if atomic.SwapUint32(&jpm.atomicPipelinesInitedIndicator, 1) != 0 {
 		panic("init client and pipelines for same jobPartMgr twice")
 	}
@@ -561,9 +561,13 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 				CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
 				Cancel:   jpm.jobMgr.Cancel,
 			}
-
-			sourceCred = common.CreateBlobCredential(ctx, jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType), credOption)
-			jpm.sourceCredential = sourceCred
+			if getCredential {
+				sourceCred = common.CreateBlobCredential(ctx, jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType), credOption)
+				jpm.sourceCredential = sourceCred
+			} else {
+				sourceCred = credential.(azblob.Credential)
+				jpm.sourceCredential = credential
+			}
 		}
 
 		jpm.sourceProviderPipeline = NewBlobPipeline(
@@ -622,10 +626,15 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	switch fromTo {
 	case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(), common.EFromTo.BenchmarkBlob(),
 		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob(), common.EFromTo.GCPBlob(), common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone():
-		credential := common.CreateBlobCredential(ctx, credInfo, credOption)
+		var cred azblob.Credential
+		if getCredential {
+			cred = common.CreateBlobCredential(ctx, credInfo, credOption)
+		} else {
+			cred = credential.(azblob.Credential)
+		}
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 		jpm.pipeline = NewBlobPipeline(
-			credential,
+			cred,
 			azblob.PipelineOptions{
 				Log: jpm.jobMgr.PipelineLogInfo(),
 				Telemetry: azblob.TelemetryOptions{

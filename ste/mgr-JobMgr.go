@@ -338,7 +338,8 @@ type jobMgr struct {
 	fileCountLimiter    common.CacheLimiter
 	jstm                *jobStatusManager
 
-	isDaemon bool /* is it running as service */
+	isDaemon   bool /* is it running as service */
+	credential pipeline.Factory
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -712,13 +713,15 @@ func (jm *jobMgr) CloseLog() {
 
 // DeferredCleanupJobMgr cleanup all the jobMgr resources.
 // Warning: DeferredCleanupJobMgr should be called from JobMgrCleanup().
-//          As this function neither threadsafe nor idempotient. So if DeferredCleanupJobMgr called
-//          mulitple times, it may stuck as receiving channel already closed. Where as JobMgrCleanup()
-//          safe in that sense it will do the cleanup only once.
+//
+//	As this function neither threadsafe nor idempotient. So if DeferredCleanupJobMgr called
+//	mulitple times, it may stuck as receiving channel already closed. Where as JobMgrCleanup()
+//	safe in that sense it will do the cleanup only once.
 //
 // TODO: Add JobsAdmin reference to each JobMgr so that in any circumstances JobsAdmin should not freed,
-//       while jobMgr running. Whereas JobsAdmin store number JobMgr running  at any time.
-//       At that point DeferredCleanupJobMgr() will delete jobMgr from jobsAdmin map.
+//
+//	while jobMgr running. Whereas JobsAdmin store number JobMgr running  at any time.
+//	At that point DeferredCleanupJobMgr() will delete jobMgr from jobsAdmin map.
 func (jm *jobMgr) DeferredCleanupJobMgr() {
 	jm.Log(pipeline.LogInfo, "DeferredCleanupJobMgr called")
 
@@ -961,7 +964,14 @@ func (jm *jobMgr) scheduleJobParts() {
 				go jm.poolSizer()
 				startedPoolSizer = true
 			}
-			jobPart.ScheduleTransfers(jm.Context())
+			getCredential := true
+			if jm.credential != nil {
+				getCredential = false
+			}
+			jobPart.ScheduleTransfers(jm.Context(), getCredential, jm.credential)
+			if getCredential {
+				jm.credential = jobPart.SourceCredential()
+			}
 		}
 	}
 }
