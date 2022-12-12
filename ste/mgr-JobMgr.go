@@ -964,9 +964,8 @@ func (jm *jobMgr) scheduleJobParts() {
 				go jm.poolSizer()
 				startedPoolSizer = true
 			}
-			getSourceCredential := jm.credential == nil
-			jobPart.ScheduleTransfers(jm.Context(), getSourceCredential, jm.credential)
-			if getSourceCredential {
+			jobPart.ScheduleTransfers(jm.Context(), jm.credential)
+			if jm.credential == nil {
 				jm.credential = jobPart.SourceCredential()
 			}
 		}
