@@ -632,7 +632,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceCredential pip
 		} else {
 			cred = sourceCredential.(azblob.Credential)
 		}
-		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, sourceCredential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
+		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 		jpm.pipeline = NewBlobPipeline(
 			cred,
 			azblob.PipelineOptions{
