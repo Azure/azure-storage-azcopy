@@ -320,15 +320,6 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 				}
 
 				storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, strings.TrimPrefix(blobInfo.Name, searchPrefix), containerName)
-
-				if t.s2sPreserveSourceTags && blobInfo.BlobTags != nil {
-					blobTagsMap := common.BlobTags{}
-					for _, blobTag := range blobInfo.BlobTags.BlobTagSet {
-						blobTagsMap[url.QueryEscape(blobTag.Key)] = url.QueryEscape(blobTag.Value)
-					}
-					storedObject.blobTags = blobTagsMap
-				}
-
 				enqueueOutput(storedObject, nil)
 			}
 
@@ -407,6 +398,13 @@ func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 	} else if t.includeDeleted && t.includeVersion && blobInfo.VersionID != nil {
 		object.blobVersionID = *blobInfo.VersionID
 	}
+	if t.s2sPreserveSourceTags && blobInfo.BlobTags != nil {
+		blobTagsMap := common.BlobTags{}
+		for _, blobTag := range blobInfo.BlobTags.BlobTagSet {
+			blobTagsMap[url.QueryEscape(blobTag.Key)] = url.QueryEscape(blobTag.Value)
+		}
+		object.blobTags = blobTagsMap
+	}
 	return object
 }
 
@@ -444,15 +442,6 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 			}
 
 			storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, relativePath, containerName)
-
-			// Setting blob tags
-			if t.s2sPreserveSourceTags && blobInfo.BlobTags != nil {
-				blobTagsMap := common.BlobTags{}
-				for _, blobTag := range blobInfo.BlobTags.BlobTagSet {
-					blobTagsMap[url.QueryEscape(blobTag.Key)] = url.QueryEscape(blobTag.Value)
-				}
-				storedObject.blobTags = blobTagsMap
-			}
 
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter(common.EEntityType.File())
