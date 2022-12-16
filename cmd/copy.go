@@ -943,8 +943,8 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 func areBothLocationsPOSIXAware(fromTo common.FromTo) bool {
 	// POSIX properties are stored in blob metadata-- They don't need a special persistence strategy for BlobBlob.
 	return runtime.GOOS == "linux" && (
-		// fromTo == common.EFromTo.BlobLocal() || TODO
-		fromTo == common.EFromTo.LocalBlob()) ||
+	// fromTo == common.EFromTo.BlobLocal() || TODO
+	fromTo == common.EFromTo.LocalBlob()) ||
 		fromTo == common.EFromTo.BlobBlob()
 }
 
@@ -1279,7 +1279,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 1: initialize pipeline
-	p, err := createBlobPipeline(ctx, credInfo, pipeline.LogNone)
+	p, _, err := createBlobPipeline(ctx, credInfo, pipeline.LogNone)
 	if err != nil {
 		return err
 	}
@@ -1329,7 +1329,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 0: initialize pipeline
-	p, err := createBlobPipeline(ctx, credInfo, pipeline.LogNone)
+	p, _, err := createBlobPipeline(ctx, credInfo, pipeline.LogNone)
 	if err != nil {
 		return err
 	}
@@ -1486,11 +1486,11 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		common.EFromTo.BenchmarkFile():
 
 		var e *CopyEnumerator
-		e, err = cca.initEnumerator(jobPartOrder, ctx)
+		e, err := cca.initEnumerator(jobPartOrder, ctx)
 		if err != nil {
 			return fmt.Errorf("failed to initialize enumerator: %w", err)
 		}
-
+		e.Credential = cca.credentialInfo.OAuthToken
 		err = e.enumerate()
 	case common.EFromTo.BlobTrash(), common.EFromTo.FileTrash():
 		e, createErr := newRemoveEnumerator(cca)

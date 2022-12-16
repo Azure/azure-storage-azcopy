@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -74,7 +75,7 @@ var JobsAdmin interface {
 
 	// JobMgr returns the specified JobID's JobMgr
 	JobMgr(jobID common.JobID) (ste.IJobMgr, bool)
-	JobMgrEnsureExists(jobID common.JobID, level common.LogLevel, commandString string) ste.IJobMgr
+	JobMgrEnsureExists(jobID common.JobID, level common.LogLevel, commandString string, sourceCredential azblob.Credential) ste.IJobMgr
 
 	// AddJobPartMgr associates the specified JobPartMgr with the Jobs Administrator
 	//AddJobPartMgr(appContext context.Context, planFile JobPartPlanFileName) IJobPartMgr
@@ -293,12 +294,12 @@ func (ja *jobsAdmin) AppPathFolder() string {
 // JobMgrEnsureExists returns the specified JobID's IJobMgr if it exists or creates it if it doesn't already exit
 // If it does exist, then the appCtx argument is ignored.
 func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
-	level common.LogLevel, commandString string) ste.IJobMgr {
+	level common.LogLevel, commandString string, sourceCredential azblob.Credential) ste.IJobMgr {
 
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
 		func() ste.IJobMgr {
 			// Return existing or new IJobMgr to caller
-			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, ja.jobLogger, false)
+			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, ja.jobLogger, false, sourceCredential)
 		})
 }
 
@@ -387,7 +388,7 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinat
 			continue
 		}
 		mmf := planFile.Map()
-		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
+		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "", nil)
 		jm.AddJobPart(partNum, planFile, mmf, sourceSAS, destinationSAS, false, nil)
 	}
 
@@ -421,7 +422,7 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 		}
 		mmf := planFile.Map()
 		//todo : call the compute transfer function here for each job.
-		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
+		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "", nil)
 		jm.AddJobPart(partNum, planFile, mmf, EMPTY_SAS_STRING, EMPTY_SAS_STRING, false, nil)
 	}
 }
@@ -453,7 +454,7 @@ func (ja *jobsAdmin) ListJobs(givenStatus common.JobStatus) common.ListJobsRespo
 		if givenStatus == common.EJobStatus.All() || givenStatus == jpph.JobStatus() {
 			ret.JobIDDetails = append(ret.JobIDDetails,
 				common.JobIDDetails{JobId: jobID, CommandString: jpph.CommandString(),
-				StartTime: jpph.StartTime, JobStatus: jpph.JobStatus()})
+					StartTime: jpph.StartTime, JobStatus: jpph.JobStatus()})
 		}
 
 		mmf.Unmap()
@@ -582,7 +583,7 @@ func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint3
 	a := ste.NewPerformanceAdvisor(p, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency, dir, averageBytesPerFile, isToAzureFiles)
 	return a.GetAdvice()
 }
-	
+
 //Structs for messageHandler
 
 /* PerfAdjustment message. */
@@ -594,7 +595,7 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 	toBitsPerSec := func(megaBitsPerSec int64) int64 {
 		return megaBitsPerSec * 1000 * 1000 / 8
 	}
-	
+
 	const minIntervalBetweenPerfAdjustment = time.Minute
 	lastPerfAdjustTime := time.Now().Add(-2 * minIntervalBetweenPerfAdjustment)
 	var err error
@@ -609,23 +610,23 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 			var perfAdjustmentReq common.PerfAdjustmentReq
 
 			if time.Since(lastPerfAdjustTime) < minIntervalBetweenPerfAdjustment {
-				err = fmt.Errorf("Performance Adjustment already in progress. Please try after " + 
-						lastPerfAdjustTime.Add(minIntervalBetweenPerfAdjustment).Format(time.RFC3339))
+				err = fmt.Errorf("Performance Adjustment already in progress. Please try after " +
+					lastPerfAdjustTime.Add(minIntervalBetweenPerfAdjustment).Format(time.RFC3339))
 			}
-			
+
 			if e := json.Unmarshal([]byte(msg.Req.Value), &perfAdjustmentReq); e != nil {
 				err = fmt.Errorf("parsing %s failed with %s", msg.Req.Value, e.Error())
 			}
 
 			if perfAdjustmentReq.Throughput < 0 {
 				err = fmt.Errorf("invalid value %d for cap-mbps. cap-mpbs should be greater than 0",
-						      perfAdjustmentReq.Throughput)
+					perfAdjustmentReq.Throughput)
 			}
 
 			if err == nil {
 				lastPerfAdjustTime = time.Now()
 				ja.UpdateTargetBandwidth(toBitsPerSec(perfAdjustmentReq.Throughput))
-				
+
 				resp.Status = true
 				resp.AdjustedThroughPut = perfAdjustmentReq.Throughput
 				resp.NextAdjustmentAfter = lastPerfAdjustTime.Add(minIntervalBetweenPerfAdjustment)
@@ -637,11 +638,11 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 				resp.Err = err.Error()
 			}
 
-			msg.SetResponse(&common.LCMMsgResp {
+			msg.SetResponse(&common.LCMMsgResp{
 				TimeStamp: time.Now(),
-				MsgType: msg.Req.MsgType,
-				Value: resp,
-				Err: err,
+				MsgType:   msg.Req.MsgType,
+				Value:     resp,
+				Err:       err,
 			})
 
 			msg.Reply()
@@ -660,7 +661,7 @@ type jobIDToJobMgr struct {
 	nocopy common.NoCopy
 	lock   sync.RWMutex
 	m      map[common.JobID]ste.IJobMgr
-} 
+}
 
 func newJobIDToJobMgr() jobIDToJobMgr {
 	return jobIDToJobMgr{m: make(map[common.JobID]ste.IJobMgr)}

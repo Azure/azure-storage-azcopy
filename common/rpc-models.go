@@ -155,6 +155,7 @@ type CopyJobPartOrderRequest struct {
 	// As a result, CredentialInfo.OAuthTokenInfo may end up being fulfilled even _if_ CredentialInfo.CredentialType is _not_ OAuth.
 	// This may not always be the case (for instance, if we opt to use multiple OAuth tokens). At that point, this will likely be it's own CredentialInfo.
 	S2SSourceCredentialType CredentialType // Only Anonymous and OAuth will really be used in response to this, but S3 and GCP will come along too...
+	SourceCredential        azblob.Credential
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,
@@ -164,6 +165,7 @@ type CredentialInfo struct {
 	OAuthTokenInfo    OAuthTokenInfo
 	S3CredentialInfo  S3CredentialInfo
 	GCPCredentialInfo GCPCredentialInfo
+	OAuthToken        azblob.Credential
 }
 
 func (c CredentialInfo) WithType(credentialType CredentialType) CredentialInfo {

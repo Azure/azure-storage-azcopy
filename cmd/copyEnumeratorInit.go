@@ -87,6 +87,9 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs,
 		cca.S2sPreserveBlobTags, azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil /* errorChannel */)
 
+	//jobPartOrder.SourceCredential = cca.credentialInfo.OAuthToken
+	cca.credentialInfo.OAuthToken = srcCredInfo.OAuthToken
+	jobPartOrder.SourceCredential = srcCredInfo.OAuthToken
 	if err != nil {
 		return nil, err
 	}
@@ -460,7 +463,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		return err
 	}
 
-	dstPipeline, err := InitPipeline(ctx, cca.FromTo.To(), dstCredInfo, logLevel.ToPipelineLogLevel())
+	dstPipeline, _, err := InitPipeline(ctx, cca.FromTo.To(), dstCredInfo, logLevel.ToPipelineLogLevel())
 	if err != nil {
 		return
 	}

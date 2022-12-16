@@ -349,8 +349,11 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 
 	// Initialize the pipeline if creds and ctx is provided
 	if ctx != nil && credential != nil {
-		tmppipe, err := InitPipeline(*ctx, location, *credential, logLevel)
-
+		tmppipe, sourceCredential, err := InitPipeline(*ctx, location, *credential, logLevel)
+		if credential.CredentialType == 1 {
+			fmt.Println("implement this, maybe return credential with tmppipe")
+			credential.OAuthToken = sourceCredential
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -692,6 +695,8 @@ type CopyEnumerator struct {
 
 	// a finalizer that is always called if the enumeration finishes properly
 	Finalize func() error
+
+	Credential azblob.Credential
 }
 
 func NewCopyEnumerator(traverser ResourceTraverser, filters []ObjectFilter, objectDispatcher objectProcessor, finalizer func() error) *CopyEnumerator {
