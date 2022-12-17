@@ -104,7 +104,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 			return err
 		}
 	case common.ELocation.Blob():
-		p, err := createBlobPipeline(ctx, credentialInfo, pipeline2.LogNone)
+		p, _, err := createBlobPipeline(ctx, credentialInfo, pipeline2.LogNone)
 		if err != nil {
 			return err
 		}

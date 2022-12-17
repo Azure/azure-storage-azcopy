@@ -349,7 +349,10 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 
 	// Initialize the pipeline if creds and ctx is provided
 	if ctx != nil && credential != nil {
-		tmppipe, err := InitPipeline(*ctx, location, *credential, logLevel)
+		tmppipe, sourceBlobToken, err := InitPipeline(*ctx, location, *credential, logLevel)
+		if credential.CredentialType == 1 {
+			credential.SourceBlobToken = sourceBlobToken
+		}
 
 		if err != nil {
 			return nil, err

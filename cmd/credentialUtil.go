@@ -660,7 +660,7 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
-func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
+func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, azblob.Credential, error) {
 	credential := common.CreateBlobCredential(ctx, credInfo, common.CredentialOpOptions{
 		// LogInfo:  glcm.Info, //Comment out for debugging
 		LogError: glcm.Info,
@@ -692,7 +692,7 @@ func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo, log
 		nil,
 		ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost),
 		nil, // we don't gather network stats on the credential pipeline
-	), nil
+	), credential, nil
 }
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost

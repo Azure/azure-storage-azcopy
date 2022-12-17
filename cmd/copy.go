@@ -1279,7 +1279,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 1: initialize pipeline
-	p, err := createBlobPipeline(ctx, credInfo, pipeline.LogNone)
+	p, _, err := createBlobPipeline(ctx, credInfo, pipeline.LogNone)
 	if err != nil {
 		return err
 	}
@@ -1329,7 +1329,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 0: initialize pipeline
-	p, err := createBlobPipeline(ctx, credInfo, pipeline.LogNone)
+	p, _, err := createBlobPipeline(ctx, credInfo, pipeline.LogNone)
 	if err != nil {
 		return err
 	}
@@ -1490,7 +1490,6 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		if err != nil {
 			return fmt.Errorf("failed to initialize enumerator: %w", err)
 		}
-
 		err = e.enumerate()
 	case common.EFromTo.BlobTrash(), common.EFromTo.FileTrash():
 		e, createErr := newRemoveEnumerator(cca)
