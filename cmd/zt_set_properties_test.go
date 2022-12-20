@@ -60,7 +60,7 @@ func (scenarioHelper) generateBlobsFromListWithAccessTier(c *chk.C, containerURL
 }
 
 func createNewBlockBlobWithAccessTier(c *chk.C, container azblob.ContainerURL, prefix string, accessTier azblob.AccessTierType) (blob azblob.BlockBlobURL, name string) {
-	blob, name = getBlockBlobURL(c, container, prefix)
+	blob, name = getBlockBlobURL(c, container, prefix, true)
 
 	cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
 		nil, azblob.BlobAccessConditions{}, accessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
@@ -144,7 +144,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForBlobTier(c *chk.C) {
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
-		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0], "")
 		transferParams := transferParams{
 			blockBlobTier: common.EBlockBlobTier.Cool(),
 			pageBlobTier:  common.EPageBlobTier.None(),
@@ -498,7 +498,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobWithFromToForBlobTier(c
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
-		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0], "")
 		transferParams := transferParams{
 			blockBlobTier: common.EBlockBlobTier.Cool(),
 			pageBlobTier:  common.EPageBlobTier.None(),
@@ -591,7 +591,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderVirtualDirWithFromToFor
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName)
+	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName, "")
 	transferParams := transferParams{
 		blockBlobTier: common.EBlockBlobTier.Cool(),
 		pageBlobTier:  common.EPageBlobTier.None(),
@@ -649,7 +649,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForMetadata(c *chk.C) {
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
-		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0], "")
 		transferParams := transferParams{
 			blockBlobTier: common.EBlockBlobTier.None(),
 			pageBlobTier:  common.EPageBlobTier.None(),
@@ -686,7 +686,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForEmptyMetadata(c *chk
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
-		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0], "")
 		transferParams := transferParams{
 			blockBlobTier: common.EBlockBlobTier.None(),
 			pageBlobTier:  common.EPageBlobTier.None(),
@@ -1037,7 +1037,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobWithFromToForMetadata(c
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
-		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0], "")
 		transferParams := transferParams{
 			blockBlobTier: common.EBlockBlobTier.None(),
 			pageBlobTier:  common.EPageBlobTier.None(),
@@ -1130,7 +1130,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderVirtualDirWithFromToFor
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName)
+	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName, "")
 	transferParams := transferParams{
 		blockBlobTier: common.EBlockBlobTier.None(),
 		pageBlobTier:  common.EPageBlobTier.None(),
@@ -1188,7 +1188,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForBlobTags(c *chk.C) {
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
-		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0], "")
 		transferParams := transferParams{
 			blockBlobTier: common.EBlockBlobTier.None(),
 			pageBlobTier:  common.EPageBlobTier.None(),
@@ -1225,7 +1225,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForEmptyBlobTags(c *chk
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
-		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0], "")
 		transferParams := transferParams{
 			blockBlobTier: common.EBlockBlobTier.None(),
 			pageBlobTier:  common.EPageBlobTier.None(),
@@ -1576,7 +1576,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobWithFromToForBlobTags(c
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
-		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0], "")
 		transferParams := transferParams{
 			blockBlobTier: common.EBlockBlobTier.None(),
 			pageBlobTier:  common.EPageBlobTier.None(),
@@ -1669,7 +1669,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderVirtualDirWithFromToFor
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName)
+	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName, "")
 	transferParams := transferParams{
 		blockBlobTier: common.EBlockBlobTier.None(),
 		pageBlobTier:  common.EPageBlobTier.None(),

@@ -63,7 +63,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
-		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0], "")
 		raw := getDefaultSyncRawInput(rawBlobURLWithSAS.String(), filepath.Join(dstDirName, dstFileName))
 
 		// the file was created after the blob, so no sync should happen
@@ -494,7 +494,7 @@ func (s *cmdIntegrationSuite) TestSyncMismatchBlobAndDirectory(c *chk.C) {
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0], "")
 	raw := getDefaultSyncRawInput(rawBlobURLWithSAS.String(), dstDirName)
 
 	// type mismatch, we should get an error
@@ -545,7 +545,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadADLSDirectoryTypeMismatch(c *chk.C
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobName)
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobName, "")
 	raw := getDefaultSyncRawInput(rawBlobURLWithSAS.String(), filepath.Join(dstDirName, dstFileName))
 
 	// the file was created after the blob, so no sync should happen
@@ -591,7 +591,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithADLSDirectory(c *chk.C) {
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawContainerURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, adlsDirName)
+	rawContainerURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, adlsDirName, "")
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 
 	runSyncAndVerify(c, raw, func(err error) {

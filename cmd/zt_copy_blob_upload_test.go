@@ -209,7 +209,7 @@ func (s *cmdIntegrationSuite) TestUploadSingleFileToBlobVirtualDirectory(c *chk.
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
-		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dstBlobName)
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dstBlobName, "")
 		raw := getDefaultCopyRawInput(filepath.Join(srcDirName, srcFileName), rawBlobURLWithSAS.String())
 
 		// the blob was created after the file, so no sync should happen
@@ -271,7 +271,7 @@ func (s *cmdIntegrationSuite) TestUploadSingleFileToBlob(c *chk.C) {
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
-		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dstBlobName)
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dstBlobName, "")
 		raw := getDefaultCopyRawInput(filepath.Join(srcDirName, srcFileName), rawBlobURLWithSAS.String())
 
 		// the blob was created after the file, so no sync should happen
@@ -368,7 +368,7 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToVirtualDirectory(c *chk.C) {
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawContainerURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName)
+	rawContainerURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName, "")
 	raw := getDefaultCopyRawInput(srcDirPath, rawContainerURLWithSAS.String())
 	raw.recursive = true
 

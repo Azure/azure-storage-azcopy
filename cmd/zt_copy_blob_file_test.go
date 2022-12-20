@@ -141,7 +141,7 @@ func (s *cmdIntegrationSuite) TestBlobCopyToFileS2SWithSingleFile(c *chk.C) {
 		mockedRPC.init()
 
 		// construct the raw input for explicit destination
-		srcBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, fileName)
+		srcBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, fileName, "")
 		dstFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, dstShareName, fileName)
 		raw := getDefaultRawCopyInput(srcBlobURLWithSAS.String(), dstFileURLWithSAS.String())
 
@@ -162,7 +162,7 @@ func (s *cmdIntegrationSuite) TestBlobCopyToFileS2SWithSingleFile(c *chk.C) {
 		mockedRPC.init()
 
 		// construct the raw input for implicit destination
-		srcBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, fileName)
+		srcBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, fileName, "")
 		dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
 		raw := getDefaultRawCopyInput(srcBlobURLWithSAS.String(), dstShareURLWithSAS.String())
 

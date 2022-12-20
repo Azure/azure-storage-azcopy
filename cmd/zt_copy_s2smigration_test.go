@@ -894,7 +894,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromPageToBlockBlob(c *chk.C) {
 	mockedRPC.init()
 
 	// Prepare copy command
-	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file")
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file", "")
 	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "BlockBlob"
@@ -909,7 +909,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromPageToBlockBlob(c *chk.C) {
 	})
 
 	// Prepare copy command
-	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2")
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2", "")
 	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "BlockBlob"
@@ -946,7 +946,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToPageBlob(c *chk.C) {
 	mockedRPC.init()
 
 	// Prepare copy command
-	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file")
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file", "")
 	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "PageBlob"
@@ -961,7 +961,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToPageBlob(c *chk.C) {
 	})
 
 	// Prepare copy command
-	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2")
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2", "")
 	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "PageBlob"
@@ -998,7 +998,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToAppendBlob(c *chk.C) {
 	mockedRPC.init()
 
 	// Prepare copy command
-	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file")
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file", "")
 	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "AppendBlob"
@@ -1013,7 +1013,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToAppendBlob(c *chk.C) {
 	})
 
 	// Prepare copy command
-	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2")
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2", "")
 	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "AppendBlob"
@@ -1051,7 +1051,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToBlockBlob(c *chk.C) {
 	mockedRPC.init()
 
 	// Prepare copy command
-	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file")
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file", "")
 	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "BlockBlob"
@@ -1066,7 +1066,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToBlockBlob(c *chk.C) {
 	})
 
 	// Prepare copy command
-	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2")
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2", "")
 	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "BlockBlob"
@@ -1104,7 +1104,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromPageToAppendBlob(c *chk.C) {
 	mockedRPC.init()
 
 	// Prepare copy command
-	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file")
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file", "")
 	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "AppendBlob"
@@ -1119,7 +1119,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromPageToAppendBlob(c *chk.C) {
 	})
 
 	// Prepare copy command
-	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2")
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2", "")
 	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "AppendBlob"
@@ -1157,7 +1157,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToPageBlob(c *chk.C) {
 	mockedRPC.init()
 
 	// Prepare copy command
-	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file")
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file", "")
 	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "PageBlob"
@@ -1172,7 +1172,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToPageBlob(c *chk.C) {
 	})
 
 	// Prepare copy command
-	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2")
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2", "")
 	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "PageBlob"
@@ -1207,7 +1207,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromSingleBlobToBlobContainer(c *chk.C)
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file") // Use default region
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file", "") // Use default region
 	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerURLWithSAS.String())
 
@@ -1223,7 +1223,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromSingleBlobToBlobContainer(c *chk.C)
 
 	mockedRPC.reset()
 
-	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2") // Use default region
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2", "") // Use default region
 	rawDstContainerURLWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerURLWithSAS.String())
 

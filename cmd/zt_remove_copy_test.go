@@ -27,8 +27,8 @@ func (s *cmdIntegrationSuite) TestCopyBlobsWithDirectoryStubsS2S(c *chk.C) {
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawSrcBlobWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, vdirName)
-	rawDstBlobWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, dstContainerName, dstBlobName)
+	rawSrcBlobWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, vdirName, "")
+	rawDstBlobWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, dstContainerName, dstBlobName, "")
 	raw := getDefaultCopyRawInput(rawSrcBlobWithSAS.String(), rawDstBlobWithSAS.String())
 	raw.recursive = true
 	raw.includeDirectoryStubs = true

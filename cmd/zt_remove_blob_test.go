@@ -50,7 +50,7 @@ func (s *cmdIntegrationSuite) TestRemoveSingleBlob(c *chk.C) {
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
-		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0], "")
 		raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 
 		runCopyAndVerify(c, raw, func(err error) {
@@ -125,7 +125,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDir(c *chk.C) {
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName)
+	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName, "")
 	raw := getDefaultRemoveRawInput(rawVirtualDirectoryURLWithSAS.String())
 	raw.recursive = true
 
@@ -401,7 +401,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubs(c *chk.C) {
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName)
+	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName, "")
 	raw := getDefaultRemoveRawInput(rawVirtualDirectoryURLWithSAS.String())
 	raw.recursive = true
 
@@ -502,7 +502,7 @@ func (s *cmdIntegrationSuite) TestDryrunRemoveSingleBlob(c *chk.C) {
 	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobName[0])
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobName[0], "")
 	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 	raw.dryrun = true
 
@@ -613,7 +613,7 @@ func (s *cmdIntegrationSuite) TestRemoveSingleBlobWithFromTo(c *chk.C) {
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
-		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0], "")
 		raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 		raw.fromTo = "BlobTrash"
 
@@ -690,7 +690,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDirWithFromTo(c *chk.C)
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName)
+	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName, "")
 	raw := getDefaultRemoveRawInput(rawVirtualDirectoryURLWithSAS.String())
 	raw.fromTo = "BlobTrash"
 	raw.recursive = true
@@ -743,7 +743,7 @@ func (s *cmdIntegrationSuite) TestPermDeleteSnapshotsVersionsUnderSingleBlob(c *
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobName)
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobName, "")
 	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 	raw.recursive = true
 	raw.permanentDeleteOption = "snapshotsandversions"

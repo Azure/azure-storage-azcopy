@@ -54,8 +54,8 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithSingleBlob(c *chk.C) {
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
-		srcBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, blobList[0])
-		dstBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, dstContainerName, blobList[0])
+		srcBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, blobList[0], "")
+		dstBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, dstContainerName, blobList[0], "")
 		raw := getDefaultSyncRawInput(srcBlobURLWithSAS.String(), dstBlobURLWithSAS.String())
 
 		// the destination was created after the source, so no sync should happen
@@ -440,7 +440,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SMismatchContainerAndBlob(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
-	dstBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, dstContainerName, singleBlobName)
+	dstBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, dstContainerName, singleBlobName, "")
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstBlobURLWithSAS.String())
 
 	// type mismatch, we should get an error
@@ -482,7 +482,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SContainerAndEmptyVirtualDir(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
-	dstVirtualDirURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, dstContainerName, "emptydir/")
+	dstVirtualDirURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, dstContainerName, "emptydir/", "")
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstVirtualDirURLWithSAS.String())
 
 	// verify that targeting a virtual directory works fine

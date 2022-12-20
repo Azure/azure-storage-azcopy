@@ -58,7 +58,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
-		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dstBlobName)
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dstBlobName, "")
 		raw := getDefaultSyncRawInput(filepath.Join(srcDirName, srcFileName), rawBlobURLWithSAS.String())
 
 		// the blob was created after the file, so no sync should happen

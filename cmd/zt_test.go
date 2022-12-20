@@ -214,8 +214,12 @@ func getFilesystemURL(c *chk.C, bfssu azbfs.ServiceURL) (filesystem azbfs.FileSy
 	return
 }
 
-func getBlockBlobURL(c *chk.C, container azblob.ContainerURL, prefix string) (blob azblob.BlockBlobURL, name string) {
-	name = prefix + generateBlobName()
+func getBlockBlobURL(c *chk.C, container azblob.ContainerURL, prefix string, isPrefix bool) (blob azblob.BlockBlobURL, name string) {
+	if isPrefix {
+		name = prefix + generateBlobName()
+	} else {
+		name = prefix
+	}
 	blob = container.NewBlockBlobURL(name)
 
 	return blob, name
@@ -272,7 +276,7 @@ func getAccountAndKey() (string, string) {
 
 func getBSU() azblob.ServiceURL {
 	accountName, accountKey := getAccountAndKey()
-	u, _ := url.Parse(fmt.Sprintf("https://%s.blob.core.windows.net/", accountName))
+	u, _ := url.Parse(fmt.Sprintf("http://%s.blob.core.windows.net/", accountName))
 
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
 	if err != nil {
@@ -345,8 +349,12 @@ func createNewBfsFile(c *chk.C, filesystem azbfs.FileSystemURL, prefix string) (
 	return
 }
 
-func createNewBlockBlob(c *chk.C, container azblob.ContainerURL, prefix string) (blob azblob.BlockBlobURL, name string) {
-	blob, name = getBlockBlobURL(c, container, prefix)
+func createNewBlockBlob(c *chk.C, container azblob.ContainerURL, prefix string, isPrefix bool) (blob azblob.BlockBlobURL, name string) {
+	if isPrefix {
+		blob, name = getBlockBlobURL(c, container, prefix, true)
+	} else {
+		blob, name = getBlockBlobURL(c, container, prefix, false)
+	}
 
 	cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
 		nil, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
@@ -780,12 +788,15 @@ func validateUpload(c *chk.C, blobURL azblob.BlockBlobURL) {
 	c.Assert(data, chk.HasLen, 0)
 }
 
-func getContainerURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential, containerName string) azblob.ContainerURL {
+func getContainerURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential, containerName string, sasPermissions string) azblob.ContainerURL {
+	if sasPermissions == "" {
+		sasPermissions = azblob.ContainerSASPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true, Tag: true}.String()
+	}
 	sasQueryParams, err := azblob.BlobSASSignatureValues{
-		Protocol:      azblob.SASProtocolHTTPS,
+		Protocol:      azblob.SASProtocolHTTPSandHTTP,
 		ExpiryTime:    time.Now().UTC().Add(48 * time.Hour),
 		ContainerName: containerName,
-		Permissions:   azblob.ContainerSASPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true, Tag: true}.String(),
+		Permissions:   sasPermissions,
 	}.NewSASQueryParameters(&credential)
 	c.Assert(err, chk.IsNil)
 
@@ -796,6 +807,7 @@ func getContainerURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential, con
 
 	// convert the raw url and validate it was parsed successfully
 	fullURL, err := url.Parse(rawURL)
+	fullURL.Scheme = "http"
 	c.Assert(err, chk.IsNil)
 
 	// TODO perhaps we need a global default pipeline

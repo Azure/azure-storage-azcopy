@@ -174,7 +174,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{})
+	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, true)
 	processor := func(object StoredObject) error {
 		// Append the container name to the relative path
 		relPath := "/" + object.ContainerName + "/" + object.relativePath
@@ -222,7 +222,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{})
+	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, true)
 	processor := func(object StoredObject) error {
 		// Append the container name to the relative path
 		relPath := "/" + object.ContainerName + "/" + object.relativePath
@@ -275,7 +275,7 @@ func (s *cmdIntegrationSuite) TestDownloadSingleBlobToFile(c *chk.C) {
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
-		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0], "")
 		raw := getDefaultCopyRawInput(rawBlobURLWithSAS.String(), filepath.Join(dstDirName, dstFileName))
 
 		// the file was created after the blob, so no sync should happen
@@ -372,7 +372,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobVirtualDirectory(c *chk.C) {
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawContainerURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName)
+	rawContainerURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName, "")
 	raw := getDefaultCopyRawInput(rawContainerURLWithSAS.String(), dstDirName)
 	raw.recursive = true
 
@@ -400,7 +400,8 @@ func (s *cmdIntegrationSuite) TestDownloadBlobVirtualDirectory(c *chk.C) {
 
 // blobs(from pattern)->directory download
 // TODO the current pattern matching behavior is inconsistent with the posix filesystem
-//   update test after re-writing copy enumerators
+//
+//	update test after re-writing copy enumerators
 func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithPattern(c *chk.C) {
 	bsu := getBSU()
 

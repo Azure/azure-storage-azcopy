@@ -139,9 +139,9 @@ func (scenarioHelper) generateCommonRemoteScenarioForSoftDelete(c *chk.C, contai
 	blobNames := make([]string, 3)
 	var listOfTransfers []string
 
-	blobURL1, blobName1 := createNewBlockBlob(c, containerURL, prefix+"top")
-	blobURL2, blobName2 := createNewBlockBlob(c, containerURL, prefix+"sub1/")
-	blobURL3, blobName3 := createNewBlockBlob(c, containerURL, prefix+"sub1/sub3/sub5/")
+	blobURL1, blobName1 := createNewBlockBlob(c, containerURL, prefix+"top", true)
+	blobURL2, blobName2 := createNewBlockBlob(c, containerURL, prefix+"sub1/", true)
+	blobURL3, blobName3 := createNewBlockBlob(c, containerURL, prefix+"sub1/sub3/sub5/", true)
 
 	blobList[0] = blobURL1
 	blobNames[0] = blobName1
@@ -177,11 +177,11 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlob(c *chk.C, containerURL
 	blobList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
-		_, blobName1 := createNewBlockBlob(c, containerURL, prefix+"top")
-		_, blobName2 := createNewBlockBlob(c, containerURL, prefix+"sub1/")
-		_, blobName3 := createNewBlockBlob(c, containerURL, prefix+"sub2/")
-		_, blobName4 := createNewBlockBlob(c, containerURL, prefix+"sub1/sub3/sub5/")
-		_, blobName5 := createNewBlockBlob(c, containerURL, prefix+specialNames[i])
+		_, blobName1 := createNewBlockBlob(c, containerURL, prefix+"top", true)
+		_, blobName2 := createNewBlockBlob(c, containerURL, prefix+"sub1/", true)
+		_, blobName3 := createNewBlockBlob(c, containerURL, prefix+"sub2/", true)
+		_, blobName4 := createNewBlockBlob(c, containerURL, prefix+"sub1/sub3/sub5/", true)
+		_, blobName5 := createNewBlockBlob(c, containerURL, prefix+specialNames[i], true)
 
 		blobList[5*i] = blobName1
 		blobList[5*i+1] = blobName2
@@ -200,11 +200,11 @@ func (scenarioHelper) generateCommonRemoteScenarioForWASB(c *chk.C, containerURL
 	blobList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
-		_, blobName1 := createNewBlockBlob(c, containerURL, prefix+"top")
-		_, blobName2 := createNewBlockBlob(c, containerURL, prefix+"sub1/")
-		_, blobName3 := createNewBlockBlob(c, containerURL, prefix+"sub2/")
-		_, blobName4 := createNewBlockBlob(c, containerURL, prefix+"sub1/sub3/sub5/")
-		_, blobName5 := createNewBlockBlob(c, containerURL, prefix+specialNames[i])
+		_, blobName1 := createNewBlockBlob(c, containerURL, prefix+"top", true)
+		_, blobName2 := createNewBlockBlob(c, containerURL, prefix+"sub1/", true)
+		_, blobName3 := createNewBlockBlob(c, containerURL, prefix+"sub2/", true)
+		_, blobName4 := createNewBlockBlob(c, containerURL, prefix+"sub1/sub3/sub5/", true)
+		_, blobName5 := createNewBlockBlob(c, containerURL, prefix+specialNames[i], true)
 
 		blobList[5*i] = blobName1
 		blobList[5*i+1] = blobName2
@@ -615,15 +615,15 @@ func (scenarioHelper) getRawContainerURLWithSAS(c *chk.C, containerName string) 
 	accountName, accountKey := getAccountAndKey()
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
 	c.Assert(err, chk.IsNil)
-	containerURLWithSAS := getContainerURLWithSAS(c, *credential, containerName)
+	containerURLWithSAS := getContainerURLWithSAS(c, *credential, containerName, "")
 	return containerURLWithSAS.URL()
 }
 
-func (scenarioHelper) getRawBlobURLWithSAS(c *chk.C, containerName string, blobName string) url.URL {
+func (scenarioHelper) getRawBlobURLWithSAS(c *chk.C, containerName string, blobName string, sasPermissions string) url.URL {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
 	c.Assert(err, chk.IsNil)
-	containerURLWithSAS := getContainerURLWithSAS(c, *credential, containerName)
+	containerURLWithSAS := getContainerURLWithSAS(c, *credential, containerName, sasPermissions)
 	blobURLWithSAS := containerURLWithSAS.NewBlockBlobURL(blobName)
 	return blobURLWithSAS.URL()
 }
