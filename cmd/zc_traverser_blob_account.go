@@ -45,8 +45,6 @@ type blobAccountTraverser struct {
 	s2sPreserveSourceTags bool
 
 	cpkOptions common.CpkOptions
-
-	getProperties bool
 }
 
 func (t *blobAccountTraverser) IsDirectory(_ bool) bool {
@@ -117,7 +115,7 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, getProperties bool) (t *blobAccountTraverser) {
+func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions) (t *blobAccountTraverser) {
 	bURLParts := azblob.NewBlobURLParts(*rawURL)
 	cPattern := bURLParts.ContainerName
 
@@ -135,7 +133,6 @@ func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.C
 		includeDirectoryStubs:       includeDirectoryStubs,
 		s2sPreserveSourceTags:       s2sPreserveSourceTags,
 		cpkOptions:                  cpkOptions,
-		getProperties:               getProperties,
 	}
 
 	return
