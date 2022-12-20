@@ -63,7 +63,7 @@ func (s *traverserBlobSuite) TestDetectRootBlob(c *chk.C) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, objectList[0], "l")
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, true)
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 	propItem, isBlob, isDir, err := blobTraverser.detectRootUsingList()
 	c.Assert(err, chk.IsNil)
@@ -73,7 +73,7 @@ func (s *traverserBlobSuite) TestDetectRootBlob(c *chk.C) {
 
 	// GetProperties
 	rawBlobURLWithSAS = scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, objectList[0], "r")
-	blobTraverser = newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, true)
+	blobTraverser = newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 	prop, isBlob, isDir, err := blobTraverser.detectRootUsingGetProperties()
 	c.Assert(err, chk.IsNil)
@@ -115,7 +115,7 @@ func (s *traverserBlobSuite) TestDetectRootMarkerDir(c *chk.C) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, objectList[0], "l")
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, true)
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 	propItem, isBlob, isDir, err := blobTraverser.detectRootUsingList()
 	c.Assert(err, chk.IsNil)
@@ -124,7 +124,7 @@ func (s *traverserBlobSuite) TestDetectRootMarkerDir(c *chk.C) {
 	c.Assert(isDir, chk.Equals, true)
 
 	rawBlobURLWithSAS = scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, "basemarkerdir", "l")
-	blobTraverser = newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, true)
+	blobTraverser = newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 	propItem, isBlob, isDir, err = blobTraverser.detectRootUsingList()
 	c.Assert(err, chk.IsNil)
@@ -134,7 +134,7 @@ func (s *traverserBlobSuite) TestDetectRootMarkerDir(c *chk.C) {
 
 	// GetProperties
 	rawBlobURLWithSAS = scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, objectList[0], "r")
-	blobTraverser = newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, true)
+	blobTraverser = newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 	prop, isBlob, isDir, err := blobTraverser.detectRootUsingGetProperties()
 	c.Assert(err, chk.IsNil)
@@ -143,7 +143,7 @@ func (s *traverserBlobSuite) TestDetectRootMarkerDir(c *chk.C) {
 	c.Assert(isDir, chk.Equals, true)
 
 	rawBlobURLWithSAS = scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, "basemarkerdir", "r")
-	blobTraverser = newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, true)
+	blobTraverser = newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 	prop, isBlob, isDir, err = blobTraverser.detectRootUsingGetProperties()
 	c.Assert(err, chk.IsNil)
@@ -184,7 +184,7 @@ func (s *traverserBlobSuite) TestDetectRootBlobVirtualDir(c *chk.C) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, "basemarkerdir/", "l")
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, true)
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 	propItem, isBlob, isDir, err := blobTraverser.detectRootUsingList()
 	c.Assert(err, chk.IsNil)
@@ -193,7 +193,7 @@ func (s *traverserBlobSuite) TestDetectRootBlobVirtualDir(c *chk.C) {
 	c.Assert(isDir, chk.Equals, true)
 
 	rawBlobURLWithSAS = scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, "basemarkerdir", "l")
-	blobTraverser = newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, true)
+	blobTraverser = newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 	propItem, isBlob, isDir, err = blobTraverser.detectRootUsingList()
 	c.Assert(err, chk.IsNil)
@@ -203,13 +203,13 @@ func (s *traverserBlobSuite) TestDetectRootBlobVirtualDir(c *chk.C) {
 
 	// GetProperties
 	rawBlobURLWithSAS = scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, "basemarkerdir/", "r")
-	blobTraverser = newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, true)
+	blobTraverser = newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 	_, isBlob, isDir, err = blobTraverser.detectRootUsingGetProperties()
 	c.Assert(err, chk.NotNil)
 
 	rawBlobURLWithSAS = scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, "basemarkerdir", "r")
-	blobTraverser = newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, true)
+	blobTraverser = newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 	_, isBlob, isDir, err = blobTraverser.detectRootUsingGetProperties()
 	c.Assert(err, chk.NotNil)

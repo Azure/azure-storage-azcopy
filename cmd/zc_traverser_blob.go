@@ -28,10 +28,8 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/pkg/errors"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // allow us to iterate through a path pointing to the blob endpoint
@@ -60,8 +58,6 @@ type blobTraverser struct {
 	includeSnapshot bool
 
 	includeVersion bool
-
-	getProperties bool
 }
 
 func (t *blobTraverser) IsDirectory(isSource bool) bool {
@@ -209,47 +205,55 @@ func (t *blobTraverser) getRoot(preprocessor objectMorpher, parts azblob.BlobURL
 		msg := fmt.Sprintf("Detecting the root blob: %s", err)
 		azcopyScanningLogger.Log(pipeline.LogDebug, msg)
 	}
-	if t.getProperties {
-		var prop *azblob.BlobGetPropertiesResponse
-		prop, isBlob, isDirStub, err = t.detectRootUsingGetProperties()
-
-		if stgErr, ok := err.(azblob.StorageError); ok {
-			// Don't error out unless it's a CPK error just yet
-			// If it's a CPK error, we know it's a single blob and that we can't get the prop on it anyway.
-			if stgErr.ServiceCode() == common.CPK_ERROR_SERVICE_CODE {
-				return nil, false, false, errors.New("this blob uses customer provided encryption keys (CPK). At the moment, AzCopy does not support CPK-encrypted blobs. " +
-					"If you wish to make use of this blob, we recommend using one of the Azure Storage SDKs")
+	// Try using GetProperties. If that fails due to permissions errors, try using List.
+	var prop *azblob.BlobGetPropertiesResponse
+	prop, isBlob, isDirStub, err = t.detectRootUsingGetProperties()
+	retryWithList := false
+	if stgErr, ok := err.(azblob.StorageError); ok {
+		if stgErr.ServiceCode() == common.CPK_ERROR_SERVICE_CODE {
+			if azcopyScanningLogger != nil {
+				msg := fmt.Sprintf("Failed to detect root blob since it uses customer provided encryption keys (CPK) and CPK was not provided. Trying to detect root blob with list. If that fails too, retry by providing CPK. : %s", err)
+				azcopyScanningLogger.Log(pipeline.LogDebug, msg)
 			}
-
-			if resp := stgErr.Response(); resp == nil || (resp != nil && resp.StatusCode == 403) {
+			retryWithList = true
+		} else {
+			resp := stgErr.Response()
+			if resp != nil && resp.StatusCode == 403 {
+				if azcopyScanningLogger != nil {
+					msg := fmt.Sprintf("Failed to detect root blob due to lack of permissions. Trying to detect root blob with list. If that fails too, retry by providing read or list permissions. : %s", err)
+					azcopyScanningLogger.Log(pipeline.LogDebug, msg)
+				}
+				retryWithList = true
+			} else {
 				return nil, false, false, fmt.Errorf("cannot list files due to reason %s", err)
 			}
 		}
-		if prop != nil {
-			storedObject := newStoredObject(
-				preprocessor,
-				getObjectNameOnly(strings.TrimSuffix(parts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
-				"",
-				common.EntityType(common.IffUint8(isBlob, uint8(common.EEntityType.File()), uint8(common.EEntityType.Folder()))),
-				prop.LastModified(),
-				prop.ContentLength(),
-				prop,
-				blobPropertiesResponseAdapter{prop},
-				common.FromAzBlobMetadataToCommonMetadata(prop.NewMetadata()), // .NewMetadata() seems odd to call, but it does actually retrieve the metadata from the blob properties.
-				parts.ContainerName,
-			)
-			if t.s2sPreserveSourceTags {
-				blobTagsMap, err := t.getBlobTags()
-				if err != nil {
-					panic("Couldn't fetch blob tags due to error: " + err.Error())
-				}
-				if len(blobTagsMap) > 0 {
-					storedObject.blobTags = blobTagsMap
-				}
+	}
+	if prop != nil {
+		storedObject := newStoredObject(
+			preprocessor,
+			getObjectNameOnly(strings.TrimSuffix(parts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
+			"",
+			common.EntityType(common.IffUint8(isBlob, uint8(common.EEntityType.File()), uint8(common.EEntityType.Folder()))),
+			prop.LastModified(),
+			prop.ContentLength(),
+			prop,
+			blobPropertiesResponseAdapter{prop},
+			common.FromAzBlobMetadataToCommonMetadata(prop.NewMetadata()), // .NewMetadata() seems odd to call, but it does actually retrieve the metadata from the blob properties.
+			parts.ContainerName,
+		)
+		if t.s2sPreserveSourceTags {
+			blobTagsMap, err := t.getBlobTags()
+			if err != nil {
+				panic("Couldn't fetch blob tags due to error: " + err.Error())
 			}
-			return &storedObject, isBlob, isDirStub, nil
+			if len(blobTagsMap) > 0 {
+				storedObject.blobTags = blobTagsMap
+			}
 		}
-	} else {
+		return &storedObject, isBlob, isDirStub, nil
+	}
+	if retryWithList {
 		var propItem *azblob.BlobItemInternal
 		propItem, isBlob, isDirStub, err = t.detectRootUsingList()
 		if stgErr, ok := err.(azblob.StorageError); ok {
@@ -486,7 +490,7 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 	return nil
 }
 
-func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion, getProperties bool) (t *blobTraverser) {
+func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool) (t *blobTraverser) {
 	t = &blobTraverser{
 		rawURL:                      rawURL,
 		p:                           p,
@@ -500,7 +504,6 @@ func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 		includeDeleted:              includeDeleted,
 		includeSnapshot:             includeSnapshot,
 		includeVersion:              includeVersion,
-		getProperties:               getProperties,
 	}
 
 	disableHierarchicalScanning := strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))
