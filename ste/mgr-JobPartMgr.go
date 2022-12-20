@@ -624,15 +624,15 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 	switch fromTo {
 	case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(), common.EFromTo.BenchmarkBlob(),
 		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob(), common.EFromTo.GCPBlob(), common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone():
-		var credential azblob.Credential
-		if jpm.sourceCredential != nil {
-			credential = jpm.sourceCredential.(azblob.Credential)
+		var cred azblob.Credential
+		if sourceBlobToken != nil {
+			cred = sourceBlobToken.(azblob.Credential)
 		} else {
-			credential = common.CreateBlobCredential(ctx, credInfo, credOption)
+			cred = common.CreateBlobCredential(ctx, credInfo, credOption)
 		}
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 		jpm.pipeline = NewBlobPipeline(
-			credential,
+			cred,
 			azblob.PipelineOptions{
 				Log: jpm.jobMgr.PipelineLogInfo(),
 				Telemetry: azblob.TelemetryOptions{
