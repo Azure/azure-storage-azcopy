@@ -105,7 +105,7 @@ func (t *blobTraverser) IsDirectory(isSource bool) (bool, error) {
 		if stgErr, ok := blobErr.(azblob.StorageError); ok {
 			// if the blob is not found return the error to throw
 			if stgErr.ServiceCode() == common.BLOB_NOT_FOUND {
-				return false, errors.New("The specified blob was not found.")
+				return false, errors.New(common.FILE_NOT_FOUND)
 			}
 		}
 		return false, blobErr

@@ -56,6 +56,7 @@ const (
 	// and inform the user that we don't support CPK yet.
 	CPK_ERROR_SERVICE_CODE = "BlobUsesCustomerSpecifiedEncryption"
 	BLOB_NOT_FOUND         = "BlobNotFound"
+	FILE_NOT_FOUND         = "The specified file was not found."
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

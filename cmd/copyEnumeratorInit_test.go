@@ -28,11 +28,12 @@ import (
 	chk "gopkg.in/check.v1"
 )
 
-type traverserBlobSuite struct{}
+type copyEnumeratorSuite struct{}
 
-var _ = chk.Suite(&traverserBlobSuite{})
+var _ = chk.Suite(&copyEnumeratorSuite{})
 
-func (s *traverserBlobSuite) TestIsSourceDirWithStub(c *chk.C) {
+// ============================================= BLOB TRAVERSER TESTS =======================================
+func (ce *copyEnumeratorSuite) TestValidateSourceDirThatExists(c *chk.C) {
 	bsu := getBSU()
 
 	// Generate source container and blobs
@@ -52,12 +53,19 @@ func (s *traverserBlobSuite) TestIsSourceDirWithStub(c *chk.C) {
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dirName)
 	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
-	isDir, err := blobTraverser.IsDirectory(true)
-	c.Assert(isDir, chk.Equals, true)
-	c.Assert(err, chk.Equals, nil)
+	// dir but recursive flag not set - fail
+	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
+	err := cca.validateSourceDir(blobTraverser)
+	c.Assert(err.Error(), chk.Equals, "cannot use directory as source without --recursive or a trailing wildcard (/*)")
+
+	// dir but recursive flag set - pass
+	cca.Recursive = true
+	err = cca.validateSourceDir(blobTraverser)
+	c.Assert(err, chk.IsNil)
+	c.Assert(cca.IsSourceDir, chk.Equals, true)
 }
 
-func (s *traverserBlobSuite) TestIsSourceDirWithNoStub(c *chk.C) {
+func (ce *copyEnumeratorSuite) TestValidateSourceDirDoesNotExist(c *chk.C) {
 	bsu := getBSU()
 
 	// Generate source container and blobs
@@ -68,6 +76,7 @@ func (s *traverserBlobSuite) TestIsSourceDirWithNoStub(c *chk.C) {
 	defer deleteContainer(c, containerURL)
 
 	dirName := "source_dir/"
+	// set up to create blob traverser
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
@@ -75,12 +84,19 @@ func (s *traverserBlobSuite) TestIsSourceDirWithNoStub(c *chk.C) {
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dirName)
 	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
-	isDir, err := blobTraverser.IsDirectory(true)
-	c.Assert(isDir, chk.Equals, true)
-	c.Assert(err, chk.Equals, nil)
+	// dir but recursive flag not set - fail
+	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
+	err := cca.validateSourceDir(blobTraverser)
+	c.Assert(err.Error(), chk.Equals, "cannot use directory as source without --recursive or a trailing wildcard (/*)")
+
+	// dir but recursive flag set - pass
+	cca.Recursive = true
+	err = cca.validateSourceDir(blobTraverser)
+	c.Assert(err, chk.IsNil)
+	c.Assert(cca.IsSourceDir, chk.Equals, true)
 }
 
-func (s *traverserBlobSuite) TestIsSourceFileExists(c *chk.C) {
+func (ce *copyEnumeratorSuite) TestValidateSourceFileExists(c *chk.C) {
 	bsu := getBSU()
 
 	// Generate source container and blobs
@@ -100,12 +116,13 @@ func (s *traverserBlobSuite) TestIsSourceFileExists(c *chk.C) {
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, fileName)
 	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
-	isDir, err := blobTraverser.IsDirectory(true)
-	c.Assert(isDir, chk.Equals, false)
+	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
+	err := cca.validateSourceDir(blobTraverser)
 	c.Assert(err, chk.IsNil)
+	c.Assert(cca.IsSourceDir, chk.Equals, false)
 }
 
-func (s *traverserBlobSuite) TestIsSourceFileDoesNotExist(c *chk.C) {
+func (ce *copyEnumeratorSuite) TestValidateSourceFileDoesNotExist(c *chk.C) {
 	bsu := getBSU()
 
 	// Generate source container and blobs
@@ -115,7 +132,8 @@ func (s *traverserBlobSuite) TestIsSourceFileDoesNotExist(c *chk.C) {
 
 	defer deleteContainer(c, containerURL)
 
-	fileName := "file_does_not_exist"
+	fileName := "source_file"
+
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
@@ -123,7 +141,34 @@ func (s *traverserBlobSuite) TestIsSourceFileDoesNotExist(c *chk.C) {
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, fileName)
 	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
-	isDir, err := blobTraverser.IsDirectory(true)
-	c.Assert(isDir, chk.Equals, false)
+	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
+	err := cca.validateSourceDir(blobTraverser)
 	c.Assert(err.Error(), chk.Equals, common.FILE_NOT_FOUND)
+	c.Assert(cca.IsSourceDir, chk.Equals, false)
+}
+
+func (ce *copyEnumeratorSuite) TestValidateSourceWithWildCard(c *chk.C) {
+	bsu := getBSU()
+
+	// Generate source container and blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+	c.Assert(containerURL, chk.NotNil)
+
+	defer deleteContainer(c, containerURL)
+
+	dirName := "source_dir_does_not_exist"
+	// set up to create blob traverser
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
+
+	// List
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dirName)
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+
+	// dir but recursive flag not set - fail
+	cca := CookedCopyCmdArgs{StripTopDir: true, Recursive: false}
+	err := cca.validateSourceDir(blobTraverser)
+	c.Assert(err, chk.IsNil)
+	c.Assert(cca.IsSourceDir, chk.Equals, false)
 }
