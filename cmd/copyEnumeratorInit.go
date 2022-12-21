@@ -92,15 +92,17 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	// Ensure we're only copying a directory under valid conditions
-	cca.IsSourceDir = traverser.IsDirectory(true)
+	cca.IsSourceDir, err = traverser.IsDirectory(true)
 	if cca.IsSourceDir &&
 		!cca.Recursive && // Copies the folder & everything under it
 		!cca.StripTopDir { // Copies only everything under it
 		// todo: dir only transfer, also todo: support syncing the root folder's acls on sync.
 		return nil, errors.New("cannot use directory as source without --recursive or a trailing wildcard (/*)")
 	}
-
-	// Check if the destination is a directory so we can correctly decide where our files land
+	if err != nil {
+		return nil, err
+	}
+	// Check if the destination is a directory to correctly decide where our files land
 	isDestDir := cca.isDestDirectory(cca.Destination, &ctx)
 	if cca.ListOfVersionIDs != nil && (!(cca.FromTo == common.EFromTo.BlobLocal() || cca.FromTo == common.EFromTo.BlobTrash()) || cca.IsSourceDir || !isDestDir) {
 		log.Fatalf("Either source is not a blob or destination is not a local folder")
@@ -367,7 +369,8 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	return rt.IsDirectory(false)
+	isDir, _ := rt.IsDirectory(false)
+	return isDir
 }
 
 // Initialize the modular filters outside of copy to increase readability.
