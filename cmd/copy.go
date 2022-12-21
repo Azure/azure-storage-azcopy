@@ -1672,10 +1672,6 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 			// indicate whether constrained by disk or not
 			isBenchmark := cca.FromTo.From() == common.ELocation.Benchmark()
 			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, isBenchmark)
-			// if it is not a dir (i.e its a single file) and no transfers occured - file not found - fail
-			if !cca.IsSourceDir && summary.TotalTransfers == 0 && !cca.StripTopDir {
-				summary.TransfersFailed += 1
-			}
 			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
 				summary.PercentComplete,
 				summary.TransfersCompleted,
