@@ -168,9 +168,6 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 	// check if the url points to a single blob
 	blobProperties, isBlob, isDirStub, propErr := t.getPropertiesIfSingleBlob()
-	if !isBlob && !t.recursive {
-		return errors.New("the blob is not found")
-	}
 
 	if stgErr, ok := propErr.(azblob.StorageError); ok {
 		// Don't error out unless it's a CPK error just yet
