@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -339,11 +340,7 @@ func (raw *RawSyncCmdArgs) Cook() (cookedSyncCmdArgs, error) {
 	cooked.includeFileAttributes = raw.parsePatterns(raw.IncludeFileAttributes)
 	cooked.excludeFileAttributes = raw.parsePatterns(raw.ExcludeFileAttributes)
 
-	cooked.preserveSMBInfo = areBothLocationsSMBAware(cooked.fromTo)
-	// If user has explicitly specified not to copy SMB Information, set cooked.preserveSMBInfo to false
-	if !raw.PreserveSMBInfo {
-		cooked.preserveSMBInfo = false
-	}
+	cooked.preserveSMBInfo = raw.PreserveSMBInfo && areBothLocationsSMBAware(cooked.fromTo)
 
 	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, nil, "preserve-smb-info"); err != nil {
 		return cooked, err
@@ -976,7 +973,11 @@ func init() {
 	// TODO: enable for copy with IfSourceNewer
 	// smb info/permissions can be persisted in the scenario of File -> File
 	syncCmd.PersistentFlags().BoolVar(&raw.PreserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Azure Files). This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
-	syncCmd.PersistentFlags().BoolVar(&raw.PreserveSMBInfo, "preserve-smb-info", true, "For SMB-aware locations, flag will be set to true by default. Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Azure Files). This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is not preserved for folders. ")
+	syncCmd.PersistentFlags().BoolVar(&raw.PreserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits)"+
+		" between SMB-aware resources (Windows and Azure Files). On windows, this flag will be set to true by default. If the source or destination is a "+
+		"volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. Only the attribute bits supported by Azure Files "+
+		"will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified "+
+		"(e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
 	syncCmd.PersistentFlags().BoolVar(&raw.PreservePOSIXProperties, "preserve-posix-properties", false, "'Preserves' property info gleaned from stat or statx into object metadata.")
 
 	// TODO: enable when we support local <-> File

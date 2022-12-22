@@ -1,5 +1,4 @@
-// +build !windows
-// +build !linux
+// +build linux
 
 // Copyright © Microsoft <wastore@microsoft.com>
 //
@@ -23,11 +22,7 @@
 
 package sddl
 
-import (
-	"errors"
-)
-
-// Note that all usages of TranslateSID gracefully handle the error, rather than throwing the error.
+// Note that all usages of OSTranslateSID gracefully handle the error, rather than throwing the error.
 func OSTranslateSID(SID string) (string, error) {
-	return SID, errors.New("unsupported on this OS")
+	return CanonicalizeSid(SID)
 }
