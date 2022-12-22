@@ -1,0 +1,42 @@
+trigger: none
+pr: none
+
+stages:
+- stage: Smallfiles
+  jobs:
+    - job: PerformanceTest
+      timeoutInMinutes: 360
+      strategy:
+        matrix:
+          Ubuntu-22:
+            imageName: "azcopyPerfUbuntu22"
+            Description: "AzCopy Perf Test"
+
+      pool:
+        name: "AzCopyPerfTestUbuntu"
+        demands:
+          - ImageOverride -equals $(imageName)
+
+      steps:
+#        - checkout: none
+#          path: "$(Agent.HomeDirectory)/go/src/github.com/Azure/azure-storage-azcopy/"
+
+        - script: |
+            echo $(Description)
+            hostnamectl
+          displayName: 'Print Agent Info'
+
+        - task: GoTool@0
+          inputs:
+            version: '1.19.3'
+        
+        - script: |
+            go build -o $GOROOT/bin/azcopy
+            azcopy list https://storenakulkar.blob.core.windows.net/container11/
+          env:
+            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
+            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
+            AZCOPY_SHOW_PERF_STATES: "1"
+          displayName: 'Build Azcopy'
+
+      
