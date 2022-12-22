@@ -279,7 +279,12 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		dstDfs := dst == common.ELocation.BlobFS() && src != common.ELocation.Local()
 		if dstDfs {
 			raw.dst = strings.Replace(raw.dst, ".dfs", ".blob", 1)
-			glcm.Info("Switching to use blob endpoint on destination account.")
+			msg := fmt.Sprintf("Switching to use blob endpoint on destination account. There are some limitations when switching endpoints. " +
+				"Please refer to https://learn.microsoft.com/en-us/azure/storage/blobs/data-lake-storage-known-issues#blob-storage-apis")
+			glcm.Info(msg)
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(pipeline.LogInfo, msg)
+			}
 		}
 
 		cooked.isHNStoHNS = srcDfs && dstDfs
