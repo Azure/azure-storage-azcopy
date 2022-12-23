@@ -259,7 +259,7 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	p, _, err := InitPipeline(ctx, cca.fromTo.To(), cca.credentialInfo, azcopyLogVerbosity.ToPipelineLogLevel())
+	p, err := InitPipeline(ctx, cca.fromTo.To(), cca.credentialInfo, azcopyLogVerbosity.ToPipelineLogLevel())
 	if err != nil {
 		return nil, err
 	}

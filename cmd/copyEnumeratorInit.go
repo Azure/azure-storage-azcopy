@@ -28,41 +28,9 @@ type BucketToContainerNameResolver interface {
 	ResolveName(bucketName string) (string, error)
 }
 
-func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) (*CopyEnumerator, error) {
+func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, srcCredInfo common.CredentialInfo, ctx context.Context) (*CopyEnumerator, error) {
 	var traverser ResourceTraverser
-
-	srcCredInfo := common.CredentialInfo{}
-	var isPublic bool
 	var err error
-
-	if srcCredInfo, isPublic, err = GetCredentialInfoForLocation(ctx, cca.FromTo.From(), cca.Source.Value, cca.Source.SAS, true, cca.CpkOptions); err != nil {
-		return nil, err
-		// If S2S and source takes OAuthToken as its cred type (OR) source takes anonymous as its cred type, but it's not public and there's no SAS
-	} else if cca.FromTo.IsS2S() &&
-		((srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() && cca.FromTo.To() != common.ELocation.Blob()) || // Blob can forward OAuth tokens
-			(srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && !isPublic && cca.Source.SAS == "")) {
-		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource, or the destination is blob storage")
-	}
-
-	if cca.Source.SAS != "" && cca.FromTo.IsS2S() && jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		glcm.Info("Authentication: If the source and destination accounts are in the same AAD tenant & the user/spn/msi has appropriate permissions on both, the source SAS token is not required and OAuth can be used round-trip.")
-	}
-
-	if cca.FromTo.IsS2S() {
-		jobPartOrder.S2SSourceCredentialType = srcCredInfo.CredentialType
-
-		if jobPartOrder.S2SSourceCredentialType.IsAzureOAuth() {
-			uotm := GetUserOAuthTokenManagerInstance()
-			// get token from env var or cache
-			if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-				return nil, err
-			} else {
-				cca.credentialInfo.OAuthTokenInfo = *tokenInfo
-				jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo
-			}
-		}
-	}
-
 	jobPartOrder.CpkOptions = cca.CpkOptions
 	jobPartOrder.PreserveSMBPermissions = cca.preservePermissions
 	jobPartOrder.PreserveSMBInfo = cca.preserveSMBInfo
@@ -73,7 +41,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// If preserve properties is enabled, but get properties in backend is disabled, turn it on
 	// If source change validation is enabled on files to remote, turn it on (consider a separate flag entirely?)
 	getRemoteProperties := cca.ForceWrite == common.EOverwriteOption.IfSourceNewer() ||
-		(cca.FromTo.From() == common.ELocation.File() && !cca.FromTo.To().IsRemote()) || // If download, we still need LMT and MD5 from files.
+		(cca.FromTo.From() == common.ELocation.File() && !cca.FromTo.To().IsRemote()) || // If it's a download, we still need LMT and MD5 from files.
 		(cca.FromTo.From() == common.ELocation.File() && cca.FromTo.To().IsRemote() && (cca.s2sSourceChangeValidation || cca.IncludeAfter != nil || cca.IncludeBefore != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise, if we are using includeAfter or includeBefore, which require LMTs.
 		(cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() && cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
 	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
@@ -86,9 +54,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		&cca.FollowSymlinks, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties,
 		cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs,
 		cca.S2sPreserveBlobTags, azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil /* errorChannel */)
-	//jobPartOrder.SourceCredential = cca.credentialInfo.OAuthToken
-	cca.credentialInfo.SourceBlobToken = srcCredInfo.SourceBlobToken
-	jobPartOrder.SourceBlobToken = srcCredInfo.SourceBlobToken
+
 	if err != nil {
 		return nil, err
 	}
@@ -461,8 +427,8 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	if dstCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.To(), cca.Destination.Value, cca.Destination.SAS, false, cca.CpkOptions); err != nil {
 		return err
 	}
-
-	dstPipeline, _, err := InitPipeline(ctx, cca.FromTo.To(), dstCredInfo, logLevel.ToPipelineLogLevel())
+	// TODO: we can pass cred here as well
+	dstPipeline, err := InitPipeline(ctx, cca.FromTo.To(), dstCredInfo, logLevel.ToPipelineLogLevel())
 	if err != nil {
 		return
 	}

@@ -252,7 +252,7 @@ func beginDetectNewVersion() chan struct{} {
 		}
 
 		// step 1: initialize pipeline
-		p, _, err := createBlobPipeline(context.TODO(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, pipeline.LogNone)
+		p, err := createBlobPipeline(context.TODO(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, pipeline.LogNone)
 		if err != nil {
 			return
 		}
