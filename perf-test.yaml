@@ -17,10 +17,10 @@ stages:
         demands:
           - ImageOverride -equals $(imageName)
 
-      steps:
-#        - checkout: none
-#          path: "$(Agent.HomeDirectory)/go/src/github.com/Azure/azure-storage-azcopy/"
+      variables:
+      - group: AzCopyPerfTestTargets
 
+      steps:
         - script: |
             echo $(Description)
             hostnamectl
@@ -29,14 +29,43 @@ stages:
         - task: GoTool@0
           inputs:
             version: '1.19.3'
-        
+
         - script: |
             go build -o $GOROOT/bin/azcopy
-            azcopy list https://storenakulkar.blob.core.windows.net/container11/
+            azcopy --version
+          displayName: 'Build Azcopy'
           env:
             AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
             AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
+            AZCOPY_CONCURRENCY_VALUE: "256"
             AZCOPY_SHOW_PERF_STATES: "1"
-          displayName: 'Build Azcopy'
 
-      
+        - script: |
+            time azcopy copy $(Blob2BlobLargeFilesSrc) $(Blob2BlobLargeFilesDst) --recursive --block-size-mb=128 --log-level=ERROR --cap-mbps=40000
+          displayName: 'Blob2Blob - Large Files'
+          condition: always()
+          env:
+            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
+            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
+            AZCOPY_CONCURRENCY_VALUE: "256"
+            AZCOPY_SHOW_PERF_STATES: "1"
+
+        - script: |
+            time azcopy copy $(Blob2BlobSmallAndMedFilesSrc) $(Blob2BlobSmallAndMedFilesDst) --recursive --block-size-mb=128 --log-level=ERROR
+          displayName: 'Blob2Blob - Small to Medium sized files'
+          condition: always()
+          env:
+            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
+            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
+            AZCOPY_CONCURRENCY_VALUE: "256"
+            AZCOPY_SHOW_PERF_STATES: "1"
+
+        - script: |
+            time azcopy copy $(Blob2BlobSmallFilesSrc) $(Blob2BlobSmallFilesDst) --recursive --check-length=false --log-level=ERROR
+          displayName: 'Blob2Blob - Small Files'
+          condition: always()
+          env:
+            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
+            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
+            AZCOPY_CONCURRENCY_VALUE: "256"
+            AZCOPY_SHOW_PERF_STATES: "1"
