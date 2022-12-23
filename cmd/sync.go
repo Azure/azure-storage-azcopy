@@ -451,6 +451,13 @@ type cookedSyncCmdArgs struct {
 	// refer to: https://golang.org/pkg/sync/atomic/#pkg-note-BUG
 	// defines the number of files listed at the source and compared.
 	atomicSourceFilesScanned uint64
+
+	// defines the number of folders listed at the source and compared.
+	atomicSourceFoldersScanned uint64
+
+	atomicSourceFilesTransferNotRequired uint64
+
+	atomicSourceFoldersTransferNotRequired uint64
 	// defines the number of files listed at the destination and compared.
 	atomicDestinationFilesScanned uint64
 	// defines the scanning status of the sync operation.
@@ -461,6 +468,9 @@ type cookedSyncCmdArgs struct {
 	atomicFirstPartOrdered uint32
 
 	// deletion count keeps track of how many extra files from the destination were removed
+	//
+	// TODO :- Have separate deletion counters for folders and files.
+	//
 	atomicDeletionCount uint32
 
 	Source                  common.ResourceString
@@ -634,6 +644,21 @@ func (cca *cookedSyncCmdArgs) setScanningComplete() {
 // scanningComplete returns the value of atomicScanningStatus.
 func (cca *cookedSyncCmdArgs) ScanningComplete() bool {
 	return atomic.LoadUint32(&cca.atomicScanningStatus) > 0
+}
+
+// GetSourceFilesScanned returns files scanned at source.
+func (cca *cookedSyncCmdArgs) GetSourceFoldersScanned() uint64 {
+	return atomic.LoadUint64(&cca.atomicSourceFoldersScanned)
+}
+
+// GetSourceFilesTransferredNotRequired returns number of files not changed, hence require no transfer.
+func (cca *cookedSyncCmdArgs) GetSourceFilesTransferredNotRequired() uint64 {
+	return atomic.LoadUint64(&cca.atomicSourceFilesTransferNotRequired)
+}
+
+// GetSourceFoldersTransferredNotRequired returns number of folders not changed, hence require no transfer.
+func (cca *cookedSyncCmdArgs) GetSourceFoldersTransferredNotRequired() uint64 {
+	return atomic.LoadUint64(&cca.atomicSourceFoldersTransferNotRequired)
 }
 
 // GetSourceFilesScanned returns files scanned at source.

@@ -265,7 +265,7 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, stopDeleteWorkers chan struc
 		return nil, err
 	}
 
-	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, p, ctx, cca.fromTo.To(), stopDeleteWorkers).delete,
+	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, p, ctx, cca.fromTo.To(), stopDeleteWorkers, cca.incrementDeletionCount).delete,
 		cca.deleteDestination, cca.fromTo.To().String(), cca.Destination, cca.incrementDeletionCount, cca.dryrunMode), nil
 }
 
@@ -277,9 +277,10 @@ type remoteResourceDeleter struct {
 	blobDeleteChan           chan interface{}
 	enumerationDone          chan struct{}
 	deleteDirEnumerationChan chan string
+	incrementDeletionCount   func()
 }
 
-func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx context.Context, targetLocation common.Location, enumDone chan struct{}) *remoteResourceDeleter {
+func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx context.Context, targetLocation common.Location, enumDone chan struct{}, incrementDeletionCount func()) *remoteResourceDeleter {
 	remote := &remoteResourceDeleter{
 		rootURL:        rawRootURL,
 		p:              p,
@@ -288,6 +289,9 @@ func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx cont
 		// This channel keep the blobURL to be deleted.
 		blobDeleteChan:           make(chan interface{}, 1000*1000),
 		deleteDirEnumerationChan: make(chan string, 1000),
+
+		// Function for incrementing count of files deleted under this folder.
+		incrementDeletionCount: incrementDeletionCount,
 
 		// This channel to inform the enumeration complete, workers can stop.
 		enumerationDone: enumDone,
@@ -312,6 +316,11 @@ func (b *remoteResourceDeleter) deleteWorker(ctx context.Context, wg *sync.WaitG
 			_, err := blobURL.(azblob.BlobURL).Delete(ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
 			if err != nil {
 				fmt.Printf("Blob[%s] deletion failed with error: %v\n", blobURL.(azblob.BlobURL).String(), err)
+			} else {
+				// One more file deleted inside the folder, update the counter.
+				if b.incrementDeletionCount != nil {
+					b.incrementDeletionCount()
+				}
 			}
 
 		case <-ctx.Done():

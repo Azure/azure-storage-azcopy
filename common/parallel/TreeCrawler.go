@@ -462,7 +462,19 @@ func (c *crawler) processOneDirectoryWithAutoPacer(ctx context.Context, workerIn
 	//       first and parent processed later. To maintain child-after-parent, we add the directory entries to single circular buffer,
 	//       which process directory in received order and add to tqueue.
 	//
-	if c.isSync && c.isSource {
+
+	//
+	// We don't want this directory to be enqueued if there is an error in enumeration.
+	// We set the bodyErr to nil as it was already communicated through addOutput.
+	//
+	// Note :- If we add a partial enumerated directory to tqueue, target traverser will treat exactly as if source folder
+	//         has fewer elements than before, and sync process will cause them to be deleted from the target.
+	//         THIS WILL CAUSE UNEXPECTED DELETION OF FILES/FOLDERS FROM THE TARGET!!
+	//
+	if bodyErr != nil {
+		// Set bodyErr to nil, to prevent entire enumeration from stopping.
+		bodyErr = nil
+	} else if c.isSync && c.isSource {
 		if _, ok := toExamine.(string); ok {
 			if _, ok := c.root.(string); ok {
 				//

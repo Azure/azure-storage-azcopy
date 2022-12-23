@@ -503,6 +503,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			}
 			t.errorChannel <- ErrorFileInfo
 		}
+		return err
 	}
 
 	// if the path is a single file, then pass it through the filters and send to processor
@@ -569,7 +570,13 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					return nil
 				}
 
-				if t.incrementEnumerationCounter != nil {
+				//
+				// parallel.DotSpecialGUID is a special filename to represent ".", we use it
+				// for safely transporting ".", safe against path cleaning functions.
+				// This is only used by the sync engine. Since every directory will already be counted
+				// as child of its parent, we don't want to count it twice.
+				//
+				if t.incrementEnumerationCounter != nil && !strings.Contains(filePath, parallel.DotSpecialGUID) {
 					t.incrementEnumerationCounter(entityType)
 				}
 

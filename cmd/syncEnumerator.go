@@ -312,6 +312,8 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *s
 		nil, cca.recursive, true, cca.isHNSToHNS, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
+			} else if entityType == common.EEntityType.Folder() {
+				atomic.AddUint64(&cca.atomicSourceFoldersScanned, 1)
 			}
 		}, nil, cca.s2sPreserveBlobTags, AzcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, nil /* errorChannel */, objectIndexerMap, nil /* possiblyRenamedMap */, orderedTqueue, true /* isSource */, true, /* isSync */
 		cca.maxObjectIndexerMapSizeInGB, time.Time{} /* lastSyncTime (not used by source traverser) */, cca.cfdMode, cca.metaDataOnlySync, sourceScannerLogger /* scannerLogger */)
@@ -406,7 +408,13 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *s
 		// when uploading, we can delete remote objects immediately, because as we traverse the remote location
 		// we ALREADY have available a complete map of everything that exists locally
 		// so as soon as we see a remote destination object we can know whether it exists in the local source
-		comparator = newSyncDestinationComparator(objectIndexerMap, possiblyRenamedMap, transferScheduler.scheduleCopyTransfer, destCleanerFunc, cca.mirrorMode, cca.cfdMode, cca.lastSyncTime, destinationScannerLogger).processIfNecessary
+		comparator = newSyncDestinationComparator(objectIndexerMap, possiblyRenamedMap, transferScheduler.scheduleCopyTransfer, destCleanerFunc, cca.mirrorMode, cca.cfdMode, cca.lastSyncTime, destinationScannerLogger, func(entityType common.EntityType) {
+			if entityType == common.EEntityType.File() {
+				atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
+			} else if entityType == common.EEntityType.Folder() {
+				atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
+			}
+		}).processIfNecessary
 		finalize = func() error {
 			//
 			// Now that target traverser is done processing, there cannot be any more "delete jobs", tell

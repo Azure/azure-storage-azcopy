@@ -145,7 +145,7 @@ func Walk(appCtx context.Context, root string, relBase string, parallelism int, 
 					// target traverser to process. Tell orderedTqueue so that it can add it in a proper child-after-parent
 					// order.
 					//
-					entry , _ := crawlResult.Item()
+					entry, _ := crawlResult.Item()
 					orderedTqueue.MarkProcessed(crawlResult.Idx(), entry)
 
 					continue
@@ -207,13 +207,22 @@ func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), 
 		}, err)
 
 		// Since we have already enqueued the failed enumeration entry, return nil error to avoid duplicate queueing by workerLoop().
-		return nil
+		return err
 	}
 	defer d.Close()
 
 	// enumerate immediate children
 	for {
-		list, err := r.Readdir(d, 1024) // list it in chunks, so that if we get child dirs early, parallel workers can start working on them
+		//
+		// TODO :- If directory permission changes midway after part of directory has been enumerated, we will end up in a situation
+		//         where some of the directory entries are added to indexerMap and rest are not. The directory itself will not be added
+		//         to tqueue. The partially added entries will never be processed (hence removed from indexerMap) sincethere is no tqueue
+		//         covering them, this will cause panic as we assert indexerMap to be empty at the end of enumeration.
+		//
+		// Note :- Directories with fewer elements than what we read in a single Readdir() call will not be affected by above. To reduce the chances
+		//         of this issue, read more in one Readdir() call.
+		//
+		list, err := r.Readdir(d, 10240) // list it in chunks, so that if we get child dirs early, parallel workers can start working on them
 		if err == io.EOF {
 			if len(list) > 0 {
 				panic("unexpected non-empty list")
@@ -224,7 +233,7 @@ func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), 
 			enqueueOutput(FileSystemEntry{dirString, nil}, err)
 
 			// Since we have already enqueued the failed enumeration entry, return nil error to avoid duplicate queueing by workerLoop().
-			return nil
+			return err
 		}
 		for _, childInfo := range list {
 			childEntry := FileSystemEntry{

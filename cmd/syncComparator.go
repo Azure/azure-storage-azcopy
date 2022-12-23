@@ -76,14 +76,19 @@ type syncDestinationComparator struct {
 	TargetCtimeSkew uint
 
 	scannerLogger common.ILoggerResetable
+
+	// Function to increment files/folders not transferred as a result of no change since last sync.
+	incrementNotTransferred func(common.EntityType)
 }
 
-func newSyncDestinationComparator(i *folderIndexer, possiblyRenamedMap *possiblyRenamedMap, copyScheduler, cleaner objectProcessor, disableComparison bool, cfdMode common.CFDMode, lastSyncTime time.Time, scannerLogger common.ILoggerResetable) *syncDestinationComparator {
+func newSyncDestinationComparator(i *folderIndexer, possiblyRenamedMap *possiblyRenamedMap, copyScheduler, cleaner objectProcessor, disableComparison bool, cfdMode common.CFDMode, lastSyncTime time.Time, scannerLogger common.ILoggerResetable, incrementNotTransferred func(common.EntityType)) *syncDestinationComparator {
 	return &syncDestinationComparator{sourceFolderIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, disableComparison: disableComparison,
-		cfdMode:            cfdMode,
-		possiblyRenamedMap: possiblyRenamedMap,
-		lastSyncTime:       lastSyncTime,
-		scannerLogger:      scannerLogger}
+		cfdMode:                 cfdMode,
+		possiblyRenamedMap:      possiblyRenamedMap,
+		lastSyncTime:            lastSyncTime,
+		scannerLogger:           scannerLogger,
+		incrementNotTransferred: incrementNotTransferred,
+	}
 }
 
 //
@@ -284,6 +289,15 @@ func (f *syncDestinationComparator) FinalizeTargetDirectory(relativeDir string, 
 			if storedObject.entityType != common.EEntityType.Folder() {
 				panic("File properties to be sync'ed. Not yet implemented")
 			}
+		} else {
+			//
+			// Neither data nor metadata for the file has changed, hence file is not transferred.
+			//
+			// Note :- For folders, properties are sync'ed when the Finalizer for that folder is called.
+			//
+			if f.incrementNotTransferred != nil && storedObject.entityType != common.EEntityType.Folder() {
+				f.incrementNotTransferred(storedObject.entityType)
+			}
 		}
 	}
 
@@ -302,7 +316,23 @@ func (f *syncDestinationComparator) FinalizeTargetDirectory(relativeDir string, 
 		// Note: We actually want to update the directory properties and *not* create a new directory.
 		// Till we have support for updating the directory properties, we use this same call to create the directory.
 		//
+		// TODO: For CtimeMtime we will be called with finalizeAll=true, only when the directory on source has changed since last sync time,
+		//       while for TargetCompare we will always be called with finalizeAll=true, even if the source directory has not changed.
+		//       So, in case of TargetCompare we must copy directory properties only if it has changed. Also incrementNotTransferred() must be called
+		//       accordingly.
+		//
 		f.copyTransferScheduler(so)
+	} else {
+		//
+		// finalizeAll will be false (and we will come here) for only CtimeMtime when the directory on the source has changed since the last sync.
+		// It will be true (and we will not come here) for the following cases :-
+		// 1. cfdMode = CtimeMtime , directory not changed on the source since last sync time.
+		// 2. cfdMode = TargetCompare.
+		// This means whenever we come here, we don't tranfers the folder property and hence we should call incrementNotTransferred().
+		//
+		if f.incrementNotTransferred != nil {
+			f.incrementNotTransferred(so.entityType)
+		}
 	}
 
 	// lets remove the folderMap, it should be empty.
@@ -465,6 +495,11 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 			}
 		} else if metadataChanged {
 			// TODO: Need to add call to just update the metadata only.
+		} else {
+			// Neither data nor metadata for the file has changed, hence file is not transferred.
+			if f.incrementNotTransferred != nil {
+				f.incrementNotTransferred(sourceObjectInMap.entityType)
+			}
 		}
 
 		atomic.AddInt64(&f.sourceFolderIndex.totalSize, -storedObjectSize(sourceObjectInMap))
