@@ -297,8 +297,8 @@ type ListJobSummaryResponse struct {
 // wraps the standard ListJobSummaryResponse with sync-specific stats
 type ListSyncJobSummaryResponse struct {
 	ListJobSummaryResponse
-	DeleteTotalTransfers     uint32 `json:",string"`
-	DeleteTransfersCompleted uint32 `json:",string"`
+	DeleteTotalTransfers     uint64 `json:",string"`
+	DeleteTransfersCompleted uint64 `json:",string"`
 }
 
 type ListJobTransfersRequest struct {

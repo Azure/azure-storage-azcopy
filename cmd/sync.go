@@ -471,7 +471,7 @@ type cookedSyncCmdArgs struct {
 	//
 	// TODO :- Have separate deletion counters for folders and files.
 	//
-	atomicDeletionCount uint32
+	atomicDeletionCount uint64
 
 	Source                  common.ResourceString
 	Destination             common.ResourceString
@@ -619,11 +619,11 @@ type cookedSyncCmdArgs struct {
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
-	atomic.AddUint32(&cca.atomicDeletionCount, 1)
+	atomic.AddUint64(&cca.atomicDeletionCount, 1)
 }
 
-func (cca *cookedSyncCmdArgs) GetDeletionCount() uint32 {
-	return atomic.LoadUint32(&cca.atomicDeletionCount)
+func (cca *cookedSyncCmdArgs) GetDeletionCount() uint64 {
+	return atomic.LoadUint64(&cca.atomicDeletionCount)
 }
 
 // setFirstPartOrdered sets the value of atomicFirstPartOrdered to 1
