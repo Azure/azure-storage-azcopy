@@ -328,6 +328,8 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
 		currentDirPath := dir.(string)
 
+		virtualDirs := map[string]bool{}
+
 		for marker := (azblob.Marker{}); marker.NotDone(); {
 			lResp, err := containerURL.ListBlobsHierarchySegment(t.ctx, marker, "/", azblob.ListBlobsSegmentOptions{Prefix: currentDirPath,
 				Details: azblob.BlobListingDetails{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion}})
@@ -339,6 +341,11 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 			if t.recursive {
 				for _, virtualDir := range lResp.Segment.BlobPrefixes {
 					enqueueDir(virtualDir.Name)
+					if t.includeDirectoryStubs {
+						if _, exists := virtualDirs[strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)]; !exists {
+							virtualDirs[strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)] = true
+						}
+					}
 				}
 			}
 
@@ -348,6 +355,10 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 				// otherwise skip it
 				if t.doesBlobRepresentAFolder(blobInfo.Metadata) {
 					continue
+				}
+
+				if gCopyUtil.doesBlobRepresentAFolder(blobInfo.Metadata) && t.includeDirectoryStubs {
+					virtualDirs[strings.TrimSuffix(blobInfo.Name, common.AZCOPY_PATH_SEPARATOR_STRING)] = false
 				}
 
 				storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, strings.TrimPrefix(blobInfo.Name, searchPrefix), containerName)
@@ -376,6 +387,50 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 
 			marker = lResp.NextMarker
 		}
+
+		// Datalake does not include directories in BlobItems but returns properties in BlobPrefixes.
+		// Once ListBlob is updated to also fetch BlobPrefix Properties, we can get rid of this code and incorporate it above.
+		if t.includeDirectoryStubs {
+			for dirName, enqueued := range virtualDirs {
+				if !enqueued {
+					// try to get properties on the directory itself, since it's not listed in BlobItems
+					fblobURL := containerURL.NewBlobURL(dirName)
+					resp, err := fblobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+					folderRelativePath := strings.TrimPrefix(dirName, searchPrefix)
+					if err == nil {
+						storedObject := newStoredObject(
+							preprocessor,
+							getObjectNameOnly(dirName),
+							folderRelativePath,
+							common.EEntityType.Folder(),
+							resp.LastModified(),
+							resp.ContentLength(),
+							resp,
+							blobPropertiesResponseAdapter{resp},
+							common.FromAzBlobMetadataToCommonMetadata(resp.NewMetadata()),
+							containerName,
+						)
+						storedObject.archiveStatus = azblob.ArchiveStatusType(resp.ArchiveStatus())
+
+						if t.s2sPreserveSourceTags {
+							var BlobTags *azblob.BlobTags
+							BlobTags, err = fblobURL.GetTags(t.ctx, nil)
+
+							if err == nil {
+								blobTagsMap := common.BlobTags{}
+								for _, blobTag := range BlobTags.BlobTagSet {
+									blobTagsMap[url.QueryEscape(blobTag.Key)] = url.QueryEscape(blobTag.Value)
+								}
+								storedObject.blobTags = blobTagsMap
+							}
+						}
+
+						enqueueOutput(storedObject, err)
+					}
+				}
+			}
+		}
+
 		return nil
 	}
 
