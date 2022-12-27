@@ -341,6 +341,9 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 			if t.recursive {
 				for _, virtualDir := range lResp.Segment.BlobPrefixes {
 					enqueueDir(virtualDir.Name)
+					if azcopyScanningLogger != nil {
+						azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", virtualDir.Name))
+					}
 					if t.includeDirectoryStubs {
 						if _, exists := virtualDirs[strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)]; !exists {
 							virtualDirs[strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)] = true
