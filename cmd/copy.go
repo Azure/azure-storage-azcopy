@@ -1405,17 +1405,15 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 				cca.credentialInfo.OAuthTokenInfo = *tokenInfo
 				jpo.CredentialInfo.OAuthTokenInfo = *tokenInfo
 			}
-		}
-	}
-	if cca.FromTo != common.EFromTo.LocalBlob() && cca.FromTo != common.EFromTo.LocalFile() && cca.FromTo != common.EFromTo.LocalBlobFS() {
-		// if the source is not local then store the credential token if it was OAuth to avoid constant refreshing
-		if cca.credentialInfo.CredentialType.IsAzureOAuth() {
-			jpo.CredentialInfo.SourceBlobToken = common.CreateBlobCredential(ctx, cca.credentialInfo, common.CredentialOpOptions{
-				// LogInfo:  glcm.Info, //Comment out for debugging
-				LogError: glcm.Info,
-			})
-			cca.credentialInfo.SourceBlobToken = jpo.CredentialInfo.SourceBlobToken
-			srcCredInfo.SourceBlobToken = jpo.CredentialInfo.SourceBlobToken
+			// if the source is not local then store the credential token if it was OAuth to avoid constant refreshing
+			if cca.FromTo != common.EFromTo.LocalBlob() && cca.FromTo != common.EFromTo.LocalFile() && cca.FromTo != common.EFromTo.LocalBlobFS() {
+				jpo.CredentialInfo.SourceBlobToken = common.CreateBlobCredential(ctx, cca.credentialInfo, common.CredentialOpOptions{
+					// LogInfo:  glcm.Info, //Comment out for debugging
+					LogError: glcm.Info,
+				})
+				cca.credentialInfo.SourceBlobToken = jpo.CredentialInfo.SourceBlobToken
+				srcCredInfo.SourceBlobToken = jpo.CredentialInfo.SourceBlobToken
+			}
 		}
 	}
 	return srcCredInfo, nil
