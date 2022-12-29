@@ -41,8 +41,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/minio/minio-go"
-
 	chk "gopkg.in/check.v1"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -276,7 +274,7 @@ func getAccountAndKey() (string, string) {
 
 func getBSU() azblob.ServiceURL {
 	accountName, accountKey := getAccountAndKey()
-	u, _ := url.Parse(fmt.Sprintf("http://%s.blob.core.windows.net/", accountName))
+	u, _ := url.Parse(fmt.Sprintf("https://%s.blob.core.windows.net/", accountName))
 
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
 	if err != nil {
@@ -793,7 +791,7 @@ func getContainerURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential, con
 		sasPermissions = azblob.ContainerSASPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true, Tag: true}.String()
 	}
 	sasQueryParams, err := azblob.BlobSASSignatureValues{
-		Protocol:      azblob.SASProtocolHTTPSandHTTP,
+		Protocol:      azblob.SASProtocolHTTPS,
 		ExpiryTime:    time.Now().UTC().Add(48 * time.Hour),
 		ContainerName: containerName,
 		Permissions:   sasPermissions,
@@ -807,7 +805,6 @@ func getContainerURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential, con
 
 	// convert the raw url and validate it was parsed successfully
 	fullURL, err := url.Parse(rawURL)
-	fullURL.Scheme = "http"
 	c.Assert(err, chk.IsNil)
 
 	// TODO perhaps we need a global default pipeline
