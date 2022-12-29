@@ -346,7 +346,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 					}
 					if t.includeDirectoryStubs {
 						if _, exists := virtualDirs[strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)]; !exists {
-							virtualDirs[strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)] = true
+							virtualDirs[strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)] = false
 						}
 					}
 				}
@@ -361,7 +361,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 				}
 
 				if gCopyUtil.doesBlobRepresentAFolder(blobInfo.Metadata) && t.includeDirectoryStubs {
-					virtualDirs[strings.TrimSuffix(blobInfo.Name, common.AZCOPY_PATH_SEPARATOR_STRING)] = false
+					virtualDirs[strings.TrimSuffix(blobInfo.Name, common.AZCOPY_PATH_SEPARATOR_STRING)] = true
 				}
 
 				storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, strings.TrimPrefix(blobInfo.Name, searchPrefix), containerName)
