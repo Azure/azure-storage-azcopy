@@ -202,15 +202,23 @@ func (s *traverserBlobSuite) TestDetectRootBlobVirtualDir(c *chk.C) {
 	c.Assert(isDir, chk.Equals, true)
 
 	// GetProperties
+	// Note: Technically the GetProperties call below should result in an error if using a flat namesepace account
+	// Since our testing infra uses a HNS account properties are actually returned for virtual directories.
 	rawBlobURLWithSAS = scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, "basemarkerdir/", "r")
 	blobTraverser = newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
-	_, isBlob, isDir, err = blobTraverser.detectRootUsingGetProperties()
-	c.Assert(err, chk.NotNil)
+	prop, isBlob, isDir, err := blobTraverser.detectRootUsingGetProperties()
+	c.Assert(err, chk.IsNil)
+	c.Assert(prop, chk.NotNil)
+	c.Assert(isBlob, chk.Equals, false)
+	c.Assert(isDir, chk.Equals, true)
 
 	rawBlobURLWithSAS = scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, "basemarkerdir", "r")
 	blobTraverser = newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
-	_, isBlob, isDir, err = blobTraverser.detectRootUsingGetProperties()
-	c.Assert(err, chk.NotNil)
+	prop, isBlob, isDir, err = blobTraverser.detectRootUsingGetProperties()
+	c.Assert(err, chk.IsNil)
+	c.Assert(prop, chk.NotNil)
+	c.Assert(isBlob, chk.Equals, false)
+	c.Assert(isDir, chk.Equals, true)
 }
