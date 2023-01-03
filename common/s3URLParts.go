@@ -64,7 +64,7 @@ const s3EssentialHostPart = "amazonaws.com"
 
 var s3HostRegex = regexp.MustCompile(s3HostPattern)
 
-// IsS3URL verfies if a given URL points to S3 URL supported by AzCopy-v10
+// IsS3URL verifies if a given URL points to S3 URL supported by AzCopy-v10
 func IsS3URL(u url.URL) bool {
 	if _, isS3URL := findS3URLMatches(strings.ToLower(u.Host)); isS3URL {
 		return true
