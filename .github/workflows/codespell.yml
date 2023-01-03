@@ -20,5 +20,5 @@ jobs:
       - uses: codespell-project/actions-codespell@master
         with:
           check_filenames: true
-          skip: ./sddl/sddlPortable_test.go, ./sddl/sddlHelper_linux.go
+          skip: ./sddl/sddlPortable_test.go,./sddl/sddlHelper_linux.go
           ignore_words_list: "resue,pase,cancl,cacl,froms"
