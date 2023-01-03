@@ -102,7 +102,7 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 	}
 
 	// Check what's the path style, and parse accordingly.
-	if matchSlices[1] != "" { // Go's implementatoin is a bit strange, even if the first subexp fail to be matched, "" will be returned for that sub exp
+	if matchSlices[1] != "" { // Go's implementation is a bit strange, even if the first subexp fail to be matched, "" will be returned for that sub exp
 		// In this case, it would be in virtual-hosted-style URL, and has host prefix like bucket.s3[-.]
 		up.BucketName = matchSlices[1][:len(matchSlices[1])-1] // Removing the trailing '.' at the end
 		up.ObjectKey = path
