@@ -509,7 +509,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 		}
 		// Closing the blobProperties response.
 		if blobProperties.Response() != nil {
-			io.Copy(ioutil.Discard, blobProperties.Response().Body)
+			_, _ = io.Copy(io.Discard, blobProperties.Response().Body)
 			blobProperties.Response().Body.Close()
 		}
 		// If the access tier type of blob is set to Archive, then the blob is offline and reading the blob is not allowed,
@@ -525,7 +525,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 		os.Exit(1)
 	}
 	// reading all the blob bytes.
-	blobBytesDownloaded, err := ioutil.ReadAll(get.Body(azblob.RetryReaderOptions{}))
+	blobBytesDownloaded, err := io.ReadAll(get.Body(azblob.RetryReaderOptions{}))
 	if get.Response().Body != nil {
 		get.Response().Body.Close()
 	}
@@ -678,7 +678,7 @@ func verifySingleAppendBlob(testBlobCmd TestBlobCommand) {
 		}
 		// Closing the blobProperties response body.
 		if blobProperties.Response() != nil {
-			io.Copy(ioutil.Discard, blobProperties.Response().Body)
+			_, _ = io.Copy(io.Discard, blobProperties.Response().Body)
 			blobProperties.Response().Body.Close()
 		}
 	}
@@ -689,7 +689,7 @@ func verifySingleAppendBlob(testBlobCmd TestBlobCommand) {
 		os.Exit(1)
 	}
 	// reading all the bytes downloaded.
-	blobBytesDownloaded, err := ioutil.ReadAll(get.Body(azblob.RetryReaderOptions{}))
+	blobBytesDownloaded, err := io.ReadAll(get.Body(azblob.RetryReaderOptions{}))
 	if get.Response().Body != nil {
 		get.Response().Body.Close()
 	}
