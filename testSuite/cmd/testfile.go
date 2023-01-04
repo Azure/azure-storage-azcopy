@@ -132,7 +132,7 @@ func validateAzureDirWithLocalFile(curAzureDirURL azfile.DirectoryURL, baseAzure
 		// look for all files that in current directory
 		listFile, err := curAzureDirURL.ListFilesAndDirectoriesSegment(context.Background(), marker, azfile.ListFilesAndDirectoriesOptions{})
 		if err != nil {
-			// fmt.Println(fmt.Sprintf("fail to list files and directories inside the directory. Please check the directory sas, %v", err))
+			// fmt.Printf("fail to list files and directories inside the directory. Please check the directory sas, %v\n", err)
 			os.Exit(1)
 		}
 
@@ -149,7 +149,7 @@ func validateAzureDirWithLocalFile(curAzureDirURL azfile.DirectoryURL, baseAzure
 			get, err := curFileURL.Download(context.Background(), 0, azfile.CountToEnd, false)
 
 			if err != nil {
-				fmt.Println(fmt.Sprintf("fail to download the file %s", fileInfo.Name))
+				fmt.Printf("fail to download the file %s\n", fileInfo.Name)
 				os.Exit(1)
 			}
 
@@ -158,14 +158,14 @@ func validateAzureDirWithLocalFile(curAzureDirURL azfile.DirectoryURL, baseAzure
 			// read all bytes.
 			fileBytesDownloaded, err := ioutil.ReadAll(retryReader)
 			if err != nil {
-				fmt.Println(fmt.Sprintf("fail to read the body of file %s downloaded and failed with error %s", fileInfo.Name, err.Error()))
+				fmt.Printf("fail to read the body of file %s downloaded and failed with error %s\n", fileInfo.Name, err.Error())
 				os.Exit(1)
 			}
 			retryReader.Close()
 
 			tokens := strings.SplitAfterN(curFileURL.URL().Path, baseAzureDirPath, 2)
 			if len(tokens) < 2 {
-				fmt.Println(fmt.Sprintf("fail to get sub directory and file name, file URL '%s', original dir path '%s'", curFileURL.String(), baseAzureDirPath))
+				fmt.Printf("fail to get sub directory and file name, file URL '%s', original dir path '%s'\n", curFileURL.String(), baseAzureDirPath)
 				os.Exit(1)
 			}
 
@@ -232,7 +232,7 @@ func validateMetadataForFile(expectedMetaDataString string, actualMetaData azfil
 		// iterating through each key value pair of actual metaData and comparing the key value pair in expected metadata
 		for key, value := range actualMetaData {
 			if expectedMetaData[key] != value {
-				fmt.Println(fmt.Sprintf("value of user given key %s is %s in actual data while it is %s in expected metadata", key, value, expectedMetaData[key]))
+				fmt.Printf("value of user given key %s is %s in actual data while it is %s in expected metadata\n", key, value, expectedMetaData[key])
 				return false
 			}
 		}
@@ -261,7 +261,7 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 	// getting the shared access signature of the resource.
 	sourceURL, err := url.Parse(testFileCmd.Subject)
 	if err != nil {
-		// fmt.Println(fmt.Sprintf("Error parsing the file url source %s", testFileCmd.Object))
+		// fmt.Printf("Error parsing the file url source %s\n", testFileCmd.Object)
 		os.Exit(1)
 	}
 
@@ -287,7 +287,7 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 		// If the fileSize is 0 and the len of downloaded bytes is not 0
 		// validation fails
 		if len(fileBytesDownloaded) != 0 {
-			fmt.Println(fmt.Sprintf("validation failed since the actual file size %d differs from the downloaded file size %d", fileInfo.Size(), len(fileBytesDownloaded)))
+			fmt.Printf("validation failed since the actual file size %d differs from the downloaded file size %d\n", fileInfo.Size(), len(fileBytesDownloaded))
 			os.Exit(1)
 		}
 		// If both the actual and downloaded file size is 0,

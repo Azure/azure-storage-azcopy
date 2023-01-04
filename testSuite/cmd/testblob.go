@@ -504,7 +504,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 		}
 		// Match the Access Tier Type with Expected Tier Type.
 		if !strings.EqualFold(blobProperties.AccessTier(), testBlobCmd.BlobTier) {
-			fmt.Println(fmt.Sprintf("block blob access tier %s does not matches the expected tier %s", blobProperties.AccessTier(), testBlobCmd.BlobTier))
+			fmt.Printf("block blob access tier %s does not matches the expected tier %s\n", blobProperties.AccessTier(), testBlobCmd.BlobTier)
 			os.Exit(1)
 		}
 		// Closing the blobProperties response.
@@ -537,7 +537,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 		// If the fileSize is 0 and the len of downloaded bytes is not 0
 		// validation fails
 		if len(blobBytesDownloaded) != 0 {
-			fmt.Println(fmt.Sprintf("validation failed since the actual file size %d differs from the downloaded file size %d", fileInfo.Size(), len(blobBytesDownloaded)))
+			fmt.Printf("validation failed since the actual file size %d differs from the downloaded file size %d\n", fileInfo.Size(), len(blobBytesDownloaded))
 			os.Exit(1)
 		}
 		// If both the actual and downloaded file size is 0,
@@ -598,7 +598,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 	mmap.Unmap()
 	err = file.Close()
 	if err != nil {
-		fmt.Println(fmt.Sprintf("error closing the file %s and failed with error %s. Error could be while validating the blob.", file.Name(), err.Error()))
+		fmt.Printf("error closing the file %s and failed with error %s. Error could be while validating the blob.\n", file.Name(), err.Error())
 		os.Exit(1)
 	}
 
@@ -634,7 +634,7 @@ func verifySingleAppendBlob(testBlobCmd TestBlobCommand) {
 	// getting the shared access signature of the resource.
 	sourceURL, err := url.Parse(testBlobCmd.Subject)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("Error parsing the blob url source %s", testBlobCmd.Object))
+		fmt.Printf("Error parsing the blob url source %s\n", testBlobCmd.Object)
 		os.Exit(1)
 	}
 
@@ -668,12 +668,12 @@ func verifySingleAppendBlob(testBlobCmd TestBlobCommand) {
 	if azblob.AccessTierType(testBlobCmd.BlobTier) != azblob.AccessTierNone {
 		blobProperties, err := appendBlobURL.GetProperties(testCtx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 		if err != nil {
-			fmt.Println(fmt.Sprintf("error getting the properties of the blob. failed with error %s", err.Error()))
+			fmt.Printf("error getting the properties of the blob. failed with error %s\n", err.Error())
 			os.Exit(1)
 		}
 		// If the blob tier does not match the expected blob tier.
 		if !strings.EqualFold(blobProperties.AccessTier(), testBlobCmd.BlobTier) {
-			fmt.Println(fmt.Sprintf("Access blob tier type %s does not match the expected %s tier type", blobProperties.AccessTier(), testBlobCmd.BlobTier))
+			fmt.Printf("Access blob tier type %s does not match the expected %s tier type\n", blobProperties.AccessTier(), testBlobCmd.BlobTier)
 			os.Exit(1)
 		}
 		// Closing the blobProperties response body.

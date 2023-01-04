@@ -100,7 +100,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 	fileUrl := azbfs.NewFileURL(*subjectUrl, p)
 	dResp, err := fileUrl.Download(context.Background(), 0, 0)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("error downloading the subject %s. Failed with error %s", fileUrl.String(), err.Error()))
+		fmt.Printf("error downloading the subject %s. Failed with error %s\n", fileUrl.String(), err.Error())
 		os.Exit(1)
 	}
 	// get the size of the downloaded file
@@ -122,7 +122,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 	// If the length of file at two location is not same
 	// validation has failed
 	if downloadedLength != fInfo.Size() {
-		fmt.Println(fmt.Sprintf("validation failed because there is difference in the source size %d and destination size %d", fInfo.Size(), downloadedLength))
+		fmt.Printf("validation failed because there is difference in the source size %d and destination size %d\n", fInfo.Size(), downloadedLength)
 		os.Exit(1)
 	}
 	// If the size of the file is 0 both locally and remote
@@ -193,11 +193,11 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 	// local and remote
 	objectInfo, err := os.Stat(tbfsc.Object)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("error getting the file info for dir %s. failed with error %s", tbfsc.Object, err.Error()))
+		fmt.Printf("error getting the file info for dir %s. failed with error %s\n", tbfsc.Object, err.Error())
 		os.Exit(1)
 	}
 	if !objectInfo.IsDir() {
-		fmt.Println(fmt.Sprintf("the source provided %s is not a directory path", tbfsc.Object))
+		fmt.Printf("the source provided %s is not a directory path\n", tbfsc.Object)
 		os.Exit(1)
 	}
 	// break the remote Url into parts
@@ -211,7 +211,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 	var firstListing bool = true
 	dResp, err := dirUrl.ListDirectorySegment(context.Background(), &continuationMarker, true)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("error listing the directory path defined by url %s. Failed with error %s", dirUrl.String(), err.Error()))
+		fmt.Printf("error listing the directory path defined by url %s. Failed with error %s\n", dirUrl.String(), err.Error())
 		os.Exit(1)
 	}
 	// numberOfFilesinSubject keeps the count of number of files of at the destination
@@ -235,13 +235,13 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 			// open the filePath locally and calculate the md5
 			fpLocal, err := os.Open(filepathLocal)
 			if err != nil {
-				fmt.Println(fmt.Sprintf("error opening the file %s. failed with error %s", filepathLocal, err.Error()))
+				fmt.Printf("error opening the file %s. failed with error %s\n", filepathLocal, err.Error())
 				os.Exit(1)
 			}
 			// Get the fileInfo to get size.
 			fpLocalInfo, err := fpLocal.Stat()
 			if err != nil {
-				fmt.Println(fmt.Sprintf("error getting the file info for file %s. failed with error %s", filepathLocal, err.Error()))
+				fmt.Printf("error getting the file info for file %s. failed with error %s\n", filepathLocal, err.Error())
 				os.Exit(1)
 			}
 			// Check the size of file
@@ -260,7 +260,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 			// memory map the file
 			fpMMf, err := NewMMF(fpLocal, false, 0, fpLocalInfo.Size())
 			if err != nil {
-				fmt.Println(fmt.Sprintf("error memory mapping the file %s. failed with error %s", filepathLocal, err.Error()))
+				fmt.Printf("error memory mapping the file %s. failed with error %s\n", filepathLocal, err.Error())
 				os.Exit(1)
 			}
 
@@ -274,7 +274,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 			fileUrl := azbfs.NewFileURL(tempUrlParts.URL(), p)
 			fResp, err := fileUrl.Download(context.Background(), 0, 0)
 			if err != nil {
-				fmt.Println(fmt.Sprintf("error downloading the file %s. failed with error %s", fileUrl.String(), err.Error()))
+				fmt.Printf("error downloading the file %s. failed with error %s\n", fileUrl.String(), err.Error())
 				os.Exit(1)
 			}
 			downloadedBuffer := make([]byte, *file.ContentLength) // byte buffer in which file will be downloaded to
@@ -287,7 +287,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 			// calculate the downloaded file Md5
 			subjMd5 := md5.Sum(downloadedBuffer)
 			if objMd5 != subjMd5 {
-				fmt.Println(fmt.Sprintf("source file %s doesn't match the remote file %s", filepathLocal, fileUrl.String()))
+				fmt.Printf("source file %s doesn't match the remote file %s\n", filepathLocal, fileUrl.String())
 				os.Exit(1)
 			}
 		}
@@ -304,7 +304,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 		return nil
 	})
 	if err != nil {
-		fmt.Println(fmt.Sprintf("validation failed with error %s walking inside the source %s", err.Error(), tbfsc.Object))
+		fmt.Printf("validation failed with error %s walking inside the source %s\n", err.Error(), tbfsc.Object)
 		os.Exit(1)
 	}
 
@@ -314,5 +314,5 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 		fmt.Println("validation failed since there is difference in the number of files in source and destination")
 		os.Exit(1)
 	}
-	fmt.Println(fmt.Sprintf("successfully validated the source %s and destination %s", tbfsc.Object, tbfsc.Subject))
+	fmt.Printf("successfully validated the source %s and destination %s\n", tbfsc.Object, tbfsc.Subject)
 }
