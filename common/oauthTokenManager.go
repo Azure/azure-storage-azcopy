@@ -30,7 +30,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -303,7 +302,7 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 		return nil, err
 	}
 
-	certData, err := ioutil.ReadFile(certPath)
+	certData, err := os.ReadFile(certPath)
 	if err != nil {
 		return nil, err
 	}
@@ -743,7 +742,7 @@ func (credInfo *OAuthTokenInfo) queryIMDS(ctx context.Context, msiEndpoint strin
 	req.Header.Set("Metadata", "true")
 
 	// Set context.
-	req.WithContext(ctx)
+	req = req.WithContext(ctx)
 	// In case of some other process (Http Server) listening at 127.0.0.1:40342 , we do not want to wait forever for it to serve request
 	msiTokenHTTPClient.Timeout = 10 * time.Second
 	// Send request
@@ -880,7 +879,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 	}
 
 	defer func() { // resp and Body should not be nil
-		_, _ = io.Copy(ioutil.Discard, resp.Body)
+		_, _ = io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 	}()
 
@@ -890,7 +889,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 		return nil, fmt.Errorf("failed to get token from msi, status code: %v", resp.StatusCode)
 	}
 
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}

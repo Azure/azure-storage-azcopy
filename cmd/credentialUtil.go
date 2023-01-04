@@ -613,9 +613,6 @@ func GetCredentialInfoForLocation(ctx context.Context, location common.Location,
 		} else {
 			credInfo.OAuthTokenInfo = *tokenInfo
 		}
-	} else if credInfo.CredentialType == common.ECredentialType.S3AccessKey() || credInfo.CredentialType == common.ECredentialType.S3PublicBucket() {
-		// nothing to do here. The extra fields for S3 are fleshed out at the time
-		// we make the S3Client
 	}
 
 	return

@@ -547,7 +547,7 @@ func deleteGCPBucket(client *gcpUtils.Client, bucketName string) {
 			break
 		}
 		if err == nil {
-			err = bucket.Object(attrs.Name).Delete(nil)
+			err = bucket.Object(attrs.Name).Delete(context.TODO())
 			if err != nil {
 				fmt.Println("Could not clear GCS Buckets.")
 				return
