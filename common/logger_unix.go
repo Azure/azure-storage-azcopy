@@ -82,7 +82,7 @@ func (sl *sysLogger) CloseLog() {
 		return
 	}
 
-	sl.writer.Notice("Closing Log")
+	_ = sl.writer.Notice("Closing Log")
 	sl.writer.Close()
 }
 

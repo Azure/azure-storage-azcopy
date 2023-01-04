@@ -1997,13 +1997,13 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")
 	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "Legacy exclude param. DO NOT USE")
 	_ = cpCmd.PersistentFlags().MarkHidden("include")
-	cpCmd.PersistentFlags().MarkHidden("exclude")
+	_ = cpCmd.PersistentFlags().MarkHidden("exclude")
 
 	// Hide the flush-threshold flag since it is implemented only for CI.
 	cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on accounts that have a hierarchical namespace.")
-	cpCmd.PersistentFlags().MarkHidden("flush-threshold")
+	_ = cpCmd.PersistentFlags().MarkHidden("flush-threshold")
 
 	// Deprecate the old persist-smb-permissions flag
-	cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
+	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
 	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files, or ADLS Gen 2 to ADLS Gen 2). For Hierarchical Namespace accounts, you will need a container SAS or OAuth token with Modify Ownership and Modify Permissions permissions. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 }

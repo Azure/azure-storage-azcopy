@@ -281,7 +281,7 @@ func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobH
 		os.Exit(1)
 	}
 	if putBlobResp.Response() != nil {
-		io.Copy(ioutil.Discard, putBlobResp.Response().Body)
+		_, _ = io.Copy(ioutil.Discard, putBlobResp.Response().Body)
 		putBlobResp.Response().Body.Close()
 	}
 }

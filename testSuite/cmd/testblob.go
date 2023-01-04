@@ -333,7 +333,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 		}
 		// Closing the blobProperties response body.
 		if blobProperties.Response() != nil {
-			io.Copy(ioutil.Discard, blobProperties.Response().Body)
+			_, _ = io.Copy(ioutil.Discard, blobProperties.Response().Body)
 			blobProperties.Response().Body.Close()
 		}
 	}

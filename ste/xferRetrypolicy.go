@@ -455,7 +455,7 @@ func NewBlobXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 				}
 				if response.Response() != nil {
 					// If we're going to retry and we got a previous response, then flush its body to avoid leaking its TCP connection
-					io.Copy(ioutil.Discard, response.Response().Body)
+					_, _ = io.Copy(ioutil.Discard, response.Response().Body)
 					response.Response().Body.Close()
 				}
 				// If retrying, cancel the current per-try timeout context
