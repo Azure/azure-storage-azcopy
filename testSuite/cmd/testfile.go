@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -156,7 +155,7 @@ func validateAzureDirWithLocalFile(curAzureDirURL azfile.DirectoryURL, baseAzure
 			retryReader := get.Body(azfile.RetryReaderOptions{MaxRetryRequests: 3})
 
 			// read all bytes.
-			fileBytesDownloaded, err := ioutil.ReadAll(retryReader)
+			fileBytesDownloaded, err := io.ReadAll(retryReader)
 			if err != nil {
 				fmt.Printf("fail to read the body of file %s downloaded and failed with error %s\n", fileInfo.Name, err.Error())
 				os.Exit(1)
@@ -277,7 +276,7 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 	// reading all the bytes downloaded.
 	retryReader := get.Body(azfile.RetryReaderOptions{MaxRetryRequests: 3})
 	defer retryReader.Close()
-	fileBytesDownloaded, err := ioutil.ReadAll(retryReader)
+	fileBytesDownloaded, err := io.ReadAll(retryReader)
 	if err != nil {
 		fmt.Println("error reading the byes from response and failed with error ", err.Error())
 		os.Exit(1)

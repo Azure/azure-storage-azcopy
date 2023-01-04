@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -94,7 +93,7 @@ func (client filesystemClient) createResponder(resp pipeline.Response) (pipeline
 	if resp == nil {
 		return nil, err
 	}
-	io.Copy(ioutil.Discard, resp.Response().Body)
+	io.Copy(io.Discard, resp.Response().Body)
 	resp.Response().Body.Close()
 	return &FilesystemCreateResponse{rawResponse: resp.Response()}, err
 }
@@ -177,7 +176,7 @@ func (client filesystemClient) deleteResponder(resp pipeline.Response) (pipeline
 	if resp == nil {
 		return nil, err
 	}
-	io.Copy(ioutil.Discard, resp.Response().Body)
+	io.Copy(io.Discard, resp.Response().Body)
 	resp.Response().Body.Close()
 	return &FilesystemDeleteResponse{rawResponse: resp.Response()}, err
 }
@@ -244,7 +243,7 @@ func (client filesystemClient) getPropertiesResponder(resp pipeline.Response) (p
 	if resp == nil {
 		return nil, err
 	}
-	io.Copy(ioutil.Discard, resp.Response().Body)
+	io.Copy(io.Discard, resp.Response().Body)
 	resp.Response().Body.Close()
 	return &FilesystemGetPropertiesResponse{rawResponse: resp.Response()}, err
 }
@@ -327,7 +326,7 @@ func (client filesystemClient) listResponder(resp pipeline.Response) (pipeline.R
 		return result, err
 	}
 	defer resp.Response().Body.Close()
-	b, err := ioutil.ReadAll(resp.Response().Body)
+	b, err := io.ReadAll(resp.Response().Body)
 	if err != nil {
 		return result, err
 	}
@@ -436,7 +435,7 @@ func (client filesystemClient) listPathsResponder(resp pipeline.Response) (pipel
 		return result, err
 	}
 	defer resp.Response().Body.Close()
-	b, err := ioutil.ReadAll(resp.Response().Body)
+	b, err := io.ReadAll(resp.Response().Body)
 	if err != nil {
 		return result, err
 	}
@@ -531,7 +530,7 @@ func (client filesystemClient) setPropertiesResponder(resp pipeline.Response) (p
 	if resp == nil {
 		return nil, err
 	}
-	io.Copy(ioutil.Discard, resp.Response().Body)
+	io.Copy(io.Discard, resp.Response().Body)
 	resp.Response().Body.Close()
 	return &FilesystemSetPropertiesResponse{rawResponse: resp.Response()}, err
 }

@@ -24,7 +24,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path"
@@ -64,7 +63,7 @@ var specialNames = []string{
 
 // note: this is to emulate the list-of-files flag
 func (scenarioHelper) generateListOfFiles(c *chk.C, fileList []string) (path string) {
-	parentDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
+	parentDirName, err := os.MkdirTemp("", "AzCopyLocalTest")
 	c.Assert(err, chk.IsNil)
 
 	// create the file
@@ -74,13 +73,13 @@ func (scenarioHelper) generateListOfFiles(c *chk.C, fileList []string) (path str
 
 	// pipe content into it
 	content := strings.Join(fileList, "\n")
-	err = ioutil.WriteFile(path, []byte(content), common.DEFAULT_FILE_PERM)
+	err = os.WriteFile(path, []byte(content), common.DEFAULT_FILE_PERM)
 	c.Assert(err, chk.IsNil)
 	return
 }
 
 func (scenarioHelper) generateLocalDirectory(c *chk.C) (dstDirName string) {
-	dstDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
+	dstDirName, err := os.MkdirTemp("", "AzCopyLocalTest")
 	c.Assert(err, chk.IsNil)
 	return
 }
@@ -97,7 +96,7 @@ func (scenarioHelper) generateLocalFile(filePath string, fileSize int) ([]byte, 
 	}
 
 	// write to file and return the data
-	err = ioutil.WriteFile(filePath, bigBuff, common.DEFAULT_FILE_PERM)
+	err = os.WriteFile(filePath, bigBuff, common.DEFAULT_FILE_PERM)
 	return bigBuff, err
 }
 

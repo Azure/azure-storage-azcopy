@@ -24,7 +24,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -449,21 +448,22 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			// We don't transfer any directory properties here, not even the root. (Because the root's
 			// properties won't be transferred, because the only way to do a non-recursive directory transfer
 			// is with /* (aka stripTopDir).
-			files, err := ioutil.ReadDir(t.fullPath)
+			entries, err := os.ReadDir(t.fullPath)
 			if err != nil {
 				return err
 			}
 
 			// go through the files and return if any of them fail to process
-			for _, singleFile := range files {
+			for _, entry := range entries {
 				// This won't change. It's purely to hand info off to STE about where the symlink lives.
-				relativePath := singleFile.Name()
-				if singleFile.Mode()&os.ModeSymlink != 0 {
+				relativePath := entry.Name()
+				fileInfo, _ := entry.Info()
+				if fileInfo.Mode()&os.ModeSymlink != 0 {
 					if !t.followSymlinks {
 						continue
 					} else {
 						// Because this only goes one layer deep, we can just append the filename to fullPath and resolve with it.
-						symlinkPath := common.GenerateFullPath(t.fullPath, singleFile.Name())
+						symlinkPath := common.GenerateFullPath(t.fullPath, entry.Name())
 						// Evaluate the symlink
 						result, err := UnfurlSymlinks(symlinkPath)
 
@@ -479,7 +479,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						}
 
 						// Replace the current FileInfo with
-						singleFile, err = common.OSStat(result)
+						fileInfo, err = common.OSStat(result)
 
 						if err != nil {
 							return err
@@ -487,7 +487,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					}
 				}
 
-				if singleFile.IsDir() {
+				if entry.IsDir() {
 					continue
 					// it doesn't make sense to transfer directory properties when not recurring
 				}
@@ -499,11 +499,11 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				err := processIfPassedFilters(filters,
 					newStoredObject(
 						preprocessor,
-						singleFile.Name(),
+						entry.Name(),
 						strings.ReplaceAll(relativePath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
 						common.EEntityType.File(), // TODO: add code path for folders
-						singleFile.ModTime(),
-						singleFile.Size(),
+						fileInfo.ModTime(),
+						fileInfo.Size(),
 						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
 						noBlobProps,
 						noMetdata,

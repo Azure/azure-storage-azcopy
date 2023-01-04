@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"strings"
@@ -281,7 +280,7 @@ func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobH
 		os.Exit(1)
 	}
 	if putBlobResp.Response() != nil {
-		_, _ = io.Copy(ioutil.Discard, putBlobResp.Response().Body)
+		_, _ = io.Copy(io.Discard, putBlobResp.Response().Body)
 		putBlobResp.Response().Body.Close()
 	}
 }

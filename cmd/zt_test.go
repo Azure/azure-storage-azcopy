@@ -26,7 +26,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net/url"
 	"os"
@@ -776,7 +775,7 @@ func disableSoftDelete(c *chk.C, bsu azblob.ServiceURL) {
 func validateUpload(c *chk.C, blobURL azblob.BlockBlobURL) {
 	resp, err := blobURL.Download(ctx, 0, 0, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
 	c.Assert(err, chk.IsNil)
-	data, _ := ioutil.ReadAll(resp.Response().Body)
+	data, _ := io.ReadAll(resp.Response().Body)
 	c.Assert(data, chk.HasLen, 0)
 }
 

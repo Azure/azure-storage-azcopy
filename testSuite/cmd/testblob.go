@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -194,7 +193,7 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 			}
 
 			// read all bytes.
-			blobBytesDownloaded, err := ioutil.ReadAll(get.Body(azblob.RetryReaderOptions{}))
+			blobBytesDownloaded, err := io.ReadAll(get.Body(azblob.RetryReaderOptions{}))
 			if err != nil {
 				fmt.Printf("error reading the body of blob %s downloaded and failed with error %s\n", blobInfo.Name, err.Error())
 				os.Exit(1)
@@ -333,7 +332,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 		}
 		// Closing the blobProperties response body.
 		if blobProperties.Response() != nil {
-			_, _ = io.Copy(ioutil.Discard, blobProperties.Response().Body)
+			_, _ = io.Copy(io.Discard, blobProperties.Response().Body)
 			blobProperties.Response().Body.Close()
 		}
 	}
@@ -344,7 +343,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 		os.Exit(1)
 	}
 	// reading all the bytes downloaded.
-	blobBytesDownloaded, err := ioutil.ReadAll(get.Body(azblob.RetryReaderOptions{}))
+	blobBytesDownloaded, err := io.ReadAll(get.Body(azblob.RetryReaderOptions{}))
 	if get.Response().Body != nil {
 		get.Response().Body.Close()
 	}
