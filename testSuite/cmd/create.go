@@ -277,7 +277,7 @@ func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobH
 		azblob.ClientProvidedKeyOptions{},
 		azblob.ImmutabilityPolicyOptions{})
 	if err != nil {
-		fmt.Println(fmt.Sprintf("error uploading the blob %v", err))
+		fmt.Printf("error uploading the blob %v\n", err)
 		os.Exit(1)
 	}
 	if putBlobResp.Response() != nil {
@@ -355,7 +355,7 @@ func createFile(fileURLStr string, fileSize uint32, metadata azfile.Metadata, fi
 		Metadata:        metadata,
 	})
 	if err != nil {
-		fmt.Println(fmt.Sprintf("error uploading the file %v", err))
+		fmt.Printf("error uploading the file %v\n", err)
 		os.Exit(1)
 	}
 }

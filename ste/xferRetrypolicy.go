@@ -192,7 +192,7 @@ func NewBFSXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 				// Set the server-side timeout query parameter "timeout=[seconds]"
 				timeout := int32(o.TryTimeout.Seconds()) // Max seconds per try
 				if deadline, ok := ctx.Deadline(); ok {  // If user's ctx has a deadline, make the timeout the smaller of the two
-					t := int32(deadline.Sub(time.Now()).Seconds()) // Duration from now until user's ctx reaches its deadline
+					t := int32(time.Until(deadline).Seconds()) // Duration from now until user's ctx reaches its deadline
 					logf("MaxTryTimeout=%d secs, TimeTilDeadline=%d sec\n", timeout, t)
 					if t < timeout {
 						timeout = t
@@ -363,7 +363,7 @@ func NewBlobXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 				// Set the server-side timeout query parameter "timeout=[seconds]"
 				timeout := int32(o.TryTimeout.Seconds()) // Max seconds per try
 				if deadline, ok := ctx.Deadline(); ok {  // If user's ctx has a deadline, make the timeout the smaller of the two
-					t := int32(deadline.Sub(time.Now()).Seconds()) // Duration from now until user's ctx reaches its deadline
+					t := int32(time.Until(deadline).Seconds()) // Duration from now until user's ctx reaches its deadline
 					logf("MaxTryTimeout=%d secs, TimeTilDeadline=%d sec\n", timeout, t)
 					if t < timeout {
 						timeout = t

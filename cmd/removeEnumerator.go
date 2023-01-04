@@ -317,7 +317,7 @@ func removeSingleBfsResource(ctx context.Context, urlParts azbfs.BfsURLParts, p 
 
 			for _, v := range listResp.Paths {
 				entityType := "directory"
-				if v.IsDirectory == nil || *v.IsDirectory == false {
+				if v.IsDirectory == nil || !*v.IsDirectory {
 					entityType = "file"
 				}
 

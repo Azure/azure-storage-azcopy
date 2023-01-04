@@ -57,7 +57,7 @@ func NewCalibratedCpuUsageMonitor() CPUMonitor {
 	// start it running and wait until it has self-calibrated
 	calibration := make(chan struct{})
 	go c.computationWorker(calibration)
-	_ = <-calibration
+	<-calibration
 
 	return c
 }
@@ -92,7 +92,7 @@ func (c *cpuUsageMonitor) computationWorker(calibrationDone chan struct{}) {
 	// run a separate loop to do the probes/measurements
 	go c.monitoringWorker(waitTime, durations)
 
-	_ = <-durations // discard first value, it doesn't seem very reliable
+	<-durations // discard first value, it doesn't seem very reliable
 
 	// get the next 3 and average them, as our baseline. We chose 3 somewhat arbitrarily
 	x := <-durations

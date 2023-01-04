@@ -1072,7 +1072,7 @@ func validateMetadataString(metadata string) error {
 	if err != nil {
 		return err
 	}
-	for k, _ := range metadataMap {
+	for k := range metadataMap {
 		if strings.ContainsAny(k, " !#$%^&*,<>{}|\\:.()+'\"?/") {
 			return fmt.Errorf("invalid metadata key value '%s': can't have spaces or special characters", k)
 		}
@@ -1631,7 +1631,7 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	totalKnownCount = summary.TotalTransfers
 
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
-	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
+	duration := time.Since(cca.jobStartTime) // report the total run time of the job
 
 	var computeThroughput = func() float64 {
 		// compute the average throughput for the last time interval
@@ -1864,7 +1864,7 @@ func init() {
 				if userFromTo == common.EFromTo.PipeBlob() {
 					// Case 1: PipeBlob. Check for the std input pipe
 					stdinPipeIn, err := isStdinPipeIn()
-					if stdinPipeIn == false || err != nil {
+					if !stdinPipeIn || err != nil {
 						return fmt.Errorf("fatal: failed to read from Stdin due to error: %s", err)
 					}
 					raw.src = pipeLocation

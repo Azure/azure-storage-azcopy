@@ -385,7 +385,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		_, err := common.OSStat(resource.ValueLocal())
 
 		// If wildcard is present and this isn't an existing file/folder, glob and feed the globbed list into a list enum.
-		if strings.Index(resource.ValueLocal(), "*") != -1 && err != nil {
+		if strings.Contains(resource.ValueLocal(), "*") && err != nil {
 			basePath := getPathBeforeFirstWildcard(resource.ValueLocal())
 			matches, err := filepath.Glob(resource.ValueLocal())
 

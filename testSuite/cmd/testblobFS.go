@@ -216,7 +216,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 	}
 	// numberOfFilesinSubject keeps the count of number of files of at the destination
 	numberOfFilesinSubject := int(0)
-	for continuationMarker != "" || firstListing == true {
+	for continuationMarker != "" || firstListing {
 		firstListing = false
 		continuationMarker = dResp.XMsContinuation()
 		files := dResp.Files()

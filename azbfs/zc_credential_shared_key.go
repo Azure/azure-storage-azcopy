@@ -143,7 +143,7 @@ func buildCanonicalizedHeader(headers http.Header) string {
 		ch.WriteRune(':')
 		ch.WriteString(strings.Join(cm[key], ","))
 	}
-	return string(ch.Bytes())
+	return ch.String()
 }
 
 func (f *SharedKeyCredential) buildCanonicalizedResource(u *url.URL) string {
@@ -190,5 +190,5 @@ func (f *SharedKeyCredential) buildCanonicalizedResource(u *url.URL) string {
 			cr.WriteString("\n" + paramName + ":" + strings.Join(paramValues, ","))
 		}
 	}
-	return string(cr.Bytes())
+	return cr.String()
 }

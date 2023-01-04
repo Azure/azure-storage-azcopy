@@ -363,7 +363,7 @@ func cleanBfsFile(fileURLStr string) {
 	fileURL := azbfs.NewFileURL(*u, createBlobFSPipeline(*u))
 	_, err = fileURL.Delete(ctx)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("error deleting the blob FS file, %v", err))
+		fmt.Printf("error deleting the blob FS file, %v\n", err)
 		os.Exit(1)
 	}
 }

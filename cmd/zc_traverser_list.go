@@ -92,9 +92,8 @@ func newListTraverser(parent common.ResourceString, parentType common.Location, 
 	ctx *context.Context, recursive, followSymlinks, getProperties bool, listChan chan string,
 	includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveBlobTags bool,
 	logLevel pipeline.LogLevel, cpkOptions common.CpkOptions) ResourceTraverser {
-	var traverserGenerator childTraverserGenerator
 
-	traverserGenerator = func(relativeChildPath string) (ResourceTraverser, error) {
+	traverserGenerator := func(relativeChildPath string) (ResourceTraverser, error) {
 		source := parent.Clone()
 		if parentType != common.ELocation.Local() {
 			// assume child path is not URL-encoded yet, this is consistent with the behavior of previous implementation

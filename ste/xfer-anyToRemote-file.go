@@ -81,7 +81,7 @@ func prepareDestAccountInfo(bURL azblob.BlobURL, jptm IJobPartTransferMgr, ctx c
 	}
 }
 
-//// TODO: Infer availability based upon blob size as well, for premium page blobs.
+// // TODO: Infer availability based upon blob size as well, for premium page blobs.
 func BlobTierAllowed(destTier azblob.AccessTierType) bool {
 	// If we failed to get the account info, just return true.
 	// This is because we can't infer whether it's possible or not, and the setTier operation could possibly succeed (or fail)
@@ -536,7 +536,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 			shouldCheckLength = false
 			checkLengthFailureOnReadOnlyDst.Do(func() {
 				var glcm = common.GetLifecycleMgr()
-				msg := fmt.Sprintf("Could not read destination length. If the destination is write-only, use --check-length=false on the command line.")
+				msg := "Could not read destination length. If the destination is write-only, use --check-length=false on the command line."
 				glcm.Info(msg)
 				if jptm.ShouldLog(pipeline.LogError) {
 					jptm.Log(pipeline.LogError, msg)

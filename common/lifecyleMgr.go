@@ -428,9 +428,7 @@ func (lcm *lifecycleMgr) processNoneOutput(msgToOutput outputMessage) {
 		lcm.closeFunc()
 		os.Exit(int(msgToOutput.exitCode))
 	}
-
 	// ignore all other outputs
-	return
 }
 
 func (lcm *lifecycleMgr) processJSONOutput(msgToOutput outputMessage) {
