@@ -567,7 +567,7 @@ var reverseEncodedChars = map[string]rune{
 }
 
 func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool, source bool) string {
-	loc := common.ELocation.Unknown()
+	var loc common.Location
 
 	if source {
 		loc = fromTo.From()

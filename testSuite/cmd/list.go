@@ -116,6 +116,7 @@ func listContainer(resourceUrl string, numberOfresource int64) {
 			blobName := blobInfo.Name
 			if len(searchPrefix) > 0 {
 				// strip away search prefix from the blob name.
+				// TODO: Ignore this in lint ineffassign
 				blobName = strings.Replace(blobName, searchPrefix, "", 1)
 			}
 			numberOfblobs++

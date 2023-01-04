@@ -130,7 +130,6 @@ func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor objectProc
 			}
 		}
 	}
-	return nil
 }
 
 func newGCPTraverser(rawURL *url.URL, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (*gcpTraverser, error) {

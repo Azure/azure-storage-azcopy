@@ -262,7 +262,6 @@ func getRelativePath(rootPath, filePath string) string {
 	if len(rootPath) == 0 {
 		return filePath
 	}
-	result := filePath
 
 	// replace the path separator in filepath with AZCOPY_PATH_SEPARATOR
 	// this replacement is required to handle the windows filepath
@@ -276,7 +275,7 @@ func getRelativePath(rootPath, filePath string) string {
 		scrubAway = rootPath[:strings.LastIndex(rootPath, common.AZCOPY_PATH_SEPARATOR_STRING)+1]
 	}
 
-	result = strings.Replace(filePath, scrubAway, "", 1)
+	result := strings.Replace(filePath, scrubAway, "", 1)
 
 	return result
 }

@@ -384,6 +384,8 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 		}
 	}
 
+	// TODO : Double check this
+	cancelWorkers()
 	return nil
 }
 

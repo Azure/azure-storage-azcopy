@@ -3,7 +3,6 @@ package ste
 import (
 	"context"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
@@ -282,8 +281,8 @@ func NewBFSXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 					break // Don't retry
 				}
 				if response.Response() != nil {
-					// If we're going to retry and we got a previous response, then flush its body to avoid leaking its TCP connection
-					_, _ = io.Copy(ioutil.Discard, response.Response().Body)
+					// If we're going to retry, and we got a previous response, then flush its body to avoid leaking its TCP connection
+					_, _ = io.Copy(io.Discard, response.Response().Body)
 					response.Response().Body.Close()
 				}
 				// If retrying, cancel the current per-try timeout context
@@ -455,7 +454,7 @@ func NewBlobXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 				}
 				if response.Response() != nil {
 					// If we're going to retry and we got a previous response, then flush its body to avoid leaking its TCP connection
-					_, _ = io.Copy(ioutil.Discard, response.Response().Body)
+					_, _ = io.Copy(io.Discard, response.Response().Body)
 					response.Response().Body.Close()
 				}
 				// If retrying, cancel the current per-try timeout context

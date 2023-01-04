@@ -196,7 +196,7 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 			// read all bytes.
 			blobBytesDownloaded, err := ioutil.ReadAll(get.Body(azblob.RetryReaderOptions{}))
 			if err != nil {
-				fmt.Println(fmt.Sprintf("error reading the body of blob %s downloaded and failed with error %s", blobInfo.Name, err.Error()))
+				fmt.Printf("error reading the body of blob %s downloaded and failed with error %s\n", blobInfo.Name, err.Error())
 				os.Exit(1)
 			}
 			// remove the search prefix from the blob name
@@ -258,7 +258,7 @@ func validateMetadata(expectedMetaDataString string, actualMetaData azblob.Metad
 		// iterating through each key value pair of actual metaData and comparing the key value pair in expected metadata
 		for key, value := range actualMetaData {
 			if expectedMetaData[key] != value {
-				fmt.Println(fmt.Sprintf("value of user given key %s is %s in actual data while it is %s in expected metadata", key, value, expectedMetaData[key]))
+				fmt.Printf("value of user given key %s is %s in actual data while it is %s in expected metadata\n", key, value, expectedMetaData[key])
 				return false
 			}
 		}
@@ -323,7 +323,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 	if azblob.AccessTierType(testBlobCmd.BlobTier) != azblob.AccessTierNone {
 		blobProperties, err := pageBlobUrl.GetProperties(testCtx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 		if err != nil {
-			fmt.Println(fmt.Sprintf("error getting the properties of the blob. failed with error %s", err.Error()))
+			fmt.Printf("error getting the properties of the blob. failed with error %s\n", err.Error())
 			os.Exit(1)
 		}
 		// If the blob tier does not match the expected blob tier.

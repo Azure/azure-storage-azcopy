@@ -110,5 +110,5 @@ func newGCPServiceTraverser(rawURL *url.URL, ctx context.Context, getProperties 
 
 	t.gcpURL = gcpURLParts
 	t.gcpClient, err = common.CreateGCPClient(t.ctx)
-	return t, nil
+	return t, err
 }

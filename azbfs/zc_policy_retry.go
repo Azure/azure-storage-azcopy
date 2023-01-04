@@ -3,7 +3,6 @@ package azbfs
 import (
 	"context"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
@@ -254,6 +253,7 @@ func NewRetryPolicyFactory(o RetryOptions) pipeline.Factory {
 					action = "Retry: Secondary URL returned 404"
 				case err != nil:
 					// NOTE: Protocol Responder returns non-nil if REST API returns invalid status code for the invoked operation
+					// TODO: AAdd ignore for this error SA1019
 					if netErr, ok := err.(net.Error); ok && (netErr.Temporary() || netErr.Timeout()) {
 						action = "Retry: net.Error and Temporary() or Timeout()"
 					} else if err == io.ErrUnexpectedEOF {
@@ -284,7 +284,7 @@ func NewRetryPolicyFactory(o RetryOptions) pipeline.Factory {
 				}
 				if response != nil && response.Response() != nil {
 					// If we're going to retry and we got a previous response, then flush its body to avoid leaking its TCP connection
-					_, _ = io.Copy(ioutil.Discard, response.Response().Body)
+					_, _ = io.Copy(io.Discard, response.Response().Body)
 					response.Response().Body.Close()
 				}
 				// If retrying, cancel the current per-try timeout context

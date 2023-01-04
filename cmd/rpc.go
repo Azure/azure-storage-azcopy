@@ -56,7 +56,7 @@ func inprocSend(rpcCmd common.RpcCmd, requestData interface{}, responseData inte
 		*(responseData.(*common.ListJobTransfersResponse)) = jobsAdmin.ListJobTransfers(requestData.(common.ListJobTransfersRequest))
 
 	case common.ERpcCmd.PauseJob():
-		responseData = jobsAdmin.CancelPauseJobOrder(requestData.(common.JobID), common.EJobStatus.Paused())
+		*(responseData.(*common.CancelPauseResumeResponse)) = jobsAdmin.CancelPauseJobOrder(requestData.(common.JobID), common.EJobStatus.Paused())
 
 	case common.ERpcCmd.CancelJob():
 		*(responseData.(*common.CancelPauseResumeResponse)) = jobsAdmin.CancelPauseJobOrder(requestData.(common.JobID), common.EJobStatus.Cancelling())

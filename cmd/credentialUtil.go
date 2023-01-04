@@ -342,6 +342,7 @@ func oAuthTokenExists() (oauthTokenExists bool) {
 
 	if hasCachedToken, err := uotm.HasCachedToken(); hasCachedToken {
 		oauthTokenExists = true
+		// TODO : Add lint ignore for this SA9003
 	} else if err != nil {
 		// Log the error if fail to get cached token, as these are unhandled errors, and should not influence the logic flow.
 		// Uncomment for debugging.

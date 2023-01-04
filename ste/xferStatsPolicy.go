@@ -25,7 +25,7 @@ import (
 	"context"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -206,9 +206,9 @@ func transparentlyReadBody(r *http.Response) string {
 	if r.Body == http.NoBody {
 		return ""
 	}
-	buf, _ := ioutil.ReadAll(r.Body)                // error responses are short fragments of XML, so safe to read all
-	_ = r.Body.Close()                              // must close the real body
-	r.Body = ioutil.NopCloser(bytes.NewReader(buf)) // replace it with something that will read the same data we just read
+	buf, _ := io.ReadAll(r.Body)                // error responses are short fragments of XML, so safe to read all
+	_ = r.Body.Close()                          // must close the real body
+	r.Body = io.NopCloser(bytes.NewReader(buf)) // replace it with something that will read the same data we just read
 
 	return string(buf) // copy to string
 }

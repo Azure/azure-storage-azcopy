@@ -460,7 +460,7 @@ func createGCPObject(objectURLStr string, objectSize uint32, o gcpUtils.ObjectAt
 		os.Exit(1)
 	}
 
-	gcpClient, err := createGCPClientWithGCSSDK()
+	gcpClient, _ := createGCPClientWithGCSSDK()
 
 	randomString := createStringWithRandomChars(int(objectSize))
 	if o.ContentType == "" {
@@ -470,7 +470,7 @@ func createGCPObject(objectURLStr string, objectSize uint32, o gcpUtils.ObjectAt
 	obj := gcpClient.Bucket(gcpURLParts.BucketName).Object(gcpURLParts.ObjectKey)
 	wc := obj.NewWriter(context.Background())
 	reader := strings.NewReader(randomString)
-	_, err = io.Copy(wc, reader)
+	_, _ = io.Copy(wc, reader)
 	err = wc.Close()
 
 	_, err = obj.Update(context.Background(), o)
