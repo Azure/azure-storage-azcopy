@@ -724,7 +724,7 @@ func (e *CopyEnumerator) enumerate() (err error) {
 // -------------------------------------- Helper Funcs -------------------------------------- \\
 
 func passedFilters(filters []ObjectFilter, storedObject StoredObject) bool {
-	if filters != nil && len(filters) > 0 {
+	if len(filters) > 0 {
 		// loop through the filters, if any of them fail, then return false
 		for _, filter := range filters {
 			msg, supported := filter.DoesSupportThisOS()

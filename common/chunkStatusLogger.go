@@ -310,10 +310,9 @@ func (csl *chunkStatusLogger) FlushLog() {
 
 	// In order to be idempotent, we don't close any channel here, we just flush it
 
-	csl.unsavedEntries <- nil // tell writer that it it must flush, then wait until it has done so
-	select {
-	case <-csl.flushDone:
-	}
+	csl.unsavedEntries <- nil // tell writer that it must flush, then wait until it has done so
+
+	<-csl.flushDone
 }
 
 // CloseLogger close the chunklogger thread.

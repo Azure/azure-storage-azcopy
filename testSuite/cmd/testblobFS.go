@@ -311,7 +311,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 	// If the number of files inside the directories locally and remote
 	// is not same, validation fails.
 	if numberOFFilesInObject != numberOfFilesinSubject {
-		fmt.Println(fmt.Sprintf("validation failed since there is difference in the number of files in source and destination"))
+		fmt.Println("validation failed since there is difference in the number of files in source and destination")
 		os.Exit(1)
 	}
 	fmt.Println(fmt.Sprintf("successfully validated the source %s and destination %s", tbfsc.Object, tbfsc.Subject))

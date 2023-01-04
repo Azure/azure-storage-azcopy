@@ -189,7 +189,7 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 				0, *size, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
 
 			if err != nil {
-				fmt.Println(fmt.Sprintf("error downloading the blob %s", blobInfo.Name))
+				fmt.Printf("error downloading the blob %s\n", blobInfo.Name)
 				os.Exit(1)
 			}
 

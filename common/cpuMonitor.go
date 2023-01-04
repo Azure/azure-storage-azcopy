@@ -140,10 +140,7 @@ func (c *cpuUsageMonitor) monitoringWorker(waitTime time.Duration, d chan time.D
 	for {
 		start := time.Now()
 
-		select {
-		case <-time.After(waitTime):
-			// noop
-		}
+		<-time.After(waitTime) // noop
 
 		duration := time.Since(start)
 		// how much longer than expected did it take for us to wake up?
