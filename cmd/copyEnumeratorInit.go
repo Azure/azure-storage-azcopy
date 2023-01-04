@@ -31,7 +31,7 @@ type BucketToContainerNameResolver interface {
 func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) (*CopyEnumerator, error) {
 	var traverser ResourceTraverser
 
-	srcCredInfo := common.CredentialInfo{}
+	var srcCredInfo common.CredentialInfo
 	var isPublic bool
 	var err error
 
@@ -452,7 +452,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	}
 	existingContainers[containerName] = true
 
-	dstCredInfo := common.CredentialInfo{}
+	var dstCredInfo common.CredentialInfo
 
 	// 3minutes is enough time to list properties of a container, and create new if it does not exist.
 	ctx, _ := context.WithTimeout(parentCtx, time.Minute*3)

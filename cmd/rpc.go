@@ -55,7 +55,6 @@ func inprocSend(rpcCmd common.RpcCmd, requestData interface{}, responseData inte
 	case common.ERpcCmd.ListJobTransfers():
 		*(responseData.(*common.ListJobTransfersResponse)) = jobsAdmin.ListJobTransfers(requestData.(common.ListJobTransfersRequest))
 
-	
 	case common.ERpcCmd.PauseJob():
 		responseData = jobsAdmin.CancelPauseJobOrder(requestData.(common.JobID), common.EJobStatus.Paused())
 
@@ -98,6 +97,9 @@ func (httpClient *HTTPClient) send(rpcCmd common.RpcCmd, requestData interface{}
 		return fmt.Errorf("error marshalling request payload for command type %q", rpcCmd.String())
 	}
 	request, err := http.NewRequest("POST", httpClient.url, bytes.NewReader(requestJson))
+	if err != nil {
+		return err
+	}
 	// adding the commandType as a query param
 	q := request.URL.Query()
 	q.Add("commandType", rpcCmd.String())

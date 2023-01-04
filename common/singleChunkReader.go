@@ -454,7 +454,7 @@ func (cr *singleChunkReader) GetPrologueState() PrologueState {
 	// unuse before Seek, since Seek is public
 	cr.unuse()
 	// MUST re-wind, so that the bytes we read will get transferred too!
-	_, err = cr.Seek(0, io.SeekStart)
+	_, _ = cr.Seek(0, io.SeekStart)
 	return PrologueState{LeadingBytes: leadingBytes}
 }
 

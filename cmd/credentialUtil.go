@@ -90,7 +90,7 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 			glcm.Error("Invalid Auto-login type specified.")
 			return
 		}
-		
+
 		if tenantID := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.TenantID()); tenantID != "" {
 			lca.tenantID = tenantID
 		}
@@ -490,10 +490,9 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 			return fmt.Errorf("Google Application Credentials to %s is not valid", resourceType.String())
 		}
 
-		host := "<unparseable url>"
 		u, err := url.Parse(resource)
 		if err == nil {
-			host = u.Host
+			host := u.Host
 			_, err := common.NewGCPURLParts(*u)
 			if err != nil {
 				return fmt.Errorf("GCP authentication to %s is not currently supported", host)

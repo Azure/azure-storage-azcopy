@@ -101,7 +101,7 @@ func (t *BlobFSAccountTraverser) listContainers() ([]string, error) {
 
 func (t *BlobFSAccountTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 	// listContainers will return the cached filesystem list if filesystems have already been listed by this traverser.
-	fsList, err := t.listContainers()
+	fsList, _ := t.listContainers()
 
 	for _, v := range fsList {
 		fileSystemURL := t.accountURL.NewFileSystemURL(v).URL()
@@ -109,7 +109,7 @@ func (t *BlobFSAccountTraverser) Traverse(preprocessor objectMorpher, processor 
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
-		err = fileSystemTraverser.Traverse(preprocessorForThisChild, processor, filters)
+		err := fileSystemTraverser.Traverse(preprocessorForThisChild, processor, filters)
 
 		if err != nil {
 			WarnStdoutAndScanningLog(fmt.Sprintf("failed to list files in filesystem %s: %s", v, err))
