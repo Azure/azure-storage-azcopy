@@ -1990,13 +1990,13 @@ func init() {
 
 	// permanently hidden
 	// Hide the list-of-files flag since it is implemented only for Storage Explorer.
-	cpCmd.PersistentFlags().MarkHidden("list-of-files")
-	cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
+	_ = cpCmd.PersistentFlags().MarkHidden("list-of-files")
+	_ = cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
 
 	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
 	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")
 	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "Legacy exclude param. DO NOT USE")
-	cpCmd.PersistentFlags().MarkHidden("include")
+	_ = cpCmd.PersistentFlags().MarkHidden("include")
 	cpCmd.PersistentFlags().MarkHidden("exclude")
 
 	// Hide the flush-threshold flag since it is implemented only for CI.

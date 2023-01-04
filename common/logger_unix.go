@@ -1,4 +1,6 @@
+//go:build linux || darwin
 // +build linux darwin
+
 // Copyright Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,29 +25,28 @@ package common
 
 import (
 	"fmt"
-	"runtime"
 	"log/syslog"
+	"runtime"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
-//////////////////////////////////////////
+// ////////////////////////////////////////
 type sysLogger struct {
 	// minimum loglevel represents the minimum severity of log messages which can be logged to Job Log file.
 	// any message with severity higher than this will be ignored.
 	jobID             JobID
 	minimumLevelToLog pipeline.LogLevel // The maximum customer-desired log level for this job
-	writer            *syslog.Writer      // The Job's logger
+	writer            *syslog.Writer    // The Job's logger
 	logSuffix         string
 	sanitizer         pipeline.LogSanitizer
 }
-
 
 func NewSysLogger(jobID JobID, minimumLevelToLog LogLevel, logSuffix string) ILoggerResetable {
 	return &sysLogger{
 		jobID:             jobID,
 		minimumLevelToLog: minimumLevelToLog.ToPipelineLogLevel(),
-		logSuffix:         logSuffix, 
+		logSuffix:         logSuffix,
 		sanitizer:         NewAzCopyLogSanitizer(),
 	}
 }
@@ -53,16 +54,16 @@ func NewSysLogger(jobID JobID, minimumLevelToLog LogLevel, logSuffix string) ILo
 func (sl *sysLogger) OpenLog() {
 	if sl.minimumLevelToLog == pipeline.LogNone {
 		return
-	    }
+	}
 	writer, err := syslog.New(syslog.LOG_NOTICE, fmt.Sprintf("%s %s", sl.logSuffix, sl.jobID.String()))
 	PanicIfErr(err)
 
 	sl.writer = writer
 	// Log the Azcopy Version
-	sl.writer.Notice("AzcopyVersion " + AzcopyVersion)
+	_ = sl.writer.Notice("AzcopyVersion " + AzcopyVersion)
 	// Log the OS Environment and OS Architecture
-	sl.writer.Notice("OS-Environment " + runtime.GOOS)
-	sl.writer.Notice("OS-Architecture " + runtime.GOARCH)
+	_ = sl.writer.Notice("OS-Environment " + runtime.GOOS)
+	_ = sl.writer.Notice("OS-Architecture " + runtime.GOARCH)
 }
 
 func (sl *sysLogger) MinimumLogLevel() pipeline.LogLevel {
@@ -85,9 +86,8 @@ func (sl *sysLogger) CloseLog() {
 	sl.writer.Close()
 }
 
-
 func (sl *sysLogger) Panic(err error) {
-	sl.writer.Crit(err.Error())  // We do NOT panic here as the app would terminate;
+	_ = sl.writer.Crit(err.Error()) // We do NOT panic here as the app would terminate;
 	//we just log it. We should never reach this line of code!
 }
 
@@ -103,16 +103,16 @@ func (sl *sysLogger) Log(loglevel pipeline.LogLevel, msg string) {
 	case pipeline.LogNone:
 		//nothing to do
 	case pipeline.LogFatal:
-		w.Emerg(msg)
+		_ = w.Emerg(msg)
 	case pipeline.LogPanic:
-		w.Crit(msg)
+		_ = w.Crit(msg)
 	case pipeline.LogError:
-		w.Err(msg)
+		_ = w.Err(msg)
 	case pipeline.LogWarning:
-		w.Warning(msg)
+		_ = w.Warning(msg)
 	case pipeline.LogInfo:
-		w.Info(msg)
+		_ = w.Info(msg)
 	case pipeline.LogDebug:
-		w.Debug(msg)
+		_ = w.Debug(msg)
 	}
 }

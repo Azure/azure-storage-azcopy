@@ -134,7 +134,7 @@ func (o RetryOptions) calcDelay(try int32) time.Duration { // try is >=1; never 
 // Note: forked from the standard package url.go
 // The content is exactly the same but the spaces are encoded as %20 instead of +
 // TODO: remove after the service fix
-// Encode encodes the values into ``URL encoded'' form
+// Encode encodes the values into “URL encoded” form
 // ("bar=baz&foo=quux") sorted by key.
 func alternativeEncode(v url.Values) string {
 	if v == nil {
@@ -284,7 +284,7 @@ func NewRetryPolicyFactory(o RetryOptions) pipeline.Factory {
 				}
 				if response != nil && response.Response() != nil {
 					// If we're going to retry and we got a previous response, then flush its body to avoid leaking its TCP connection
-					io.Copy(ioutil.Discard, response.Response().Body)
+					_, _ = io.Copy(ioutil.Discard, response.Response().Body)
 					response.Response().Body.Close()
 				}
 				// If retrying, cancel the current per-try timeout context

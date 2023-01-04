@@ -108,9 +108,10 @@ func newAzcopyHTTPClient() *http.Client {
 }
 
 // GetTokenInfo gets token info, it follows rule:
-// 1. If there is token passed from environment variable(note this is only for testing purpose),
-//    use token passed from environment variable.
-// 2. Otherwise, try to get token from cache.
+//  1. If there is token passed from environment variable(note this is only for testing purpose),
+//     use token passed from environment variable.
+//  2. Otherwise, try to get token from cache.
+//
 // This method either successfully return token, or return error.
 func (uotm *UserOAuthTokenManager) GetTokenInfo(ctx context.Context) (*OAuthTokenInfo, error) {
 	if uotm.stashedInfo != nil {
@@ -879,7 +880,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 	}
 
 	defer func() { // resp and Body should not be nil
-		io.Copy(ioutil.Discard, resp.Body)
+		_, _ = io.Copy(ioutil.Discard, resp.Body)
 		resp.Body.Close()
 	}()
 

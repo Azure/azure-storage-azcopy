@@ -59,7 +59,7 @@ func CreateDirectoryIfNotExist(directory string, tracker FolderCreationTracker) 
 		// stat errors can be present in write-only scenarios, when the directory isn't present, etc.
 		// as a result, we care more about the mkdir error than the stat error, because that's the tell.
 		// first make sure the parent directory exists but we ignore any error that comes back
-		CreateParentDirectoryIfNotExist(directory, tracker)
+		_ = CreateParentDirectoryIfNotExist(directory, tracker)
 
 		// then create the directory
 		mkDirErr := os.Mkdir(directory, os.ModePerm)

@@ -366,7 +366,7 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinat
 	// are include in the result
 	files := func(prefix, ext string) []os.FileInfo {
 		var files []os.FileInfo
-		filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
+		_ = filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
 			if !fileInfo.IsDir() && fileInfo.Size() != 0 && strings.HasPrefix(fileInfo.Name(), prefix) && strings.HasSuffix(fileInfo.Name(), ext) {
 				files = append(files, fileInfo)
 			}
@@ -403,7 +403,7 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 	// Get all the Job part plan files in the plan directory
 	files := func(ext string) []os.FileInfo {
 		var files []os.FileInfo
-		filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
+		_ = filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
 			if !fileInfo.IsDir() && fileInfo.Size() != 0 && strings.HasSuffix(fileInfo.Name(), ext) {
 				files = append(files, fileInfo)
 			}
@@ -430,7 +430,7 @@ func (ja *jobsAdmin) ListJobs(givenStatus common.JobStatus) common.ListJobsRespo
 	ret := common.ListJobsResponse{JobIDDetails: []common.JobIDDetails{}}
 	files := func(ext string) []os.FileInfo {
 		var files []os.FileInfo
-		filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
+		_ = filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
 			if !fileInfo.IsDir() && strings.HasSuffix(fileInfo.Name(), ext) {
 				files = append(files, fileInfo)
 			}
@@ -453,7 +453,7 @@ func (ja *jobsAdmin) ListJobs(givenStatus common.JobStatus) common.ListJobsRespo
 		if givenStatus == common.EJobStatus.All() || givenStatus == jpph.JobStatus() {
 			ret.JobIDDetails = append(ret.JobIDDetails,
 				common.JobIDDetails{JobId: jobID, CommandString: jpph.CommandString(),
-				StartTime: jpph.StartTime, JobStatus: jpph.JobStatus()})
+					StartTime: jpph.StartTime, JobStatus: jpph.JobStatus()})
 		}
 
 		mmf.Unmap()
@@ -582,7 +582,7 @@ func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint3
 	a := ste.NewPerformanceAdvisor(p, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency, dir, averageBytesPerFile, isToAzureFiles)
 	return a.GetAdvice()
 }
-	
+
 //Structs for messageHandler
 
 /* PerfAdjustment message. */
@@ -594,7 +594,7 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 	toBitsPerSec := func(megaBitsPerSec int64) int64 {
 		return megaBitsPerSec * 1000 * 1000 / 8
 	}
-	
+
 	const minIntervalBetweenPerfAdjustment = time.Minute
 	lastPerfAdjustTime := time.Now().Add(-2 * minIntervalBetweenPerfAdjustment)
 	var err error
@@ -602,30 +602,30 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 	for {
 		msg := <-inputChan
 		var msgType common.LCMMsgType
-		msgType.Parse(msg.Req.MsgType) // MsgType is already verified by LCM
+		_ = msgType.Parse(msg.Req.MsgType) // MsgType is already verified by LCM
 		switch msgType {
 		case common.ELCMMsgType.PerformanceAdjustment():
 			var resp common.PerfAdjustmentResp
 			var perfAdjustmentReq common.PerfAdjustmentReq
 
 			if time.Since(lastPerfAdjustTime) < minIntervalBetweenPerfAdjustment {
-				err = fmt.Errorf("Performance Adjustment already in progress. Please try after " + 
-						lastPerfAdjustTime.Add(minIntervalBetweenPerfAdjustment).Format(time.RFC3339))
+				err = fmt.Errorf("Performance Adjustment already in progress. Please try after " +
+					lastPerfAdjustTime.Add(minIntervalBetweenPerfAdjustment).Format(time.RFC3339))
 			}
-			
+
 			if e := json.Unmarshal([]byte(msg.Req.Value), &perfAdjustmentReq); e != nil {
 				err = fmt.Errorf("parsing %s failed with %s", msg.Req.Value, e.Error())
 			}
 
 			if perfAdjustmentReq.Throughput < 0 {
 				err = fmt.Errorf("invalid value %d for cap-mbps. cap-mpbs should be greater than 0",
-						      perfAdjustmentReq.Throughput)
+					perfAdjustmentReq.Throughput)
 			}
 
 			if err == nil {
 				lastPerfAdjustTime = time.Now()
 				ja.UpdateTargetBandwidth(toBitsPerSec(perfAdjustmentReq.Throughput))
-				
+
 				resp.Status = true
 				resp.AdjustedThroughPut = perfAdjustmentReq.Throughput
 				resp.NextAdjustmentAfter = lastPerfAdjustTime.Add(minIntervalBetweenPerfAdjustment)
@@ -637,11 +637,11 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 				resp.Err = err.Error()
 			}
 
-			msg.SetResponse(&common.LCMMsgResp {
+			msg.SetResponse(&common.LCMMsgResp{
 				TimeStamp: time.Now(),
-				MsgType: msg.Req.MsgType,
-				Value: resp,
-				Err: err,
+				MsgType:   msg.Req.MsgType,
+				Value:     resp,
+				Err:       err,
 			})
 
 			msg.Reply()
@@ -660,7 +660,7 @@ type jobIDToJobMgr struct {
 	nocopy common.NoCopy
 	lock   sync.RWMutex
 	m      map[common.JobID]ste.IJobMgr
-} 
+}
 
 func newJobIDToJobMgr() jobIDToJobMgr {
 	return jobIDToJobMgr{m: make(map[common.JobID]ste.IJobMgr)}

@@ -58,7 +58,7 @@ func validateSeekableStreamAt0AndGetCount(body io.ReadSeeker) int64 {
 	if err != nil {
 		panic("failed to seek stream")
 	}
-	body.Seek(0, io.SeekStart)
+	_, _ = body.Seek(0, io.SeekStart)
 	return count
 }
 
