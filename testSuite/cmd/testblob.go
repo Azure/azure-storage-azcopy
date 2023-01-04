@@ -328,7 +328,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 		}
 		// If the blob tier does not match the expected blob tier.
 		if !strings.EqualFold(blobProperties.AccessTier(), testBlobCmd.BlobTier) {
-			fmt.Println(fmt.Sprintf("Access blob tier type %s does not match the expected %s tier type", blobProperties.AccessTier(), testBlobCmd.BlobTier))
+			fmt.Printf("Access blob tier type %s does not match the expected %s tier type\n", blobProperties.AccessTier(), testBlobCmd.BlobTier)
 			os.Exit(1)
 		}
 		// Closing the blobProperties response body.
@@ -462,7 +462,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 	sourceSas := testBlobCmd.Subject
 	sourceURL, err := url.Parse(sourceSas)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("Error parsing the blob url source %s", testBlobCmd.Object))
+		fmt.Printf("Error parsing the blob url source %s\n", testBlobCmd.Object)
 		os.Exit(1)
 	}
 
@@ -499,7 +499,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 	if azblob.AccessTierType(testBlobCmd.BlobTier) != azblob.AccessTierNone {
 		blobProperties, err := blobUrl.GetProperties(testCtx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
 		if err != nil {
-			fmt.Println(fmt.Sprintf("error getting the blob properties. Failed with error %s", err.Error()))
+			fmt.Printf("error getting the blob properties. Failed with error %s\n", err.Error())
 			os.Exit(1)
 		}
 		// Match the Access Tier Type with Expected Tier Type.

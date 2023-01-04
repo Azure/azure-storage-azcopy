@@ -25,7 +25,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -111,7 +111,7 @@ func (httpClient *HTTPClient) send(rpcCmd common.RpcCmd, requestData interface{}
 	}
 
 	// Read response data, deserialize it and return it (via out responseData parameter) & error
-	responseJson, err := ioutil.ReadAll(response.Body)
+	responseJson, err := io.ReadAll(response.Body)
 	response.Body.Close()
 	if err != nil {
 		return fmt.Errorf("error reading response for the request")

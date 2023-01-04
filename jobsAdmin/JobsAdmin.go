@@ -465,7 +465,7 @@ func (ja *jobsAdmin) ListJobs(givenStatus common.JobStatus) common.ListJobsRespo
 func (ja *jobsAdmin) SetConcurrencySettingsToAuto() {
 	// Setting initial pool size to 4 and max pool size to 3,000
 	ja.concurrency.InitialMainPoolSize = 4
-	ja.concurrency.MaxMainPoolSize = &ste.ConfiguredInt{3000, false, common.EEnvironmentVariable.ConcurrencyValue().Name, "auto-tuning limit"}
+	ja.concurrency.MaxMainPoolSize = &ste.ConfiguredInt{Value: 3000, IsUserSpecified: false, EnvVarName: common.EEnvironmentVariable.ConcurrencyValue().Name, DefaultSourceDesc: "auto-tuning limit"}
 
 	// recreate the concurrency tuner.
 	// Tuner isn't called until the first job part is scheduled for transfer, so it is safe to update it before that.

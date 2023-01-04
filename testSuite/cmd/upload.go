@@ -146,7 +146,7 @@ func (u *testUploader) uploadToGCP() {
 		}
 		obj := gcpClient.Bucket(gcpURLPartsForFile.BucketName).Object(gcpURLPartsForFile.ObjectKey)
 		wc := obj.NewWriter(context.Background())
-		_, err = io.Copy(wc, f)
+		_, _ = io.Copy(wc, f)
 		err = wc.Close()
 		if err != nil {
 			return err

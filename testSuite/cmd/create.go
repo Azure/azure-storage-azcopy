@@ -471,7 +471,7 @@ func createGCPObject(objectURLStr string, objectSize uint32, o gcpUtils.ObjectAt
 	wc := obj.NewWriter(context.Background())
 	reader := strings.NewReader(randomString)
 	_, _ = io.Copy(wc, reader)
-	err = wc.Close()
+	_ = wc.Close()
 
 	_, err = obj.Update(context.Background(), o)
 	if err != nil {
