@@ -44,9 +44,11 @@ var validCredTypesPerLocation = map[common.Location][]common.CredentialType{
 	common.ELocation.GCP():     {common.ECredentialType.GoogleAppCredentials()},
 }
 
+//nolint:unused
 var allCredentialTypes []common.CredentialType = nil
 
 // var oAuthOnly = []common.CredentialType{common.ECredentialType.OAuthToken()}
+//nolint:unused
 var anonymousAuthOnly = []common.CredentialType{common.ECredentialType.Anonymous()}
 
 func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredentialTypesSrc, requestedCredentialTypesDst []common.CredentialType, accountTypes []AccountType) [][2]common.CredentialType {

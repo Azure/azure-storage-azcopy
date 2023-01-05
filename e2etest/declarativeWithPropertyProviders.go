@@ -33,6 +33,7 @@ import (
 // This is the main property provider, and the only one most tests will ever need.
 // For ease of use, and conciseness in the tests, the members of this struct are NOT pointers.
 // Instead, default values in these structs are mapped to nils, inside the createObjectProperties method.
+//nolint:unused
 type with struct {
 	size string // uses our standard K, M, G suffix
 
@@ -55,10 +56,12 @@ type with struct {
 	cpkByValue         bool
 }
 
+//nolint:unused
 func (with) appliesToCreation() bool {
 	return true
 }
 
+//nolint:unused
 func (with) appliesToVerification() bool {
 	return true
 }
@@ -187,11 +190,13 @@ func (createOnly) appliesToVerification() bool {
 ////
 
 // Use verifyOnly if you need to specify some properties that should NOT be applied to the file when it is created,
-// but should be present on it afte) the transfer
+// but should be present on it after) the transfer
+//nolint:unused
 type verifyOnly struct {
 	with
 }
 
+//nolint:unused
 func (verifyOnly) appliesToCreation() bool {
 	return false
 }
@@ -207,10 +212,12 @@ func (withDirStubMetadata) appliesToCreation() bool {
 	return true
 }
 
+//nolint:unused
 func (withDirStubMetadata) appliesToVerification() bool {
 	return true // since IF we ever do move these stubs, we expect them to retain their stub metadata
 }
 
+//nolint:unused
 func (withDirStubMetadata) createObjectProperties() *objectProperties {
 	m := map[string]string{"hdi_isfolder": "true"} // special flag that says this file is a stub
 	size := int64(0)
@@ -233,6 +240,7 @@ type withError struct {
 	msg string
 }
 
+//nolint:unused
 func (withError) appliesToCreation() bool {
 	return false
 }
