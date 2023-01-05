@@ -90,7 +90,7 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 			glcm.Error("Invalid Auto-login type specified.")
 			return
 		}
-		
+
 		if tenantID := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.TenantID()); tenantID != "" {
 			lca.tenantID = tenantID
 		}
@@ -470,7 +470,7 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 		// something like https://someApi.execute-api.someRegion.amazonaws.com is AWS but is a customer-
 		// written code, not S3.
 		ok := false
-		host := "<unparseable url>"
+		host := "<unparsable url>"
 		u, err := url.Parse(resource)
 		if err == nil {
 			host = u.Host
@@ -483,14 +483,14 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 
 		if !ok {
 			return fmt.Errorf(
-				"s3 authentication to %s is not currently suported in AzCopy", host)
+				"s3 authentication to %s is not currently supported in AzCopy", host)
 		}
 	case common.ECredentialType.GoogleAppCredentials():
 		if resourceType != common.ELocation.GCP() {
 			return fmt.Errorf("Google Application Credentials to %s is not valid", resourceType.String())
 		}
 
-		host := "<unparseable url>"
+		host := "<unparsable url>"
 		u, err := url.Parse(resource)
 		if err == nil {
 			host = u.Host

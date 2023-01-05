@@ -712,13 +712,15 @@ func (jm *jobMgr) CloseLog() {
 
 // DeferredCleanupJobMgr cleanup all the jobMgr resources.
 // Warning: DeferredCleanupJobMgr should be called from JobMgrCleanup().
-//          As this function neither threadsafe nor idempotient. So if DeferredCleanupJobMgr called
-//          mulitple times, it may stuck as receiving channel already closed. Where as JobMgrCleanup()
-//          safe in that sense it will do the cleanup only once.
+//
+//	As this function neither threadsafe nor idempotient. So if DeferredCleanupJobMgr called
+//	multiple times, it may stuck as receiving channel already closed. Where as JobMgrCleanup()
+//	safe in that sense it will do the cleanup only once.
 //
 // TODO: Add JobsAdmin reference to each JobMgr so that in any circumstances JobsAdmin should not freed,
-//       while jobMgr running. Whereas JobsAdmin store number JobMgr running  at any time.
-//       At that point DeferredCleanupJobMgr() will delete jobMgr from jobsAdmin map.
+//
+//	while jobMgr running. Whereas JobsAdmin store number JobMgr running  at any time.
+//	At that point DeferredCleanupJobMgr() will delete jobMgr from jobsAdmin map.
 func (jm *jobMgr) DeferredCleanupJobMgr() {
 	jm.Log(pipeline.LogInfo, "DeferredCleanupJobMgr called")
 
@@ -956,7 +958,7 @@ func (jm *jobMgr) scheduleJobParts() {
 		case jobPart := <-jm.xferChannels.partsChannel:
 
 			if !startedPoolSizer {
-				// spin up a GR to co-ordinate dynamic sizing of the main pool
+				// spin up a GR to coordinate dynamic sizing of the main pool
 				// It will automatically spin up the right number of chunk processors
 				go jm.poolSizer()
 				startedPoolSizer = true

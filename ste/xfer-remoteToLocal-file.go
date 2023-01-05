@@ -353,7 +353,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 			}
 
 			// check if we need to rename back to original name. At this point, we're sure the file is completely
-			// downloaded and not corrupt. Infact, post this point we should only log errors and
+			// downloaded and not corrupt. In fact, post this point we should only log errors and
 			// not fail the transfer.
 			renameNecessary := !strings.EqualFold(info.getDownloadPath(), info.Destination) &&
 				!strings.EqualFold(info.Destination, common.Dev_Null)
@@ -472,7 +472,7 @@ func tryDeleteFile(info TransferInfo, jptm IJobPartTransferMgr) {
 }
 
 // Returns the path of file to be downloaded. If we want to
-// download to a temp path we return a temp paht in format
+// download to a temp path we return a temp path in format
 // /actual/parent/path/.azDownload-<jobID>-<actualFileName>
 func (info *TransferInfo) getDownloadPath() string {
 	if common.GetLifecycleMgr().DownloadToTempPath() {

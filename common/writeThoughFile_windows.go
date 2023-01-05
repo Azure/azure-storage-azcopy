@@ -223,7 +223,7 @@ func OpenWithWriteThroughSetting(path string, mode int, perm uint32, writeThroug
 	return h, e
 }
 
-// SetBackupMode optionally enables special priviledges on Windows.
+// SetBackupMode optionally enables special privileges on Windows.
 // For a description, see https://docs.microsoft.com/en-us/windows-hardware/drivers/ifs/privileges
 // and https://superuser.com/a/1430372
 // and run this: whoami /priv
@@ -233,7 +233,9 @@ func OpenWithWriteThroughSetting(path string, mode int, perm uint32, writeThroug
 // 1. Uploading data where normal file system ACLs would prevent AzCopy from reading it. Simply run
 // AzCopy as an account that has SeBackupPrivilege (typically an administrator account using
 // an elevated command prompt, or a member of the "Backup Operators" group)
-//  and set the AzCopy flag for this routine to be called.
+//
+//	and set the AzCopy flag for this routine to be called.
+//
 // 2. Downloading where you are preserving SMB permissions, and some of the permissions include
 // owners that are NOT the same account as the one running AzCopy.  Again, run AzCopy
 // from a elevated admin command prompt (or as a member of the "Backup Operators" group),

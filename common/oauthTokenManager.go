@@ -108,9 +108,10 @@ func newAzcopyHTTPClient() *http.Client {
 }
 
 // GetTokenInfo gets token info, it follows rule:
-// 1. If there is token passed from environment variable(note this is only for testing purpose),
-//    use token passed from environment variable.
-// 2. Otherwise, try to get token from cache.
+//  1. If there is token passed from environment variable(note this is only for testing purpose),
+//     use token passed from environment variable.
+//  2. Otherwise, try to get token from cache.
+//
 // This method either successfully return token, or return error.
 func (uotm *UserOAuthTokenManager) GetTokenInfo(ctx context.Context) (*OAuthTokenInfo, error) {
 	if uotm.stashedInfo != nil {
@@ -508,7 +509,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 // getCachedTokenInfo get a fresh token from local disk cache.
 // If access token is expired, it will refresh the token.
 // If refresh token is expired, the method will fail and return failure reason.
-// Fresh token is persisted if acces token or refresh token is changed.
+// Fresh token is persisted if access token or refresh token is changed.
 func (uotm *UserOAuthTokenManager) getCachedTokenInfo(ctx context.Context) (*OAuthTokenInfo, error) {
 	hasToken, err := uotm.credCache.HasCachedToken()
 	if err != nil {
@@ -592,7 +593,7 @@ func (uotm *UserOAuthTokenManager) getTokenInfoFromEnvVar(ctx context.Context) (
 	}
 
 	// Remove the env var after successfully fetching once,
-	// in case of env var is further spreading into child processes unexpectly.
+	// in case of env var is further spreading into child processes unexpectedly.
 	lcm.ClearEnvironmentVariable(EEnvironmentVariable.OAuthTokenInfo())
 
 	tokenInfo, err := jsonToTokenInfo([]byte(rawToken))

@@ -435,7 +435,7 @@ func (AzureFileParentDirCreator) verifyAndHandleCreateErrors(err error) error {
 	return nil
 }
 
-// splitWithoutToken splits string with a given token, and returns splitted results without token.
+// splitWithoutToken splits string with a given token, and returns split results without token.
 func (AzureFileParentDirCreator) splitWithoutToken(str string, token rune) []string {
 	return strings.FieldsFunc(str, func(c rune) bool {
 		return c == token

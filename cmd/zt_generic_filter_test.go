@@ -175,7 +175,7 @@ func (_ *genericFilterSuite) findAmbiguousTime() (string, time.Time, time.Time, 
 		localString := u.Local().Format(localTimeFormat)
 		hourLaterLocalString := u.Add(time.Hour).Local().Format(localTimeFormat)
 		if localString == hourLaterLocalString {
-			// return the string, and the two UTC times that map to that local time (with their fractional seconds trucated away)
+			// return the string, and the two UTC times that map to that local time (with their fractional seconds truncated away)
 			return localString, u.Truncate(time.Second), u.Add(time.Hour).Truncate(time.Second), nil
 		}
 	}
