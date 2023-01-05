@@ -43,7 +43,7 @@ func (jpfn JobPartPlanFileName) Parse() (jobID common.JobID, partNumber common.P
 	jobId, err := common.ParseJobID(jpfnSplit[0])
 	if err != nil {
 		err = fmt.Errorf("failed to parse the JobId from JobPartFileName %s. Failed with error %s", string(jpfn), err.Error())
-		// TODO: return here on error?
+		// TODO: return here on error? or ignore
 	}
 	jobID = jobId
 	n, err := fmt.Sscanf(jpfnSplit[1], "%05d.steV%d", &partNumber, &dataSchemaVersion)
@@ -120,7 +120,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		rv := reflect.ValueOf(v)
 		structSize := reflect.TypeOf(v).Elem().Size()
 		slice := reflect.SliceHeader{Data: rv.Pointer(), Len: int(structSize), Cap: int(structSize)}
-		byteSlice := *(*[]byte)(unsafe.Pointer(&slice))
+		byteSlice := *(*[]byte)(unsafe.Pointer(&slice)) //nolint:govet
 		err := binary.Write(writer, binary.LittleEndian, byteSlice)
 		common.PanicIfErr(err)
 		return int64(structSize)

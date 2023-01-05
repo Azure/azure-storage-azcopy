@@ -253,8 +253,7 @@ func NewRetryPolicyFactory(o RetryOptions) pipeline.Factory {
 					action = "Retry: Secondary URL returned 404"
 				case err != nil:
 					// NOTE: Protocol Responder returns non-nil if REST API returns invalid status code for the invoked operation
-					// TODO: AAdd ignore for this error SA1019
-					if netErr, ok := err.(net.Error); ok && (netErr.Temporary() || netErr.Timeout()) {
+					if netErr, ok := err.(net.Error); ok && (netErr.Temporary() || netErr.Timeout()) { //nolint:SA1019
 						action = "Retry: net.Error and Temporary() or Timeout()"
 					} else if err == io.ErrUnexpectedEOF {
 						// Some of our methods under the zz_ files do use io.Copy and other related methods that can throw an unexpectedEOF.

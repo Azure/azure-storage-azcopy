@@ -231,10 +231,10 @@ func (t *autoConcurrencyTuner) worker() {
 			}
 
 			if multiplier < minMulitplier {
-				break // no point in tuning any more
+				break // no point in tuning anymore
 			} else {
-				lastReason = t.setConcurrency(concurrency, concurrencyReasonBackoff)
-				lastSpeed, _ = t.getCurrentSpeed() // must re-measure immediately after backing off
+				lastReason = t.setConcurrency(concurrency, concurrencyReasonBackoff) //nolint:SA4006
+				lastSpeed, _ = t.getCurrentSpeed()                                   // must re-measure immediately after backing off
 			}
 		}
 	}
