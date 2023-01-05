@@ -8,6 +8,7 @@ import (
 	"context"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -220,7 +221,7 @@ func (client pathClient) createResponder(resp pipeline.Response) (pipeline.Respo
 	if resp == nil {
 		return nil, err
 	}
-	io.Copy(io.Discard, resp.Response().Body)
+	io.Copy(ioutil.Discard, resp.Response().Body)
 	resp.Response().Body.Close()
 	return &PathCreateResponse{rawResponse: resp.Response()}, err
 }
@@ -322,7 +323,7 @@ func (client pathClient) deleteResponder(resp pipeline.Response) (pipeline.Respo
 	if resp == nil {
 		return nil, err
 	}
-	io.Copy(io.Discard, resp.Response().Body)
+	io.Copy(ioutil.Discard, resp.Response().Body)
 	resp.Response().Body.Close()
 	return &PathDeleteResponse{rawResponse: resp.Response()}, err
 }
@@ -430,7 +431,7 @@ func (client pathClient) getPropertiesResponder(resp pipeline.Response) (pipelin
 	if resp == nil {
 		return nil, err
 	}
-	io.Copy(io.Discard, resp.Response().Body)
+	io.Copy(ioutil.Discard, resp.Response().Body)
 	resp.Response().Body.Close()
 	return &PathGetPropertiesResponse{rawResponse: resp.Response()}, err
 }
@@ -547,7 +548,7 @@ func (client pathClient) leaseResponder(resp pipeline.Response) (pipeline.Respon
 	if resp == nil {
 		return nil, err
 	}
-	io.Copy(io.Discard, resp.Response().Body)
+	io.Copy(ioutil.Discard, resp.Response().Body)
 	resp.Response().Body.Close()
 	return &PathLeaseResponse{rawResponse: resp.Response()}, err
 }
@@ -861,7 +862,7 @@ func (client pathClient) updateResponder(resp pipeline.Response) (pipeline.Respo
 	if resp == nil {
 		return nil, err
 	}
-	io.Copy(io.Discard, resp.Response().Body)
+	io.Copy(ioutil.Discard, resp.Response().Body)
 	resp.Response().Body.Close()
 	return &PathUpdateResponse{rawResponse: resp.Response()}, err
 }

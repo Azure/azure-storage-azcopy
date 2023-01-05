@@ -8,7 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"io"
+	"io/ioutil"
 )
 
 type responder func(resp pipeline.Response) (result pipeline.Response, err error)
@@ -53,7 +53,7 @@ func validateResponse(resp pipeline.Response, successStatusCodes ...int) error {
 	// only close the body in the failure case. in the
 	// success case responders will close the body as required.
 	defer resp.Response().Body.Close()
-	b, err := io.ReadAll(resp.Response().Body)
+	b, err := ioutil.ReadAll(resp.Response().Body)
 	if err != nil {
 		return err
 	}
