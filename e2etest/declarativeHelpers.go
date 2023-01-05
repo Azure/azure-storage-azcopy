@@ -52,7 +52,7 @@ func equals() comparison {
 	return comparison{true}
 }
 
-// nolint
+//nolint
 func notEquals() comparison {
 	return comparison{false}
 }

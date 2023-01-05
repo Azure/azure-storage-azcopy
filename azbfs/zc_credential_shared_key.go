@@ -62,25 +62,19 @@ func (f *SharedKeyCredential) New(next pipeline.Policy, po *pipeline.PolicyOptio
 // credentialMarker is a package-internal method that exists just to satisfy the Credential interface.
 func (*SharedKeyCredential) credentialMarker() {}
 
-// Constants ensuring that header names are correctly spelled and consistently cased.
 const (
-	headerAuthorization      = "Authorization"
-	headerCacheControl       = "Cache-Control"
-	headerContentEncoding    = "Content-Encoding"
-	headerContentDisposition = "Content-Disposition"
-	headerContentLanguage    = "Content-Language"
-	headerContentLength      = "Content-Length"
-	headerContentMD5         = "Content-MD5"
-	headerContentType        = "Content-Type"
-	headerDate               = "Date"
-	headerIfMatch            = "If-Match"
-	headerIfModifiedSince    = "If-Modified-Since"
-	headerIfNoneMatch        = "If-None-Match"
-	headerIfUnmodifiedSince  = "If-Unmodified-Since"
-	headerRange              = "Range"
-	headerUserAgent          = "User-Agent"
-	headerXmsDate            = "x-ms-date"
-	headerXmsVersion         = "x-ms-version"
+	headerAuthorization     = "Authorization"
+	headerContentEncoding   = "Content-Encoding"
+	headerContentLanguage   = "Content-Language"
+	headerContentLength     = "Content-Length"
+	headerContentMD5        = "Content-MD5"
+	headerContentType       = "Content-Type"
+	headerIfMatch           = "If-Match"
+	headerIfModifiedSince   = "If-Modified-Since"
+	headerIfNoneMatch       = "If-None-Match"
+	headerIfUnmodifiedSince = "If-Unmodified-Since"
+	headerRange             = "Range"
+	headerXmsDate           = "x-ms-date"
 )
 
 // ComputeHMACSHA256 generates a hash signature for an HTTP request or for a SAS.

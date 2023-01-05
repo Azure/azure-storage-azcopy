@@ -12,6 +12,7 @@ type Credential interface {
 	credentialMarker()
 }
 
+//nolint:unused
 type credentialFunc pipeline.FactoryFunc
 
 func (f credentialFunc) New(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.Policy {
@@ -36,11 +37,15 @@ type anonymousCredentialPolicyFactory struct {
 }
 
 // New creates a credential policy object.
+//
+//nolint:unused
 func (f *anonymousCredentialPolicyFactory) New(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.Policy {
 	return &anonymousCredentialPolicy{next: next}
 }
 
 // credentialMarker is a package-internal method that exists just to satisfy the Credential interface.
+//
+//nolint:unused
 func (*anonymousCredentialPolicyFactory) credentialMarker() {}
 
 // anonymousCredentialPolicy is the credential's policy object.
