@@ -159,31 +159,6 @@ func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *ur
 	return true
 }
 
-// append a file name to the container path to generate a blob path
-func (copyHandlerUtil) generateObjectPath(destinationPath, fileName string) string {
-	if strings.LastIndex(destinationPath, "/") == len(destinationPath)-1 {
-		return fmt.Sprintf("%s%s", destinationPath, fileName)
-	}
-	return fmt.Sprintf("%s/%s", destinationPath, fileName)
-}
-
-func (util copyHandlerUtil) getBlobNameFromURL(path string) string {
-	// return everything after the second /
-	return strings.SplitAfterN(path[1:], common.AZCOPY_PATH_SEPARATOR_STRING, 2)[1]
-}
-
-func (util copyHandlerUtil) firstIndexOfWildCard(name string) int {
-	return strings.Index(name, wildCard)
-}
-func (util copyHandlerUtil) getContainerURLFromString(url url.URL) url.URL {
-	blobParts := azblob.NewBlobURLParts(url)
-	blobParts.BlobName = ""
-	return blobParts.URL()
-	//containerName := strings.SplitAfterN(url.Path[1:], "/", 2)[0]
-	//url.Path = "/" + containerName
-	//return url
-}
-
 func (util copyHandlerUtil) getContainerUrl(blobParts azblob.BlobURLParts) url.URL {
 	blobParts.BlobName = ""
 	return blobParts.URL()

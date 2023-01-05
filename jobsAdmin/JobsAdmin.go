@@ -238,13 +238,12 @@ func (ja *jobsAdmin) recordTuningCompleted(showOutput bool) {
 // There will be only 1 instance of the jobsAdmin type.
 // The coordinator uses this to manage all the running jobs and their job parts.
 type jobsAdmin struct {
-	atomicSuccessfulBytesInActiveFiles int64
-	atomicBytesTransferredWhileTuning  int64
-	atomicTuningEndSeconds             int64
-	atomicCurrentMainPoolSize          int32 // align 64 bit integers for 32 bit arch
-	concurrency                        ste.ConcurrencySettings
-	logger                             common.ILoggerCloser
-	jobIDToJobMgr                      jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
+	atomicBytesTransferredWhileTuning int64
+	atomicTuningEndSeconds            int64
+	atomicCurrentMainPoolSize         int32 // align 64 bit integers for 32 bit arch
+	concurrency                       ste.ConcurrencySettings
+	logger                            common.ILoggerCloser
+	jobIDToJobMgr                     jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
 	// Other global state can be stored in more fields here...
 	logDir                  string // Where log files are stored
 	planDir                 string // Initialize to directory where Job Part Plans are stored
@@ -581,13 +580,6 @@ func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint3
 	isToAzureFiles := fromTo.To() == common.ELocation.File()
 	a := ste.NewPerformanceAdvisor(p, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency, dir, averageBytesPerFile, isToAzureFiles)
 	return a.GetAdvice()
-}
-
-//Structs for messageHandler
-
-/* PerfAdjustment message. */
-type jaPerfAdjustmentMsg struct {
-	Throughput int64 `json:"cap-mbps,string"`
 }
 
 func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {

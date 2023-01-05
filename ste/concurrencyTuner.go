@@ -21,7 +21,6 @@
 package ste
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"sync"
 	"sync/atomic"
 )
@@ -73,7 +72,6 @@ type autoConcurrencyTuner struct {
 	}
 	initialConcurrency  int
 	maxConcurrency      int
-	cpuMonitor          common.CPUMonitor
 	callbacksWhenStable chan func()
 	finalReason         string
 	finalConcurrency    int

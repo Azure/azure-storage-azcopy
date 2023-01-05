@@ -69,8 +69,8 @@ type appLogger struct {
 	// maximum loglevel represents the maximum severity of log messages which can be logged to Job Log file.
 	// any message with severity higher than this will be ignored.
 	minimumLevelToLog pipeline.LogLevel // The maximum customer-desired log level for this job
-	file              *os.File          // The job's log file
-	logger            *log.Logger       // The Job's logger
+	// file              *os.File          // The job's log file
+	// logger            *log.Logger       // The Job's logger
 }
 
 func (al *appLogger) ShouldLog(level pipeline.LogLevel) bool {

@@ -38,9 +38,6 @@ type blobDownloader struct {
 	// used to avoid downloading zero ranges of page blobs
 	pageRangeOptimizer *pageRangeOptimizer
 
-	// used to avoid re-setting file mode
-	setMode bool
-
 	jptm   IJobPartTransferMgr
 	txInfo TransferInfo
 }
