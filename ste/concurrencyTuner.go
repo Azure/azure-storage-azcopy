@@ -233,7 +233,7 @@ func (t *autoConcurrencyTuner) worker() {
 			if multiplier < minMulitplier {
 				break // no point in tuning anymore
 			} else {
-				lastReason = t.setConcurrency(concurrency, concurrencyReasonBackoff) //nolint:SA4006
+				lastReason = t.setConcurrency(concurrency, concurrencyReasonBackoff) //nolint:staticcheck
 				lastSpeed, _ = t.getCurrentSpeed()                                   // must re-measure immediately after backing off
 			}
 		}

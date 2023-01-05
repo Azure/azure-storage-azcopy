@@ -257,8 +257,8 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromSecret(ctx context.Context) (*ada
 // Read a potentially encrypted PKCS block
 func readPKCSBlock(block *pem.Block, secret []byte, parseFunc func([]byte) (interface{}, error)) (pk interface{}, err error) {
 	// Reduce code duplication by baking the parse functions into this
-	if x509.IsEncryptedPEMBlock(block) { //nolint:SA1019
-		data, err := x509.DecryptPEMBlock(block, secret) //nolint:SA1019
+	if x509.IsEncryptedPEMBlock(block) { //nolint:staticcheck
+		data, err := x509.DecryptPEMBlock(block, secret) //nolint:staticcheck
 
 		if err == nil {
 			pk, err = parseFunc(data)
@@ -804,7 +804,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 	req, resp, errArcVM := credInfo.queryIMDS(ctx, MSIEndpointArcVM, targetResource, IMDSAPIVersionArcVM)
 	if errArcVM != nil {
 		// Try Azure VM since there was an error in trying Arc VM
-		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(ctx, MSIEndpointAzureVM, targetResource, IMDSAPIVersionAzureVM) //nolint:SA4006
+		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(ctx, MSIEndpointAzureVM, targetResource, IMDSAPIVersionAzureVM) //nolint:staticcheck
 		if errAzureVM != nil {
 			var serr syscall.Errno
 			if errors.As(errArcVM, &serr) {
@@ -832,17 +832,17 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 		}
 
 		// Arc IMDS failed with error, but Azure IMDS succeeded
-		req, resp = reqAzureVM, respAzureVM //nolint:SA4006
+		req, resp = reqAzureVM, respAzureVM //nolint:staticcheck
 	} else if !isValidArcResponse(resp) {
 		// Not valid response from ARC IMDS endpoint. Perhaps some other process listening on it. Try Azure IMDS endpoint as fallback option.
-		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(ctx, MSIEndpointAzureVM, targetResource, IMDSAPIVersionAzureVM) //nolint:SA4006
+		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(ctx, MSIEndpointAzureVM, targetResource, IMDSAPIVersionAzureVM) //nolint:staticcheck
 		if errAzureVM != nil {
 			// Neither Arc nor Azure VM IMDS endpoint available. Can't use MSI.
 			return nil, fmt.Errorf("invalid response received from Arc IMDS endpoint (%s), probably some unknown process listening. If this an Azure VM, please check whether MSI is enabled, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm: %v", MSIEndpointArcVM, errAzureVM)
 		}
 
 		// Azure VM IMDS endpoint ok!
-		req, resp = reqAzureVM, respAzureVM //nolint:SA4006
+		req, resp = reqAzureVM, respAzureVM //nolint:staticcheck
 	} else {
 		// Valid response received from ARC IMDS endpoint. Proceed with the next step.
 		challengeTokenPath := strings.Split(resp.Header["Www-Authenticate"][0], "=")[1]
