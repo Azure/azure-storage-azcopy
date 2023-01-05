@@ -233,6 +233,7 @@ func (o Operation) includes(item Operation) bool {
 
 // ///////////
 
+//nolint:unused
 var eTestFromTo = TestFromTo{}
 
 // TestFromTo is similar to common/FromTo, except that it can have cases where one value represents many possibilities

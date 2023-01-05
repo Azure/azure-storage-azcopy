@@ -44,8 +44,6 @@ type copyHandlerUtil struct{}
 // TODO: Need be replaced with anonymous embedded field technique.
 var gCopyUtil = copyHandlerUtil{}
 
-const wildCard = "*"
-
 // checks if a given url points to a container or virtual directory, as opposed to a blob or prefix match
 func (util copyHandlerUtil) urlIsContainerOrVirtualDirectory(url *url.URL) bool {
 	if azblob.NewBlobURLParts(*url).IPEndpointStyleInfo.AccountName == "" {

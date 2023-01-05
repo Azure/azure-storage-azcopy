@@ -65,6 +65,7 @@ func (with) appliesToVerification() bool {
 
 // maps non-nillable fields (which are easy to create in the tests) to nillable ones, which have clearer meaning in
 // the resourceManagers.
+//nolint:unused
 func (w with) createObjectProperties() *objectProperties {
 	result := &objectProperties{}
 	populated := false
@@ -173,12 +174,12 @@ func (w with) createObjectProperties() *objectProperties {
 // use createOnly if you want to define properties that should be used when creating an object, but not
 // used when verifying the state of the transferred object. Generally you'll have no use for this.
 // Just use "with", and the test framework will do the right thing.
-//nolint
+//nolint:unused
 type createOnly struct {
 	with
 }
 
-//nolint
+//nolint:unused
 func (createOnly) appliesToVerification() bool {
 	return false
 }
@@ -198,8 +199,10 @@ func (verifyOnly) appliesToCreation() bool {
 ////
 
 // use withDirStubMetadata to say that file should be created with metadata that says its a directory stub, and it should have zero size
+//nolint:unused
 type withDirStubMetadata struct{}
 
+//nolint:unused
 func (withDirStubMetadata) appliesToCreation() bool {
 	return true
 }
@@ -225,6 +228,7 @@ func (withDirStubMetadata) createObjectProperties() *objectProperties {
 // It allows you to say what the error should be
 // TODO: as at 1 July 2020, we are not actually validating these.  Should we? It could be nice.  If we don't,
 //   remove this type and its usages, and the expectedFailureProvider interface
+//nolint:unused
 type withError struct {
 	msg string
 }
@@ -233,14 +237,17 @@ func (withError) appliesToCreation() bool {
 	return false
 }
 
+//nolint:unused
 func (withError) appliesToVerification() bool {
 	return false
 }
 
+//nolint:unused
 func (withError) createObjectProperties() *objectProperties {
 	return nil // implementing withPropertyProvider is just to trick the type system into letting us pass this to f() and folder(). Our implementation doesn't DO anything
 }
 
+//nolint:unused
 func (w withError) expectedFailure() string {
 	return w.msg
 }

@@ -285,6 +285,7 @@ func f(n string, properties ...withPropertyProvider) *testObject {
 }
 
 // define a folder, in the expectations lists on a testFiles struct
+//nolint:unused
 func folder(n string, properties ...withPropertyProvider) *testObject {
 	name := strings.TrimLeft(n, "/")
 	result := f(name, properties...)
