@@ -42,7 +42,7 @@ func (jpfn JobPartPlanFileName) Parse() (jobID common.JobID, partNumber common.P
 	jpfnSplit := strings.Split(string(jpfn), "--")
 	jobId, err := common.ParseJobID(jpfnSplit[0])
 	if err != nil {
-		err = fmt.Errorf("failed to parse the JobId from JobPartFileName %s. Failed with error %s", string(jpfn), err.Error())
+		err = fmt.Errorf("failed to parse the JobId from JobPartFileName %s. Failed with error %s", string(jpfn), err.Error()) //nolint:staticcheck
 		// TODO: return here on error? or ignore
 	}
 	jobID = jobId
