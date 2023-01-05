@@ -212,10 +212,14 @@ jobs:
           secureFile: 'ci-gcs-dev.json'
       - script: |
           pip install azure-storage-blob==12.12.0
+          # set the variable to indicate that the mutex is being acquired
+          # note: we set it before acquiring the mutex to ensure we release the mutex. 
+          # setting this after can result in an un-broken mutex if someone cancels the pipeline after we acquire the 
+          # mutex but before we set this variable.
+          # setting this before will always work since it is valid to break an un-acquired mutex.
+          echo '##vso[task.setvariable variable=isMutexSet]true'
           # acquire the mutex before running live tests to avoid conflicts
           python ./tool_distributed_mutex.py lock "$(MUTEX_URL)"
-          # set the variable to indicate that the mutex was actually acquired
-          echo '##vso[task.setvariable variable=isMutexSet]true'
         name: 'Acquire_the_distributed_mutex'
       - script: |
           # run unit test and build executable
