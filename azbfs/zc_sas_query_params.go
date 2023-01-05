@@ -200,7 +200,7 @@ func newSASQueryParameters(values url.Values, deleteSASParametersFromValues bool
 		case "st":
 			p.startTime, p.stTimeFormat, _ = parseSASTimeString(val)
 		case "se":
-			p.expiryTime, p.stTimeFormat, _ = parseSASTimeString(val)
+			p.expiryTime, p.seTimeFormat, _ = parseSASTimeString(val)
 		case "sip":
 			dashIndex := strings.Index(val, "-")
 			if dashIndex == -1 {
@@ -255,7 +255,7 @@ func (p *SASQueryParameters) addToValues(v url.Values) url.Values {
 		v.Add("st", formatSASTime(&p.startTime, p.stTimeFormat))
 	}
 	if !p.expiryTime.IsZero() {
-		v.Add("se", formatSASTime(&p.expiryTime, p.stTimeFormat))
+		v.Add("se", formatSASTime(&p.expiryTime, p.seTimeFormat))
 	}
 	if len(p.ipRange.Start) > 0 {
 		v.Add("sip", p.ipRange.String())

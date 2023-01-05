@@ -25,7 +25,6 @@ import (
 	"errors"
 	"hash"
 	"io"
-	"runtime"
 	"sync"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -471,16 +470,5 @@ func (cr *singleChunkReader) WriteBufferTo(h hash.Hash) {
 	_, err := h.Write(cr.buffer)
 	if err != nil {
 		panic("documentation of hash.Hash.Write says it will never return an error")
-	}
-}
-
-func stack() []byte {
-	buf := make([]byte, 2048)
-	for {
-		n := runtime.Stack(buf, false)
-		if n < len(buf) {
-			return buf[:n]
-		}
-		buf = make([]byte, 2*len(buf))
 	}
 }

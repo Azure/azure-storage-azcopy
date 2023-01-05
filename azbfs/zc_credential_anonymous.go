@@ -15,11 +15,13 @@ type Credential interface {
 //nolint:unused
 type credentialFunc pipeline.FactoryFunc
 
+//nolint:unused
 func (f credentialFunc) New(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.Policy {
 	return f(next, po)
 }
 
 // credentialMarker is a package-internal method that exists just to satisfy the Credential interface.
+//nolint:unused
 func (credentialFunc) credentialMarker() {}
 
 //////////////////////////////

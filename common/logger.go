@@ -52,6 +52,7 @@ type ILoggerResetable interface {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// TODO : Can this be deleted?
 func NewAppLogger(minimumLevelToLog pipeline.LogLevel, logFileFolder string) ILoggerCloser {
 	// TODO: Put start date time in file Name
 	// TODO: log life time management.

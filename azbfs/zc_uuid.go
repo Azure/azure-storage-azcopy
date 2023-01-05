@@ -39,6 +39,7 @@ func (u uuid) String() string {
 
 // ParseUUID parses a string formatted as "003020100-0504-0706-0809-0a0b0c0d0e0f"
 // or "{03020100-0504-0706-0809-0a0b0c0d0e0f}" into a UUID.
+//nolint:unused
 func parseUUID(uuidStr string) uuid {
 	char := func(hexString string) byte {
 		i, _ := strconv.ParseUint(hexString, 16, 8)
@@ -75,6 +76,7 @@ func parseUUID(uuidStr string) uuid {
 	return uuidVal
 }
 
+//nolint:unused
 func (u uuid) bytes() []byte {
 	return u[:]
 }

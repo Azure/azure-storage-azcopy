@@ -41,9 +41,8 @@ type blobDownloader struct {
 	// used to avoid re-setting file mode
 	setMode bool
 
-	jptm     IJobPartTransferMgr
-	txInfo   TransferInfo
-	fileMode uint32
+	jptm   IJobPartTransferMgr
+	txInfo TransferInfo
 }
 
 func newBlobDownloader() downloader {
