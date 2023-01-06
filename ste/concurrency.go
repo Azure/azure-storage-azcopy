@@ -49,7 +49,7 @@ func (i *ConfiguredInt) GetDescription() string {
 func tryNewConfiguredInt(envVar common.EnvironmentVariable) *ConfiguredInt {
 	override := common.GetLifecycleMgr().GetEnvironmentVariable(envVar)
 	if override != "" {
-		val, err := strconv.ParseInt(override, 10, 64)
+		val, err := strconv.ParseInt(override, 10, 32)
 		if err != nil {
 			log.Fatalf("error parsing the env %s %q failed with error %v",
 				envVar.Name, override, err)

@@ -21,9 +21,142 @@
 package common
 
 import (
+	"encoding/binary"
+	"fmt"
 	"os"
 	"syscall"
+	"time"
+
+	"github.com/pkg/xattr"
+	"golang.org/x/sys/unix"
 )
+
+// Extended Attribute (xattr) keys for fetching various information from Linux cifs client.
+const (
+	CIFS_XATTR_CREATETIME     = "user.cifs.creationtime" // File creation time.
+	CIFS_XATTR_ATTRIB         = "user.cifs.dosattrib"    // FileAttributes.
+	CIFS_XATTR_CIFS_ACL       = "system.cifs_acl"        // DACL only.
+	CIFS_XATTR_CIFS_NTSD      = "system.cifs_ntsd"       // Owner, Group, DACL.
+	CIFS_XATTR_CIFS_NTSD_FULL = "system.cifs_ntsd_full"  // Owner, Group, DACL, SACL.
+)
+
+// 100-nanosecond intervals from Windows Epoch (January 1, 1601) to Unix Epoch (January 1, 1970).
+const (
+	TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH = 116444736000000000
+)
+
+// windows.Filetime.
+type Filetime struct {
+	LowDateTime  uint32
+	HighDateTime uint32
+}
+
+// windows.ByHandleFileInformation
+type ByHandleFileInformation struct {
+	FileAttributes     uint32
+	CreationTime       Filetime
+	LastAccessTime     Filetime
+	LastWriteTime      Filetime
+	VolumeSerialNumber uint32
+	FileSizeHigh       uint32
+	FileSizeLow        uint32
+	NumberOfLinks      uint32
+	FileIndexHigh      uint32
+	FileIndexLow       uint32
+}
+
+// Nanoseconds converts Filetime (as ticks since Windows Epoch) to nanoseconds since Unix Epoch (January 1, 1970).
+func (ft *Filetime) Nanoseconds() int64 {
+	// 100-nanosecond intervals (ticks) since Windows Epoch (January 1, 1601).
+	nsec := int64(ft.HighDateTime)<<32 + int64(ft.LowDateTime)
+
+	// 100-nanosecond intervals since Unix Epoch (January 1, 1970).
+	nsec -= TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH
+
+	// nanoseconds since Unix Epoch.
+	return nsec * 100
+}
+
+// Convert nanoseconds since Unix Epoch (January 1, 1970) to Filetime since Windows Epoch (January 1, 1601).
+func NsecToFiletime(nsec int64) Filetime {
+	// 100-nanosecond intervals since Unix Epoch (January 1, 1970).
+	nsec /= 100
+
+	// 100-nanosecond intervals since Windows Epoch (January 1, 1601).
+	nsec += TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH
+
+	return Filetime{LowDateTime: uint32(nsec & 0xFFFFFFFF), HighDateTime: uint32(nsec >> 32)}
+}
+
+// WindowsTicksToUnixNano converts ticks (100-ns intervals) since Windows Epoch to nanoseconds since Unix Epoch.
+func WindowsTicksToUnixNano(ticks int64) int64 {
+	// 100-nanosecond intervals since Unix Epoch (January 1, 1970).
+	ticks -= TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH
+
+	// nanoseconds since Unix Epoch (January 1, 1970).
+	return ticks * 100
+}
+
+// UnixNanoToWindowsTicks converts nanoseconds since Unix Epoch to ticks since Windows Epoch.
+func UnixNanoToWindowsTicks(nsec int64) int64 {
+	// 100-nanosecond intervals since Unix Epoch (January 1, 1970).
+	nsec /= 100
+
+	// 100-nanosecond intervals since Windows Epoch (January 1, 1601).
+	nsec += TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH
+
+	return nsec
+}
+
+// StatxTimestampToFiletime converts the unix StatxTimestamp (sec, nsec) to the Windows' Filetime.
+// Note that StatxTimestamp is from Unix Epoch while Filetime holds time from Windows Epoch.
+func StatxTimestampToFiletime(ts unix.StatxTimestamp) Filetime {
+	return NsecToFiletime(ts.Sec*int64(time.Second) + int64(ts.Nsec))
+}
+
+func GetFileInformation(path string) (ByHandleFileInformation, error) {
+	var stx unix.Statx_t
+
+	// We want all attributes including Btime (aka creation time).
+	// For consistency with Windows implementation we pass flags==0 which causes it to follow symlinks.
+	err := unix.Statx(unix.AT_FDCWD, path, 0 /* flags */, unix.STATX_ALL, &stx)
+	if err == unix.ENOSYS || err == unix.EPERM {
+		panic(fmt.Errorf("statx syscall is not available: %v", err))
+	} else if err != nil {
+		return ByHandleFileInformation{}, fmt.Errorf("statx(%s) failed: %v", path, err)
+	}
+
+	// For getting FileAttributes we need to query the CIFS_XATTR_ATTRIB extended attribute.
+	// Note: This doesn't necessarily cause a new QUERY_PATH_INFO call to the SMB server, instead
+	//       the value cached in the inode (likely as a result of the above Statx call) will be
+	//       returned.
+	xattrbuf, err := xattr.Get(path, CIFS_XATTR_ATTRIB)
+	if err != nil {
+		return ByHandleFileInformation{},
+			fmt.Errorf("xattr.Get(%s, %s) failed: %v", path, CIFS_XATTR_ATTRIB, err)
+	}
+
+	var info ByHandleFileInformation
+
+	info.FileAttributes = binary.LittleEndian.Uint32(xattrbuf)
+
+	info.CreationTime = StatxTimestampToFiletime(stx.Btime)
+	info.LastAccessTime = StatxTimestampToFiletime(stx.Atime)
+	info.LastWriteTime = StatxTimestampToFiletime(stx.Mtime)
+
+	// TODO: Do we need this?
+	info.VolumeSerialNumber = 0
+
+	info.FileSizeHigh = uint32(stx.Size >> 32)
+	info.FileSizeLow = uint32(stx.Size & 0xFFFFFFFF)
+
+	info.NumberOfLinks = stx.Nlink
+
+	info.FileIndexHigh = uint32(stx.Ino >> 32)
+	info.FileIndexLow = uint32(stx.Ino & 0xFFFFFFFF)
+
+	return info, nil
+}
 
 func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int64, writeThrough bool, t FolderCreationTracker, forceIfReadOnly bool) (*os.File, error) {
 	// forceIfReadOnly is not used on this OS

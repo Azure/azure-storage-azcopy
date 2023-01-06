@@ -157,7 +157,11 @@ func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err
 
 	err = d.deleter(object)
 	if err != nil {
-		glcm.Info(fmt.Sprintf("error %s deleting the object %s", err.Error(), object.relativePath))
+		msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.relativePath)
+		glcm.Info(msg)
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(pipeline.LogInfo, msg)
+		}
 	}
 
 	if d.incrementDeletionCount != nil {
@@ -242,7 +246,11 @@ func shouldSyncRemoveFolders() bool {
 
 func (l *localFileDeleter) deleteFile(object StoredObject) error {
 	if object.entityType == common.EEntityType.File() {
-		glcm.Info("Deleting extra file: " + object.relativePath)
+		msg := "Deleting extra file: " + object.relativePath
+		glcm.Info(msg)
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(pipeline.LogInfo, msg)
+		}
 		return os.Remove(common.GenerateFullPath(l.rootPath, object.relativePath))
 	}
 	if shouldSyncRemoveFolders() {
@@ -287,7 +295,11 @@ func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx cont
 func (b *remoteResourceDeleter) delete(object StoredObject) error {
 	if object.entityType == common.EEntityType.File() {
 		// TODO: use b.targetLocation.String() in the next line, instead of "object", if we can make it come out as string
-		glcm.Info("Deleting extra object: " + object.relativePath)
+		msg := "Deleting extra object: " + object.relativePath
+		glcm.Info(msg)
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(pipeline.LogInfo, msg)
+		}
 		switch b.targetLocation {
 		case common.ELocation.Blob():
 			blobURLParts := azblob.NewBlobURLParts(*b.rootURL)

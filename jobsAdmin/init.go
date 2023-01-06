@@ -48,7 +48,7 @@ func round(num float64) int {
 	return int(num + math.Copysign(0.5, num))
 }
 
-// ToFixed api returns the float number precised upto given decimal places.
+// ToFixed api returns the float number precised up to given decimal places.
 func ToFixed(num float64, precision int) float64 {
 	output := math.Pow(10, float64(precision))
 	return float64(round(num*output)) / output

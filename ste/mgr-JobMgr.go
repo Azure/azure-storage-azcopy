@@ -961,7 +961,7 @@ func (jm *jobMgr) scheduleJobParts() {
 		case jobPart := <-jm.xferChannels.partsChannel:
 
 			if !startedPoolSizer {
-				// spin up a GR to co-ordinate dynamic sizing of the main pool
+				// spin up a GR to coordinate dynamic sizing of the main pool
 				// It will automatically spin up the right number of chunk processors
 				go jm.poolSizer()
 				startedPoolSizer = true
