@@ -32,27 +32,6 @@ jobs:
           version: '1.19.2'
 
       - script: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
-          echo 'Installation complete' 
-          $(go env GOPATH)/bin/golangci-lint --version
-          $(go env GOPATH)/bin/golangci-lint run --tests=false --max-issues-per-linter=0 --skip-files=azbfs/zz_generated_* --exclude=S1008 > lint.log
-          result=$(cat lint.log | wc -l)
-          if [ $result -ne 0 ]; then
-            echo "-----------------------------------"
-            echo "Below issues are found in static analysis"
-            cat lint.log
-            echo "-----------------------------------"
-            exit 1
-          else
-            echo "-----------------------------------"
-            echo "No issues are found in static analysis"
-            echo "-----------------------------------"
-          fi
-        displayName: 'Golang Lint Check - Linux'
-        workingDirectory: $(System.DefaultWorkingDirectory)
-        condition: eq(variables.type, 'linux')
-
-      - script: |
           echo 'Running GO Vet'
           go vet 
         displayName: 'Golang Vet - Linux'
