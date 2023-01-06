@@ -47,3 +47,22 @@ func (s *gcpURLPartsTestSuite) TestGCPURLParseNegative(c *chk.C) {
 	c.Assert(err, chk.NotNil)
 	c.Assert(strings.Contains(err.Error(), invalidGCPURLErrorMessage), chk.Equals, true)
 }
+
+func (s *gcpURLPartsTestSuite) TestIsGCPURL(c *chk.C) {
+	u, _ := url.Parse("http://storage.cloud.google.com/bucket/keyname/")
+	isGCP := IsGCPURL(*u)
+	c.Assert(isGCP, chk.Equals, true)
+
+	// Negative Test Cases
+	u, _ = url.Parse("http://storage.cloudxgoogle.com/bucket/keyname/")
+	isGCP = IsGCPURL(*u)
+	c.Assert(isGCP, chk.Equals, false)
+
+	u, _ = url.Parse("http://storage.cloud.googlexcom/bucket/keyname/")
+	isGCP = IsGCPURL(*u)
+	c.Assert(isGCP, chk.Equals, false)
+
+	u, _ = url.Parse("http://storagexcloud.google.com/bucket/keyname/")
+	isGCP = IsGCPURL(*u)
+	c.Assert(isGCP, chk.Equals, false)
+}
