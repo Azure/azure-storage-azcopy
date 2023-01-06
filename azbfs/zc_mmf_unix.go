@@ -11,7 +11,7 @@ import (
 //nolint:unused
 type mmf []byte
 
-//nolint:unused
+//nolint:unused,deadcode
 func newMMF(file *os.File, writable bool, offset int64, length int) (mmf, error) {
 	prot, flags := syscall.PROT_READ, syscall.MAP_SHARED // Assume read-only
 	if writable {

@@ -360,7 +360,7 @@ func getAzureFileCredentialType() (common.CredentialType, error) {
 
 // envVarCredentialType used for passing credential type into AzCopy through environment variable.
 // Note: This is only used for internal integration, and not encouraged to be used directly.
-//nolint:unused
+//nolint:unused,deadcode
 const envVarCredentialType = "AZCOPY_CRED_TYPE"
 
 var stashedEnvCredType = ""
