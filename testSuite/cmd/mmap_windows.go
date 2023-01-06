@@ -18,7 +18,7 @@ func NewMMF(file *os.File, writable bool, offset int64, length int64) (MMF, erro
 	if hMMF == 0 {
 		return nil, os.NewSyscallError("CreateFileMapping", errno)
 	}
-	defer syscall.CloseHandle(hMMF)
+	defer syscall.CloseHandle(hMMF) //nolint:errcheck
 	addr, errno := syscall.MapViewOfFile(hMMF, access, uint32(offset>>32), uint32(offset&0xffffffff), uintptr(length))
 	m := MMF{}
 	h := (*reflect.SliceHeader)(unsafe.Pointer(&m))

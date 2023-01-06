@@ -249,7 +249,7 @@ func encrypt(data []byte, entropy *dataBlob) ([]byte, error) {
 	var outblob dataBlob
 	defer func() {
 		if outblob.pbData != nil {
-			mLocalFree.Call(uintptr(unsafe.Pointer(outblob.pbData)))
+			_, _, _ = mLocalFree.Call(uintptr(unsafe.Pointer(outblob.pbData)))
 		}
 	}()
 
@@ -276,7 +276,7 @@ func decrypt(data []byte, entropy *dataBlob) ([]byte, error) {
 	var outblob dataBlob
 	defer func() {
 		if outblob.pbData != nil {
-			mLocalFree.Call(uintptr(unsafe.Pointer(outblob.pbData)))
+			_, _, _ = mLocalFree.Call(uintptr(unsafe.Pointer(outblob.pbData)))
 		}
 	}()
 
