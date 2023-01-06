@@ -61,7 +61,7 @@ func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, err
 		return nil, os.NewSyscallError("CreateFileMapping", errno)
 	}
 	defer syscall.CloseHandle(hMMF) //nolint:errcheck
-	addr, errno := syscall.MapViewOfFile(hMMF, access, uint32(offset>>32), uint32(offset&0xffffffff), uintptr(length))
+	addr, _ := syscall.MapViewOfFile(hMMF, access, uint32(offset>>32), uint32(offset&0xffffffff), uintptr(length))
 
 	if !writable {
 		// pre-fetch the memory mapped file so that performance is better when it is read
