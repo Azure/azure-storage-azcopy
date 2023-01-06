@@ -30,7 +30,7 @@ import (
 )
 
 // CredCache manages credential caches.
-// Use keyring in Linux OS. Session keyring is choosed,
+// Use keyring in Linux OS. Session keyring is chosen,
 // the session hooks key should be created since user first login (i.e. by pam).
 // So the session is inherited by processes created from login session.
 // When user logout, the session keyring is recycled.

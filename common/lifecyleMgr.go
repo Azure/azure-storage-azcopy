@@ -618,7 +618,7 @@ func (_ *lifecycleMgr) awaitChannel(ch chan struct{}, timeout time.Duration) {
 	}
 }
 
-// E2EAwaitContinue is used in case where a developer want's to debug AzCopy by attaching to the running process,
+// E2EAwaitContinue is used in case where a developer wants to debug AzCopy by attaching to the running process,
 // before it starts doing any actual work.
 func (lcm *lifecycleMgr) E2EAwaitContinue() {
 	lcm.e2eAllowAwaitContinue = true // not technically gorountine safe (since its shared state) but its consistent with EnableInputWatcher

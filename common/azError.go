@@ -27,7 +27,7 @@ type AzError struct {
 	additonalInfo string
 }
 
-// NewAzError composes an AzError with given code and messgae
+// NewAzError composes an AzError with given code and message
 func NewAzError(base AzError, additionalInfo string) AzError {
 	base.additonalInfo = additionalInfo
 	return base

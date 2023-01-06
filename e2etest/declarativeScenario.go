@@ -179,10 +179,10 @@ func (s *scenario) assignSourceAndDest() {
 				return &resourceBlobContainer{accountType: s.destAccountType}
 			}
 		case common.ELocation.BlobFS():
-			s.a.Error("Not implementd yet for blob FS")
+			s.a.Error("Not implemented yet for blob FS")
 			return &resourceDummy{}
 		case common.ELocation.S3():
-			s.a.Error("Not implementd yet for S3")
+			s.a.Error("Not implemented yet for S3")
 			return &resourceDummy{}
 		case common.ELocation.Unknown():
 			return &resourceDummy{}

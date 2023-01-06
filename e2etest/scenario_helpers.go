@@ -653,7 +653,7 @@ func (scenarioHelper) generateCommonRemoteScenarioForS3(c asserter, client *mini
 		objectName5 := createNewObject(c, client, bucketName, prefix+specialNames[i])
 
 		// Note: common.AZCOPY_PATH_SEPARATOR_STRING is added before bucket or objectName, as in the change minimize JobPartPlan file size,
-		// transfer.Source & transfer.Destination(after trimed the SourceRoot and DestinationRoot) are with AZCOPY_PATH_SEPARATOR_STRING suffix,
+		// transfer.Source & transfer.Destination(after trimming the SourceRoot and DestinationRoot) are with AZCOPY_PATH_SEPARATOR_STRING suffix,
 		// when user provided source & destination are without / suffix, which is the case for scenarioHelper generated URL.
 
 		bucketPath := ""
@@ -717,7 +717,7 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			// set other properties
 			// TODO: do we need a SetProperties method on dir...?  Discuss with zezha-msft
 			if f.creationProperties.creationTime != nil {
-				panic("setting these properties isn't implmented yet for folders in the test harnesss")
+				panic("setting these properties isn't implemented yet for folders in the test harness")
 				// TODO: nakulkar-msft the attributes stuff will need to be implemented here before attributes can be tested on Azure Files
 			}
 

@@ -488,7 +488,7 @@ func (ja *jobsAdmin) DeleteJob(jobID common.JobID) {
 	* Removes the entry of given JobId from JobsInfo
 */
 
-// TODO: take care fo this.
+// TODO: take care of this.
 /*func (ja *jobsAdmin) cleanUpJob(jobID common.JobID) {
 	jm, found := ja.JobMgr(jobID)
 	if !found {

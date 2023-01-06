@@ -472,7 +472,7 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 		// something like https://someApi.execute-api.someRegion.amazonaws.com is AWS but is a customer-
 		// written code, not S3.
 		ok := false
-		host := "<unparseable url>"
+		host := "<unparsable url>"
 		u, err := url.Parse(resource)
 		if err == nil {
 			host = u.Host
@@ -485,7 +485,7 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 
 		if !ok {
 			return fmt.Errorf(
-				"s3 authentication to %s is not currently suported in AzCopy", host)
+				"s3 authentication to %s is not currently supported in AzCopy", host)
 		}
 	case common.ECredentialType.GoogleAppCredentials():
 		if resourceType != common.ELocation.GCP() {

@@ -142,7 +142,7 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string, env []
 	runErr := c.Start()
 	if runErr == nil {
 		defer func() {
-			_ = c.Process.Kill() // in case we never finish c.Wait() below, and get paniced or killed
+			_ = c.Process.Kill() // in case we never finish c.Wait() below, and get panicked or killed
 		}()
 
 		if debug {

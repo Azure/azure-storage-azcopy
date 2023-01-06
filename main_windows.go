@@ -42,7 +42,7 @@ func osModifyProcessCommand(cmd *exec.Cmd) *exec.Cmd {
 	return cmd
 }
 
-// ProcessOSSpecificInitialization chnages the soft limit for filedescriptor for process
+// ProcessOSSpecificInitialization changes the soft limit for filedescriptor for process
 // return the filedescriptor limit for process. If the function fails with some, it returns
 // the error
 // TODO: this api is implemented for windows as well but not required because Windows

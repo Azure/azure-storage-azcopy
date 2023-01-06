@@ -276,7 +276,7 @@ func NewChunkStatusLogger(jobID JobID, cpuMon CPUMonitor, logFileFolder string, 
 }
 
 func numWaitReasons() int32 {
-	return EWaitReason.Cancelled().index + 1 // assume that maitainers follow the comment above to always keep Cancelled as numerically the greatest one
+	return EWaitReason.Cancelled().index + 1 // assume that maintainers follow the comment above to always keep Cancelled as numerically the greatest one
 }
 
 type chunkStatusCount struct {
@@ -537,7 +537,7 @@ DateTime? ParseStart(string s)
 	}
 }
 
-// convert to real datetime (default unparseable ones to a fixed value, simply to avoid needing to deal with nulls below, and because all valid records should be parseable. Only exception would be something partially written a time of a crash)
+// convert to real datetime (default unparsable ones to a fixed value, simply to avoid needing to deal with nulls below, and because all valid records should be parseable. Only exception would be something partially written a time of a crash)
 var parsed = data.Select(d => new { d.Name, d.Offset, d.State, StateStartTime = ParseStart(d.StateStartTime) ?? DateTime.MaxValue}).ToList();
 
 var grouped = parsed.GroupBy(c => new {c.Name, c.Offset});
