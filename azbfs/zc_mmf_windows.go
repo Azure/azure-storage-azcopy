@@ -10,7 +10,7 @@ import (
 //nolint:unused
 type mmf []byte
 
-//nolint:deadcode
+//nolint:deadcode,unused
 func newMMF(file *os.File, writable bool, offset int64, length int) (mmf, error) {
 	prot, access := uint32(syscall.PAGE_READONLY), uint32(syscall.FILE_MAP_READ) // Assume read-only
 	if writable {
@@ -22,7 +22,7 @@ func newMMF(file *os.File, writable bool, offset int64, length int) (mmf, error)
 		return nil, os.NewSyscallError("CreateFileMapping", errno)
 	}
 	defer syscall.CloseHandle(hMMF) //nolint:errcheck
-	addr, errno := syscall.MapViewOfFile(hMMF, access, uint32(offset>>32), uint32(offset&0xffffffff), uintptr(length))
+	addr, _ := syscall.MapViewOfFile(hMMF, access, uint32(offset>>32), uint32(offset&0xffffffff), uintptr(length))
 	m := mmf{}
 	h := (*reflect.SliceHeader)(unsafe.Pointer(&m))
 	h.Data = addr

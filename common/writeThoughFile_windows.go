@@ -125,13 +125,6 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 
 	fd, err := doOpen()
 	if err != nil {
-		// Because a hidden file isn't necessarily a intentional lock on a file, we choose to make it a default override.
-		toMatchSet := FILE_ATTRIBUTE_HIDDEN
-		// But, by the opposite nature, readonly is a intentional lock, so we make it a required option.
-		if forceIfReadOnly {
-			toMatchSet |= FILE_ATTRIBUTE_READONLY
-		}
-
 		// Let's check what we might need to clear, and if we should retry
 		toClearFlagSet, allFlags, toRetry := getFlagMatches(FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN)
 
