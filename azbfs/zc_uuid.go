@@ -7,7 +7,7 @@ import (
 )
 
 // The UUID reserved variants.
-//nolint:deadcode
+//nolint:deadcode,varcheck
 const (
 	reservedNCS       byte = 0x80
 	reservedRFC4122   byte = 0x40

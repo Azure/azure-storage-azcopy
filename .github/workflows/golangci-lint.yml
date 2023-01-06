@@ -34,7 +34,7 @@ jobs:
           # working-directory: somedir
 
           # Optional: golangci-lint command line arguments.
-          args: --tests=false --max-issues-per-linter=0 --skip-files=azbfs/zz_generated_* --exclude=S1008
+          args: --tests=false --max-issues-per-linter=0 --skip-files=azbfs/zz_generated_* --exclude=S1008 --max-same-issues=0
 
           # Optional: show only new issues if it's a pull request. The default value is `false`.
           # only-new-issues: true
