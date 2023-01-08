@@ -87,7 +87,7 @@ jobs:
         condition: eq(variables.type, 'mac-os')
 
       - script: |
-          GOARCH=arm64 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64"
+          GOARCH=arm64 CGO_ENABLED=1 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64"
         displayName: 'Generate MacOS Build with ARM64'
         condition: eq(variables.type, 'mac-os')
 
@@ -197,7 +197,7 @@ jobs:
       # Running E2E Tests on Mac
       - script: |
           set -e
-          go build -o azcopy_darwin_arm64
+          GOARCH=arm64 CGO_ENABLED=1 go build -o azcopy_darwin_arm64
           echo 'starting E2E tests on mac-os'
           export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_darwin_arm64
           go test -timeout 60m -race -cover -v ./e2etest
