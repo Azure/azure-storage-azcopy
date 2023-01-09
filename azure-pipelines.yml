@@ -83,7 +83,12 @@ jobs:
 
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
-        displayName: 'Generate MacOS Build'
+        displayName: 'Generate MacOS Build with AMD64'
+        condition: eq(variables.type, 'mac-os')
+
+      - script: |
+          GOARCH=arm64 CGO_ENABLED=1 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64"
+        displayName: 'Generate MacOS Build with ARM64'
         condition: eq(variables.type, 'mac-os')
 
       - task: PublishBuildArtifacts@1
@@ -186,7 +191,7 @@ jobs:
           AZCOPY_E2E_STD_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_STD_MANAGED_DISK_CONFIG)
           CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
           CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
-        displayName: 'E2E Test MacOs'
+        displayName: 'E2E Test MacOs AMD64'
         condition: eq(variables.type, 'mac-os')
 
   - job: Test_On_Ubuntu
