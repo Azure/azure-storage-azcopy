@@ -123,10 +123,8 @@ jobs:
           set -e
           GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
           export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
-          go test -timeout 60m -race -short -coverprofile=coverage_linux.out ./e2etest
-          go tool cover -html=coverage_linux.out
-          cp ./*.out $(Build.ArtifactStagingDirectory)/
-          cp ./*.html $(Build.ArtifactStagingDirectory)/
+          go test -timeout 60m -race -short -coverprofile=$(Build.ArtifactStagingDirectory)/coverage_linux.out ./e2etest
+          go tool cover -html=$(Build.ArtifactStagingDirectory)/coverage_linux.out -o $(Build.ArtifactStagingDirectory)/coverage_linux.html
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
@@ -149,10 +147,8 @@ jobs:
           go build -o $(System.DefaultWorkingDirectory)/azcopy_windows_amd64.exe
           go build -o $(System.DefaultWorkingDirectory)/azcopy_windows_386.exe
           echo 'starting E2E tests on windows'
-          go test -timeout 60m -race -coverprofile=coverage_windows.out -v ./e2etest
-          go tool cover -html=coverage_windows.out
-          cp ./*.out $(Build.ArtifactStagingDirectory)/
-          cp ./*.html $(Build.ArtifactStagingDirectory)/
+          go test -timeout 60m -race -coverprofile=$(Build.ArtifactStagingDirectory)/coverage_windows.out -v ./e2etest
+          go tool cover -html=$(Build.ArtifactStagingDirectory)/coverage_windows.out -o $(Build.ArtifactStagingDirectory)/coverage_windows.html
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
@@ -177,10 +173,8 @@ jobs:
           go build -o azcopy_darwin_amd64
           echo 'starting E2E tests on mac-os'
           export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_darwin_amd64
-          go test -timeout 60m -race -coverprofile=coverage_darwin_amd64.out -v ./e2etest
-          go tool cover -html=coverage_darwin_amd64.out
-          cp ./*.out $(Build.ArtifactStagingDirectory)/
-          cp ./*.html $(Build.ArtifactStagingDirectory)/
+          go test -timeout 60m -race -coverprofile=$(Build.ArtifactStagingDirectory)/coverage_darwin_amd64.out -v ./e2etest
+          go tool cover -html=$(Build.ArtifactStagingDirectory)/coverage_darwin_amd64.out -o $(Build.ArtifactStagingDirectory)/coverage_darwin_amd64.html
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
