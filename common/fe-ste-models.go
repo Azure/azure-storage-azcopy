@@ -110,7 +110,7 @@ type PartNumber uint32
 type Version uint32
 type Status uint32
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 var EDeleteSnapshotsOption = DeleteSnapshotsOption(0)
 
 type DeleteSnapshotsOption uint8
@@ -145,7 +145,7 @@ func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() azblob.DeleteSnapsh
 	return azblob.DeleteSnapshotsOptionType(strings.ToLower(d.String()))
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 var EPermanentDeleteOption = PermanentDeleteOption(3) // Default to "None"
 
 type PermanentDeleteOption uint8
@@ -610,7 +610,7 @@ func (ft *FromTo) IsPropertyOnlyTransfer() bool {
 
 var BenchmarkLmt = time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC)
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Enumerates the values for blob type.
 type BlobType uint8
 
@@ -674,9 +674,11 @@ type TransferStatus int32 // Must be 32-bit for atomic operations; negative #s r
 func (TransferStatus) NotStarted() TransferStatus { return TransferStatus(0) }
 
 // TODO confirm whether this is actually needed
-//   Outdated:
-//     Transfer started & at least 1 chunk has successfully been transferred.
-//     Used to resume a transfer that started to avoid transferring all chunks thereby improving performance
+//
+//	Outdated:
+//	  Transfer started & at least 1 chunk has successfully been transferred.
+//	  Used to resume a transfer that started to avoid transferring all chunks thereby improving performance
+//
 // Update(Jul 2020): This represents the state of transfer as soon as the file is scheduled.
 func (TransferStatus) Started() TransferStatus { return TransferStatus(1) }
 
@@ -972,7 +974,7 @@ func (i *InvalidMetadataHandleOption) UnmarshalJSON(b []byte) error {
 	return i.Parse(s)
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const (
 	DefaultBlockBlobBlockSize      = 8 * 1024 * 1024
 	MaxBlockBlobBlockSize          = 4000 * 1024 * 1024
@@ -1561,7 +1563,7 @@ func GetClientProvidedKey(options CpkOptions) azblob.ClientProvidedKeyOptions {
 	return ToClientProvidedKeyOptions(_cpkInfo, _cpkScopeInfo)
 }
 
-////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////
 type SetPropertiesFlags uint32 // [0000000000...32 times]
 
 var ESetPropertiesFlags = SetPropertiesFlags(0)
@@ -1584,7 +1586,7 @@ func (op *SetPropertiesFlags) ShouldTransferBlobTags() bool {
 	return (*op)&ESetPropertiesFlags.SetBlobTags() == ESetPropertiesFlags.SetBlobTags()
 }
 
-////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////
 type RehydratePriorityType uint8
 
 var ERehydratePriorityType = RehydratePriorityType(0) // setting default as none
@@ -1613,4 +1615,49 @@ func (rpt RehydratePriorityType) ToRehydratePriorityType() azblob.RehydratePrior
 	default:
 		return azblob.RehydratePriorityStandard
 	}
+}
+
+// //////////////////////////////////////////////////////////////////////////////
+type SyncHashType uint8
+
+var ESyncHashType SyncHashType = 0
+
+func (SyncHashType) None() SyncHashType {
+	return 0
+}
+
+func (SyncHashType) MD5() SyncHashType {
+	return 1
+}
+
+func (ht *SyncHashType) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(ht), s, true, true)
+	if err == nil {
+		*ht = val.(SyncHashType)
+	}
+	return err
+}
+
+func (ht SyncHashType) String() string {
+	return enum.StringInt(ht, reflect.TypeOf(ht))
+}
+
+type SyncMissingHashPolicy uint8
+
+var ESyncMissingHashPolicy SyncMissingHashPolicy = 0
+
+func (SyncMissingHashPolicy) Overwrite() SyncMissingHashPolicy {
+	return 0
+}
+
+func (SyncMissingHashPolicy) Generate() SyncMissingHashPolicy { // local-only, generate when missing/incompatible
+	return 1
+}
+
+func (mhp *SyncMissingHashPolicy) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(mhp), s, true, true)
+	if err == nil {
+		*mhp = val.(SyncMissingHashPolicy)
+	}
+	return err
 }

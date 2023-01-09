@@ -56,6 +56,8 @@ type rawSyncCmdArgs struct {
 	legacyExclude         string // for warning messages only
 	includeRegex          string
 	excludeRegex          string
+	compareHash           string
+	missingHashPolicy     string
 
 	preservePermissions     bool
 	preserveSMBPermissions  bool // deprecated and synonymous with preservePermissions
@@ -274,6 +276,20 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		return cooked, fmt.Errorf("in order to use --preserve-posix-properties, both the source and destination must be POSIX-aware (valid pairings are Linux->Blob, Blob->Linux, Blob->Blob)")
 	}
 
+	if err = cooked.compareHash.Parse(raw.compareHash); err != nil {
+		return cooked, err
+	} else {
+		switch cooked.compareHash {
+		case common.ESyncHashType.MD5():
+			// Save any new MD5s on files we download.
+			raw.putMd5 = true
+		default: // no need to put a hash of any kind.
+		}
+	}
+	if err = cooked.missingHashPolicy.Parse(raw.missingHashPolicy); err != nil {
+		return cooked, err
+	}
+
 	cooked.putMd5 = raw.putMd5
 	if err = validatePutMd5(cooked.putMd5, cooked.fromTo); err != nil {
 		return cooked, err
@@ -384,6 +400,8 @@ type cookedSyncCmdArgs struct {
 	excludeRegex          []string
 
 	// options
+	compareHash             common.SyncHashType
+	missingHashPolicy       common.SyncMissingHashPolicy
 	preservePermissions     common.PreservePermissionsOption
 	preserveSMBInfo         bool
 	preservePOSIXProperties bool
@@ -791,6 +809,9 @@ func init() {
 	syncCmd.PersistentFlags().BoolVar(&raw.cpkInfo, "cpk-by-value", false, "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key and its hash will be fetched from environment variables")
 	syncCmd.PersistentFlags().BoolVar(&raw.mirrorMode, "mirror-mode", false, "Disable last-modified-time based comparison and overwrites the conflicting files and blobs at the destination if this flag is set to true. Default is false")
 	syncCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the path of files that would be copied or removed by the sync command. This flag does not copy or remove the actual files.")
+
+	syncCmd.PersistentFlags().StringVar(&raw.compareHash, "compare-hash", "None", "Inform sync to rely on hashes as an alternative to LMT. (None, MD5) Default: None")
+	syncCmd.PersistentFlags().StringVar(&raw.missingHashPolicy, "missing-hash-policy", "Overwrite", "Inform sync how to handle missing hashes. (Generate: Local-only, generate over unusable hashes in requested type; Overwrite: Treat the file as out-of-date if a hash is unusable) Default: Overwrite")
 
 	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
 	syncCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")

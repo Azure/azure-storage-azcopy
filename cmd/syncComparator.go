@@ -20,7 +20,11 @@
 
 package cmd
 
-import "strings"
+import (
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"reflect"
+	"strings"
+)
 
 // with the help of an objectIndexer containing the source objects
 // find out the destination objects that should be transferred
@@ -35,11 +39,13 @@ type syncDestinationComparator struct {
 	// storing the source objects
 	sourceIndex *objectIndexer
 
+	comparisonHashType common.SyncHashType
+
 	disableComparison bool
 }
 
-func newSyncDestinationComparator(i *objectIndexer, copyScheduler, cleaner objectProcessor, disableComparison bool) *syncDestinationComparator {
-	return &syncDestinationComparator{sourceIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, disableComparison: disableComparison}
+func newSyncDestinationComparator(i *objectIndexer, copyScheduler, cleaner objectProcessor, comparisonHashType common.SyncHashType, disableComparison bool) *syncDestinationComparator {
+	return &syncDestinationComparator{sourceIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, disableComparison: disableComparison, comparisonHashType: comparisonHashType}
 }
 
 // it will only schedule transfers for destination objects that are present in the indexer but stale compared to the entry in the map
@@ -57,11 +63,23 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 	// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
 	if present {
 		defer delete(f.sourceIndex.indexMap, destinationObject.relativePath)
-		if f.disableComparison || sourceObjectInMap.isMoreRecentThan(destinationObject) {
-			err := f.copyTransferScheduler(sourceObjectInMap)
-			if err != nil {
-				return err
+
+		if f.disableComparison {
+			return f.copyTransferScheduler(sourceObjectInMap)
+		}
+
+		if f.comparisonHashType != common.ESyncHashType.None() {
+			switch f.comparisonHashType {
+			case common.ESyncHashType.MD5():
+				if !reflect.DeepEqual(sourceObjectInMap.md5, destinationObject.md5) {
+					// hash inequality = source "newer" in this model.
+					return f.copyTransferScheduler(sourceObjectInMap)
+				}
+			default:
+				panic("sanity check: unsupported hash type " + f.comparisonHashType.String())
 			}
+		} else if sourceObjectInMap.isMoreRecentThan(destinationObject) {
+			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 	} else {
 		// purposefully ignore the error from destinationCleaner
@@ -82,16 +100,19 @@ type syncSourceComparator struct {
 	// storing the destination objects
 	destinationIndex *objectIndexer
 
+	comparisonHashType common.SyncHashType
+
 	disableComparison bool
 }
 
-func newSyncSourceComparator(i *objectIndexer, copyScheduler objectProcessor, disableComparison bool) *syncSourceComparator {
-	return &syncSourceComparator{destinationIndex: i, copyTransferScheduler: copyScheduler, disableComparison: disableComparison}
+func newSyncSourceComparator(i *objectIndexer, copyScheduler objectProcessor, comparisonHashType common.SyncHashType, disableComparison bool) *syncSourceComparator {
+	return &syncSourceComparator{destinationIndex: i, copyTransferScheduler: copyScheduler, disableComparison: disableComparison, comparisonHashType: comparisonHashType}
 }
 
 // it will only transfer source items that are:
-//	1. not present in the map
+//  1. not present in the map
 //  2. present but is more recent than the entry in the map
+//
 // note: we remove the StoredObject if it is present so that when we have finished
 // the index will contain all objects which exist at the destination but were NOT seen at the source
 func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) error {
@@ -106,11 +127,25 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) err
 	if present {
 		defer delete(f.destinationIndex.indexMap, relPath)
 
-		// if destination is stale, schedule source for transfer
-		if f.disableComparison || sourceObject.isMoreRecentThan(destinationObjectInMap) {
+		if f.disableComparison {
 			return f.copyTransferScheduler(sourceObject)
 		}
-		// skip if source is more recent
+
+		if f.comparisonHashType != common.ESyncHashType.None() {
+			switch f.comparisonHashType {
+			case common.ESyncHashType.MD5():
+				if !reflect.DeepEqual(sourceObject.md5, destinationObjectInMap.md5) {
+					// hash inequality = source "newer" in this model.
+					return f.copyTransferScheduler(sourceObject)
+				}
+			default:
+				panic("sanity check: unsupported hash type " + f.comparisonHashType.String())
+			}
+		} else if sourceObject.isMoreRecentThan(destinationObjectInMap) {
+			// if destination is stale, schedule source
+			return f.copyTransferScheduler(sourceObject)
+		}
+		// skip if dest is more recent
 		return nil
 	}
 

@@ -138,6 +138,18 @@ func (s *StoredObject) isCompatibleWithFpo(fpo common.FolderPropertyOption) bool
 	}
 }
 
+// ErrorNoHashPresent , ErrorHashNoLongerValid, and ErrorHashNotCompatible indicate a hash is not present, not obtainable, and/or not usable.
+// For the sake of best-effort, when these errors are emitted, depending on the sync hash policy
+var ErrorNoHashPresent = errors.New("no hash present on file")
+var ErrorHashNoLongerValid = errors.New("attached hash no longer valid")
+var ErrorHashNotCompatible = errors.New("hash types do not match")
+
+// ErrorHashAsyncCalculation is not a strict "the hash is unobtainable", but a "the hash is not currently present".
+// In effect, when it is returned, it indicates we have placed the target onto a queue to be handled later.
+// It can be treated like a promise, and the item can cease processing in the immediate term.
+// This option is only used locally on sync-downloads when the user has specified that azcopy should create a new hash.
+var ErrorHashAsyncCalculation = errors.New("hash is calculating asynchronously")
+
 // Returns a func that only calls inner if StoredObject isCompatibleWithFpo
 // We use this, so that we can easily test for compatibility in the sync deletion code (which expects an objectProcessor)
 func newFpoAwareProcessor(fpo common.FolderPropertyOption, inner objectProcessor) objectProcessor {
@@ -322,7 +334,7 @@ type enumerationCounterFunc func(entityType common.EntityType)
 func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context,
 	credential *common.CredentialInfo, followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties,
 	includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string,
-	s2sPreserveBlobTags bool, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo) (ResourceTraverser, error) {
+	s2sPreserveBlobTags bool, syncHashType common.SyncHashType, syncMissingHashPolicy common.SyncMissingHashPolicy, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo) (ResourceTraverser, error) {
 	var output ResourceTraverser
 	var p *pipeline.Pipeline
 
@@ -407,9 +419,9 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions)
 		} else {
 			if ctx != nil {
-				output = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter, errorChannel)
+				output = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, toFollow, syncHashType, syncMissingHashPolicy, incrementEnumerationCounter, errorChannel)
 			} else {
-				output = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter, errorChannel)
+				output = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, toFollow, syncHashType, syncMissingHashPolicy, incrementEnumerationCounter, errorChannel)
 			}
 		}
 	case common.ELocation.Benchmark():
@@ -759,7 +771,7 @@ func getProcessingError(errin error) (ignored bool, err error) {
 		return true, nil
 	}
 
-	return false, err
+	return false, errin
 }
 
 func processIfPassedFilters(filters []ObjectFilter, storedObject StoredObject, processor objectProcessor) (err error) {
