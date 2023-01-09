@@ -40,8 +40,6 @@ func (s *traverserBlobSuite) TestIsSourceDirWithStub(c *chk.C) {
 	defer deleteContainer(c, containerURL)
 	c.Assert(containerURL, chk.NotNil)
 
-	defer deleteContainer(c, containerURL)
-
 	dirName := "source_dir"
 	createNewDirectoryStub(c, containerURL, dirName)
 	// set up to create blob traverser
@@ -65,8 +63,6 @@ func (s *traverserBlobSuite) TestIsSourceDirWithNoStub(c *chk.C) {
 	defer deleteContainer(c, containerURL)
 	c.Assert(containerURL, chk.NotNil)
 
-	defer deleteContainer(c, containerURL)
-
 	dirName := "source_dir/"
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
@@ -87,8 +83,6 @@ func (s *traverserBlobSuite) TestIsSourceFileExists(c *chk.C) {
 	containerURL, containerName := createNewContainer(c, bsu)
 	defer deleteContainer(c, containerURL)
 	c.Assert(containerURL, chk.NotNil)
-
-	defer deleteContainer(c, containerURL)
 
 	fileName := "source_file"
 	_, fileName = createNewBlockBlob(c, containerURL, fileName)
@@ -112,8 +106,6 @@ func (s *traverserBlobSuite) TestIsSourceFileDoesNotExist(c *chk.C) {
 	containerURL, containerName := createNewContainer(c, bsu)
 	defer deleteContainer(c, containerURL)
 	c.Assert(containerURL, chk.NotNil)
-
-	defer deleteContainer(c, containerURL)
 
 	fileName := "file_does_not_exist"
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
