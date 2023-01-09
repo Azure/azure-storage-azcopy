@@ -125,7 +125,7 @@ jobs:
           export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
           go test -timeout 60m -race -short -coverprofile=coverage_linux.out ./e2etest
           go tool cover -html=coverage_linux.out
-          cp ./*.cov  $(Build.ArtifactStagingDirectory)/
+          cp ./*.out $(Build.ArtifactStagingDirectory)/
           cp ./*.html $(Build.ArtifactStagingDirectory)/
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
@@ -151,7 +151,7 @@ jobs:
           echo 'starting E2E tests on windows'
           go test -timeout 60m -race -coverprofile=coverage_windows.out -v ./e2etest
           go tool cover -html=coverage_windows.out
-          cp ./*.cov  $(Build.ArtifactStagingDirectory)/
+          cp ./*.out $(Build.ArtifactStagingDirectory)/
           cp ./*.html $(Build.ArtifactStagingDirectory)/
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
@@ -179,7 +179,7 @@ jobs:
           export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_darwin_amd64
           go test -timeout 60m -race -coverprofile=coverage_darwin_amd64.out -v ./e2etest
           go tool cover -html=coverage_darwin_amd64.out
-          cp ./*.cov  $(Build.ArtifactStagingDirectory)/
+          cp ./*.out $(Build.ArtifactStagingDirectory)/
           cp ./*.html $(Build.ArtifactStagingDirectory)/
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
