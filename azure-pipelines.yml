@@ -236,7 +236,8 @@ jobs:
           # the set -e line is needed so that the unit tests failure would cause the job to fail properly
           # "-check.v" (must be after package list) outputs timings
           set -e
-          go test -timeout 60m -race -short -cover ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v"
+          go test -timeout 60m -race -short -coverprofile=$(Build.ArtifactStagingDirectory)/unit_coverage_linux.out  ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v"
+          go tool cover -html=$(Build.ArtifactStagingDirectory)/unit_coverage_linux.out -o $(Build.ArtifactStagingDirectory)/unit_coverage_linux.html
           GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
         name: 'Run_unit_tests'
         env:
@@ -248,6 +249,12 @@ jobs:
           AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
           GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
           GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+      # Publish the Artifacts
+      - task: PublishBuildArtifacts@1
+        inputs:
+          artifactName: 'AzCopy Coverage $(imageName)'
+        displayName: 'Publish Artifacts for AzCopy code coverage'
+        condition: succeeded()
       - script: |
           go build -o test-validator ./testSuite/
           mkdir test-temp
