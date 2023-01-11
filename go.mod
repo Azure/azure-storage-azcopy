@@ -14,7 +14,7 @@ require (
 	github.com/mattn/go-ieproxy v0.0.3
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/pkg/errors v0.9.1
-	github.com/pkg/xattr v0.4.9
+	github.com/pkg/xattr v0.4.6
 	github.com/rogpeppe/go-internal v1.8.1 // indirect
 	github.com/spf13/cobra v1.4.0
 	github.com/wastore/keychain v0.0.0-20180920053336-f2c902a3d807
@@ -22,7 +22,7 @@ require (
 	golang.org/x/crypto v0.0.0-20220314234724-5d542ad81a58
 	golang.org/x/oauth2 v0.0.0-20220309155454-6242fa91716a
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20220408201424-a24fb2fb8a0f
+	golang.org/x/sys v0.0.0-20220310020820-b874c991c1a5
 	google.golang.org/api v0.72.0
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 )

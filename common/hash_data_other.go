@@ -1,4 +1,5 @@
-//go:build !windows && !linux && !darwin && !freebsd && !netbsd && !solaris
+//go:build !windows
+// +build !windows
 
 package common
 
