@@ -1,5 +1,4 @@
-//go:build !windows
-// +build !windows
+//go:build !windows && !linux && !darwin && !freebsd && !netbsd && !solaris
 
 package common
 
