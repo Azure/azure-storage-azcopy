@@ -121,7 +121,7 @@ func (r *randomDataGenerator) freshenRandomData(count int) {
 
 	// ALSO flip random bits in every yth one (where y is much smaller than the x we used above)
 	// This is not as random as what we do above, but its faster. And without it, the data is too compressible
-	var skipSize = 2 // with skip-size = 3 its slightly faster, and still uncompressible with zip but it is
+	var skipSize = 2 // with skip-size = 3 its slightly faster, and still incompressible with zip but it is
 	// compressible (down to 30% of original size) with 7zip's compression
 	bitFlipMask := byte(r.randGen.Int31n(128)) + 128
 	for i := r.readIterationCount % skipSize; i < count; i += skipSize {

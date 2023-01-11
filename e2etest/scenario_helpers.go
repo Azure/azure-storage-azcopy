@@ -26,7 +26,7 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/url"
 	"os"
 	"path"
@@ -67,7 +67,7 @@ var specialNames = []string{
 // note: this is to emulate the list-of-files flag
 // nolint
 func (scenarioHelper) generateListOfFiles(c asserter, fileList []string) (path string) {
-	parentDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
+	parentDirName, err := os.MkdirTemp("", "AzCopyLocalTest")
 	c.AssertNoErr(err)
 
 	// create the file
@@ -77,14 +77,14 @@ func (scenarioHelper) generateListOfFiles(c asserter, fileList []string) (path s
 
 	// pipe content into it
 	content := strings.Join(fileList, "\n")
-	err = ioutil.WriteFile(path, []byte(content), common.DEFAULT_FILE_PERM)
+	err = os.WriteFile(path, []byte(content), common.DEFAULT_FILE_PERM)
 	c.AssertNoErr(err)
 	return
 }
 
 // nolint
 func (scenarioHelper) generateLocalDirectory(c asserter) (dstDirName string) {
-	dstDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
+	dstDirName, err := os.MkdirTemp("", "AzCopyLocalTest")
 	c.AssertNoErr(err)
 	return
 }
@@ -101,7 +101,7 @@ func (scenarioHelper) generateLocalFile(filePath string, fileSize int) ([]byte, 
 	}
 
 	// write to file and return the data
-	err = ioutil.WriteFile(filePath, bigBuff, common.DEFAULT_FILE_PERM)
+	err = os.WriteFile(filePath, bigBuff, common.DEFAULT_FILE_PERM)
 	return bigBuff, err
 }
 
@@ -123,6 +123,9 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 			if file.creationProperties.smbPermissionsSddl != nil {
 				osScenarioHelper{}.setFileSDDLString(c, filepath.Join(options.dirPath, file.name), *file.creationProperties.smbPermissionsSddl)
 			}
+			if file.creationProperties.lastWriteTime != nil {
+				c.AssertNoErr(os.Chtimes(filepath.Join(options.dirPath, file.name), time.Now(), *file.creationProperties.lastWriteTime), "set times")
+			}
 		} else {
 			sourceData, err := s.generateLocalFile(
 				filepath.Join(options.dirPath, file.name),
@@ -140,6 +143,9 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 
 			if file.creationProperties.smbPermissionsSddl != nil {
 				osScenarioHelper{}.setFileSDDLString(c, filepath.Join(options.dirPath, file.name), *file.creationProperties.smbPermissionsSddl)
+			}
+			if file.creationProperties.lastWriteTime != nil {
+				c.AssertNoErr(os.Chtimes(filepath.Join(options.dirPath, file.name), time.Now(), *file.creationProperties.lastWriteTime), "set times")
 			}
 		}
 	}
@@ -523,7 +529,7 @@ func (s scenarioHelper) downloadBlobContent(a asserter, options downloadContentO
 	retryReader := downloadResp.Body(azblob.RetryReaderOptions{})
 	defer retryReader.Close()
 
-	destData, err := ioutil.ReadAll(retryReader)
+	destData, err := io.ReadAll(retryReader)
 	a.AssertNoErr(err)
 	return destData[:]
 }
@@ -647,7 +653,7 @@ func (scenarioHelper) generateCommonRemoteScenarioForS3(c asserter, client *mini
 		objectName5 := createNewObject(c, client, bucketName, prefix+specialNames[i])
 
 		// Note: common.AZCOPY_PATH_SEPARATOR_STRING is added before bucket or objectName, as in the change minimize JobPartPlan file size,
-		// transfer.Source & transfer.Destination(after trimed the SourceRoot and DestinationRoot) are with AZCOPY_PATH_SEPARATOR_STRING suffix,
+		// transfer.Source & transfer.Destination(after trimming the SourceRoot and DestinationRoot) are with AZCOPY_PATH_SEPARATOR_STRING suffix,
 		// when user provided source & destination are without / suffix, which is the case for scenarioHelper generated URL.
 
 		bucketPath := ""
@@ -690,7 +696,7 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 				c.AssertNoErr(err)
 			}
 
-			if f.creationProperties.smbPermissionsSddl != nil || f.creationProperties.smbAttributes != nil {
+			if f.creationProperties.smbPermissionsSddl != nil || f.creationProperties.smbAttributes != nil || f.creationProperties.lastWriteTime != nil {
 				_, err := dir.SetProperties(ctx, ad.toHeaders(c, options.shareURL).SMBProperties)
 				c.AssertNoErr(err)
 
@@ -711,7 +717,7 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			// set other properties
 			// TODO: do we need a SetProperties method on dir...?  Discuss with zezha-msft
 			if f.creationProperties.creationTime != nil {
-				panic("setting these properties isn't implmented yet for folders in the test harnesss")
+				panic("setting these properties isn't implemented yet for folders in the test harness")
 				// TODO: nakulkar-msft the attributes stuff will need to be implemented here before attributes can be tested on Azure Files
 			}
 
@@ -743,7 +749,12 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			c.AssertNoErr(err)
 			c.Assert(cResp.StatusCode(), equals(), 201)
 
-			if f.creationProperties.smbPermissionsSddl != nil || f.creationProperties.smbAttributes != nil {
+			_, err = file.UploadRange(context.Background(), 0, contentR, nil)
+			if err == nil {
+				c.Failed()
+			}
+
+			if f.creationProperties.smbPermissionsSddl != nil || f.creationProperties.smbAttributes != nil || f.creationProperties.lastWriteTime != nil {
 				/*
 					via Jason Shay:
 					Providing securityKey/SDDL during 'PUT File' and 'PUT Properties' can and will provide different results/semantics.
@@ -771,11 +782,6 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 
 					c.Assert(dest.Compare(source), equals(), true)
 				}
-			}
-
-			_, err = file.UploadRange(context.Background(), 0, contentR, nil)
-			if err == nil {
-				c.Failed()
 			}
 
 			// TODO: do we want to put some random content into it?
@@ -904,7 +910,7 @@ func (s scenarioHelper) downloadFileContent(a asserter, options downloadContentO
 	retryReader := downloadResp.Body(azfile.RetryReaderOptions{})
 	defer retryReader.Close() // The client must close the response body when finished with it
 
-	destData, err := ioutil.ReadAll(retryReader)
+	destData, err := io.ReadAll(retryReader)
 	a.AssertNoErr(err)
 	downloadResp.Body(azfile.RetryReaderOptions{})
 	return destData

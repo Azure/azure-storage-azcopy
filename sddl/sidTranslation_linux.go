@@ -1,3 +1,5 @@
+// +build linux
+
 // Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -18,39 +20,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package sddl
 
-// AzError is to handle AzCopy internal errors in a fine way
-type AzError struct {
-	code          uint64
-	msg           string
-	additonalInfo string
-}
-
-// NewAzError composes an AzError with given code and message
-func NewAzError(base AzError, additionalInfo string) AzError {
-	base.additonalInfo = additionalInfo
-	return base
-}
-
-func (err AzError) ErrorCode() uint64 {
-	return err.code
-}
-
-func (lhs AzError) Equals(rhs AzError) bool {
-	return lhs.code == rhs.code
-}
-
-func (err AzError) Error() string {
-	return err.msg + err.additonalInfo
-}
-
-var EAzError AzError
-
-func (err AzError) LoginCredMissing() AzError {
-	return AzError{uint64(1), "Login Credentials missing. ", ""}
-}
-
-func (err AzError) InvalidBlobName() AzError {
-	return AzError{uint64(2), "Invalid Blob Name.", ""}
+// Note that all usages of OSTranslateSID gracefully handle the error, rather than throwing the error.
+func OSTranslateSID(SID string) (string, error) {
+	return CanonicalizeSid(SID)
 }

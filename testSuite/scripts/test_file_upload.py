@@ -7,7 +7,7 @@ import unittest
 class FileShare_Upload_User_Scenario(unittest.TestCase):
 
     def test_file_upload_empty(self):
-        self.util_test_file_upload_size_n_fullname(0) #emtpy file
+        self.util_test_file_upload_size_n_fullname(0) #empty file
 
     def test_file_upload_1b_fullname(self):
         self.util_test_file_upload_size_n_fullname(1) #1B
@@ -209,7 +209,7 @@ class FileShare_Upload_User_Scenario(unittest.TestCase):
         self.assertTrue(result)
 
     # test_1G_file_upload verifies the azcopy upload of 1Gb file upload in blocks of 100 Mb
-    @unittest.skip("coverd by stress")
+    @unittest.skip("covered by stress")
     def test_1GB_file_upload(self):
         # create 1Gb file
         filename = "test_1G_file.txt"

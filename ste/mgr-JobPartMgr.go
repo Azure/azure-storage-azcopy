@@ -53,6 +53,7 @@ type IJobPartMgr interface {
 	ChunkStatusLogger() common.ChunkStatusLogger
 	common.ILogger
 	SourceProviderPipeline() pipeline.Pipeline
+	SourceCredential() pipeline.Factory
 	getOverwritePrompter() *overwritePrompter
 	getFolderCreationTracker() FolderCreationTracker
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
@@ -297,6 +298,7 @@ type jobPartMgr struct {
 	// Currently, this only sees use in ADLSG2->ADLSG2 ACL transfers. TODO: Remove it when we can reliably get/set ACLs on blob.
 	secondaryPipeline pipeline.Pipeline
 
+	sourceCredential       pipeline.Factory // must satisfy azblob.TokenCredential currently
 	sourceProviderPipeline pipeline.Pipeline
 	// TODO: Ditto
 	secondarySourceProviderPipeline pipeline.Pipeline
@@ -551,7 +553,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() {
 		var sourceCred azblob.Credential = azblob.NewAnonymousCredential()
 		jobState := jpm.jobMgr.getInMemoryTransitJobState()
-		if fromTo.To() == common.ELocation.Blob() && jobState.S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
+		if fromTo.To() == common.ELocation.Blob() && jobState.S2SSourceCredentialType.IsAzureOAuth() {
 			credOption := common.CredentialOpOptions{
 				LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
 				LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
@@ -561,6 +563,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			}
 
 			sourceCred = common.CreateBlobCredential(ctx, jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType), credOption)
+			jpm.sourceCredential = sourceCred
 		}
 
 		jpm.sourceProviderPipeline = NewBlobPipeline(
@@ -578,8 +581,9 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 
 		// Consider the ADLSG2->ADLSG2 ACLs case
 		if fromTo == common.EFromTo.BlobBlob() && jpm.Plan().PreservePermissions.IsTruthy() {
+			credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
 			jpm.secondarySourceProviderPipeline = NewBlobFSPipeline(
-				azbfs.NewAnonymousCredential(),
+				credential,
 				azbfs.PipelineOptions{
 					Log: jpm.jobMgr.PipelineLogInfo(),
 					Telemetry: azbfs.TelemetryOptions{
@@ -928,6 +932,10 @@ func (jpm *jobPartMgr) ChunkStatusLogger() common.ChunkStatusLogger {
 
 func (jpm *jobPartMgr) SourceProviderPipeline() pipeline.Pipeline {
 	return jpm.sourceProviderPipeline
+}
+
+func (jpm *jobPartMgr) SourceCredential() pipeline.Factory {
+	return jpm.sourceCredential
 }
 
 /* Status update messages should not fail */

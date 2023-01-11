@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-//GCPURLParts structure is used to parse and hold the different
-//components of GCP Object/Service/Bucket URL
+// GCPURLParts structure is used to parse and hold the different
+// components of GCP Object/Service/Bucket URL
 type GCPURLParts struct {
 	Scheme         string
 	Host           string
@@ -17,13 +17,13 @@ type GCPURLParts struct {
 	UnparsedParams string
 }
 
-const gcpHostPattern = "^storage.cloud.google.com"
+const gcpHostPattern = "^storage\\.cloud\\.google\\.com"
 const invalidGCPURLErrorMessage = "Invalid GCP URL"
 const gcpEssentialHostPart = "google.com"
 
 var gcpHostRegex = regexp.MustCompile(gcpHostPattern)
 
-//IsGCPURL validates whether a given URL is a valid GCP Object/Service/Bucket URL
+// IsGCPURL validates whether a given URL is a valid GCP Object/Service/Bucket URL
 func IsGCPURL(u url.URL) bool {
 	if _, isGCPURL := findGCPURLMatches(strings.ToLower(u.Host)); isGCPURL {
 		return true
@@ -39,8 +39,8 @@ func findGCPURLMatches(lower string) ([]string, bool) {
 	return matches, true
 }
 
-//NewGCPURLParts processes the given URL and returns a valid GCPURLParts
-//structure that contains all the necessary components.
+// NewGCPURLParts processes the given URL and returns a valid GCPURLParts
+// structure that contains all the necessary components.
 func NewGCPURLParts(u url.URL) (GCPURLParts, error) {
 	host := strings.ToLower(u.Host)
 	_, isGCPURL := findGCPURLMatches(host)
@@ -70,7 +70,7 @@ func NewGCPURLParts(u url.URL) (GCPURLParts, error) {
 	return up, nil
 }
 
-//URL returns a valid net/url.URL object initialised from the components of GCP URL
+// URL returns a valid net/url.URL object initialised from the components of GCP URL
 func (gUrl *GCPURLParts) URL() url.URL {
 	path := ""
 
@@ -118,8 +118,8 @@ func (gUrl *GCPURLParts) IsObjectSyntactically() bool {
 	return false
 }
 
-//IsDirectorySyntactically returns true if the given GCPURLParts
-//points to a directory or not based on the path.
+// IsDirectorySyntactically returns true if the given GCPURLParts
+// points to a directory or not based on the path.
 func (gUrl *GCPURLParts) IsDirectorySyntactically() bool {
 	if gUrl.IsObjectSyntactically() && strings.HasSuffix(gUrl.ObjectKey, "/") {
 		return true

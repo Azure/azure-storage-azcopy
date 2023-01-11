@@ -21,7 +21,9 @@
 package e2etest
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/Azure/go-autorest/autorest/adal"
 	"os"
 	"reflect"
 	"strconv"
@@ -105,7 +107,86 @@ func (AccountType) Standard() AccountType                     { return AccountTy
 func (AccountType) Premium() AccountType                      { return AccountType(1) }
 func (AccountType) HierarchicalNamespaceEnabled() AccountType { return AccountType(2) }
 func (AccountType) Classic() AccountType                      { return AccountType(3) }
+func (AccountType) StdManagedDisk() AccountType               { return AccountType(4) }
+func (AccountType) OAuthManagedDisk() AccountType             { return AccountType(5) }
 
 func (o AccountType) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
+}
+
+func (o AccountType) IsManagedDisk() bool {
+	return o == o.StdManagedDisk() || o == o.OAuthManagedDisk()
+}
+
+func (o AccountType) IsBlobOnly() bool {
+	return o.IsManagedDisk() || o == o.HierarchicalNamespaceEnabled()
+}
+
+/*
+	{"SubscriptionID":"","ResourceGroupName":"","DiskName":""}
+*/
+type ManagedDiskConfig struct {
+	SubscriptionID    string
+	ResourceGroupName string
+	DiskName          string
+	oauth             *adal.ServicePrincipalToken
+}
+
+func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDiskConfig, error) {
+	var mdConfigVar string
+
+	switch accountType {
+	case EAccountType.StdManagedDisk():
+		mdConfigVar = "AZCOPY_E2E_STD_MANAGED_DISK_CONFIG"
+	case EAccountType.OAuthManagedDisk():
+		mdConfigVar = "AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG"
+	default:
+		return nil, fmt.Errorf("account type %s is invalid for GetMDConfig", accountType.String())
+	}
+
+	conf := os.Getenv(mdConfigVar)
+	if conf == "" {
+		return nil, fmt.Errorf("config for env var %s was empty; empty config: {\"SubscriptionID\":\"\",\"ResourceGroupName\":\"\",\"DiskName\":\"\"}", mdConfigVar)
+	}
+
+	var out ManagedDiskConfig
+	err := json.Unmarshal([]byte(conf), &out)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse config") // Outputting the error may reveal semi-sensitive info like subscription ID
+	}
+
+	out.oauth, err = gim.GetOAuthCredential("https://management.core.windows.net/")
+	if err != nil {
+		return nil, fmt.Errorf("failed to refresh oauth token: %w", err)
+	}
+
+	return &out, nil
+}
+
+func (gim GlobalInputManager) GetOAuthCredential(resource string) (*adal.ServicePrincipalToken, error) {
+	tenant, appID, clientSecret := gim.GetServicePrincipalAuth()
+
+	var spt *adal.ServicePrincipalToken
+
+	oauthConfig, err := adal.NewOAuthConfig("https://login.microsoftonline.com", tenant)
+	if err != nil {
+		return nil, err
+	}
+
+	spt, err = adal.NewServicePrincipalToken( // initialize the token
+		*oauthConfig,
+		appID,
+		clientSecret,
+		resource,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	err = spt.Refresh() // grab a token and return it.
+	if err != nil {
+		return nil, err
+	}
+
+	return spt, nil
 }

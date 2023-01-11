@@ -153,7 +153,7 @@ func (s *cmdIntegrationSuite) TestFileCopyS2SWithIncludeFlag(c *chk.C) {
 	raw.include = includeString
 	raw.recursive = true
 
-	// verify that only the files specified by the include flag are copyed
+	// verify that only the files specified by the include flag are copied
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		validateS2STransfersAreScheduled(c, "/", "/", filesToInclude, mockedRPC)
@@ -232,7 +232,7 @@ func (s *cmdIntegrationSuite) TestFileCopyS2SWithIncludeAndExcludeFlag(c *chk.C)
 	raw.exclude = excludeString
 	raw.recursive = true
 
-	// verify that only the files specified by the include flag are copyed
+	// verify that only the files specified by the include flag are copied
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		validateS2STransfersAreScheduled(c, "/", "/", filesToInclude, mockedRPC)

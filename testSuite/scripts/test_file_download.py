@@ -280,7 +280,7 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
         result = util.Command("testFile").add_arguments(file_path).add_arguments(destination_sas).execute_azcopy_verify()
         self.assertTrue(result)
 
-        # downloading the created parallely in blocks of 4mb file through azcopy.
+        # downloading the created parallelly in blocks of 4mb file through azcopy.
         download_file = util.test_directory_path + "/test_63mb_in4mb_download.txt"
         result = util.Command("copy").add_arguments(destination_sas).add_arguments(download_file).add_flags("log-level",
                                                                                                             "info").add_flags(
