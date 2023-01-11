@@ -171,6 +171,8 @@ type params struct {
 	s2sPreserveAccessTier     bool
 	accessTier                azblob.AccessTierType
 	checkMd5                  common.HashValidationOption
+	compareHash               common.SyncHashType
+	missingHashPolicy         common.SyncMissingHashPolicy
 
 	destNull bool
 

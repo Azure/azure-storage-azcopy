@@ -336,3 +336,47 @@ func TestBasic_CopyWithShareRoot(t *testing.T) {
 		"",
 	)
 }
+
+func TestBasic_HashBasedSync_UploadDownload(t *testing.T) {
+	tf := testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("asdf.txt"),
+			f("overwriteme.txt"), // create at destination with different hash
+		},
+		shouldSkip: []interface{}{
+			f("skipme-exists.txt"), // create at destination
+		},
+	}
+
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.BlobLocal(), common.EFromTo.FileLocal()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive:         true,
+			compareHash:       common.ESyncHashType.MD5(),
+			missingHashPolicy: common.ESyncMissingHashPolicy.Generate(), // Generate local hashes
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				h.CreateFile(f("overwriteme.txt"), false) // will have a different hash, and get overwritten.
+
+				existingBody := []byte("foobar")
+				existingObject := f("skipme-exists.txt")
+				existingObject.body = existingBody
+
+				h.CreateFile(existingObject, true)
+				h.CreateFile(existingObject, false)
+			},
+		},
+		tf,
+		EAccountType.Standard(),
+		EAccountType.Standard(),
+		"",
+	)
+}

@@ -1661,3 +1661,7 @@ func (mhp *SyncMissingHashPolicy) Parse(s string) error {
 	}
 	return err
 }
+
+func (mhp SyncMissingHashPolicy) String() string {
+	return enum.StringInt(mhp, reflect.TypeOf(mhp))
+}
