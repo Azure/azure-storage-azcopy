@@ -21,6 +21,7 @@
 package cmd
 
 import (
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"reflect"
 	"strings"
@@ -68,7 +69,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
-		if f.comparisonHashType != common.ESyncHashType.None() {
+		if f.comparisonHashType != common.ESyncHashType.None() && sourceObjectInMap.entityType == common.EEntityType.File() {
 			switch f.comparisonHashType {
 			case common.ESyncHashType.MD5():
 				if !reflect.DeepEqual(sourceObjectInMap.md5, destinationObject.md5) {
@@ -131,7 +132,7 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) err
 			return f.copyTransferScheduler(sourceObject)
 		}
 
-		if f.comparisonHashType != common.ESyncHashType.None() {
+		if f.comparisonHashType != common.ESyncHashType.None() && sourceObject.entityType == common.EEntityType.File() {
 			switch f.comparisonHashType {
 			case common.ESyncHashType.MD5():
 				if !reflect.DeepEqual(sourceObject.md5, destinationObjectInMap.md5) {
@@ -145,6 +146,8 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) err
 			// if destination is stale, schedule source
 			return f.copyTransferScheduler(sourceObject)
 		}
+
+		azcopyScanningLogger.Log(pipeline.LogDebug, "Object "+sourceObject.name+" skipped")
 		// skip if dest is more recent
 		return nil
 	}
