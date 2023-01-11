@@ -416,31 +416,47 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 				options.accessTier = azblob.DefaultAccessTier
 			}
 
-			// to prevent the service from erroring out with an improper MD5, we opt to commit a block, then the list.
-			blockID := base64.StdEncoding.EncodeToString([]byte(uuid.NewString()))
-			sResp, err := bb.StageBlock(ctx,
-				blockID,
-				reader,
-				azblob.LeaseAccessConditions{},
-				nil,
-				common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo))
+			if reader.Size() > 0 {
+				// to prevent the service from erroring out with an improper MD5, we opt to commit a block, then the list.
+				blockID := base64.StdEncoding.EncodeToString([]byte(uuid.NewString()))
+				sResp, err := bb.StageBlock(ctx,
+					blockID,
+					reader,
+					azblob.LeaseAccessConditions{},
+					nil,
+					common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo))
 
-			c.AssertNoErr(err)
-			c.Assert(sResp.StatusCode(), equals(), 201)
+				c.AssertNoErr(err)
+				c.Assert(sResp.StatusCode(), equals(), 201)
 
-			cResp, err := bb.CommitBlockList(ctx,
-				[]string{blockID},
-				headers,
-				ad.toMetadata(),
-				azblob.BlobAccessConditions{},
-				options.accessTier,
-				ad.toBlobTags(),
-				common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo),
-				azblob.ImmutabilityPolicyOptions{},
-			)
+				cResp, err := bb.CommitBlockList(ctx,
+					[]string{blockID},
+					headers,
+					ad.toMetadata(),
+					azblob.BlobAccessConditions{},
+					options.accessTier,
+					ad.toBlobTags(),
+					common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo),
+					azblob.ImmutabilityPolicyOptions{},
+				)
 
-			c.AssertNoErr(err)
-			c.Assert(cResp.StatusCode(), equals(), 201)
+				c.AssertNoErr(err)
+				c.Assert(cResp.StatusCode(), equals(), 201)
+			} else { // todo: invalid MD5 on empty blob is impossible like this, but it's doubtful we'll need to support it.
+				// handle empty blobs
+				cResp, err := bb.Upload(ctx,
+					reader,
+					headers,
+					ad.toMetadata(),
+					azblob.BlobAccessConditions{},
+					options.accessTier,
+					ad.toBlobTags(),
+					common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo),
+					azblob.ImmutabilityPolicyOptions{})
+
+				c.AssertNoErr(err)
+				c.Assert(cResp.StatusCode(), equals(), 201)
+			}
 		case common.EBlobType.PageBlob():
 			pb := options.containerURL.NewPageBlobURL(b.name)
 			cResp, err := pb.Create(ctx, reader.Size(), 0, headers, ad.toMetadata(), azblob.BlobAccessConditions{}, azblob.DefaultPremiumBlobAccessTier, tags, common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo), azblob.ImmutabilityPolicyOptions{})
