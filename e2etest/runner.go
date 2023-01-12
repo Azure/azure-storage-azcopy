@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -187,7 +188,7 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string, env []
 	return stdout.Bytes(), runErr
 }
 
-func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, needsOAuth bool, afterStart func() string, chToStdin <-chan string) (CopyOrSyncCommandResult, bool, error) {
+func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, needsOAuth bool, afterStart func() string, chToStdin <-chan string, logDir string) (CopyOrSyncCommandResult, bool, error) {
 	capLen := func(b []byte) []byte {
 		if len(b) < 1024 {
 			return b
@@ -237,6 +238,11 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 		}
 	}
 
+	if logDir != "" {
+		env = append(env, "AZCOPY_LOG_LOCATION="+logDir)
+		env = append(env, "AZCOPY_JOB_PLAN_LOCATION="+filepath.Join(logDir, "plans"))
+	}
+
 	out, err := t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args, env, afterStart, chToStdin)
 
 	wasClean := true
@@ -271,9 +277,15 @@ func (t *TestRunner) SetTransferStatusFlag(value string) {
 	t.flags["with-status"] = value
 }
 
-func (t *TestRunner) ExecuteJobsShowCommand(jobID common.JobID) (JobsShowCommandResult, error) {
+func (t *TestRunner) ExecuteJobsShowCommand(jobID common.JobID, azcopyDir string) (JobsShowCommandResult, error) {
 	args := append([]string{"jobs", "show", jobID.String()}, t.computeArgs()...)
-	out, err := exec.Command(GlobalInputManager{}.GetExecutablePath(), args...).Output()
+	cmd := exec.Command(GlobalInputManager{}.GetExecutablePath(), args...)
+
+	if azcopyDir != "" {
+		cmd.Env = append(cmd.Env, "AZCOPY_JOB_PLAN_LOCATION="+filepath.Join(azcopyDir, "plans"))
+	}
+
+	out, err := cmd.Output()
 	if err != nil {
 		return JobsShowCommandResult{}, err
 	}
@@ -310,12 +322,12 @@ func newCopyOrSyncCommandResult(rawOutput string) (CopyOrSyncCommandResult, bool
 	return CopyOrSyncCommandResult{jobID: jobSummary.JobID, finalStatus: jobSummary}, true
 }
 
-func (c *CopyOrSyncCommandResult) GetTransferList(status common.TransferStatus) ([]common.TransferDetail, error) {
+func (c *CopyOrSyncCommandResult) GetTransferList(status common.TransferStatus, azcopyDir string) ([]common.TransferDetail, error) {
 	runner := newTestRunner()
 	runner.SetTransferStatusFlag(status.String())
 
 	// invoke AzCopy to get the status from the plan files
-	result, err := runner.ExecuteJobsShowCommand(c.jobID)
+	result, err := runner.ExecuteJobsShowCommand(c.jobID, azcopyDir)
 	if err != nil {
 		return make([]common.TransferDetail, 0), err
 	}
