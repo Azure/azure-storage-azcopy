@@ -49,7 +49,8 @@ func anyToRemote_fileProperties(jptm IJobPartTransferMgr, info TransferInfo, p p
 		return
 	}
 
-	if srcInfoProvider.EntityType() != common.EEntityType.FileProperties() {
+	if (jptm.GetOverwriteOption() == common.EOverwriteOption.PosixProperties() &&
+						srcInfoProvider.EntityType() != common.EEntityType.File()) {
 		panic("configuration error. Source Info Provider does not have FileProperties entity type")
 	}
 

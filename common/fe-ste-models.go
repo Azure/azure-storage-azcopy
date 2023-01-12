@@ -250,6 +250,7 @@ func (OverwriteOption) True() OverwriteOption          { return OverwriteOption(
 func (OverwriteOption) False() OverwriteOption         { return OverwriteOption(1) }
 func (OverwriteOption) Prompt() OverwriteOption        { return OverwriteOption(2) }
 func (OverwriteOption) IfSourceNewer() OverwriteOption { return OverwriteOption(3) }
+func (OverwriteOption) PosixProperties() OverwriteOption {return OverwriteOption(4)}
 
 func (o *OverwriteOption) Parse(s string) error {
 	val, err := enum.Parse(reflect.TypeOf(o), s, true)
@@ -1421,7 +1422,6 @@ type EntityType uint8
 
 func (EntityType) File() EntityType   { return EntityType(0) }
 func (EntityType) Folder() EntityType { return EntityType(1) }
-func (EntityType) FileProperties() EntityType { return EntityType(2) }
 
 func (e EntityType) String() string {
 	return enum.StringInt(e, reflect.TypeOf(e))
