@@ -835,3 +835,26 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
 
         self.assertEquals(x.TransfersCompleted, "10")
         self.assertEquals(x.TransfersFailed, "0")
+
+    def test_overwrite_posix_properties(self):
+        # create a file file_hot_block_blob_tier
+        filename = "test_posix.txt"
+        file_path = util.create_test_file(filename, 10 * 1024)
+
+        # uploading the file file_hot_block_blob_tier using azcopy and setting the block-blob-tier to Hot
+        destination_sas = util.get_resource_sas(filename)
+        result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
+            add_flags("log-level", "info").add_flags("preserve-posix-properties", "true").execute_azcopy_copy_command()
+        self.assertTrue(result)
+        # execute azcopy validate order.
+        # added the expected blob-tier "Hot"
+        result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination_sas)
+
+        os.chmod(file_path, 0o444)
+
+        result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
+            add_flags("log-level", "info").add_flags("overwrite", "PosixProperties").execute_azcopy_copy_command()
+
+
+        result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination_sas).add_flags("metadata", "permissions=0o444").execute_azcopy_verify()
+        self.assertTrue(result)
