@@ -82,7 +82,7 @@ stages:
             AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
 
         - script: |
-            time azcopy bench $(Blob2BlobLargeFilesDst) --log-level=ERROR --size-per-file=50G --file-count=800 --put-md5=false
+            time azcopy bench $(Blob2BlobLargeFilesDst) --log-level=ERROR --size-per-file=50G --file-count=200 --put-md5=false --delete-test-data=false
             sudo rm -rf $(localPath)/*
           displayName: 'Upload - Large files'
           condition: always()
@@ -126,7 +126,7 @@ stages:
             AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
 
         - script: |
-            time azcopy bench $(Blob2BlobSmallFilesDst) --size-per-file=5k --file-count=8000000 --check-length=false --log-level=ERROR
+            time azcopy bench $(Blob2BlobSmallFilesDst) --size-per-file=5k --file-count=8000000 --check-length=false --log-level=ERROR --delete-test-data=false
             sudo rm -rf $(localPath)/*
           displayName: 'Upload - Small Files'
           condition: always()
@@ -146,7 +146,7 @@ stages:
             curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
             az login --identity --username $(AZCOPY_MSI_CLIENT_ID)
             for container in `az storage container list --account-name $(DestinationAccount) --query "[*].[name]" --output tsv --auth-mode login`; do
-              az storage container delete --account-name $(DestinationAccount) --name $container --auth-mode login
+              az storage container delete --account-name $(DestinationAccount) --name $container 
             done
           displayName: 'Clean destination storage Account'
           condition: always()
