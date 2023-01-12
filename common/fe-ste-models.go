@@ -55,6 +55,8 @@ const (
 	// Since we haven't updated the Go SDKs to handle CPK just yet, we need to detect CPK related errors
 	// and inform the user that we don't support CPK yet.
 	CPK_ERROR_SERVICE_CODE = "BlobUsesCustomerSpecifiedEncryption"
+	BLOB_NOT_FOUND         = "BlobNotFound"
+	FILE_NOT_FOUND         = "The specified file was not found."
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -110,7 +112,7 @@ type PartNumber uint32
 type Version uint32
 type Status uint32
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 var EDeleteSnapshotsOption = DeleteSnapshotsOption(0)
 
 type DeleteSnapshotsOption uint8
@@ -145,7 +147,7 @@ func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() azblob.DeleteSnapsh
 	return azblob.DeleteSnapshotsOptionType(strings.ToLower(d.String()))
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 var EPermanentDeleteOption = PermanentDeleteOption(3) // Default to "None"
 
 type PermanentDeleteOption uint8
@@ -610,7 +612,7 @@ func (ft *FromTo) IsPropertyOnlyTransfer() bool {
 
 var BenchmarkLmt = time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC)
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Enumerates the values for blob type.
 type BlobType uint8
 
@@ -679,9 +681,11 @@ func (t TransferStatus) StatusLocked() bool { // Is an overwrite necessary to ch
 func (TransferStatus) NotStarted() TransferStatus { return TransferStatus(0) }
 
 // TODO confirm whether this is actually needed
-//   Outdated:
-//     Transfer started & at least 1 chunk has successfully been transferred.
-//     Used to resume a transfer that started to avoid transferring all chunks thereby improving performance
+//
+//	Outdated:
+//	  Transfer started & at least 1 chunk has successfully been transferred.
+//	  Used to resume a transfer that started to avoid transferring all chunks thereby improving performance
+//
 // Update(Jul 2020): This represents the state of transfer as soon as the file is scheduled.
 func (TransferStatus) Started() TransferStatus { return TransferStatus(1) }
 
@@ -977,7 +981,7 @@ func (i *InvalidMetadataHandleOption) UnmarshalJSON(b []byte) error {
 	return i.Parse(s)
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const (
 	DefaultBlockBlobBlockSize      = 8 * 1024 * 1024
 	MaxBlockBlobBlockSize          = 4000 * 1024 * 1024
@@ -1566,7 +1570,7 @@ func GetClientProvidedKey(options CpkOptions) azblob.ClientProvidedKeyOptions {
 	return ToClientProvidedKeyOptions(_cpkInfo, _cpkScopeInfo)
 }
 
-////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////
 type SetPropertiesFlags uint32 // [0000000000...32 times]
 
 var ESetPropertiesFlags = SetPropertiesFlags(0)
@@ -1589,7 +1593,7 @@ func (op *SetPropertiesFlags) ShouldTransferBlobTags() bool {
 	return (*op)&ESetPropertiesFlags.SetBlobTags() == ESetPropertiesFlags.SetBlobTags()
 }
 
-////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////
 type RehydratePriorityType uint8
 
 var ERehydratePriorityType = RehydratePriorityType(0) // setting default as none
