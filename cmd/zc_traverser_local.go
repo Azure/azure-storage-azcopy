@@ -52,8 +52,7 @@ type localTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 	errorChannel                chan ErrorFileInfo
 
-	targetHashType    common.SyncHashType
-	missingHashPolicy common.SyncMissingHashPolicy
+	targetHashType common.SyncHashType
 	// receives fullPath entries and manages hashing of files lacking metadata.
 	hashTargetChannel chan string
 }
@@ -394,11 +393,6 @@ func (t *localTraverser) GetHashData(fullpath string) (common.SyncHashData, erro
 			ErrorHashNotCompatible:
 			break
 		default:
-			return common.SyncHashData{}, err
-		}
-
-		// if we cannot generate, return it as is.
-		if t.missingHashPolicy != common.ESyncMissingHashPolicy.Generate() {
 			return common.SyncHashData{}, err
 		}
 
@@ -776,7 +770,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	return finalizeHashing(err)
 }
 
-func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, followSymlinks bool, syncHashType common.SyncHashType, syncMissingHashPolicy common.SyncMissingHashPolicy, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan ErrorFileInfo) *localTraverser {
+func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, followSymlinks bool, syncHashType common.SyncHashType, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan ErrorFileInfo) *localTraverser {
 	traverser := localTraverser{
 		fullPath:                    cleanLocalPath(fullPath),
 		recursive:                   recursive,
@@ -784,8 +778,7 @@ func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, fol
 		appCtx:                      ctx,
 		incrementEnumerationCounter: incrementEnumerationCounter,
 		errorChannel:                errorChannel,
-		targetHashType:              syncHashType,
-		missingHashPolicy:           syncMissingHashPolicy}
+		targetHashType:              syncHashType}
 	return &traverser
 }
 

@@ -73,8 +73,19 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 		if f.comparisonHashType != common.ESyncHashType.None() && sourceObjectInMap.entityType == common.EEntityType.File() {
 			switch f.comparisonHashType {
 			case common.ESyncHashType.MD5():
+				if sourceObjectInMap.md5 == nil {
+					if azcopyScanningLogger != nil {
+						azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf("File %s skipped, because the source does not have a hash.", sourceObjectInMap.relativePath))
+					}
+
+					glcm.Info(fmt.Sprintf("File %s skipped, because the source does not have a hash.", sourceObjectInMap.relativePath))
+					return nil
+				}
+
 				if !reflect.DeepEqual(sourceObjectInMap.md5, destinationObject.md5) {
-					azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("File %s overwritten due to differing hash.", destinationObject.relativePath))
+					if azcopyScanningLogger != nil {
+						azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("File %s overwritten due to differing hash.", destinationObject.relativePath))
+					}
 					// hash inequality = source "newer" in this model.
 					return f.copyTransferScheduler(sourceObjectInMap)
 				}
@@ -82,13 +93,17 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 				panic("sanity check: unsupported hash type " + f.comparisonHashType.String())
 			}
 
-			azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("File %s skipped due to same hash.", destinationObject.relativePath))
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("File %s skipped due to same hash.", destinationObject.relativePath))
+			}
 			return nil
 		} else if sourceObjectInMap.isMoreRecentThan(destinationObject) {
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
-		azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("File %s skipped due to destination being newer", destinationObject.relativePath))
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("File %s skipped due to destination being newer", destinationObject.relativePath))
+		}
 	} else {
 		// purposefully ignore the error from destinationCleaner
 		// it's a tolerable error, since it just means some extra destination object might hang around a bit longer
@@ -142,23 +157,38 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) err
 		if f.comparisonHashType != common.ESyncHashType.None() && sourceObject.entityType == common.EEntityType.File() {
 			switch f.comparisonHashType {
 			case common.ESyncHashType.MD5():
+				if sourceObject.md5 == nil {
+					if azcopyScanningLogger != nil {
+						azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf("File %s skipped, because the source does not have a hash.", sourceObject.relativePath))
+					}
+
+					glcm.Info(fmt.Sprintf("File %s skipped, because the source does not have a hash.", sourceObject.relativePath))
+					return nil
+				}
+
 				if !reflect.DeepEqual(sourceObject.md5, destinationObjectInMap.md5) {
 					// hash inequality = source "newer" in this model.
-					azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("File %s overwritten due to differing hash.", sourceObject.relativePath))
+					if azcopyScanningLogger != nil {
+						azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("File %s overwritten due to differing hash.", sourceObject.relativePath))
+					}
 					return f.copyTransferScheduler(sourceObject)
 				}
 			default:
 				panic("sanity check: unsupported hash type " + f.comparisonHashType.String())
 			}
 
-			azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("File %s skipped due to same hash.", sourceObject.relativePath))
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("File %s skipped due to same hash.", sourceObject.relativePath))
+			}
 			return nil
 		} else if sourceObject.isMoreRecentThan(destinationObjectInMap) {
 			// if destination is stale, schedule source
 			return f.copyTransferScheduler(sourceObject)
 		}
 
-		azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("File %s skipped due to destination being newer", sourceObject.relativePath))
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("File %s skipped due to destination being newer", sourceObject.relativePath))
+		}
 		// skip if dest is more recent
 		return nil
 	}

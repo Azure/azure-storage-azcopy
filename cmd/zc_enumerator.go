@@ -334,7 +334,7 @@ type enumerationCounterFunc func(entityType common.EntityType)
 func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context,
 	credential *common.CredentialInfo, followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties,
 	includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string,
-	s2sPreserveBlobTags bool, syncHashType common.SyncHashType, syncMissingHashPolicy common.SyncMissingHashPolicy, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo) (ResourceTraverser, error) {
+	s2sPreserveBlobTags bool, syncHashType common.SyncHashType, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo) (ResourceTraverser, error) {
 	var output ResourceTraverser
 	var p *pipeline.Pipeline
 
@@ -419,9 +419,9 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions)
 		} else {
 			if ctx != nil {
-				output = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, toFollow, syncHashType, syncMissingHashPolicy, incrementEnumerationCounter, errorChannel)
+				output = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, toFollow, syncHashType, incrementEnumerationCounter, errorChannel)
 			} else {
-				output = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, toFollow, syncHashType, syncMissingHashPolicy, incrementEnumerationCounter, errorChannel)
+				output = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, toFollow, syncHashType, incrementEnumerationCounter, errorChannel)
 			}
 		}
 	case common.ELocation.Benchmark():

@@ -347,9 +347,8 @@ func TestBasic_HashBasedSync_Folders(t *testing.T) {
 		anonymousAuthOnly,
 		anonymousAuthOnly,
 		params{
-			recursive:         true,
-			compareHash:       common.ESyncHashType.MD5(),
-			missingHashPolicy: common.ESyncMissingHashPolicy.Generate(), // Generate local hashes
+			recursive:   true,
+			compareHash: common.ESyncHashType.MD5(),
 		},
 		&hooks{
 			beforeRunJob: func(h hookHelper) { // set up source to overwrite dest
@@ -399,9 +398,8 @@ func TestBasic_HashBasedSync_S2S(t *testing.T) {
 		anonymousAuthOnly,
 		anonymousAuthOnly,
 		params{
-			recursive:         true,
-			compareHash:       common.ESyncHashType.MD5(),
-			missingHashPolicy: common.ESyncMissingHashPolicy.Generate(), // Generate local hashes
+			recursive:   true,
+			compareHash: common.ESyncHashType.MD5(),
 		},
 		&hooks{
 			beforeRunJob: func(h hookHelper) {
@@ -441,9 +439,8 @@ func TestBasic_HashBasedSync_UploadDownload(t *testing.T) {
 		anonymousAuthOnly,
 		anonymousAuthOnly,
 		params{
-			recursive:         true,
-			compareHash:       common.ESyncHashType.MD5(),
-			missingHashPolicy: common.ESyncMissingHashPolicy.Generate(), // Generate local hashes
+			recursive:   true,
+			compareHash: common.ESyncHashType.MD5(),
 		},
 		&hooks{
 			beforeRunJob: func(h hookHelper) {

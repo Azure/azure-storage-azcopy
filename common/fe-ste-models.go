@@ -1646,27 +1646,3 @@ func (ht *SyncHashType) Parse(s string) error {
 func (ht SyncHashType) String() string {
 	return enum.StringInt(ht, reflect.TypeOf(ht))
 }
-
-type SyncMissingHashPolicy uint8
-
-var ESyncMissingHashPolicy SyncMissingHashPolicy = 0
-
-func (SyncMissingHashPolicy) Overwrite() SyncMissingHashPolicy {
-	return 0
-}
-
-func (SyncMissingHashPolicy) Generate() SyncMissingHashPolicy { // local-only, generate when missing/incompatible
-	return 1
-}
-
-func (mhp *SyncMissingHashPolicy) Parse(s string) error {
-	val, err := enum.ParseInt(reflect.TypeOf(mhp), s, true, true)
-	if err == nil {
-		*mhp = val.(SyncMissingHashPolicy)
-	}
-	return err
-}
-
-func (mhp SyncMissingHashPolicy) String() string {
-	return enum.StringInt(mhp, reflect.TypeOf(mhp))
-}

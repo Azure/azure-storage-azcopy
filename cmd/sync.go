@@ -57,7 +57,6 @@ type rawSyncCmdArgs struct {
 	includeRegex          string
 	excludeRegex          string
 	compareHash           string
-	missingHashPolicy     string
 
 	preservePermissions     bool
 	preserveSMBPermissions  bool // deprecated and synonymous with preservePermissions
@@ -286,9 +285,6 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		default: // no need to put a hash of any kind.
 		}
 	}
-	if err = cooked.missingHashPolicy.Parse(raw.missingHashPolicy); err != nil {
-		return cooked, err
-	}
 
 	cooked.putMd5 = raw.putMd5
 	if err = validatePutMd5(cooked.putMd5, cooked.fromTo); err != nil {
@@ -401,7 +397,6 @@ type cookedSyncCmdArgs struct {
 
 	// options
 	compareHash             common.SyncHashType
-	missingHashPolicy       common.SyncMissingHashPolicy
 	preservePermissions     common.PreservePermissionsOption
 	preserveSMBInfo         bool
 	preservePOSIXProperties bool
@@ -772,11 +767,11 @@ func init() {
 	// TODO: enable for copy with IfSourceNewer
 	// smb info/permissions can be persisted in the scenario of File -> File
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Azure Files). This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
-	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS=="windows"), "Preserves SMB property info (last write time, creation time, attribute bits)"+
-					 " between SMB-aware resources (Windows and Azure Files). On windows, this flag will be set to true by default. If the source or destination is a "+
-					 "volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. Only the attribute bits supported by Azure Files "+
-					 "will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified "+
-					 "(e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
+	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits)"+
+		" between SMB-aware resources (Windows and Azure Files). On windows, this flag will be set to true by default. If the source or destination is a "+
+		"volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. Only the attribute bits supported by Azure Files "+
+		"will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified "+
+		"(e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false, "'Preserves' property info gleaned from stat or statx into object metadata.")
 
 	// TODO: enable when we support local <-> File
@@ -811,7 +806,6 @@ func init() {
 	syncCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the path of files that would be copied or removed by the sync command. This flag does not copy or remove the actual files.")
 
 	syncCmd.PersistentFlags().StringVar(&raw.compareHash, "compare-hash", "None", "Inform sync to rely on hashes as an alternative to LMT. (None, MD5) Default: None")
-	syncCmd.PersistentFlags().StringVar(&raw.missingHashPolicy, "missing-hash-policy", "Overwrite", "Inform sync how to handle missing hashes. (Generate: Local-only, generate over unusable hashes in requested type; Overwrite: Treat the file as out-of-date if a hash is unusable) Default: Overwrite")
 
 	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
 	syncCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")

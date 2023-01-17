@@ -109,7 +109,7 @@ func newListTraverser(parent common.ResourceString, parentType common.Location, 
 		// Construct a traverser that goes through the child
 		traverser, err := InitResourceTraverser(source, parentType, ctx, credential, &followSymlinks,
 			nil, recursive, getProperties, includeDirectoryStubs, common.EPermanentDeleteOption.None(), incrementEnumerationCounter,
-			nil, s2sPreserveBlobTags, common.ESyncHashType.None(), common.ESyncMissingHashPolicy.Overwrite(), logLevel, cpkOptions, nil /* errorChannel */)
+			nil, s2sPreserveBlobTags, common.ESyncHashType.None(), logLevel, cpkOptions, nil /* errorChannel */)
 		if err != nil {
 			return nil, err
 		}

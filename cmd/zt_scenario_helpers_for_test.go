@@ -871,7 +871,6 @@ func getDefaultSyncRawInput(src, dst string) rawSyncCmdArgs {
 		deleteDestination:   deleteDestination.String(),
 		md5ValidationOption: common.DefaultHashValidationOption.String(),
 		compareHash:         common.ESyncHashType.None().String(),
-		missingHashPolicy:   common.ESyncMissingHashPolicy.Overwrite().String(),
 	}
 }
 
