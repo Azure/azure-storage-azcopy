@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func TryGetHashData(fullpath string) (SyncHashData, error) {
+func getHashPath(fullpath string) string {
 	// get meta file name
 	dir, fn := filepath.Split(fullpath)
 	var metaFile string
@@ -20,6 +20,13 @@ func TryGetHashData(fullpath string) (SyncHashData, error) {
 	} else {
 		metaFile = dir + "/." + fn + AzCopyHashDataStream
 	}
+
+	return metaFile
+}
+
+func TryGetHashData(fullpath string) (SyncHashData, error) {
+	// get meta file name
+	metaFile := getHashPath(fullpath)
 	// open file for reading
 	f, err := os.OpenFile(metaFile, os.O_RDONLY, 0644)
 	if err != nil {
@@ -40,13 +47,7 @@ func TryGetHashData(fullpath string) (SyncHashData, error) {
 
 func PutHashData(fullpath string, data SyncHashData) error {
 	// get meta file name
-	dir, fn := filepath.Split(fullpath)
-	var metaFile string
-	if dir == "." { // Hide the file on UNIX-like systems (e.g. Linux, OSX)
-		metaFile = "./." + fn + AzCopyHashDataStream
-	} else {
-		metaFile = dir + "/." + fn + AzCopyHashDataStream
-	}
+	metaFile := getHashPath(fullpath)
 	// open file for writing; truncate.
 	f, err := os.OpenFile(metaFile, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
 	if err != nil {

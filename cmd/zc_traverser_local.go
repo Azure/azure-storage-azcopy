@@ -461,8 +461,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	mutexProcessor := func(proc objectProcessor) objectProcessor {
 		return func(object StoredObject) error {
 			commitMutex.Lock()
+			defer commitMutex.Unlock()
 			err := proc(object)
-			commitMutex.Unlock()
 
 			return err
 		}
