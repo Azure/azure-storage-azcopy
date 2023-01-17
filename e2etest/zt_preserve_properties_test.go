@@ -42,10 +42,10 @@ func TestProperties_NameValueMetadataIsPreservedS2S(t *testing.T) {
 }
 
 func TestProperties_NameValueMetadataCanBeUploaded(t *testing.T) {
-	expectedMap := map[string]string{"foo": "abc", "bar": "def"}
+	expectedMap := map[string]string{"foo": "abc", "bar": "def", "baz": "te=s;t"}
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllUploads(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
-		metadata:  "foo=abc;bar=def",
+		metadata:  "foo=abc;bar=def;baz=te=s\\;t",
 	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{

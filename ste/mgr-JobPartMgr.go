@@ -377,9 +377,10 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	metadataString := string(dstData.Metadata[:dstData.MetadataLength])
 	jpm.metadata = common.Metadata{}
 	if len(metadataString) > 0 {
-		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
-			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-			jpm.metadata[kv[0]] = kv[1]
+		var err error
+		jpm.metadata, err = common.StringToMetadata(metadataString)
+		if err != nil {
+			panic("sanity check: metadata string should be valid at this point: " + metadataString)
 		}
 	}
 	blobTagsStr := string(dstData.BlobTags[:dstData.BlobTagsLength])
