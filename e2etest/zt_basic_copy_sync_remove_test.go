@@ -342,7 +342,7 @@ func TestBasic_SyncLMTSwitch_PreferServiceLMT(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Sync(),
-		eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileLocal()),
+		eTestFromTo.Other(common.EFromTo.FileFile()),
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,
@@ -389,7 +389,7 @@ func TestBasic_SyncLMTSwitch_PreferSMBLMT(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Sync(),
-		eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileLocal()),
+		eTestFromTo.Other(common.EFromTo.FileFile()),
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,
