@@ -336,3 +336,45 @@ func TestBasic_CopyWithShareRoot(t *testing.T) {
 		"",
 	)
 }
+
+func TestBasic_OverwriteHNSDirWithChildren(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.LocalBlobFS()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive: true,
+			preserveSMBPermissions: true,
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				h.CreateFiles(
+					testFiles{
+						defaultSize: "1K",
+						shouldSkip: []interface{}{
+							folder("overwrite"), //create folder to overwrite, with no perms so it can be correctly detected later.
+							f("overwrite/a"), // place file under folder to re-create conditions
+						},
+					},
+					false, // create dest
+					false, // do not set test files
+					false, // create only shouldSkip here
+				)
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				// overwrite with an ACL to ensure overwrite worked
+				folder("overwrite", with{adlsPermissionsACL: "user::rwx,group::rwx,other::-w-"}),
+			},
+		},
+		EAccountType.HierarchicalNamespaceEnabled(),
+		EAccountType.HierarchicalNamespaceEnabled(),
+		"",
+	)
+}
