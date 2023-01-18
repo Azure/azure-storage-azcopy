@@ -96,6 +96,7 @@ type IJobPartTransferMgr interface {
 	PropertiesToTransfer() common.SetPropertiesFlags
 	ResetSourceSize() // sets source size to 0 (made to be used by setProperties command to make number of bytes transferred = 0)
 	SuccessfulBytesTransferred() int64
+	TransferIndex() (partNum, transferIndex uint32)
 }
 
 type TransferInfo struct {
@@ -120,9 +121,6 @@ type TransferInfo struct {
 	SrcBlobType    azblob.BlobType       // used for both S2S and for downloads to local from blob
 	S2SSrcBlobTier azblob.AccessTierType // AccessTierType (string) is used to accommodate service-side support matrix change.
 
-	// NumChunks is the number of chunks in which transfer will be split into while uploading the transfer.
-	// NumChunks is not used in case of AppendBlob transfer.
-	NumChunks         uint16
 	RehydratePriority azblob.RehydratePriorityType
 }
 
@@ -549,6 +547,11 @@ func (jptm *jobPartTransferMgr) PropertiesToTransfer() common.SetPropertiesFlags
 
 func (jptm *jobPartTransferMgr) ResetSourceSize() {
 	jptm.transferInfo.SourceSize = 0
+}
+
+// This will identity a file in a job
+func (jptm *jobPartTransferMgr) TransferIndex() (partNum, transferIndex uint32) {
+	return uint32(jptm.jobPartMgr.Plan().PartNum), jptm.transferIndex
 }
 
 // JobHasLowFileCount returns an estimate of whether we only have a very small number of files in the overall job

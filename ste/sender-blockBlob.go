@@ -22,6 +22,7 @@ package ste
 
 import (
 	"context"
+	"crypto/md5"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -36,6 +37,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/google/uuid"
 )
 
 var lowMemoryLimitAdvice sync.Once
@@ -61,6 +63,7 @@ type blockBlobSenderBase struct {
 	atomicChunksWritten    int32
 	atomicPutListIndicator int32
 	muBlockIDs             *sync.Mutex
+	blockNamePrefix	string
 }
 
 func getVerifiedChunkParams(transferInfo TransferInfo, memLimit int64) (chunkSize int64, numChunks uint32, err error) {
@@ -138,6 +141,11 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
 	cpkToApply := common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
 
+	// Block Names of blobs are of format noted below. We generate prefix here. 
+	// md5-Sum{ <128 Bit GUID of AzCopy JobID><5B PartNum><5B Index in the jobPart><5B blockNum> }
+	partNum, transferIndex := jptm.TransferIndex()
+	blockNamePrefix := fmt.Sprintf("%s%05d%05d", jptm.Info().JobID.String(), partNum, transferIndex)
+
 	return &blockBlobSenderBase{
 		jptm:             jptm,
 		sip:              srcInfoProvider,
@@ -151,7 +159,9 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		blobTagsToApply:  props.SrcBlobTags.ToAzBlobTagsMap(),
 		destBlobTier:     destBlobTier,
 		cpkToApply:       cpkToApply,
-		muBlockIDs:       &sync.Mutex{}}, nil
+		muBlockIDs:       &sync.Mutex{},
+		blockNamePrefix:  blockNamePrefix,
+		}, nil
 }
 
 func (s *blockBlobSenderBase) SendableEntityType() common.EntityType {
@@ -282,7 +292,8 @@ func (s *blockBlobSenderBase) setBlockID(index int32, value string) {
 	s.blockIDs[index] = value
 }
 
-func (s *blockBlobSenderBase) generateEncodedBlockID() string {
-	blockID := common.NewUUID().String()
-	return base64.StdEncoding.EncodeToString([]byte(blockID))
+func (s *blockBlobSenderBase) generateEncodedBlockID(index int32) string {
+	blockNameMd5 := md5.Sum([]byte(fmt.Sprintf("%s%05d", s.blockNamePrefix, index)))
+	blockID, _ := uuid.FromBytes(blockNameMd5[:]) //This func returns error if size of blockNameMd5 is not 16
+	return base64.StdEncoding.EncodeToString([]byte(blockID.String()))
 }
