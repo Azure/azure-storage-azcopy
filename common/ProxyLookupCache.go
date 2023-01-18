@@ -23,7 +23,6 @@ package common
 import (
 	"errors"
 	"fmt"
-	"github.com/mattn/go-ieproxy"
 	"net/http"
 	"net/url"
 	"strings"
@@ -41,7 +40,7 @@ func init() {
 		refreshInterval: time.Minute * 5, // this is plenty, given the usual retry policies in AzCopy span a much longer time period in the total retry sequence
 		lookupTimeout:   time.Minute,     // equals the documented max allowable execution time for WinHttpGetProxyForUrl
 		lookupLock:      &sync.Mutex{},
-		lookupMethod:    ieproxy.GetProxyFunc(),
+		lookupMethod:    GetProxyFunc(),
 	}
 
 	ev := GetLifecycleMgr().GetEnvironmentVariable(EEnvironmentVariable.CacheProxyLookup())
@@ -74,11 +73,14 @@ type proxyLookupResult struct {
 // permanent GR per cache entry. That assumption makes sense in AzCopy, but is not correct in general (e.g.
 // if used in something with usage patterns like a web browser).
 // TODO: should we one day find a better solution, so it can be contributed to mattn.go-ieproxy instead of done here?
-//    or maybe just the code in getProxyNoCache could be contributed there?
+//
+//	or maybe just the code in getProxyNoCache could be contributed there?
+//
 // TODO: consider that one consequence of the current lack of integration with mattn.go-ieproxy is that pipelines created by
-//    pipeline.NewPipeline don't use proxyLookupCache at all.  However, that only affects the enumeration portion of our code,
-//    for Azure Files and ADLS Gen2. The issues that proxyLookupCache solves have not been reported there. The issues matter in
-//    the STE, where request counts are much higher (and there, we always do use this cache, because we make our own pipelines).
+//
+//	pipeline.NewPipeline don't use proxyLookupCache at all.  However, that only affects the enumeration portion of our code,
+//	for Azure Files and ADLS Gen2. The issues that proxyLookupCache solves have not been reported there. The issues matter in
+//	the STE, where request counts are much higher (and there, we always do use this cache, because we make our own pipelines).
 type proxyLookupCache struct {
 	m               *sync.Map // is optimized for caches that only grow (as is the case here)
 	refreshInterval time.Duration

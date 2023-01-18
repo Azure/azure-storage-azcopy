@@ -91,7 +91,7 @@ func getVerifiedChunkParams(transferInfo TransferInfo, memLimit int64) (chunkSiz
 
 	if chunkSize > common.MaxBlockBlobBlockSize {
 		// mercy, please
-		err = fmt.Errorf("block size of %.2fGiB for file %s of size %.2fGiB exceeds maxmimum allowed block size for a BlockBlob",
+		err = fmt.Errorf("block size of %.2fGiB for file %s of size %.2fGiB exceeds maximum allowed block size for a BlockBlob",
 			toGiB(chunkSize), transferInfo.Source, toGiB(transferInfo.SourceSize))
 		return
 	}

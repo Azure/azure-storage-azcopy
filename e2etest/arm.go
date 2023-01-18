@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/go-autorest/autorest/adal"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -53,7 +53,7 @@ func ResolveAzureAsyncOperation(OAuth *adal.ServicePrincipalToken, uri string, p
 		}
 
 		var buf []byte
-		buf, err = ioutil.ReadAll(resp.Body)
+		buf, err = io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read response body (resp code 200): %w", err)
 		}
@@ -68,7 +68,7 @@ func ResolveAzureAsyncOperation(OAuth *adal.ServicePrincipalToken, uri string, p
 		}
 
 		if resp.StatusCode != 200 {
-			rBody, err := ioutil.ReadAll(resp.Body)
+			rBody, err := io.ReadAll(resp.Body)
 			if err != nil {
 				return nil, fmt.Errorf("failed to read response body (resp code %d): %w", resp.StatusCode, err)
 			}
