@@ -27,6 +27,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -59,6 +60,17 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 			return // nothing to do. The flag is not supposed to be set
 		}
 
+		reflectVal := reflect.ValueOf(value) // check for pointer
+		if reflectVal.Kind() == reflect.Pointer {
+			result := reflectVal.Elem() // attempt to deref
+
+			if result != (reflect.Value{}) && result.CanInterface() { // can we grab the underlying value?
+				value = result.Interface()
+			} else {
+				return // nothing to use
+			}
+		}
+
 		format := "%v"
 		if len(formats) > 0 {
 			format = formats[0]
@@ -83,7 +95,7 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 	set("s2s-detect-source-changed", p.s2sSourceChangeValidation, false)
 	set("metadata", p.metadata, "")
 	set("cancel-from-stdin", p.cancelFromStdin, false)
-	set("preserve-smb-info", p.preserveSMBInfo, true)
+	set("preserve-smb-info", p.preserveSMBInfo, nil)
 	set("preserve-smb-permissions", p.preserveSMBPermissions, false)
 	set("backup", p.backupMode, false)
 	set("blob-tags", p.blobTags, "")

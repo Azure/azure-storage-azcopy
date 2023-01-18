@@ -68,8 +68,10 @@ func TestProperties_SMBPermissionsSDDLPreserved(t *testing.T) {
 		common.EFromTo.FileFile(),
 	), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:              true,
-		preserveSMBInfo:        true,
 		preserveSMBPermissions: true,
+
+		// default, but present for clarity
+		//preserveSMBInfo:        BoolPointer(true),
 	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
@@ -88,7 +90,9 @@ func TestProperties_SMBPermissionsSDDLPreserved(t *testing.T) {
 func TestProperties_SMBDates(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:       true,
-		preserveSMBInfo: true,
+
+		// default, but present for clarity
+		//preserveSMBInfo:        BoolPointer(true),
 	}, &hooks{
 		beforeRunJob: func(h hookHelper) {
 			// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
@@ -118,7 +122,9 @@ func TestProperties_SMBDates(t *testing.T) {
 func TestProperties_SMBFlags(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileFile(), common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:       true,
-		preserveSMBInfo: true,
+
+		// default, but present for clarity
+		//preserveSMBInfo:        BoolPointer(true),
 	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
@@ -143,7 +149,9 @@ func TestProperties_SMBPermsAndFlagsWithIncludeAfter(t *testing.T) {
 
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:       true,
-		preserveSMBInfo: true, // this wasn't compatible with time-sensitive filtering prior.
+
+		// default, but present for clarity
+		//preserveSMBInfo:        BoolPointer(true),
 		// includeAfter: SET LATER
 	}, &hooks{
 		beforeRunJob: func(h hookHelper) {
@@ -190,7 +198,9 @@ func TestProperties_SMBPermsAndFlagsWithSync(t *testing.T) {
 
 	RunScenarios(t, eOperation.Sync(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:       true,
-		preserveSMBInfo: true, // this wasn't compatible with time-sensitive filtering prior.
+
+		// default, but present for clarity
+		//preserveSMBInfo:        BoolPointer(true),
 	}, &hooks{
 		beforeRunJob: func(h hookHelper) {
 			// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
@@ -244,7 +254,9 @@ func TestProperties_SMBWithCopyWithShareRoot(t *testing.T) {
 			recursive:              true,
 			invertedAsSubdir:       true,
 			preserveSMBPermissions: true,
-			preserveSMBInfo:        true,
+
+			// default, but present for clarity
+			//preserveSMBInfo:        BoolPointer(true),
 		},
 		nil,
 		testFiles{
@@ -276,7 +288,9 @@ func TestProperties_SMBTimes(t *testing.T) {
 		anonymousAuthOnly,
 		params{
 			recursive:       true,
-			preserveSMBInfo: true,
+
+			// default, but present for clarity
+			//preserveSMBInfo:        BoolPointer(true),
 		},
 		nil,
 		testFiles{

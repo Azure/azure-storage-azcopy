@@ -36,7 +36,7 @@ func (s *syncComparatorSuite) TestSyncSourceComparator(c *chk.C) {
 
 	// set up the indexer as well as the source comparator
 	indexer := newObjectIndexer()
-	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process, false)
+	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process, false, false)
 
 	// create a sample destination object
 	sampleDestinationObject := StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now(), md5: destMD5}
@@ -88,7 +88,7 @@ func (s *syncComparatorSuite) TestSyncSrcCompDisableComparator(c *chk.C) {
 
 	// set up the indexer as well as the source comparator
 	indexer := newObjectIndexer()
-	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process, true)
+	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process, false, true)
 
 	// test the comparator in case a given source object is not present at the destination
 	// meaning no entry in the index, so the comparator should pass the given object to schedule a transfer
