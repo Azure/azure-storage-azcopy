@@ -198,15 +198,14 @@ func (u *blobFSSenderBase) doEnsureDirExists(d azbfs.DirectoryURL) error {
 	if d.IsFileSystemRoot() {
 		return nil // nothing to do, there's no directory component to create
 	}
-
-	_, err := d.Create(u.jptm.Context(), false)
-	if err == nil {
-		// must always do this, regardless of whether we are called in a file-centric code path
-		// or a folder-centric one, since with the parallelism we use, we don't actually
-		// know which will happen first
-		dirUrl := d.URL()
-		u.jptm.GetFolderCreationTracker().RecordCreation(dirUrl.String())
-	}
+	// must always do this, regardless of whether we are called in a file-centric code path
+	// or a folder-centric one, since with the parallelism we use, we don't actually
+	// know which will happen first
+	dirUrl := d.URL()
+	err := u.jptm.GetFolderCreationTracker().CreateFolder(dirUrl.String(), func() error {
+		_, err := d.Create(u.jptm.Context(), false)
+		return err
+	})
 	if stgErr, ok := err.(azbfs.StorageError); ok && stgErr.ServiceCode() == azbfs.ServiceCodePathAlreadyExists {
 		return nil // not a error as far as we are concerned. It just already exists
 	}

@@ -23,6 +23,7 @@ package common
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -55,6 +56,8 @@ const (
 	// Since we haven't updated the Go SDKs to handle CPK just yet, we need to detect CPK related errors
 	// and inform the user that we don't support CPK yet.
 	CPK_ERROR_SERVICE_CODE = "BlobUsesCustomerSpecifiedEncryption"
+	BLOB_NOT_FOUND         = "BlobNotFound"
+	FILE_NOT_FOUND         = "The specified file was not found."
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1082,13 +1085,53 @@ func UnMarshalToCommonMetadata(metadataString string) (Metadata, error) {
 func StringToMetadata(metadataString string) (Metadata, error) {
 	metadataMap := Metadata{}
 	if len(metadataString) > 0 {
-		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
-			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-			// what if '=' not present?
-			if len(kv) != 2 {
-				return metadataMap, fmt.Errorf("invalid metadata string passed")
+		cKey := ""
+		cVal := ""
+		keySet := false
+		ignoreRules := false
+
+		addchar := func(c rune) {
+			if !keySet {
+				cKey += string(c)
+			} else {
+				cVal += string(c)
 			}
-			metadataMap[kv[0]] = kv[1]
+		}
+		for _, c := range metadataString {
+			if ignoreRules {
+				addchar(c)
+				ignoreRules = false
+			} else {
+				switch c {
+				case '=':
+					if keySet {
+						addchar(c)
+					} else {
+						keySet = true
+					}
+
+				case ';':
+					if !keySet {
+						return Metadata{}, errors.New("metadata names must conform to C# naming rules (https://learn.microsoft.com/en-us/rest/api/storageservices/naming-and-referencing-containers--blobs--and-metadata#metadata-names)")
+					}
+
+					metadataMap[cKey] = cVal
+					cKey = ""
+					cVal = ""
+					keySet = false
+					ignoreRules = false
+
+				case '\\':
+					ignoreRules = true // ignore the rules on the next character
+
+				default:
+					addchar(c)
+				}
+			}
+		}
+
+		if cKey != "" {
+			metadataMap[cKey] = cVal
 		}
 	}
 	return metadataMap, nil

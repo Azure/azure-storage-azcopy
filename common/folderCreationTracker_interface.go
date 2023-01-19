@@ -5,7 +5,7 @@ package common
 // with the fact that when overwrite == false, we only set file properties on files created
 // by the current job)
 type FolderCreationTracker interface {
-	RecordCreation(folder string)
+	CreateFolder(folder string, doCreation func() error) error
 	ShouldSetProperties(folder string, overwrite OverwriteOption, prompter Prompter) bool
 	StopTracking(folder string)
 }

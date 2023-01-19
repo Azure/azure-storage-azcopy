@@ -43,11 +43,12 @@ type syncDestinationComparator struct {
 
 	comparisonHashType common.SyncHashType
 
+  preferSMBTime     bool
 	disableComparison bool
 }
 
-func newSyncDestinationComparator(i *objectIndexer, copyScheduler, cleaner objectProcessor, comparisonHashType common.SyncHashType, disableComparison bool) *syncDestinationComparator {
-	return &syncDestinationComparator{sourceIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, disableComparison: disableComparison, comparisonHashType: comparisonHashType}
+func newSyncDestinationComparator(i *objectIndexer, copyScheduler, cleaner objectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool) *syncDestinationComparator {
+	return &syncDestinationComparator{sourceIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, preferSMBTime: preferSMBTime, disableComparison: disableComparison, comparisonHashType: comparisonHashType}
 }
 
 // it will only schedule transfers for destination objects that are present in the indexer but stale compared to the entry in the map
@@ -97,7 +98,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 				azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("File %s skipped due to same hash.", destinationObject.relativePath))
 			}
 			return nil
-		} else if sourceObjectInMap.isMoreRecentThan(destinationObject) {
+		} else if sourceObjectInMap.isMoreRecentThan(destinationObject, f.preferSMBTime) {
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
@@ -125,11 +126,12 @@ type syncSourceComparator struct {
 
 	comparisonHashType common.SyncHashType
 
+  preferSMBTime     bool
 	disableComparison bool
 }
 
-func newSyncSourceComparator(i *objectIndexer, copyScheduler objectProcessor, comparisonHashType common.SyncHashType, disableComparison bool) *syncSourceComparator {
-	return &syncSourceComparator{destinationIndex: i, copyTransferScheduler: copyScheduler, disableComparison: disableComparison, comparisonHashType: comparisonHashType}
+func newSyncSourceComparator(i *objectIndexer, copyScheduler objectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool) *syncSourceComparator {
+	return &syncSourceComparator{destinationIndex: i, copyTransferScheduler: copyScheduler, preferSMBTime: preferSMBTime, disableComparison: disableComparison, comparisonHashType: comparisonHashType}
 }
 
 // it will only transfer source items that are:
@@ -150,6 +152,7 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) err
 	if present {
 		defer delete(f.destinationIndex.indexMap, relPath)
 
+    // if destination is stale, schedule source for transfer
 		if f.disableComparison {
 			return f.copyTransferScheduler(sourceObject)
 		}
@@ -181,7 +184,7 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) err
 				azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("File %s skipped due to same hash.", sourceObject.relativePath))
 			}
 			return nil
-		} else if sourceObject.isMoreRecentThan(destinationObjectInMap) {
+		} else if sourceObject.isMoreRecentThan(destinationObjectInMap, f.preferSMBTime) {
 			// if destination is stale, schedule source
 			return f.copyTransferScheduler(sourceObject)
 		}

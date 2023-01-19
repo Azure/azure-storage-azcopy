@@ -157,7 +157,7 @@ type params struct {
 	cancelFromStdin           bool
 	backupMode                bool
 	preserveSMBPermissions    bool
-	preserveSMBInfo           bool
+	preserveSMBInfo           *bool
 	preservePOSIXProperties   bool
 	relativeSourcePath        string
 	blobTags                  string

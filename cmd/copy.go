@@ -26,7 +26,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"io"
 	"math"
 	"net/url"
@@ -35,6 +34,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
@@ -1110,7 +1111,9 @@ type CookedCopyCmdArgs struct {
 	FollowSymlinks     bool
 	ForceWrite         common.OverwriteOption // says whether we should try to overwrite
 	ForceIfReadOnly    bool                   // says whether we should _force_ any overwrites (triggered by forceWrite) to work on Azure Files objects that are set to read-only
-	autoDecompress     bool
+	IsSourceDir        bool
+
+	autoDecompress bool
 
 	// options from flags
 	blockSize int64
@@ -1669,7 +1672,6 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 			// indicate whether constrained by disk or not
 			isBenchmark := cca.FromTo.From() == common.ELocation.Benchmark()
 			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, isBenchmark)
-
 			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
 				summary.PercentComplete,
 				summary.TransfersCompleted,

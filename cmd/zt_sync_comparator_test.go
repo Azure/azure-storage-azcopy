@@ -37,7 +37,7 @@ func (s *syncComparatorSuite) TestSyncSourceComparator(c *chk.C) {
 
 	// set up the indexer as well as the source comparator
 	indexer := newObjectIndexer()
-	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process, common.ESyncHashType.None(), false)
+	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process, common.ESyncHashType.None(), false, false)
 
 	// create a sample destination object
 	sampleDestinationObject := StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now(), md5: destMD5}
@@ -89,7 +89,7 @@ func (s *syncComparatorSuite) TestSyncSrcCompDisableComparator(c *chk.C) {
 
 	// set up the indexer as well as the source comparator
 	indexer := newObjectIndexer()
-	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process, common.ESyncHashType.None(), true)
+	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process, common.ESyncHashType.None(), false, true)
 
 	// test the comparator in case a given source object is not present at the destination
 	// meaning no entry in the index, so the comparator should pass the given object to schedule a transfer
@@ -138,7 +138,7 @@ func (s *syncComparatorSuite) TestSyncDestinationComparator(c *chk.C) {
 
 	// set up the indexer as well as the destination comparator
 	indexer := newObjectIndexer()
-	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false)
+	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, false)
 
 	// create a sample source object
 	sampleSourceObject := StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now(), md5: srcMD5}
@@ -195,7 +195,7 @@ func (s *syncComparatorSuite) TestSyncDestCompDisableComparison(c *chk.C) {
 
 	// set up the indexer as well as the destination comparator
 	indexer := newObjectIndexer()
-	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), true)
+	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, true)
 
 	// create a sample source object
 	currTime := time.Now()
