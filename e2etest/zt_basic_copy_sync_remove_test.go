@@ -21,9 +21,6 @@
 package e2etest
 
 import (
-	"testing"
-	"time"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"testing"
 	"time"
