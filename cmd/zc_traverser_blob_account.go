@@ -47,8 +47,8 @@ type blobAccountTraverser struct {
 	cpkOptions common.CpkOptions
 }
 
-func (t *blobAccountTraverser) IsDirectory(_ bool) bool {
-	return true // Returns true as account traversal is inherently folder-oriented and recursive.
+func (t *blobAccountTraverser) IsDirectory(_ bool) (bool, error) {
+	return true, nil // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
 func (t *blobAccountTraverser) listContainers() ([]string, error) {

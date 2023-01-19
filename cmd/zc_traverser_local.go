@@ -48,18 +48,18 @@ type localTraverser struct {
 	errorChannel                chan ErrorFileInfo
 }
 
-func (t *localTraverser) IsDirectory(bool) bool {
+func (t *localTraverser) IsDirectory(bool) (bool, error) {
 	if strings.HasSuffix(t.fullPath, "/") {
-		return true
+		return true, nil
 	}
 
 	props, err := common.OSStat(t.fullPath)
 
 	if err != nil {
-		return false
+		return false, err
 	}
 
-	return props.IsDir()
+	return props.IsDir(), nil
 }
 
 func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
@@ -363,7 +363,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 
 func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
-
+	// it fails here if file does not exist
 	if err != nil {
 		azcopyScanningLogger.Log(pipeline.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
 		return fmt.Errorf("failed to scan path %s due to %s", t.fullPath, err.Error())

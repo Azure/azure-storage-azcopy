@@ -336,7 +336,7 @@ func (u *azureFileSenderBase) Epilogue() {
 	//   2. The service started updating the last-write-time in March 2021 when the file is modified.
 	//      So when we uploaded the ranges, we've unintentionally changed the last-write-time.
 	if u.jptm.IsLive() && u.jptm.Info().PreserveSMBInfo {
-		//This is an extra round trip, but we can live with that for these relatively rare cases
+		// This is an extra round trip, but we can live with that for these relatively rare cases
 		_, err := u.fileURL().SetHTTPHeaders(u.ctx, u.headersToApply)
 		if err != nil {
 			u.jptm.FailActiveSend("Applying final attribute settings", err)
@@ -435,7 +435,7 @@ func (AzureFileParentDirCreator) verifyAndHandleCreateErrors(err error) error {
 	return nil
 }
 
-// splitWithoutToken splits string with a given token, and returns splitted results without token.
+// splitWithoutToken splits string with a given token, and returns split results without token.
 func (AzureFileParentDirCreator) splitWithoutToken(str string, token rune) []string {
 	return strings.FieldsFunc(str, func(c rune) bool {
 		return c == token
@@ -464,16 +464,12 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, dirURL a
 			// Try to create the directories
 			for i := 0; i < len(segments); i++ {
 				curDirURL = curDirURL.NewDirectoryURL(segments[i])
-				// TODO: Persist permissions on folders.
-				_, err := curDirURL.Create(ctx, azfile.Metadata{}, azfile.SMBProperties{})
-				if err == nil {
-					// We did create it, so record that fact. I.e. THIS job created the folder.
-					// Must do it here, in the routine that is shared by both the folder and the file code,
-					// because due to the parallelism of AzCopy, we don't know which will get here first, file code, or folder code.
-					dirUrl := curDirURL.URL()
-					dirUrl.RawQuery = ""
-					t.RecordCreation(dirUrl.String())
-				}
+				recorderURL := curDirURL.URL()
+				recorderURL.RawQuery = ""
+				err = t.CreateFolder(recorderURL.String(), func() error {
+					_, err := curDirURL.Create(ctx, azfile.Metadata{}, azfile.SMBProperties{})
+					return err
+				})
 				if verifiedErr := d.verifyAndHandleCreateErrors(err); verifiedErr != nil {
 					return verifiedErr
 				}

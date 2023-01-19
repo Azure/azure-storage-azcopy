@@ -28,6 +28,23 @@ type BucketToContainerNameResolver interface {
 	ResolveName(bucketName string) (string, error)
 }
 
+func (cca *CookedCopyCmdArgs) validateSourceDir(traverser ResourceTraverser) error {
+	var err error
+	// Ensure we're only copying a directory under valid conditions
+	cca.IsSourceDir, err = traverser.IsDirectory(true)
+	if cca.IsSourceDir &&
+		!cca.Recursive && // Copies the folder & everything under it
+		!cca.StripTopDir { // Copies only everything under it
+		// todo: dir only transfer, also todo: support syncing the root folder's acls on sync.
+		return errors.New("cannot use directory as source without --recursive or a trailing wildcard (/*)")
+	}
+	// check if error is file not found - if it is then we need to make sure it's not a wild card
+	if err != nil && strings.EqualFold(err.Error(), common.FILE_NOT_FOUND) && !cca.StripTopDir {
+		return err
+	}
+	return nil
+}
+
 func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) (*CopyEnumerator, error) {
 	var traverser ResourceTraverser
 
@@ -91,18 +108,14 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, err
 	}
 
-	// Ensure we're only copying a directory under valid conditions
-	isSourceDir := traverser.IsDirectory(true)
-	if isSourceDir &&
-		!cca.Recursive && // Copies the folder & everything under it
-		!cca.StripTopDir { // Copies only everything under it
-		// todo: dir only transfer, also todo: support syncing the root folder's acls on sync.
-		return nil, errors.New("cannot use directory as source without --recursive or a trailing wildcard (/*)")
+	err = cca.validateSourceDir(traverser)
+	if err != nil {
+		return nil, err
 	}
 
-	// Check if the destination is a directory so we can correctly decide where our files land
+	// Check if the destination is a directory to correctly decide where our files land
 	isDestDir := cca.isDestDirectory(cca.Destination, &ctx)
-	if cca.ListOfVersionIDs != nil && (!(cca.FromTo == common.EFromTo.BlobLocal() || cca.FromTo == common.EFromTo.BlobTrash()) || isSourceDir || !isDestDir) {
+	if cca.ListOfVersionIDs != nil && (!(cca.FromTo == common.EFromTo.BlobLocal() || cca.FromTo == common.EFromTo.BlobTrash()) || cca.IsSourceDir || !isDestDir) {
 		log.Fatalf("Either source is not a blob or destination is not a local folder")
 	}
 	srcLevel, err := DetermineLocationLevel(cca.Source.Value, cca.FromTo.From(), true)
@@ -163,14 +176,15 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		// only create the destination container in S2S scenarios
 		if cca.FromTo.From().IsRemote() && dstContainerName != "" { // if the destination has a explicit container name
 			// Attempt to create the container. If we fail, fail silently.
-			err = cca.createDstContainer(dstContainerName, cca.Destination, ctx, existingContainers, azcopyLogVerbosity)
+			err = cca.createDstContainer(dstContainerName, cca.Destination, ctx, existingContainers, common.ELogLevel.None())
 
 			// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 			if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 				logDstContainerCreateFailureOnce.Do(func() {
 					glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 				})
-				jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err), pipeline.LogWarning)
+				jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to create destination container %s. The transfer will continue if the container exists", dstContainerName), pipeline.LogWarning)
+				jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Error %s", err), pipeline.LogDebug)
 				seenFailedContainers[dstContainerName] = true
 			}
 		} else if cca.FromTo.From().IsRemote() { // if the destination has implicit container names
@@ -197,7 +211,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						continue
 					}
 
-					err = cca.createDstContainer(bucketName, cca.Destination, ctx, existingContainers, azcopyLogVerbosity)
+					err = cca.createDstContainer(bucketName, cca.Destination, ctx, existingContainers, common.ELogLevel.None())
 
 					// if JobsAdmin is nil, we're probably in testing mode.
 					// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
@@ -206,7 +220,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						logDstContainerCreateFailureOnce.Do(func() {
 							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
-						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", bucketName, err), pipeline.LogWarning)
+						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail).", bucketName), pipeline.LogWarning)
+						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Error %s", err), pipeline.LogDebug)
 						seenFailedContainers[bucketName] = true
 					}
 				}
@@ -220,13 +235,14 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				resName, err := containerResolver.ResolveName(cName)
 
 				if err == nil {
-					err = cca.createDstContainer(resName, cca.Destination, ctx, existingContainers, azcopyLogVerbosity)
+					err = cca.createDstContainer(resName, cca.Destination, ctx, existingContainers, common.ELogLevel.None())
 
 					if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 						logDstContainerCreateFailureOnce.Do(func() {
 							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
-						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", dstContainerName, err), pipeline.LogWarning)
+						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail).", resName), pipeline.LogWarning)
+						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Error %s", err), pipeline.LogDebug)
 						seenFailedContainers[dstContainerName] = true
 					}
 				}
@@ -364,7 +380,8 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	return rt.IsDirectory(false)
+	isDir, _ := rt.IsDirectory(false)
+	return isDir
 }
 
 // Initialize the modular filters outside of copy to increase readability.

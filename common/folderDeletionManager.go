@@ -130,7 +130,7 @@ func (s *standardFolderDeletionManager) getParent(u *url.URL) (*url.URL, bool) {
 	out := s.clean(u)
 	out.Path = out.Path[:strings.LastIndex(out.Path, "/")]
 	if out.RawPath != "" {
-		out.RawPath = out.Path[:strings.LastIndex(out.RawPath, "/")]
+		out.RawPath = out.RawPath[:strings.LastIndex(out.RawPath, "/")]
 	}
 	return out, true
 }

@@ -66,7 +66,7 @@ func prepareDestAccountInfo(bURL azblob.BlobURL, jptm IJobPartTransferMgr, ctx c
 			} else {
 				tierSetPossibleFail = true
 				glcm := common.GetLifecycleMgr()
-				glcm.Info("Transfers are likely to fail because destination does not support tiers.")
+				glcm.Info("Transfers could fail because AzCopy could not verify if the destination supports tiers.")
 				destAccountSKU = "failget"
 				destAccountKind = "failget"
 			}
@@ -81,7 +81,7 @@ func prepareDestAccountInfo(bURL azblob.BlobURL, jptm IJobPartTransferMgr, ctx c
 	}
 }
 
-//// TODO: Infer availability based upon blob size as well, for premium page blobs.
+// // TODO: Infer availability based upon blob size as well, for premium page blobs.
 func BlobTierAllowed(destTier azblob.AccessTierType) bool {
 	// If we failed to get the account info, just return true.
 	// This is because we can't infer whether it's possible or not, and the setTier operation could possibly succeed (or fail)
@@ -127,8 +127,9 @@ func ValidateTier(jptm IJobPartTransferMgr, blobTier azblob.AccessTierType, blob
 		// Let's check if we can confirm we'll be able to check the destination blob's account info.
 		// A SAS token, even with write-only permissions is enough. OR, OAuth with the account owner.
 		// We can't guess that last information, so we'll take a gamble and try to get account info anyway.
+		// User delegation SAS is the same as OAuth
 		destParts := azblob.NewBlobURLParts(blobURL.URL())
-		mustGet := destParts.SAS.Encode() != ""
+		mustGet := destParts.SAS.Encode() != "" && destParts.SAS.SignedTid() == ""
 
 		prepareDestAccountInfo(blobURL, jptm, ctx, mustGet)
 		tierAvailable := BlobTierAllowed(blobTier)
@@ -498,7 +499,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 	defer jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 
 	if jptm.WasCanceled() {
-		// This is where we detect that transfer has been cancelled. Further statments do not act on
+		// This is where we detect that transfer has been cancelled. Further statements do not act on
 		// dead jptm. We set the status here.
 		jptm.SetStatus(common.ETransferStatus.Cancelled())
 	}

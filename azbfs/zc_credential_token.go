@@ -25,7 +25,7 @@ type TokenCredential interface {
 // indicating how long the TokenCredential object should wait before calling your tokenRefresher function again.
 func NewTokenCredential(initialToken string, tokenRefresher func(credential TokenCredential) time.Duration) TokenCredential {
 	tc := &tokenCredential{}
-	tc.SetToken(initialToken) // We dont' set it above to guarantee atomicity
+	tc.SetToken(initialToken) // We don't set it above to guarantee atomicity
 	if tokenRefresher == nil {
 		return tc // If no callback specified, return the simple tokenCredential
 	}

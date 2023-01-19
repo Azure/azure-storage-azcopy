@@ -37,8 +37,9 @@ func NewFolderCreationTracker(fpo common.FolderPropertyOption, plan *JobPartPlan
 
 type nullFolderTracker struct{}
 
-func (f *nullFolderTracker) RecordCreation(folder string) {
+func (f *nullFolderTracker) CreateFolder(folder string, doCreation func() error) error {
 	// no-op (the null tracker doesn't track anything)
+	return doCreation()
 }
 
 func (f *nullFolderTracker) ShouldSetProperties(folder string, overwrite common.OverwriteOption, prompter common.Prompter) bool {
@@ -76,12 +77,17 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIn
 	}
 }
 
-func (f *jpptFolderTracker) RecordCreation(folder string) {
+func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	if folder == common.Dev_Null {
-		return // Never persist to dev-null
+		return nil // Never persist to dev-null
+	}
+
+	err := doCreation()
+	if err != nil {
+		return err
 	}
 
 	if idx, ok := f.contents[folder]; ok {
@@ -92,6 +98,8 @@ func (f *jpptFolderTracker) RecordCreation(folder string) {
 		// Recording it in memory is OK, because we *cannot* resume a job that hasn't finished traversal.
 		f.unregisteredButCreated[folder] = struct{}{}
 	}
+
+	return nil
 }
 
 func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.OverwriteOption, prompter common.Prompter) bool {
