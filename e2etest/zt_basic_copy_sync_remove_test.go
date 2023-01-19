@@ -394,8 +394,8 @@ func TestBasic_SyncLMTSwitch_PreferSMBLMT(t *testing.T) {
 		anonymousAuthOnly,
 		anonymousAuthOnly,
 		params{
-			// default, but present for clarity
-			//preserveSMBInfo: BoolPointer(true),
+			// enforce for Linux/MacOS tests
+			preserveSMBInfo: BoolPointer(true),
 		},
 		&hooks{
 			beforeRunJob: func(h hookHelper) {
