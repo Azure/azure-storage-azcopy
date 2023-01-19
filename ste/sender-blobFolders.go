@@ -147,37 +147,42 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 		}
 	}
 
-	b.metadataToApply["hdi_isfolder"] = "true" // Set folder metadata flag
-	err = b.getExtraProperties()
-	if err != nil {
-		return fmt.Errorf("when getting additional folder properties: %w", err)
-	}
-
 	err = t.CreateFolder(b.DirUrlToString(), func() error {
-		_, err := b.destination.Upload(b.jptm.Context(),
-			strings.NewReader(""),
-			b.headersToAppply,
-			b.metadataToApply,
-			azblob.BlobAccessConditions{},
-			azblob.DefaultAccessTier, // It doesn't make sense to use a special access tier, the blob will be 0 bytes.
-			b.blobTagsToApply,
-			b.cpkToApply,
-			azblob.ImmutabilityPolicyOptions{})
+		b.metadataToApply["hdi_isfolder"] = "true" // Set folder metadata flag
+		err = b.getExtraProperties()
+		if err != nil {
+			return fmt.Errorf("when getting additional folder properties: %w", err)
+		}
 
-		return err
+		err = t.CreateFolder(b.DirUrlToString(), func() error {
+			_, err := b.destination.Upload(b.jptm.Context(),
+				strings.NewReader(""),
+				b.headersToAppply,
+				b.metadataToApply,
+				azblob.BlobAccessConditions{},
+				azblob.DefaultAccessTier, // It doesn't make sense to use a special access tier, the blob will be 0 bytes.
+				b.blobTagsToApply,
+				b.cpkToApply,
+				azblob.ImmutabilityPolicyOptions{})
+
+			return err
+		})
+
+		if err != nil {
+			return fmt.Errorf("when creating folder: %w", err)
+		}
+
+		// Upload ADLS Gen 2 ACLs
+		if b.jptm.FromTo() == common.EFromTo.BlobBlob() && b.jptm.Info().PreserveSMBPermissions.IsTruthy() {
+			b.setDatalakeACLs()
+		}
+
+		return nil
 	})
 
 	if err != nil {
-		return fmt.Errorf("when creating folder: %w", err)
+		return err
 	}
-
-
-	// Upload ADLS Gen 2 ACLs
-	if b.jptm.FromTo() == common.EFromTo.BlobBlob() && b.jptm.Info().PreserveSMBPermissions.IsTruthy() {
-		b.setDatalakeACLs()
-	}
-
-	t.RecordCreation(b.DirUrlToString())
 
 	return folderPropertiesSetInCreation{}
 }

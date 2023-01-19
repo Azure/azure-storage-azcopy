@@ -297,7 +297,7 @@ func TestBasic_CopyToWrongBlobType(t *testing.T) {
 						h.GetAsserter().Assert(bprops.blobType, equals(), dst)
 					}
 				},
-			}, testFiles{;``
+			}, testFiles{
 				defaultSize: "1k",
 
 				shouldFail: []interface{}{
