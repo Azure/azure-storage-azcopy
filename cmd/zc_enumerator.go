@@ -274,7 +274,7 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, en
 // pass each StoredObject to the given objectProcessor if it passes all the filters
 type ResourceTraverser interface {
 	Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error
-	IsDirectory(isSource bool) bool
+	IsDirectory(isSource bool) (bool, error)
 	// isDirectory has an isSource flag for a single exception to blob.
 	// Blob should ONLY check remote if it's a source.
 	// On destinations, because blobs and virtual directories can share names, we should support placing in both ways.

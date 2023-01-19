@@ -28,6 +28,23 @@ type BucketToContainerNameResolver interface {
 	ResolveName(bucketName string) (string, error)
 }
 
+func (cca *CookedCopyCmdArgs) validateSourceDir(traverser ResourceTraverser) error {
+	var err error
+	// Ensure we're only copying a directory under valid conditions
+	cca.IsSourceDir, err = traverser.IsDirectory(true)
+	if cca.IsSourceDir &&
+		!cca.Recursive && // Copies the folder & everything under it
+		!cca.StripTopDir { // Copies only everything under it
+		// todo: dir only transfer, also todo: support syncing the root folder's acls on sync.
+		return errors.New("cannot use directory as source without --recursive or a trailing wildcard (/*)")
+	}
+	// check if error is file not found - if it is then we need to make sure it's not a wild card
+	if err != nil && strings.EqualFold(err.Error(), common.FILE_NOT_FOUND) && !cca.StripTopDir {
+		return err
+	}
+	return nil
+}
+
 func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, srcCredInfo common.CredentialInfo, ctx context.Context) (*CopyEnumerator, error) {
 	var traverser ResourceTraverser
 	var err error
@@ -59,18 +76,14 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, err
 	}
 
-	// Ensure we're only copying a directory under valid conditions
-	isSourceDir := traverser.IsDirectory(true)
-	if isSourceDir &&
-		!cca.Recursive && // Copies the folder & everything under it
-		!cca.StripTopDir { // Copies only everything under it
-		// todo: dir only transfer, also todo: support syncing the root folder's acls on sync.
-		return nil, errors.New("cannot use directory as source without --recursive or a trailing wildcard (/*)")
+	err = cca.validateSourceDir(traverser)
+	if err != nil {
+		return nil, err
 	}
 
-	// Check if the destination is a directory so we can correctly decide where our files land
+	// Check if the destination is a directory to correctly decide where our files land
 	isDestDir := cca.isDestDirectory(cca.Destination, &ctx)
-	if cca.ListOfVersionIDs != nil && (!(cca.FromTo == common.EFromTo.BlobLocal() || cca.FromTo == common.EFromTo.BlobTrash()) || isSourceDir || !isDestDir) {
+	if cca.ListOfVersionIDs != nil && (!(cca.FromTo == common.EFromTo.BlobLocal() || cca.FromTo == common.EFromTo.BlobTrash()) || cca.IsSourceDir || !isDestDir) {
 		log.Fatalf("Either source is not a blob or destination is not a local folder")
 	}
 	srcLevel, err := DetermineLocationLevel(cca.Source.Value, cca.FromTo.From(), true)
@@ -335,7 +348,8 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	return rt.IsDirectory(false)
+	isDir, _ := rt.IsDirectory(false)
+	return isDir
 }
 
 // Initialize the modular filters outside of copy to increase readability.

@@ -46,8 +46,8 @@ type fileTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func (t *fileTraverser) IsDirectory(bool) bool {
-	return copyHandlerUtil{}.urlIsAzureFileDirectory(t.ctx, t.rawURL, t.p) // This handles all of the fanciness for us.
+func (t *fileTraverser) IsDirectory(bool) (bool, error) {
+	return copyHandlerUtil{}.urlIsAzureFileDirectory(t.ctx, t.rawURL, t.p), nil // This handles all of the fanciness for us.
 }
 
 func (t *fileTraverser) getPropertiesIfSingleFile() (*azfile.FileGetPropertiesResponse, bool) {
