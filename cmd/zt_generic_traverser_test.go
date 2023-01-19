@@ -897,7 +897,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 				c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
 				// Say, here's a good question, why do we have this last check?
 				// None of the other tests have it.
-				c.Assert(correspondingLocalFile.isMoreRecentThan(storedObject), chk.Equals, true)
+				c.Assert(correspondingLocalFile.isMoreRecentThan(storedObject, false), chk.Equals, true)
 
 				if !isRecursiveOn {
 					c.Assert(strings.Contains(storedObject.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)

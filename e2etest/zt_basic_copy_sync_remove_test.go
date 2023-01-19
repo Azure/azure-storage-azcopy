@@ -22,6 +22,7 @@ package e2etest
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -329,6 +330,106 @@ func TestBasic_CopyWithShareRoot(t *testing.T) {
 				f("asdf.txt"),
 				folder("a"),
 				f("a/asdf.txt"),
+			},
+		},
+		EAccountType.Standard(),
+		EAccountType.Standard(),
+		"",
+	)
+}
+
+func TestBasic_SyncLMTSwitch_PreferServiceLMT(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.FileFile()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			preserveSMBInfo: BoolPointer(false),
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				// re-create dotransfer on the destination before the source to allow an overwrite.
+				// create the files endpoint with an LMT in the future.
+				fromTo := h.FromTo()
+				if fromTo.To() == common.ELocation.File() {
+					// if we're ignoring the SMB LMT, then the service LMT will still indicate the file is old, rather than new.
+					h.CreateFile(f("dotransfer", with{lastWriteTime: time.Now().Add(time.Second * 60)}), false)
+				} else {
+					h.CreateFile(f("dotransfer"), false)
+				}
+				time.Sleep(time.Second * 5)
+				if fromTo.From() == common.ELocation.File() {
+					// if we're ignoring the SMB LMT, then the service LMT will indicate the destination is older, not newer.
+					h.CreateFile(f("dotransfer", with{lastWriteTime: time.Now().Add(-time.Second * 60)}), true)
+				} else {
+					h.CreateFile(f("dotransfer"), true)
+				}
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("dotransfer"),
+			},
+			shouldSkip: []interface{}{
+				f("donottransfer"), // "real"/service LMT should be out of date
+			},
+		},
+		EAccountType.Standard(),
+		EAccountType.Standard(),
+		"",
+		)
+}
+
+func TestBasic_SyncLMTSwitch_PreferSMBLMT(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.FileFile()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			// enforce for Linux/MacOS tests
+			preserveSMBInfo: BoolPointer(true),
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				/*
+				In a typical scenario, the source is written before the destination.
+				This way, the destination is always skipped in the case of overwrite on Sync.
+
+				In this case, because we distinctly DO NOT want to test the service LMT, we'll create the destination before the source.
+				But, we'll create those files with an SMB LMT that would lead to a skipped file.
+				 */
+
+				newTestFiles := testFiles{
+					defaultSize: "1K",
+					shouldTransfer: []interface{}{
+						folder(""),
+						f("do overwrite"),
+					},
+					shouldSkip: []interface{}{
+						f("do not overwrite"),
+					},
+				}
+
+				// create do not overwrite in the future, so that it does not get overwritten
+				h.CreateFile(f("do not overwrite", with{lastWriteTime: time.Now().Add(time.Second * 60)}), false)
+				// create do overwrite in the past, so that it does get overwritten
+				h.CreateFile(f("do overwrite", with{lastWriteTime: time.Now().Add(-time.Second * 60)}), false)
+				time.Sleep(time.Second * 5)
+				h.CreateFiles(newTestFiles, true, true, false)
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
 			},
 		},
 		EAccountType.Standard(),

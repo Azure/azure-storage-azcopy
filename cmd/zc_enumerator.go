@@ -92,13 +92,13 @@ type StoredObject struct {
 	leaseDuration azblob.LeaseDurationType
 }
 
-func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject) bool {
+func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTime bool) bool {
 	lmtA := s.lastModifiedTime
-	if !s.smbLastModifiedTime.IsZero() {
+	if preferSMBTime && !s.smbLastModifiedTime.IsZero() {
 		lmtA = s.smbLastModifiedTime
 	}
 	lmtB := storedObject2.lastModifiedTime
-	if !storedObject2.smbLastModifiedTime.IsZero() {
+	if preferSMBTime && !storedObject2.smbLastModifiedTime.IsZero() {
 		lmtB = storedObject2.smbLastModifiedTime
 	}
 
