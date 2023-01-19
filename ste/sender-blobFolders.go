@@ -54,6 +54,25 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, p pipelin
 	return out, nil
 }
 
+func (b *blobFolderSender) setDatalakeACLs() {
+	bURLParts := azblob.NewBlobURLParts(b.destination.URL())
+	bURLParts.BlobName = strings.TrimSuffix(bURLParts.BlobName, "/") // BlobFS does not like when we target a folder with the /
+	bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".blob", ".dfs")
+	// todo: jank, and violates the principle of interfaces
+	fileURL := azbfs.NewFileURL(bURLParts.URL(), b.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline)
+
+	// We know for a fact our source is a "blob".
+	acl, err := b.sip.(*blobSourceInfoProvider).AccessControl()
+	if err != nil {
+		b.jptm.FailActiveSend("Grabbing source ACLs", err)
+	}
+	acl.Permissions = "" // Since we're sending the full ACL, Permissions is irrelevant.
+	_, err = fileURL.SetAccessControl(b.jptm.Context(), acl)
+	if err != nil {
+		b.jptm.FailActiveSend("Putting ACLs", err)
+	}
+}
+
 func (b *blobFolderSender) overwriteDFSProperties() (string, error) {
 	b.jptm.Log(pipeline.LogWarning, "It is impossible to completely overwrite a folder with existing content under it on a hierarchical namespace storage account. A best-effort attempt will be made, but if CPK does not match the transfer will fail.")
 
@@ -80,22 +99,7 @@ func (b *blobFolderSender) overwriteDFSProperties() (string, error) {
 
 	// Upload ADLS Gen 2 ACLs
 	if b.jptm.FromTo() == common.EFromTo.BlobBlob() && b.jptm.Info().PreserveSMBPermissions.IsTruthy() {
-		bURLParts := azblob.NewBlobURLParts(b.destination.URL())
-		bURLParts.BlobName = strings.TrimSuffix(bURLParts.BlobName, "/") // BlobFS does not like when we target a folder with the /
-		bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".blob", ".dfs")
-		// todo: jank, and violates the principle of interfaces
-		fileURL := azbfs.NewFileURL(bURLParts.URL(), b.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline)
-
-		// We know for a fact our source is a "blob".
-		acl, err := b.sip.(*blobSourceInfoProvider).AccessControl()
-		if err != nil {
-			return "Grabbing source ACLs", err
-		}
-		acl.Permissions = "" // Since we're sending the full ACL, Permissions is irrelevant.
-		_, err = fileURL.SetAccessControl(b.jptm.Context(), acl)
-		if err != nil {
-			return "Putting ACLs", err
-		}
+		b.setDatalakeACLs()
 	}
 
 	return "", nil
@@ -170,22 +174,7 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 
 	// Upload ADLS Gen 2 ACLs
 	if b.jptm.FromTo() == common.EFromTo.BlobBlob() && b.jptm.Info().PreserveSMBPermissions.IsTruthy() {
-		bURLParts := azblob.NewBlobURLParts(b.destination.URL())
-		bURLParts.BlobName = strings.TrimSuffix(bURLParts.BlobName, "/") // BlobFS does not like when we target a folder with the /
-		bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".blob", ".dfs")
-		// todo: jank, and violates the principle of interfaces
-		fileURL := azbfs.NewFileURL(bURLParts.URL(), b.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline)
-
-		// We know for a fact our source is a "blob".
-		acl, err := b.sip.(*blobSourceInfoProvider).AccessControl()
-		if err != nil {
-			b.jptm.FailActiveSend("Grabbing source ACLs", err)
-		}
-		acl.Permissions = "" // Since we're sending the full ACL, Permissions is irrelevant.
-		_, err = fileURL.SetAccessControl(b.jptm.Context(), acl)
-		if err != nil {
-			b.jptm.FailActiveSend("Putting ACLs", err)
-		}
+		b.setDatalakeACLs()
 	}
 
 	t.RecordCreation(b.DirUrlToString())
