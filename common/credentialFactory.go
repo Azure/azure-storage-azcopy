@@ -105,11 +105,15 @@ func CreateBlobCredential(ctx context.Context, credInfo CredentialInfo, options 
 		}
 
 		// Create TokenCredential with refresher.
-		return azblob.NewTokenCredential(
-			credInfo.OAuthTokenInfo.AccessToken,
-			func(credential azblob.TokenCredential) time.Duration {
-				return refreshBlobToken(ctx, credInfo.OAuthTokenInfo, credential, options)
-			})
+		if credInfo.SourceBlobToken != nil {
+			return credInfo.SourceBlobToken
+		} else {
+			return azblob.NewTokenCredential(
+				credInfo.OAuthTokenInfo.AccessToken,
+				func(credential azblob.TokenCredential) time.Duration {
+					return refreshBlobToken(ctx, credInfo.OAuthTokenInfo, credential, options)
+				})
+		}
 	}
 
 	return credential

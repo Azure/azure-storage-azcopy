@@ -347,7 +347,7 @@ func TestBasic_HashBasedSync_Folders(t *testing.T) {
 		anonymousAuthOnly,
 		anonymousAuthOnly,
 		params{
-			recursive:   true,
+recursive:   true,
 			compareHash: common.ESyncHashType.MD5(),
 		},
 		&hooks{
@@ -471,6 +471,48 @@ func TestBasic_HashBasedSync_UploadDownload(t *testing.T) {
 	)
 }
 
+func TestBasic_OverwriteHNSDirWithChildren(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.LocalBlobFS()),
+    eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+      recursive: true,
+			preserveSMBPermissions: true,
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				h.CreateFiles(
+					testFiles{
+						defaultSize: "1K",
+						shouldSkip: []interface{}{
+							folder("overwrite"), //create folder to overwrite, with no perms so it can be correctly detected later.
+							f("overwrite/a"), // place file under folder to re-create conditions
+						},
+					},
+					false, // create dest
+					false, // do not set test files
+					false, // create only shouldSkip here
+				)
+       },
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+        // overwrite with an ACL to ensure overwrite worked
+				folder("overwrite", with{adlsPermissionsACL: "user::rwx,group::rwx,other::-w-"}),
+			},
+		},
+		EAccountType.HierarchicalNamespaceEnabled(),
+		EAccountType.HierarchicalNamespaceEnabled(),
+		"",
+	)
+}
+
 func TestBasic_SyncLMTSwitch_PreferServiceLMT(t *testing.T) {
 	RunScenarios(
 		t,
@@ -480,7 +522,7 @@ func TestBasic_SyncLMTSwitch_PreferServiceLMT(t *testing.T) {
 		anonymousAuthOnly,
 		anonymousAuthOnly,
 		params{
-			preserveSMBInfo: BoolPointer(false),
+      preserveSMBInfo: BoolPointer(false),
 		},
 		&hooks{
 			beforeRunJob: func(h hookHelper) {
@@ -557,13 +599,13 @@ func TestBasic_SyncLMTSwitch_PreferSMBLMT(t *testing.T) {
 				h.CreateFile(f("do overwrite", with{lastWriteTime: time.Now().Add(-time.Second * 60)}), false)
 				time.Sleep(time.Second * 5)
 				h.CreateFiles(newTestFiles, true, true, false)
-			},
+        },
 		},
 		testFiles{
 			defaultSize: "1K",
 			shouldTransfer: []interface{}{
 				folder(""),
-			},
+      },
 		},
 		EAccountType.Standard(),
 		EAccountType.Standard(),
