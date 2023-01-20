@@ -433,9 +433,9 @@ func (jptm *jobPartTransferMgr) FileCountLimiter() common.CacheLimiter {
 // As at Oct 2019, cases where we mutate destination names are
 // (i)  when destination is Windows or Azure Files, and source contains characters unsupported at the destination
 // (ii) when downloading with --decompress and there are two files that differ only in an extension that will will strip
-//	e.g. foo.txt and foo.txt.gz (if we decompress the latter, we'll strip the extension and the names will collide)
+//e.g. foo.txt and foo.txt.gz (if we decompress the latter, we'll strip the extension and the names will collide)
 // (iii) For completeness, there's also bucket->container name resolution when copying from S3, but that is not expected to ever
-//	create collisions, since it already takes steps to prevent them.
+//create collisions, since it already takes steps to prevent them.
 func (jptm *jobPartTransferMgr) WaitUntilLockDestination(ctx context.Context) error {
 	if strings.EqualFold(jptm.Info().Destination, common.Dev_Null) {
 		return nil // nothing to lock
