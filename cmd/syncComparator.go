@@ -28,6 +28,28 @@ import (
 	"strings"
 )
 
+const (
+	syncSkipReasonTime = "the source has an older LMT than the destination"
+	syncSkipReasonMissingHash = "the source lacks an associated hash; please upload with --put-md5"
+	syncSkipReasonSameHash = "the source has the same hash"
+	syncOverwriteReasonNewerHash = "the source has a differing hash"
+	syncOverwriteResaonNewerLMT = "the source is more recent than the destination"
+	syncStatusSkipped = "skipped"
+	syncStatusOverwritten = "overwritten"
+)
+
+func syncComparatorLog(fileName, status, skipReason string, stdout bool) {
+	out := fmt.Sprintf("File %s was %s because %s", fileName, status, skipReason)
+
+	if azcopyScanningLogger != nil {
+		azcopyScanningLogger.Log(pipeline.LogInfo, out)
+	}
+
+	if stdout {
+		glcm.Info(out)
+	}
+}
+
 // with the help of an objectIndexer containing the source objects
 // find out the destination objects that should be transferred
 // in other words, this should be used when destination is being enumerated secondly
@@ -43,7 +65,7 @@ type syncDestinationComparator struct {
 
 	comparisonHashType common.SyncHashType
 
-  preferSMBTime     bool
+  	preferSMBTime     bool
 	disableComparison bool
 }
 
@@ -75,18 +97,13 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 			switch f.comparisonHashType {
 			case common.ESyncHashType.MD5():
 				if sourceObjectInMap.md5 == nil {
-					if azcopyScanningLogger != nil {
-						azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf("File %s skipped, because the source does not have a hash.", sourceObjectInMap.relativePath))
-					}
-
-					glcm.Info(fmt.Sprintf("File %s skipped, because the source does not have a hash.", sourceObjectInMap.relativePath))
+					syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonMissingHash, true)
 					return nil
 				}
 
 				if !reflect.DeepEqual(sourceObjectInMap.md5, destinationObject.md5) {
-					if azcopyScanningLogger != nil {
-						azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("File %s overwritten due to differing hash.", destinationObject.relativePath))
-					}
+					syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
+
 					// hash inequality = source "newer" in this model.
 					return f.copyTransferScheduler(sourceObjectInMap)
 				}
@@ -94,17 +111,13 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 				panic("sanity check: unsupported hash type " + f.comparisonHashType.String())
 			}
 
-			if azcopyScanningLogger != nil {
-				azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("File %s skipped due to same hash.", destinationObject.relativePath))
-			}
+			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonSameHash, false)
 			return nil
 		} else if sourceObjectInMap.isMoreRecentThan(destinationObject, f.preferSMBTime) {
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
-		if azcopyScanningLogger != nil {
-			azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("File %s skipped due to destination being newer", destinationObject.relativePath))
-		}
+		syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteResaonNewerLMT, false)
 	} else {
 		// purposefully ignore the error from destinationCleaner
 		// it's a tolerable error, since it just means some extra destination object might hang around a bit longer
@@ -161,37 +174,28 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) err
 			switch f.comparisonHashType {
 			case common.ESyncHashType.MD5():
 				if sourceObject.md5 == nil {
-					if azcopyScanningLogger != nil {
-						azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf("File %s skipped, because the source does not have a hash.", sourceObject.relativePath))
-					}
-
-					glcm.Info(fmt.Sprintf("File %s skipped, because the source does not have a hash.", sourceObject.relativePath))
+					syncComparatorLog(sourceObject.relativePath, syncStatusSkipped, syncSkipReasonMissingHash, true)
 					return nil
 				}
 
 				if !reflect.DeepEqual(sourceObject.md5, destinationObjectInMap.md5) {
 					// hash inequality = source "newer" in this model.
-					if azcopyScanningLogger != nil {
-						azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("File %s overwritten due to differing hash.", sourceObject.relativePath))
-					}
+					syncComparatorLog(sourceObject.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
 					return f.copyTransferScheduler(sourceObject)
 				}
 			default:
 				panic("sanity check: unsupported hash type " + f.comparisonHashType.String())
 			}
 
-			if azcopyScanningLogger != nil {
-				azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("File %s skipped due to same hash.", sourceObject.relativePath))
-			}
+			syncComparatorLog(sourceObject.relativePath, syncStatusSkipped, syncSkipReasonSameHash, false)
 			return nil
 		} else if sourceObject.isMoreRecentThan(destinationObjectInMap, f.preferSMBTime) {
 			// if destination is stale, schedule source
+			syncComparatorLog(sourceObject.relativePath, syncStatusOverwritten, syncOverwriteResaonNewerLMT, false)
 			return f.copyTransferScheduler(sourceObject)
 		}
 
-		if azcopyScanningLogger != nil {
-			azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("File %s skipped due to destination being newer", sourceObject.relativePath))
-		}
+		syncComparatorLog(sourceObject.relativePath, syncStatusSkipped, syncSkipReasonTime, false)
 		// skip if dest is more recent
 		return nil
 	}

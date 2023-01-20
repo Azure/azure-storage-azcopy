@@ -419,23 +419,26 @@ func (t *localTraverser) GetHashData(fullpath string) (common.SyncHashData, erro
 	}
 }
 
-func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
-	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
-	// it fails here if file does not exist
-	if err != nil {
-		azcopyScanningLogger.Log(pipeline.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
-		return fmt.Errorf("failed to scan path %s due to %s", t.fullPath, err.Error())
+// prepareHashingThreads creates background threads to perform hashing on local files that are missing hashes.
+// It returns a finalizer and a wrapped processor-- Use the wrapped processor in place of the original processor (even if synchashtype is none)
+// and wrap the error getting returned in the finalizer function to kill the background threads.
+func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (finalizer func(existingErr error) error, hashingProcessor func(obj StoredObject) error) {
+	if t.targetHashType == common.ESyncHashType.None() { // if no hashing is needed, do nothing.
+		return func(existingErr error) error {
+			return existingErr // nothing to overwrite with, no-op
+		}, processor
 	}
 
+	// set up for threaded hashing
 	t.hashTargetChannel = make(chan string, 1_000) // "reasonable" backlog
 	// Use half of the available CPU cores for hashing to prevent throttling the STE too hard if hashing is still occurring when the first job part gets sent out
 	hashingThreadCount := runtime.NumCPU() / 2
 	hashError := make(chan error, hashingThreadCount)
 	wg := &sync.WaitGroup{}
-	commitMutex := &sync.Mutex{}
 	immediateStopHashing := int32(0)
 
-	finalizeHashing := func(existingErr error) error {
+	// create return wrapper to handle hashing errors
+	finalizer = func(existingErr error) error {
 		if existingErr != nil {
 			close(t.hashTargetChannel)                  // stop sending hashes
 			atomic.StoreInt32(&immediateStopHashing, 1) // force the end of hashing
@@ -458,9 +461,10 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	}
 
 	// wrap the processor, preventing a data race
+	commitMutex := &sync.Mutex{}
 	mutexProcessor := func(proc objectProcessor) objectProcessor {
 		return func(object StoredObject) error {
-			commitMutex.Lock()
+			commitMutex.Lock() // prevent committing two objects at once to prevent a data race
 			defer commitMutex.Unlock()
 			err := proc(object)
 
@@ -468,32 +472,28 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 		}
 	}
 
-	for i := 0; i < runtime.NumCPU()/2; i++ {
+	// spin up hashing threads
+	for i := 0; i < hashingThreadCount; i++ {
 		wg.Add(1)
 
 		go func() {
 			defer wg.Done() // mark the hashing thread as completed
 
-			// shut down background hasher immediately
-			if t.targetHashType == common.ESyncHashType.None() {
-				return
-			}
-
 			for toHash := range t.hashTargetChannel {
-				if atomic.LoadInt32(&immediateStopHashing) == 1 {
-					return // stop hashing
+				if atomic.LoadInt32(&immediateStopHashing) == 1 { // should we stop hashing?
+					return
 				}
 
 				glcm.Info("Generating hash for " + toHash + "... This may take some time.")
 
-				fi, err := os.Stat(toHash)
+				fi, err := os.Stat(toHash) // query LMT & if it's a directory
 				if err != nil {
 					err = fmt.Errorf("failed to get properties of file result %s: %s", toHash, err.Error())
 					hashError <- err
 					return
 				}
 
-				if fi.IsDir() {
+				if fi.IsDir() { // this should never happen
 					panic(toHash)
 				}
 
@@ -504,7 +504,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					return
 				}
 
-				var hasher hash.Hash
+				var hasher hash.Hash // set up hasher
 				switch t.targetHashType {
 				case common.ESyncHashType.MD5():
 					hasher = md5.New()
@@ -526,14 +526,10 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					LMT:  fi.ModTime(),
 				}
 
-				err = common.PutHashData(toHash, hashData)
-				if err != nil {
-					// err = fmt.Errorf("failed to write hash data result %s: %s", toHash, err.Error())
-					// // Failing to write hash data doesn't strictly prevent us from transferring.
-					// // e.g. uploading a read-only directory.
-					// WarnStdoutAndScanningLog(err.Error())
-				}
+				// failing to store hash data doesn't mean we can't transfer (e.g. RO directory)
+				_ = common.PutHashData(toHash, hashData)
 
+				// build the internal path
 				relPath := strings.TrimPrefix(strings.TrimPrefix(cleanLocalPath(toHash), cleanLocalPath(t.fullPath)), common.DeterminePathSeparator(t.fullPath))
 
 				err = processIfPassedFilters(filters,
@@ -574,12 +570,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 		}()
 	}
 
-	// wrap the processor, try to grab hashes, or defer processing to the goroutine
-	hashingProcessor := func(storedObject StoredObject) error {
-		if t.targetHashType == common.ESyncHashType.None() {
-			return processor(storedObject) // skip hashing if not using hash-based sync
-		}
-
+	// wrap the processor, try to grab hashes, or defer processing to the goroutines
+	hashingProcessor = func(storedObject StoredObject) error {
 		if storedObject.entityType != common.EEntityType.File() {
 			return processor(storedObject) // no process folders
 		}
@@ -615,6 +607,19 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 		return mutexProcessor(processor)(storedObject)
 	}
 
+	return finalizer, hashingProcessor
+}
+
+func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
+	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
+	// it fails here if file does not exist
+	if err != nil {
+		azcopyScanningLogger.Log(pipeline.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
+		return fmt.Errorf("failed to scan path %s due to %s", t.fullPath, err.Error())
+	}
+
+	finalizer, hashingProcessor := t.prepareHashingThreads(preprocessor, processor, filters)
+
 	// if the path is a single file, then pass it through the filters and send to processor
 	if isSingleFile {
 		if t.incrementEnumerationCounter != nil {
@@ -638,7 +643,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 		)
 		_, err = getProcessingError(err)
 
-		return finalizeHashing(err)
+		return finalizer(err)
 	} else {
 		if t.recursive {
 			processFile := func(filePath string, fileInfo os.FileInfo, fileError error) error {
@@ -691,7 +696,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			}
 
 			// note: Walk includes root, so no need here to separately create StoredObject for root (as we do for other folder-aware sources)
-			return finalizeHashing(WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.followSymlinks, t.errorChannel))
+			return finalizer(WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.followSymlinks, t.errorChannel))
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath
 			// We don't transfer any directory properties here, not even the root. (Because the root's
@@ -761,13 +766,13 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				)
 				_, err = getProcessingError(err)
 				if err != nil {
-					return finalizeHashing(err)
+					return finalizer(err)
 				}
 			}
 		}
 	}
 
-	return finalizeHashing(err)
+	return finalizer(err)
 }
 
 func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, followSymlinks bool, syncHashType common.SyncHashType, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan ErrorFileInfo) *localTraverser {
