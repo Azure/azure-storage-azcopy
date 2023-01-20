@@ -171,6 +171,7 @@ type params struct {
 	s2sPreserveAccessTier     bool
 	accessTier                azblob.AccessTierType
 	checkMd5                  common.HashValidationOption
+	compareHash               common.SyncHashType
 
 	destNull bool
 
@@ -503,6 +504,9 @@ type hookHelper interface {
 
 	// GetTestFiles returns (a copy of) the testFiles object that defines which files will be used in the test
 	GetTestFiles() testFiles
+
+	// SetTestFiles allows the test to set the test files in a callback (e.g. adding new files to the test dynamically w/o creation)
+	SetTestFiles(fs testFiles)
 
 	// CreateFiles creates the specified files (overwriting any that are already there of the same name)
 	CreateFiles(fs testFiles, atSource bool, setTestFiles bool, createSourceFilesAtDest bool)

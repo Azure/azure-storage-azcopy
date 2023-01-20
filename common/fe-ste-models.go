@@ -1664,3 +1664,28 @@ func (rpt RehydratePriorityType) ToRehydratePriorityType() azblob.RehydratePrior
 		return azblob.RehydratePriorityStandard
 	}
 }
+
+// //////////////////////////////////////////////////////////////////////////////
+type SyncHashType uint8
+
+var ESyncHashType SyncHashType = 0
+
+func (SyncHashType) None() SyncHashType {
+	return 0
+}
+
+func (SyncHashType) MD5() SyncHashType {
+	return 1
+}
+
+func (ht *SyncHashType) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(ht), s, true, true)
+	if err == nil {
+		*ht = val.(SyncHashType)
+	}
+	return err
+}
+
+func (ht SyncHashType) String() string {
+	return enum.StringInt(ht, reflect.TypeOf(ht))
+}

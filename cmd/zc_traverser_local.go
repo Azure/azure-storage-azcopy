@@ -22,18 +22,23 @@ package cmd
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
+	"hash"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
+	"sync"
+	"sync/atomic"
 )
 
 const MAX_SYMLINKS_TO_FOLLOW = 40
@@ -46,6 +51,10 @@ type localTraverser struct {
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
 	errorChannel                chan ErrorFileInfo
+
+	targetHashType common.SyncHashType
+	// receives fullPath entries and manages hashing of files lacking metadata.
+	hashTargetChannel chan string
 }
 
 func (t *localTraverser) IsDirectory(bool) (bool, error) {
@@ -358,7 +367,247 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 			}
 		})
 	}
+
 	return
+}
+
+func (t *localTraverser) GetHashData(fullpath string) (common.SyncHashData, error) {
+	if t.targetHashType == common.ESyncHashType.None() {
+		return common.SyncHashData{}, nil // no-op
+	}
+
+	fi, err := os.Stat(fullpath) // grab the stat so we can tell if the hash is valid
+	if err != nil {
+		return common.SyncHashData{}, err
+	}
+
+	if fi.IsDir() {
+		return common.SyncHashData{}, nil // there is no hash data on directories
+	}
+
+	// If a hash is considered unusable by some metric, attempt to set it up for generation, if the user allows it.
+	handleHashingError := func(err error) (common.SyncHashData, error) {
+		switch err {
+		case ErrorNoHashPresent,
+			ErrorHashNoLongerValid,
+			ErrorHashNotCompatible:
+			break
+		default:
+			return common.SyncHashData{}, err
+		}
+
+		// defer hashing to the goroutine
+		t.hashTargetChannel <- fullpath
+		return common.SyncHashData{}, ErrorHashAsyncCalculation
+	}
+
+	// attempt to grab existing hash data, and ensure it's validity.
+	data, err := common.TryGetHashData(fullpath)
+	if err != nil {
+		// Treat failure to read/parse/etc like a missing hash.
+		return handleHashingError(ErrorNoHashPresent)
+	} else {
+		if data.Mode != t.targetHashType {
+			return handleHashingError(ErrorHashNotCompatible)
+		}
+
+		if !data.LMT.Equal(fi.ModTime()) {
+			return handleHashingError(ErrorHashNoLongerValid)
+		}
+
+		return data, nil
+	}
+}
+
+// prepareHashingThreads creates background threads to perform hashing on local files that are missing hashes.
+// It returns a finalizer and a wrapped processor-- Use the wrapped processor in place of the original processor (even if synchashtype is none)
+// and wrap the error getting returned in the finalizer function to kill the background threads.
+func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (finalizer func(existingErr error) error, hashingProcessor func(obj StoredObject) error) {
+	if t.targetHashType == common.ESyncHashType.None() { // if no hashing is needed, do nothing.
+		return func(existingErr error) error {
+			return existingErr // nothing to overwrite with, no-op
+		}, processor
+	}
+
+	// set up for threaded hashing
+	t.hashTargetChannel = make(chan string, 1_000) // "reasonable" backlog
+	// Use half of the available CPU cores for hashing to prevent throttling the STE too hard if hashing is still occurring when the first job part gets sent out
+	hashingThreadCount := runtime.NumCPU() / 2
+	hashError := make(chan error, hashingThreadCount)
+	wg := &sync.WaitGroup{}
+	immediateStopHashing := int32(0)
+
+	// create return wrapper to handle hashing errors
+	finalizer = func(existingErr error) error {
+		if existingErr != nil {
+			close(t.hashTargetChannel)                  // stop sending hashes
+			atomic.StoreInt32(&immediateStopHashing, 1) // force the end of hashing
+			wg.Wait()                                   // Await the finalization of all hashing
+
+			return existingErr // discard all hashing errors
+		} else {
+			close(t.hashTargetChannel) // stop sending hashes
+
+			wg.Wait()                    // Await the finalization of all hashing
+			close(hashError)             // close out the error channel
+			for err := range hashError { // inspect all hashing errors
+				if err != nil {
+					return err
+				}
+			}
+
+			return nil
+		}
+	}
+
+	// wrap the processor, preventing a data race
+	commitMutex := &sync.Mutex{}
+	mutexProcessor := func(proc objectProcessor) objectProcessor {
+		return func(object StoredObject) error {
+			commitMutex.Lock() // prevent committing two objects at once to prevent a data race
+			defer commitMutex.Unlock()
+			err := proc(object)
+
+			return err
+		}
+	}
+
+	// spin up hashing threads
+	for i := 0; i < hashingThreadCount; i++ {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done() // mark the hashing thread as completed
+
+			for toHash := range t.hashTargetChannel {
+				if atomic.LoadInt32(&immediateStopHashing) == 1 { // should we stop hashing?
+					return
+				}
+
+				glcm.Info("Generating hash for " + toHash + "... This may take some time.")
+
+				fi, err := os.Stat(toHash) // query LMT & if it's a directory
+				if err != nil {
+					err = fmt.Errorf("failed to get properties of file result %s: %s", toHash, err.Error())
+					hashError <- err
+					return
+				}
+
+				if fi.IsDir() { // this should never happen
+					panic(toHash)
+				}
+
+				f, err := os.OpenFile(toHash, os.O_RDONLY, 0644) // perm is not used here since it's RO
+				if err != nil {
+					err = fmt.Errorf("failed to open file for reading result %s: %s", toHash, err.Error())
+					hashError <- err
+					return
+				}
+
+				var hasher hash.Hash // set up hasher
+				switch t.targetHashType {
+				case common.ESyncHashType.MD5():
+					hasher = md5.New()
+				}
+
+				// hash.Hash provides a writer type, allowing us to do a (small, 32MB to be precise) buffered write into the hasher and avoid memory concerns
+				_, err = io.Copy(hasher, f)
+				if err != nil {
+					err = fmt.Errorf("failed to read file into hasher result %s: %s", toHash, err.Error())
+					hashError <- err
+					return
+				}
+
+				sum := hasher.Sum([]byte{})
+
+				hashData := common.SyncHashData{
+					Mode: t.targetHashType,
+					Data: base64.StdEncoding.EncodeToString(sum),
+					LMT:  fi.ModTime(),
+				}
+
+				// failing to store hash data doesn't mean we can't transfer (e.g. RO directory)
+				_ = common.PutHashData(toHash, hashData)
+
+				// build the internal path
+				relPath := strings.TrimPrefix(strings.TrimPrefix(cleanLocalPath(toHash), cleanLocalPath(t.fullPath)), common.DeterminePathSeparator(t.fullPath))
+
+				err = processIfPassedFilters(filters,
+					newStoredObject(
+						func(storedObject *StoredObject) {
+							// apply the hash data
+							// storedObject.hashData = hashData
+							switch hashData.Mode {
+							case common.ESyncHashType.MD5():
+								storedObject.md5 = sum
+							default: // no-op
+							}
+
+							if preprocessor != nil {
+								// apply the original preprocessor
+								preprocessor(storedObject)
+							}
+						},
+						fi.Name(),
+						strings.ReplaceAll(relPath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING),
+
+						common.EEntityType.File(),
+						fi.ModTime(),
+						fi.Size(),
+						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
+						noBlobProps,
+						noMetdata,
+						"", // Local has no such thing as containers
+					),
+					mutexProcessor(processor),
+				)
+				_, err = getProcessingError(err)
+				if err != nil {
+					hashError <- err
+					return
+				}
+			}
+		}()
+	}
+
+	// wrap the processor, try to grab hashes, or defer processing to the goroutines
+	hashingProcessor = func(storedObject StoredObject) error {
+		if storedObject.entityType != common.EEntityType.File() {
+			return processor(storedObject) // no process folders
+		}
+
+		if strings.HasSuffix(path.Base(storedObject.relativePath), common.AzCopyHashDataStream) {
+			return nil // do not process hash data files.
+		}
+
+		fullPath := common.GenerateFullPath(t.fullPath, storedObject.relativePath)
+		hashData, err := t.GetHashData(fullPath)
+
+		if err != nil {
+			switch err {
+			case ErrorNoHashPresent, ErrorHashNoLongerValid, ErrorHashNotCompatible:
+				glcm.Info("No usable hash is present for " + fullPath + ". Will transfer if not present at destination.")
+				return processor(storedObject) // There is no hash data, so this file will be overwritten (in theory).
+			case ErrorHashAsyncCalculation:
+				return nil // File will be processed later
+			default:
+				return err // Cannot get or create hash data for some reason
+			}
+		}
+
+		// storedObject.hashData = hashData
+		switch hashData.Mode {
+		case common.ESyncHashType.MD5():
+			md5data, _ := base64.StdEncoding.DecodeString(hashData.Data) // If decode fails, treat it like no hash is present.
+			storedObject.md5 = md5data
+		default: // do nothing, no hash is present.
+		}
+
+		// delay the mutex until after potentially long-running operations
+		return mutexProcessor(processor)(storedObject)
+	}
+
+	return finalizer, hashingProcessor
 }
 
 func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
@@ -368,6 +617,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 		azcopyScanningLogger.Log(pipeline.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
 		return fmt.Errorf("failed to scan path %s due to %s", t.fullPath, err.Error())
 	}
+
+	finalizer, hashingProcessor := t.prepareHashingThreads(preprocessor, processor, filters)
 
 	// if the path is a single file, then pass it through the filters and send to processor
 	if isSingleFile {
@@ -388,10 +639,11 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				noMetdata,
 				"", // Local has no such thing as containers
 			),
-			processor,
+			hashingProcessor, // hashingProcessor handles the mutex wrapper
 		)
 		_, err = getProcessingError(err)
-		return err
+
+		return finalizer(err)
 	} else {
 		if t.recursive {
 			processFile := func(filePath string, fileInfo os.FileInfo, fileError error) error {
@@ -439,11 +691,12 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						noMetdata,
 						"", // Local has no such thing as containers
 					),
-					processor)
+					hashingProcessor, // hashingProcessor handles the mutex wrapper
+				)
 			}
 
 			// note: Walk includes root, so no need here to separately create StoredObject for root (as we do for other folder-aware sources)
-			return WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.followSymlinks, t.errorChannel)
+			return finalizer(WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.followSymlinks, t.errorChannel))
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath
 			// We don't transfer any directory properties here, not even the root. (Because the root's
@@ -509,26 +762,28 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						noMetdata,
 						"", // Local has no such thing as containers
 					),
-					processor)
+					hashingProcessor, // hashingProcessor handles the mutex wrapper
+				)
 				_, err = getProcessingError(err)
 				if err != nil {
-					return err
+					return finalizer(err)
 				}
 			}
 		}
 	}
 
-	return
+	return finalizer(err)
 }
 
-func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan ErrorFileInfo) *localTraverser {
+func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, followSymlinks bool, syncHashType common.SyncHashType, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan ErrorFileInfo) *localTraverser {
 	traverser := localTraverser{
 		fullPath:                    cleanLocalPath(fullPath),
 		recursive:                   recursive,
 		followSymlinks:              followSymlinks,
 		appCtx:                      ctx,
 		incrementEnumerationCounter: incrementEnumerationCounter,
-		errorChannel:                errorChannel}
+		errorChannel:                errorChannel,
+		targetHashType:              syncHashType}
 	return &traverser
 }
 

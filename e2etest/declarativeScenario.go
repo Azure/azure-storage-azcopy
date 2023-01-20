@@ -667,6 +667,10 @@ func (s *scenario) GetTestFiles() testFiles {
 	return s.fs
 }
 
+func (s *scenario) SetTestFiles(fs testFiles) {
+	s.fs = fs
+}
+
 func (s *scenario) CreateFiles(fs testFiles, atSource bool, setTestFiles bool, createSourceFilesAtDest bool) {
 	original := s.fs
 	s.fs = fs
