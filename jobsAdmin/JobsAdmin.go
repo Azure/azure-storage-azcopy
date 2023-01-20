@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -74,7 +75,7 @@ var JobsAdmin interface {
 
 	// JobMgr returns the specified JobID's JobMgr
 	JobMgr(jobID common.JobID) (ste.IJobMgr, bool)
-	JobMgrEnsureExists(jobID common.JobID, level common.LogLevel, commandString string) ste.IJobMgr
+	JobMgrEnsureExists(jobID common.JobID, level common.LogLevel, commandString string, sourceBlobToken azblob.Credential) ste.IJobMgr
 
 	// AddJobPartMgr associates the specified JobPartMgr with the Jobs Administrator
 	//AddJobPartMgr(appContext context.Context, planFile JobPartPlanFileName) IJobPartMgr
@@ -293,12 +294,12 @@ func (ja *jobsAdmin) AppPathFolder() string {
 // JobMgrEnsureExists returns the specified JobID's IJobMgr if it exists or creates it if it doesn't already exit
 // If it does exist, then the appCtx argument is ignored.
 func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
-	level common.LogLevel, commandString string) ste.IJobMgr {
+	level common.LogLevel, commandString string, sourceBlobToken azblob.Credential) ste.IJobMgr {
 
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
 		func() ste.IJobMgr {
 			// Return existing or new IJobMgr to caller
-			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, ja.jobLogger, false)
+			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, ja.jobLogger, false, sourceBlobToken)
 		})
 }
 
@@ -387,7 +388,7 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinat
 			continue
 		}
 		mmf := planFile.Map()
-		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
+		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "", nil)
 		jm.AddJobPart(partNum, planFile, mmf, sourceSAS, destinationSAS, false, nil)
 	}
 
@@ -421,7 +422,7 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 		}
 		mmf := planFile.Map()
 		//todo : call the compute transfer function here for each job.
-		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
+		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "", nil)
 		jm.AddJobPart(partNum, planFile, mmf, EMPTY_SAS_STRING, EMPTY_SAS_STRING, false, nil)
 	}
 }
