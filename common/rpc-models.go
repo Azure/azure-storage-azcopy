@@ -114,6 +114,7 @@ type Transfers struct {
 	TotalSizeInBytes    uint64
 	FileTransferCount   uint32
 	FolderTransferCount uint32
+	FilePropertiesCount uint32
 }
 
 // This struct represents the job info (a single part) to be sent to the storage engine
@@ -259,6 +260,7 @@ type ListJobSummaryResponse struct {
 	// FileTransfers.
 	FileTransfers           uint32 `json:",string"`
 	FolderPropertyTransfers uint32 `json:",string"`
+	FilePropertyTransfers   uint32 `json:",string"`
 
 	TransfersCompleted uint32 `json:",string"`
 	TransfersFailed    uint32 `json:",string"`

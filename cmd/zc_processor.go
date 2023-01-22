@@ -178,6 +178,8 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 	s.copyJobTemplate.Transfers.TotalSizeInBytes += uint64(copyTransfer.SourceSize)
 	if copyTransfer.EntityType == common.EEntityType.File() {
 		s.copyJobTemplate.Transfers.FileTransferCount++
+	} else if copyTransfer.EntityType == common.EEntityType.FileProperties() {
+		s.copyJobTemplate.Transfers.FilePropertiesCount++
 	} else {
 		s.copyJobTemplate.Transfers.FolderTransferCount++
 	}

@@ -302,8 +302,7 @@ func (raw *RawSyncCmdArgs) Cook() (cookedSyncCmdArgs, error) {
 		return cooked, err
 	}
 
-	// TODO: Till we don't have API's to update the metaDataOnly. Lets keep this flag false.
-	cooked.metaDataOnlySync = false
+	cooked.metaDataOnlySync = raw.MetaDataOnlySync
 
 	// This check is in-line with copy mode.
 	// Note: * can be filename in that case, which means user want to copy file with name "*". For files we don't copy
@@ -823,7 +822,8 @@ Files Scanned at Source: %v
 Files Scanned at Destination: %v
 Elapsed Time (Minutes): %v
 Number of Copy Transfers for Files: %v
-Number of Copy Transfers for Folder Properties: %v 
+Number of Copy Transfers for Folder Properties: %v
+Number of Copy Transfers for Files Properties: %v
 Total Number Of Copy Transfers: %v
 Number of Copy Transfers Completed: %v
 Number of Copy Transfers Failed: %v
@@ -838,6 +838,7 @@ Final Job Status: %v%s%s
 				jobsAdmin.ToFixed(duration.Minutes(), 4),
 				summary.FileTransfers,
 				summary.FolderPropertyTransfers,
+				summary.FilePropertyTransfers,
 				summary.TotalTransfers,
 				summary.TransfersCompleted,
 				summary.TransfersFailed,

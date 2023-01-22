@@ -123,7 +123,7 @@ func (s *StoredObject) isSourceRootFolder() bool {
 // do not pass through that routine.  So we need to make the filtering available in a separate function
 // so that the sync deletion code path(s) can access it.
 func (s *StoredObject) isCompatibleWithFpo(fpo common.FolderPropertyOption) bool {
-	if s.entityType == common.EEntityType.File() {
+	if s.entityType == common.EEntityType.File() || s.entityType == common.EEntityType.FileProperties() {
 		return true
 	} else if s.entityType == common.EEntityType.Folder() {
 		switch fpo {

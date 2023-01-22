@@ -81,13 +81,14 @@ type syncDestinationComparator struct {
 	incrementNotTransferred func(common.EntityType)
 }
 
-func newSyncDestinationComparator(i *folderIndexer, possiblyRenamedMap *possiblyRenamedMap, copyScheduler, cleaner objectProcessor, disableComparison bool, cfdMode common.CFDMode, lastSyncTime time.Time, scannerLogger common.ILoggerResetable, incrementNotTransferred func(common.EntityType)) *syncDestinationComparator {
+func newSyncDestinationComparator(i *folderIndexer, possiblyRenamedMap *possiblyRenamedMap, copyScheduler, cleaner objectProcessor, disableComparison bool, cfdMode common.CFDMode, lastSyncTime time.Time, scannerLogger common.ILoggerResetable, incrementNotTransferred func(common.EntityType), metaDataOnlySync bool) *syncDestinationComparator {
 	return &syncDestinationComparator{sourceFolderIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, disableComparison: disableComparison,
 		cfdMode:                 cfdMode,
 		possiblyRenamedMap:      possiblyRenamedMap,
 		lastSyncTime:            lastSyncTime,
 		scannerLogger:           scannerLogger,
 		incrementNotTransferred: incrementNotTransferred,
+		metaDataOnlySync:   metaDataOnlySync,
 	}
 }
 
@@ -287,7 +288,12 @@ func (f *syncDestinationComparator) FinalizeTargetDirectory(relativeDir string, 
 		} else if metaDataChange {
 			// For folders, properties are sync'ed when the Finalizer for that folder is called.
 			if storedObject.entityType != common.EEntityType.Folder() {
-				panic("File properties to be sync'ed. Not yet implemented")
+				f.scannerLogger.Log(pipeline.LogInfo, fmt.Sprintf("File(%s) scheduled for property transfer only", storedObject.relativePath))
+				storedObject.entityType = common.EEntityType.FileProperties()
+
+				// This is only file properties transfer, we don't want it to be accounted in bytes transferred.
+				storedObject.size = 0
+				f.copyTransferScheduler(storedObject)
 			}
 		} else {
 			//
@@ -314,13 +320,14 @@ func (f *syncDestinationComparator) FinalizeTargetDirectory(relativeDir string, 
 	if finalizeAll {
 		//
 		// Note: We actually want to update the directory properties and *not* create a new directory.
-		// Till we have support for updating the directory properties, we use this same call to create the directory.
 		//
 		// TODO: For CtimeMtime we will be called with finalizeAll=true, only when the directory on source has changed since last sync time,
 		//       while for TargetCompare we will always be called with finalizeAll=true, even if the source directory has not changed.
 		//       So, in case of TargetCompare we must copy directory properties only if it has changed. Also incrementNotTransferred() must be called
 		//       accordingly.
 		//
+
+		// Add this transfer to job order.
 		f.copyTransferScheduler(so)
 	} else {
 		//
@@ -486,15 +493,18 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 			panic(fmt.Sprintf("Relative Path at source[%s] not matched with destination[%s]", sourceObjectInMap.relativePath, destinationObject.relativePath))
 		}
 		dataChanged, metadataChanged := f.HasFileChangedSinceLastSyncUsingTargetCompare(destinationObject, sourceObjectInMap)
+
+		var err error
 		if f.disableComparison || dataChanged {
-			err := f.copyTransferScheduler(sourceObjectInMap)
-			if err != nil {
-				// Release the lock.
-				f.sourceFolderIndex.lock.Unlock()
-				return err
-			}
+			err = f.copyTransferScheduler(sourceObjectInMap)
 		} else if metadataChanged {
-			// TODO: Need to add call to just update the metadata only.
+			f.scannerLogger.Log(pipeline.LogInfo, fmt.Sprintf("File(%s) scheduled for file property transfer only", sourceObjectInMap.relativePath))
+
+			sourceObjectInMap.entityType = common.EEntityType.FileProperties()
+
+			// This is only file properties transfer, we don't want it to be accounted in bytes transferred.
+			sourceObjectInMap.size = 0
+			err = f.copyTransferScheduler(sourceObjectInMap)
 		} else {
 			// Neither data nor metadata for the file has changed, hence file is not transferred.
 			if f.incrementNotTransferred != nil {
@@ -506,7 +516,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 		delete(foldermap.indexMap, lcFileName)
 
 		f.sourceFolderIndex.lock.Unlock()
-		return nil
+		return err
 	}
 
 	f.sourceFolderIndex.lock.Unlock()

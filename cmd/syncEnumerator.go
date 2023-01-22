@@ -414,7 +414,8 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *s
 			} else if entityType == common.EEntityType.Folder() {
 				atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
 			}
-		}).processIfNecessary
+		}, cca.metaDataOnlySync).processIfNecessary
+
 		finalize = func() error {
 			//
 			// Now that target traverser is done processing, there cannot be any more "delete jobs", tell
