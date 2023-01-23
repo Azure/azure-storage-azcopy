@@ -23,9 +23,9 @@ package e2etest
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
-	"path/filepath"
+	"os"
+	"path"
 	"runtime"
 	"strings"
 	"testing"
@@ -159,7 +159,6 @@ func (TestResourceFactory) CreateNewContainer(c asserter, publicAccess azblob.Pu
 	name = TestResourceNameGenerator{}.GenerateContainerName(c)
 	container = TestResourceFactory{}.GetBlobServiceURL(accountType).NewContainerURL(name)
 
-
 	cResp, err := container.Create(context.Background(), nil, publicAccess)
 	c.AssertNoErr(err)
 	c.Assert(cResp.StatusCode(), equals(), 201)
@@ -185,7 +184,7 @@ func (TestResourceFactory) CreateNewFileShareSnapshot(c asserter, fileShare azfi
 }
 
 func (TestResourceFactory) CreateLocalDirectory(c asserter) (dstDirName string) {
-	dstDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
+	dstDirName, err := os.MkdirTemp("","AzCopyLocalTest")
 	c.AssertNoErr(err)
 	return
 }
@@ -229,20 +228,28 @@ func getTestName(t *testing.T) (pseudoSuite, test string) {
 	uscorePos := strings.Index(testName, "_")
 	if uscorePos >= 0 && uscorePos < len(testName)-1 {
 		beforeUnderscore := strings.ToLower(testName[:uscorePos])
-		fileWords := strings.Split(strings.Replace(strings.ToLower(filepath.Base(fileName)), "_test.go", "", -1), "_")
-		for _, w := range fileWords {
-			if beforeUnderscore == w {
-				pseudoSuite = beforeUnderscore
-				testName = testName[uscorePos+1:]
-				break
-			}
+
+		fileWords := strings.ReplaceAll(
+			strings.TrimSuffix(strings.TrimPrefix(path.Base(fileName), "zt_"), "_test.go"), "_", "")
+
+		if strings.Contains(fileWords, beforeUnderscore) {
+			pseudoSuite = beforeUnderscore
+			testName = testName[uscorePos+1:]
 		}
+		// fileWords := strings.Split(strings.Replace(strings.ToLower(filepath.Base(fileName)), "_test.go", "", -1), "_")
+		// for _, w := range fileWords {
+		// 	if beforeUnderscore == w {
+		// 		pseudoSuite = beforeUnderscore
+		// 		testName = testName[uscorePos+1:]
+		// 		break
+		// 	}
+		// }
 	}
 
 	return pseudoSuite, removeUnderscores(testName)
 }
 
-//nolint
+// nolint
 // This function generates an entity name by concatenating the passed prefix,
 // the name of the test requesting the entity name, and the minute, second, and nanoseconds of the call.
 // This should make it easy to associate the entities with their test, uniquely identify
@@ -273,7 +280,7 @@ func (TestResourceNameGenerator) GenerateContainerName(c asserter) string {
 	return uuid.New().String()
 }
 
-//nolint
+// nolint
 func (TestResourceNameGenerator) generateBlobName(c asserter) string {
 	return generateName(c, blobPrefix, 0)
 }

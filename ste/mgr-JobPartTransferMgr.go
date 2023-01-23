@@ -60,6 +60,7 @@ type IJobPartTransferMgr interface {
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
 	SourceProviderPipeline() pipeline.Pipeline
+	SourceCredential() pipeline.Factory
 	FailActiveUpload(where string, err error)
 	FailActiveDownload(where string, err error)
 	FailActiveUploadWithStatus(where string, err error, failureStatus common.TransferStatus)
@@ -94,6 +95,7 @@ type IJobPartTransferMgr interface {
 	GetS2SSourceBlobTokenCredential() azblob.TokenCredential
 	PropertiesToTransfer() common.SetPropertiesFlags
 	ResetSourceSize() // sets source size to 0 (made to be used by setProperties command to make number of bytes transferred = 0)
+	SuccessfulBytesTransferred() int64
 }
 
 type TransferInfo struct {
@@ -206,19 +208,16 @@ type jobPartTransferMgr struct {
 }
 
 func (jptm *jobPartTransferMgr) GetS2SSourceBlobTokenCredential() azblob.TokenCredential {
-	jpm := jptm.jobPartMgr.(*jobPartMgr)
-	credOption := common.CredentialOpOptions{
-		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
-		LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
-		Panic:    jpm.Panic,
-		CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
-		Cancel:   jpm.jobMgr.Cancel,
-	}
+	cred := jptm.SourceCredential()
 
-	if jpm.jobMgr.getInMemoryTransitJobState().S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
-		return common.CreateBlobCredential(jptm.Context(), jptm.jobPartMgr.(*jobPartMgr).jobMgr.getInMemoryTransitJobState().CredentialInfo.WithType(common.ECredentialType.OAuthToken()), credOption).(azblob.TokenCredential)
-	} else {
+	if cred == nil {
 		return nil
+	} else {
+		if tc, ok := cred.(azblob.TokenCredential); ok {
+			return tc
+		} else {
+			return nil
+		}
 	}
 }
 
@@ -342,7 +341,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	// does not exceeds 50000 (max number of block per blob)
 	if blockSize == 0 {
 		blockSize = common.DefaultBlockBlobBlockSize
-		for ; uint32(sourceSize/blockSize) > common.MaxNumberOfBlocksPerBlob; blockSize = 2 * blockSize {
+		for ; sourceSize >= common.MaxNumberOfBlocksPerBlob * blockSize; blockSize = 2 * blockSize {
 			if blockSize > common.BlockSizeThreshold {
 				/*
 				 * For a RAM usage of 0.5G/core, we would have 4G memory on typical 8 core device, meaning at a blockSize of 256M,
@@ -434,9 +433,9 @@ func (jptm *jobPartTransferMgr) FileCountLimiter() common.CacheLimiter {
 // As at Oct 2019, cases where we mutate destination names are
 // (i)  when destination is Windows or Azure Files, and source contains characters unsupported at the destination
 // (ii) when downloading with --decompress and there are two files that differ only in an extension that will will strip
-//      e.g. foo.txt and foo.txt.gz (if we decompress the latter, we'll strip the extension and the names will collide)
+//e.g. foo.txt and foo.txt.gz (if we decompress the latter, we'll strip the extension and the names will collide)
 // (iii) For completeness, there's also bucket->container name resolution when copying from S3, but that is not expected to ever
-//      create collisions, since it already takes steps to prevent them.
+//create collisions, since it already takes steps to prevent them.
 func (jptm *jobPartTransferMgr) WaitUntilLockDestination(ctx context.Context) error {
 	if strings.EqualFold(jptm.Info().Destination, common.Dev_Null) {
 		return nil // nothing to lock
@@ -952,6 +951,10 @@ func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {
 	return jptm.jobPartMgr.SourceProviderPipeline()
 }
 
+func (jptm *jobPartTransferMgr) SourceCredential() pipeline.Factory {
+	return jptm.jobPartMgr.SourceCredential()
+}
+
 func (jptm *jobPartTransferMgr) SecurityInfoPersistenceManager() *securityInfoPersistenceManager {
 	return jptm.jobPartMgr.SecurityInfoPersistenceManager()
 }
@@ -970,4 +973,8 @@ func (jptm *jobPartTransferMgr) ShouldInferContentType() bool {
 	// For local files, even if the file size is 0B, we try to infer the content based on file extension
 	fromTo := jptm.FromTo()
 	return fromTo.From() == common.ELocation.Local()
+}
+
+func (jptm *jobPartTransferMgr) SuccessfulBytesTransferred() int64 {
+	return atomic.LoadInt64(&jptm.atomicSuccessfulBytes)
 }

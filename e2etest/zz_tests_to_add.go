@@ -5,7 +5,7 @@ package e2etest
 //   Next framework _use_ tasks
 //   	In progress: More filter tests
 //      Flesh out attribute support, in usages of objectProperties.smbAttributes, so that we can create, and verify, tests with these
-//         (right now, tests that use these will fail, because they lack the necessary code to retrieve them, from the destinatino (and set the at the source)
+//         (right now, tests that use these will fail, because they lack the necessary code to retrieve them, from the destination (and set the at the source)
 //         isn't there.  See commented code marked TODO: nakulkar-msft
 //      The resource manager support for S3 and BlobFS and (who will do this one) GCP?
 //

@@ -10,8 +10,10 @@ import (
 func TestSMB_FromShareSnapshot(t *testing.T) {
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:              true,
-		preserveSMBInfo:        true,
 		preserveSMBPermissions: true,
+
+		// default, but present for clarity
+		//preserveSMBInfo:        BoolPointer(true),
 	}, &hooks{
 		// create a snapshot for the source share
 		beforeRunJob: func(h hookHelper) {
@@ -39,7 +41,7 @@ func TestSMB_ToDevNull(t *testing.T) {
 		params{
 			recursive:              true,
 			preserveSMBPermissions: isWindows,
-			preserveSMBInfo:        isWindows,
+			preserveSMBInfo:        BoolPointer(isWindows),
 			checkMd5:               common.EHashValidationOption.FailIfDifferent(),
 			destNull:               true,
 		},

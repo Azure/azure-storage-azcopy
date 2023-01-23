@@ -46,7 +46,7 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 				pipeline.LogInfo,
 				srcInfoProvider.RawSource(),
 				destination,
-				fmt.Sprintf("BlobType has been explictly set to %q for destination blob.", blobTypeOverride))
+				fmt.Sprintf("BlobType has been explicitly set to %q for destination blob.", blobTypeOverride))
 		}
 	} else {
 		if blobSrcInfoProvider, ok := srcInfoProvider.(IBlobSourceInfoProvider); ok { // If source is a blob, detect the source blob type.

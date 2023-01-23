@@ -58,9 +58,16 @@ type chunkedFileWriter struct {
 	// NOTE: for the 64 bit atomic functions to work on a 32 bit system, we have to guarantee the right 64-bit alignment
 	// so the 64 bit integers are placed first in the struct to avoid future breaks
 	// refer to: https://golang.org/pkg/sync/atomic/#pkg-note-BUG
+	currentReservedCapacity int64
+
 	// all time received count for this instance
 	totalChunkReceiveMilliseconds int64
 	totalReceivedChunkCount       int32
+
+	// used to control scheduling of new chunks against this file,
+	// to make sure we don't get too many sitting in RAM all waiting to be
+	// saved at the same time
+	activeChunkCount int32
 
 	// the file we are writing to (type as interface to somewhat abstract away io.File - e.g. for unit testing)
 	file io.WriteCloser
@@ -77,13 +84,8 @@ type chunkedFileWriter struct {
 	// file chunks that have arrived and not been sorted yet
 	newUnorderedChunks chan fileChunk
 
-	// used to control scheduling of new chunks against this file,
-	// to make sure we don't get too many sitting in RAM all waiting to be
-	// saved at the same time
-	activeChunkCount int32
-
 	// used for completion
-	successMd5   chan []byte
+	successMd5      chan []byte
 	chunkWriterDone chan bool
 
 	// controls body-read retries. Public so value can be shared with retryReader
@@ -94,9 +96,7 @@ type chunkedFileWriter struct {
 
 	sourceMd5Exists bool
 
-	currentReservedCapacity int64
-
-	err error //This field should be set only by workerRoutine
+	err error // This field should be set only by workerRoutine
 }
 
 type fileChunk struct {
@@ -146,7 +146,7 @@ func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, id ChunkID,
 		atomic.AddInt32(&w.activeChunkCount, 1)
 	}
 	return err
-	//At this point, the book-keeping of this memory is chunkedFileWriter's responsibility
+	// At this point, the book-keeping of this memory is chunkedFileWriter's responsibility
 }
 
 // Threadsafe method to enqueue a new chunk for processing
@@ -164,11 +164,11 @@ func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, id ChunkID, chunkS
 
 	// read into a buffer
 	buffer := w.slicePool.RentSlice(chunkSize)
-	
+
 	defer func() {
-		//cleanup stuff if we abruptly quit
+		// cleanup stuff if we abruptly quit
 		if err == nil {
-			return //We've successfully queued, the worker will now takeover
+			return // We've successfully queued, the worker will now takeover
 		}
 		w.cacheLimiter.Remove(chunkSize) // remove this from the tally of scheduled-but-unsaved bytes
 		atomic.AddInt64(&w.currentReservedCapacity, -chunkSize)
@@ -176,7 +176,7 @@ func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, id ChunkID, chunkS
 		atomic.AddInt32(&w.activeChunkCount, -1)
 		w.chunkLogger.LogChunkStatus(id, EWaitReason.ChunkDone()) // this chunk is all finished
 	}()
-	
+
 	readStart := time.Now()
 	_, err = io.ReadFull(chunkContents, buffer)
 	close(readDone)
@@ -214,13 +214,13 @@ func (w *chunkedFileWriter) Flush(ctx context.Context) ([]byte, error) {
 	 *
 	 * Why should we do this?
 	 * Ideally, the capacity should be zero here, because workerRoutine() would return
-	 * the slice after saving the chunk. However, transferProcessor() is designed such that 
+	 * the slice after saving the chunk. However, transferProcessor() is designed such that
 	 * it has to schedule all chunks of jptm even if it has detected a failure in between.
 	 * In such a case, we'd have added to the capacity of the fileWriter, while the
 	 * workerRoutine() has already exited. We release that capacity here. When Flush() finds
-	 * active chunks here, it is only those which have not rented a slice.	 
+	 * active chunks here, it is only those which have not rented a slice.
 	 */
-	 defer func() {
+	defer func() {
 		w.cacheLimiter.Remove(atomic.LoadInt64(&w.currentReservedCapacity))
 	}()
 
@@ -255,7 +255,7 @@ func (w *chunkedFileWriter) workerRoutine(ctx context.Context) {
 	}
 
 	defer func() {
-		//cleanup stuff if we abruptly quit
+		// cleanup stuff if we abruptly quit
 		for _, chunk := range unsavedChunksByFileOffset {
 			w.cacheLimiter.Remove(int64(chunk.id.length)) // remove this from the tally of scheduled-but-unsaved bytes
 			atomic.AddInt64(&w.currentReservedCapacity, -chunk.id.length)
@@ -295,7 +295,7 @@ func (w *chunkedFileWriter) workerRoutine(ctx context.Context) {
 		err := w.sequentiallyProcessAvailableChunks(unsavedChunksByFileOffset, &nextOffsetToSave, md5Hasher, ctx)
 		if err != nil {
 			w.err = err
-			return                // no point in processing any more after a failure
+			return // no point in processing any more after a failure
 		}
 	}
 }
@@ -313,7 +313,7 @@ func (w *chunkedFileWriter) sequentiallyProcessAvailableChunks(unsavedChunksByFi
 		// Look for next chunk in sequence
 		nextChunkInSequence, exists := unsavedChunksByFileOffset[*nextOffsetToSave]
 		if !exists {
-			return nil //its not there yet. That's OK.
+			return nil // its not there yet. That's OK.
 		}
 		delete(unsavedChunksByFileOffset, *nextOffsetToSave)      // remove it
 		*nextOffsetToSave += int64(len(nextChunkInSequence.data)) // update immediately so we won't forget!
@@ -339,7 +339,7 @@ func (w *chunkedFileWriter) setStatusForContiguousAvailableChunks(unsavedChunksB
 
 		nextChunkInSequence, exists := unsavedChunksByFileOffset[nextOffsetToSave]
 		if !exists {
-			return //its not there yet, so no need to touch anything AFTER it. THEY are still waiting for prior chunk
+			return // its not there yet, so no need to touch anything AFTER it. THEY are still waiting for prior chunk
 		}
 		nextOffsetToSave += int64(len(nextChunkInSequence.data))
 		w.chunkLogger.LogChunkStatus(nextChunkInSequence.id, EWaitReason.QueueToWrite()) // we WILL write this. Just may have to write others before it

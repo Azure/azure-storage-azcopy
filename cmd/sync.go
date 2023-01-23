@@ -24,10 +24,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
@@ -54,6 +56,7 @@ type rawSyncCmdArgs struct {
 	legacyExclude         string // for warning messages only
 	includeRegex          string
 	excludeRegex          string
+	compareHash           string
 
 	preservePermissions     bool
 	preserveSMBPermissions  bool // deprecated and synonymous with preservePermissions
@@ -144,7 +147,12 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	if loc := InferArgumentLocation(raw.dst); loc == common.ELocation.BlobFS() {
 		raw.dst = strings.Replace(raw.dst, ".dfs", ".blob", 1)
-		glcm.Info("Sync operates only on blob endpoint. Switching to use blob endpoint on destination account.")
+		msg := fmt.Sprintf("Sync operates only on blob endpoint. Switching to use blob endpoint on destination account. There are some limitations when switching endpoints. " +
+			"Please refer to https://learn.microsoft.com/en-us/azure/storage/blobs/data-lake-storage-known-issues#blob-storage-apis")
+		glcm.Info(msg)
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(pipeline.LogInfo, msg)
+		}
 		dstHNS = true
 	}
 
@@ -242,11 +250,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.includeFileAttributes = raw.parsePatterns(raw.includeFileAttributes)
 	cooked.excludeFileAttributes = raw.parsePatterns(raw.excludeFileAttributes)
 
-	cooked.preserveSMBInfo = areBothLocationsSMBAware(cooked.fromTo)
-	// If user has explicitly specified not to copy SMB Information, set cooked.preserveSMBInfo to false
-	if !raw.preserveSMBInfo {
-		cooked.preserveSMBInfo = false
-	}
+	cooked.preserveSMBInfo = raw.preserveSMBInfo && areBothLocationsSMBAware(cooked.fromTo)
 
 	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, nil, "preserve-smb-info"); err != nil {
 		return cooked, err
@@ -272,6 +276,17 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.preservePOSIXProperties = raw.preservePOSIXProperties
 	if cooked.preservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.fromTo) {
 		return cooked, fmt.Errorf("in order to use --preserve-posix-properties, both the source and destination must be POSIX-aware (valid pairings are Linux->Blob, Blob->Linux, Blob->Blob)")
+	}
+
+	if err = cooked.compareHash.Parse(raw.compareHash); err != nil {
+		return cooked, err
+	} else {
+		switch cooked.compareHash {
+		case common.ESyncHashType.MD5():
+			// Save any new MD5s on files we download.
+			raw.putMd5 = true
+		default: // no need to put a hash of any kind.
+		}
 	}
 
 	cooked.putMd5 = raw.putMd5
@@ -384,6 +399,7 @@ type cookedSyncCmdArgs struct {
 	excludeRegex          []string
 
 	// options
+	compareHash             common.SyncHashType
 	preservePermissions     common.PreservePermissionsOption
 	preserveSMBInfo         bool
 	preservePOSIXProperties bool
@@ -754,7 +770,11 @@ func init() {
 	// TODO: enable for copy with IfSourceNewer
 	// smb info/permissions can be persisted in the scenario of File -> File
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Azure Files). This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
-	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", true, "For SMB-aware locations, flag will be set to true by default. Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Azure Files). This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is not preserved for folders. ")
+	syncCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits)"+
+		" between SMB-aware resources (Windows and Azure Files). On windows, this flag will be set to true by default. If the source or destination is a "+
+		"volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. Only the attribute bits supported by Azure Files "+
+		"will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified "+
+		"(e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false, "'Preserves' property info gleaned from stat or statx into object metadata.")
 
 	// TODO: enable when we support local <-> File
@@ -787,6 +807,8 @@ func init() {
 	syncCmd.PersistentFlags().BoolVar(&raw.cpkInfo, "cpk-by-value", false, "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key and its hash will be fetched from environment variables")
 	syncCmd.PersistentFlags().BoolVar(&raw.mirrorMode, "mirror-mode", false, "Disable last-modified-time based comparison and overwrites the conflicting files and blobs at the destination if this flag is set to true. Default is false")
 	syncCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the path of files that would be copied or removed by the sync command. This flag does not copy or remove the actual files.")
+
+	syncCmd.PersistentFlags().StringVar(&raw.compareHash, "compare-hash", "None", "Inform sync to rely on hashes as an alternative to LMT. Missing hashes at a remote source will throw an error. (None, MD5) Default: None")
 
 	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
 	syncCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")

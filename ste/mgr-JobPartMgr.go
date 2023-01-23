@@ -28,7 +28,7 @@ var DebugSkipFiles = make(map[string]bool)
 
 type IJobPartMgr interface {
 	Plan() *JobPartPlanHeader
-	ScheduleTransfers(jobCtx context.Context)
+	ScheduleTransfers(jobCtx context.Context, sourceBlobToken azblob.Credential)
 	StartJobXfer(jptm IJobPartTransferMgr)
 	ReportTransferDone(status common.TransferStatus) uint32
 	GetOverwriteOption() common.OverwriteOption
@@ -53,6 +53,7 @@ type IJobPartMgr interface {
 	ChunkStatusLogger() common.ChunkStatusLogger
 	common.ILogger
 	SourceProviderPipeline() pipeline.Pipeline
+	SourceCredential() pipeline.Factory
 	getOverwritePrompter() *overwritePrompter
 	getFolderCreationTracker() FolderCreationTracker
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
@@ -297,6 +298,7 @@ type jobPartMgr struct {
 	// Currently, this only sees use in ADLSG2->ADLSG2 ACL transfers. TODO: Remove it when we can reliably get/set ACLs on blob.
 	secondaryPipeline pipeline.Pipeline
 
+	sourceCredential       pipeline.Factory // must satisfy azblob.TokenCredential currently
 	sourceProviderPipeline pipeline.Pipeline
 	// TODO: Ditto
 	secondarySourceProviderPipeline pipeline.Pipeline
@@ -338,7 +340,7 @@ func (jpm *jobPartMgr) Plan() *JobPartPlanHeader {
 }
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
-func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
+func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, sourceBlobToken azblob.Credential) {
 	jobCtx = context.WithValue(jobCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
 	jpm.atomicTransfersDone = 0 // Reset the # of transfers done back to 0
 	// partplan file is opened and mapped when job part is added
@@ -375,9 +377,10 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	metadataString := string(dstData.Metadata[:dstData.MetadataLength])
 	jpm.metadata = common.Metadata{}
 	if len(metadataString) > 0 {
-		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
-			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-			jpm.metadata[kv[0]] = kv[1]
+		var err error
+		jpm.metadata, err = common.StringToMetadata(metadataString)
+		if err != nil {
+			panic("sanity check: metadata string should be valid at this point: " + metadataString)
 		}
 	}
 	blobTagsStr := string(dstData.BlobTags[:dstData.BlobTagsLength])
@@ -407,7 +410,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 	jpm.priority = plan.Priority
 
-	jpm.createPipelines(jobCtx) // pipeline is created per job part manager
+	jpm.createPipelines(jobCtx, sourceBlobToken) // pipeline is created per job part manager
 
 	// *** Schedule this job part's transfers ***
 	for t := uint32(0); t < plan.NumTransfers; t++ {
@@ -510,11 +513,13 @@ func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 	jpm.jobMgr.ScheduleTransfer(jpm.priority, jptm)
 }
 
-func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
+func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azblob.Credential) {
 	if atomic.SwapUint32(&jpm.atomicPipelinesInitedIndicator, 1) != 0 {
 		panic("init client and pipelines for same jobPartMgr twice")
 	}
-
+	if jpm.sourceCredential == nil {
+		jpm.sourceCredential = sourceBlobToken
+	}
 	fromTo := jpm.planMMF.Plan().FromTo
 	credInfo := jpm.credInfo
 	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
@@ -551,7 +556,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() || fromTo == common.EFromTo.BlobLocal() {
 		var sourceCred azblob.Credential = azblob.NewAnonymousCredential()
 		jobState := jpm.jobMgr.getInMemoryTransitJobState()
-		if fromTo.To() == common.ELocation.Blob() && jobState.S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
+		if fromTo.To() == common.ELocation.Blob() && jobState.S2SSourceCredentialType.IsAzureOAuth() {
 			credOption := common.CredentialOpOptions{
 				LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
 				LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
@@ -559,8 +564,10 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 				CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
 				Cancel:   jpm.jobMgr.Cancel,
 			}
-
-			sourceCred = common.CreateBlobCredential(ctx, jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType), credOption)
+			if jpm.sourceCredential == nil {
+				sourceCred = common.CreateBlobCredential(ctx, jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType), credOption)
+				jpm.sourceCredential = sourceCred
+			}
 		}
 
 		jpm.sourceProviderPipeline = NewBlobPipeline(
@@ -578,8 +585,9 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 
 		// Consider the ADLSG2->ADLSG2 ACLs case
 		if fromTo == common.EFromTo.BlobBlob() && jpm.Plan().PreservePermissions.IsTruthy() {
+			credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
 			jpm.secondarySourceProviderPipeline = NewBlobFSPipeline(
-				azbfs.NewAnonymousCredential(),
+				credential,
 				azbfs.PipelineOptions{
 					Log: jpm.jobMgr.PipelineLogInfo(),
 					Telemetry: azbfs.TelemetryOptions{
@@ -928,6 +936,10 @@ func (jpm *jobPartMgr) ChunkStatusLogger() common.ChunkStatusLogger {
 
 func (jpm *jobPartMgr) SourceProviderPipeline() pipeline.Pipeline {
 	return jpm.sourceProviderPipeline
+}
+
+func (jpm *jobPartMgr) SourceCredential() pipeline.Factory {
+	return jpm.sourceCredential
 }
 
 /* Status update messages should not fail */

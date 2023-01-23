@@ -70,6 +70,42 @@ type scenarioState struct {
 func (s *scenario) Run() {
 	defer s.cleanup()
 
+	// setup runner
+	azcopyDir, err := os.MkdirTemp("", "")
+	if err != nil {
+		s.a.Error(err.Error())
+		return
+	}
+	azcopyRan := false
+	defer func() {
+		if os.Getenv("AZCOPY_E2E_LOG_OUTPUT") == "" {
+			s.a.Assert(os.RemoveAll(azcopyDir), equals(), nil)
+			return // no need, just delete logdir
+		}
+
+		err := os.MkdirAll(os.Getenv("AZCOPY_E2E_LOG_OUTPUT"), os.ModePerm|os.ModeDir)
+		if err != nil {
+			s.a.Assert(err, equals(), nil)
+			return
+		}
+		if azcopyRan && s.a.Failed() {
+			s.uploadLogs(azcopyDir)
+			s.a.(*testingAsserter).t.Log("uploaded logs for job " + s.state.result.jobID.String() + " as an artifact")
+		}
+	}()
+
+	// setup scenario
+	// First, validate the accounts make sense for the source/dests
+	if s.srcAccountType.IsBlobOnly() {
+		s.a.Assert(s.fromTo.From(), equals(), common.ELocation.Blob())
+	}
+
+	if s.destAccountType.IsBlobOnly() {
+		s.a.Assert(s.destAccountType, notEquals(), EAccountType.StdManagedDisk(), "Upload is not supported in MD testing yet")
+		s.a.Assert(s.destAccountType, notEquals(), EAccountType.OAuthManagedDisk(), "Upload is not supported in MD testing yet")
+		s.a.Assert(s.fromTo.To(), equals(), common.ELocation.Blob())
+	}
+
 	// setup
 	s.assignSourceAndDest() // what/where are they
 	s.state.source.createLocation(s.a, s)
@@ -86,14 +122,15 @@ func (s *scenario) Run() {
 	}
 
 	// execute
-	s.runAzCopy()
+	azcopyRan = true
+	s.runAzCopy(azcopyDir)
 	if s.a.Failed() {
 		return // execution failed. No point in running validation
 	}
 
 	// resume if needed
 	if s.needResume {
-		tx, err := s.state.result.GetTransferList(common.ETransferStatus.Cancelled())
+		tx, err := s.state.result.GetTransferList(common.ETransferStatus.Cancelled(), azcopyDir)
 		s.a.AssertNoErr(err, "Failed to get transfer list for Cancelled")
 		s.a.Assert(len(tx), equals(), len(s.p.debugSkipFiles), "Job cancel didn't completely work")
 
@@ -101,14 +138,14 @@ func (s *scenario) Run() {
 			return
 		}
 
-		s.resumeAzCopy()
+		s.resumeAzCopy(azcopyDir)
 	}
 	if s.a.Failed() {
 		return // resume failed. No point in running validation
 	}
 
 	// check
-	s.validateTransferStates()
+	s.validateTransferStates(azcopyDir)
 	if s.a.Failed() {
 		return // no point in doing more validation
 	}
@@ -127,6 +164,13 @@ func (s *scenario) Run() {
 	s.runHook(s.hs.afterValidation)
 }
 
+func (s *scenario) uploadLogs(logDir string) {
+	if s.state.result == nil || os.Getenv("AZCOPY_E2E_LOG_OUTPUT") == "" {
+		return // nothing to upload
+	}
+	s.a.Assert(os.Rename(logDir, filepath.Join(os.Getenv("AZCOPY_E2E_LOG_OUTPUT"), s.state.result.jobID.String())), equals(), nil)
+}
+
 func (s *scenario) runHook(h hookFunc) bool {
 	if h == nil {
 		return true // nothing to do. So "successful"
@@ -140,6 +184,13 @@ func (s *scenario) runHook(h hookFunc) bool {
 
 func (s *scenario) assignSourceAndDest() {
 	createTestResource := func(loc common.Location, isSourceAcc bool) resourceManager {
+		var accType AccountType
+		if isSourceAcc {
+			accType = s.srcAccountType
+		} else {
+			accType = s.destAccountType
+		}
+
 		// TODO: handle account to account (multi-container) scenarios
 		switch loc {
 		case common.ELocation.Local():
@@ -149,16 +200,22 @@ func (s *scenario) assignSourceAndDest() {
 		case common.ELocation.Blob():
 			// TODO: handle the multi-container (whole account) scenario
 			// TODO: handle wider variety of account types
+			if accType.IsManagedDisk() {
+				mdCfg, err := GlobalInputManager{}.GetMDConfig(accType)
+				s.a.AssertNoErr(err)
+				return &resourceManagedDisk{config: *mdCfg}
+			}
+
 			if isSourceAcc {
 				return &resourceBlobContainer{accountType: s.srcAccountType}
 			} else {
 				return &resourceBlobContainer{accountType: s.destAccountType}
 			}
 		case common.ELocation.BlobFS():
-			s.a.Error("Not implementd yet for blob FS")
+			s.a.Error("Not implemented yet for blob FS")
 			return &resourceDummy{}
 		case common.ELocation.S3():
-			s.a.Error("Not implementd yet for S3")
+			s.a.Error("Not implemented yet for S3")
 			return &resourceDummy{}
 		case common.ELocation.Unknown():
 			return &resourceDummy{}
@@ -171,7 +228,7 @@ func (s *scenario) assignSourceAndDest() {
 	s.state.dest = createTestResource(s.fromTo.To(), false)
 }
 
-func (s *scenario) runAzCopy() {
+func (s *scenario) runAzCopy(logDirectory string) {
 	s.chToStdin = make(chan string) // unubuffered seems the most predictable for our usages
 	defer close(s.chToStdin)
 
@@ -190,14 +247,18 @@ func (s *scenario) runAzCopy() {
 		}
 	}
 
+	needsSAS := func(credType common.CredentialType) bool {
+		return credType == common.ECredentialType.Anonymous() || credType == common.ECredentialType.MDOAuthToken()
+	}
+
 	tf := s.GetTestFiles()
 	// run AzCopy
 	result, wasClean, err := r.ExecuteAzCopyCommand(
 		s.operation,
-		s.state.source.getParam(s.stripTopDir, s.credTypes[0] == common.ECredentialType.Anonymous(), tf.objectTarget),
-		s.state.dest.getParam(false, s.credTypes[1] == common.ECredentialType.Anonymous(), common.IffString(tf.destTarget != "", tf.destTarget, tf.objectTarget)),
+		s.state.source.getParam(s.stripTopDir, needsSAS(s.credTypes[0]), tf.objectTarget),
+    s.state.dest.getParam(false, needsSAS(s.credTypes[1]), common.IffString(tf.destTarget != "", tf.destTarget, tf.objectTarget)),
 		s.credTypes[0] == common.ECredentialType.OAuthToken() || s.credTypes[1] == common.ECredentialType.OAuthToken(), // needsOAuth
-		afterStart, s.chToStdin)
+		afterStart, s.chToStdin, logDirectory)
 
 	if !wasClean {
 		s.a.AssertNoErr(err, "running AzCopy")
@@ -207,7 +268,7 @@ func (s *scenario) runAzCopy() {
 	if result.finalStatus.JobStatus == common.EJobStatus.Cancelled() {
 		for _, v := range result.finalStatus.FailedTransfers {
 			if v.ErrorCode == 403 {
-				s.a.Error("authorization failed, perhaps SPN auth or the SAS token is bad?")
+				s.a.Error("Job " + result.jobID.String() + " authorization failed, perhaps SPN auth or the SAS token is bad?")
 			}
 		}
 	}
@@ -215,7 +276,7 @@ func (s *scenario) runAzCopy() {
 	s.state.result = &result
 }
 
-func (s *scenario) resumeAzCopy() {
+func (s *scenario) resumeAzCopy(logDir string) {
 	s.chToStdin = make(chan string) // unubuffered seems the most predictable for our usages
 	defer close(s.chToStdin)
 
@@ -246,6 +307,7 @@ func (s *scenario) resumeAzCopy() {
 		false,
 		afterStart,
 		s.chToStdin,
+		logDir,
 	)
 
 	if !wasClean {
@@ -267,7 +329,7 @@ func (s *scenario) validateRemove() {
 		}
 	}
 }
-func (s *scenario) validateTransferStates() {
+func (s *scenario) validateTransferStates(azcopyDir string) {
 	if s.operation == eOperation.Remove() {
 		s.validateRemove()
 		return
@@ -290,7 +352,7 @@ func (s *scenario) validateTransferStates() {
 		//       Is that OK? (Not sure what to do if it's not, because azcopy jobs show, apparently doesn't offer us a way to get the skipped list)
 	} {
 		expectedTransfers := s.fs.getForStatus(statusToTest, expectFolders, expectRootFolder)
-		actualTransfers, err := s.state.result.GetTransferList(statusToTest)
+		actualTransfers, err := s.state.result.GetTransferList(statusToTest, azcopyDir)
 		s.a.AssertNoErr(err)
 
 		Validator{}.ValidateCopyTransfersAreScheduled(s.a, isSrcEncoded, isDstEncoded, srcRoot, dstRoot, expectedTransfers, actualTransfers, statusToTest, s.FromTo(), s.srcAccountType, s.destAccountType)
@@ -603,6 +665,10 @@ func (s *scenario) GetModifiableParameters() *params {
 
 func (s *scenario) GetTestFiles() testFiles {
 	return s.fs
+}
+
+func (s *scenario) SetTestFiles(fs testFiles) {
+	s.fs = fs
 }
 
 func (s *scenario) CreateFiles(fs testFiles, atSource bool, setTestFiles bool, createSourceFilesAtDest bool) {

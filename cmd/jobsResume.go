@@ -152,16 +152,35 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 				return string(jsonOutput)
 			} else {
 				return fmt.Sprintf(
-					"\n\nJob %s summary\nElapsed Time (Minutes): %v\nNumber of File Transfers: %v\nNumber of Folder Property Transfers: %v\nNumber of Symlink Transfers: %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nTotalBytesTransferred: %v\nFinal Job Status: %v\n",
+					`
+
+Job %s summary
+Elapsed Time (Minutes): %v
+Number of File Transfers: %v
+Number of Folder Property Transfers: %v
+Number of Symlink Transfers: %v
+Total Number Of Transfers: %v
+Number of File Transfers Completed: %v
+Number of Folder Transfers Completed: %v
+Number of File Transfers Failed: %v
+Number of Folder Transfers Failed: %v
+Number of File Transfers Skipped: %v
+Number of Folder Transfers Skipped: %v
+TotalBytesTransferred: %v
+Final Job Status: %v
+`,
 					summary.JobID.String(),
 					jobsAdmin.ToFixed(duration.Minutes(), 4),
 					summary.FileTransfers,
 					summary.FolderPropertyTransfers,
 					summary.SymlinkTransfers,
 					summary.TotalTransfers,
-					summary.TransfersCompleted,
-					summary.TransfersFailed,
-					summary.TransfersSkipped,
+					summary.TransfersCompleted-summary.FoldersCompleted,
+					summary.FoldersCompleted,
+					summary.TransfersFailed-summary.FoldersFailed,
+					summary.FoldersFailed,
+					summary.TransfersSkipped-summary.FoldersSkipped,
+					summary.FoldersSkipped,
 					summary.TotalBytesTransferred,
 					summary.JobStatus)
 			}
@@ -294,7 +313,7 @@ func (rca resumeCmdArgs) process() error {
 		destinationSAS: rca.DestinationSAS,
 	}, common.CpkOptions{}); err != nil {
 		return err
-	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+	} else if credentialInfo.CredentialType.IsAzureOAuth() {
 		uotm := GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {

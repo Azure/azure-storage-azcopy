@@ -61,27 +61,57 @@ type blobTraverser struct {
 	includeSnapshot bool
 
 	includeVersion bool
+
+	stripTopDir bool
 }
 
-func (t *blobTraverser) IsDirectory(isSource bool) bool {
+func (t *blobTraverser) IsDirectory(isSource bool) (bool, error) {
 	isDirDirect := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(t.rawURL)
 
 	// Skip the single blob check if we're checking a destination.
 	// This is an individual exception for blob because blob supports virtual directories and blobs sharing the same name.
 	if isDirDirect || !isSource {
-		return isDirDirect
+		return isDirDirect, nil
 	}
 
-	_, isSingleBlob, _, err := t.getPropertiesIfSingleBlob()
+	_, _, isDirStub, blobErr := t.getPropertiesIfSingleBlob()
 
-	if stgErr, ok := err.(azblob.StorageError); ok {
+	if stgErr, ok := blobErr.(azblob.StorageError); ok {
 		// We know for sure this is a single blob still, let it walk on through to the traverser.
 		if stgErr.ServiceCode() == common.CPK_ERROR_SERVICE_CODE {
-			return false
+			return false, nil
 		}
 	}
 
-	return !isSingleBlob
+	if blobErr == nil {
+		return isDirStub, nil
+	}
+
+	blobURLParts := azblob.NewBlobURLParts(*t.rawURL)
+	containerRawURL := copyHandlerUtil{}.getContainerUrl(blobURLParts)
+	containerURL := azblob.NewContainerURL(containerRawURL, t.p)
+	searchPrefix := strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING) + common.AZCOPY_PATH_SEPARATOR_STRING
+	resp, err := containerURL.ListBlobsFlatSegment(t.ctx, azblob.Marker{}, azblob.ListBlobsSegmentOptions{Prefix: searchPrefix, MaxResults: 1})
+	if err != nil {
+		if azcopyScanningLogger != nil {
+			msg := fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err)
+			azcopyScanningLogger.Log(pipeline.LogError, msg)
+		}
+		return false, nil
+	}
+
+	if len(resp.Segment.BlobItems) == 0 {
+		//Not a directory
+		if stgErr, ok := blobErr.(azblob.StorageError); ok {
+			// if the blob is not found return the error to throw
+			if stgErr.ServiceCode() == common.BLOB_NOT_FOUND {
+				return false, errors.New(common.FILE_NOT_FOUND)
+			}
+		}
+		return false, blobErr
+	}
+
+	return true, nil
 }
 
 func (t *blobTraverser) getPropertiesIfSingleBlob() (props *azblob.BlobGetPropertiesResponse, isBlob bool, isDirStub bool, err error) {
@@ -249,6 +279,9 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 			if t.recursive {
 				for _, virtualDir := range lResp.Segment.BlobPrefixes {
 					enqueueDir(virtualDir.Name)
+					if azcopyScanningLogger != nil {
+						azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", virtualDir.Name))
+					}
 
 					if t.includeDirectoryStubs {
 						// try to get properties on the directory itself, since it's not listed in BlobItems

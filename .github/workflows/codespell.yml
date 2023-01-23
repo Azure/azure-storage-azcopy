@@ -1,0 +1,24 @@
+# GitHub Action to automate the identification of common misspellings in text files.
+# https://github.com/codespell-project/actions-codespell
+# https://github.com/codespell-project/codespell
+name: codespell
+on:
+  push:
+    branches:
+      - dev
+      - main
+  pull_request:
+    branches:
+      - dev
+      - main
+jobs:
+  codespell:
+    name: Check for spelling errors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: codespell-project/actions-codespell@master
+        with:
+          check_filenames: true
+          skip: ./sddl/sddlPortable_test.go,./sddl/sddlHelper_linux.go
+          ignore_words_list: "resue,pase,cancl,cacl,froms"
