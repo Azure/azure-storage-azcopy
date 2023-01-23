@@ -64,7 +64,7 @@ const s3EssentialHostPart = "amazonaws.com"
 
 var s3HostRegex = regexp.MustCompile(s3HostPattern)
 
-// IsS3URL verfies if a given URL points to S3 URL supported by AzCopy-v10
+// IsS3URL verifies if a given URL points to S3 URL supported by AzCopy-v10
 func IsS3URL(u url.URL) bool {
 	if _, isS3URL := findS3URLMatches(strings.ToLower(u.Host)); isS3URL {
 		return true
@@ -102,7 +102,7 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 	}
 
 	// Check what's the path style, and parse accordingly.
-	if matchSlices[1] != "" { // Go's implementatoin is a bit strange, even if the first subexp fail to be matched, "" will be returned for that sub exp
+	if matchSlices[1] != "" { // Go's implementation is a bit strange, even if the first subexp fail to be matched, "" will be returned for that sub exp
 		// In this case, it would be in virtual-hosted-style URL, and has host prefix like bucket.s3[-.]
 		up.BucketName = matchSlices[1][:len(matchSlices[1])-1] // Removing the trailing '.' at the end
 		up.ObjectKey = path

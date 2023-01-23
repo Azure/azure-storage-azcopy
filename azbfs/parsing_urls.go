@@ -20,7 +20,7 @@ type BfsURLParts struct {
 	isIPEndpointStyle bool   // Ex: "https://ip/accountname/filesystem"
 }
 
-// isIPEndpointStyle checkes if URL's host is IP, in this case the storage account endpoint will be composed as:
+// isIPEndpointStyle checks if URL's host is IP, in this case the storage account endpoint will be composed as:
 // http(s)://IP(:port)/storageaccount/share(||container||etc)/...
 func isIPEndpointStyle(url url.URL) bool {
 	return net.ParseIP(url.Host) != nil

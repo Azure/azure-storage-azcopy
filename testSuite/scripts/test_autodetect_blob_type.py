@@ -36,7 +36,7 @@ class Autodetect_Blob_Type_Scenario(unittest.TestCase):
         file_name = "testS2SVHD.vhd"
         containerName = util.get_resource_name("s2sbtautodetect")
 
-        # These run on seperate accounts in CI, so even without "dst", it's OK.
+        # These run on separate accounts in CI, so even without "dst", it's OK.
         # Needed this to run on a single account, though.
         dstbase = util.get_object_sas(util.test_s2s_dst_blob_account_url, containerName + "dst")
         srcbase = util.get_object_sas(util.test_s2s_src_file_account_url, containerName)
@@ -77,7 +77,7 @@ class Autodetect_Blob_Type_Scenario(unittest.TestCase):
         file_name = "testS2SVHD.vhd"
         containerName = util.get_resource_name("s2sbtautodetect")
 
-        # These run on seperate accounts in CI, so even without "dst", it's OK.
+        # These run on separate accounts in CI, so even without "dst", it's OK.
         # Needed this to run on a single account, though.
         dstbase = util.get_object_sas(util.test_s2s_dst_blob_account_url, containerName + "dst")
         srcbase = util.get_object_sas(util.test_s2s_src_blob_account_url, containerName)

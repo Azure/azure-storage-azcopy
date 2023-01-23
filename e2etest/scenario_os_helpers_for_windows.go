@@ -39,7 +39,7 @@ import (
 type osScenarioHelper struct{}
 
 // set file attributes to test file
-func (osScenarioHelper) setAttributesForLocalFile(filePath string, attrList []string) error {
+func (osScenarioHelper) setAttributesForLocalFile(filePath string, attrList []string) error { //nolint:golint,unused
 	lpFilePath, err := syscall.UTF16PtrFromString(filePath)
 	if err != nil {
 		return err
@@ -65,7 +65,7 @@ func (osScenarioHelper) setAttributesForLocalFile(filePath string, attrList []st
 	return err
 }
 
-func (s osScenarioHelper) setAttributesForLocalFiles(c asserter, dirPath string, fileList []string, attrList []string) {
+func (s osScenarioHelper) setAttributesForLocalFiles(c asserter, dirPath string, fileList []string, attrList []string) { //nolint:golint,unused
 	for _, fileName := range fileList {
 		err := s.setAttributesForLocalFile(filepath.Join(dirPath, fileName), attrList)
 		c.AssertNoErr(err)

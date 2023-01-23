@@ -213,7 +213,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
 	} else if cooked.location == cooked.location.File() && source.SAS == "" {
 		return errors.New("azure files requires a SAS token for authentication")
-	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+	} else if credentialInfo.CredentialType.IsAzureOAuth() {
 		uotm := GetUserOAuthTokenManagerInstance()
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
@@ -224,7 +224,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 
 	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.None(), nil,
 		true, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {},
-		nil, false, pipeline.LogNone, common.CpkOptions{}, nil /* errorChannel */)
+		nil, false, common.ESyncHashType.None(), pipeline.LogNone, common.CpkOptions{}, nil /* errorChannel */)
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())

@@ -24,20 +24,20 @@ type gcpTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func (t *gcpTraverser) IsDirectory(isSource bool) bool {
+func (t *gcpTraverser) IsDirectory(isSource bool) (bool, error) {
 	//Identify whether directory or not syntactically
 	isDirDirect := !t.gcpURLParts.IsObjectSyntactically() && (t.gcpURLParts.IsDirectorySyntactically() || t.gcpURLParts.IsBucketSyntactically())
 	if !isSource {
-		return isDirDirect
+		return isDirDirect, nil
 	}
 	bkt := t.gcpClient.Bucket(t.gcpURLParts.BucketName)
 	obj := bkt.Object(t.gcpURLParts.ObjectKey)
 	//Directories do not have attributes and hence throw error
 	_, err := obj.Attrs(t.ctx)
 	if err == gcpUtils.ErrObjectNotExist {
-		return true
+		return true, nil
 	}
-	return false
+	return false, nil
 }
 
 func (t *gcpTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {

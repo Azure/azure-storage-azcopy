@@ -1,4 +1,5 @@
 // +build !windows
+// +build !linux
 
 // Copyright © Microsoft <wastore@microsoft.com>
 //

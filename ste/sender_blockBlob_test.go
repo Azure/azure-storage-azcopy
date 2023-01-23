@@ -46,7 +46,7 @@ func (s *blockBlobSuite) TestGetVerifiedChunkParams(c *chk.C) {
 
 	// Verify large block Size
 	memLimit = int64(8388608000) // 8000MiB
-	expectedErr = fmt.Sprintf("block size of 3.91GiB for file tmpSrc of size 7.81GiB exceeds maxmimum allowed block size for a BlockBlob")
+	expectedErr = fmt.Sprintf("block size of 3.91GiB for file tmpSrc of size 7.81GiB exceeds maximum allowed block size for a BlockBlob")
 	_, _, err = getVerifiedChunkParams(transferInfo, memLimit)
 	c.Assert(err.Error(), chk.Equals, expectedErr)
 

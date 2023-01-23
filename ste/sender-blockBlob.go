@@ -91,7 +91,7 @@ func getVerifiedChunkParams(transferInfo TransferInfo, memLimit int64) (chunkSiz
 
 	if chunkSize > common.MaxBlockBlobBlockSize {
 		// mercy, please
-		err = fmt.Errorf("block size of %.2fGiB for file %s of size %.2fGiB exceeds maxmimum allowed block size for a BlockBlob",
+		err = fmt.Errorf("block size of %.2fGiB for file %s of size %.2fGiB exceeds maximum allowed block size for a BlockBlob",
 			toGiB(chunkSize), transferInfo.Source, toGiB(transferInfo.SourceSize))
 		return
 	}
@@ -271,6 +271,28 @@ func (s *blockBlobSenderBase) Cleanup() {
 			_, _ = s.destBlockBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 		}
 	}
+}
+
+//Currently we've common Metadata Copier across all senders for block blob.
+func (s *blockBlobSenderBase) GenerateCopyMetadata(id common.ChunkID) chunkFunc {
+	return createChunkFunc(true, s.jptm, id, func() {
+		if unixSIP, ok := s.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
+			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
+			s.metadataToApply = common.Metadata(s.metadataToApply).Clone().ToAzBlobMetadata()
+	
+			statAdapter, err := unixSIP.GetUNIXProperties()
+			if err != nil {
+				s.jptm.FailActiveSend("GetUNIXProperties", err)
+			}
+	
+			common.AddStatToBlobMetadata(statAdapter, s.metadataToApply)
+		}
+		_, err := s.destBlockBlobURL.SetMetadata(s.jptm.Context(), s.metadataToApply, azblob.BlobAccessConditions{}, s.cpkToApply)	
+		if err != nil {
+			s.jptm.FailActiveSend("Setting Metadata", err)
+			return
+		}
+	})
 }
 
 func (s *blockBlobSenderBase) setBlockID(index int32, value string) {

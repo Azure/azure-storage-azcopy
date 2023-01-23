@@ -152,8 +152,9 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 		// The retryReader encapsulates any retries that may be necessary while downloading the body
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		retryReader := get.Body(azblob.RetryReaderOptions{
-			MaxRetryRequests: destWriter.MaxRetryPerDownloadBody(),
-			NotifyFailedRead: common.NewReadLogFunc(jptm, u),
+			MaxRetryRequests:         destWriter.MaxRetryPerDownloadBody(),
+			NotifyFailedRead:         common.NewReadLogFunc(jptm, u),
+			ClientProvidedKeyOptions: clientProvidedKey,
 		})
 		defer retryReader.Close()
 		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newPacedResponseBody(jptm.Context(), retryReader, pacer), true)

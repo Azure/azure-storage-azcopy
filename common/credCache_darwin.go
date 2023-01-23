@@ -60,7 +60,7 @@ func NewCredCache(options CredCacheOptions) *CredCache {
 	}
 }
 
-// keychain is used for intenal integration as well.
+// keychain is used for internal integration as well.
 var NewCredCacheInternalIntegration = NewCredCache
 
 // HasCachedToken returns if there is cached token for current executing user.

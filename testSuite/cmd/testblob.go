@@ -206,7 +206,7 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 			// opening the file locally and memory mapping it.
 			sFileInfo, err := os.Stat(objectLocalPath)
 			if err != nil {
-				fmt.Println("error geting the subject blob file info on local disk ")
+				fmt.Println("error getting the subject blob file info on local disk ")
 				os.Exit(1)
 			}
 
