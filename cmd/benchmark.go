@@ -273,7 +273,7 @@ func (h benchmarkSourceHelper) FromUrl(s string) (fileCount uint, bytesPerFile i
 	pieces[0] = strings.Split(pieces[0], "=")[1]
 	pieces[1] = strings.Split(pieces[1], "=")[1]
 	pieces[2] = strings.Split(pieces[2], "=")[1]
-	fc, err := strconv.ParseUint(pieces[0], 10, 64)
+	fc, err := strconv.ParseUint(pieces[0], 10, 32)
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -281,7 +281,7 @@ func (h benchmarkSourceHelper) FromUrl(s string) (fileCount uint, bytesPerFile i
 	if err != nil {
 		return 0, 0, 0, err
 	}
-	nf, err := strconv.ParseUint(pieces[2], 10, 64)
+	nf, err := strconv.ParseUint(pieces[2], 10, 32)
 	if err != nil {
 		return 0, 0, 0, err
 	}

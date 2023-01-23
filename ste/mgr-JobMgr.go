@@ -23,6 +23,7 @@ package ste
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"net/http"
 	"runtime"
 	"strings"
@@ -111,7 +112,7 @@ type IJobMgr interface {
 func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel,
 	commandString string, logFileFolder string, tuner ConcurrencyTuner,
 	pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
-	jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
+	jobLogger common.ILoggerResetable, daemonMode bool, sourceBlobToken azblob.Credential) IJobMgr {
 	const channelSize = 100000
 	// PartsChannelSize defines the number of JobParts which can be placed into the
 	// parts channel. Any JobPart which comes from FE and partChannel is full,
@@ -187,6 +188,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		cpuMon:           cpuMon,
 		jstm:             &jstm,
 		isDaemon:         daemonMode,
+		sourceBlobToken:  sourceBlobToken,
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.Reset(appCtx, commandString)
 	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
@@ -338,7 +340,8 @@ type jobMgr struct {
 	fileCountLimiter    common.CacheLimiter
 	jstm                *jobStatusManager
 
-	isDaemon bool /* is it running as service */
+	isDaemon        bool /* is it running as service */
+	sourceBlobToken azblob.Credential
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -712,13 +715,15 @@ func (jm *jobMgr) CloseLog() {
 
 // DeferredCleanupJobMgr cleanup all the jobMgr resources.
 // Warning: DeferredCleanupJobMgr should be called from JobMgrCleanup().
-//          As this function neither threadsafe nor idempotient. So if DeferredCleanupJobMgr called
-//          mulitple times, it may stuck as receiving channel already closed. Where as JobMgrCleanup()
-//          safe in that sense it will do the cleanup only once.
+//
+//	As this function neither thread safe nor idempotent. So if DeferredCleanupJobMgr called
+//	multiple times, it may stuck as receiving channel already closed. Where as JobMgrCleanup()
+//	safe in that sense it will do the cleanup only once.
 //
 // TODO: Add JobsAdmin reference to each JobMgr so that in any circumstances JobsAdmin should not freed,
-//       while jobMgr running. Whereas JobsAdmin store number JobMgr running  at any time.
-//       At that point DeferredCleanupJobMgr() will delete jobMgr from jobsAdmin map.
+//
+//	while jobMgr running. Whereas JobsAdmin store number JobMgr running  at any time.
+//	At that point DeferredCleanupJobMgr() will delete jobMgr from jobsAdmin map.
 func (jm *jobMgr) DeferredCleanupJobMgr() {
 	jm.Log(pipeline.LogInfo, "DeferredCleanupJobMgr called")
 
@@ -956,12 +961,12 @@ func (jm *jobMgr) scheduleJobParts() {
 		case jobPart := <-jm.xferChannels.partsChannel:
 
 			if !startedPoolSizer {
-				// spin up a GR to co-ordinate dynamic sizing of the main pool
+				// spin up a GR to coordinate dynamic sizing of the main pool
 				// It will automatically spin up the right number of chunk processors
 				go jm.poolSizer()
 				startedPoolSizer = true
 			}
-			jobPart.ScheduleTransfers(jm.Context())
+			jobPart.ScheduleTransfers(jm.Context(), jm.sourceBlobToken)
 		}
 	}
 }

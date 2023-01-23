@@ -466,7 +466,7 @@ func (scenarioHelper) generateCommonRemoteScenarioForS3(c *chk.C, client *minio.
 		objectName5 := createNewObject(c, client, bucketName, prefix+specialNames[i])
 
 		// Note: common.AZCOPY_PATH_SEPARATOR_STRING is added before bucket or objectName, as in the change minimize JobPartPlan file size,
-		// transfer.Source & transfer.Destination(after trimed the SourceRoot and DestinationRoot) are with AZCOPY_PATH_SEPARATOR_STRING suffix,
+		// transfer.Source & transfer.Destination(after trimming the SourceRoot and DestinationRoot) are with AZCOPY_PATH_SEPARATOR_STRING suffix,
 		// when user provided source & destination are without / suffix, which is the case for scenarioHelper generated URL.
 
 		bucketPath := ""
@@ -496,7 +496,7 @@ func (scenarioHelper) generateCommonRemoteScenarioForGCP(c *chk.C, client *gcpUt
 		objectName5 := createNewGCPObject(c, client, bucketName, prefix+specialNames[i])
 
 		// Note: common.AZCOPY_PATH_SEPARATOR_STRING is added before bucket or objectName, as in the change minimize JobPartPlan file size,
-		// transfer.Source & transfer.Destination(after trimed the SourceRoot and DestinationRoot) are with AZCOPY_PATH_SEPARATOR_STRING suffix,
+		// transfer.Source & transfer.Destination(after trimming the SourceRoot and DestinationRoot) are with AZCOPY_PATH_SEPARATOR_STRING suffix,
 		// when user provided source & destination are without / suffix, which is the case for scenarioHelper generated URL.
 
 		bucketPath := ""
@@ -870,6 +870,7 @@ func getDefaultSyncRawInput(src, dst string) rawSyncCmdArgs {
 		recursive:           true,
 		deleteDestination:   deleteDestination.String(),
 		md5ValidationOption: common.DefaultHashValidationOption.String(),
+		compareHash:         common.ESyncHashType.None().String(),
 	}
 }
 

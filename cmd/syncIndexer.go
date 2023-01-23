@@ -26,8 +26,8 @@ import (
 
 // the objectIndexer is essential for the generic sync enumerator to work
 // it can serve as a:
-// 		1. objectProcessor: accumulate a lookup map with given StoredObjects
-//		2. resourceTraverser: go through the entities in the map like a traverser
+//  1. objectProcessor: accumulate a lookup map with given StoredObjects
+//  2. resourceTraverser: go through the entities in the map like a traverser
 type objectIndexer struct {
 	indexMap map[string]StoredObject
 	counter  int

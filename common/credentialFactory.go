@@ -105,18 +105,22 @@ func CreateBlobCredential(ctx context.Context, credInfo CredentialInfo, options 
 		}
 
 		// Create TokenCredential with refresher.
-		return azblob.NewTokenCredential(
-			credInfo.OAuthTokenInfo.AccessToken,
-			func(credential azblob.TokenCredential) time.Duration {
-				return refreshBlobToken(ctx, credInfo.OAuthTokenInfo, credential, options)
-			})
+		if credInfo.SourceBlobToken != nil {
+			return credInfo.SourceBlobToken
+		} else {
+			return azblob.NewTokenCredential(
+				credInfo.OAuthTokenInfo.AccessToken,
+				func(credential azblob.TokenCredential) time.Duration {
+					return refreshBlobToken(ctx, credInfo.OAuthTokenInfo, credential, options)
+				})
+		}
 	}
 
 	return credential
 }
 
 // refreshPolicyHalfOfExpiryWithin is used for calculating next refresh time,
-// it checkes how long it will be before the token get expired, and use half of the value as
+// it checks how long it will be before the token get expired, and use half of the value as
 // duration to wait.
 func refreshPolicyHalfOfExpiryWithin(token *adal.Token, options CredentialOpOptions) time.Duration {
 	if token == nil {

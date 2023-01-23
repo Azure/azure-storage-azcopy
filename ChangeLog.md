@@ -1,6 +1,19 @@
 
 # Change Log
 
+## Version 10.17.0
+
+### New features
+
+1. Added support for hash-based sync. AzCopy sync can now take two new flags `--compare-hash` and `--missing-hash-policy=Generate`, which which user will be able to transfer only those files which differ in their MD5 hash.
+
+### Bug fixes
+1. Fixed [issue 1994](https://github.com/Azure/azure-storage-azcopy/pull/1994): Error in calculation of block size
+2. Fixed [issue 1957](https://github.com/Azure/azure-storage-azcopy/pull/1957): Repeated Authentication token refresh
+3. Fixed [issue 1870](https://github.com/Azure/azure-storage-azcopy/pull/1870): Fixed issue where CPK would not be injected on retries
+4. Fixed [issue 1946](https://github.com/Azure/azure-storage-azcopy/issues/1946): Fixed Metadata parsing
+5: Fixed [issue 1931](https://github.com/Azure/azure-storage-azcopy/issues/1931)
+
 ## Version 10.16.2
 
 ### Bug Fixes
@@ -35,7 +48,7 @@
 1. Fixed [issue 1506](https://github.com/Azure/azure-storage-azcopy/issues/1506): Added input watcher to resolve issue since job could not be resumed.
 2. Fixed [issue 1794](https://github.com/Azure/azure-storage-azcopy/issues/1794): Moved log-level to root.go so log-level arguments do not get ignored.
 3. Fixed [issue 1824](https://github.com/Azure/azure-storage-azcopy/issues/1824): Avoid creating .azcopy under HOME if plan/log location is specified elsewhere.
-4. Fixed [isue 1830](https://github.com/Azure/azure-storage-azcopy/issues/1830), [issue 1412](https://github.com/Azure/azure-storage-azcopy/issues/1418), and [issue 873](https://github.com/Azure/azure-storage-azcopy/issues/873): Improved error message for when AzCopy cannot determine if source is directory.
+4. Fixed [issue 1830](https://github.com/Azure/azure-storage-azcopy/issues/1830), [issue 1412](https://github.com/Azure/azure-storage-azcopy/issues/1418), and [issue 873](https://github.com/Azure/azure-storage-azcopy/issues/873): Improved error message for when AzCopy cannot determine if source is directory.
 5. Fixed [issue 1777](https://github.com/Azure/azure-storage-azcopy/issues/1777): Fixed job list to handle respective output-type correctly. 
 6. Fixed win64 alignment issue.
 
@@ -191,7 +204,7 @@
 
 ### New features
 1. Added option to [disable parallel blob listing](https://github.com/Azure/azure-storage-azcopy/pull/1263)
-1. Added support for uploading [large files](https://github.com/Azure/azure-storage-azcopy/pull/1254/files) upto 4TiB. Please refer the [public documentation](https://docs.microsoft.com/en-us/rest/api/storageservices/create-file) for more information
+1. Added support for uploading [large files](https://github.com/Azure/azure-storage-azcopy/pull/1254/files) up to 4TiB. Please refer the [public documentation](https://docs.microsoft.com/en-us/rest/api/storageservices/create-file) for more information
 1. Added support for `include-before`flag. Refer [this](https://github.com/Azure/azure-storage-azcopy/issues/1075) for more information
 
 ### Bug fixes
@@ -469,7 +482,7 @@ disallowed because none (other than include-path) are respected.
 
 1. The `*` character is no longer supported as a wildcard in URLs, except for the two exceptions
    noted below. It remains supported in local file paths.
-   1. The first execption is that `/*` is still allowed at the very end of the "path" section of a
+   1. The first exception is that `/*` is still allowed at the very end of the "path" section of a
       URL. This is illustrated by the difference between these two source URLs:
       `https://account/container/virtual?SAS` and 
       `https://account/container/virtualDir/*?SAS`.  The former copies the virtual directory
@@ -501,7 +514,7 @@ disallowed because none (other than include-path) are respected.
 1. Percent complete is displayed as each job runs.
 1. VHD files are auto-detected as page blobs.
 1. A new benchmark mode allows quick and easy performance benchmarking of your network connection to
-   Blob Storage. Run AzCopy with the paramaters `bench --help` for details.  This feature is in
+   Blob Storage. Run AzCopy with the parameters `bench --help` for details.  This feature is in
    Preview status.
 1. The location for AzCopy's "plan" files can be specified with the environment variable
    `AZCOPY_JOB_PLAN_LOCATION`. (If you move the plan files and also move the log files using the existing
@@ -520,7 +533,7 @@ disallowed because none (other than include-path) are respected.
 1. Memory usage can be controlled by setting the new environment variable `AZCOPY_BUFFER_GB`.
    Decimal values are supported. Actual usage will be the value specified, plus some overhead. 
 1. An extra integrity check has been added: the length of the
-   completed desination file is checked against that of the source.
+   completed destination file is checked against that of the source.
 1. When downloading, AzCopy can automatically decompress blobs (or Azure Files) that have a
    `Content-Encoding` of `gzip` or `deflate`. To enable this behaviour, supply the `--decompress`
    parameter.
@@ -685,21 +698,21 @@ information, including those needed to set the new headers.
 
 1. For creating MD5 hashes when uploading, version 10.x now has the OPPOSITE default to version
    AzCopy 8.x. Specifically, as of version 10.0.9, MD5 hashes are NOT created by default. To create
-   Content-MD5 hashs when uploading, you must now specify `--put-md5` on the command line.
+   Content-MD5 hashes when uploading, you must now specify `--put-md5` on the command line.
 
 ### New features
 
 1. Can migrate data directly from Amazon Web Services (AWS). In this high-performance data path
    the data is read directly from AWS by the Azure Storage service. It does not need to pass through
-   the machine running AzCopy. The copy happens syncronously, so you can see its exact progress.  
+   the machine running AzCopy. The copy happens synchronously, so you can see its exact progress.  
 1. Can migrate data directly from Azure Files or Azure Blobs (any blob type) to Azure Blobs (any
    blob type). In this high-performance data path the data is read directly from the source by the
    Azure Storage service. It does not need to pass through the machine running AzCopy. The copy
-   happens syncronously, so you can see its exact progress.  
+   happens synchronously, so you can see its exact progress.  
 1. Sync command prompts with 4 options about deleting unneeded files from the target: Yes, No, All or
    None. (Deletion only happens if the `--delete-destination` flag is specified).
 1. Can download to /dev/null. This throws the data away - but is useful for testing raw network
-   performance unconstrained by disk; and also for validing MD5 hashes in bulk (when run in a cloud
+   performance unconstrained by disk; and also for validating MD5 hashes in bulk (when run in a cloud
    VM in the same region as the Storage account)
 
 ### Bug fixes

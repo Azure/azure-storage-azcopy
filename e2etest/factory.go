@@ -23,8 +23,8 @@ package e2etest
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
+	"os"
 	"path"
 	"runtime"
 	"strings"
@@ -184,7 +184,7 @@ func (TestResourceFactory) CreateNewFileShareSnapshot(c asserter, fileShare azfi
 }
 
 func (TestResourceFactory) CreateLocalDirectory(c asserter) (dstDirName string) {
-	dstDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
+	dstDirName, err := os.MkdirTemp("","AzCopyLocalTest")
 	c.AssertNoErr(err)
 	return
 }

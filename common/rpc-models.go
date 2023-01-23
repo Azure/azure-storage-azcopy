@@ -108,7 +108,7 @@ func ConsolidatePathSeparators(path string) string {
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Transfers describes each file/folder being transferred in a given JobPartOrder, and
-// other auxilliary details of this order.
+// other auxiliary details of this order.
 type Transfers struct {
 	List                []CopyTransfer
 	TotalSizeInBytes    uint64
@@ -164,6 +164,7 @@ type CredentialInfo struct {
 	OAuthTokenInfo    OAuthTokenInfo
 	S3CredentialInfo  S3CredentialInfo
 	GCPCredentialInfo GCPCredentialInfo
+	SourceBlobToken   azblob.Credential
 }
 
 func (c CredentialInfo) WithType(credentialType CredentialType) CredentialInfo {
@@ -260,8 +261,11 @@ type ListJobSummaryResponse struct {
 	FileTransfers           uint32 `json:",string"`
 	FolderPropertyTransfers uint32 `json:",string"`
 
+	FoldersCompleted   uint32 `json:",string"` // Files can be figured out by TransfersCompleted - FoldersCompleted
 	TransfersCompleted uint32 `json:",string"`
+	FoldersFailed      uint32 `json:",string"`
 	TransfersFailed    uint32 `json:",string"`
+	FoldersSkipped     uint32 `json:",string"`
 	TransfersSkipped   uint32 `json:",string"`
 
 	// includes bytes sent in retries (i.e. has double counting, if there are retries) and in failed transfers

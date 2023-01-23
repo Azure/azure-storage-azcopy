@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"path"
@@ -77,7 +77,7 @@ func (config *ManagedDiskConfig) GetAccess() (*url.URL, error) {
 				return nil, fmt.Errorf("failed to get access (async op): %w", err)
 			}
 		} else { // error
-			rBody, err := ioutil.ReadAll(resp.Body)
+			rBody, err := io.ReadAll(resp.Body)
 			if err != nil {
 				return nil, fmt.Errorf("failed to read response body (resp code %d): %w", resp.StatusCode, err)
 			}
@@ -85,7 +85,7 @@ func (config *ManagedDiskConfig) GetAccess() (*url.URL, error) {
 			return nil, fmt.Errorf("failed to get access (resp code %d): %s", resp.StatusCode, string(rBody))
 		}
 	} else { // immediate response
-		rBody, err := ioutil.ReadAll(resp.Body)
+		rBody, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read response body: %w", err)
 		}
@@ -132,7 +132,7 @@ func (config *ManagedDiskConfig) RevokeAccess() error {
 			return err
 		}
 
-		rBody, err := ioutil.ReadAll(resp.Body)
+		rBody, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return fmt.Errorf("failed to read response body (resp code %d): %w", resp.StatusCode, err)
 		}
