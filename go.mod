@@ -5,7 +5,7 @@ require (
 	github.com/Azure/azure-pipeline-go v0.2.4-0.20220425205405-09e6f201e1e4
 	github.com/Azure/azure-storage-blob-go v0.15.0
 	github.com/Azure/azure-storage-file-go v0.6.1-0.20201111053559-3c1754dc00a5
-	github.com/Azure/go-autorest/autorest/adal v0.9.18
+	github.com/Azure/go-autorest/autorest/adal v0.9.22
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
 	github.com/danieljoos/wincred v1.1.2
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
@@ -19,7 +19,7 @@ require (
 	github.com/spf13/cobra v1.4.0
 	github.com/wastore/keychain v0.0.0-20180920053336-f2c902a3d807
 	github.com/wastore/keyctl v0.3.1
-	golang.org/x/crypto v0.0.0-20220314234724-5d542ad81a58
+	golang.org/x/crypto v0.0.0-20220722155217-630584e8d5aa
 	golang.org/x/oauth2 v0.0.0-20220309155454-6242fa91716a
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20220310020820-b874c991c1a5
