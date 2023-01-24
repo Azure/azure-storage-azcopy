@@ -54,6 +54,7 @@ const (
 	blobAccessTier   validProperty = "BlobAccessTier"
 	contentType      validProperty = "ContentType"
 	contentEncoding  validProperty = "ContentEncoding"
+	contentMd5       validProperty = "ContentMD5"
 	leaseState       validProperty = "LeaseState"
 	leaseDuration    validProperty = "LeaseDuration"
 	leaseStatus      validProperty = "LeaseStatus"
@@ -63,7 +64,7 @@ const (
 // validProperties returns an array of possible values for the validProperty const type.
 func validProperties() []validProperty {
 	return []validProperty{lastModifiedTime, versionId, blobType, blobAccessTier,
-		contentType, contentEncoding, leaseState, leaseDuration, leaseStatus, archiveStatus}
+		contentType, contentEncoding, contentMd5, leaseState, leaseDuration, leaseStatus, archiveStatus}
 }
 
 func (raw *rawListCmdArgs) parseProperties(rawProperties string) []validProperty {
@@ -177,6 +178,8 @@ func (cooked cookedListCmdArgs) processProperties(object StoredObject) string {
 			builder.WriteString(propertyStr + ": " + object.contentType + "; ")
 		case contentEncoding:
 			builder.WriteString(propertyStr + ": " + object.contentEncoding + "; ")
+		case contentMd5:
+			builder.WriteString(propertyStr + ": " + object.contentMd5 + "; ")
 		case leaseState:
 			builder.WriteString(propertyStr + ": " + string(object.leaseState) + "; ")
 		case leaseStatus:
