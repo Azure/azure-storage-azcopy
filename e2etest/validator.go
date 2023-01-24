@@ -55,7 +55,7 @@ func (Validator) ValidateRemoveTransfer(c asserter, isSrcEncoded bool, isDstEnco
 	// TODO: Think of how to validate files in case of remove
 }
 func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool, isDstEncoded bool,
-	sourcePrefix string, destinationPrefix string, expectedTransfers []*testObject, actualTransfers []common.TransferDetail, statusToTest common.TransferStatus, fromTo common.FromTo, srcAccountType, dstAccountType AccountType) {
+	sourcePrefix string, destinationPrefix string, expectedTransfers []*testObject, actualTransfers []common.TransferDetail, statusToTest common.TransferStatus, expectFolders bool) {
 
 	sourcePrefix = makeSlashesComparable(sourcePrefix)
 	destinationPrefix = makeSlashesComparable(destinationPrefix)
@@ -83,7 +83,7 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 		return s + "/"
 	}
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers, func(to *testObject) string {
-		if to.isFolder() && (fromTo.To() != common.ELocation.Blob() || dstAccountType == EAccountType.HierarchicalNamespaceEnabled()) {
+		if to.isFolder() && expectFolders {
 			return addFolderSuffix(to.name)
 		} else {
 			return to.name

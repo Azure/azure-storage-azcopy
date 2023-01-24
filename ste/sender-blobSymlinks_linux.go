@@ -2,8 +2,9 @@ package ste
 
 import (
 	"errors"
+	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"os"
 )
 
 func (s *blobSymlinkSender) getExtraProperties() error {
@@ -17,7 +18,8 @@ func (s *blobSymlinkSender) getExtraProperties() error {
 				return err
 			}
 
-			if !((os.FileMode(statAdapter.FileMode()) & os.ModeSymlink) == os.ModeSymlink) { // sanity check this is actually targeting the symlink
+			s.jptm.Log(pipeline.LogInfo, fmt.Sprintf("MODE: %b", statAdapter.FileMode()))
+			if !(statAdapter.FileMode()&common.S_IFLNK == common.S_IFLNK) { // sanity check this is actually targeting the symlink
 				return errors.New("sanity check: GetUNIXProperties did not return symlink properties")
 			}
 
