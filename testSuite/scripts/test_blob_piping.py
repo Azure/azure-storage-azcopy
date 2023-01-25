@@ -105,7 +105,7 @@ def execute_command_with_pipe(command, source_file_to_pipe=None, destination_fil
     # if piping azcopy's output to a file
     if destination_file_to_pipe is not None:
         with open(destination_file_to_pipe, "wb") as output, open('fake_input.txt', 'wb') as fake_input:
-            # an emtpy file is used as stdin because if None was specified, then the subprocess would
+            # an empty file is used as stdin because if None was specified, then the subprocess would
             # inherit the parent's stdin pipe, this is a limitation of the subprocess package
             try:
                 subprocess.check_call(shlex.split(command), stdin=fake_input, stdout=output, timeout=360)

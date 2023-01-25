@@ -111,6 +111,11 @@ func (a filesResourceAdapter) toHeaders(c asserter, share azfile.ShareURL) azfil
 		headers.SMBProperties.FileAttributes = &attribs
 	}
 
+	if a.obj.creationProperties.lastWriteTime != nil {
+		lwt := *a.obj.creationProperties.lastWriteTime
+		headers.SMBProperties.FileLastWriteTime = &lwt
+	}
+
 	props := a.obj.creationProperties.contentHeaders
 	if props == nil {
 		return headers

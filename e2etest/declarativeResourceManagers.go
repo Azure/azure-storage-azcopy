@@ -404,6 +404,74 @@ func (r *resourceAzureFileShare) createSourceSnapshot(a asserter) {
 
 // //
 
+type resourceManagedDisk struct {
+	config    ManagedDiskConfig
+	accessURI *url.URL
+}
+
+// Typically, createLocation would well, create the location.
+// However, resourceManagedDisk hijacks that for calling getAccess
+func (r *resourceManagedDisk) createLocation(a asserter, s *scenario) {
+	uri, err := r.config.GetAccess()
+	a.AssertNoErr(err)
+
+	r.accessURI = uri
+}
+
+func (r *resourceManagedDisk) createFiles(a asserter, s *scenario, isSource bool) {
+	// No-op.
+}
+
+func (r *resourceManagedDisk) createFile(a asserter, o *testObject, s *scenario, isSource bool) {
+	// No-op.
+}
+
+func (r *resourceManagedDisk) getAllProperties(a asserter) map[string]*objectProperties {
+	// No-op.
+	return map[string]*objectProperties{}
+}
+
+func (r *resourceManagedDisk) downloadContent(a asserter, options downloadContentOptions) []byte {
+	panic("md testing currently does not involve custom content; just a zeroed out disk")
+}
+
+// cleanup also usurps traditional resourceManager functionality.
+func (r *resourceManagedDisk) cleanup(a asserter) {
+	// revoking access isn't required and causes funky behaviour for testing that might require a distributed mutex.
+	// todo: we should create managed disks as needed with the requirements rather than using a single MD should we plan to do read-write tests.
+}
+
+// getParam works functionally different because resourceManagerDisk inherently only targets a single file.
+func (r *resourceManagedDisk) getParam(stripTopDir bool, withSas bool, withFile string) string {
+	out := *r.accessURI // clone the URI
+
+	if !withSas {
+		out.RawQuery = ""
+	}
+
+	return out.String()
+}
+
+func (r *resourceManagedDisk) getSAS() string {
+	// TODO implement me
+	panic("implement me")
+}
+
+func (r *resourceManagedDisk) isContainerLike() bool {
+	return false
+}
+
+func (r *resourceManagedDisk) appendSourcePath(s string, b bool) {
+	panic("resourceManagedDisk is a single file")
+}
+
+func (r *resourceManagedDisk) createSourceSnapshot(a asserter) {
+	// TODO implement me
+	panic("cannot snapshot a managed disk")
+}
+
+// //
+
 type resourceDummy struct{}
 
 func (r *resourceDummy) createLocation(a asserter, s *scenario) {

@@ -3,6 +3,7 @@ package ste
 import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"net/url"
@@ -53,6 +54,57 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, p pipelin
 	return out, nil
 }
 
+func (b *blobFolderSender) setDatalakeACLs() {
+	bURLParts := azblob.NewBlobURLParts(b.destination.URL())
+	bURLParts.BlobName = strings.TrimSuffix(bURLParts.BlobName, "/") // BlobFS does not like when we target a folder with the /
+	bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".blob", ".dfs")
+	// todo: jank, and violates the principle of interfaces
+	fileURL := azbfs.NewFileURL(bURLParts.URL(), b.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline)
+
+	// We know for a fact our source is a "blob".
+	acl, err := b.sip.(*blobSourceInfoProvider).AccessControl()
+	if err != nil {
+		b.jptm.FailActiveSend("Grabbing source ACLs", err)
+	}
+	acl.Permissions = "" // Since we're sending the full ACL, Permissions is irrelevant.
+	_, err = fileURL.SetAccessControl(b.jptm.Context(), acl)
+	if err != nil {
+		b.jptm.FailActiveSend("Putting ACLs", err)
+	}
+}
+
+func (b *blobFolderSender) overwriteDFSProperties() (string, error) {
+	b.jptm.Log(pipeline.LogWarning, "It is impossible to completely overwrite a folder with existing content under it on a hierarchical namespace storage account. A best-effort attempt will be made, but if CPK does not match the transfer will fail.")
+
+	b.metadataToApply["hdi_isfolder"] = "true" // Set folder metadata flag
+	err := b.getExtraProperties()
+	if err != nil {
+		return "Get Extra Properties", fmt.Errorf("when getting additional folder properties: %w", err)
+	}
+
+	// SetMetadata can set CPK if it wasn't specified prior. This is not a "full" overwrite, but a best-effort overwrite.
+	_, err = b.destination.SetMetadata(b.jptm.Context(), b.metadataToApply, azblob.BlobAccessConditions{}, b.cpkToApply)
+	if err != nil {
+		return "Set Metadata", fmt.Errorf("A best-effort overwrite was attempted; CPK errors cannot be handled when the blob cannot be deleted.\n%w", err)
+	}
+
+	_, err = b.destination.SetTags(b.jptm.Context(), nil, nil, nil, b.blobTagsToApply)
+	if err != nil {
+		return "Set Blob Tags", err
+	}
+	_, err = b.destination.SetHTTPHeaders(b.jptm.Context(), b.headersToAppply, azblob.BlobAccessConditions{})
+	if err != nil {
+		return "Set HTTP Headers", err
+	}
+
+	// Upload ADLS Gen 2 ACLs
+	if b.jptm.FromTo() == common.EFromTo.BlobBlob() && b.jptm.Info().PreserveSMBPermissions.IsTruthy() {
+		b.setDatalakeACLs()
+	}
+
+	return "", nil
+}
+
 func (b *blobFolderSender) EnsureFolderExists() error {
 	t := b.jptm.GetFolderCreationTracker()
 
@@ -72,6 +124,17 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 		if t.ShouldSetProperties(b.DirUrlToString(), b.jptm.GetOverwriteOption(), b.jptm.GetOverwritePrompter()) {
 			_, err := b.destination.Delete(b.jptm.Context(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 			if err != nil {
+				if stgErr, ok := err.(azblob.StorageError); ok {
+					if stgErr.ServiceCode() == "DirectoryIsNotEmpty" { // this is DFS, and we cannot do a standard replacement on it. Opt to simply overwrite the properties.
+						where, err := b.overwriteDFSProperties()
+						if err != nil {
+							return fmt.Errorf("%w. When %s", err, where)
+						}
+
+						return nil
+					}
+				}
+
 				return fmt.Errorf("when deleting existing blob: %w", err)
 			}
 		} else {
@@ -90,20 +153,34 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 		return fmt.Errorf("when getting additional folder properties: %w", err)
 	}
 
-	_, err = b.destination.Upload(b.jptm.Context(),
-		strings.NewReader(""),
-		b.headersToAppply,
-		b.metadataToApply,
-		azblob.BlobAccessConditions{},
-		azblob.DefaultAccessTier, // It doesn't make sense to use a special access tier, the blob will be 0 bytes.
-		b.blobTagsToApply,
-		b.cpkToApply,
-		azblob.ImmutabilityPolicyOptions{})
+	err = t.CreateFolder(b.DirUrlToString(), func() error {
+		_, err := b.destination.Upload(b.jptm.Context(),
+			strings.NewReader(""),
+			b.headersToAppply,
+			b.metadataToApply,
+			azblob.BlobAccessConditions{},
+			azblob.DefaultAccessTier, // It doesn't make sense to use a special access tier, the blob will be 0 bytes.
+			b.blobTagsToApply,
+			b.cpkToApply,
+			azblob.ImmutabilityPolicyOptions{})
+
+		return err
+	})
+
 	if err != nil {
 		return fmt.Errorf("when creating folder: %w", err)
 	}
 
-	t.RecordCreation(b.DirUrlToString())
+	// Upload ADLS Gen 2 ACLs
+	if b.jptm.FromTo() == common.EFromTo.BlobBlob() && b.jptm.Info().PreserveSMBPermissions.IsTruthy() {
+		b.setDatalakeACLs()
+	}
+
+	return nil
+
+	if err != nil {
+		return err
+	}
 
 	return folderPropertiesSetInCreation{}
 }

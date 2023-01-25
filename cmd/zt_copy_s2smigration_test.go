@@ -51,23 +51,22 @@ const (
 var defaultS2SInvalideMetadataHandleOption = common.DefaultInvalidMetadataHandleOption
 
 func (s *cmdIntegrationSuite) SetUpSuite(c *chk.C) {
-	// skip cleaning up the S3 account when not necessary
-	if isS3Disabled() && gcpTestsDisabled() {
-		return
+	if !isS3Disabled() {
+		if s3Client, err := createS3ClientWithMinio(createS3ResOptions{}); err == nil {
+			cleanS3Account(c, s3Client)
+		} else {
+			// If S3 credentials aren't supplied, we're probably only trying to run Azure tests.
+			// As such, gracefully return here instead of cancelling every test because we couldn't clean up S3.
+			c.Log("S3 client could not be successfully initialised")
+		}
 	}
 
-	if s3Client, err := createS3ClientWithMinio(createS3ResOptions{}); err == nil {
-		cleanS3Account(c, s3Client)
-	} else {
-		// If S3 credentials aren't supplied, we're probably only trying to run Azure tests.
-		// As such, gracefully return here instead of cancelling every test because we couldn't clean up S3.
-		c.Log("S3 client could not be successfully initialised")
-	}
-
-	if gcpClient, err := createGCPClientWithGCSSDK(); err == nil {
-		cleanGCPAccount(c, gcpClient)
-	} else {
-		c.Log("GCP client could not be successfully initialised")
+	if !gcpTestsDisabled() {
+		if gcpClient, err := createGCPClientWithGCSSDK(); err == nil {
+			cleanGCPAccount(c, gcpClient)
+		} else {
+			c.Log("GCP client could not be successfully initialised")
+		}
 	}
 }
 
@@ -872,7 +871,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerNoPreserveBlobT
 	})
 }
 
-//Attempt to copy from a page blob to a block blob
+// Attempt to copy from a page blob to a block blob
 func (s *cmdIntegrationSuite) TestS2SCopyFromPageToBlockBlob(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
 	bsu := getBSU()
@@ -925,7 +924,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromPageToBlockBlob(c *chk.C) {
 	})
 }
 
-//Attempt to copy from a block blob to a page blob
+// Attempt to copy from a block blob to a page blob
 func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToPageBlob(c *chk.C) {
 	bsu := getBSU()
 
@@ -977,7 +976,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToPageBlob(c *chk.C) {
 	})
 }
 
-//Attempt to copy from a block blob to an append blob
+// Attempt to copy from a block blob to an append blob
 func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToAppendBlob(c *chk.C) {
 	bsu := getBSU()
 
@@ -1029,7 +1028,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToAppendBlob(c *chk.C) {
 	})
 }
 
-//Attempt to copy from an append blob to a block blob
+// Attempt to copy from an append blob to a block blob
 func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToBlockBlob(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
 	bsu := getBSU()
@@ -1082,7 +1081,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToBlockBlob(c *chk.C) {
 	})
 }
 
-//Attempt to copy from a page blob to an append blob
+// Attempt to copy from a page blob to an append blob
 func (s *cmdIntegrationSuite) TestS2SCopyFromPageToAppendBlob(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
 	bsu := getBSU()
@@ -1135,7 +1134,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromPageToAppendBlob(c *chk.C) {
 	})
 }
 
-//Attempt to copy from an append blob to a page blob
+// Attempt to copy from an append blob to a page blob
 func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToPageBlob(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
 	bsu := getBSU()
@@ -1316,7 +1315,7 @@ func (s *cmdIntegrationSuite) TestCopyWithDFSResource(c *chk.C) {
 	dirURLWithSAS := serviceURLWithSAS.NewFileSystemURL(fsName).NewDirectoryURL(parentDirName)
 	// =====================================
 
-	//1. Verify that copy between dfs and dfs works.
+	// 1. Verify that copy between dfs and dfs works.
 
 	rawCopy := getDefaultRawCopyInput(dirURLWithSASSource.String(), dirURLWithSAS.String())
 	rawCopy.recursive = true
@@ -1332,10 +1331,10 @@ func (s *cmdIntegrationSuite) TestCopyWithDFSResource(c *chk.C) {
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
 
-		//c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+		// c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
 	})
 
-	//2. Verify Sync between dfs and dfs works.
+	// 2. Verify Sync between dfs and dfs works.
 	mockedRPC.reset()
 	// set up the file
 	fileNameSource = generateName("file2", 0)
@@ -1350,7 +1349,7 @@ func (s *cmdIntegrationSuite) TestCopyWithDFSResource(c *chk.C) {
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
 
-		//c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+		// c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
 	})
 
 }

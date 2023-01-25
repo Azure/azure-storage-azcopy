@@ -46,8 +46,8 @@ type fileTraverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func (t *fileTraverser) IsDirectory(bool) bool {
-	return copyHandlerUtil{}.urlIsAzureFileDirectory(t.ctx, t.rawURL, t.p) // This handles all of the fanciness for us.
+func (t *fileTraverser) IsDirectory(bool) (bool, error) {
+	return copyHandlerUtil{}.urlIsAzureFileDirectory(t.ctx, t.rawURL, t.p), nil // This handles all of the fanciness for us.
 }
 
 func (t *fileTraverser) getPropertiesIfSingleFile() (*azfile.FileGetPropertiesResponse, bool) {
@@ -87,6 +87,9 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				targetURLParts.ShareName,
 			)
 
+			smbLastWriteTime, _ := time.Parse(azfile.ISO8601, fileProperties.FileLastWriteTime()) // no need to worry about error since we'll only check against it if it's non-zero for sync
+			storedObject.smbLastModifiedTime = smbLastWriteTime
+
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter(common.EEntityType.File())
 			}
@@ -111,6 +114,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 		// We need to omit some properties if we don't get properties
 		lmt := time.Time{}
+		smbLMT := time.Time{}
 		var contentProps contentPropsProvider = noContentProps
 		var meta common.Metadata = nil
 
@@ -124,6 +128,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				}, err
 			}
 			lmt = fullProperties.LastModified()
+			smbLMT, _ = time.Parse(azfile.ISO8601, fullProperties.FileLastWriteTime())
 			if f.entityType == common.EEntityType.File() {
 				contentProps = fullProperties.(*azfile.FileGetPropertiesResponse) // only files have content props. Folders don't.
 				// Get an up-to-date size, because it's documented that the size returned by the listing might not be up-to-date,
@@ -135,7 +140,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			}
 			meta = common.FromAzFileMetadataToCommonMetadata(fullProperties.NewMetadata())
 		}
-		return newStoredObject(
+		obj := newStoredObject(
 			preprocessor,
 			getObjectNameOnly(f.name),
 			relativePath,
@@ -146,7 +151,11 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			noBlobProps,
 			meta,
 			targetURLParts.ShareName,
-		), nil
+		)
+
+		obj.smbLastModifiedTime = smbLMT
+
+		return obj, nil
 	}
 
 	processStoredObject := func(s StoredObject) error {
@@ -262,7 +271,7 @@ func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 	return
 }
 
-//  allows polymorphic treatment of folders and files
+// allows polymorphic treatment of folders and files
 type azfileEntity struct {
 	name           string
 	contentLength  int64
@@ -301,4 +310,5 @@ func newAzFileRootFolderEntity(rootDir azfile.DirectoryURL, name string) azfileE
 type azfilePropertiesAdapter interface {
 	NewMetadata() azfile.Metadata
 	LastModified() time.Time
+	FileLastWriteTime() string
 }

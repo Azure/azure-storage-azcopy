@@ -1,16 +1,16 @@
-//dictionary that stores value of soure and destination for copy, sync, and remove
+//dictionary that stores value of source and destination for copy, sync, and remove
 var sourceAndDestination = {
     BlobtoBlob: " 'https://[account name].blob.core.windows.net/[container name]?[SAS key]' 'https://[account name].blob.core.windows.net/[container name]?[SAS key]'",
     BlobtoLocal: " 'https://[account name].blob.core.windows.net/[container name]?[SAS key]' 'C:\\local\\path'",
     BlobtoFiles: " 'https://[account name].blob.core.windows.net/[container name]?[SAS key]' 'https://[account name].file.core.windows.net/[container name]?[SAS key]'",
     FilestoLocal: " 'https://[account name].file.core.windows.net/[container name]?[SAS key]' 'C:\\local\\path'",
-    AdlstoLocal: " 'https://[account name].dfs.core.windows.net/[container name]?[SAS key]' 'C:\\local\\path'", 
+    AdlstoLocal: " 'https://[account name].dfs.core.windows.net/[container name]?[SAS key]' 'C:\\local\\path'",
     AWStoBlob: " 'https://[account name].s3.us-west-2.amazonaws.com/[path]' 'https://[account name].blob.core.windows.net/[container name]?[SAS key]'",
     FilestoFiles: " 'https://[account name].file.core.windows.net/[container name]?[SAS key]' 'https://[account name].file.core.windows.net/[container name]?[SAS key]'",
     LocaltoBlob: " 'C:\\local\\path' 'https://[account name].blob.core.windows.net/[container name]?[SAS key]'",
     FilestoBlob: " 'https://[account name].file.core.windows.net/[container name]?[SAS key]' 'https://[account name].blob.core.windows.net/[container name]?[SAS key]'",
     LocaltoFiles: " 'C:\\local\\path' 'https://[account name].file.core.windows.net/[container name]?[SAS key]'",
-    LocaltoAdls: " 'C:\\local\\path' 'https://[account name].dfs.core.windows.net/[container name]?[SAS key]'", 
+    LocaltoAdls: " 'C:\\local\\path' 'https://[account name].dfs.core.windows.net/[container name]?[SAS key]'",
     GCStoBlob: " 'https://storage.cloud.google.com/[bucket*name]/' 'https://[account name].blob.core.windows.net/[container name]?[SAS key]'", //gcs MISSING
     BlobsRemove: " 'https://[account name].blob.core.windows.net/[container name]?[SAS key]'",
     FilesRemove: " 'https://[account name].file.core.windows.net/[container name]?[SAS key]'",
@@ -24,7 +24,7 @@ var sourceAndDestination = {
     AdlstoAdls: " 'https://[account name].dfs.core.windows.net/[container name]?[SAS key]' 'https://[account name].dfs.core.windows.net/[container name]?[SAS key]'"
 };
 
-//dictionary that store all flag values 
+//dictionary that store all flag values
 var flagValue = {
     recursive: " --recursive",
     includePattern: " --include-pattern=[patterns]",
@@ -79,7 +79,7 @@ function choseCommand(btn) {
         document.getElementById("removeContainer").style.display="block";
         document.getElementById("syncContainer").style.display="none";
         document.getElementById("commandHolder").style.display="none";
-        
+
         document.getElementById("message").value="azcopy remove";
     }
 
@@ -94,7 +94,7 @@ function choseCommand(btn) {
         document.getElementById("commandHolder").style.display="none";
 
         document.getElementById("message").value="azcopy sync";
-    } 
+    }
 
     Object.keys(sourceAndDestination).forEach( button => document.getElementById(button).disabled = false);
 
@@ -107,11 +107,11 @@ function choseCommand(btn) {
 
 
 function choseSourceandDestination(btn) {
-    //enable all the button 
+    //enable all the button
     Object.keys(sourceAndDestination).forEach( button => document.getElementById(button).disabled = false);
     document.getElementById(btn.id).disabled = true;
     document.getElementById("commandHolderTwo").style.display="none";
-    
+
     //message in text deciding if copy, sync, or remove
     if ((btn.id).includes("Sync")) {
         document.getElementById("syncFlags").style.display="flex";
@@ -142,7 +142,7 @@ function choseSourceandDestination(btn) {
             }
         });
         document.getElementById("message").value = "azcopy copy" + sourceAndDestination[btn.id];
-    } 
+    }
 }
 
 function flags(flag, command) {

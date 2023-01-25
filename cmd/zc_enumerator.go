@@ -47,12 +47,13 @@ import (
 // we can add more properties if needed, as this is easily extensible
 // ** DO NOT instantiate directly, always use newStoredObject ** (to make sure its fully populated and any preprocessor method runs)
 type StoredObject struct {
-	name             string
-	entityType       common.EntityType
-	lastModifiedTime time.Time
-	size             int64
-	md5              []byte
-	blobType         azblob.BlobType // will be "None" when unknown or not applicable
+	name                string
+	entityType          common.EntityType
+	lastModifiedTime    time.Time
+	smbLastModifiedTime time.Time
+	size                int64
+	md5                 []byte
+	blobType            azblob.BlobType // will be "None" when unknown or not applicable
 
 	// all of these will be empty when unknown or not applicable.
 	contentDisposition string
@@ -91,8 +92,17 @@ type StoredObject struct {
 	leaseDuration azblob.LeaseDurationType
 }
 
-func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject) bool {
-	return s.lastModifiedTime.After(storedObject2.lastModifiedTime)
+func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTime bool) bool {
+	lmtA := s.lastModifiedTime
+	if preferSMBTime && !s.smbLastModifiedTime.IsZero() {
+		lmtA = s.smbLastModifiedTime
+	}
+	lmtB := storedObject2.lastModifiedTime
+	if preferSMBTime && !storedObject2.smbLastModifiedTime.IsZero() {
+		lmtB = storedObject2.smbLastModifiedTime
+	}
+
+	return lmtA.After(lmtB)
 }
 
 func (s *StoredObject) isSingleSourceFile() bool {
@@ -127,6 +137,18 @@ func (s *StoredObject) isCompatibleWithFpo(fpo common.FolderPropertyOption) bool
 		panic("undefined entity type")
 	}
 }
+
+// ErrorNoHashPresent , ErrorHashNoLongerValid, and ErrorHashNotCompatible indicate a hash is not present, not obtainable, and/or not usable.
+// For the sake of best-effort, when these errors are emitted, depending on the sync hash policy
+var ErrorNoHashPresent = errors.New("no hash present on file")
+var ErrorHashNoLongerValid = errors.New("attached hash no longer valid")
+var ErrorHashNotCompatible = errors.New("hash types do not match")
+
+// ErrorHashAsyncCalculation is not a strict "the hash is unobtainable", but a "the hash is not currently present".
+// In effect, when it is returned, it indicates we have placed the target onto a queue to be handled later.
+// It can be treated like a promise, and the item can cease processing in the immediate term.
+// This option is only used locally on sync-downloads when the user has specified that azcopy should create a new hash.
+var ErrorHashAsyncCalculation = errors.New("hash is calculating asynchronously")
 
 // Returns a func that only calls inner if StoredObject isCompatibleWithFpo
 // We use this, so that we can easily test for compatibility in the sync deletion code (which expects an objectProcessor)
@@ -264,7 +286,7 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, en
 // pass each StoredObject to the given objectProcessor if it passes all the filters
 type ResourceTraverser interface {
 	Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error
-	IsDirectory(isSource bool) bool
+	IsDirectory(isSource bool) (bool, error)
 	// isDirectory has an isSource flag for a single exception to blob.
 	// Blob should ONLY check remote if it's a source.
 	// On destinations, because blobs and virtual directories can share names, we should support placing in both ways.
@@ -312,7 +334,7 @@ type enumerationCounterFunc func(entityType common.EntityType)
 func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context,
 	credential *common.CredentialInfo, followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties,
 	includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string,
-	s2sPreserveBlobTags bool, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo) (ResourceTraverser, error) {
+	s2sPreserveBlobTags bool, syncHashType common.SyncHashType, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo) (ResourceTraverser, error) {
 	var output ResourceTraverser
 	var p *pipeline.Pipeline
 
@@ -340,7 +362,6 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 	// Initialize the pipeline if creds and ctx is provided
 	if ctx != nil && credential != nil {
 		tmppipe, err := InitPipeline(*ctx, location, *credential, logLevel)
-
 		if err != nil {
 			return nil, err
 		}
@@ -397,9 +418,9 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions)
 		} else {
 			if ctx != nil {
-				output = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter, errorChannel)
+				output = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, toFollow, syncHashType, incrementEnumerationCounter, errorChannel)
 			} else {
-				output = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, toFollow, incrementEnumerationCounter, errorChannel)
+				output = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, toFollow, syncHashType, incrementEnumerationCounter, errorChannel)
 			}
 		}
 	case common.ELocation.Benchmark():
@@ -569,7 +590,9 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 type objectProcessor func(storedObject StoredObject) error
 
 // TODO: consider making objectMorpher an interface, not a func, and having newStoredObject take an array of them, instead of just one
-//   Might be easier to debug
+//
+//	Might be easier to debug
+//
 // modifies a StoredObject, but does NOT process it.  Used for modifications, such as pre-pending a parent path
 type objectMorpher func(storedObject *StoredObject)
 
@@ -747,7 +770,7 @@ func getProcessingError(errin error) (ignored bool, err error) {
 		return true, nil
 	}
 
-	return false, err
+	return false, errin
 }
 
 func processIfPassedFilters(filters []ObjectFilter, storedObject StoredObject, processor objectProcessor) (err error) {

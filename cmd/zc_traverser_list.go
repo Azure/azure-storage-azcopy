@@ -40,8 +40,8 @@ type listTraverser struct {
 type childTraverserGenerator func(childPath string) (ResourceTraverser, error)
 
 // There is no impact to a list traverser returning false because a list traverser points directly to relative paths.
-func (l *listTraverser) IsDirectory(bool) bool {
-	return false
+func (l *listTraverser) IsDirectory(bool) (bool, error) {
+	return false, nil
 }
 
 // To kill the traverser, close() the channel under it.
@@ -61,7 +61,8 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		}
 
 		// listTraverser will only ever execute on the source
-		if !l.recursive && childTraverser.IsDirectory(true) {
+		isDir, _ := childTraverser.IsDirectory(true)
+		if !l.recursive && isDir {
 			continue // skip over directories
 		}
 
@@ -109,7 +110,7 @@ func newListTraverser(parent common.ResourceString, parentType common.Location, 
 		// Construct a traverser that goes through the child
 		traverser, err := InitResourceTraverser(source, parentType, ctx, credential, &followSymlinks,
 			nil, recursive, getProperties, includeDirectoryStubs, common.EPermanentDeleteOption.None(), incrementEnumerationCounter,
-			nil, s2sPreserveBlobTags, logLevel, cpkOptions, nil /* errorChannel */)
+			nil, s2sPreserveBlobTags, common.ESyncHashType.None(), logLevel, cpkOptions, nil /* errorChannel */)
 		if err != nil {
 			return nil, err
 		}

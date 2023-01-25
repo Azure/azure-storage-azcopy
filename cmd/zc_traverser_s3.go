@@ -45,22 +45,22 @@ type s3Traverser struct {
 	incrementEnumerationCounter enumerationCounterFunc
 }
 
-func (t *s3Traverser) IsDirectory(isSource bool) bool {
+func (t *s3Traverser) IsDirectory(isSource bool) (bool, error) {
 	// Do a basic syntax check
 	isDirDirect := !t.s3URLParts.IsObjectSyntactically() && (t.s3URLParts.IsDirectorySyntactically() || t.s3URLParts.IsBucketSyntactically())
 
 	// S3 can convert directories and objects sharing names as well.
 	if !isSource {
-		return isDirDirect
+		return isDirDirect, nil
 	}
 
 	_, err := t.s3Client.StatObject(t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
 
 	if err != nil {
-		return true
+		return true, nil
 	}
 
-	return false
+	return false, nil
 }
 
 func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {

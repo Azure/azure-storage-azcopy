@@ -270,6 +270,7 @@ func getAccountAndKey() (string, string) {
 	return name, key
 }
 
+// get blob account service URL
 func getBSU() azblob.ServiceURL {
 	accountName, accountKey := getAccountAndKey()
 	u, _ := url.Parse(fmt.Sprintf("https://%s.blob.core.windows.net/", accountName))
@@ -357,6 +358,7 @@ func createNewBlockBlob(c *chk.C, container azblob.ContainerURL, prefix string) 
 	return
 }
 
+// create metadata indicating that this is a dir
 func createNewDirectoryStub(c *chk.C, container azblob.ContainerURL, dirPath string) {
 	dir := container.NewBlockBlobURL(dirPath)
 
@@ -595,13 +597,20 @@ func deleteGCPBucket(c *chk.C, client *gcpUtils.Client, bucketName string, waitQ
 	it := bucket.Objects(ctx, &gcpUtils.Query{Prefix: ""})
 	for {
 		attrs, err := it.Next()
-		if err == iterator.Done {
-			break
+		if err != nil { // if Next returns an error other than iterator.Done, all subsequent calls will return the same error.
+			if err == iterator.Done {
+				break
+			}
+
+			// Failure during listing
+			c.Assert(err, chk.Equals, nil)
+			return
 		}
 		if err == nil {
 			err = bucket.Object(attrs.Name).Delete(nil)
 			if err != nil {
-				c.Log("Could not clear GCS Buckets.")
+				// Failure cleaning bucket
+				c.Assert(err, chk.Equals, nil)
 				return
 			}
 		}
@@ -642,8 +651,13 @@ func cleanGCPAccount(c *chk.C, client *gcpUtils.Client) {
 	it := client.Buckets(ctx, projectID)
 	for {
 		battrs, err := it.Next()
-		if err == iterator.Done {
-			break
+		if err != nil {
+			if err == iterator.Done {
+				break
+			}
+
+			c.Assert(err, chk.Equals, nil)
+			return
 		}
 		deleteGCPBucket(c, client, battrs.Name, false)
 	}

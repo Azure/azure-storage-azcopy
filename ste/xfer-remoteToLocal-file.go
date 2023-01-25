@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -414,7 +415,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 			}
 
 			// check if we need to rename back to original name. At this point, we're sure the file is completely
-			// downloaded and not corrupt. Infact, post this point we should only log errors and
+			// downloaded and not corrupt. In fact, post this point we should only log errors and
 			// not fail the transfer.
 			renameNecessary := !strings.EqualFold(info.getDownloadPath(), info.Destination) &&
 				!strings.EqualFold(info.Destination, common.Dev_Null)
@@ -455,6 +456,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 }
 
 func commonDownloaderCompletion(jptm IJobPartTransferMgr, info TransferInfo, entityType common.EntityType) {
+redoCompletion:
 	// note that we do not really know whether the context was canceled because of an error, or because the user asked for it
 	// if was an intentional cancel, the status is still "in progress", so we are still counting it as pending
 	// we leave these transfer status alone
@@ -476,6 +478,25 @@ func commonDownloaderCompletion(jptm IJobPartTransferMgr, info TransferInfo, ent
 	} else {
 		if !jptm.IsLive() {
 			panic("reached branch where jptm is assumed to be live, but it isn't")
+		}
+
+		// Attempt to put MD5 data if necessary, compliant with the sync hash scheme
+		if jptm.ShouldPutMd5() {
+			fi, err := os.Stat(info.Destination)
+			if err != nil {
+				jptm.FailActiveDownload("saving MD5 data (stat to pull LMT)", err)
+				goto redoCompletion // let fail as expected
+			}
+
+			err = common.PutHashData(info.Destination, common.SyncHashData{
+				Mode: common.ESyncHashType.MD5(),
+				LMT:  fi.ModTime(),
+				Data: base64.StdEncoding.EncodeToString(info.SrcHTTPHeaders.ContentMD5),
+			})
+			if err != nil {
+				jptm.FailActiveDownload("saving MD5 data (writing alternate data stream)", err)
+				goto redoCompletion // let fail as expected
+			}
 		}
 
 		// We know all chunks are done (because this routine was called)
@@ -533,7 +554,7 @@ func tryDeleteFile(info TransferInfo, jptm IJobPartTransferMgr) {
 }
 
 // Returns the path of file to be downloaded. If we want to
-// download to a temp path we return a temp paht in format
+// download to a temp path we return a temp path in format
 // /actual/parent/path/.azDownload-<jobID>-<actualFileName>
 func (info *TransferInfo) getDownloadPath() string {
 	if common.GetLifecycleMgr().DownloadToTempPath() && info.SourceSize > 0 { // 0-byte files don't need a rename.
