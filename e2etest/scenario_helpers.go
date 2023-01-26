@@ -793,8 +793,10 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			if f.body != nil {
 				contentR = bytes.NewReader(f.body)
 				contentD = f.body
+				fileSize = contentR.Size()
 			} else {
 				contentR, contentD = getRandomDataAndReader(int(fileSize))
+				f.body = contentD
 			}
 			if f.creationProperties.contentHeaders == nil {
 				f.creationProperties.contentHeaders = &contentHeaders{}
