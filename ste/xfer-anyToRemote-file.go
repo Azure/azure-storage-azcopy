@@ -181,6 +181,8 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 
 	if info.IsFolderPropertiesTransfer() {
 		anyToRemote_folder(jptm, info, p, pacer, senderFactory, sipf)
+	} else if (jptm.GetOverwriteOption() == common.EOverwriteOption.PosixProperties() && info.EntityType == common.EEntityType.File()) {
+		anyToRemote_fileProperties(jptm, info, p, pacer, senderFactory, sipf)
 	} else {
 		anyToRemote_file(jptm, info, p, pacer, senderFactory, sipf)
 	}

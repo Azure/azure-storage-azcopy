@@ -1,6 +1,19 @@
 
 # Change Log
 
+## Version 10.17.0
+
+### New features
+
+1. Added support for hash-based sync. AzCopy sync can now take two new flags `--compare-hash` and `--missing-hash-policy=Generate`, which which user will be able to transfer only those files which differ in their MD5 hash.
+
+### Bug fixes
+1. Fixed [issue 1994](https://github.com/Azure/azure-storage-azcopy/pull/1994): Error in calculation of block size
+2. Fixed [issue 1957](https://github.com/Azure/azure-storage-azcopy/pull/1957): Repeated Authentication token refresh
+3. Fixed [issue 1870](https://github.com/Azure/azure-storage-azcopy/pull/1870): Fixed issue where CPK would not be injected on retries
+4. Fixed [issue 1946](https://github.com/Azure/azure-storage-azcopy/issues/1946): Fixed Metadata parsing
+5: Fixed [issue 1931](https://github.com/Azure/azure-storage-azcopy/issues/1931)
+
 ## Version 10.16.2
 
 ### Bug Fixes

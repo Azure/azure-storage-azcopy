@@ -54,8 +54,8 @@ func newBlobFSTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Contex
 	return
 }
 
-func (t *blobFSTraverser) IsDirectory(bool) bool {
-	return copyHandlerUtil{}.urlIsBFSFileSystemOrDirectory(t.ctx, t.rawURL, t.p) // This gets all the fanciness done for us.
+func (t *blobFSTraverser) IsDirectory(bool) (bool, error) {
+	return copyHandlerUtil{}.urlIsBFSFileSystemOrDirectory(t.ctx, t.rawURL, t.p), nil // This gets all the fanciness done for us.
 }
 
 func (t *blobFSTraverser) getPropertiesIfSingleFile() (*azbfs.PathGetPropertiesResponse, bool, error) {

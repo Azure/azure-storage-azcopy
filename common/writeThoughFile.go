@@ -62,20 +62,9 @@ func CreateDirectoryIfNotExist(directory string, tracker FolderCreationTracker) 
 		_ = CreateParentDirectoryIfNotExist(directory, tracker)
 
 		// then create the directory
-		mkDirErr := os.Mkdir(directory, os.ModePerm)
-
-		// if Mkdir succeeds, no error is dropped-- it is nil.
-		// therefore, returning here is perfectly acceptable as it either succeeds (or it doesn't)
-		if mkDirErr == nil {
-			// To run our folder overwrite logic, we have to know if this current job created the folder.
-			// As per the comments above, we are technically wrong here in a write-only scenario (maybe it already
-			// existed and our Stat failed).  But using overwrite=false on a write-only destination doesn't make
-			// a lot of sense anyway. Yes, we'll make the wrong decision here in a write-only scenario, but we'll
-			// make the _same_ wrong overwrite decision for all the files too (not just folders). So this is, at least,
-			// consistent.
-			tracker.RecordCreation(directory)
-			return nil
-		}
+		mkDirErr := tracker.CreateFolder(directory, func() error {
+			return os.Mkdir(directory, os.ModePerm)
+		})
 
 		// another routine might have created the directory at the same time
 		// check whether the directory now exists

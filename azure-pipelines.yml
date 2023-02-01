@@ -74,7 +74,12 @@ jobs:
 
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
-        displayName: 'Generate MacOS Build'
+        displayName: 'Generate MacOS Build with AMD64'
+        condition: eq(variables.type, 'mac-os')
+
+      - script: |
+          GOARCH=arm64 CGO_ENABLED=1 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64"
+        displayName: 'Generate MacOS Build with ARM64'
         condition: eq(variables.type, 'mac-os')
 
       - task: PublishBuildArtifacts@1
@@ -125,6 +130,7 @@ jobs:
           AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
           AZCOPY_E2E_CLASSIC_ACCOUNT_NAME: $(AZCOPY_E2E_CLASSIC_ACCOUNT_NAME)
           AZCOPY_E2E_CLASSIC_ACCOUNT_KEY: $(AZCOPY_E2E_CLASSIC_ACCOUNT_KEY)
+          AZCOPY_E2E_LOG_OUTPUT: '$(System.DefaultWorkingDirectory)/logs'
           AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG)
           AZCOPY_E2E_STD_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_STD_MANAGED_DISK_CONFIG)
           CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
@@ -148,6 +154,7 @@ jobs:
           AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
           AZCOPY_E2E_CLASSIC_ACCOUNT_NAME: $(AZCOPY_E2E_CLASSIC_ACCOUNT_NAME)
           AZCOPY_E2E_CLASSIC_ACCOUNT_KEY: $(AZCOPY_E2E_CLASSIC_ACCOUNT_KEY)
+          AZCOPY_E2E_LOG_OUTPUT: '$(System.DefaultWorkingDirectory)/logs'
           AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG)
           AZCOPY_E2E_STD_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_STD_MANAGED_DISK_CONFIG)
           CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
@@ -173,12 +180,20 @@ jobs:
           AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
           AZCOPY_E2E_CLASSIC_ACCOUNT_NAME: $(AZCOPY_E2E_CLASSIC_ACCOUNT_NAME)
           AZCOPY_E2E_CLASSIC_ACCOUNT_KEY: $(AZCOPY_E2E_CLASSIC_ACCOUNT_KEY)
+          AZCOPY_E2E_LOG_OUTPUT: '$(System.DefaultWorkingDirectory)/logs'
           AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG)
           AZCOPY_E2E_STD_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_STD_MANAGED_DISK_CONFIG)
           CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
           CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
-        displayName: 'E2E Test MacOs'
+        displayName: 'E2E Test MacOs AMD64'
         condition: eq(variables.type, 'mac-os')
+
+      - task: PublishBuildArtifacts@1
+        displayName: 'Publish logs'
+        condition: succeededOrFailed()
+        inputs:
+          pathToPublish: '$(System.DefaultWorkingDirectory)/logs'
+          artifactName: logs
 
   - job: Test_On_Ubuntu
     variables:
@@ -203,10 +218,14 @@ jobs:
           secureFile: 'ci-gcs-dev.json'
       - script: |
           pip install azure-storage-blob==12.12.0
+          # set the variable to indicate that the mutex is being acquired
+          # note: we set it before acquiring the mutex to ensure we release the mutex. 
+          # setting this after can result in an un-broken mutex if someone cancels the pipeline after we acquire the 
+          # mutex but before we set this variable.
+          # setting this before will always work since it is valid to break an un-acquired mutex.
+          echo '##vso[task.setvariable variable=isMutexSet]true'
           # acquire the mutex before running live tests to avoid conflicts
           python ./tool_distributed_mutex.py lock "$(MUTEX_URL)"
-          # set the variable to indicate that the mutex was actually acquired
-          echo '##vso[task.setvariable variable=isMutexSet]true'
         name: 'Acquire_the_distributed_mutex'
       - script: |
           # run unit test and build executable
