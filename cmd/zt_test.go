@@ -270,6 +270,7 @@ func getAccountAndKey() (string, string) {
 	return name, key
 }
 
+// get blob account service URL
 func getBSU() azblob.ServiceURL {
 	accountName, accountKey := getAccountAndKey()
 	u, _ := url.Parse(fmt.Sprintf("https://%s.blob.core.windows.net/", accountName))
@@ -357,6 +358,7 @@ func createNewBlockBlob(c *chk.C, container azblob.ContainerURL, prefix string) 
 	return
 }
 
+// create metadata indicating that this is a dir
 func createNewDirectoryStub(c *chk.C, container azblob.ContainerURL, dirPath string) {
 	dir := container.NewBlockBlobURL(dirPath)
 

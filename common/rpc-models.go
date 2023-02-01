@@ -164,6 +164,7 @@ type CredentialInfo struct {
 	OAuthTokenInfo    OAuthTokenInfo
 	S3CredentialInfo  S3CredentialInfo
 	GCPCredentialInfo GCPCredentialInfo
+	SourceBlobToken   azblob.Credential
 }
 
 func (c CredentialInfo) WithType(credentialType CredentialType) CredentialInfo {

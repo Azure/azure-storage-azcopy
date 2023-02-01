@@ -26,7 +26,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"io"
 	"math"
 	"net/url"
@@ -35,6 +34,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
@@ -945,8 +946,8 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 func areBothLocationsPOSIXAware(fromTo common.FromTo) bool {
 	// POSIX properties are stored in blob metadata-- They don't need a special persistence strategy for BlobBlob.
 	return runtime.GOOS == "linux" && (
-	// fromTo == common.EFromTo.BlobLocal() || TODO
-	fromTo == common.EFromTo.LocalBlob()) ||
+		// fromTo == common.EFromTo.BlobLocal() || TODO
+		fromTo == common.EFromTo.LocalBlob()) ||
 		fromTo == common.EFromTo.BlobBlob()
 }
 
@@ -1002,9 +1003,6 @@ func validatePutMd5(putMd5 bool, fromTo common.FromTo) error {
 	// This is because we cannot calculate MD5 hash of the data stored at a remote locations.
 	if putMd5 && fromTo.IsS2S() {
 		glcm.Info(" --put-md5 flag to check data consistency between source and destination is not applicable for S2S Transfers (i.e. When both the source and the destination are remote). AzCopy cannot compute MD5 hash of data stored at remote location.")
-	}
-	if putMd5 && !fromTo.IsUpload() {
-		return fmt.Errorf("put-md5 is set but the job is not an upload")
 	}
 	return nil
 }
@@ -1113,7 +1111,9 @@ type CookedCopyCmdArgs struct {
 	FollowSymlinks     bool
 	ForceWrite         common.OverwriteOption // says whether we should try to overwrite
 	ForceIfReadOnly    bool                   // says whether we should _force_ any overwrites (triggered by forceWrite) to work on Azure Files objects that are set to read-only
-	autoDecompress     bool
+	IsSourceDir        bool
+
+	autoDecompress bool
 
 	// options from flags
 	blockSize int64
@@ -1377,6 +1377,49 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	return err
 }
 
+// get source credential - if there is a token it will be used to get passed along our pipeline
+func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.CopyJobPartOrderRequest) (common.CredentialInfo, error) {
+	srcCredInfo := common.CredentialInfo{}
+	var err error
+	var isPublic bool
+
+	if srcCredInfo, isPublic, err = GetCredentialInfoForLocation(ctx, cca.FromTo.From(), cca.Source.Value, cca.Source.SAS, true, cca.CpkOptions); err != nil {
+		return srcCredInfo, err
+		// If S2S and source takes OAuthToken as its cred type (OR) source takes anonymous as its cred type, but it's not public and there's no SAS
+	} else if cca.FromTo.IsS2S() &&
+		((srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() && cca.FromTo.To() != common.ELocation.Blob()) || // Blob can forward OAuth tokens
+			(srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && !isPublic && cca.Source.SAS == "")) {
+		return srcCredInfo, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource, or the destination is blob storage")
+	}
+
+	if cca.Source.SAS != "" && cca.FromTo.IsS2S() && jpo.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+		//glcm.Info("Authentication: If the source and destination accounts are in the same AAD tenant & the user/spn/msi has appropriate permissions on both, the source SAS token is not required and OAuth can be used round-trip.")
+	}
+
+	if cca.FromTo.IsS2S() {
+		jpo.S2SSourceCredentialType = srcCredInfo.CredentialType
+
+		if jpo.S2SSourceCredentialType.IsAzureOAuth() {
+			uotm := GetUserOAuthTokenManagerInstance()
+			// get token from env var or cache
+			if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+				return srcCredInfo, err
+			} else {
+				cca.credentialInfo.OAuthTokenInfo = *tokenInfo
+				jpo.CredentialInfo.OAuthTokenInfo = *tokenInfo
+			}
+			// if the source is not local then store the credential token if it was OAuth to avoid constant refreshing
+			jpo.CredentialInfo.SourceBlobToken = common.CreateBlobCredential(ctx, srcCredInfo, common.CredentialOpOptions{
+				// LogInfo:  glcm.Info, //Comment out for debugging
+				LogError: glcm.Info,
+			})
+			cca.credentialInfo.SourceBlobToken = jpo.CredentialInfo.SourceBlobToken
+			srcCredInfo.SourceBlobToken = jpo.CredentialInfo.SourceBlobToken
+		}
+	}
+	return srcCredInfo, nil
+}
+
 // handles the copy command
 // dispatches the job order (in parts) to the storage engine
 func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
@@ -1489,11 +1532,12 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		common.EFromTo.BenchmarkFile():
 
 		var e *CopyEnumerator
-		e, err = cca.initEnumerator(jobPartOrder, ctx)
+		srcCredInfo, _ := cca.getSrcCredential(ctx, &jobPartOrder)
+
+		e, err = cca.initEnumerator(jobPartOrder, srcCredInfo, ctx)
 		if err != nil {
 			return fmt.Errorf("failed to initialize enumerator: %w", err)
 		}
-
 		err = e.enumerate()
 	case common.EFromTo.BlobTrash(), common.EFromTo.FileTrash():
 		e, createErr := newRemoveEnumerator(cca)
@@ -1672,7 +1716,6 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 			// indicate whether constrained by disk or not
 			isBenchmark := cca.FromTo.From() == common.ELocation.Benchmark()
 			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, isBenchmark)
-
 			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
 				summary.PercentComplete,
 				summary.TransfersCompleted,

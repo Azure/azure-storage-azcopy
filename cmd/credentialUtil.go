@@ -655,11 +655,14 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // pipeline factory methods
 // ==============================================================================================
 func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
-	credential := common.CreateBlobCredential(ctx, credInfo, common.CredentialOpOptions{
-		// LogInfo:  glcm.Info, //Comment out for debugging
-		LogError: glcm.Info,
-	})
-
+	// are we getting dest token?
+	credential := credInfo.SourceBlobToken
+	if credential == nil {
+		credential = common.CreateBlobCredential(ctx, credInfo, common.CredentialOpOptions{
+			// LogInfo:  glcm.Info, //Comment out for debugging
+			LogError: glcm.Info,
+		})
+	}
 	logOption := pipeline.LogOptions{}
 	if azcopyScanningLogger != nil {
 		logOption = pipeline.LogOptions{

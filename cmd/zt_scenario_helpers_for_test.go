@@ -870,6 +870,7 @@ func getDefaultSyncRawInput(src, dst string) rawSyncCmdArgs {
 		recursive:           true,
 		deleteDestination:   deleteDestination.String(),
 		md5ValidationOption: common.DefaultHashValidationOption.String(),
+		compareHash:         common.ESyncHashType.None().String(),
 	}
 }
 

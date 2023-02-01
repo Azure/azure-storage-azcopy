@@ -26,6 +26,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -58,6 +60,17 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 			return // nothing to do. The flag is not supposed to be set
 		}
 
+		reflectVal := reflect.ValueOf(value) // check for pointer
+		if reflectVal.Kind() == reflect.Pointer {
+			result := reflectVal.Elem() // attempt to deref
+
+			if result != (reflect.Value{}) && result.CanInterface() { // can we grab the underlying value?
+				value = result.Interface()
+			} else {
+				return // nothing to use
+			}
+		}
+
 		format := "%v"
 		if len(formats) > 0 {
 			format = formats[0]
@@ -65,6 +78,7 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 
 		t.flags[key] = fmt.Sprintf(format, value)
 	}
+	set("log-level", "debug", "debug")
 
 	// TODO: TODO: nakulkar-msft there will be many more to add here
 	set("recursive", p.recursive, false)
@@ -82,7 +96,7 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 	set("s2s-detect-source-changed", p.s2sSourceChangeValidation, false)
 	set("metadata", p.metadata, "")
 	set("cancel-from-stdin", p.cancelFromStdin, false)
-	set("preserve-smb-info", p.preserveSMBInfo, false)
+	set("preserve-smb-info", p.preserveSMBInfo, nil)
 	set("preserve-smb-permissions", p.preserveSMBPermissions, false)
 	set("backup", p.backupMode, false)
 	set("blob-tags", p.blobTags, "")
@@ -98,6 +112,7 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 		set("preserve-posix-properties", p.preservePOSIXProperties, "")
 	} else if o == eOperation.Sync() {
 		set("preserve-posix-properties", p.preservePOSIXProperties, false)
+		set("compare-hash", p.compareHash.String(), "None")
 	}
 }
 
@@ -184,7 +199,7 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string, env []
 	return stdout.Bytes(), runErr
 }
 
-func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, needsOAuth bool, afterStart func() string, chToStdin <-chan string) (CopyOrSyncCommandResult, bool, error) {
+func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, needsOAuth bool, afterStart func() string, chToStdin <-chan string, logDir string) (CopyOrSyncCommandResult, bool, error) {
 	capLen := func(b []byte) []byte {
 		if len(b) < 1024 {
 			return b
@@ -234,6 +249,11 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 		}
 	}
 
+	if logDir != "" {
+		env = append(env, "AZCOPY_LOG_LOCATION="+logDir)
+		env = append(env, "AZCOPY_JOB_PLAN_LOCATION="+filepath.Join(logDir, "plans"))
+	}
+
 	out, err := t.execDebuggableWithOutput(GlobalInputManager{}.GetExecutablePath(), args, env, afterStart, chToStdin)
 
 	wasClean := true
@@ -268,9 +288,15 @@ func (t *TestRunner) SetTransferStatusFlag(value string) {
 	t.flags["with-status"] = value
 }
 
-func (t *TestRunner) ExecuteJobsShowCommand(jobID common.JobID) (JobsShowCommandResult, error) {
+func (t *TestRunner) ExecuteJobsShowCommand(jobID common.JobID, azcopyDir string) (JobsShowCommandResult, error) {
 	args := append([]string{"jobs", "show", jobID.String()}, t.computeArgs()...)
-	out, err := exec.Command(GlobalInputManager{}.GetExecutablePath(), args...).Output()
+	cmd := exec.Command(GlobalInputManager{}.GetExecutablePath(), args...)
+
+	if azcopyDir != "" {
+		cmd.Env = append(cmd.Env, "AZCOPY_JOB_PLAN_LOCATION="+filepath.Join(azcopyDir, "plans"))
+	}
+
+	out, err := cmd.Output()
 	if err != nil {
 		return JobsShowCommandResult{}, err
 	}
@@ -307,12 +333,12 @@ func newCopyOrSyncCommandResult(rawOutput string) (CopyOrSyncCommandResult, bool
 	return CopyOrSyncCommandResult{jobID: jobSummary.JobID, finalStatus: jobSummary}, true
 }
 
-func (c *CopyOrSyncCommandResult) GetTransferList(status common.TransferStatus) ([]common.TransferDetail, error) {
+func (c *CopyOrSyncCommandResult) GetTransferList(status common.TransferStatus, azcopyDir string) ([]common.TransferDetail, error) {
 	runner := newTestRunner()
 	runner.SetTransferStatusFlag(status.String())
 
 	// invoke AzCopy to get the status from the plan files
-	result, err := runner.ExecuteJobsShowCommand(c.jobID)
+	result, err := runner.ExecuteJobsShowCommand(c.jobID, azcopyDir)
 	if err != nil {
 		return make([]common.TransferDetail, 0), err
 	}

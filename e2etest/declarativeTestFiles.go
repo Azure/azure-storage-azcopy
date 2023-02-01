@@ -55,8 +55,10 @@ func (h *contentHeaders) DeepCopy() *contentHeaders {
 	ret.contentEncoding = h.contentEncoding
 	ret.contentLanguage = h.contentLanguage
 	ret.contentType = h.contentType
-	ret.contentMD5 = make([]byte, len(h.contentMD5))
-	copy(ret.contentMD5, h.contentMD5)
+	if h.contentMD5 != nil {
+		ret.contentMD5 = make([]byte, len(h.contentMD5))
+		copy(ret.contentMD5, h.contentMD5)
+	}
 
 	return &ret
 }
@@ -184,6 +186,8 @@ type testObject struct {
 	name                   string
 	expectedFailureMessage string // the failure message that we expect to see in the log for this file/folder (only populated for expected failures)
 
+	body []byte
+
 	// info to be used at creation time. Usually, creationInfo and and verificationInfo will be the same
 	// I.e. we expect the creation properties to be preserved. But, for flexibility, they can be set to something different.
 	creationProperties objectProperties
@@ -196,6 +200,11 @@ func (t *testObject) DeepCopy() *testObject {
 	ret.name = t.name
 	ret.expectedFailureMessage = t.expectedFailureMessage
 	ret.creationProperties = t.creationProperties.DeepCopy()
+
+	if t.body != nil {
+		ret.body = make([]byte, len(t.body))
+		copy(ret.body, t.body)
+	}
 
 	if t.verificationProperties != nil {
 		vp := (*t.verificationProperties).DeepCopy()
@@ -366,7 +375,8 @@ func (*testFiles) copyList(src []interface{}) []interface{} {
 
 // takes a mixed list of (potentially) strings and testObjects, and returns them all as test objects
 // TODO: do we want to continue supporting plain strings in the expectation file lists (for convenience of test coders)
-//   or force them to use f() for every file?
+//
+//	or force them to use f() for every file?
 func (*testFiles) toTestObjects(rawList []interface{}, isFail bool) []*testObject {
 	result := make([]*testObject, 0, len(rawList))
 	for _, r := range rawList {

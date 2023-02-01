@@ -23,9 +23,12 @@
 package e2etest
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
+	"encoding/base64"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 	"net/url"
 	"os"
@@ -90,9 +93,11 @@ func (scenarioHelper) generateLocalDirectory(c asserter) (dstDirName string) {
 }
 
 // create a test file
-func (scenarioHelper) generateLocalFile(filePath string, fileSize int) ([]byte, error) {
-	// generate random data
-	_, bigBuff := getRandomDataAndReader(fileSize)
+func (scenarioHelper) generateLocalFile(filePath string, fileSize int, body []byte) ([]byte, error) {
+	if body == nil {
+		// generate random data
+		_, body = getRandomDataAndReader(fileSize)
+	}
 
 	// create all parent directories
 	err := os.MkdirAll(filepath.Dir(filePath), os.ModePerm)
@@ -101,8 +106,8 @@ func (scenarioHelper) generateLocalFile(filePath string, fileSize int) ([]byte, 
 	}
 
 	// write to file and return the data
-	err = os.WriteFile(filePath, bigBuff, common.DEFAULT_FILE_PERM)
-	return bigBuff, err
+	err = os.WriteFile(filePath, body, common.DEFAULT_FILE_PERM)
+	return body, err
 }
 
 type generateLocalFilesFromList struct {
@@ -129,12 +134,15 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 		} else {
 			sourceData, err := s.generateLocalFile(
 				filepath.Join(options.dirPath, file.name),
-				file.creationProperties.sizeBytes(c, options.defaultSize))
-			contentMD5 := md5.Sum(sourceData)
+				file.creationProperties.sizeBytes(c, options.defaultSize), file.body)
 			if file.creationProperties.contentHeaders == nil {
 				file.creationProperties.contentHeaders = &contentHeaders{}
 			}
-			file.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+
+			if file.creationProperties.contentHeaders.contentMD5 == nil {
+				contentMD5 := md5.Sum(sourceData)
+				file.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+			}
 
 			c.AssertNoErr(err)
 			// TODO: You'll need to set up things like attributes, and other relevant things from
@@ -212,7 +220,7 @@ func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c asserter, dirPath
 
 		for j, name := range batch {
 			fileList[5*i+j] = name
-			_, err := s.generateLocalFile(filepath.Join(dirPath, name), defaultFileSize)
+			_, err := s.generateLocalFile(filepath.Join(dirPath, name), defaultFileSize, nil)
 			c.AssertNoErr(err)
 		}
 	}
@@ -371,14 +379,24 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 			continue // no real folders in blob
 		}
 		ad := blobResourceAdapter{b}
-		reader, sourceData := getRandomDataAndReader(b.creationProperties.sizeBytes(c, options.defaultSize))
+		var reader *bytes.Reader
+		var sourceData []byte
+		if b.body != nil {
+			reader = bytes.NewReader(b.body)
+			sourceData = b.body
+		} else {
+			reader, sourceData = getRandomDataAndReader(b.creationProperties.sizeBytes(c, options.defaultSize))
+			b.body = sourceData // set body
+		}
 
 		// Setting content MD5
-		contentMD5 := md5.Sum(sourceData)
 		if ad.obj.creationProperties.contentHeaders == nil {
 			b.creationProperties.contentHeaders = &contentHeaders{}
 		}
-		ad.obj.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+		if ad.obj.creationProperties.contentHeaders.contentMD5 == nil {
+			contentMD5 := md5.Sum(sourceData)
+			ad.obj.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+		}
 
 		tags := ad.toBlobTags()
 
@@ -387,7 +405,6 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 		}
 
 		headers := ad.toHeaders()
-		headers.ContentMD5 = contentMD5[:]
 
 		var err error
 
@@ -399,19 +416,47 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 				options.accessTier = azblob.DefaultAccessTier
 			}
 
-			cResp, err := bb.Upload(ctx,
-				reader,
-				headers,
-				ad.toMetadata(),
-				azblob.BlobAccessConditions{},
-				options.accessTier,
-				tags,
-				common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo),
-				azblob.ImmutabilityPolicyOptions{},
-			)
+			if reader.Size() > 0 {
+				// to prevent the service from erroring out with an improper MD5, we opt to commit a block, then the list.
+				blockID := base64.StdEncoding.EncodeToString([]byte(uuid.NewString()))
+				sResp, err := bb.StageBlock(ctx,
+					blockID,
+					reader,
+					azblob.LeaseAccessConditions{},
+					nil,
+					common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo))
 
-			c.AssertNoErr(err)
-			c.Assert(cResp.StatusCode(), equals(), 201)
+				c.AssertNoErr(err)
+				c.Assert(sResp.StatusCode(), equals(), 201)
+
+				cResp, err := bb.CommitBlockList(ctx,
+					[]string{blockID},
+					headers,
+					ad.toMetadata(),
+					azblob.BlobAccessConditions{},
+					options.accessTier,
+					ad.toBlobTags(),
+					common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo),
+					azblob.ImmutabilityPolicyOptions{},
+				)
+
+				c.AssertNoErr(err)
+				c.Assert(cResp.StatusCode(), equals(), 201)
+			} else { // todo: invalid MD5 on empty blob is impossible like this, but it's doubtful we'll need to support it.
+				// handle empty blobs
+				cResp, err := bb.Upload(ctx,
+					reader,
+					headers,
+					ad.toMetadata(),
+					azblob.BlobAccessConditions{},
+					options.accessTier,
+					ad.toBlobTags(),
+					common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo),
+					azblob.ImmutabilityPolicyOptions{})
+
+				c.AssertNoErr(err)
+				c.Assert(cResp.StatusCode(), equals(), 201)
+			}
 		case common.EBlobType.PageBlob():
 			pb := options.containerURL.NewPageBlobURL(b.name)
 			cResp, err := pb.Create(ctx, reader.Size(), 0, headers, ad.toMetadata(), azblob.BlobAccessConditions{}, azblob.DefaultPremiumBlobAccessTier, tags, common.ToClientProvidedKeyOptions(options.cpkInfo, options.cpkScopeInfo), azblob.ImmutabilityPolicyOptions{})
@@ -731,19 +776,23 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 
 			// create the file itself
 			fileSize := int64(f.creationProperties.sizeBytes(c, options.defaultSize))
-			contentR, contentD := getRandomDataAndReader(int(fileSize))
-			contentMD5 := md5.Sum(contentD)
+			var contentR *bytes.Reader
+			var contentD []byte
+			if f.body != nil {
+				contentR = bytes.NewReader(f.body)
+				contentD = f.body
+			} else {
+				contentR, contentD = getRandomDataAndReader(int(fileSize))
+			}
 			if f.creationProperties.contentHeaders == nil {
 				f.creationProperties.contentHeaders = &contentHeaders{}
 			}
-			f.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+			if f.creationProperties.contentHeaders.contentMD5 == nil {
+				contentMD5 := md5.Sum(contentD)
+				f.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+			}
 
-			// if f.verificationProperties.contentHeaders == nil {
-			//	f.verificationProperties.contentHeaders = &contentHeaders{}
-			// }
-			// f.verificationProperties.contentHeaders.contentMD5 = contentMD5[:]
 			headers := ad.toHeaders(c, options.shareURL)
-			headers.ContentMD5 = contentMD5[:]
 
 			cResp, err := file.Create(ctx, fileSize, headers, ad.toMetadata())
 			c.AssertNoErr(err)
