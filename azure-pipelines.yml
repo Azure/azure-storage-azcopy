@@ -79,7 +79,6 @@ jobs:
         env:
           GOARCH: 386
           GOOS: windows
-          CGO_ENABLED: 1
 
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_v7_arm.exe"
@@ -89,7 +88,6 @@ jobs:
           GOARCH: arm
           GOARM: 7
           GOOS: windows
-          CGO_ENABLED: 1
 
       - script: |
           cp NOTICE.txt $(Build.ArtifactStagingDirectory)
