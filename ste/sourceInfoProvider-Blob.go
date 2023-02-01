@@ -79,10 +79,14 @@ func (p *blobSourceInfoProvider) AccessControl() (azbfs.BlobFSAccessControl, err
 
 	bURLParts := azblob.NewBlobURLParts(*presignedURL)
 	bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".blob", ".dfs")
-	bURLParts.BlobName = strings.TrimSuffix(bURLParts.BlobName, "/") // BlobFS doesn't handle folders correctly like this.
+	if bURLParts.BlobName != "" {
+		bURLParts.BlobName = strings.TrimSuffix(bURLParts.BlobName, "/") // BlobFS doesn't handle folders correctly like this.
+	} else {
+		bURLParts.BlobName = "/" // container level perms MUST have a /
+	}
+
 	// todo: jank, and violates the principle of interfaces
 	fURL := azbfs.NewFileURL(bURLParts.URL(), p.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondarySourceProviderPipeline)
-
 	return fURL.GetAccessControl(p.jptm.Context())
 }
 

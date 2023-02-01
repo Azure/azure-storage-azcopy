@@ -376,7 +376,7 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 
 	// compute dest, taking into account our stripToDir rules
 	addedDirAtDest = ""
-	areBothContainerLike := s.state.source.isContainerLike() && s.state.dest.isContainerLike()
+	areBothContainerLike := s.state.source.isContainerLike() && s.state.dest.isContainerLike() && !s.p.preserveSMBPermissions // There are no permission-compatible sources and destinations that do not feature support for root folder perms anymore*
 
 	tf := s.GetTestFiles()
 	if s.stripTopDir || s.operation == eOperation.Sync() || areBothContainerLike {

@@ -117,8 +117,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, errors.New("cannot use --as-subdir=false with a service level destination")
 	}
 
-	// When copying a container directly to a container, strip the top directory
-	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Container() && cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() {
+	// When copying a container directly to a container, strip the top directory, unless we're attempting to persist permissions.
+	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Container() && cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() && !cca.preservePermissions.IsTruthy() {
 		cca.StripTopDir = true
 	}
 

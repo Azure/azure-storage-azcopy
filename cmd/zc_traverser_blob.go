@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 
@@ -224,7 +225,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			}
 		}
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(common.EEntityType.File())
+			t.incrementEnumerationCounter(storedObject.entityType)
 		}
 
 		err := processIfPassedFilters(filters, storedObject, processor)
@@ -234,6 +235,31 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		if !t.includeDeleted && (isBlob || err != nil) {
 			return err
 		}
+	} else if blobUrlParts.BlobName == "" && t.includeDirectoryStubs {
+		// if the root is a container and we're copying "folders", we should persist the ACLs there too.
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(pipeline.LogDebug, "Detected the root as a container.")
+		}
+
+		storedObject := newStoredObject(
+			preprocessor,
+			"",
+			"",
+			common.EEntityType.Folder(),
+			time.Now(),
+			0,
+			noContentProps,
+			noBlobProps,
+			common.Metadata{},
+			blobUrlParts.ContainerName,
+		)
+
+		if t.incrementEnumerationCounter != nil {
+			t.incrementEnumerationCounter(common.EEntityType.Folder())
+		}
+
+		err := processIfPassedFilters(filters, storedObject, processor)
+		_, err = getProcessingError(err)
 	}
 
 	// get the container URL so that we can list the blobs
