@@ -23,13 +23,14 @@ package ste
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"net/http"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
@@ -39,6 +40,10 @@ import (
 var _ IJobMgr = &jobMgr{}
 
 type PartNumber = common.PartNumber
+
+const (
+	NumOfFilesPerDispatchJobPart = 10000
+)
 
 // InMemoryTransitJobState defines job state transit in memory, and not in JobPartPlan file.
 // Note: InMemoryTransitJobState should only be set when request come from cmd(FE) module to STE module.
@@ -189,6 +194,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		jstm:             &jstm,
 		isDaemon:         daemonMode,
 		sourceBlobToken:  sourceBlobToken,
+		checkPoint:       initCheckpoint(appCtx),
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.Reset(appCtx, commandString)
 	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
@@ -342,6 +348,7 @@ type jobMgr struct {
 
 	isDaemon        bool /* is it running as service */
 	sourceBlobToken azblob.Credential
+	checkPoint      *jobCheckpointFile
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -428,6 +435,7 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, e
 		cacheLimiter:      jm.cacheLimiter,
 		fileCountLimiter:  jm.fileCountLimiter,
 		closeOnCompletion: completionChan,
+		checkPoint:        jm.checkPoint,
 	}
 	// If an existing plan MMF was supplied, re use it. Otherwise, init a new one.
 	if existingPlanMMF == nil {
@@ -480,6 +488,7 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 		cacheLimiter:     jm.cacheLimiter,
 		fileCountLimiter: jm.fileCountLimiter,
 		credInfo:         order.CredentialInfo,
+		checkPoint:       jm.checkPoint,
 	}
 	jpm.planMMF = jpm.filename.Map()
 	jm.jobPartMgrs.Set(order.PartNum, jpm)

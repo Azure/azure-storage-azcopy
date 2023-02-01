@@ -321,6 +321,8 @@ type jobPartMgr struct {
 	SetPropertiesFlags common.SetPropertiesFlags
 
 	RehydratePriority common.RehydratePriorityType
+
+	checkPoint *jobCheckpointFile
 }
 
 func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {
@@ -415,6 +417,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, sourceBlobToken
 	// *** Schedule this job part's transfers ***
 	for t := uint32(0); t < plan.NumTransfers; t++ {
 		jppt := plan.Transfer(t)
+		transferIndex := (int(plan.PartNum) * NumOfFilesPerDispatchJobPart) + int(t)
 		ts := jppt.TransferStatus()
 		if ts == common.ETransferStatus.Success() {
 			jpm.ReportTransferDone(ts) // Don't schedule an already-completed/failed transfer
@@ -442,6 +445,11 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, sourceBlobToken
 			}
 		}
 
+		cp := NewNullCheckpointEntry() // If we support checkpoint for other locations, we can switch here.
+		if plan.FromTo.To() == common.ELocation.Blob() {
+			cp = NewBlobCheckpointEntry(transferIndex, jpm.checkPoint)
+		}
+
 		// Each transfer gets its own context (so any chunk can cancel the whole transfer) based off the job's context
 		transferCtx, transferCancel := context.WithCancel(jobCtx)
 		// Initialize a job part transfer manager
@@ -451,6 +459,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, sourceBlobToken
 			transferIndex:       t,
 			ctx:                 transferCtx,
 			cancel:              transferCancel,
+			checkpoint: 	     cp,
 			// TODO: insert the factory func interface in jptm.
 			// numChunks will be set by the transfer's prologue method
 		}

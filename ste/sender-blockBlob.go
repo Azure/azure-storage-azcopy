@@ -43,6 +43,7 @@ var lowMemoryLimitAdvice sync.Once
 type blockBlobSenderBase struct {
 	jptm             IJobPartTransferMgr
 	sip              ISourceInfoProvider
+	checkPoint       ICheckpoint
 	destBlockBlobURL azblob.BlockBlobURL
 	chunkSize        int64
 	numChunks        uint32
@@ -141,6 +142,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 	return &blockBlobSenderBase{
 		jptm:             jptm,
 		sip:              srcInfoProvider,
+		checkPoint: 	  jptm.CheckPoint(),
 		destBlockBlobURL: destBlockBlobURL,
 		chunkSize:        chunkSize,
 		numChunks:        numChunks,
@@ -171,6 +173,9 @@ func (s *blockBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
 }
 
 func (s *blockBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
+	//Init checkpoint
+	s.checkPoint.Init(int(s.numChunks))
+
 	if s.jptm.ShouldInferContentType() {
 		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
 	}
@@ -242,6 +247,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 			jptm.FailActiveSend("Putting ACLs", err)
 		}
 	}
+
 }
 
 func (s *blockBlobSenderBase) Cleanup() {

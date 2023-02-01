@@ -96,6 +96,13 @@ type IJobPartTransferMgr interface {
 	PropertiesToTransfer() common.SetPropertiesFlags
 	ResetSourceSize() // sets source size to 0 (made to be used by setProperties command to make number of bytes transferred = 0)
 	SuccessfulBytesTransferred() int64
+	CheckPoint() ICheckpoint
+}
+
+type ICheckpoint interface {
+	Init(numChunks int)
+	ChunkDone(chunkID int)
+	TransferDone()
 }
 
 type TransferInfo struct {
@@ -200,6 +207,8 @@ type jobPartTransferMgr struct {
 	transferInfo *TransferInfo
 
 	actionAfterLastChunk func()
+
+	checkpoint ICheckpoint
 
 	/*
 		@Parteek removed 3/23 morning, as jeff ad equivalent
@@ -840,6 +849,10 @@ func (jptm *jobPartTransferMgr) ErrorCodeAndString(err error) (int, string) {
 	default:
 		return 0, err.Error()
 	}
+}
+
+func (jptm *jobPartTransferMgr) CheckPoint() ICheckpoint {
+	return jptm.checkpoint
 }
 
 type transferErrorCode string

@@ -551,6 +551,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 				wrapped := fmt.Errorf("Could not read destination length. %w", err)
 				jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", wrapped)
 			} else if destLength != jptm.Info().SourceSize {
+				jptm.CheckPoint().TransferDone() // Remove checkpoint so that we dont restart corrupt transfer
 				jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check", errors.New("destination length does not match source length"))
 			}
 		}
@@ -584,6 +585,8 @@ func commonSenderCompletion(jptm IJobPartTransferMgr, s sender, info TransferInf
 		// and we know the transfer didn't fail (because just checked its status above and made sure the context was not canceled),
 		// so it must have succeeded. So make sure its not left "in progress" state
 		jptm.SetStatus(common.ETransferStatus.Success())
+		jptm.CheckPoint().TransferDone() // Better place for this line would be Epilogue. But because we've not yet set the
+		// transfer status, a failure post Epilogue would mean that the file will be restarted entirely.
 
 		// Final logging
 		if jptm.ShouldLog(pipeline.LogInfo) { // TODO: question: can we remove these ShouldLogs?  Aren't they inside Log?
