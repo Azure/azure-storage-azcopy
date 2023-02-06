@@ -144,6 +144,7 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 			return
 		}
 
+		c.checkPoint.ChunkDone(int(blockIndex))
 		atomic.AddInt32(&c.atomicChunksWritten, 1)
 	})
 }

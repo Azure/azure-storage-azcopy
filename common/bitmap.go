@@ -7,7 +7,7 @@ import (
 const BitsPerElement = 64
 
 
-// BitMap is a collecton of bit-blocks backed by uint64.
+// BitMap is a collection of bit-blocks backed by uint64.
 // We support a max of math.MaxUint16 bits which is enough for AzCopy's usecase
 type Bitmap []uint64
 

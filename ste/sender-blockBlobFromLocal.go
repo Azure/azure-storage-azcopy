@@ -100,6 +100,7 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 			return
 		}
 
+		u.checkPoint.ChunkDone(int(blockIndex))
 		atomic.AddInt32(&u.atomicChunksWritten, 1)
 	})
 }
