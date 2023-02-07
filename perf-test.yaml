@@ -9,7 +9,7 @@ stages:
       strategy:
         matrix:
           Ubuntu-22:
-            imageName: "azcopyPerfUbuntu22"
+            imageName: "azcopyPerfTestUbuntu22.04"
             Description: "AzCopy Perf Test"
 
       pool:
