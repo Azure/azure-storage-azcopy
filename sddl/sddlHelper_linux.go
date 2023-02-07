@@ -871,26 +871,6 @@ func aceRightsToString(aceRights uint32) string {
 	return fmt.Sprintf("0x%x", aceRights)
 }
 
-// Does the aceType correspond to an object ACE?
-// We don't support object ACEs.
-//nolint:unused,deadcode
-func isObjectAce(aceType byte) bool {
-	switch aceType {
-	case ACCESS_ALLOWED_OBJECT_ACE_TYPE,
-		ACCESS_DENIED_OBJECT_ACE_TYPE,
-		SYSTEM_AUDIT_OBJECT_ACE_TYPE,
-		SYSTEM_ALARM_OBJECT_ACE_TYPE,
-		ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE,
-		ACCESS_DENIED_CALLBACK_OBJECT_ACE_TYPE,
-		SYSTEM_AUDIT_CALLBACK_OBJECT_ACE_TYPE,
-		SYSTEM_ALARM_CALLBACK_OBJECT_ACE_TYPE:
-		return true
-
-	default:
-		return false
-	}
-}
-
 // Returns true for aceTypes that we support.
 // TODO: Allow SACL ACE type, conditional ACE Types.
 func isUnsupportedAceType(aceType byte) bool {

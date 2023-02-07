@@ -525,7 +525,6 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
 		credInfo = jpm.jobMgr.getInMemoryTransitJobState().CredentialInfo
 	}
-	// TODO: Double check this fix
 	var userAgent string
 	if fromTo.From() == common.ELocation.S3() {
 		userAgent = common.S3ImportUserAgent

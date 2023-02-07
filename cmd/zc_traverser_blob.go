@@ -61,8 +61,6 @@ type blobTraverser struct {
 	includeSnapshot bool
 
 	includeVersion bool
-
-	stripTopDir bool
 }
 
 func (t *blobTraverser) IsDirectory(isSource bool) (bool, error) {

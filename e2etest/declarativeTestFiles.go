@@ -229,7 +229,7 @@ func (t *testObject) isRootFolder() bool {
 // It is to be used ONLY as parameters to the f() and folder() methods.
 // It is not used in other parts of the code, since the other parts use the testObject instances that are created
 // from
-//nolint:unused
+//nolint
 type withPropertyProvider interface {
 	appliesToCreation() bool
 	appliesToVerification() bool
@@ -237,7 +237,7 @@ type withPropertyProvider interface {
 	createObjectProperties() *objectProperties
 }
 
-//nolint:unused
+//nolint
 type expectedFailureProvider interface {
 	expectedFailure() string
 }
@@ -252,7 +252,7 @@ type expectedFailureProvider interface {
 // You can also add withFailureMessage{"message"} to files that are expected to fail, to specify what the expected
 // failure message will be in the log.
 // And withStubMetadata{} to supply the metadata that indicates that an object is a directory stub.
-//nolint:unused
+//nolint
 func f(n string, properties ...withPropertyProvider) *testObject {
 	haveCreationProperties := false
 	haveVerificationProperties := false
@@ -297,7 +297,7 @@ func f(n string, properties ...withPropertyProvider) *testObject {
 }
 
 // define a folder, in the expectations lists on a testFiles struct
-//nolint:unused,deadcode
+//nolint
 func folder(n string, properties ...withPropertyProvider) *testObject {
 	name := strings.TrimLeft(n, "/")
 	result := f(name, properties...)

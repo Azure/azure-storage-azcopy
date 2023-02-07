@@ -15,8 +15,11 @@ type Credential interface {
 //nolint:unused
 type credentialFunc pipeline.FactoryFunc
 
+// New creates a credentialFunc object.
 //nolint:unused
 func (f credentialFunc) New(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.Policy {
+	// Note: We are not deleting this "unused" code since this is a publicly exported function, we do not want to break
+	// anyone that has a dependency on the azbfs library (like blobfuse).
 	return f(next, po)
 }
 
@@ -39,14 +42,14 @@ type anonymousCredentialPolicyFactory struct {
 }
 
 // New creates a credential policy object.
-//
 //nolint:unused
 func (f *anonymousCredentialPolicyFactory) New(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.Policy {
+	// Note: We are not deleting this "unused" code since this is a publicly exported function, we do not want to break
+	// anyone that has a dependency on the azbfs library (like blobfuse).
 	return &anonymousCredentialPolicy{next: next}
 }
 
 // credentialMarker is a package-internal method that exists just to satisfy the Credential interface.
-//
 //nolint:unused
 func (*anonymousCredentialPolicyFactory) credentialMarker() {}
 
