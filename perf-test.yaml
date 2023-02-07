@@ -146,7 +146,7 @@ stages:
             curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
             az login --identity --username $(AZCOPY_MSI_CLIENT_ID)
             for container in `az storage container list --account-name $(DestinationAccount) --query "[*].[name]" --output tsv --auth-mode login`; do
-              az storage container delete --account-name $(DestinationAccount) --name $container 
+              az storage container delete --account-name $(DestinationAccount) --name $container --auth-mode login 
             done
           displayName: 'Clean destination storage Account'
           condition: always()
