@@ -368,12 +368,12 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 	srcRoot = s.state.source.getParam(false, false, "")
 	dstRoot = s.state.dest.getParam(false, false, "")
 
-	srcBase := path.Base(srcRoot)
+	srcBase := filepath.Base(srcRoot)
 	srcRootURL, err := url.Parse(srcRoot)
 	if err == nil {
 		snapshotID := srcRootURL.Query().Get("sharesnapshot")
 		if snapshotID != "" {
-			srcBase = path.Base(strings.TrimSuffix(srcRoot, "?sharesnapshot="+snapshotID))
+			srcBase = filepath.Base(strings.TrimSuffix(srcRoot, "?sharesnapshot="+snapshotID))
 		}
 	}
 
