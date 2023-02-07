@@ -3,7 +3,7 @@ package e2etest
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/go-autorest/autorest/adal"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"io"
 	"net/http"
 	"reflect"
@@ -33,7 +33,7 @@ const (
 	ARMStatusCanceled  = "Canceled"
 )
 
-func ResolveAzureAsyncOperation(OAuth *adal.ServicePrincipalToken, uri string, properties interface{}) (armResp *ARMAsyncResponse, err error) {
+func ResolveAzureAsyncOperation(OAuth *azcore.AccessToken, uri string, properties interface{}) (armResp *ARMAsyncResponse, err error) {
 	if properties != nil && reflect.TypeOf(properties).Kind() != reflect.Ptr {
 		return nil, fmt.Errorf("properties must be a pointer (or nil)")
 	}
@@ -43,7 +43,7 @@ func ResolveAzureAsyncOperation(OAuth *adal.ServicePrincipalToken, uri string, p
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header["Authorization"] = []string{"Bearer " + OAuth.OAuthToken()}
+	req.Header["Authorization"] = []string{"Bearer " + OAuth.Token}
 
 	var resp *http.Response
 	for {

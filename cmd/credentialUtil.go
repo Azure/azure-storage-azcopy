@@ -136,7 +136,7 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 // ==============================================================================================
 
 // getBlobCredentialType is used to get Blob's credential type when user wishes to use OAuth session mode.
-// The verification logic follows following rules:
+// The verification logic follows the following rules:
 // 1. For source or dest url, if the url contains SAS or SAS is provided standalone, indicating using anonymous credential(SAS).
 // 2. If the blob URL can be public access resource, and validated as public resource, indicating using anonymous credential(public resource).
 // 3. If there is cached OAuth token, indicating using token credential.
@@ -292,7 +292,7 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 // 1. Check if there is a SAS query appended to the URL
 // 2. If there is cached session OAuth token, indicating using token credential.
 // 3. If there is OAuth token info passed from env var, indicating using token credential. (Note: this is only for testing)
-// 4. Otherwise use shared key.
+// 4. Otherwise, use shared key.
 func getBlobFSCredentialType(ctx context.Context, blobResourceURL string, standaloneSAS bool) (common.CredentialType, error) {
 	resourceURL, err := url.Parse(blobResourceURL)
 	if err != nil {
