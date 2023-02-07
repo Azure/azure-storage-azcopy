@@ -27,6 +27,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -367,6 +368,15 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 	srcRoot = s.state.source.getParam(false, false, "")
 	dstRoot = s.state.dest.getParam(false, false, "")
 
+	srcBase := path.Base(srcRoot)
+	srcRootURL, err := url.Parse(srcRoot)
+	if err == nil {
+		snapshotID := srcRootURL.Query().Get("sharesnapshot")
+		if snapshotID != "" {
+			srcBase = path.Base(strings.TrimSuffix(srcRoot, "?sharesnapshot="+snapshotID))
+		}
+	}
+
 	// do we expect folder transfers
 	expectFolders = (s.fromTo.From().IsFolderAware() &&
 		s.fromTo.To().IsFolderAware() &&
@@ -387,14 +397,14 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 		expectRootFolder = false
 	} else if s.fromTo.From().IsLocal() {
 		if tf.objectTarget == "" && tf.destTarget == "" {
-			addedDirAtDest = filepath.Base(srcRoot)
+			addedDirAtDest = srcBase
 		} else if tf.destTarget != "" {
 			addedDirAtDest = tf.destTarget
 		}
 		dstRoot = fmt.Sprintf("%s%c%s", dstRoot, os.PathSeparator, addedDirAtDest)
 	} else {
 		if tf.objectTarget == "" && tf.destTarget == "" {
-			addedDirAtDest = path.Base(srcRoot)
+			addedDirAtDest = srcBase
 		} else if tf.destTarget != "" {
 			addedDirAtDest = tf.destTarget
 		}

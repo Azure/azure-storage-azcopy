@@ -57,6 +57,8 @@ type blobTraverser struct {
 
 	cpkOptions common.CpkOptions
 
+	preservePermissions common.PreservePermissionsOption
+
 	includeDeleted bool
 
 	includeSnapshot bool
@@ -235,7 +237,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		if !t.includeDeleted && (isBlob || err != nil) {
 			return err
 		}
-	} else if blobUrlParts.BlobName == "" && t.includeDirectoryStubs {
+	} else if blobUrlParts.BlobName == "" && t.preservePermissions.IsTruthy() {
 		// if the root is a container and we're copying "folders", we should persist the ACLs there too.
 		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(pipeline.LogDebug, "Detected the root as a container.")
@@ -508,7 +510,7 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 	return nil
 }
 
-func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool) (t *blobTraverser) {
+func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool, preservePermissions common.PreservePermissionsOption) (t *blobTraverser) {
 	t = &blobTraverser{
 		rawURL:                      rawURL,
 		p:                           p,
@@ -522,6 +524,7 @@ func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 		includeDeleted:              includeDeleted,
 		includeSnapshot:             includeSnapshot,
 		includeVersion:              includeVersion,
+		preservePermissions: 		 preservePermissions,
 	}
 
 	disableHierarchicalScanning := strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))
