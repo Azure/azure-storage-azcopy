@@ -52,57 +52,6 @@ type ILoggerResetable interface {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// TODO : Can this be deleted?
-func NewAppLogger(minimumLevelToLog pipeline.LogLevel, logFileFolder string) ILoggerCloser {
-	// TODO: Put start date time in file Name
-	// TODO: log life time management.
-	// appLogFile, err := os.OpenFile(path.Join(logFileFolder, "azcopy.log"), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666) // TODO: Make constant for 0666
-	// PanicIfErr(err)
-	return &appLogger{
-		minimumLevelToLog: minimumLevelToLog,
-		// file:              appLogFile,
-		// logger:            log.New(appLogFile, "", log.LstdFlags|log.LUTC),
-	}
-}
-
-type appLogger struct {
-	// maximum loglevel represents the maximum severity of log messages which can be logged to Job Log file.
-	// any message with severity higher than this will be ignored.
-	minimumLevelToLog pipeline.LogLevel // The maximum customer-desired log level for this job
-	// file              *os.File          // The job's log file
-	// logger            *log.Logger       // The Job's logger
-}
-
-func (al *appLogger) ShouldLog(level pipeline.LogLevel) bool {
-	if level == pipeline.LogNone {
-		return false
-	}
-	return level <= al.minimumLevelToLog
-}
-
-func (al *appLogger) CloseLog() {
-	// TODO consider delete completely to get rid of app logger
-	// al.logger.Println("Closing Log")
-	// err := al.file.Close()
-	// PanicIfErr(err)
-}
-
-func (al *appLogger) Log(loglevel pipeline.LogLevel, msg string) {
-	// TODO consider delete completely to get rid of app logger
-	// TODO: see also the workaround in jobsAdmin.LogToJobLog
-	// TODO: if we DON'T delete, use azCopyLogSanitizer
-	// if al.ShouldLog(loglevel) {
-	//	al.logger.Println(msg)
-	// }
-}
-
-func (al *appLogger) Panic(err error) {
-	// TODO consider delete completely to get rid of app logger
-	// al.logger.Panic(err)
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 type jobLogger struct {
 	// maximum loglevel represents the maximum severity of log messages which can be logged to Job Log file.
 	// any message with severity higher than this will be ignored.

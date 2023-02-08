@@ -368,12 +368,12 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 
 	// initiate parallel scanning, starting at the root path
 	workerContext, cancelWorkers := context.WithCancel(t.ctx)
+	defer cancelWorkers()
 	cCrawled := parallel.Crawl(workerContext, searchPrefix+extraSearchPrefix, enumerateOneDir, EnumerationParallelism)
 
 	for x := range cCrawled {
 		item, workerError := x.Item()
 		if workerError != nil {
-			cancelWorkers()
 			return workerError
 		}
 
@@ -385,13 +385,10 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 		processErr := processIfPassedFilters(filters, object, processor)
 		_, processErr = getProcessingError(processErr)
 		if processErr != nil {
-			cancelWorkers()
 			return processErr
 		}
 	}
 
-	// TODO : Double check this
-	cancelWorkers()
 	return nil
 }
 
