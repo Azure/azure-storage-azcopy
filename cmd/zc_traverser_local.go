@@ -47,6 +47,7 @@ type localTraverser struct {
 	fullPath       string
 	recursive      bool
 	followSymlinks bool
+	stripTopDir    bool
 	appCtx         context.Context
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
@@ -72,6 +73,10 @@ func (t *localTraverser) IsDirectory(bool) (bool, error) {
 }
 
 func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
+	if t.stripTopDir {
+		return nil, false, nil // StripTopDir can NEVER be a single file. If a user wants to target a single file, they must escape the *.
+	}
+
 	fileInfo, err := common.OSStat(t.fullPath)
 
 	if err != nil {
@@ -775,7 +780,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	return finalizer(err)
 }
 
-func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, followSymlinks bool, syncHashType common.SyncHashType, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan ErrorFileInfo) *localTraverser {
+func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, stripTopDir bool, followSymlinks bool, syncHashType common.SyncHashType, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan ErrorFileInfo) *localTraverser {
 	traverser := localTraverser{
 		fullPath:                    cleanLocalPath(fullPath),
 		recursive:                   recursive,
@@ -783,7 +788,9 @@ func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, fol
 		appCtx:                      ctx,
 		incrementEnumerationCounter: incrementEnumerationCounter,
 		errorChannel:                errorChannel,
-		targetHashType:              syncHashType}
+		targetHashType:              syncHashType,
+		stripTopDir: stripTopDir,
+	}
 	return &traverser
 }
 

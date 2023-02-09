@@ -334,7 +334,7 @@ type enumerationCounterFunc func(entityType common.EntityType)
 func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context,
 	credential *common.CredentialInfo, followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties,
 	includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string,
-	s2sPreserveBlobTags bool, syncHashType common.SyncHashType, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo) (ResourceTraverser, error) {
+	s2sPreserveBlobTags bool, syncHashType common.SyncHashType, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo, stripTopDir bool) (ResourceTraverser, error) {
 	var output ResourceTraverser
 	var p *pipeline.Pipeline
 
@@ -396,7 +396,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		_, err := common.OSStat(resource.ValueLocal())
 
 		// If wildcard is present and this isn't an existing file/folder, glob and feed the globbed list into a list enum.
-		if strings.Index(resource.ValueLocal(), "*") != -1 && err != nil {
+		if strings.Contains(resource.ValueLocal(), "*") && (stripTopDir || err != nil) {
 			basePath := getPathBeforeFirstWildcard(resource.ValueLocal())
 			matches, err := filepath.Glob(resource.ValueLocal())
 
@@ -418,9 +418,9 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions)
 		} else {
 			if ctx != nil {
-				output = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, toFollow, syncHashType, incrementEnumerationCounter, errorChannel)
+				output = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, stripTopDir, toFollow, syncHashType, incrementEnumerationCounter, errorChannel)
 			} else {
-				output = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, toFollow, syncHashType, incrementEnumerationCounter, errorChannel)
+				output = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, stripTopDir, toFollow, syncHashType, incrementEnumerationCounter, errorChannel)
 			}
 		}
 	case common.ELocation.Benchmark():

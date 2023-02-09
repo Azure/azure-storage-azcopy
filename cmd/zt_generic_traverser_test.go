@@ -22,10 +22,12 @@ package cmd
 
 import (
 	"context"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -54,6 +56,65 @@ func trySymlink(src, dst string, c *chk.C) {
 		}
 		c.Error(err)
 	}
+}
+
+func (s *genericTraverserSuite) TestLocalWildcardOverlap(c *chk.C) {
+	if runtime.GOOS == "windows" {
+		c.Skip("invalid filename used")
+		return
+	}
+
+	/*
+	Wildcard support is not actually a part of the local traverser, believe it or not.
+	It's instead implemented in InitResourceTraverser as a short-circuit to a list traverser
+	utilizing the filepath.Glob function, which then initializes local traversers to achieve the same effect.
+	 */
+	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	defer func(path string) { _ = os.RemoveAll(path) }(tmpDir)
+
+	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, []string{
+		"test.txt",
+		"tes*t.txt",
+		"foobarbaz/test.txt",
+	})
+
+	resource, err := SplitResourceString(filepath.Join(tmpDir, "tes*t.txt"), common.ELocation.Local())
+	c.Assert(err, chk.IsNil)
+
+	traverser, err := InitResourceTraverser(
+		resource,
+		common.ELocation.Local(),
+		nil,
+		nil,
+		nil,
+		nil,
+		true,
+		false,
+		false,
+		common.EPermanentDeleteOption.None(),
+		nil,
+		nil,
+		false,
+		common.ESyncHashType.None(),
+		pipeline.LogInfo,
+		common.CpkOptions{},
+		nil,
+		true,
+		)
+	c.Assert(err, chk.IsNil)
+
+	seenFiles := make(map[string]bool)
+
+	err = traverser.Traverse(nil, func(storedObject StoredObject) error {
+		seenFiles[storedObject.relativePath] = true
+		return nil
+	}, []ObjectFilter{})
+	c.Assert(err, chk.IsNil)
+
+	c.Assert(seenFiles, chk.DeepEquals, map[string]bool{
+		"test.txt": true,
+		"tes*t.txt": true,
+	})
 }
 
 // GetProperties tests.
@@ -484,7 +545,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 		scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
 
 		// construct a local traverser
-		localTraverser := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, dstFileName), false, false, common.ESyncHashType.None(), func(common.EntityType) {}, nil)
+		localTraverser := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, dstFileName), false, false, false, common.ESyncHashType.None(), func(common.EntityType) {}, nil)
 
 		// invoke the local traversal with a dummy processor
 		localDummyProcessor := dummyProcessor{}
@@ -644,7 +705,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
-		localTraverser := newLocalTraverser(context.TODO(), dstDirName, isRecursiveOn, false, common.ESyncHashType.None(), func(common.EntityType) {}, nil)
+		localTraverser := newLocalTraverser(context.TODO(), dstDirName, isRecursiveOn, false, false, common.ESyncHashType.None(), func(common.EntityType) {}, nil)
 
 		// invoke the local traversal with an indexer
 		// so that the results are indexed for easy validation
@@ -805,7 +866,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
-		localTraverser := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, virDirName), isRecursiveOn, false, common.ESyncHashType.None(), func(common.EntityType) {}, nil)
+		localTraverser := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, virDirName), isRecursiveOn, false, false, common.ESyncHashType.None(), func(common.EntityType) {}, nil)
 
 		// invoke the local traversal with an indexer
 		// so that the results are indexed for easy validation
