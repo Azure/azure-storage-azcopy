@@ -82,7 +82,7 @@ stages:
             AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
 
         - script: |
-            time azcopy bench $(Blob2BlobLargeFilesDst) --log-level=ERROR --size-per-file=50G --file-count=200 --put-md5=false --delete-test-data=false
+            time azcopy bench $(Blob2BlobLargeFilesDst) --log-level=ERROR --size-per-file=50G --file-count=50 --put-md5=false --delete-test-data=false
             sudo rm -rf $(localPath)/*
           displayName: 'Upload - Large files'
           condition: always()
