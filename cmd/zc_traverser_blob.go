@@ -102,7 +102,7 @@ type blobTraverser struct {
 
 func (t *blobTraverser) writeToErrorChannel(err ErrorFileInfo) {
 	if t.scannerLogger != nil {
-		t.scannerLogger.Log(pipeline.LogDebug, err.ErrorMsg.Error())
+		t.scannerLogger.Log(pipeline.LogError, err.ErrorMsg.Error())
 	} else {
 		WarnStdoutAndScanningLog(err.ErrorMsg.Error())
 	}
