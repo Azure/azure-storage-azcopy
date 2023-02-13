@@ -46,6 +46,12 @@ type folderDownloader interface {
 	SetFolderProperties(jptm IJobPartTransferMgr) error
 }
 
+// symlinkDownloader is a downloader that can also handle symbolic links.
+type symlinkDownloader interface {
+	downloader
+	CreateSymlink(jptm IJobPartTransferMgr) error
+}
+
 // smbPropertyAwareDownloader is a windows-triggered interface.
 // Code outside of windows-specific files shouldn't implement this ever.
 type smbPropertyAwareDownloader interface {

@@ -205,7 +205,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			preprocessor,
 			getObjectNameOnly(strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
 			"",
-			common.EntityType(common.IffUint8(isBlob, uint8(common.EEntityType.File()), uint8(common.EEntityType.Folder()))),
+			getEntityType(blobProperties.NewMetadata()),
 			blobProperties.LastModified(),
 			blobProperties.ContentLength(),
 			blobProperties,
@@ -394,16 +394,24 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 
 	return nil
 }
+func getEntityType(blobInfo azblob.Metadata) common.EntityType {
+	if _, isfolder := blobInfo["hdi_isfolder"]; isfolder {
+		return common.EEntityType.Folder()
+	} else if _, isSymlink := blobInfo["is_symlink"]; isSymlink {
+		return common.EEntityType.Symlink()
+	}
+
+	return common.EEntityType.File()
+}
 
 func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, blobInfo azblob.BlobItemInternal, relativePath string, containerName string) StoredObject {
 	adapter := blobPropertiesAdapter{blobInfo.Properties}
 
-	_, isFolder := blobInfo.Metadata["hdi_isfolder"]
 	object := newStoredObject(
 		preprocessor,
 		getObjectNameOnly(blobInfo.Name),
 		relativePath,
-		common.EntityType(common.IffUint8(isFolder, uint8(common.EEntityType.Folder()), uint8(common.EEntityType.File()))),
+		getEntityType(blobInfo.Metadata),
 		blobInfo.Properties.LastModified,
 		*blobInfo.Properties.ContentLength,
 		adapter,
