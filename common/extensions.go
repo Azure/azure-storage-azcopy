@@ -2,12 +2,16 @@ package common
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/url"
 	"runtime"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/google/uuid"
 
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
@@ -177,4 +181,10 @@ func GenerateFullPathWithQuery(rootPath, childPath, extraQuery string) string {
 	} else {
 		return p + "?" + extraQuery
 	}
+}
+
+func GenerateBlockBlobBlockID(blockNamePrefix string, index int32) string {
+	blockNameMd5 := md5.Sum([]byte(fmt.Sprintf("%s%05d", blockNamePrefix, index)))
+	blockID, _ := uuid.FromBytes(blockNameMd5[:]) //This func returns error if size of blockNameMd5 is not 16
+	return base64.StdEncoding.EncodeToString([]byte(blockID.String()))
 }

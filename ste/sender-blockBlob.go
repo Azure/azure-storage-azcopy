@@ -22,8 +22,6 @@ package ste
 
 import (
 	"context"
-	"crypto/md5"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
@@ -37,7 +35,6 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/google/uuid"
 )
 
 var lowMemoryLimitAdvice sync.Once
@@ -293,7 +290,5 @@ func (s *blockBlobSenderBase) setBlockID(index int32, value string) {
 }
 
 func (s *blockBlobSenderBase) generateEncodedBlockID(index int32) string {
-	blockNameMd5 := md5.Sum([]byte(fmt.Sprintf("%s%05d", s.blockNamePrefix, index)))
-	blockID, _ := uuid.FromBytes(blockNameMd5[:]) //This func returns error if size of blockNameMd5 is not 16
-	return base64.StdEncoding.EncodeToString([]byte(blockID.String()))
+	return common.GenerateBlockBlobBlockID(s.blockNamePrefix, index)
 }

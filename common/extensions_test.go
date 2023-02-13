@@ -1,9 +1,13 @@
 package common
 
 import (
-	chk "gopkg.in/check.v1"
+	"fmt"
+	"math/rand"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-storage-blob-go/azblob"
+	chk "gopkg.in/check.v1"
 )
 
 type extensionsTestSuite struct{}
@@ -140,4 +144,28 @@ func (*extensionsTestSuite) TestRedaction(c *chk.C) {
 			c.Assert(isRedacted, chk.Equals, false)
 		}
 	}
+}
+
+
+func (*extensionsTestSuite) TestBlockblobBlockIDGeneration(c *chk.C) {
+	// Make sure that for a given JobID, jobPart, an index in job part and a block index,
+	// the blockID generated is consistent.
+	numOfFilesPerDispatchJobPart :=int32(10000) // == cmd.NumOfFilesPerDispatchJobPart
+	maxNumberOfParts := int32(99999) // Depends on our plan file Name
+	azCopyBlockLength := 48 // Current size of blocks in AzCopy
+
+	jobId := NewUUID()
+	partNum := rand.Int31n(maxNumberOfParts) // We support a max of 9999 parts
+	fileIndex  := rand.Int31n(numOfFilesPerDispatchJobPart)
+	blockIndex := rand.Int31n(azblob.BlockBlobMaxBlocks)
+
+	blockNamePrefix := fmt.Sprintf("%s%05d%05d", jobId.String(), partNum, fileIndex)
+	blockName := GenerateBlockBlobBlockID(blockNamePrefix, blockIndex)
+	c.Assert(len(blockName), chk.Equals, azCopyBlockLength)
+
+	for i := 1; i <= 10; i++ {
+		tmp := GenerateBlockBlobBlockID(blockNamePrefix, blockIndex)
+		c.Assert(tmp, chk.Equals, blockName)
+	}
+
 }
