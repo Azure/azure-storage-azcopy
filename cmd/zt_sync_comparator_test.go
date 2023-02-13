@@ -23,6 +23,7 @@ package cmd
 import (
 	"time"
 
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
 )
 
@@ -138,7 +139,8 @@ func (s *syncComparatorSuite) TestSyncDestinationComparator(c *chk.C) {
 
 	// set up the indexer as well as the destination comparator
 	indexer := newfolderIndexer()
-	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, false, CFDModeFlags{}, time.Time{})
+	destinationComparator := newSyncDestinationComparator(indexer, nil /* possiblyRenamedMap */, dummyCopyScheduler.process, dummyCleaner.process,
+		true, common.CFDModeFlags, time.Time{}, nil /* scannerLogger */, nil /* incrementFunc */, false /* metaDataOnlySync */)
 
 	// create a sample source object
 	sampleSourceObject := StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now(), md5: srcMD5}
@@ -195,7 +197,8 @@ func (s *syncComparatorSuite) TestSyncDestCompDisableComparison(c *chk.C) {
 
 	// set up the indexer as well as the destination comparator
 	indexer := newfolderIndexer()
-	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, true, CFDModeFlags{}, time.Time{})
+	destinationComparator := newSyncDestinationComparator(indexer, nil /* possiblyRenamedMap */, dummyCopyScheduler.process, dummyCleaner.process,
+		true, common.CFDModeFlags, time.Time{}, nil /* scannerLogger */, nil /* incrementFunc */, false /* metaDataOnlySync */)
 
 	// create a sample source object
 	currTime := time.Now()

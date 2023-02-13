@@ -35,7 +35,7 @@ var _ = chk.Suite(&genericFilterSuite{})
 
 func (s *genericFilterSuite) TestIncludeFilter(c *chk.C) {
 	// set up the filters
-	raw := rawSyncCmdArgs{}
+	raw := RawSyncCmdArgs{}
 	includePatternList := raw.parsePatterns("*.pdf;*.jpeg;exactName")
 	includeFilter := buildIncludeFilters(includePatternList)[0]
 
@@ -56,7 +56,7 @@ func (s *genericFilterSuite) TestIncludeFilter(c *chk.C) {
 
 func (s *genericFilterSuite) TestExcludeFilter(c *chk.C) {
 	// set up the filters
-	raw := rawSyncCmdArgs{}
+	raw := RawSyncCmdArgs{}
 	excludePatternList := raw.parsePatterns("*.pdf;*.jpeg;exactName")
 	excludeFilterList := buildExcludeFilters(excludePatternList, false)
 

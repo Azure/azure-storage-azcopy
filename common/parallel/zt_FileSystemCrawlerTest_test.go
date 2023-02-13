@@ -62,12 +62,12 @@ func (s *fileSystemCrawlerSuite) TestParallelEnumerationFindsTheRightFiles(c *ch
 
 	// our parallel walk
 	parallelResults := make(map[string]struct{})
-	Walk(context.TODO(), dir, 16, false, func(path string, _ os.FileInfo, fileErr error) error {
+	Walk(context.TODO(), dir, "" /*relBase */, 16, false, func(path string, _ os.FileInfo, fileErr error) error {
 		if fileErr == nil {
 			parallelResults[path] = struct{}{}
 		}
 		return nil
-	})
+	}, nil /* getObjectIndexerMapSize */, nil /* Tqueue */, true, false, 0 /* maxObjectIndexerSizeInGB */)
 
 	// check results.
 	// check all std results exist, and remove them from the parallel results
@@ -123,12 +123,12 @@ func (s *fileSystemCrawlerSuite) doTestParallelEnumerationGetsTheRightFileInfo(p
 
 	// our parallel walk
 	parallelResults := make(map[string]os.FileInfo)
-	Walk(context.TODO(), dir, 64, parallelStat, func(path string, fi os.FileInfo, fileErr error) error {
+	Walk(context.TODO(), dir, "", 64, parallelStat, func(path string, fi os.FileInfo, fileErr error) error {
 		if fileErr == nil {
 			parallelResults[path] = fi
 		}
 		return nil
-	})
+	}, nil /* getObjectIndexerMapSize */, nil /* Tqueue */, true, false, 0 /* maxObjectIndexerSizeInGB */)
 
 	// check results.
 	c.Assert(len(stdResults) > 1000, chk.Equals, true) // assert that we got a decent number of results
@@ -175,11 +175,11 @@ func (s *fileSystemCrawlerSuite) doTestParallelEnumerationGetsTheRightFileInfo(p
 func (s *fileSystemCrawlerSuite) TestRootErrorsAreSignalled(c *chk.C) {
 	receivedError := false
 	nonExistentDir := filepath.Join(os.TempDir(), "Big random-named directory that almost certainly doesn't exist 85784362628398473732827384")
-	Walk(context.TODO(), nonExistentDir, 16, false, func(path string, _ os.FileInfo, fileErr error) error {
+	Walk(context.TODO(), nonExistentDir, "" /*relBase */, 16, false, func(path string, _ os.FileInfo, fileErr error) error {
 		if fileErr != nil && path == nonExistentDir {
 			receivedError = true
 		}
 		return nil
-	})
+	}, nil /* getObjectIndexerMapSize */, nil /* Tqueue */, true, false, 0 /* maxObjectIndexerSizeInGB */)
 	c.Assert(receivedError, chk.Equals, true)
 }

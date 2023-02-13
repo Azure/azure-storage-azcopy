@@ -124,7 +124,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithEmptyDestination(c *chk.C) {
 	})
 
 	// turn off recursive, this time only top blobs should be transferred
-	raw.recursive = false
+	raw.Recursive = false
 	mockedRPC.reset()
 
 	runSyncAndVerify(c, raw, func(err error) {
@@ -251,7 +251,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludePatternFlag(c *chk.C) {
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
-	raw.include = includeString
+	raw.Include = includeString
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
@@ -287,7 +287,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithExcludePatternFlag(c *chk.C) {
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
-	raw.exclude = excludeString
+	raw.Exclude = excludeString
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
@@ -329,8 +329,8 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludeAndExcludePatternFlag(c
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
-	raw.include = includeString
-	raw.exclude = excludeString
+	raw.Include = includeString
+	raw.Exclude = excludeString
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
@@ -366,7 +366,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithExcludePathFlag(c *chk.C) {
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
-	raw.excludePath = excludeString
+	raw.ExcludePath = excludeString
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
@@ -602,7 +602,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithADLSDirectory(c *chk.C) {
 	})
 
 	// turn off recursive, this time only top blobs should be transferred
-	raw.recursive = false
+	raw.Recursive = false
 	mockedRPC.reset()
 
 	runSyncAndVerify(c, raw, func(err error) {

@@ -60,8 +60,8 @@ func (s *genericTraverserSuite) TestBlobFSServiceTraverserWithManyObjects(c *chk
 
 	// Create a local traversal
 	localTraverser := newLocalTraverser(context.TODO(), dstDirName, true, true, func(common.EntityType) {}, nil,
-		nil /* folderIndexer */, nil, /* tqueue */
-		false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, CFDModeFlags{})
+		nil /* folderIndexer */, nil /* possiblyRenamedMap */, nil, /* tqueue */
+		false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, common.CFDModeFlags, false /* metaDataOnlySync */, nil /* scannerLogger */)
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
@@ -178,8 +178,8 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 
 	// Create a local traversal
 	localTraverser := newLocalTraverser(context.TODO(), dstDirName, true, true, func(common.EntityType) {}, nil,
-		nil /* folderIndexer */, nil, /* tqueue */
-		false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, CFDModeFlags{})
+		nil /* folderIndexer */, nil /* possiblyRenamedMap */, nil, /* tqueue */
+		false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, common.CFDModeFlags, false /* metaDataOnlySync */, nil /* scannerLogger */)
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
@@ -364,8 +364,8 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 
 	// Create a local traversal
 	localTraverser := newLocalTraverser(context.TODO(), dstDirName, true, true, func(common.EntityType) {}, nil,
-		nil /* folderIndexer */, nil, /* tqueue */
-		false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, CFDModeFlags{})
+		nil /* folderIndexer */, nil /* possiblyRenamedMap */, nil, /* tqueue */
+		false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, common.CFDModeFlags, false /* metaDataOnlySync */, nil /* scannerLogger */)
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()

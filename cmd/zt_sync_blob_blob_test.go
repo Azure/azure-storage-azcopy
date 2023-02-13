@@ -111,7 +111,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithEmptyDestination(c *chk.C) {
 	})
 
 	// turn off recursive, this time only top blobs should be transferred
-	raw.recursive = false
+	raw.Recursive = false
 	mockedRPC.reset()
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
@@ -244,7 +244,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIncludePatternFlag(c *chk.C) {
 	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
 	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
-	raw.include = includeString
+	raw.Include = includeString
 
 	// verify that only the blobs specified by the include flag are synced
 	runSyncAndVerify(c, raw, func(err error) {
@@ -279,7 +279,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithExcludePatternFlag(c *chk.C) {
 	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
 	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
-	raw.exclude = excludeString
+	raw.Exclude = excludeString
 
 	// make sure the list doesn't include the blobs specified by the exclude flag
 	runSyncAndVerify(c, raw, func(err error) {
@@ -320,8 +320,8 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeAndExcludePatternFlag(c *chk
 	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
 	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
-	raw.include = includeString
-	raw.exclude = excludeString
+	raw.Include = includeString
+	raw.Exclude = excludeString
 
 	// verify that only the blobs specified by the include flag are synced
 	runSyncAndVerify(c, raw, func(err error) {
@@ -356,7 +356,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithExcludePathFlag(c *chk.C) {
 	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
 	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
-	raw.excludePath = excludeString
+	raw.ExcludePath = excludeString
 
 	// make sure the list doesn't include the blobs specified by the exclude flag
 	runSyncAndVerify(c, raw, func(err error) {
@@ -497,7 +497,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SContainerAndEmptyVirtualDir(c *chk.C) {
 	})
 
 	// turn off recursive, this time only top blobs should be transferred
-	raw.recursive = false
+	raw.Recursive = false
 	mockedRPC.reset()
 
 	runSyncAndVerify(c, raw, func(err error) {
@@ -710,7 +710,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeRegexFlag(c *chk.C) {
 	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
 	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
-	raw.includeRegex = includeString
+	raw.IncludeRegex = includeString
 
 	// verify that only the blobs specified by the include flag are synced
 	runSyncAndVerify(c, raw, func(err error) {
@@ -756,7 +756,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithExcludeRegexFlag(c *chk.C) {
 	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
 	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
-	raw.excludeRegex = excludeString
+	raw.ExcludeRegex = excludeString
 
 	// make sure the list doesn't include the blobs specified by the exclude flag
 	runSyncAndVerify(c, raw, func(err error) {
@@ -799,8 +799,8 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeAndExcludeRegexFlag(c *chk.C
 	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
 	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
-	raw.includeRegex = includeString
-	raw.excludeRegex = excludeString
+	raw.IncludeRegex = includeString
+	raw.ExcludeRegex = excludeString
 
 	// verify that only the blobs specified by the include flag are synced
 	runSyncAndVerify(c, raw, func(err error) {
@@ -847,7 +847,7 @@ func (s *cmdIntegrationSuite) TestDryrunSyncBlobtoBlob(c *chk.C) {
 	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
 	raw.dryrun = true
-	raw.deleteDestination = "true"
+	raw.DeleteDestination = "true"
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
@@ -895,7 +895,7 @@ func (s *cmdIntegrationSuite) TestDryrunSyncBlobtoBlobJson(c *chk.C) {
 	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
 	raw.dryrun = true
-	raw.deleteDestination = "true"
+	raw.DeleteDestination = "true"
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)

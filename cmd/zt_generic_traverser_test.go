@@ -276,7 +276,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks_ToFolder(c *chk.C) {
 		fileCount++
 		return nil
 	},
-		true, nil), chk.IsNil)
+		true, nil, nil /* getObjectIndexerMapSize */, nil /* tqueue */, false, false, 0, nil), chk.IsNil)
 
 	// 3 files live in base, 3 files live in symlink
 	c.Assert(fileCount, chk.Equals, 6)
@@ -341,7 +341,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksBreakLoop(c *chk.C) {
 		fileCount++
 		return nil
 	},
-		true, nil), chk.IsNil)
+		true, nil, nil /* getObjectIndexerMapSize */, nil /* tqueue */, false, false, 0, nil), chk.IsNil)
 
 	c.Assert(fileCount, chk.Equals, 3)
 }
@@ -371,7 +371,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksDedupe(c *chk.C) {
 		fileCount++
 		return nil
 	},
-		true, nil), chk.IsNil)
+		true, nil, nil /* getObjectIndexerMapSize */, nil /* tqueue */, false, false, 0, nil), chk.IsNil)
 
 	c.Assert(fileCount, chk.Equals, 6)
 }
@@ -402,7 +402,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksMultitarget(c *chk.C) {
 		fileCount++
 		return nil
 	},
-		true, nil), chk.IsNil)
+		true, nil, nil /* getObjectIndexerMapSize */, nil /* tqueue */, false, false, 0, nil), chk.IsNil)
 
 	// 3 files live in base, 3 files live in first symlink, second & third symlink is ignored.
 	c.Assert(fileCount, chk.Equals, 6)
@@ -435,7 +435,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksToParentAndChild(c *chk.C) {
 		fileCount++
 		return nil
 	},
-		true, nil), chk.IsNil)
+		true, nil, nil /* getObjectIndexerMapSize */, nil /* tqueue */, false, false, 0, nil), chk.IsNil)
 
 	// 6 files total live under toroot. tochild should be ignored (or if tochild was traversed first, child will be ignored on toroot).
 	c.Assert(fileCount, chk.Equals, 6)
@@ -484,7 +484,9 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 		scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
 
 		// construct a local traverser
-		localTraverser := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, dstFileName), false, false, func(common.EntityType) {}, nil)
+		localTraverser := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, dstFileName), false, false, func(common.EntityType) {}, nil,
+			nil /* folderIndexer */, nil /* possiblyRenamedMap */, nil, /* tqueue */
+			false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, common.CFDModeFlags, false /* metaDataOnlySync */, nil /* scannerLogger */)
 
 		// invoke the local traversal with a dummy processor
 		localDummyProcessor := dummyProcessor{}
@@ -496,7 +498,9 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
-		blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, false, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+		blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, false, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false,
+			nil /* folderIndexer */, nil /* possiblyRenamedMap */, nil, /* tqueue */
+			false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, common.CFDModeFlags, false /* metaDataOnlySync */, nil /* scannerLogger */)
 
 		// invoke the blob traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
@@ -644,7 +648,9 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
-		localTraverser := newLocalTraverser(context.TODO(), dstDirName, isRecursiveOn, false, func(common.EntityType) {}, nil)
+		localTraverser := newLocalTraverser(context.TODO(), dstDirName, isRecursiveOn, false, func(common.EntityType) {}, nil,
+			nil /* folderIndexer */, nil /* possiblyRenamedMap */, nil, /* tqueue */
+			false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, common.CFDModeFlags, false /* metaDataOnlySync */, nil /* scannerLogger */)
 
 		// invoke the local traversal with an indexer
 		// so that the results are indexed for easy validation
@@ -656,7 +662,9 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 		rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-		blobTraverser := newBlobTraverser(&rawContainerURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+		blobTraverser := newBlobTraverser(&rawContainerURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false,
+			nil /* folderIndexer */, nil /* possiblyRenamedMap */, nil, /* tqueue */
+			false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, common.CFDModeFlags, false /* metaDataOnlySync */, nil /* scannerLogger */)
 
 		// invoke the local traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
@@ -805,7 +813,9 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
-		localTraverser := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, virDirName), isRecursiveOn, false, func(common.EntityType) {}, nil)
+		localTraverser := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, virDirName), isRecursiveOn, false, func(common.EntityType) {}, nil,
+			nil /* folderIndexer */, nil /* possiblyRenamedMap */, nil, /* tqueue */
+			false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, common.CFDModeFlags, false /* metaDataOnlySync */, nil /* scannerLogger */)
 
 		// invoke the local traversal with an indexer
 		// so that the results are indexed for easy validation
@@ -817,7 +827,9 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 		rawVirDirURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, virDirName)
-		blobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+		blobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false,
+			nil /* folderIndexer */, nil /* possiblyRenamedMap */, nil, /* tqueue */
+			false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, common.CFDModeFlags, false /* metaDataOnlySync */, nil /* scannerLogger */)
 
 		// invoke the local traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
@@ -925,10 +937,15 @@ func (s *genericTraverserSuite) TestSerialAndParallelBlobTraverser(c *chk.C) {
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 		rawVirDirURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, virDirName)
-		parallelBlobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+		parallelBlobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false,
+			nil /* folderIndexer */, nil /* possiblyRenamedMap */, nil, /* tqueue */
+			false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, common.CFDModeFlags, false /* metaDataOnlySync */, nil /* scannerLogger */)
 
 		// construct a serial blob traverser
-		serialBlobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+		serialBlobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false,
+			nil /* folderIndexer */, nil /* possiblyRenamedMap */, nil, /* tqueue */
+			false /* isSource */, false /* isSync */, 0 /* maxObjectIndexerSizeInGB */, time.Time{}, common.CFDModeFlags, false /* metaDataOnlySync */, nil /* scannerLogger */)
+
 		serialBlobTraverser.parallelListing = false
 
 		// invoke the parallel traversal with a dummy processor

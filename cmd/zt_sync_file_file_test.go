@@ -22,13 +22,14 @@ package cmd
 
 import (
 	"context"
-	"github.com/Azure/azure-storage-file-go/azfile"
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
-	chk "gopkg.in/check.v1"
 	"os"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	chk "gopkg.in/check.v1"
 )
 
 // regular file->file sync
@@ -111,7 +112,7 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithEmptyDestination(c *chk.C) {
 	})
 
 	// turn off recursive, this time only top files should be transferred
-	raw.recursive = false
+	raw.Recursive = false
 	mockedRPC.reset()
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
@@ -253,7 +254,7 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithIncludeFlag(c *chk.C) {
 	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
 	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
 	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
-	raw.include = includeString
+	raw.Include = includeString
 
 	// verify that only the files specified by the include flag are synced
 	runSyncAndVerify(c, raw, func(err error) {
@@ -288,7 +289,7 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithExcludeFlag(c *chk.C) {
 	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
 	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
 	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
-	raw.exclude = excludeString
+	raw.Exclude = excludeString
 
 	// make sure the list doesn't include the files specified by the exclude flag
 	runSyncAndVerify(c, raw, func(err error) {
@@ -329,8 +330,8 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithIncludeAndExcludeFlag(c *chk.C)
 	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
 	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
 	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
-	raw.include = includeString
-	raw.exclude = excludeString
+	raw.Include = includeString
+	raw.Exclude = excludeString
 
 	// verify that only the files specified by the include flag are synced
 	runSyncAndVerify(c, raw, func(err error) {
@@ -458,7 +459,7 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SShareAndEmptyDir(c *chk.C) {
 	})
 
 	// turn off recursive, this time only top files should be transferred
-	raw.recursive = false
+	raw.Recursive = false
 	mockedRPC.reset()
 
 	runSyncAndVerify(c, raw, func(err error) {
@@ -544,7 +545,7 @@ func (s *cmdIntegrationSuite) TestDryrunSyncFiletoFile(c *chk.C) {
 	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
 	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
 	raw.dryrun = true
-	raw.deleteDestination = "true"
+	raw.DeleteDestination = "true"
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
@@ -593,7 +594,7 @@ func (s *cmdIntegrationSuite) TestDryrunSyncLocaltoFile(c *chk.C) {
 	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
 	raw := getDefaultSyncRawInput(srcDirName, dstShareURLWithSAS.String())
 	raw.dryrun = true
-	raw.deleteDestination = "true"
+	raw.DeleteDestination = "true"
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
@@ -640,7 +641,7 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithIdenticalDestinationTemp(c *chk
 	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
 	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
 	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
-	raw.preserveSMBInfo = false
+	raw.PreserveSMBInfo = false
 
 	// nothing should be sync since the source is older
 	runSyncAndVerify(c, raw, func(err error) {

@@ -119,7 +119,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithEmptyDestination(c *chk.C) {
 	})
 
 	// turn off recursive, this time only top blobs should be transferred
-	raw.recursive = false
+	raw.Recursive = false
 	mockedRPC.reset()
 
 	runSyncAndVerify(c, raw, func(err error) {
@@ -240,7 +240,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludePatternFlag(c *chk.C) {
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
 	raw := getDefaultSyncRawInput(srcDirName, rawContainerURLWithSAS.String())
-	raw.include = includeString
+	raw.Include = includeString
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
@@ -274,7 +274,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludePatternFlag(c *chk.C) {
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
 	raw := getDefaultSyncRawInput(srcDirName, rawContainerURLWithSAS.String())
-	raw.exclude = excludeString
+	raw.Exclude = excludeString
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
@@ -314,8 +314,8 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndExcludePatternFlag(c *
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
 	raw := getDefaultSyncRawInput(srcDirName, rawContainerURLWithSAS.String())
-	raw.include = includeString
-	raw.exclude = excludeString
+	raw.Include = includeString
+	raw.Exclude = excludeString
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
@@ -349,7 +349,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludePathFlag(c *chk.C) {
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
 	raw := getDefaultSyncRawInput(srcDirName, rawContainerURLWithSAS.String())
-	raw.excludePath = excludeString
+	raw.ExcludePath = excludeString
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
@@ -435,7 +435,7 @@ func (s *cmdIntegrationSuite) TestDryrunSyncLocaltoBlob(c *chk.C) {
 	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
 	raw := getDefaultSyncRawInput(srcDirName, dstContainerURLWithSAS.String())
 	raw.dryrun = true
-	raw.deleteDestination = "true"
+	raw.DeleteDestination = "true"
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)

@@ -753,9 +753,9 @@ func (scenarioHelper) containerExists(containerURL azblob.ContainerURL) bool {
 	return false
 }
 
-func runSyncAndVerify(c *chk.C, raw rawSyncCmdArgs, verifier func(err error)) {
+func runSyncAndVerify(c *chk.C, raw RawSyncCmdArgs, verifier func(err error)) {
 	// the simulated user input should parse properly
-	cooked, err := raw.cook()
+	cooked, err := raw.Cook()
 	c.Assert(err, chk.IsNil)
 
 	// the enumeration ends when process() returns
@@ -861,15 +861,15 @@ func validateRemoveTransfersAreScheduled(c *chk.C, isSrcEncoded bool, expectedTr
 	// }
 }
 
-func getDefaultSyncRawInput(src, dst string) rawSyncCmdArgs {
+func getDefaultSyncRawInput(src, dst string) RawSyncCmdArgs {
 	deleteDestination := common.EDeleteDestination.True()
 
-	return rawSyncCmdArgs{
-		src:                 src,
-		dst:                 dst,
-		recursive:           true,
-		deleteDestination:   deleteDestination.String(),
-		md5ValidationOption: common.DefaultHashValidationOption.String(),
+	return RawSyncCmdArgs{
+		Src:                 src,
+		Dst:                 dst,
+		Recursive:           true,
+		DeleteDestination:   deleteDestination.String(),
+		Md5ValidationOption: common.DefaultHashValidationOption.String(),
 	}
 }
 

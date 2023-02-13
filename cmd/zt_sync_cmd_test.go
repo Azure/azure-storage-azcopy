@@ -32,7 +32,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithDFS(c *chk.C) {
 
 	raw := getDefaultSyncRawInput(src, dst)
 
-	cooked, err := raw.cook()
+	cooked, err := raw.Cook()
 
 	c.Assert(err, chk.IsNil)
 	c.Assert(cooked.fromTo, chk.Equals, common.EFromTo.BlobBlob())
