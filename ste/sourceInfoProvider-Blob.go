@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"io/ioutil"
 	"strings"
 	"time"
 
@@ -33,6 +34,38 @@ import (
 // Source info provider for Azure blob
 type blobSourceInfoProvider struct {
 	defaultRemoteSourceInfoProvider
+}
+
+func (p *blobSourceInfoProvider) ReadLink() (string, error) {
+	uri, err := p.PreSignedSourceURL()
+	if err != nil {
+		return "", err
+	}
+
+	pl := p.jptm.SourceProviderPipeline()
+	ctx := p.jptm.Context()
+
+	blobURL := azblob.NewBlockBlobURL(*uri, pl)
+
+	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
+	if p.jptm.IsSourceEncrypted() {
+		clientProvidedKey = common.ToClientProvidedKeyOptions(p.jptm.CpkInfo(), p.jptm.CpkScopeInfo())
+	}
+
+	resp, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, clientProvidedKey)
+	if err != nil {
+		return "", err
+	}
+
+	symlinkBuf, err := ioutil.ReadAll(resp.Body(azblob.RetryReaderOptions{
+		MaxRetryRequests: 5,
+		NotifyFailedRead: common.NewReadLogFunc(p.jptm, uri),
+	}))
+	if err != nil {
+		return "", err
+	}
+
+	return string(symlinkBuf), nil
 }
 
 func (p *blobSourceInfoProvider) GetUNIXProperties() (common.UnixStatAdapter, error) {

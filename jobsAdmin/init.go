@@ -188,6 +188,7 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 		IsFinalPart:          order.IsFinalPart,
 		TotalBytesEnumerated: order.Transfers.TotalSizeInBytes,
 		FileTransfers:        order.Transfers.FileTransferCount,
+		SymlinkTransfers:     order.Transfers.SymlinkTransferCount,
 		FolderTransfer:       order.Transfers.FolderTransferCount})
 
 	return common.CopyJobPartOrderResponse{JobStarted: true}
@@ -563,10 +564,13 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 			jppt := jpp.Transfer(t)
 			js.TotalBytesEnumerated += uint64(jppt.SourceSize)
 
-			if jppt.EntityType == common.EEntityType.File() {
+			switch jppt.EntityType {
+			case common.EEntityType.File():
 				js.FileTransfers++
-			} else {
+			case common.EEntityType.Folder():
 				js.FolderPropertyTransfers++
+			case common.EEntityType.Symlink():
+				js.SymlinkTransfers++
 			}
 
 			// check for all completed transfer to calculate the progress percentage at the end
