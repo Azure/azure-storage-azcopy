@@ -1,7 +1,11 @@
 package ste
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
+	"fmt"
+	"os"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -27,12 +31,15 @@ type checkPointMsg struct {
 type jobCheckpointFile struct {
 	fileMap map[int]common.Bitmap
 	action  chan checkPointMsg
+	filePath string
+	log	 func(string)
 }
 
-func initCheckpoint(ctx context.Context) *jobCheckpointFile {
+func initCheckpoint(ctx context.Context, path string, logger func(string)) *jobCheckpointFile {
 	cp := jobCheckpointFile{
 		fileMap: make(map[int]common.Bitmap),
 		action:  make(chan checkPointMsg, checkPointBufferSize),
+		log: logger,
 	}
 
 	go cp.checkpointMain(ctx)
@@ -64,7 +71,17 @@ func (cp *jobCheckpointFile) FileDone(fileID int) {
 }
 
 func (cp *jobCheckpointFile) Flush() {
+	buf := new(bytes.Buffer)
+	encoder := gob.NewEncoder(buf)
 
+	err := encoder.Encode(cp.fileMap)
+    	if err != nil {
+		cp.log(fmt.Sprintf("Could not encode checkpoint file: %s, err: %s", cp.filePath, err.Error()))
+	}
+
+	if err := os.WriteFile(cp.filePath, buf.Bytes(), 0666); err != nil {
+		cp.log(fmt.Sprintf("Failed to write checkpoint to disk: %s, err: %s", cp.filePath, err.Error()))
+	}
 }
 
 func (cp *jobCheckpointFile) checkpointMain(ctx context.Context) {

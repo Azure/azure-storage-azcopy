@@ -43,6 +43,7 @@ type PartNumber = common.PartNumber
 
 const (
 	NumOfFilesPerDispatchJobPart = 10000
+	checkpointFileExtension      = ".cpv1"
 )
 
 // InMemoryTransitJobState defines job state transit in memory, and not in JobPartPlan file.
@@ -154,6 +155,10 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		jobLogger.OpenLog()
 	}
 
+	//Checkpoint file is saved along with plan files. The name of file would be jobID.String()+checkpointFileExtension
+	checkpointPath := fmt.Sprintf("%s%s%s%s", common.AzcopyJobPlanFolder, common.AZCOPY_PATH_SEPARATOR_STRING, jobID.String(), checkpointFileExtension)
+	checkpointLogger := func(msg string) { jobLogger.Log(pipeline.LogError, msg) }
+
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
 		httpClient:           NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
 		logger:               jobLogger,
@@ -194,7 +199,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		jstm:             &jstm,
 		isDaemon:         daemonMode,
 		sourceBlobToken:  sourceBlobToken,
-		checkPoint:       initCheckpoint(appCtx),
+		checkPoint:       initCheckpoint(appCtx, checkpointPath, checkpointLogger),
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.Reset(appCtx, commandString)
 	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
