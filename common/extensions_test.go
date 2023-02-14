@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"net/url"
 	"strings"
+	"unsafe"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
@@ -151,15 +152,17 @@ func (*extensionsTestSuite) TestBlockblobBlockIDGeneration(c *chk.C) {
 	// Make sure that for a given JobID, jobPart, an index in job part and a block index,
 	// the blockID generated is consistent.
 	numOfFilesPerDispatchJobPart :=int32(10000) // == cmd.NumOfFilesPerDispatchJobPart
-	maxNumberOfParts := int32(99999) // Depends on our plan file Name
+	maxNumberOfParts := int32(99999) // Depends on our plan file Name, we support max of 99999 parts
 	azCopyBlockLength := 48 // Current size of blocks in AzCopy
 
+	placeHolder := "00000" // 5B placeholder
 	jobId := NewUUID()
-	partNum := rand.Int31n(maxNumberOfParts) // We support a max of 9999 parts
-	fileIndex  := rand.Int31n(numOfFilesPerDispatchJobPart)
-	blockIndex := rand.Int31n(azblob.BlockBlobMaxBlocks)
+	jobIdStr := string((*[16]byte)(unsafe.Pointer(&jobId))[:]) // 16Byte jobID
+	partNum := rand.Int31n(maxNumberOfParts) // 5B partNumber 
+	fileIndex  := rand.Int31n(numOfFilesPerDispatchJobPart) // 5Byte index of file in part
+	blockIndex := rand.Int31n(azblob.BlockBlobMaxBlocks) // 5B blockIndex
 
-	blockNamePrefix := fmt.Sprintf("%s%05d%05d", jobId.String(), partNum, fileIndex)
+	blockNamePrefix := fmt.Sprintf("%s%s%05d%05d", placeHolder, jobIdStr, partNum, fileIndex)
 	blockName := GenerateBlockBlobBlockID(blockNamePrefix, blockIndex)
 	c.Assert(len(blockName), chk.Equals, azCopyBlockLength)
 

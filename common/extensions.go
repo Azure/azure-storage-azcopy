@@ -2,7 +2,6 @@ package common
 
 import (
 	"bytes"
-	"crypto/md5"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -11,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/google/uuid"
 
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
@@ -183,10 +181,12 @@ func GenerateFullPathWithQuery(rootPath, childPath, extraQuery string) string {
 	}
 }
 
-// Block Names of blobs are of format noted below. We generate prefix here. 
-// md5-Sum{ <128 Bit GUID of AzCopy JobID><5B PartNum><5B Index in the jobPart><5B blockNum> }
+// Current size of block names in AzCopy is 48B. To be consistent with this,
+// we have to generate a 36B string and then base64-encode this to retain the
+// same size.
+// Block Names of blobs are of format noted below.
+// <5B empty placeholder> <16B GUID of AzCopy re-interpreted as string><5B PartNum><5B Index in the jobPart><5B blockNum> 
 func GenerateBlockBlobBlockID(blockNamePrefix string, index int32) string {
-	blockNameMd5 := md5.Sum([]byte(fmt.Sprintf("%s%05d", blockNamePrefix, index)))
-	blockID, _ := uuid.FromBytes(blockNameMd5[:]) //This func returns error if size of blockNameMd5 is not 16
-	return base64.StdEncoding.EncodeToString([]byte(blockID.String()))
+	blockID := []byte(fmt.Sprintf("%s%05d", blockNamePrefix, index))
+	return base64.StdEncoding.EncodeToString(blockID)
 }
