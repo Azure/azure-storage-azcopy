@@ -55,7 +55,7 @@ const (
 	blobAccessTier   validProperty = "BlobAccessTier"
 	contentType      validProperty = "ContentType"
 	contentEncoding  validProperty = "ContentEncoding"
-	contentMD5       validProperty = "ContentMD5"
+	contentMd5       validProperty = "ContentMD5"
 	leaseState       validProperty = "LeaseState"
 	leaseDuration    validProperty = "LeaseDuration"
 	leaseStatus      validProperty = "LeaseStatus"
@@ -179,8 +179,8 @@ func (cooked cookedListCmdArgs) processProperties(object StoredObject) string {
 			builder.WriteString(propertyStr + ": " + object.contentType + "; ")
 		case contentEncoding:
 			builder.WriteString(propertyStr + ": " + object.contentEncoding + "; ")
-		case contentMD5:
-			builder.WriteString(propertyStr + ": " + base64.StdEncoding.EncodeToString(object.contentMD5) + "; ")
+		case contentMd5:
+			builder.WriteString(propertyStr + ": " + base64.StdEncoding.EncodeToString(object.contentMd5) + "; ")
 		case leaseState:
 			builder.WriteString(propertyStr + ": " + string(object.leaseState) + "; ")
 		case leaseStatus:
