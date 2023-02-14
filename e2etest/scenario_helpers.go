@@ -131,7 +131,7 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 			if file.creationProperties.lastWriteTime != nil {
 				c.AssertNoErr(os.Chtimes(filepath.Join(options.dirPath, file.name), time.Now(), *file.creationProperties.lastWriteTime), "set times")
 			}
-		} else {
+		} else if file.creationProperties.entityType == common.EEntityType.File() {
 			sourceData, err := s.generateLocalFile(
 				filepath.Join(options.dirPath, file.name),
 				file.creationProperties.sizeBytes(c, options.defaultSize), file.body)
@@ -155,6 +155,11 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 			if file.creationProperties.lastWriteTime != nil {
 				c.AssertNoErr(os.Chtimes(filepath.Join(options.dirPath, file.name), time.Now(), *file.creationProperties.lastWriteTime), "set times")
 			}
+		} else if file.creationProperties.entityType == common.EEntityType.Symlink() {
+			c.Assert(file.creationProperties.symlinkTarget, notEquals(), nil)
+			oldName := filepath.Join(options.dirPath, *file.creationProperties.symlinkTarget)
+			newName := filepath.Join(options.dirPath, file.name)
+			c.AssertNoErr(os.Symlink(oldName, newName))
 		}
 	}
 
@@ -188,8 +193,15 @@ func (s scenarioHelper) enumerateLocalProperties(a asserter, dirpath string) map
 			pSmbAttributes = osScenarioHelper{}.getFileAttrs(a, fullpath)
 			pSmbPermissionsSddl = osScenarioHelper{}.getFileSDDLString(a, fullpath)
 		}
+		entityType := common.EEntityType.File()
+		if info.IsDir() {
+			entityType = common.EEntityType.Folder()
+		} else if info.Mode()&os.ModeSymlink == os.ModeSymlink {
+			entityType = common.EEntityType.Symlink()
+		}
+
 		props := objectProperties{
-			isFolder:           info.IsDir(),
+			entityType:         entityType,
 			size:               &size,
 			creationTime:       pCreationTime,
 			lastWriteTime:      &lastWriteTime,
@@ -375,7 +387,7 @@ type generateBlobFromListOptions struct {
 // create the demanded blobs
 func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFromListOptions) {
 	for _, b := range options.fs {
-		if b.isFolder() {
+		if b.isFolder() { // todo entityType
 			continue // no real folders in blob
 		}
 		ad := blobResourceAdapter{b}
@@ -534,7 +546,7 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 			md := map[string]string(blobInfo.Metadata)
 
 			props := objectProperties{
-				isFolder:           false, // no folders in Blob
+				entityType:         common.EEntityType.File(), // todo: posix properties includes folders
 				size:               bp.ContentLength,
 				contentHeaders:     &h,
 				nameValueMetadata:  md,
@@ -768,7 +780,7 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 
 			// TODO: I'm pretty sure we don't prserve lastWritetime or contentProperties (headers) for folders, so the above if statement doesn't test those
 			//    Is that the correct decision?
-		} else {
+		} else if f.creationProperties.entityType == common.EEntityType.File() {
 			file := options.shareURL.NewRootDirectoryURL().NewFileURL(f.name)
 
 			// create parents first
@@ -781,8 +793,10 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			if f.body != nil {
 				contentR = bytes.NewReader(f.body)
 				contentD = f.body
+				fileSize = contentR.Size()
 			} else {
 				contentR, contentD = getRandomDataAndReader(int(fileSize))
+				f.body = contentD
 			}
 			if f.creationProperties.contentHeaders == nil {
 				f.creationProperties.contentHeaders = &contentHeaders{}
@@ -834,6 +848,8 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			}
 
 			// TODO: do we want to put some random content into it?
+		} else {
+			panic(fmt.Sprintf("file %s unsupported entity type %s", f.name, f.creationProperties.entityType.String()))
 		}
 	}
 
@@ -886,7 +902,7 @@ func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile
 				}
 
 				props := objectProperties{
-					isFolder:           false, // no folders in Blob
+					entityType:         common.EEntityType.File(), // only enumerating files in list call
 					size:               &fileSize,
 					nameValueMetadata:  fProps.NewMetadata(),
 					contentHeaders:     &h,
@@ -927,7 +943,7 @@ func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile
 
 				// Set up properties
 				props := objectProperties{
-					isFolder:           true,
+					entityType:         common.EEntityType.Folder(), // Only enumerating directories in list call
 					nameValueMetadata:  dProps.NewMetadata(),
 					creationTime:       &creationTime,
 					lastWriteTime:      &lastWriteTime,

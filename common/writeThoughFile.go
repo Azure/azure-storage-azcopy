@@ -30,6 +30,7 @@ const IncludeBeforeFlagName = "include-before"
 const IncludeAfterFlagName = "include-after"
 const BackupModeFlagName = "backup" // original name, backup mode, matches the name used for the same thing in Robocopy
 const PreserveOwnerFlagName = "preserve-owner"
+const PreserveSymlinkFlagName = "preserve-symlinks"
 const PreserveOwnerDefault = true
 
 // The regex doesn't require a / on the ending, it just requires something similar to the following

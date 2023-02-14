@@ -41,6 +41,8 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 	info := jptm.Info()
 	if info.IsFolderPropertiesTransfer() {
 		remoteToLocal_folder(jptm, p, pacer, df)
+	} else if info.EntityType == common.EEntityType.Symlink() {
+		remoteToLocal_symlink(jptm, p, pacer, df)
 	} else {
 		remoteToLocal_file(jptm, p, pacer, df)
 	}

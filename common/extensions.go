@@ -2,6 +2,8 @@ package common
 
 import (
 	"bytes"
+	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/url"
 	"runtime"
@@ -177,4 +179,14 @@ func GenerateFullPathWithQuery(rootPath, childPath, extraQuery string) string {
 	} else {
 		return p + "?" + extraQuery
 	}
+}
+
+// Current size of block names in AzCopy is 48B. To be consistent with this,
+// we have to generate a 36B string and then base64-encode this to retain the
+// same size.
+// Block Names of blobs are of format noted below.
+// <5B empty placeholder> <16B GUID of AzCopy re-interpreted as string><5B PartNum><5B Index in the jobPart><5B blockNum> 
+func GenerateBlockBlobBlockID(blockNamePrefix string, index int32) string {
+	blockID := []byte(fmt.Sprintf("%s%05d", blockNamePrefix, index))
+	return base64.StdEncoding.EncodeToString(blockID)
 }

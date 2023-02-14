@@ -22,7 +22,6 @@ package ste
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
@@ -30,6 +29,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
@@ -62,6 +62,7 @@ type blockBlobSenderBase struct {
 	atomicChunksWritten    int32
 	atomicPutListIndicator int32
 	muBlockIDs             *sync.Mutex
+	blockNamePrefix	string
 }
 
 func getVerifiedChunkParams(transferInfo TransferInfo, memLimit int64) (chunkSize int64, numChunks uint32, err error) {
@@ -105,6 +106,17 @@ func getVerifiedChunkParams(transferInfo TransferInfo, memLimit int64) (chunkSiz
 	return
 }
 
+// Current size of block names in AzCopy is 48B. To be consistent with this,
+// we have to generate a 36B string and then base64-encode this to conform
+// to the same size. We generate prefix here.
+// Block Names of blobs are of format noted below.
+// <5B empty placeholder><16B GUID of AzCopy re-interpreted as string><5B PartNum><5B Index in the jobPart><5B blockNum>
+func getBlockNamePrefix(jobID common.JobID, partNum uint32, transferIndex uint32) string {
+	jobIdStr := string((*[16]byte)(unsafe.Pointer(&jobID))[:])
+	placeHolderPrefix := "00000"
+	return fmt.Sprintf("%s%s%05d%05d", placeHolderPrefix, jobIdStr, partNum, transferIndex)
+}
+
 func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType azblob.AccessTierType) (*blockBlobSenderBase, error) {
 	// compute chunk count
 	chunkSize, numChunks, err := getVerifiedChunkParams(jptm.Info(), jptm.CacheLimiter().Limit())
@@ -139,6 +151,8 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
 	cpkToApply := common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
 
+	partNum, transferIndex := jptm.TransferIndex()
+
 	return &blockBlobSenderBase{
 		jptm:             jptm,
 		sip:              srcInfoProvider,
@@ -153,7 +167,9 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		blobTagsToApply:  props.SrcBlobTags.ToAzBlobTagsMap(),
 		destBlobTier:     destBlobTier,
 		cpkToApply:       cpkToApply,
-		muBlockIDs:       &sync.Mutex{}}, nil
+		muBlockIDs:       &sync.Mutex{},
+		blockNamePrefix:  getBlockNamePrefix(jptm.Info().JobID, partNum, transferIndex),
+		}, nil
 }
 
 func (s *blockBlobSenderBase) SendableEntityType() common.EntityType {
@@ -310,7 +326,6 @@ func (s *blockBlobSenderBase) setBlockID(index int32, value string) {
 	s.blockIDs[index] = value
 }
 
-func (s *blockBlobSenderBase) generateEncodedBlockID() string {
-	blockID := common.NewUUID().String()
-	return base64.StdEncoding.EncodeToString([]byte(blockID))
+func (s *blockBlobSenderBase) generateEncodedBlockID(index int32) string {
+	return common.GenerateBlockBlobBlockID(s.blockNamePrefix, index)
 }
