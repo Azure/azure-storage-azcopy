@@ -55,7 +55,7 @@ const (
 	blobAccessTier   validProperty = "BlobAccessTier"
 	contentType      validProperty = "ContentType"
 	contentEncoding  validProperty = "ContentEncoding"
-	contentMD5		         validProperty = "md5"
+	contentMD5       validProperty = "ContentMD5"
 	leaseState       validProperty = "LeaseState"
 	leaseDuration    validProperty = "LeaseDuration"
 	leaseStatus      validProperty = "LeaseStatus"
