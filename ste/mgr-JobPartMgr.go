@@ -322,7 +322,7 @@ type jobPartMgr struct {
 
 	RehydratePriority common.RehydratePriorityType
 
-	checkPoint *jobCheckpointFile
+	checkPoint *jobCheckpointMetaFile
 }
 
 func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {
@@ -459,7 +459,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, sourceBlobToken
 			transferIndex:       t,
 			ctx:                 transferCtx,
 			cancel:              transferCancel,
-			checkpoint: 	     cp,
+			checkpoint:          cp,
 			// TODO: insert the factory func interface in jptm.
 			// numChunks will be set by the transfer's prologue method
 		}

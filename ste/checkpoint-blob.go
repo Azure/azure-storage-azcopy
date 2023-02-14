@@ -6,120 +6,151 @@ import (
 	"encoding/gob"
 	"fmt"
 	"os"
+	"sync"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-const checkPointBufferSize = 512
+const checkpointFlushInterval = time.Second * 10
 
-type checkPointMsgType int
-
-const (
-	newFile checkPointMsgType = iota
-	chunkDone
-	fileDone
-	flush
-)
-
-type checkPointMsg struct {
-	msgType    checkPointMsgType
-	fileID     int
-	numChunks  int
-	chunkIndex int
-}
-
-type jobCheckpointFile struct {
+type jobCheckpointMetaFile struct {
+	mutex sync.Mutex
 	fileMap map[int]common.Bitmap
-	action  chan checkPointMsg
 	filePath string
 	log	 func(string)
 }
 
-func initCheckpoint(ctx context.Context, path string, logger func(string)) *jobCheckpointFile {
-	cp := jobCheckpointFile{
+func initCheckpoint(ctx context.Context, path string, logger func(string)) *jobCheckpointMetaFile {
+	cp := jobCheckpointMetaFile{
 		fileMap: make(map[int]common.Bitmap),
-		action:  make(chan checkPointMsg, checkPointBufferSize),
+		filePath: path,
 		log: logger,
 	}
 
-	go cp.checkpointMain(ctx)
+	go cp.flush(ctx)
 
 	return &cp
 }
 
-func (cp *jobCheckpointFile) NewFile(fileID, numChunks int) {
-	cp.action <- checkPointMsg{
-		msgType:   newFile,
-		fileID:    fileID,
-		numChunks: numChunks,
+
+func NewCheckpointFromMetafile(ctx context.Context, path string, logger func(string)) (*jobCheckpointMetaFile, error) {
+	buf, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
 	}
+
+	fileMap := make(map[int]common.Bitmap)
+	decoder := gob.NewDecoder(bytes.NewReader(buf))
+	if err := decoder.Decode(&fileMap); err != nil {
+		return nil, err
+	}
+
+	cp := jobCheckpointMetaFile{
+		fileMap: fileMap,
+		log: logger,
+		filePath: path,
+	}
+
+	go cp.flush(ctx)
+
+	return &cp, nil
 }
 
-func (cp *jobCheckpointFile) ChunkDone(fileID, chunkIndex int) {
-	cp.action <- checkPointMsg{
-		msgType:    chunkDone,
-		fileID:     fileID,
-		chunkIndex: chunkIndex,
-	}
+
+func (cp *jobCheckpointMetaFile) NewTransfer(fileID, numChunks int) {
+	cp.mutex.Lock()
+	defer cp.mutex.Unlock()
+
+	cp.fileMap[fileID] = common.NewBitMap(numChunks)
 }
 
-func (cp *jobCheckpointFile) FileDone(fileID int) {
-	cp.action <- checkPointMsg{
-		msgType: fileDone,
-		fileID:  fileID,
-	}
+func (cp *jobCheckpointMetaFile) ChunkDone(fileID, chunkIndex int) {
+	cp.mutex.Lock()
+	defer cp.mutex.Unlock()
+
+	cp.fileMap[fileID].Set(chunkIndex)
+
 }
 
-func (cp *jobCheckpointFile) Flush() {
-	buf := new(bytes.Buffer)
-	encoder := gob.NewEncoder(buf)
+func (cp *jobCheckpointMetaFile) TransferDone(fileID int) {
+	cp.mutex.Lock()
+	defer cp.mutex.Unlock()
 
-	err := encoder.Encode(cp.fileMap)
-    	if err != nil {
-		cp.log(fmt.Sprintf("Could not encode checkpoint file: %s, err: %s", cp.filePath, err.Error()))
-	}
+	delete(cp.fileMap, fileID)
 
-	if err := os.WriteFile(cp.filePath, buf.Bytes(), 0666); err != nil {
-		cp.log(fmt.Sprintf("Failed to write checkpoint to disk: %s, err: %s", cp.filePath, err.Error()))
-	}
 }
 
-func (cp *jobCheckpointFile) checkpointMain(ctx context.Context) {
+func (cp *jobCheckpointMetaFile) CurrentMapForTransfer(fileID int) (ret common.Bitmap) {
+	cp.mutex.Lock()
+	defer cp.mutex.Unlock()
+
+	ret = cp.fileMap[fileID]
+	return
+}
+
+func (cp *jobCheckpointMetaFile) ListOfTransfersInMetafile() ([]int) {
+	cp.mutex.Lock()
+	defer cp.mutex.Unlock()
+
+	ret := make([]int, len(cp.fileMap))
+
+	i := 0
+	for k, _ := range cp.fileMap {
+		ret[i] = k
+		i++
+	}
+
+	return ret
+}
+
+func (cp *jobCheckpointMetaFile) flush(ctx context.Context) {
+	ticker := time.NewTicker(checkpointFlushInterval)
+
+	flushInt := func() {
+		cp.mutex.Lock()
+		defer cp.mutex.Unlock()
+
+		buf := new(bytes.Buffer)
+		encoder := gob.NewEncoder(buf)
+
+		err := encoder.Encode(cp.fileMap)
+ 	   	if err != nil {
+			cp.log(fmt.Sprintf("Could not encode checkpoint file: %s, err: %s", cp.filePath, err.Error()))
+		}
+
+		if err := os.WriteFile(cp.filePath, buf.Bytes(), 0666); err != nil {
+			cp.log(fmt.Sprintf("Failed to write checkpoint to disk: %s, err: %s", cp.filePath, err.Error()))
+		}
+	}
 
 	for {
 		select {
-		case msg := <-cp.action:
-			switch msg.msgType {
-			case newFile:
-				cp.fileMap[msg.fileID] = common.NewBitMap(msg.numChunks)
-			case chunkDone:
-				cp.fileMap[msg.fileID].Set(msg.chunkIndex)
-			case fileDone:
-				delete(cp.fileMap, msg.fileID)
-			case flush:
-				cp.Flush()
-			}
-		case <-ctx.Done():
+		case <- ctx.Done():
+			ticker.Stop()
 			return
+		case <- ticker.C:
+			flushInt()
 		}
 	}
+
 }
 
 //=============================================================================
 
 type blobCheckpointEntry struct {
 	fileID int
-	cp     *jobCheckpointFile
+	cp     *jobCheckpointMetaFile
 }
 
 
-func NewBlobCheckpointEntry(fileID int, cp *jobCheckpointFile) ICheckpoint {
+func NewBlobCheckpointEntry(fileID int, cp *jobCheckpointMetaFile) ICheckpoint {
 	b := blobCheckpointEntry{fileID, cp}
 	return &b
 }
 
 func (b *blobCheckpointEntry) Init(numChunks int) {
-	b.cp.NewFile(b.fileID, numChunks)
+	b.cp.NewTransfer(b.fileID, numChunks)
 }
 
 func (b *blobCheckpointEntry) ChunkDone(chunkIndex int) {
@@ -127,7 +158,21 @@ func (b *blobCheckpointEntry) ChunkDone(chunkIndex int) {
 }
 
 func (b *blobCheckpointEntry) TransferDone() {
-	b.cp.FileDone(b.fileID)
+	b.cp.TransferDone(b.fileID)
+}
+
+func (b *blobCheckpointEntry) CompletedChunks() map[int]int {
+	m := b.cp.CurrentMapForTransfer(b.fileID)
+	size := m.Size()
+	ret := make(map[int]int)
+	
+	for i := 0; i < size; i++ {
+		if m.Test(i) {
+			ret[i] = 1
+		}
+	}
+
+	return ret
 }
 
 //=============================================================================
@@ -135,6 +180,7 @@ func (b *blobCheckpointEntry) TransferDone() {
 type nilCheckpointEntry int
 
 func NewNullCheckpointEntry() ICheckpoint {return nilCheckpointEntry(0) }
-func (nilCheckpointEntry) Init(_ int) {}
-func (nilCheckpointEntry) ChunkDone(_ int) {}
+func (nilCheckpointEntry) Init(int) {}
+func (nilCheckpointEntry) ChunkDone(int) {}
 func (nilCheckpointEntry) TransferDone() {}
+func (nilCheckpointEntry) CompletedChunks() map[int]int {return nil}

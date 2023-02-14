@@ -30,17 +30,25 @@ func (b Bitmap) getSliceIndexAndMask(index int) (blockIndex int, mask uint64) {
 	return (index/BitsPerElement), uint64(1 << (index % BitsPerElement))
 }
 
+// Test returns true if the bit at given index is set.
 func (b Bitmap) Test(index int) bool {
 	BlockIndex, mask := b.getSliceIndexAndMask(index)
 	return b[BlockIndex] & mask != 0
 }
 
+//set the bit at given index
 func (b Bitmap) Set(index int) {
 	indexInSlice, mask := b.getSliceIndexAndMask(index)
 	b[indexInSlice] |= mask
 }
 
+//clear the bit at given index
 func (b Bitmap) Clear(index int) {
 	indexInSlice, mask := b.getSliceIndexAndMask(index)
 	b[indexInSlice] &= ^mask
+}
+
+//Size returns maximum size of bitmap
+func (b Bitmap) Size() int {
+	return len(b) * BitsPerElement
 }

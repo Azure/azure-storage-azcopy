@@ -353,7 +353,7 @@ type jobMgr struct {
 
 	isDaemon        bool /* is it running as service */
 	sourceBlobToken azblob.Credential
-	checkPoint      *jobCheckpointFile
+	checkPoint      *jobCheckpointMetaFile
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

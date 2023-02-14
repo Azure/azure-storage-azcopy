@@ -103,6 +103,7 @@ type ICheckpoint interface {
 	Init(numChunks int)
 	ChunkDone(chunkID int)
 	TransferDone()
+	CompletedChunks() map[int]int
 }
 
 type TransferInfo struct {
