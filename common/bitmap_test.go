@@ -21,6 +21,7 @@
 package common
 
 import (
+	"math"
 	"math/rand"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -31,8 +32,8 @@ type bitmapTestSuite struct{}
 
 var _ = chk.Suite(&bitmapTestSuite{})
 
-func (b *bitmapTestSuite) TestBitmap(c *chk.C) {
-	numOfBlocks := rand.Int31n(azblob.AppendBlobMaxBlocks)
+func (b *bitmapTestSuite) TestBitmapBasic(c *chk.C) {
+	numOfBlocks := rand.Int31n(azblob.BlockBlobMaxBlocks)
 	fileMap := NewBitMap(int(numOfBlocks))
 
 	// Make some unique random keys to test
@@ -68,5 +69,34 @@ func (b *bitmapTestSuite) TestBitmap(c *chk.C) {
 	//verify the others are still set
 	for i := 1; i < len(testBits); i = i+2 {
 		c.Assert(fileMap.Test(testBits[i]), chk.Equals, true)
+	}
+}
+
+func (b *bitmapTestSuite) TestBitmapBoundary(c *chk.C) {
+	// For a given n, such that (n % bitsPerElement) == 0, len(bitmap of size n) == len(bitmap of size n-1) + 1
+	for size := bitsPerElement; size < math.MaxUint16; size += bitsPerElement {
+		c.Assert(len(NewBitMap(size)), chk.Equals, len(NewBitMap(size - 1)) + 1)
+	}
+
+	// Verify first and last bit of each element
+	for firstBitInElement := 0; firstBitInElement < math.MaxUint16; firstBitInElement += bitsPerElement {
+		lastBitInElement := firstBitInElement + (bitsPerElement - 1)
+		bitmap := NewBitMap(lastBitInElement)
+
+		// Test that bit is false
+		c.Assert(bitmap.Test(firstBitInElement), chk.Equals, false)
+		c.Assert(bitmap.Test(lastBitInElement), chk.Equals, false)
+
+		// Set the bit, and test that it is true
+		bitmap.Set(firstBitInElement)
+		bitmap.Set(lastBitInElement)
+		c.Assert(bitmap.Test(firstBitInElement), chk.Equals, true)
+		c.Assert(bitmap.Test(lastBitInElement), chk.Equals, true)
+		
+		// Clear the bit, and verify again.
+		bitmap.Clear(firstBitInElement)
+		bitmap.Clear(lastBitInElement)
+		c.Assert(bitmap.Test(firstBitInElement), chk.Equals, false)
+		c.Assert(bitmap.Test(lastBitInElement), chk.Equals, false)
 	}
 }

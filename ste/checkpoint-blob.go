@@ -128,19 +128,21 @@ func (cp *jobCheckpointMetaFile) flush(ctx context.Context) {
 	ticker := time.NewTicker(checkpointFlushInterval)
 
 	flushInt := func() {
-		cp.mutex.Lock()
-		defer cp.mutex.Unlock()
-
 		buf := new(bytes.Buffer)
 		encoder := gob.NewEncoder(buf)
 
+		cp.mutex.Lock() // keep critical-section to minimum
 		err := encoder.Encode(cp.fileMap)
- 	   	if err != nil {
+		cp.mutex.Unlock()
+ 	
+		if err != nil {
 			cp.log(fmt.Sprintf("Could not encode checkpoint file: %s, err: %s", cp.filePath, err.Error()))
+			return
 		}
 
 		if err := os.WriteFile(cp.filePath, buf.Bytes(), 0666); err != nil {
 			cp.log(fmt.Sprintf("Failed to write checkpoint to disk: %s, err: %s", cp.filePath, err.Error()))
+			return
 		}
 	}
 

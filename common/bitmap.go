@@ -24,30 +24,29 @@ import (
 	"math"
 )
 
-const BitsPerElement = 64
+const bitsPerElement = 64
 
-
-// BitMap is a collection of bit-blocks backed by uint64.
-// We support a max of math.MaxUint16 bits which is enough for AzCopy's usecase
 type Bitmap []uint64
 
-// size is the minimum num of bits to be available in the bitmap.
+// NewBitmap returns a bitmap with at least 'size' bits, backed by an array of uint64. Maximum allowed value
+// for size is math.MaxUint16. Higher value will result in a empty bitmap. This should suffice for AzCopy's
+// usecase, where we need at most azblob.BlockBlobMaxBlocks bits. 
 func NewBitMap(size int) (Bitmap) {
 	if (size > math.MaxUint16) {
 		return Bitmap{}
 	}
 
-	numberOfUint64sRequired := math.Ceil(float64(size)/float64(BitsPerElement))
+	numberOfUint64sRequired := (size/bitsPerElement) + 1
 	
-	return Bitmap(make([]uint64, int(numberOfUint64sRequired)))
+	return Bitmap(make([]uint64, numberOfUint64sRequired))
 }
 
 func (b Bitmap) getSliceIndexAndMask(index int) (blockIndex int, mask uint64) {
-	if index >= len(b) * BitsPerElement || index < 0 {
+	if index >= len(b) * bitsPerElement || index < 0 {
 		return 0, 0
 	}
 
-	return (index/BitsPerElement), uint64(1 << (index % BitsPerElement))
+	return (index/bitsPerElement), uint64(1 << (index % bitsPerElement))
 }
 
 // Test returns true if the bit at given index is set.
@@ -56,19 +55,19 @@ func (b Bitmap) Test(index int) bool {
 	return b[BlockIndex] & mask != 0
 }
 
-//set the bit at given index
+// Set the bit at given index
 func (b Bitmap) Set(index int) {
 	indexInSlice, mask := b.getSliceIndexAndMask(index)
 	b[indexInSlice] |= mask
 }
 
-//clear the bit at given index
+// Clear the bit at given index
 func (b Bitmap) Clear(index int) {
 	indexInSlice, mask := b.getSliceIndexAndMask(index)
 	b[indexInSlice] &= ^mask
 }
 
-//Size returns maximum size of bitmap
+// Size returns maximum size of bitmap
 func (b Bitmap) Size() int {
-	return len(b) * BitsPerElement
+	return len(b) * bitsPerElement
 }
