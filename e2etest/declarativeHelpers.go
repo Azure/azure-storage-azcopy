@@ -52,7 +52,6 @@ func equals() comparison {
 	return comparison{true}
 }
 
-//nolint
 func notEquals() comparison {
 	return comparison{false}
 }
@@ -235,7 +234,6 @@ func (o Operation) includes(item Operation) bool {
 
 // ///////////
 
-//nolint
 var eTestFromTo = TestFromTo{}
 
 // TestFromTo is similar to common/FromTo, except that it can have cases where one value represents many possibilities

@@ -244,7 +244,6 @@ func (t *testObject) isRootFolder() bool {
 // It is to be used ONLY as parameters to the f() and folder() methods.
 // It is not used in other parts of the code, since the other parts use the testObject instances that are created
 // from
-//nolint
 type withPropertyProvider interface {
 	appliesToCreation() bool
 	appliesToVerification() bool
@@ -252,7 +251,6 @@ type withPropertyProvider interface {
 	createObjectProperties() *objectProperties
 }
 
-//nolint
 type expectedFailureProvider interface {
 	expectedFailure() string
 }
@@ -267,7 +265,6 @@ type expectedFailureProvider interface {
 // You can also add withFailureMessage{"message"} to files that are expected to fail, to specify what the expected
 // failure message will be in the log.
 // And withStubMetadata{} to supply the metadata that indicates that an object is a directory stub.
-//nolint
 func f(n string, properties ...withPropertyProvider) *testObject {
 	haveCreationProperties := false
 	haveVerificationProperties := false
@@ -327,7 +324,6 @@ func symlink(new, target string) *testObject {
 }
 
 // define a folder, in the expectations lists on a testFiles struct
-//nolint
 func folder(n string, properties ...withPropertyProvider) *testObject {
 	name := strings.TrimLeft(n, "/")
 	result := f(name, properties...)
@@ -369,7 +365,6 @@ type testFiles struct {
 	shouldSkip []interface{}
 }
 
-//nolint:unused
 func (tf testFiles) cloneShouldTransfers() testFiles {
 	return testFiles{
 		defaultSize:    tf.defaultSize,

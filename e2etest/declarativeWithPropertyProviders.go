@@ -33,7 +33,6 @@ import (
 // This is the main property provider, and the only one most tests will ever need.
 // For ease of use, and conciseness in the tests, the members of this struct are NOT pointers.
 // Instead, default values in these structs are mapped to nils, inside the createObjectProperties method.
-//nolint
 type with struct {
 	size string // uses our standard K, M, G suffix
 
@@ -58,19 +57,16 @@ type with struct {
 	cpkByValue         bool
 }
 
-//nolint
 func (with) appliesToCreation() bool {
 	return true
 }
 
-//nolint
 func (with) appliesToVerification() bool {
 	return true
 }
 
 // maps non-nillable fields (which are easy to create in the tests) to nillable ones, which have clearer meaning in
 // the resourceManagers.
-//nolint
 func (w with) createObjectProperties() *objectProperties {
 	result := &objectProperties{}
 	populated := false
@@ -183,12 +179,10 @@ func (w with) createObjectProperties() *objectProperties {
 // use createOnly if you want to define properties that should be used when creating an object, but not
 // used when verifying the state of the transferred object. Generally you'll have no use for this.
 // Just use "with", and the test framework will do the right thing.
-// nolint
 type createOnly struct {
 	with
 }
 
-// nolint
 func (createOnly) appliesToVerification() bool {
 	return false
 }
@@ -197,12 +191,10 @@ func (createOnly) appliesToVerification() bool {
 
 // Use verifyOnly if you need to specify some properties that should NOT be applied to the file when it is created,
 // but should be present on it after) the transfer
-//nolint
 type verifyOnly struct {
 	with
 }
 
-//nolint
 func (verifyOnly) appliesToCreation() bool {
 	return false
 }
@@ -210,20 +202,16 @@ func (verifyOnly) appliesToCreation() bool {
 ////
 
 // use withDirStubMetadata to say that file should be created with metadata that says its a directory stub, and it should have zero size
-//nolint
 type withDirStubMetadata struct{}
 
-//nolint
 func (withDirStubMetadata) appliesToCreation() bool {
 	return true
 }
 
-//nolint
 func (withDirStubMetadata) appliesToVerification() bool {
 	return true // since IF we ever do move these stubs, we expect them to retain their stub metadata
 }
 
-//nolint
 func (withDirStubMetadata) createObjectProperties() *objectProperties {
 	m := map[string]string{"hdi_isfolder": "true"} // special flag that says this file is a stub
 	size := int64(0)
@@ -241,27 +229,22 @@ func (withDirStubMetadata) createObjectProperties() *objectProperties {
 // It allows you to say what the error should be
 // TODO: as at 1 July 2020, we are not actually validating these.  Should we? It could be nice.  If we don't,
 //   remove this type and its usages, and the expectedFailureProvider interface
-//nolint
 type withError struct {
 	msg string
 }
 
-//nolint
 func (withError) appliesToCreation() bool {
 	return false
 }
 
-//nolint
 func (withError) appliesToVerification() bool {
 	return false
 }
 
-//nolint
 func (withError) createObjectProperties() *objectProperties {
 	return nil // implementing withPropertyProvider is just to trick the type system into letting us pass this to f() and folder(). Our implementation doesn't DO anything
 }
 
-//nolint
 func (w withError) expectedFailure() string {
 	return w.msg
 }

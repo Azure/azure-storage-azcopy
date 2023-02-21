@@ -49,7 +49,7 @@ func (bd *blobDownloader) CreateSymlink(jptm IJobPartTransferMgr) error {
 		return err
 	}
 	symsip := sip.(ISymlinkBearingSourceInfoProvider) // blob always implements this
-	symlinkInfo, err := symsip.ReadLink()
+	symlinkInfo, _ := symsip.ReadLink()
 
 	// create the link
 	err = os.Symlink(symlinkInfo, jptm.Info().Destination)
