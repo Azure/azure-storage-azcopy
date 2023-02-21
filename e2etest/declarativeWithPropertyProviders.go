@@ -37,6 +37,8 @@ import (
 type with struct {
 	size string // uses our standard K, M, G suffix
 
+	symlinkTarget string
+
 	cacheControl       string
 	contentDisposition string
 	contentEncoding    string
@@ -87,6 +89,10 @@ func (w with) createObjectProperties() *objectProperties {
 	}
 
 	// content headers
+	if w.symlinkTarget != "" {
+		populated = true
+		result.symlinkTarget = &w.symlinkTarget
+	}
 	if w.cacheControl != "" {
 		populated = true
 		ensureContentPropsExist()
@@ -177,12 +183,12 @@ func (w with) createObjectProperties() *objectProperties {
 // use createOnly if you want to define properties that should be used when creating an object, but not
 // used when verifying the state of the transferred object. Generally you'll have no use for this.
 // Just use "with", and the test framework will do the right thing.
-//nolint
+// nolint
 type createOnly struct {
 	with
 }
 
-//nolint
+// nolint
 func (createOnly) appliesToVerification() bool {
 	return false
 }

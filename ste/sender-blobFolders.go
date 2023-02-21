@@ -46,9 +46,9 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, p pipelin
 	}
 	fromTo := jptm.FromTo()
 	if fromTo.IsUpload() {
-		out = &dummyUploader{fsend}
+		out = &dummyFolderUploader{fsend}
 	} else {
-		out = &dummys2sCopier{fsend}
+		out = &dummyFolderS2SCopier{fsend}
 	}
 
 	return out, nil
@@ -224,25 +224,25 @@ func (b *blobFolderSender) GetDestinationLength() (int64, error) {
 
 // implement uploader to handle commonSenderCompletion
 
-type dummyUploader struct {
+type dummyFolderUploader struct {
 	blobFolderSender
 }
 
-func (d dummyUploader) GenerateUploadFunc(chunkID common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
+func (d dummyFolderUploader) GenerateUploadFunc(chunkID common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
 	panic("this sender only sends folders.")
 }
 
-func (d dummyUploader) Md5Channel() chan<- []byte {
+func (d dummyFolderUploader) Md5Channel() chan<- []byte {
 	panic("this sender only sends folders.")
 }
 
 // ditto for s2sCopier
 
-type dummys2sCopier struct {
+type dummyFolderS2SCopier struct {
 	blobFolderSender
 }
 
-func (d dummys2sCopier) GenerateCopyFunc(chunkID common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
+func (d dummyFolderS2SCopier) GenerateCopyFunc(chunkID common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
 	// TODO implement me
 	panic("implement me")
 }

@@ -275,7 +275,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks_ToFolder(c *chk.C) {
 		fileCount++
 		return nil
 	},
-		true, nil), chk.IsNil)
+		common.ESymlinkHandlingType.Follow(), nil), chk.IsNil)
 
 	// 3 files live in base, 3 files live in symlink
 	c.Assert(fileCount, chk.Equals, 6)
@@ -340,7 +340,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksBreakLoop(c *chk.C) {
 		fileCount++
 		return nil
 	},
-		true, nil), chk.IsNil)
+		common.ESymlinkHandlingType.Follow(), nil), chk.IsNil)
 
 	c.Assert(fileCount, chk.Equals, 3)
 }
@@ -370,7 +370,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksDedupe(c *chk.C) {
 		fileCount++
 		return nil
 	},
-		true, nil), chk.IsNil)
+		common.ESymlinkHandlingType.Follow(), nil), chk.IsNil)
 
 	c.Assert(fileCount, chk.Equals, 6)
 }
@@ -401,7 +401,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksMultitarget(c *chk.C) {
 		fileCount++
 		return nil
 	},
-		true, nil), chk.IsNil)
+		common.ESymlinkHandlingType.Follow(), nil), chk.IsNil)
 
 	// 3 files live in base, 3 files live in first symlink, second & third symlink is ignored.
 	c.Assert(fileCount, chk.Equals, 6)
@@ -434,7 +434,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksToParentAndChild(c *chk.C) {
 		fileCount++
 		return nil
 	},
-		true, nil), chk.IsNil)
+		common.ESymlinkHandlingType.Follow(), nil), chk.IsNil)
 
 	// 6 files total live under toroot. tochild should be ignored (or if tochild was traversed first, child will be ignored on toroot).
 	c.Assert(fileCount, chk.Equals, 6)
@@ -483,7 +483,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 		scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
 
 		// construct a local traverser
-		localTraverser := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, dstFileName), false, false, common.ESyncHashType.None(), func(common.EntityType) {}, nil)
+		localTraverser := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, dstFileName), false, common.ESymlinkHandlingType.Skip(), common.ESyncHashType.None(), func(common.EntityType) {}, nil)
 
 		// invoke the local traversal with a dummy processor
 		localDummyProcessor := dummyProcessor{}
@@ -643,7 +643,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
-		localTraverser := newLocalTraverser(context.TODO(), dstDirName, isRecursiveOn, false, common.ESyncHashType.None(), func(common.EntityType) {}, nil)
+		localTraverser := newLocalTraverser(context.TODO(), dstDirName, isRecursiveOn, common.ESymlinkHandlingType.Skip(), common.ESyncHashType.None(), func(common.EntityType) {}, nil)
 
 		// invoke the local traversal with an indexer
 		// so that the results are indexed for easy validation
@@ -804,7 +804,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
-		localTraverser := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, virDirName), isRecursiveOn, false, common.ESyncHashType.None(), func(common.EntityType) {}, nil)
+		localTraverser := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, virDirName), isRecursiveOn, common.ESymlinkHandlingType.Skip(), common.ESyncHashType.None(), func(common.EntityType) {}, nil)
 
 		// invoke the local traversal with an indexer
 		// so that the results are indexed for easy validation

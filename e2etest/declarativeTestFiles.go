@@ -86,7 +86,8 @@ func (h *contentHeaders) String() string {
 // This is exposed to the declarativeResourceManagers, to create/check the objects.
 // All field are pointers or interfaces to make them nil-able. Nil means "unspecified".
 type objectProperties struct {
-	isFolder           bool // if false, the object is a file
+	entityType         common.EntityType
+	symlinkTarget      *string
 	size               *int64
 	contentHeaders     *contentHeaders
 	nameValueMetadata  map[string]string
@@ -122,7 +123,12 @@ func (op objectProperties) sizeBytes(a asserter, defaultSize string) int {
 
 func (op objectProperties) DeepCopy() objectProperties {
 	ret := objectProperties{}
-	ret.isFolder = op.isFolder
+	ret.entityType = op.entityType
+
+	if op.symlinkTarget != nil {
+		target := *op.symlinkTarget
+		ret.symlinkTarget = &target
+	}
 
 	if op.size != nil {
 		val := op.size
@@ -214,11 +220,20 @@ func (t *testObject) DeepCopy() *testObject {
 	return &ret
 }
 
-func (t *testObject) isFolder() bool {
-	if t.verificationProperties != nil && t.creationProperties.isFolder != t.verificationProperties.isFolder {
-		panic("isFolder properties are misconfigured")
+func (t *testObject) hasContentToValidate() bool {
+	if t.verificationProperties != nil && t.creationProperties.entityType != t.verificationProperties.entityType {
+		panic("entityType property is misconfigured")
 	}
-	return t.creationProperties.isFolder
+
+	return t.creationProperties.entityType == common.EEntityType.File()
+}
+
+func (t *testObject) isFolder() bool {
+	if t.verificationProperties != nil && t.creationProperties.entityType != t.verificationProperties.entityType {
+		panic("entityType property is misconfigured")
+	}
+
+	return t.creationProperties.entityType == common.EEntityType.Folder()
 }
 
 func (t *testObject) isRootFolder() bool {
@@ -296,6 +311,21 @@ func f(n string, properties ...withPropertyProvider) *testObject {
 	return result
 }
 
+func symlink(new, target string) *testObject {
+	name := strings.TrimLeft(new, "/")
+	result := f(name)
+
+	// result.creationProperties todo: entityType
+	result.creationProperties.entityType = common.EEntityType.Symlink()
+	result.creationProperties.symlinkTarget = &target
+	if result.verificationProperties != nil {
+		result.verificationProperties.entityType = common.EEntityType.Symlink()
+		result.verificationProperties.symlinkTarget = &target
+	}
+
+	return result
+}
+
 // define a folder, in the expectations lists on a testFiles struct
 //nolint
 func folder(n string, properties ...withPropertyProvider) *testObject {
@@ -304,9 +334,9 @@ func folder(n string, properties ...withPropertyProvider) *testObject {
 
 	// isFolder is at properties level, not testObject level, because we need it at properties level when reading
 	// the properties back from the destination (where we don't read testObjects, we just read objectProperties)
-	result.creationProperties.isFolder = true
+	result.creationProperties.entityType = common.EEntityType.Folder()
 	if result.verificationProperties != nil {
-		result.verificationProperties.isFolder = true
+		result.verificationProperties.entityType = common.EEntityType.Folder()
 	}
 
 	return result
@@ -384,14 +414,15 @@ func (*testFiles) copyList(src []interface{}) []interface{} {
 //	or force them to use f() for every file?
 func (*testFiles) toTestObjects(rawList []interface{}, isFail bool) []*testObject {
 	result := make([]*testObject, 0, len(rawList))
-	for _, r := range rawList {
+	for k, r := range rawList {
 		if asTestObject, ok := r.(*testObject); ok {
 			if asTestObject.expectedFailureMessage != "" && !isFail {
 				panic("expected failures are only allowed in the shouldFail list. They are not allowed for other test files")
 			}
 			result = append(result, asTestObject)
 		} else if asString, ok := r.(string); ok {
-			result = append(result, &testObject{name: asString})
+			rawList[k] = &testObject{name: asString} // convert to a full deal so we can apply md5
+			result = append(result, rawList[k].(*testObject))
 		} else {
 			panic("testFiles lists may contain only strings and testObjects. Create your test objects with the f() and folder() functions")
 		}

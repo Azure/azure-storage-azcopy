@@ -553,8 +553,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 
 	var statsAccForSip *PipelineNetworkStats = nil // we don't accumulate stats on the source info provider
 
-	// Create source info provider's pipeline for S2S copy.
-	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() {
+	// Create source info provider's pipeline for S2S copy or download (in some cases).
+	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() || fromTo == common.EFromTo.BlobLocal() {
 		var sourceCred azblob.Credential = azblob.NewAnonymousCredential()
 		jobState := jpm.jobMgr.getInMemoryTransitJobState()
 		if fromTo.To() == common.ELocation.Blob() && jobState.S2SSourceCredentialType.IsAzureOAuth() {

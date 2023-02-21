@@ -78,6 +78,8 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 
 	if jptm.Info().IsFolderPropertiesTransfer() {
 		return newBlobFolderSender(jptm, destination, p, pacer, srcInfoProvider)
+	} else if jptm.Info().EntityType == common.EEntityType.Symlink() {
+		return newBlobSymlinkSender(jptm, destination, p, pacer, srcInfoProvider)
 	}
 
 	switch targetBlobType {

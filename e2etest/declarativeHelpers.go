@@ -172,6 +172,7 @@ type params struct {
 	accessTier                azblob.AccessTierType
 	checkMd5                  common.HashValidationOption
 	compareHash               common.SyncHashType
+	symlinkHandling           common.SymlinkHandlingType
 
 	destNull bool
 

@@ -113,13 +113,13 @@ func (s *StoredObject) isSourceRootFolder() bool {
 	return s.relativePath == "" && s.entityType == common.EEntityType.Folder()
 }
 
-// isCompatibleWithFpo serves as our universal filter for filtering out folders in the cases where we should not
+// isCompatibleWithEntitySettings serves as our universal filter for filtering out folders in the cases where we should not
 // process them. (If we didn't have a filter like this, we'd have to put the filtering into
 // every enumerator, which would complicated them.)
 // We can't just implement this filtering in ToNewCopyTransfer, because delete transfers (from sync)
 // do not pass through that routine.  So we need to make the filtering available in a separate function
 // so that the sync deletion code path(s) can access it.
-func (s *StoredObject) isCompatibleWithFpo(fpo common.FolderPropertyOption) bool {
+func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyOption, sht common.SymlinkHandlingType) bool {
 	if s.entityType == common.EEntityType.File() {
 		return true
 	} else if s.entityType == common.EEntityType.Folder() {
@@ -133,10 +133,13 @@ func (s *StoredObject) isCompatibleWithFpo(fpo common.FolderPropertyOption) bool
 		default:
 			panic("undefined folder properties option")
 		}
+	} else if s.entityType == common.EEntityType.Symlink() {
+		return sht == common.ESymlinkHandlingType.Preserve()
 	} else {
 		panic("undefined entity type")
 	}
 }
+
 
 // ErrorNoHashPresent , ErrorHashNoLongerValid, and ErrorHashNotCompatible indicate a hash is not present, not obtainable, and/or not usable.
 // For the sake of best-effort, when these errors are emitted, depending on the sync hash policy
@@ -154,7 +157,7 @@ var ErrorHashAsyncCalculation = errors.New("hash is calculating asynchronously")
 // We use this, so that we can easily test for compatibility in the sync deletion code (which expects an objectProcessor)
 func newFpoAwareProcessor(fpo common.FolderPropertyOption, inner objectProcessor) objectProcessor {
 	return func(s StoredObject) error {
-		if s.isCompatibleWithFpo(fpo) {
+		if s.isCompatibleWithEntitySettings(fpo, common.ESymlinkHandlingType.Skip()) {
 			return inner(s)
 		} else {
 			return nil // nothing went wrong, because we didn't do anything
@@ -162,14 +165,9 @@ func newFpoAwareProcessor(fpo common.FolderPropertyOption, inner objectProcessor
 	}
 }
 
-func (s *StoredObject) ToNewCopyTransfer(
-	steWillAutoDecompress bool,
-	Source string,
-	Destination string,
-	preserveBlobTier bool,
-	folderPropertiesOption common.FolderPropertyOption) (transfer common.CopyTransfer, shouldSendToSte bool) {
+func (s *StoredObject) ToNewCopyTransfer(steWillAutoDecompress bool, Source string, Destination string, preserveBlobTier bool, folderPropertiesOption common.FolderPropertyOption, symlinkHandlingType common.SymlinkHandlingType) (transfer common.CopyTransfer, shouldSendToSte bool) {
 
-	if !s.isCompatibleWithFpo(folderPropertiesOption) {
+	if !s.isCompatibleWithEntitySettings(folderPropertiesOption, symlinkHandlingType) {
 		return common.CopyTransfer{}, false
 	}
 
@@ -327,12 +325,12 @@ type enumerationCounterFunc func(entityType common.EntityType)
 
 // source, location, recursive, and incrementEnumerationCounter are always required.
 // ctx, pipeline are only required for remote resources.
-// followSymlinks is only required for local resources (defaults to false)
+// symlinkHandling is only required for local resources (defaults to false)
 // errorOnDirWOutRecursive is used by copy.
 // If errorChannel is non-nil, all errors encountered during enumeration will be conveyed through this channel.
 // To avoid slowdowns, use a buffered channel of enough capacity.
 func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context,
-	credential *common.CredentialInfo, followSymlinks *bool, listOfFilesChannel chan string, recursive, getProperties,
+	credential *common.CredentialInfo, symlinkHandling common.SymlinkHandlingType, listOfFilesChannel chan string, recursive, getProperties,
 	includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string,
 	s2sPreserveBlobTags bool, syncHashType common.SyncHashType, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo) (ResourceTraverser, error) {
 	var output ResourceTraverser
@@ -369,11 +367,6 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		p = &tmppipe
 	}
 
-	toFollow := false
-	if followSymlinks != nil {
-		toFollow = *followSymlinks
-	}
-
 	// Feed list of files channel into new list traverser
 	if listOfFilesChannel != nil {
 		if location.IsLocal() {
@@ -386,7 +379,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 			}
 		}
 
-		output = newListTraverser(resource, location, credential, ctx, recursive, toFollow, getProperties,
+		output = newListTraverser(resource, location, credential, ctx, recursive, symlinkHandling, getProperties,
 			listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions)
 		return output, nil
 	}
@@ -414,13 +407,13 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 			}()
 
 			baseResource := resource.CloneWithValue(cleanLocalPath(basePath))
-			output = newListTraverser(baseResource, location, nil, nil, recursive, toFollow, getProperties,
+			output = newListTraverser(baseResource, location, nil, nil, recursive, symlinkHandling, getProperties,
 				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions)
 		} else {
 			if ctx != nil {
-				output = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, toFollow, syncHashType, incrementEnumerationCounter, errorChannel)
+				output = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, symlinkHandling, syncHashType, incrementEnumerationCounter, errorChannel)
 			} else {
-				output = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, toFollow, syncHashType, incrementEnumerationCounter, errorChannel)
+				output = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, symlinkHandling, syncHashType, incrementEnumerationCounter, errorChannel)
 			}
 		}
 	case common.ELocation.Benchmark():

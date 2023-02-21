@@ -100,6 +100,13 @@ func (f folderPropertiesNotOverwroteInCreation) Error() string {
 	panic("Not a real error")
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// symlinkSender is a sender that also knows how to send symlink properties
+/////////////////////////////////////////////////////////////////////////////////////////////////
+type symlinkSender interface {
+	SendSymlink(linkData string) error
+}
+
 type senderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -217,6 +224,8 @@ func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pi
 
 	if jptm.Info().IsFolderPropertiesTransfer() {
 		return newBlobFolderSender(jptm, destination, p, pacer, sip)
+	} else if jptm.Info().EntityType == common.EEntityType.Symlink() {
+		return newBlobSymlinkSender(jptm, destination, p, pacer, sip)
 	}
 
 	switch intendedType {
