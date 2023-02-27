@@ -1,4 +1,5 @@
-//go:build !windows && !linux
+//go:build linux
+
 // Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,12 +20,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// TODO this file was forked from the cmd package, it needs to cleaned to keep only the necessary part
-
 package e2etest
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"golang.org/x/sys/unix"
 	"time"
 )
 
@@ -63,12 +64,32 @@ func (osScenarioHelper) setFileSDDLString(c asserter, filepath string, sddldata 
 	panic("should never be called")
 }
 
-//nolint
 func (osScenarioHelper) Mknod(c asserter, path string, mode uint32, dev int) {
-	panic("should never be called")
+	c.AssertNoErr(unix.Mknod(path, mode, dev))
 }
 
-//nolint
 func (osScenarioHelper) GetUnixStatAdapterForFile(c asserter, filepath string) common.UnixStatAdapter {
-	panic("should never be called")
+	{ // attempt to call statx, if ENOSYS is returned, statx is unavailable
+		var stat unix.Statx_t
+
+		statxFlags := unix.AT_STATX_SYNC_AS_STAT | unix.AT_SYMLINK_NOFOLLOW
+		// dirfd is a null pointer, because we should only ever be passing relative paths here, and directories will be passed via transferInfo.Source.
+		// AT_SYMLINK_NOFOLLOW is not used, because we automagically resolve symlinks. TODO: Add option to not follow symlinks, and use AT_SYMLINK_NOFOLLOW when resolving is disabled.
+		err := unix.Statx(0, filepath,
+			statxFlags,
+			unix.STATX_ALL,
+			&stat)
+
+		if err != nil && err != unix.ENOSYS { // catch if statx is unsupported
+			c.AssertNoErr(err, "for file " + filepath)
+		} else if err == nil {
+			return ste.StatxTAdapter(stat)
+		}
+	}
+
+	var stat unix.Stat_t
+	err := unix.Stat(filepath, &stat)
+	c.AssertNoErr(err)
+
+	return ste.StatTAdapter(stat)
 }

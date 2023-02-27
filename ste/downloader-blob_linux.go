@@ -87,9 +87,10 @@ func (bd *blobDownloader) CreateFile(jptm IJobPartTransferMgr, destination strin
 
 func (bd *blobDownloader) ApplyUnixProperties(adapter common.UnixStatAdapter) (stage string, err error) {
 	// At this point, mode has already been applied. Let's work out what we need to apply, and apply the rest.
+	destination := bd.txInfo.getDownloadPath()
 
 	// First, grab our file descriptor and such.
-	fi, err := os.Stat(bd.txInfo.Destination)
+	fi, err := os.Stat(destination)
 	if err != nil {
 		return "stat", err
 	}
@@ -107,7 +108,7 @@ func (bd *blobDownloader) ApplyUnixProperties(adapter common.UnixStatAdapter) (s
 			mode = os.FileMode(adapter.FileMode())
 		}
 
-		err = os.Chmod(bd.txInfo.Destination, mode)
+		err = os.Chmod(destination, mode)
 		if err != nil {
 			return "chmod", err
 		}
@@ -122,7 +123,7 @@ func (bd *blobDownloader) ApplyUnixProperties(adapter common.UnixStatAdapter) (s
 			gid = adapter.Group()
 		}
 		// set ownership
-		err = os.Chown(bd.txInfo.Destination, int(uid), int(gid))
+		err = os.Chown(destination, int(uid), int(gid))
 		if err != nil {
 			return "chown", err
 		}
@@ -138,20 +139,20 @@ func (bd *blobDownloader) ApplyUnixProperties(adapter common.UnixStatAdapter) (s
 		}
 
 		// adapt times
-		err = os.Chtimes(bd.txInfo.Destination, atime, mtime)
+		err = os.Chtimes(destination, atime, mtime)
 		if err != nil {
 			return "chtimes", err
 		}
 	} else {
-		err = os.Chmod(bd.txInfo.Destination, os.FileMode(adapter.FileMode())) // only write permissions
+		err = os.Chmod(destination, os.FileMode(adapter.FileMode())) // only write permissions
 		if err != nil {
 			return "chmod", err
 		}
-		err = os.Chown(bd.txInfo.Destination, int(adapter.Owner()), int(adapter.Group()))
+		err = os.Chown(destination, int(adapter.Owner()), int(adapter.Group()))
 		if err != nil {
 			return "chown", err
 		}
-		err = os.Chtimes(bd.txInfo.Destination, adapter.ATime(), adapter.MTime())
+		err = os.Chtimes(destination, adapter.ATime(), adapter.MTime())
 		if err != nil {
 			return "chtimes", err
 		}

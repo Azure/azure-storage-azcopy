@@ -35,6 +35,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -118,8 +119,10 @@ type generateLocalFilesFromList struct {
 func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generateLocalFilesFromList) {
 	for _, file := range options.fs {
 		var err error
+		destFile := filepath.Join(options.dirPath, file.name)
+
 		if file.isFolder() {
-			err = os.MkdirAll(filepath.Join(options.dirPath, file.name), os.ModePerm)
+			err = os.MkdirAll(destFile, os.ModePerm)
 			c.AssertNoErr(err)
 			// TODO: You'll need to set up things like attributes, and other relevant things from
 			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
@@ -129,37 +132,45 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 				osScenarioHelper{}.setFileSDDLString(c, filepath.Join(options.dirPath, file.name), *file.creationProperties.smbPermissionsSddl)
 			}
 			if file.creationProperties.lastWriteTime != nil {
-				c.AssertNoErr(os.Chtimes(filepath.Join(options.dirPath, file.name), time.Now(), *file.creationProperties.lastWriteTime), "set times")
+				c.AssertNoErr(os.Chtimes(destFile, time.Now(), *file.creationProperties.lastWriteTime), "set times")
 			}
 		} else if file.creationProperties.entityType == common.EEntityType.File() {
-			sourceData, err := s.generateLocalFile(
-				filepath.Join(options.dirPath, file.name),
-				file.creationProperties.sizeBytes(c, options.defaultSize), file.body)
-			if file.creationProperties.contentHeaders == nil {
-				file.creationProperties.contentHeaders = &contentHeaders{}
+			var mode uint32
+			if file.creationProperties.posixProperties != nil && file.creationProperties.posixProperties.mode != nil {
+				mode = *file.creationProperties.posixProperties.mode
 			}
+			switch {
+			case mode & common.S_IFIFO == common.S_IFIFO || mode & common.S_IFSOCK == common.S_IFSOCK:
+				osScenarioHelper{}.Mknod(c, destFile, mode, 0)
+			default:
+				sourceData, err := s.generateLocalFile(
+					destFile,
+					file.creationProperties.sizeBytes(c, options.defaultSize), file.body)
+				if file.creationProperties.contentHeaders == nil {
+					file.creationProperties.contentHeaders = &contentHeaders{}
+				}
 
-			if file.creationProperties.contentHeaders.contentMD5 == nil {
-				contentMD5 := md5.Sum(sourceData)
-				file.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+				if file.creationProperties.contentHeaders.contentMD5 == nil {
+					contentMD5 := md5.Sum(sourceData)
+					file.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+				}
+
+				c.AssertNoErr(err)
 			}
-
-			c.AssertNoErr(err)
 			// TODO: You'll need to set up things like attributes, and other relevant things from
 			//   file.creationProperties here. (Use all the properties of file.creationProperties that are supported
 			//   by local files. E.g. not contentHeaders or metadata).
 
 			if file.creationProperties.smbPermissionsSddl != nil {
-				osScenarioHelper{}.setFileSDDLString(c, filepath.Join(options.dirPath, file.name), *file.creationProperties.smbPermissionsSddl)
+				osScenarioHelper{}.setFileSDDLString(c, destFile, *file.creationProperties.smbPermissionsSddl)
 			}
 			if file.creationProperties.lastWriteTime != nil {
-				c.AssertNoErr(os.Chtimes(filepath.Join(options.dirPath, file.name), time.Now(), *file.creationProperties.lastWriteTime), "set times")
+				c.AssertNoErr(os.Chtimes(destFile, time.Now(), *file.creationProperties.lastWriteTime), "set times")
 			}
 		} else if file.creationProperties.entityType == common.EEntityType.Symlink() {
 			c.Assert(file.creationProperties.symlinkTarget, notEquals(), nil)
 			oldName := filepath.Join(options.dirPath, *file.creationProperties.symlinkTarget)
-			newName := filepath.Join(options.dirPath, file.name)
-			c.AssertNoErr(os.Symlink(oldName, newName))
+			c.AssertNoErr(os.Symlink(oldName, destFile))
 		}
 	}
 
@@ -372,6 +383,7 @@ func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c asserter, s3Clien
 type generateFromListOptions struct {
 	fs          []*testObject
 	defaultSize string
+	preservePosixProperties bool
 	accountType AccountType
 }
 
@@ -387,8 +399,46 @@ type generateBlobFromListOptions struct {
 // create the demanded blobs
 func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFromListOptions) {
 	for _, b := range options.fs {
-		if b.isFolder() { // todo entityType
-			continue // no real folders in blob
+		switch b.creationProperties.entityType {
+		case common.EEntityType.Folder(): // it's fine to create folders even when we're not explicitly testing
+			if b.name == "" {
+				continue // can't write root!
+			}
+
+			if b.creationProperties.nameValueMetadata == nil {
+				b.creationProperties.nameValueMetadata = map[string]string{}
+			}
+
+			b.body = make([]byte, 0)
+			b.creationProperties.nameValueMetadata[common.POSIXFolderMeta] = "true"
+			mode := uint64(os.FileMode(common.DEFAULT_FILE_PERM) | os.ModeDir)
+			b.creationProperties.nameValueMetadata[common.POSIXModeMeta] = strconv.FormatUint(mode, 10)
+			b.creationProperties.posixProperties.AddToMetadata(b.creationProperties.nameValueMetadata)
+		case common.EEntityType.Symlink():
+			if b.creationProperties.nameValueMetadata == nil {
+				b.creationProperties.nameValueMetadata = map[string]string{}
+			}
+
+			b.body = []byte(*b.creationProperties.symlinkTarget)
+			b.creationProperties.nameValueMetadata[common.POSIXSymlinkMeta] = "true"
+			mode := uint64(os.FileMode(common.DEFAULT_FILE_PERM) | os.ModeSymlink)
+			b.creationProperties.nameValueMetadata[common.POSIXModeMeta] = strconv.FormatUint(mode, 10)
+			b.creationProperties.posixProperties.AddToMetadata(b.creationProperties.nameValueMetadata)
+		default:
+			if b.creationProperties.nameValueMetadata == nil {
+				b.creationProperties.nameValueMetadata = map[string]string{}
+			}
+
+			b.creationProperties.posixProperties.AddToMetadata(b.creationProperties.nameValueMetadata)
+
+			if b.creationProperties.posixProperties != nil && b.creationProperties.posixProperties.mode != nil {
+				mode := *b.creationProperties.posixProperties.mode
+
+				// todo: support for device rep files may be difficult in a testing environment.
+				if mode & common.S_IFSOCK == common.S_IFSOCK || mode & common.S_IFIFO == common.S_IFIFO {
+					b.body = make([]byte, 0)
+				}
+			}
 		}
 		ad := blobResourceAdapter{b}
 		var reader *bytes.Reader

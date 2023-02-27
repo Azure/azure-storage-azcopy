@@ -38,6 +38,8 @@ type with struct {
 
 	symlinkTarget string
 
+	posixProperties objectUnixStatContainer
+
 	cacheControl       string
 	contentDisposition string
 	contentEncoding    string
@@ -153,6 +155,10 @@ func (w with) createObjectProperties() *objectProperties {
 	if w.adlsPermissionsACL != "" {
 		populated = true
 		result.adlsPermissionsACL = &w.adlsPermissionsACL
+	}
+	if !w.posixProperties.Empty() {
+		populated = true
+		result.posixProperties = &w.posixProperties
 	}
 
 	if w.cpkByName != "" {
