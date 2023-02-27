@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"math"
 	"os"
 	"reflect"
@@ -37,7 +38,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/JeffreyRichter/enum/enum"
 )
@@ -141,12 +141,12 @@ func (d *DeleteSnapshotsOption) Parse(s string) error {
 	return err
 }
 
-func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() azblob.DeleteSnapshotsOptionType {
+func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() blob.DeleteSnapshotsOptionType {
 	if d == EDeleteSnapshotsOption.None() {
-		return azblob.DeleteSnapshotsOptionNone
+		return ""
 	}
 
-	return azblob.DeleteSnapshotsOptionType(strings.ToLower(d.String()))
+	return blob.DeleteSnapshotsOptionType(strings.ToLower(d.String()))
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -179,11 +179,11 @@ func (p PermanentDeleteOption) String() string {
 	return enum.StringInt(p, reflect.TypeOf(p))
 }
 
-func (p PermanentDeleteOption) ToPermanentDeleteOptionType() azblob.BlobDeleteType {
+func (p PermanentDeleteOption) ToPermanentDeleteOptionType() blob.DeleteType {
 	if p == EPermanentDeleteOption.None() {
-		return azblob.BlobDeleteNone
+		return ""
 	}
-	return azblob.BlobDeletePermanent
+	return blob.DeleteTypePermanent
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -641,21 +641,21 @@ func (bt *BlobType) Parse(s string) error {
 	return err
 }
 
-func FromAzBlobType(bt azblob.BlobType) BlobType {
+func FromBlobType(bt blob.BlobType) BlobType {
 	switch bt {
-	case azblob.BlobBlockBlob:
+	case blob.BlobTypeBlockBlob:
 		return EBlobType.BlockBlob()
-	case azblob.BlobPageBlob:
+	case blob.BlobTypePageBlob:
 		return EBlobType.PageBlob()
-	case azblob.BlobAppendBlob:
+	case blob.BlobTypeAppendBlob:
 		return EBlobType.AppendBlob()
 	default:
 		return EBlobType.Detect()
 	}
 }
 
-// ToAzBlobType returns the equivalent azblob.BlobType for given string.
-func (bt *BlobType) ToAzBlobType() blob.BlobType {
+// ToBlobType returns the equivalent blob.BlobType for given string.
+func (bt *BlobType) ToBlobType() blob.BlobType {
 	blobType := bt.String()
 	switch blobType {
 	case string(blob.BlobTypeBlockBlob):
@@ -1297,14 +1297,26 @@ type ResourceHTTPHeaders struct {
 }
 
 // ToAzBlobHTTPHeaders converts ResourceHTTPHeaders to azblob's BlobHTTPHeaders.
-func (h ResourceHTTPHeaders) ToAzBlobHTTPHeaders() azblob.BlobHTTPHeaders {
+func (h ResourceHTTPHeaders) ToBlobHTTPHeaders() blob.HTTPHeaders {
+	return blob.HTTPHeaders{
+		BlobContentType:        &h.ContentType,
+		BlobContentMD5:         h.ContentMD5,
+		BlobContentEncoding:    &h.ContentEncoding,
+		BlobContentLanguage:    &h.ContentLanguage,
+		BlobContentDisposition: &h.ContentDisposition,
+		BlobCacheControl:       &h.CacheControl,
+	}
+}
+
+// ToAzBlobHTTPHeaders converts ResourceHTTPHeaders to azblob's BlobHTTPHeaders.
+func ToAzBlobHTTPHeaders(h blob.HTTPHeaders) azblob.BlobHTTPHeaders {
 	return azblob.BlobHTTPHeaders{
-		ContentType:        h.ContentType,
-		ContentMD5:         h.ContentMD5,
-		ContentEncoding:    h.ContentEncoding,
-		ContentLanguage:    h.ContentLanguage,
-		ContentDisposition: h.ContentDisposition,
-		CacheControl:       h.CacheControl,
+		ContentType:        *h.BlobContentType,
+		ContentMD5:         h.BlobContentMD5,
+		ContentEncoding:    *h.BlobContentEncoding,
+		ContentLanguage:    *h.BlobContentLanguage,
+		ContentDisposition: *h.BlobContentDisposition,
+		CacheControl:       *h.BlobCacheControl,
 	}
 }
 
@@ -1657,14 +1669,14 @@ func (rpt RehydratePriorityType) String() string {
 	return enum.StringInt(rpt, reflect.TypeOf(rpt))
 }
 
-func (rpt RehydratePriorityType) ToRehydratePriorityType() azblob.RehydratePriorityType {
+func (rpt RehydratePriorityType) ToRehydratePriorityType() blob.RehydratePriority {
 	switch rpt {
 	case ERehydratePriorityType.None(), ERehydratePriorityType.Standard():
-		return azblob.RehydratePriorityStandard
+		return blob.RehydratePriorityStandard
 	case ERehydratePriorityType.High():
-		return azblob.RehydratePriorityHigh
+		return blob.RehydratePriorityHigh
 	default:
-		return azblob.RehydratePriorityStandard
+		return blob.RehydratePriorityStandard
 	}
 }
 

@@ -863,7 +863,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 			if err != nil {
 				return cooked, fmt.Errorf("error parsing the exclude-blob-type %s provided with exclude-blob-type flag ", blobType)
 			}
-			cooked.excludeBlobType = append(cooked.excludeBlobType, eBlobType.ToAzBlobType())
+			cooked.excludeBlobType = append(cooked.excludeBlobType, eBlobType.ToBlobType())
 		}
 	}
 

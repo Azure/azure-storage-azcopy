@@ -108,7 +108,7 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 			destBlobTier = ""
 		}
 
-		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.headersToApply, c.metadataToApply, azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags, c.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
+		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), common.ToAzBlobHTTPHeaders(c.headersToApply), c.metadataToApply, azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags, c.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
 			jptm.FailActiveSend("Creating empty blob", err)
 			return
 		}
@@ -175,7 +175,7 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
 
-		_, err := c.destBlockBlobURL.PutBlobFromURL(c.jptm.Context(), c.headersToApply, c.srcURL, c.metadataToApply,
+		_, err := c.destBlockBlobURL.PutBlobFromURL(c.jptm.Context(), common.ToAzBlobHTTPHeaders(c.headersToApply), c.srcURL, c.metadataToApply,
 			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil, nil, azblob.AccessTierType(destBlobTier), blobTags,
 			c.cpkToApply, c.jptm.GetS2SSourceBlobTokenCredential())
 

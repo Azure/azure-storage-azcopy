@@ -48,7 +48,7 @@ type pageBlobSenderBase struct {
 	// object. For S2S, these come from the source service.
 	// When sending local data, they are computed based on
 	// the properties of the local file
-	headersToApply  azblob.BlobHTTPHeaders
+	headersToApply  blob.HTTPHeaders
 	metadataToApply azblob.Metadata
 	blobTagsToApply azblob.BlobTagsMap
 	cpkToApply      azblob.ClientProvidedKeyOptions
@@ -132,7 +132,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 		chunkSize:              chunkSize,
 		numChunks:              numChunks,
 		pacer:                  pacer,
-		headersToApply:         props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
+		headersToApply:         props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
 		metadataToApply:        props.SrcMetadata.ToAzBlobMetadata(),
 		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
 		destBlobTier:           destBlobTier,
@@ -223,7 +223,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 	if s.jptm.ShouldInferContentType() {
 		// sometimes, specifically when reading local files, we have more info
 		// about the file type at this time than what we had before
-		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
+		s.headersToApply.BlobContentType = ps.GetInferredContentType(s.jptm)
 	}
 
 	destBlobTier := azblob.PremiumPageBlobAccessTierType(s.destBlobTier)
@@ -245,7 +245,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 	if _, err := s.destPageBlobURL.Create(s.jptm.Context(),
 		s.srcSize,
 		0,
-		s.headersToApply,
+		common.ToAzBlobHTTPHeaders(s.headersToApply),
 		s.metadataToApply,
 		azblob.BlobAccessConditions{},
 		destBlobTier,

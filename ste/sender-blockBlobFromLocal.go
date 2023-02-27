@@ -130,7 +130,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		}
 
 		if jptm.Info().SourceSize == 0 {
-			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags, u.cpkToApply, azblob.ImmutabilityPolicyOptions{})
+			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), common.ToAzBlobHTTPHeaders(u.headersToApply), u.metadataToApply, azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags, u.cpkToApply, azblob.ImmutabilityPolicyOptions{})
 		} else {
 			// File with content
 
@@ -140,11 +140,11 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 				jptm.FailActiveUpload("Getting hash", errNoHash)
 				return
 			}
-			u.headersToApply.ContentMD5 = md5Hash
+			u.headersToApply.BlobContentMD5 = md5Hash
 
 			// Upload the file
 			body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
-			_, err = u.destBlockBlobURL.Upload(jptm.Context(), body, u.headersToApply, u.metadataToApply,
+			_, err = u.destBlockBlobURL.Upload(jptm.Context(), body, common.ToAzBlobHTTPHeaders(u.headersToApply), u.metadataToApply,
 				azblob.BlobAccessConditions{}, azblob.AccessTierType(u.destBlobTier), blobTags, u.cpkToApply, azblob.ImmutabilityPolicyOptions{})
 		}
 
@@ -173,7 +173,7 @@ func (u *blockBlobUploader) Epilogue() {
 
 		md5Hash, ok := <-u.md5Channel
 		if ok {
-			u.headersToApply.ContentMD5 = md5Hash
+			u.headersToApply.BlobContentMD5 = md5Hash
 		} else {
 			jptm.FailActiveSend("Getting hash", errNoHash)
 			return

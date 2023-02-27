@@ -3,6 +3,7 @@ package ste
 import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -16,7 +17,7 @@ type blobFolderSender struct {
 	jptm            IJobPartTransferMgr
 	sip             ISourceInfoProvider
 	metadataToApply azblob.Metadata
-	headersToAppply azblob.BlobHTTPHeaders
+	headersToAppply blob.HTTPHeaders
 	blobTagsToApply azblob.BlobTagsMap
 	cpkToApply      azblob.ClientProvidedKeyOptions
 }
@@ -40,7 +41,7 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, p pipelin
 		sip:             sip,
 		destination:     destBlockBlobURL,
 		metadataToApply: props.SrcMetadata.Clone().ToAzBlobMetadata(), // We're going to modify it, so we should clone it.
-		headersToAppply: props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
+		headersToAppply: props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
 		blobTagsToApply: props.SrcBlobTags.ToAzBlobTagsMap(),
 		cpkToApply:      common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo()),
 	}
@@ -92,7 +93,7 @@ func (b *blobFolderSender) overwriteDFSProperties() (string, error) {
 	if err != nil {
 		return "Set Blob Tags", err
 	}
-	_, err = b.destination.SetHTTPHeaders(b.jptm.Context(), b.headersToAppply, azblob.BlobAccessConditions{})
+	_, err = b.destination.SetHTTPHeaders(b.jptm.Context(), common.ToAzBlobHTTPHeaders(b.headersToAppply), azblob.BlobAccessConditions{})
 	if err != nil {
 		return "Set HTTP Headers", err
 	}
@@ -156,7 +157,7 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 	err = t.CreateFolder(b.DirUrlToString(), func() error {
 		_, err := b.destination.Upload(b.jptm.Context(),
 			strings.NewReader(""),
-			b.headersToAppply,
+			common.ToAzBlobHTTPHeaders(b.headersToAppply),
 			b.metadataToApply,
 			azblob.BlobAccessConditions{},
 			azblob.DefaultAccessTier, // It doesn't make sense to use a special access tier, the blob will be 0 bytes.

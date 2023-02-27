@@ -88,8 +88,8 @@ func (u *appendBlobUploader) Epilogue() {
 	if jptm.IsLive() {
 		tryPutMd5Hash(jptm, u.md5Channel, func(md5Hash []byte) error {
 			epilogueHeaders := u.headersToApply
-			epilogueHeaders.ContentMD5 = md5Hash
-			_, err := u.destAppendBlobURL.SetHTTPHeaders(jptm.Context(), epilogueHeaders, azblob.BlobAccessConditions{})
+			epilogueHeaders.BlobContentMD5 = md5Hash
+			_, err := u.destAppendBlobURL.SetHTTPHeaders(jptm.Context(), common.ToAzBlobHTTPHeaders(epilogueHeaders), azblob.BlobAccessConditions{})
 			return err
 		})
 	}

@@ -22,6 +22,7 @@ package ste
 
 import (
 	"context"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"time"
 
@@ -42,7 +43,7 @@ type appendBlobSenderBase struct {
 	// object. For S2S, these come from the source service.
 	// When sending local data, they are computed based on
 	// the properties of the local file
-	headersToApply  azblob.BlobHTTPHeaders
+	headersToApply  blob.HTTPHeaders
 	metadataToApply azblob.Metadata
 	blobTagsToApply azblob.BlobTagsMap
 	cpkToApply      azblob.ClientProvidedKeyOptions
@@ -90,7 +91,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 		chunkSize:              chunkSize,
 		numChunks:              numChunks,
 		pacer:                  pacer,
-		headersToApply:         props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
+		headersToApply:         props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
 		metadataToApply:        props.SrcMetadata.ToAzBlobMetadata(),
 		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
 		sip:                    srcInfoProvider,
@@ -147,7 +148,7 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 	if s.jptm.ShouldInferContentType() {
 		// sometimes, specifically when reading local files, we have more info
 		// about the file type at this time than what we had before
-		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
+		s.headersToApply.BlobContentType = ps.GetInferredContentType(s.jptm)
 	}
 
 	blobTags := s.blobTagsToApply
@@ -155,7 +156,7 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 	if separateSetTagsRequired || len(blobTags) == 0 {
 		blobTags = nil
 	}
-	if _, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, blobTags, s.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
+	if _, err := s.destAppendBlobURL.Create(s.jptm.Context(), common.ToAzBlobHTTPHeaders(s.headersToApply), s.metadataToApply, azblob.BlobAccessConditions{}, blobTags, s.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}

@@ -54,7 +54,7 @@ type blockBlobSenderBase struct {
 	// Headers and other info that we will apply to the destination object.
 	// 1. For S2S, these come from the source service.
 	// 2. When sending local data, they are computed based on the properties of the local file
-	headersToApply  azblob.BlobHTTPHeaders
+	headersToApply  blob.HTTPHeaders
 	metadataToApply azblob.Metadata
 	blobTagsToApply azblob.BlobTagsMap
 	cpkToApply      azblob.ClientProvidedKeyOptions
@@ -161,7 +161,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		numChunks:        numChunks,
 		pacer:            pacer,
 		blockIDs:         make([]string, numChunks),
-		headersToApply:   props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
+		headersToApply:   props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
 		metadataToApply:  props.SrcMetadata.ToAzBlobMetadata(),
 		blobTagsToApply:  props.SrcBlobTags.ToAzBlobTagsMap(),
 		destBlobTier:     destBlobTier,
@@ -189,7 +189,7 @@ func (s *blockBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
 
 func (s *blockBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
 	if s.jptm.ShouldInferContentType() {
-		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
+		s.headersToApply.BlobContentType = ps.GetInferredContentType(s.jptm)
 	}
 	return false
 }
@@ -228,7 +228,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 			destBlobTier = ""
 		}
 
-		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags, s.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
+		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, common.ToAzBlobHTTPHeaders(s.headersToApply), s.metadataToApply, azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags, s.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
 			jptm.FailActiveSend("Committing block list", err)
 			return
 		}
