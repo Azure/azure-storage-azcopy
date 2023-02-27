@@ -22,6 +22,7 @@ package ste
 
 import (
 	"errors"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -219,7 +220,7 @@ func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pi
 	intendedType := override.ToAzBlobType()
 
 	if override == common.EBlobType.Detect() {
-		intendedType = inferBlobType(jptm.Info().Source, azblob.BlobBlockBlob)
+		intendedType = inferBlobType(jptm.Info().Source, blob.BlobTypeBlockBlob)
 		// jptm.LogTransferInfo(fmt.Sprintf("Autodetected %s blob type as %s.", jptm.Info().Source , intendedType))
 		// TODO: Log these? @JohnRusk and @zezha-msft this creates quite a bit of spam in the logs but is important info.
 		// TODO: Perhaps we should log it only if it isn't a block blob?
@@ -232,11 +233,11 @@ func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pi
 	}
 
 	switch intendedType {
-	case azblob.BlobBlockBlob:
+	case blob.BlobTypeBlockBlob:
 		return newBlockBlobUploader(jptm, destination, p, pacer, sip)
-	case azblob.BlobPageBlob:
+	case blob.BlobTypePageBlob:
 		return newPageBlobUploader(jptm, destination, p, pacer, sip)
-	case azblob.BlobAppendBlob:
+	case blob.BlobTypeAppendBlob:
 		return newAppendBlobUploader(jptm, destination, p, pacer, sip)
 	default:
 		return newBlockBlobUploader(jptm, destination, p, pacer, sip) // If no blob type was inferred, assume block blob.

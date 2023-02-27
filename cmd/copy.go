@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"io"
 	"math"
 	"net/url"
@@ -1143,7 +1144,7 @@ type CookedCopyCmdArgs struct {
 	// options from flags
 	blockSize int64
 	// list of blobTypes to exclude while enumerating the transfer
-	excludeBlobType []azblob.BlobType
+	excludeBlobType []blob.BlobType
 	blobType        common.BlobType
 	// Blob index tags categorize data in your storage account utilizing key-value tag attributes.
 	// These tags are automatically indexed and exposed as a queryable multi-dimensional index to easily find data.

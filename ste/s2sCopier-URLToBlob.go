@@ -23,6 +23,7 @@ package ste
 import (
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -34,7 +35,7 @@ import (
 func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
 	srcInfoProvider := sip.(IRemoteSourceInfoProvider) // "downcast" to the type we know it really has
 
-	var targetBlobType azblob.BlobType
+	var targetBlobType blob.BlobType
 
 	blobTypeOverride := jptm.BlobTypeOverride() // BlobTypeOverride is copy info specified by user
 
@@ -61,10 +62,10 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 
 			fileName := srcURL.Path
 
-			targetBlobType = inferBlobType(fileName, azblob.BlobBlockBlob)
+			targetBlobType = inferBlobType(fileName, blob.BlobTypeBlockBlob)
 		}
 
-		if targetBlobType != azblob.BlobBlockBlob {
+		if targetBlobType != blob.BlobTypeBlockBlob {
 			jptm.LogTransferInfo(pipeline.LogInfo, srcInfoProvider.RawSource(), destination, fmt.Sprintf("Autodetected %s blob type as %s.", jptm.Info().Source, targetBlobType))
 		}
 	}
@@ -84,11 +85,11 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 	}
 
 	switch targetBlobType {
-	case azblob.BlobBlockBlob:
+	case blob.BlobTypeBlockBlob:
 		return newURLToBlockBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
-	case azblob.BlobAppendBlob:
+	case blob.BlobTypeAppendBlob:
 		return newURLToAppendBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
-	case azblob.BlobPageBlob:
+	case blob.BlobTypePageBlob:
 		return newURLToPageBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
 	default:
 		if jptm.ShouldLog(pipeline.LogDebug) { // To save fmt.Sprintf

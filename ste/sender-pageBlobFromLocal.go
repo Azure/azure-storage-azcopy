@@ -36,7 +36,7 @@ type pageBlobUploader struct {
 }
 
 func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	senderBase, err := newPageBlobSenderBase(jptm, destination, p, pacer, sip, azblob.AccessTierNone)
+	senderBase, err := newPageBlobSenderBase(jptm, destination, p, pacer, sip, "")
 	if err != nil {
 		return nil, err
 	}

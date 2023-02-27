@@ -3,6 +3,7 @@ package ste
 import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"net/url"
@@ -16,7 +17,7 @@ type blobSymlinkSender struct {
 	sip              ISourceInfoProvider
 	headersToApply   azblob.BlobHTTPHeaders
 	metadataToApply  azblob.Metadata
-	destBlobTier     azblob.AccessTierType
+	destBlobTier     blob.AccessTier
 	blobTagsToApply  azblob.BlobTagsMap
 	cpkToApply       azblob.ClientProvidedKeyOptions
 }
@@ -34,7 +35,7 @@ func newBlobSymlinkSender(jptm IJobPartTransferMgr, destination string, p pipeli
 		return nil, err
 	}
 
-	destBlobTier := azblob.AccessTierNone
+	var destBlobTier blob.AccessTier
 	blockBlobTierOverride, _ := jptm.BlobTiers()
 	if blockBlobTierOverride != common.EBlockBlobTier.None() {
 		destBlobTier = blockBlobTierOverride.ToAccessTierType()
@@ -68,7 +69,7 @@ func (s *blobSymlinkSender) SendSymlink(linkData string) error {
 	}
 	s.metadataToApply["is_symlink"] = "true"
 
-	_, err = s.destBlockBlobURL.Upload(s.jptm.Context(), strings.NewReader(linkData), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, s.destBlobTier, s.blobTagsToApply, s.cpkToApply, azblob.ImmutabilityPolicyOptions{})
+	_, err = s.destBlockBlobURL.Upload(s.jptm.Context(), strings.NewReader(linkData), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, azblob.AccessTierType(s.destBlobTier), s.blobTagsToApply, s.cpkToApply, azblob.ImmutabilityPolicyOptions{})
 	return err
 }
 

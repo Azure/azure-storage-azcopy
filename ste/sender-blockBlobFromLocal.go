@@ -37,7 +37,7 @@ type blockBlobUploader struct {
 }
 
 func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	senderBase, err := newBlockBlobSenderBase(jptm, destination, p, pacer, sip, azblob.AccessTierNone)
+	senderBase, err := newBlockBlobSenderBase(jptm, destination, p, pacer, sip, "")
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		var err error
 		if !ValidateTier(jptm, u.destBlobTier, u.destBlockBlobURL.BlobURL, u.jptm.Context(), false) {
-			u.destBlobTier = azblob.DefaultAccessTier
+			u.destBlobTier = ""
 		}
 
 		blobTags := u.blobTagsToApply
@@ -126,11 +126,11 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		// TODO: Remove this snippet once service starts supporting CPK with blob tier
 		destBlobTier := u.destBlobTier
 		if u.cpkToApply.EncryptionScope != nil || (u.cpkToApply.EncryptionKey != nil && u.cpkToApply.EncryptionKeySha256 != nil) {
-			destBlobTier = azblob.AccessTierNone
+			destBlobTier = ""
 		}
 
 		if jptm.Info().SourceSize == 0 {
-			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{}, destBlobTier, blobTags, u.cpkToApply, azblob.ImmutabilityPolicyOptions{})
+			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags, u.cpkToApply, azblob.ImmutabilityPolicyOptions{})
 		} else {
 			// File with content
 
@@ -145,7 +145,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 			// Upload the file
 			body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
 			_, err = u.destBlockBlobURL.Upload(jptm.Context(), body, u.headersToApply, u.metadataToApply,
-				azblob.BlobAccessConditions{}, u.destBlobTier, blobTags, u.cpkToApply, azblob.ImmutabilityPolicyOptions{})
+				azblob.BlobAccessConditions{}, azblob.AccessTierType(u.destBlobTier), blobTags, u.cpkToApply, azblob.ImmutabilityPolicyOptions{})
 		}
 
 		// if the put blob is a failure, update the transfer status to failed

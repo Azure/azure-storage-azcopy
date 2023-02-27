@@ -1,6 +1,7 @@
 package common
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"reflect"
 	"strings"
@@ -131,7 +132,7 @@ type CopyJobPartOrderRequest struct {
 	Fpo                 FolderPropertyOption // passed in from front-end to ensure that front-end and STE agree on the desired behaviour for the job
 	SymlinkHandlingType SymlinkHandlingType
 	// list of blobTypes to exclude.
-	ExcludeBlobType []azblob.BlobType
+	ExcludeBlobType []blob.BlobType
 
 	SourceRoot      ResourceString
 	DestinationRoot ResourceString

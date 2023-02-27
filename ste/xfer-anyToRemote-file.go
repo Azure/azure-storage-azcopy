@@ -25,6 +25,7 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"hash"
 	"net/http"
@@ -82,7 +83,7 @@ func prepareDestAccountInfo(bURL azblob.BlobURL, jptm IJobPartTransferMgr, ctx c
 }
 
 // // TODO: Infer availability based upon blob size as well, for premium page blobs.
-func BlobTierAllowed(destTier azblob.AccessTierType) bool {
+func BlobTierAllowed(destTier blob.AccessTier) bool {
 	// If we failed to get the account info, just return true.
 	// This is because we can't infer whether it's possible or not, and the setTier operation could possibly succeed (or fail)
 	if tierSetPossibleFail {
@@ -116,13 +117,13 @@ func BlobTierAllowed(destTier azblob.AccessTierType) bool {
 		// Standard storage account. If it's Hot, Cool, or Archive, we're A-OK.
 		// Page blobs, however, don't have an access tier on Standard accounts.
 		// However, this is also OK, because the pageblob sender code prevents us from using a standard access tier type.
-		return destTier == azblob.AccessTierArchive || destTier == azblob.AccessTierCool || destTier == azblob.AccessTierHot
+		return destTier == blob.AccessTierArchive || destTier == blob.AccessTierCool || destTier == blob.AccessTierHot
 	}
 }
 
-func ValidateTier(jptm IJobPartTransferMgr, blobTier azblob.AccessTierType, blobURL azblob.BlobURL, ctx context.Context, performQuietly bool) (isValid bool) {
+func ValidateTier(jptm IJobPartTransferMgr, blobTier blob.AccessTier, blobURL azblob.BlobURL, ctx context.Context, performQuietly bool) (isValid bool) {
 
-	if jptm.IsLive() && blobTier != azblob.AccessTierNone {
+	if jptm.IsLive() && blobTier != "" {
 
 		// Let's check if we can confirm we'll be able to check the destination blob's account info.
 		// A SAS token, even with write-only permissions is enough. OR, OAuth with the account owner.

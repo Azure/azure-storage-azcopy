@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"math"
 	"os"
 	"reflect"
@@ -249,11 +250,11 @@ var EOverwriteOption = OverwriteOption(0)
 
 type OverwriteOption uint8
 
-func (OverwriteOption) True() OverwriteOption          { return OverwriteOption(0) }
-func (OverwriteOption) False() OverwriteOption         { return OverwriteOption(1) }
-func (OverwriteOption) Prompt() OverwriteOption        { return OverwriteOption(2) }
-func (OverwriteOption) IfSourceNewer() OverwriteOption { return OverwriteOption(3) }
-func (OverwriteOption) PosixProperties() OverwriteOption {return OverwriteOption(4)}
+func (OverwriteOption) True() OverwriteOption            { return OverwriteOption(0) }
+func (OverwriteOption) False() OverwriteOption           { return OverwriteOption(1) }
+func (OverwriteOption) Prompt() OverwriteOption          { return OverwriteOption(2) }
+func (OverwriteOption) IfSourceNewer() OverwriteOption   { return OverwriteOption(3) }
+func (OverwriteOption) PosixProperties() OverwriteOption { return OverwriteOption(4) }
 
 func (o *OverwriteOption) Parse(s string) error {
 	val, err := enum.Parse(reflect.TypeOf(o), s, true)
@@ -654,17 +655,17 @@ func FromAzBlobType(bt azblob.BlobType) BlobType {
 }
 
 // ToAzBlobType returns the equivalent azblob.BlobType for given string.
-func (bt *BlobType) ToAzBlobType() azblob.BlobType {
+func (bt *BlobType) ToAzBlobType() blob.BlobType {
 	blobType := bt.String()
 	switch blobType {
-	case string(azblob.BlobBlockBlob):
-		return azblob.BlobBlockBlob
-	case string(azblob.BlobPageBlob):
-		return azblob.BlobPageBlob
-	case string(azblob.BlobAppendBlob):
-		return azblob.BlobAppendBlob
+	case string(blob.BlobTypeBlockBlob):
+		return blob.BlobTypeBlockBlob
+	case string(blob.BlobTypePageBlob):
+		return blob.BlobTypePageBlob
+	case string(blob.BlobTypeAppendBlob):
+		return blob.BlobTypeAppendBlob
 	default:
-		return azblob.BlobNone
+		return ""
 	}
 }
 
@@ -772,8 +773,8 @@ func (bbt *BlockBlobTier) Parse(s string) error {
 	return err
 }
 
-func (bbt BlockBlobTier) ToAccessTierType() azblob.AccessTierType {
-	return azblob.AccessTierType(bbt.String())
+func (bbt BlockBlobTier) ToAccessTierType() blob.AccessTier {
+	return blob.AccessTier(bbt.String())
 }
 
 func (bbt BlockBlobTier) MarshalJSON() ([]byte, error) {
@@ -817,8 +818,8 @@ func (pbt *PageBlobTier) Parse(s string) error {
 	return err
 }
 
-func (pbt PageBlobTier) ToAccessTierType() azblob.AccessTierType {
-	return azblob.AccessTierType(pbt.String())
+func (pbt PageBlobTier) ToAccessTierType() blob.AccessTier {
+	return blob.AccessTier(pbt.String())
 }
 
 func (pbt PageBlobTier) MarshalJSON() ([]byte, error) {
@@ -1014,8 +1015,8 @@ type CopyTransfer struct {
 	Metadata           Metadata
 
 	// Properties for S2S blob copy
-	BlobType      azblob.BlobType
-	BlobTier      azblob.AccessTierType
+	BlobType      blob.BlobType
+	BlobTier      blob.AccessTier
 	BlobVersionID string
 	// Blob index tags categorize data in your storage account utilizing key-value tag attributes
 	BlobTags BlobTags

@@ -67,11 +67,11 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 
 		var err error = nil
 		if jptm.Info().SrcBlobType == azblob.BlobBlockBlob && blockBlobTier != common.EBlockBlobTier.None() && ValidateTier(jptm, blockBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context(), true) {
-			_, err = srcBlobURL.SetTier(jptm.Context(), blockBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{}, rehydratePriority)
+			_, err = srcBlobURL.SetTier(jptm.Context(), azblob.AccessTierType(blockBlobTier.ToAccessTierType()), azblob.LeaseAccessConditions{}, rehydratePriority)
 		}
 		// cannot return true for >1, therefore only one of these will run
 		if jptm.Info().SrcBlobType == azblob.BlobPageBlob && pageBlobTier != common.EPageBlobTier.None() && ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context(), true) {
-			_, err = srcBlobURL.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{}, rehydratePriority)
+			_, err = srcBlobURL.SetTier(jptm.Context(), azblob.AccessTierType(pageBlobTier.ToAccessTierType()), azblob.LeaseAccessConditions{}, rehydratePriority)
 		}
 
 		if err != nil {
@@ -129,7 +129,7 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		_, pageBlobTier := jptm.BlobTiers()
 		var err error = nil
 		if ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context(), false) {
-			_, err = srcBlobURL.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{}, rehydratePriority)
+			_, err = srcBlobURL.SetTier(jptm.Context(), azblob.AccessTierType(pageBlobTier.ToAccessTierType()), azblob.LeaseAccessConditions{}, rehydratePriority)
 		}
 
 		if err != nil {

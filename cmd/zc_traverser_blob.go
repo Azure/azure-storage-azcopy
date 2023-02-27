@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"strings"
 
@@ -302,7 +303,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 								common.FromAzBlobMetadataToCommonMetadata(resp.NewMetadata()),
 								containerName,
 							)
-							storedObject.archiveStatus = azblob.ArchiveStatusType(resp.ArchiveStatus())
+							storedObject.archiveStatus = blob.ArchiveStatus(resp.ArchiveStatus())
 
 							if t.s2sPreserveSourceTags {
 								var BlobTags *azblob.BlobTags
