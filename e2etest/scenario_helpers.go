@@ -566,7 +566,16 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 				props.blobTags = blobTagsMap
 			}
 
-			props.blobType = common.FromBlobType(blobInfo.Properties.BlobType)
+			switch blobInfo.Properties.BlobType {
+			case azblob.BlobBlockBlob:
+				props.blobType = common.EBlobType.BlockBlob()
+			case azblob.BlobPageBlob:
+				props.blobType = common.EBlobType.PageBlob()
+			case azblob.BlobAppendBlob:
+				props.blobType = common.EBlobType.AppendBlob()
+			default:
+				props.blobType = common.EBlobType.Detect()
+			}
 
 			result[relativePath] = &props
 		}
