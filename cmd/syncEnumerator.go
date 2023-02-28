@@ -427,6 +427,11 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *s
 
 			<-stopDeleteWorkers
 
+			// Check if enumeration cancelled or not.
+			if ctx.Err() != nil {
+				return nil
+			}
+
 			// schedule every local file that doesn't exist at the destination
 			err = objectIndexerMap.traverse(transferScheduler.scheduleCopyTransfer, filters)
 			if err != nil {

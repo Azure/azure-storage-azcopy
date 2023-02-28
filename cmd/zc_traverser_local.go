@@ -390,13 +390,6 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 					return nil
 				}
 
-				slPath, err := filepath.Abs(filePath)
-				if err != nil {
-					err = fmt.Errorf("Failed to get absolute path of %s: %s", filePath, err.Error())
-					writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
-					return nil
-				}
-
 				rStat, err := os.Stat(result)
 				if err != nil {
 					err = fmt.Errorf("Failed to get properties of symlink target at %s: %s", result, err.Error())
@@ -406,16 +399,28 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 
 				if rStat.IsDir() {
 					/*
+					 * We need to compute absolute path for which symlink traversal started.
+					 * Original path of symlink is fullPath + RelBase. computedRelativePath is relative filePath to RelBase,
+					 * of files found underneath the folder symlink pointing too.
+					 */
+					finalSlPath, err := filepath.Abs(common.GenerateFullPath(fullPath, computedRelativePath))
+					if err != nil {
+						err = fmt.Errorf("Failed to get absolute path of %s: %s", common.GenerateFullPath(fullPath, computedRelativePath), err.Error())
+						writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+						return nil
+					}
+					/*
 					 * Symlink pointing to a directory has the potential of causing filesystem loops by pointing
 					 * to one of its ancestor directories.
 					 * Skip the symlink if it causes one, else queue it for scanning.
 					 */
-					if ok, err := checkSymlinkCausesDirectoryLoop(slPath); err != nil {
+
+					if ok, err := checkSymlinkCausesDirectoryLoop(finalSlPath); err != nil {
 						err = fmt.Errorf("checkSymlinkCausesDirectoryLoop failed with error: %v", err)
 						writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 						return err
 					} else if ok {
-						err = fmt.Errorf("[Directory Loop Detected] %s -> %s, skipping", slPath, result)
+						err = fmt.Errorf("[Directory Loop Detected] %s -> %s, skipping", finalSlPath, result)
 						writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 						return nil
 					} else {
