@@ -2,12 +2,12 @@ package ste
 
 import (
 	"errors"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"reflect"
 	"sync/atomic"
 	"unsafe"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
@@ -197,7 +197,7 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
 
 // TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder
 // TODO: Refactor return type to an object
-func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType, blobTier azblob.AccessTierType,
+func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType blob.BlobType, blobTier blob.AccessTier,
 	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType, blobVersionID string, blobSnapshotID string, blobTags common.BlobTags) {
 	var err error
 	t := jpph.Transfer(transferIndex)
@@ -243,12 +243,12 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 	}
 	if t.SrcBlobTypeLength != 0 {
 		tmpBlobTypeStr := []byte(jpph.getString(offset, t.SrcBlobTypeLength))
-		blobType = azblob.BlobType(tmpBlobTypeStr)
+		blobType = blob.BlobType(tmpBlobTypeStr)
 		offset += int64(t.SrcBlobTypeLength)
 	}
 	if t.SrcBlobTierLength != 0 {
 		tmpBlobTierStr := []byte(jpph.getString(offset, t.SrcBlobTierLength))
-		blobTier = azblob.AccessTierType(tmpBlobTierStr)
+		blobTier = blob.AccessTier(tmpBlobTierStr)
 		offset += int64(t.SrcBlobTierLength)
 	}
 	if t.SrcBlobVersionIDLength != 0 {

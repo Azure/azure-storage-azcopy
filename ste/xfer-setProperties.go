@@ -3,6 +3,7 @@ package ste
 import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -66,11 +67,11 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		blockBlobTier, pageBlobTier := jptm.BlobTiers()
 
 		var err error = nil
-		if jptm.Info().SrcBlobType == azblob.BlobBlockBlob && blockBlobTier != common.EBlockBlobTier.None() && ValidateTier(jptm, blockBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context(), true) {
+		if jptm.Info().SrcBlobType == blob.BlobTypeBlockBlob && blockBlobTier != common.EBlockBlobTier.None() && ValidateTier(jptm, blockBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context(), true) {
 			_, err = srcBlobURL.SetTier(jptm.Context(), azblob.AccessTierType(blockBlobTier.ToAccessTierType()), azblob.LeaseAccessConditions{}, azblob.RehydratePriorityType(rehydratePriority))
 		}
 		// cannot return true for >1, therefore only one of these will run
-		if jptm.Info().SrcBlobType == azblob.BlobPageBlob && pageBlobTier != common.EPageBlobTier.None() && ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context(), true) {
+		if jptm.Info().SrcBlobType == blob.BlobTypePageBlob && pageBlobTier != common.EPageBlobTier.None() && ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context(), true) {
 			_, err = srcBlobURL.SetTier(jptm.Context(), azblob.AccessTierType(pageBlobTier.ToAccessTierType()), azblob.LeaseAccessConditions{}, azblob.RehydratePriorityType(rehydratePriority))
 		}
 

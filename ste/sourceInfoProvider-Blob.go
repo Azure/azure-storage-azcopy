@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"io/ioutil"
 	"strings"
 	"time"
@@ -119,11 +120,11 @@ func (p *blobSourceInfoProvider) AccessControl() (azbfs.BlobFSAccessControl, err
 	return fURL.GetAccessControl(p.jptm.Context())
 }
 
-func (p *blobSourceInfoProvider) BlobTier() azblob.AccessTierType {
+func (p *blobSourceInfoProvider) BlobTier() blob.AccessTier {
 	return p.transferInfo.S2SSrcBlobTier
 }
 
-func (p *blobSourceInfoProvider) BlobType() azblob.BlobType {
+func (p *blobSourceInfoProvider) BlobType() blob.BlobType {
 	return p.transferInfo.SrcBlobType
 }
 

@@ -119,8 +119,8 @@ type TransferInfo struct {
 	S2SInvalidMetadataHandleOption common.InvalidMetadataHandleOption
 
 	// Blob
-	SrcBlobType    azblob.BlobType       // used for both S2S and for downloads to local from blob
-	S2SSrcBlobTier azblob.AccessTierType // AccessTierType (string) is used to accommodate service-side support matrix change.
+	SrcBlobType    blob.BlobType   // used for both S2S and for downloads to local from blob
+	S2SSrcBlobTier blob.AccessTier // AccessTierType (string) is used to accommodate service-side support matrix change.
 
 	RehydratePriority blob.RehydratePriority
 }
