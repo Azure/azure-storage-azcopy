@@ -400,13 +400,6 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 					return nil
 				}
 
-				slPath, err := filepath.Abs(filePath)
-				if err != nil {
-					err = fmt.Errorf("Failed to get absolute path of %s: %s", filePath, err.Error())
-					writeToErrorChannel(ErrorFileInfo{FileName: fileInfo.Name(), FilePath: filePath, FileLastModifiedTime: fileInfo.ModTime(), FileSize: fileInfo.Size(), IsDir: fileInfo.IsDir(), ErrorMsg: err, IsSource: isSource})
-					return nil
-				}
-
 				rStat, err := os.Stat(result)
 				if err != nil {
 					err = fmt.Errorf("Failed to get properties of symlink target at %s: %s", result, err.Error())
@@ -423,7 +416,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 					finalSlPath, err := filepath.Abs(common.GenerateFullPath(fullPath, computedRelativePath))
 					if err != nil {
 						err = fmt.Errorf("Failed to get absolute path of %s: %s", common.GenerateFullPath(fullPath, computedRelativePath), err.Error())
-						writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+						writeToErrorChannel(ErrorFileInfo{FileName: fileInfo.Name(), FilePath: filePath, FileLastModifiedTime: fileInfo.ModTime(), FileSize: fileInfo.Size(), IsDir: fileInfo.IsDir(), ErrorMsg: err, IsSource: isSource})
 						return nil
 					}
 					/*
