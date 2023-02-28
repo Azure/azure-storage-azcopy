@@ -868,7 +868,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerNoPreserveBlobT
 		validateS2STransfersAreScheduled(c,
 			"", "/"+srcContainerName, []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
 
-		c.Assert(mockedRPC.transfers[0].BlobTier, chk.Equals, "")
+		c.Assert(mockedRPC.transfers[0].BlobTier, chk.Equals, blob.AccessTier(""))
 	})
 }
 
