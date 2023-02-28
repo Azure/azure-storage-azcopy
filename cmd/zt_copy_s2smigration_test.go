@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"strings"
 	"time"
@@ -830,7 +831,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerPreserveBlobTie
 		validateS2STransfersAreScheduled(c,
 			"", "/"+srcContainerName, []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
 
-		c.Assert(mockedRPC.transfers[0].BlobTier, chk.Equals, azblob.AccessTierCool)
+		c.Assert(mockedRPC.transfers[0].BlobTier, chk.Equals, blob.AccessTierCool)
 	})
 }
 
@@ -867,7 +868,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerNoPreserveBlobT
 		validateS2STransfersAreScheduled(c,
 			"", "/"+srcContainerName, []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
 
-		c.Assert(mockedRPC.transfers[0].BlobTier, chk.Equals, azblob.AccessTierNone)
+		c.Assert(mockedRPC.transfers[0].BlobTier, chk.Equals, "")
 	})
 }
 
