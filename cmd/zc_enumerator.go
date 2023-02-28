@@ -454,7 +454,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		} else {
 			// TODO: Need to add error channel in case of blob traverse.
 			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted,
-				includeSnapshot, includeVersion, indexerMap, possiblyRenamedMap, orderedTqueue, isSource, isSync, maxObjectIndexerSizeInGB, lastSyncTime, cfdMode, metaDataOnlySync, scannerLogger)
+				includeSnapshot, includeVersion, errorChannel, indexerMap, possiblyRenamedMap, orderedTqueue, isSource, isSync, maxObjectIndexerSizeInGB, lastSyncTime, cfdMode, metaDataOnlySync, scannerLogger)
 
 		}
 	case common.ELocation.File():

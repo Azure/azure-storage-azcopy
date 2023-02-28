@@ -69,6 +69,9 @@ type blobTraverser struct {
 	// isSync boolean tells whether its copy operation or sync operation.
 	isSync bool
 
+	// Error channel for scanning errors
+	errorChannel chan ErrorFileInfo
+
 	// Hierarchical map of files and folders seen on source side.
 	indexerMap *folderIndexer
 
@@ -97,6 +100,16 @@ type blobTraverser struct {
 	scannerLogger common.ILoggerResetable
 }
 
+func (t *blobTraverser) writeToErrorChannel(err ErrorFileInfo) {
+	if t.scannerLogger != nil {
+		t.scannerLogger.Log(pipeline.LogError, err.ErrorMsg.Error())
+	} else {
+		WarnStdoutAndScanningLog(err.ErrorMsg.Error())
+	}
+	if t.errorChannel != nil {
+		t.errorChannel <- err
+	}
+}
 func (t *blobTraverser) IsDirectory(isSource bool) bool {
 	isDirDirect := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(t.rawURL)
 
@@ -174,6 +187,14 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	blobProperties, isBlob, isDirStub, propErr := t.getPropertiesIfSingleBlob()
 
 	if stgErr, ok := propErr.(azblob.StorageError); ok {
+		if t.errorChannel != nil {
+			ErrorFileInfo := ErrorFileInfo{
+				FilePath: blobUrlParts.BlobName,
+				ErrorMsg: stgErr,
+			}
+			t.errorChannel <- ErrorFileInfo
+		}
+
 		// Don't error out unless it's a CPK error just yet
 		// If it's a CPK error, we know it's a single blob and that we can't get the properties on it anyway.
 		if stgErr.ServiceCode() == common.CPK_ERROR_SERVICE_CODE {
@@ -620,8 +641,11 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 									storedObject.blobTags = blobTagsMap
 								}
 							}
-
 							enqueueOutput(storedObject, err)
+						}
+
+						if err != nil {
+							t.writeToErrorChannel(ErrorFileInfo{FilePath: folderRelativePath, IsDir: true, ErrorMsg: err, IsSource: t.isSource})
 						}
 					}
 				}
@@ -739,6 +763,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 				item, workerError := x.Item()
 				if workerError != nil {
 					errChan <- workerError
+					t.writeToErrorChannel(ErrorFileInfo{ErrorMsg: workerError, IsSource: t.isSource})
 					cancelWorkers()
 					return
 				}
@@ -754,6 +779,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 				if processErr != nil {
 					fmt.Printf("Traverser failed with error: %v", processErr)
 					errChan <- processErr
+					t.writeToErrorChannel(ErrorFileInfo{FileName: object.name, FilePath: object.relativePath, FileLastModifiedTime: object.lastModifiedTime, IsDir: object.entityType == common.EEntityType.Folder(), ErrorMsg: processErr, IsSource: t.isSource})
 					cancelWorkers()
 					return
 				}
@@ -877,7 +903,7 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 }
 
 func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool,
-	cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool, indexerMap *folderIndexer, possiblyRenamedMap *possiblyRenamedMap, orderedTqueue parallel.OrderedTqueueInterface, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32,
+	cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool, errorChannel chan ErrorFileInfo, indexerMap *folderIndexer, possiblyRenamedMap *possiblyRenamedMap, orderedTqueue parallel.OrderedTqueueInterface, isSource bool, isSync bool, maxObjectIndexerSizeInGB uint32,
 	lastSyncTime time.Time, cfdMode common.CFDMode, metaDataOnlySync bool, scannerLogger common.ILoggerResetable) (t *blobTraverser) {
 	t = &blobTraverser{
 		rawURL:                      rawURL,
@@ -895,6 +921,7 @@ func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 
 		// Sync related fields.
 		isSync:                   isSync,
+		errorChannel:             errorChannel,
 		indexerMap:               indexerMap,
 		orderedTqueue:            orderedTqueue,
 		possiblyRenamedMap:       possiblyRenamedMap,

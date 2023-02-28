@@ -230,9 +230,13 @@ type symlinkTargetFileInfo struct {
 
 // ErrorFileInfo holds information about files and folders that failed enumeration.
 type ErrorFileInfo struct {
-	FilePath string
-	FileInfo os.FileInfo
-	ErrorMsg error
+	FileName             string
+	FilePath             string
+	FileSize             int64
+	FileLastModifiedTime time.Time
+	IsDir                bool
+	ErrorMsg             error
+	IsSource             bool
 }
 
 func (s symlinkTargetFileInfo) Name() string {
@@ -337,7 +341,13 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 
 			if fileError != nil {
 				err := fmt.Errorf("Accessing '%s' failed with error: %s", filePath, fileError.Error())
-				writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+
+				// If fileInfo is nil here, it means enumeration failed for a directory.
+				if fileInfo != nil {
+					writeToErrorChannel(ErrorFileInfo{FileName: fileInfo.Name(), FilePath: filePath, FileLastModifiedTime: fileInfo.ModTime(), FileSize: fileInfo.Size(), IsDir: fileInfo.IsDir(), ErrorMsg: err, IsSource: isSource})
+				} else {
+					writeToErrorChannel(ErrorFileInfo{FilePath: filePath, IsDir: true, ErrorMsg: err, IsSource: isSource})
+				}
 				return nil
 			}
 			computedRelativePath := strings.TrimPrefix(common.CleanLocalPath(filePath), common.CleanLocalPath(queueItem.fullPath))
@@ -353,13 +363,13 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 
 			if fileInfo == nil {
 				err := fmt.Errorf("fileInfo is nil for file %s", filePath)
-				writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+				writeToErrorChannel(ErrorFileInfo{FilePath: filePath, IsDir: true, ErrorMsg: err, IsSource: isSource})
 				return nil
 			}
 
 			if (fileInfo.Mode() & unsupportedFileTypes) != 0 {
 				err := fmt.Errorf("Unsupported file type %s: %v", filePath, fileInfo.Mode())
-				writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+				writeToErrorChannel(ErrorFileInfo{FileName: fileInfo.Name(), FilePath: filePath, FileLastModifiedTime: fileInfo.ModTime(), FileSize: fileInfo.Size(), IsDir: fileInfo.IsDir(), ErrorMsg: err, IsSource: isSource})
 				return nil
 			}
 
@@ -379,21 +389,21 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 
 				if err != nil {
 					err = fmt.Errorf("Failed to resolve symlink %s: %s", filePath, err.Error())
-					writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					writeToErrorChannel(ErrorFileInfo{FileName: fileInfo.Name(), FilePath: filePath, FileLastModifiedTime: fileInfo.ModTime(), FileSize: fileInfo.Size(), IsDir: fileInfo.IsDir(), ErrorMsg: err, IsSource: isSource})
 					return nil
 				}
 
 				result, err = filepath.Abs(result)
 				if err != nil {
 					err = fmt.Errorf("Failed to get absolute path of symlink result %s: %s", filePath, err.Error())
-					writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					writeToErrorChannel(ErrorFileInfo{FileName: fileInfo.Name(), FilePath: filePath, FileLastModifiedTime: fileInfo.ModTime(), FileSize: fileInfo.Size(), IsDir: fileInfo.IsDir(), ErrorMsg: err, IsSource: isSource})
 					return nil
 				}
 
 				rStat, err := os.Stat(result)
 				if err != nil {
 					err = fmt.Errorf("Failed to get properties of symlink target at %s: %s", result, err.Error())
-					writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					writeToErrorChannel(ErrorFileInfo{FileName: fileInfo.Name(), FilePath: filePath, FileLastModifiedTime: fileInfo.ModTime(), FileSize: fileInfo.Size(), IsDir: fileInfo.IsDir(), ErrorMsg: err, IsSource: isSource})
 					return nil
 				}
 
@@ -406,7 +416,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 					finalSlPath, err := filepath.Abs(common.GenerateFullPath(fullPath, computedRelativePath))
 					if err != nil {
 						err = fmt.Errorf("Failed to get absolute path of %s: %s", common.GenerateFullPath(fullPath, computedRelativePath), err.Error())
-						writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+						writeToErrorChannel(ErrorFileInfo{FileName: fileInfo.Name(), FilePath: filePath, FileLastModifiedTime: fileInfo.ModTime(), FileSize: fileInfo.Size(), IsDir: fileInfo.IsDir(), ErrorMsg: err, IsSource: isSource})
 						return nil
 					}
 					/*
@@ -417,11 +427,11 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 
 					if ok, err := checkSymlinkCausesDirectoryLoop(finalSlPath); err != nil {
 						err = fmt.Errorf("checkSymlinkCausesDirectoryLoop failed with error: %v", err)
-						writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+						writeToErrorChannel(ErrorFileInfo{FileName: fileInfo.Name(), FilePath: filePath, FileLastModifiedTime: fileInfo.ModTime(), FileSize: fileInfo.Size(), IsDir: fileInfo.IsDir(), ErrorMsg: err, IsSource: isSource})
 						return err
 					} else if ok {
 						err = fmt.Errorf("[Directory Loop Detected] %s -> %s, skipping", finalSlPath, result)
-						writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+						writeToErrorChannel(ErrorFileInfo{FileName: fileInfo.Name(), FilePath: filePath, FileLastModifiedTime: fileInfo.ModTime(), FileSize: fileInfo.Size(), IsDir: fileInfo.IsDir(), ErrorMsg: err, IsSource: isSource})
 						return nil
 					} else {
 						err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
@@ -448,7 +458,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), targetFi, fileError)
 					_, err = getProcessingError(err)
 					if err != nil {
-						writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+						writeToErrorChannel(ErrorFileInfo{FileName: fileInfo.Name(), FilePath: filePath, FileLastModifiedTime: fileInfo.ModTime(), FileSize: fileInfo.Size(), IsDir: fileInfo.IsDir(), ErrorMsg: err, IsSource: isSource})
 					}
 					return err
 				}
@@ -459,7 +469,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 
 				if err != nil {
 					err = fmt.Errorf("Failed to get absolute path of %s: %s", filePath, err.Error())
-					writeToErrorChannel(ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					writeToErrorChannel(ErrorFileInfo{FileName: fileInfo.Name(), FilePath: filePath, FileLastModifiedTime: fileInfo.ModTime(), FileSize: fileInfo.Size(), IsDir: fileInfo.IsDir(), ErrorMsg: err, IsSource: isSource})
 					return nil
 				}
 
@@ -505,6 +515,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			ErrorFileInfo := ErrorFileInfo{
 				FilePath: t.fullPath,
 				ErrorMsg: err,
+				IsSource: t.isSource,
 			}
 			t.errorChannel <- ErrorFileInfo
 		}

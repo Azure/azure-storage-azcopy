@@ -910,7 +910,7 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return err
 	}
 
-	enumerator, err := cca.InitEnumerator(ctx)
+	enumerator, err := cca.InitEnumerator(ctx, nil /* errorChannel */)
 	if err != nil {
 		return err
 	}

@@ -230,7 +230,7 @@ func (cca *cookedSyncCmdArgs) ShouldConsultPossiblyRenamedMap() bool {
 	return cca.cfdMode != common.CFDModeFlags.TargetCompare()
 }
 
-func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *syncEnumerator, err error) {
+func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel chan ErrorFileInfo) (enumerator *syncEnumerator, err error) {
 
 	srcCredInfo, srcIsPublic, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.Source.Value, cca.Source.SAS, true, cca.cpkOptions)
 
@@ -315,7 +315,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *s
 			} else if entityType == common.EEntityType.Folder() {
 				atomic.AddUint64(&cca.atomicSourceFoldersScanned, 1)
 			}
-		}, nil, cca.s2sPreserveBlobTags, AzcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, nil /* errorChannel */, objectIndexerMap, nil /* possiblyRenamedMap */, orderedTqueue, true /* isSource */, true, /* isSync */
+		}, nil, cca.s2sPreserveBlobTags, AzcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, errorChannel, objectIndexerMap, nil /* possiblyRenamedMap */, orderedTqueue, true /* isSource */, true, /* isSync */
 		cca.maxObjectIndexerMapSizeInGB, time.Time{} /* lastSyncTime (not used by source traverser) */, cca.cfdMode, cca.metaDataOnlySync, sourceScannerLogger /* scannerLogger */)
 
 	if err != nil {
@@ -337,7 +337,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *s
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 		}
-	}, nil, cca.s2sPreserveBlobTags, AzcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, nil /* errorChannel */, objectIndexerMap /*folderIndexerMap */, possiblyRenamedMap, orderedTqueue, false, /* isSource */
+	}, nil, cca.s2sPreserveBlobTags, AzcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, errorChannel, objectIndexerMap /*folderIndexerMap */, possiblyRenamedMap, orderedTqueue, false, /* isSource */
 		true /* isSync */, cca.maxObjectIndexerMapSizeInGB /* maxObjectIndexerSizeInGB (not used by destination traverse) */, cca.lastSyncTime /* lastSyncTime */, cca.cfdMode, cca.metaDataOnlySync,
 		destinationScannerLogger /*scannerLogger */)
 	if err != nil {
