@@ -57,8 +57,6 @@ func (bd *blobDownloader) CreateFile(jptm IJobPartTransferMgr, destination strin
 		}
 	}
 
-	bd.fileMode = mode
-
 	if !needMakeFile {
 		return
 	}
