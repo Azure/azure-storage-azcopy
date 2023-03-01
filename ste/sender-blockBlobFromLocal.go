@@ -86,7 +86,7 @@ func (u *blockBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader) chunkFunc {
 	return createSendToRemoteChunkFunc(u.jptm, id, func() {
 		// step 1: generate block ID
-		encodedBlockID := u.generateEncodedBlockID()
+		encodedBlockID := u.generateEncodedBlockID(blockIndex)
 
 		// step 2: save the block ID into the list of block IDs
 		u.setBlockID(blockIndex, encodedBlockID)

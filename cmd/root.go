@@ -227,12 +227,12 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&debugSkipFiles, "debug-skip-files", "", "Used when debugging, to tell AzCopy to cancel the job midway. List of relative paths to skip in the STE.")
 
 	// reserved for partner teams
-	rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
+	_ = rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
 
 	// debug-only
-	rootCmd.PersistentFlags().MarkHidden("await-continue")
-	rootCmd.PersistentFlags().MarkHidden("await-open")
-	rootCmd.PersistentFlags().MarkHidden("debug-skip-files")
+	_ = rootCmd.PersistentFlags().MarkHidden("await-continue")
+	_ = rootCmd.PersistentFlags().MarkHidden("await-open")
+	_ = rootCmd.PersistentFlags().MarkHidden("debug-skip-files")
 }
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where

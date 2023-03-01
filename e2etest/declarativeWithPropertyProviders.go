@@ -185,12 +185,10 @@ func (w with) createObjectProperties() *objectProperties {
 // use createOnly if you want to define properties that should be used when creating an object, but not
 // used when verifying the state of the transferred object. Generally you'll have no use for this.
 // Just use "with", and the test framework will do the right thing.
-// nolint
 type createOnly struct {
 	with
 }
 
-// nolint
 func (createOnly) appliesToVerification() bool {
 	return false
 }
@@ -198,7 +196,7 @@ func (createOnly) appliesToVerification() bool {
 ////
 
 // Use verifyOnly if you need to specify some properties that should NOT be applied to the file when it is created,
-// but should be present on it afte) the transfer
+// but should be present on it after) the transfer
 type verifyOnly struct {
 	with
 }

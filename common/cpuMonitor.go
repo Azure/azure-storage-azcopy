@@ -57,7 +57,7 @@ func NewCalibratedCpuUsageMonitor() CPUMonitor {
 	// start it running and wait until it has self-calibrated
 	calibration := make(chan struct{})
 	go c.computationWorker(calibration)
-	_ = <-calibration
+	<-calibration
 
 	return c
 }
@@ -92,7 +92,7 @@ func (c *cpuUsageMonitor) computationWorker(calibrationDone chan struct{}) {
 	// run a separate loop to do the probes/measurements
 	go c.monitoringWorker(waitTime, durations)
 
-	_ = <-durations // discard first value, it doesn't seem very reliable
+	<-durations // discard first value, it doesn't seem very reliable
 
 	// get the next 3 and average them, as our baseline. We chose 3 somewhat arbitrarily
 	x := <-durations
@@ -140,10 +140,7 @@ func (c *cpuUsageMonitor) monitoringWorker(waitTime time.Duration, d chan time.D
 	for {
 		start := time.Now()
 
-		select {
-		case <-time.After(waitTime):
-			// noop
-		}
+		<-time.After(waitTime) // noop
 
 		duration := time.Since(start)
 		// how much longer than expected did it take for us to wake up?

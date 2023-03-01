@@ -315,7 +315,7 @@ func splitQueryFromSaslessResource(resource string, loc common.Location) (mainUr
 // All of the below functions only really do one thing at the moment.
 // They've been separated from copyEnumeratorInit.go in order to make the code more maintainable, should we want more destinations in the future.
 func getPathBeforeFirstWildcard(path string) string {
-	if strings.Index(path, "*") == -1 {
+	if !strings.Contains(path, "*") {
 		return path
 	}
 

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -428,9 +429,7 @@ func (lcm *lifecycleMgr) processNoneOutput(msgToOutput outputMessage) {
 		lcm.closeFunc()
 		os.Exit(int(msgToOutput.exitCode))
 	}
-
 	// ignore all other outputs
-	return
 }
 
 func (lcm *lifecycleMgr) processJSONOutput(msgToOutput outputMessage) {
@@ -555,7 +554,7 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 		lastFetchTime := time.Now().Add(-wait) // So that we start fetching time immediately
 
 		// cancelChannel will be notified when os receives os.Interrupt and os.Kill signals
-		signal.Notify(lcm.cancelChannel, os.Interrupt, os.Kill)
+		signal.Notify(lcm.cancelChannel, os.Interrupt, syscall.SIGTERM)
 
 		cancelCalled := false
 

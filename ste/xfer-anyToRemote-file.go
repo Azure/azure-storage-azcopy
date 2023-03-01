@@ -543,7 +543,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 			shouldCheckLength = false
 			checkLengthFailureOnReadOnlyDst.Do(func() {
 				var glcm = common.GetLifecycleMgr()
-				msg := fmt.Sprintf("Could not read destination length. If the destination is write-only, use --check-length=false on the command line.")
+				msg := "Could not read destination length. If the destination is write-only, use --check-length=false on the command line."
 				glcm.Info(msg)
 				if jptm.ShouldLog(pipeline.LogError) {
 					jptm.Log(pipeline.LogError, msg)

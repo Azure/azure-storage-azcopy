@@ -24,9 +24,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -64,7 +65,7 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 
 	// if we've a custom mime map
 	if path := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.MimeMapping()); path != "" {
-		data, err := ioutil.ReadFile(path)
+		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
@@ -81,12 +82,12 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 	deserialize := func(request *http.Request, v interface{}) {
 		// TODO: Check the HTTP verb here?
 		// reading the entire request body and closing the request body
-		body, err := ioutil.ReadAll(request.Body)
+		body, err := io.ReadAll(request.Body)
 		request.Body.Close()
 		if err != nil {
 			JobsAdmin.Panic(fmt.Errorf("error deserializing HTTP request"))
 		}
-		json.Unmarshal(body, v)
+		_ = json.Unmarshal(body, v)
 	}
 	serialize := func(v interface{}, response http.ResponseWriter) {
 		payload, err := json.Marshal(response)
@@ -95,7 +96,7 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 		}
 		// sending successful response back to front end
 		response.WriteHeader(http.StatusAccepted)
-		response.Write(payload)
+		_, _ = response.Write(payload)
 	}
 	http.HandleFunc(common.ERpcCmd.CopyJobPartOrder().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {

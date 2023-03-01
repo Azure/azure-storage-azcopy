@@ -39,12 +39,8 @@ type blobDownloader struct {
 	// used to avoid downloading zero ranges of page blobs
 	pageRangeOptimizer *pageRangeOptimizer
 
-	// used to avoid re-setting file mode
-	setMode bool
-
-	jptm     IJobPartTransferMgr
-	txInfo   TransferInfo
-	fileMode uint32
+	jptm   IJobPartTransferMgr
+	txInfo TransferInfo
 }
 
 func (bd *blobDownloader) CreateSymlink(jptm IJobPartTransferMgr) error {
@@ -53,7 +49,7 @@ func (bd *blobDownloader) CreateSymlink(jptm IJobPartTransferMgr) error {
 		return err
 	}
 	symsip := sip.(ISymlinkBearingSourceInfoProvider) // blob always implements this
-	symlinkInfo, err := symsip.ReadLink()
+	symlinkInfo, _ := symsip.ReadLink()
 
 	// create the link
 	err = os.Symlink(symlinkInfo, jptm.Info().Destination)

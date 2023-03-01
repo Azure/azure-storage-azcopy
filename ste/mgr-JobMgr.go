@@ -321,9 +321,6 @@ type jobMgr struct {
 	// only a single instance of the prompter is needed for all transfers
 	overwritePrompter *overwritePrompter
 
-	// must have a single instance of this, for the whole job
-	folderCreationTracker FolderCreationTracker
-
 	initMu    *sync.Mutex
 	initState *jobMgrInitState
 
