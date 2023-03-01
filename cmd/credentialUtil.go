@@ -26,6 +26,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"net/http"
 	"net/url"
@@ -646,6 +649,23 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
+func createBlobClientOptions() *blob.ClientOptions {
+	return &blob.ClientOptions{
+		ClientOptions: azcore.ClientOptions{
+			APIVersion: ,
+			Cloud: ,
+			Logging: ,
+			Retry: ,
+			Telemetry: policy.TelemetryOptions{
+				ApplicationID: common.UserAgent,
+			},
+			TracingProvider: ,
+			Transport: ,
+			PerCallPolicies: ,
+			PerRetryPolicies: ,
+		},
+	}
+}
 func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
 	// are we getting dest token?
 	credential := credInfo.SourceBlobToken

@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"io"
 	"math"
 	"net/url"
@@ -40,7 +41,6 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -1320,6 +1320,8 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 3: start download
+	blobClient, err := common.CreateBlobClient(u.String(), credInfo)
+
 	blobURL := azblob.NewBlobURL(*u, p)
 	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
 	if cca.CpkOptions.IsSourceEncrypted {
