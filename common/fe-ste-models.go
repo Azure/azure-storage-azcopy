@@ -1230,7 +1230,7 @@ func ToCommonBlobTagsMap(blobTagsString string) BlobTags {
 const metadataRenamedKeyPrefix = "rename_"
 const metadataKeyForRenamedOriginalKeyPrefix = "rename_key_"
 
-var metadataKeyInvalidCharRegex = regexp.MustCompile("\\W")
+var metadataKeyInvalidCharRegex = regexp.MustCompile(`\W`)
 var metadataKeyRenameErrStr = "failed to rename invalid metadata key %q"
 
 // ResolveInvalidKey resolves invalid metadata key with following steps:

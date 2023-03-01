@@ -23,7 +23,6 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -211,7 +210,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithMismatchedDestination(c *chk.C
 		validateDownloadTransfersAreScheduled(c, "", "", expectedOutput, mockedRPC)
 
 		// make sure the extra files were deleted
-		currentDstFileList, err := ioutil.ReadDir(dstDirName)
+		currentDstFileList, err := os.ReadDir(dstDirName)
 		extraFilesFound := false
 		for _, file := range currentDstFileList {
 			if strings.Contains(file.Name(), "extra") {

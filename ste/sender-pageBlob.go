@@ -207,8 +207,8 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 			return
 		}
 		if s.srcSize != p.ContentLength() {
-			sizeErr := errors.New(fmt.Sprintf("source file is not same size as the destination page blob. Source size is %d bytes but destination size is %d bytes. Re-create the destination with exactly the right size. E.g. see parameter UploadSizeInBytes in PowerShell's New-AzDiskConfig. Ensure the source is a fixed-size VHD",
-				s.srcSize, p.ContentLength()))
+			sizeErr := fmt.Errorf("source file is not same size as the destination page blob. Source size is %d bytes but destination size is %d bytes. Re-create the destination with exactly the right size. E.g. see parameter UploadSizeInBytes in PowerShell's New-AzDiskConfig. Ensure the source is a fixed-size VHD",
+				s.srcSize, p.ContentLength())
 			s.jptm.FailActiveSend("Checking size of managed disk blob", sizeErr)
 			return
 		}

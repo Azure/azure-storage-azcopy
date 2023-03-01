@@ -431,10 +431,11 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	}
 	existingContainers[containerName] = true
 
-	dstCredInfo := common.CredentialInfo{}
+	var dstCredInfo common.CredentialInfo
 
 	// 3minutes is enough time to list properties of a container, and create new if it does not exist.
-	ctx, _ := context.WithTimeout(parentCtx, time.Minute*3)
+	ctx, cancel := context.WithTimeout(parentCtx, time.Minute*3)
+	defer cancel()
 	if dstCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.To(), cca.Destination.Value, cca.Destination.SAS, false, cca.CpkOptions); err != nil {
 		return err
 	}
@@ -516,7 +517,6 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	default:
 		panic(fmt.Sprintf("cannot create a destination container at location %s.", cca.FromTo.To()))
 	}
-
 	return
 }
 
@@ -546,7 +546,7 @@ var reverseEncodedChars = map[string]rune{
 }
 
 func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool, source bool) string {
-	loc := common.ELocation.Unknown()
+	var loc common.Location
 
 	if source {
 		loc = fromTo.From()

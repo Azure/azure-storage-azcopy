@@ -295,9 +295,8 @@ func (dlr *DirectoryListResponse) Directories() []string {
 func (dlr *DirectoryListResponse) FilesAndDirectories() []Path {
 	var entities []Path
 	lSchema := (PathList)(*dlr)
-	for _, path := range lSchema.Paths {
-		entities = append(entities, path)
-	}
+	// Assuming this file is not generated based on the azbfs swagger README which states generated files prefix = zz_generated.
+	entities = append(entities, lSchema.Paths...)
 	return entities
 }
 

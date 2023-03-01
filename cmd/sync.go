@@ -562,7 +562,7 @@ func (cca *cookedSyncCmdArgs) getJsonOfSyncJobSummary(summary common.ListJobSumm
 }
 
 func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (totalKnownCount uint32) {
-	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
+	duration := time.Since(cca.jobStartTime) // report the total run time of the job
 	var summary common.ListJobSummaryResponse
 	var throughput float64
 	var jobDone bool
@@ -813,8 +813,8 @@ func init() {
 	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
 	syncCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")
 	syncCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "Legacy exclude param. DO NOT USE")
-	syncCmd.PersistentFlags().MarkHidden("include")
-	syncCmd.PersistentFlags().MarkHidden("exclude")
+	_ = syncCmd.PersistentFlags().MarkHidden("include")
+	_ = syncCmd.PersistentFlags().MarkHidden("exclude")
 
 	// TODO follow sym link is not implemented, clarify behavior first
 	// syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when performing sync from local file system.")
@@ -822,6 +822,6 @@ func init() {
 	// TODO sync does not support all BlobAttributes on the command line, this functionality should be added
 
 	// Deprecate the old persist-smb-permissions flag
-	syncCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
+	_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files, or ADLS Gen 2 to ADLS Gen 2). For Hierarchical Namespace accounts, you will need a container SAS or OAuth token with Modify Ownership and Modify Permissions permissions. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 }

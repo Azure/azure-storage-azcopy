@@ -146,7 +146,7 @@ func (u *testUploader) uploadToGCP() {
 		}
 		obj := gcpClient.Bucket(gcpURLPartsForFile.BucketName).Object(gcpURLPartsForFile.ObjectKey)
 		wc := obj.NewWriter(context.Background())
-		_, err = io.Copy(wc, f)
+		_, _ = io.Copy(wc, f)
 		err = wc.Close()
 		if err != nil {
 			return err
@@ -262,7 +262,6 @@ func getRelativePath(rootPath, filePath string) string {
 	if len(rootPath) == 0 {
 		return filePath
 	}
-	result := filePath
 
 	// replace the path separator in filepath with AZCOPY_PATH_SEPARATOR
 	// this replacement is required to handle the windows filepath
@@ -276,7 +275,7 @@ func getRelativePath(rootPath, filePath string) string {
 		scrubAway = rootPath[:strings.LastIndex(rootPath, common.AZCOPY_PATH_SEPARATOR_STRING)+1]
 	}
 
-	result = strings.Replace(filePath, scrubAway, "", 1)
+	result := strings.Replace(filePath, scrubAway, "", 1)
 
 	return result
 }

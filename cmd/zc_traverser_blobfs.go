@@ -170,7 +170,7 @@ func (t *blobFSTraverser) Traverse(preprocessor objectMorpher, processor objectP
 		for _, v := range dlr.Paths {
 			var entityType common.EntityType
 			lmt := v.LastModifiedTime()
-			if v.IsDirectory == nil || *v.IsDirectory == false {
+			if v.IsDirectory == nil || !*v.IsDirectory {
 				entityType = common.EEntityType.File()
 				contentProps = md5OnlyAdapter{md5: t.getContentMd5(t.ctx, dirUrl, v)}
 				size = *v.ContentLength
@@ -219,7 +219,7 @@ func (t *blobFSTraverser) Traverse(preprocessor objectMorpher, processor objectP
 			var fileListBuilder strings.Builder
 
 			for _, v := range dlr.Paths {
-				if v.IsDirectory == nil || *v.IsDirectory == false {
+				if v.IsDirectory == nil || !*v.IsDirectory {
 					// it's a file
 					fmt.Fprintf(&fileListBuilder, " %s,", *v.Name)
 				} else {

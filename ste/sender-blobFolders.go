@@ -178,12 +178,6 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 	}
 
 	return nil
-
-	if err != nil {
-		return err
-	}
-
-	return folderPropertiesSetInCreation{}
 }
 
 func (b *blobFolderSender) SetFolderProperties() error {

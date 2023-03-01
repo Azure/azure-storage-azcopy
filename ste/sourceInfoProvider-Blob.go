@@ -22,7 +22,7 @@ package ste
 
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"io/ioutil"
+	"io"
 	"strings"
 	"time"
 
@@ -58,7 +58,7 @@ func (p *blobSourceInfoProvider) ReadLink() (string, error) {
 		return "", err
 	}
 
-	symlinkBuf, err := ioutil.ReadAll(resp.Body(azblob.RetryReaderOptions{
+	symlinkBuf, err := io.ReadAll(resp.Body(azblob.RetryReaderOptions{
 		MaxRetryRequests: 5,
 		NotifyFailedRead: common.NewReadLogFunc(p.jptm, uri),
 	}))
