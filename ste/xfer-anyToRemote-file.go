@@ -116,7 +116,7 @@ func BlobTierAllowed(destTier azblob.AccessTierType) bool {
 		// Standard storage account. If it's Hot, Cool, or Archive, we're A-OK.
 		// Page blobs, however, don't have an access tier on Standard accounts.
 		// However, this is also OK, because the pageblob sender code prevents us from using a standard access tier type.
-		return destTier == azblob.AccessTierArchive || destTier == azblob.AccessTierCool || destTier == azblob.AccessTierHot
+		return destTier == azblob.AccessTierArchive || destTier == azblob.AccessTierCool || destTier == common.EBlockBlobTier.Cold().ToAccessTierType() || destTier == azblob.AccessTierHot
 	}
 }
 
