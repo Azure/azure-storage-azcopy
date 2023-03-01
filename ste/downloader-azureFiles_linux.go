@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package ste
@@ -56,7 +57,7 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 			var ts [2]unix.Timespec
 
 			// Don't set atime.
-			ts[0] = unix.Timespec{unix.UTIME_OMIT, unix.UTIME_OMIT}
+			ts[0] = unix.Timespec{Sec: unix.UTIME_OMIT, Nsec: unix.UTIME_OMIT}
 
 			// Set mtime to smbLastWrite.
 			ts[1] = unix.NsecToTimespec(smbLastWrite.UnixNano())

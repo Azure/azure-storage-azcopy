@@ -16,7 +16,6 @@ import (
 	"net/url"
 	//"strings"
 
-	"io/ioutil"
 	"net/http"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
@@ -213,7 +212,7 @@ func (s *FileURLSuite) TestFileGetProperties(c *chk.C) {
 //	c.Assert(resp.ContentType(), chk.Equals, "application/octet-stream")
 //	c.Assert(resp.Status(), chk.Not(chk.Equals), "")
 //
-//	download, err := ioutil.ReadAll(resp.Response().Body)
+//	download, err := io.ReadAll(resp.Response().Body)
 //	c.Assert(err, chk.IsNil)
 //	c.Assert(download, chk.DeepEquals, contentD[:1024])
 //}
@@ -250,14 +249,14 @@ func (s *FileURLSuite) TestUnexpectedEOFRecovery(c *chk.C) {
 	// Verify that we can inject errors first.
 	reader := dResp.Body(azbfs.InjectErrorInRetryReaderOptions(errors.New("unrecoverable error")))
 
-	_, err = ioutil.ReadAll(reader)
+	_, err = io.ReadAll(reader)
 	c.Assert(err, chk.NotNil)
 	c.Assert(err.Error(), chk.Equals, "unrecoverable error")
 
 	// Then inject the retryable error.
 	reader = dResp.Body(azbfs.InjectErrorInRetryReaderOptions(io.ErrUnexpectedEOF))
 
-	buf, err := ioutil.ReadAll(reader)
+	buf, err := io.ReadAll(reader)
 	c.Assert(err, chk.IsNil)
 	c.Assert(buf, chk.DeepEquals, contentD)
 }
@@ -309,7 +308,7 @@ func (s *FileURLSuite) TestUploadDownloadRoundTrip(c *chk.C) {
 	c.Assert(resp.Status(), chk.Not(chk.Equals), "")
 
 	// Verify the partial data
-	download, err := ioutil.ReadAll(resp.Response().Body)
+	download, err := io.ReadAll(resp.Response().Body)
 	c.Assert(err, chk.IsNil)
 	c.Assert(download, chk.DeepEquals, contentD1[:1024])
 
@@ -325,7 +324,7 @@ func (s *FileURLSuite) TestUploadDownloadRoundTrip(c *chk.C) {
 	c.Assert(resp.Version(), chk.Not(chk.Equals), "")
 
 	// Verify the entire content
-	download, err = ioutil.ReadAll(resp.Response().Body)
+	download, err = io.ReadAll(resp.Response().Body)
 	c.Assert(err, chk.IsNil)
 	c.Assert(download[:2048], chk.DeepEquals, contentD1[:])
 	c.Assert(download[2048:], chk.DeepEquals, contentD2[:])

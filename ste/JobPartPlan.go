@@ -262,7 +262,7 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 	if t.SrcBlobTagsLength != 0 {
 		blobTagsString := jpph.getString(offset, t.SrcBlobTagsLength)
 		blobTags = common.ToCommonBlobTagsMap(blobTagsString)
-		offset += int64(t.SrcBlobTagsLength)
+		offset += int64(t.SrcBlobTagsLength) //nolint:ineffassign
 	}
 	return
 }

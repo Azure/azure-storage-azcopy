@@ -21,7 +21,7 @@
 package ste
 
 import (
-	"io/ioutil"
+	"io"
 	"strings"
 	"time"
 
@@ -57,7 +57,7 @@ func (p *blobSourceInfoProvider) ReadLink() (string, error) {
 		return "", err
 	}
 
-	symlinkBuf, err := ioutil.ReadAll(resp.Body(azblob.RetryReaderOptions{
+	symlinkBuf, err := io.ReadAll(resp.Body(azblob.RetryReaderOptions{
 		MaxRetryRequests: 5,
 		NotifyFailedRead: common.NewReadLogFunc(p.jptm, uri),
 	}))

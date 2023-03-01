@@ -12,15 +12,6 @@ type Credential interface {
 	credentialMarker()
 }
 
-type credentialFunc pipeline.FactoryFunc
-
-func (f credentialFunc) New(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.Policy {
-	return f(next, po)
-}
-
-// credentialMarker is a package-internal method that exists just to satisfy the Credential interface.
-func (credentialFunc) credentialMarker() {}
-
 //////////////////////////////
 
 // NewAnonymousCredential creates an anonymous credential for use with HTTP(S) requests that read public resource
@@ -36,11 +27,15 @@ type anonymousCredentialPolicyFactory struct {
 }
 
 // New creates a credential policy object.
+//nolint:unused
 func (f *anonymousCredentialPolicyFactory) New(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.Policy {
+	// Note: We are not deleting this "unused" code since this is a publicly exported function, we do not want to break
+	// anyone that has a dependency on the azbfs library (like blobfuse).
 	return &anonymousCredentialPolicy{next: next}
 }
 
 // credentialMarker is a package-internal method that exists just to satisfy the Credential interface.
+//nolint:unused
 func (*anonymousCredentialPolicyFactory) credentialMarker() {}
 
 // anonymousCredentialPolicy is the credential's policy object.

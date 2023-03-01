@@ -1095,7 +1095,7 @@ func validateMetadataString(metadata string) error {
 	if err != nil {
 		return err
 	}
-	for k, _ := range metadataMap {
+	for k := range metadataMap {
 		if strings.ContainsAny(k, " !#$%^&*,<>{}|\\:.()+'\"?/") {
 			return fmt.Errorf("invalid metadata key value '%s': can't have spaces or special characters", k)
 		}
@@ -1404,11 +1404,9 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 
 // get source credential - if there is a token it will be used to get passed along our pipeline
 func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.CopyJobPartOrderRequest) (common.CredentialInfo, error) {
-	srcCredInfo := common.CredentialInfo{}
-	var err error
-	var isPublic bool
 
-	if srcCredInfo, isPublic, err = GetCredentialInfoForLocation(ctx, cca.FromTo.From(), cca.Source.Value, cca.Source.SAS, true, cca.CpkOptions); err != nil {
+	srcCredInfo, isPublic, err := GetCredentialInfoForLocation(ctx, cca.FromTo.From(), cca.Source.Value, cca.Source.SAS, true, cca.CpkOptions)
+	if err != nil {
 		return srcCredInfo, err
 		// If S2S and source takes OAuthToken as its cred type (OR) source takes anonymous as its cred type, but it's not public and there's no SAS
 	} else if cca.FromTo.IsS2S() &&
@@ -1418,7 +1416,7 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 	}
 
 	if cca.Source.SAS != "" && cca.FromTo.IsS2S() && jpo.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		//glcm.Info("Authentication: If the source and destination accounts are in the same AAD tenant & the user/spn/msi has appropriate permissions on both, the source SAS token is not required and OAuth can be used round-trip.")
+		glcm.Info("Authentication: If the source and destination accounts are in the same AAD tenant & the user/spn/msi has appropriate permissions on both, the source SAS token is not required and OAuth can be used round-trip.")
 	}
 
 	if cca.FromTo.IsS2S() {
@@ -1701,7 +1699,7 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	totalKnownCount = summary.TotalTransfers
 
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
-	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
+	duration := time.Since(cca.jobStartTime) // report the total run time of the job
 
 	var computeThroughput = func() float64 {
 		// compute the average throughput for the last time interval
@@ -1935,7 +1933,7 @@ func init() {
 				if userFromTo == common.EFromTo.PipeBlob() {
 					// Case 1: PipeBlob. Check for the std input pipe
 					stdinPipeIn, err := isStdinPipeIn()
-					if stdinPipeIn == false || err != nil {
+					if !stdinPipeIn || err != nil {
 						return fmt.Errorf("fatal: failed to read from Stdin due to error: %s", err)
 					}
 					raw.src = pipeLocation
@@ -2062,20 +2060,20 @@ func init() {
 
 	// permanently hidden
 	// Hide the list-of-files flag since it is implemented only for Storage Explorer.
-	cpCmd.PersistentFlags().MarkHidden("list-of-files")
-	cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
+	_ = cpCmd.PersistentFlags().MarkHidden("list-of-files")
+	_ = cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
 
 	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
 	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")
 	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "Legacy exclude param. DO NOT USE")
-	cpCmd.PersistentFlags().MarkHidden("include")
-	cpCmd.PersistentFlags().MarkHidden("exclude")
+	_ = cpCmd.PersistentFlags().MarkHidden("include")
+	_ = cpCmd.PersistentFlags().MarkHidden("exclude")
 
 	// Hide the flush-threshold flag since it is implemented only for CI.
 	cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on accounts that have a hierarchical namespace.")
-	cpCmd.PersistentFlags().MarkHidden("flush-threshold")
+	_ = cpCmd.PersistentFlags().MarkHidden("flush-threshold")
 
 	// Deprecate the old persist-smb-permissions flag
-	cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
+	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
 	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files, or ADLS Gen 2 to ADLS Gen 2). For Hierarchical Namespace accounts, you will need a container SAS or OAuth token with Modify Ownership and Modify Permissions permissions. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 }

@@ -37,7 +37,6 @@ func Test(t *testing.T) { chk.TestingT(t) }
 type fileSystemCrawlerSuite struct{}
 
 var _ = chk.Suite(&fileSystemCrawlerSuite{})
-var ctx = context.Background()
 
 var windowsSystemDirectory = ""
 

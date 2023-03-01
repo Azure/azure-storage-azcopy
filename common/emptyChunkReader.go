@@ -62,5 +62,5 @@ func (cr *emptyChunkReader) Length() int64 {
 }
 
 func (cr *emptyChunkReader) WriteBufferTo(h hash.Hash) {
-	return // no content to write
+	// no content to write
 }
