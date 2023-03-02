@@ -1562,7 +1562,7 @@ func ToClientProvidedKeyOptions(cpkInfo blob.CPKInfo, cpkScopeInfo blob.CPKScope
 	return azblob.ClientProvidedKeyOptions{
 		EncryptionKey:       cpkInfo.EncryptionKey,
 		EncryptionAlgorithm: azblob.EncryptionAlgorithmAES256,
-		EncryptionKeySha256: cpkInfo.EncryptionKey,
+		EncryptionKeySha256: cpkInfo.EncryptionKeySHA256,
 		EncryptionScope:     cpkScopeInfo.EncryptionScope,
 	}
 }
