@@ -63,6 +63,8 @@ type blobTraverser struct {
 	includeVersion bool
 
 	stripTopDir bool
+
+	log func(pipeline.LogLevel, string)
 }
 
 func (t *blobTraverser) IsDirectory(isSource bool) (bool, error) {
@@ -263,6 +265,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, containerName string, searchPrefix string,
 	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
+	atleastOneBlobScheduled := false
 	// Define how to enumerate its contents
 	// This func must be thread safe/goroutine safe
 	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
@@ -279,9 +282,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 			if t.recursive {
 				for _, virtualDir := range lResp.Segment.BlobPrefixes {
 					enqueueDir(virtualDir.Name)
-					if azcopyScanningLogger != nil {
-						azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", virtualDir.Name))
-					}
+					t.log(pipeline.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", virtualDir.Name))
 
 					if t.includeDirectoryStubs {
 						// try to get properties on the directory itself, since it's not listed in BlobItems
@@ -370,12 +371,16 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 
 	// initiate parallel scanning, starting at the root path
 	workerContext, cancelWorkers := context.WithCancel(t.ctx)
+	defer cancelWorkers()
 	cCrawled := parallel.Crawl(workerContext, searchPrefix+extraSearchPrefix, enumerateOneDir, EnumerationParallelism)
 
 	for x := range cCrawled {
 		item, workerError := x.Item()
 		if workerError != nil {
-			cancelWorkers()
+			t.log(pipeline.LogDebug, workerError.Error())
+			if atleastOneBlobScheduled {
+				continue
+			}
 			return workerError
 		}
 
@@ -385,9 +390,13 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 
 		object := item.(StoredObject)
 		processErr := processIfPassedFilters(filters, object, processor)
+		atleastOneBlobScheduled = (processErr == nil)
 		_, processErr = getProcessingError(processErr)
 		if processErr != nil {
-			cancelWorkers()
+			t.log(pipeline.LogDebug, processErr.Error())
+			if atleastOneBlobScheduled {
+				continue
+			}
 			return processErr
 		}
 	}
@@ -428,6 +437,7 @@ func (t *blobTraverser) doesBlobRepresentAFolder(metadata azblob.Metadata) bool 
 
 func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerName string, searchPrefix string,
 	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
+	atleastOneBlobScheduled := false
 
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// see the TO DO in GetEnumerationPreFilter if/when we make this more directory-aware
@@ -438,7 +448,12 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 		listBlob, err := containerURL.ListBlobsFlatSegment(t.ctx, marker,
 			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix + extraSearchPrefix, Details: azblob.BlobListingDetails{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion}})
 		if err != nil {
-			return fmt.Errorf("cannot list blobs. Failed with error %s", err.Error())
+			err := fmt.Errorf("cannot list blobs. Failed with error %w", err)
+			t.log(pipeline.LogError, err.Error())
+			if atleastOneBlobScheduled {
+				continue // In this case we do not want to fail immediately, we'll wait for transfer.
+			}
+			return err
 		}
 
 		// process the blobs returned in this result segment
@@ -471,7 +486,13 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 
 			processErr := processIfPassedFilters(filters, storedObject, processor)
 			_, processErr = getProcessingError(processErr)
+			atleastOneBlobScheduled = (processErr == nil)
 			if processErr != nil {
+				processErr = fmt.Errorf("failed to process item %s, %w", blobInfo.Name, processErr)
+				t.log(pipeline.LogError, processErr.Error())
+				if atleastOneBlobScheduled {
+					return nil
+				}
 				return processErr
 			}
 		}
@@ -496,6 +517,11 @@ func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 		includeDeleted:              includeDeleted,
 		includeSnapshot:             includeSnapshot,
 		includeVersion:              includeVersion,
+		log:                         func(pipeline.LogLevel, string){},
+	}
+
+	if azcopyScanningLogger != nil {
+		t.log = azcopyScanningLogger.Log
 	}
 
 	disableHierarchicalScanning := strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))

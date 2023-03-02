@@ -423,6 +423,8 @@ func NewBlobXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 						}
 					} else if _, ok := err.(net.Error); ok {
 						action = "Retry: net.Error"
+					} else if common.IsConnError(err) {
+						action = "Retry: connection aborted Error"
 					} else if err == io.ErrUnexpectedEOF {
 						action = "Retry: io.UnexpectedEOF"
 					} else {
