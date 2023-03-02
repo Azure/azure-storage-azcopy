@@ -1554,7 +1554,6 @@ func (p PreservePermissionsOption) IsTruthy() bool {
 }
 
 ////////////////////////////////////////////////////////////////
-
 func ToClientProvidedKeyOptions(cpkInfo blob.CPKInfo, cpkScopeInfo blob.CPKScopeInfo) azblob.ClientProvidedKeyOptions {
 	if (cpkInfo.EncryptionKey == nil || cpkInfo.EncryptionKeySHA256 == nil) && cpkScopeInfo.EncryptionScope == nil {
 		return azblob.ClientProvidedKeyOptions{}

@@ -23,6 +23,7 @@ package e2etest
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"math"
 	"reflect"
 	"strings"
@@ -98,8 +99,8 @@ type objectProperties struct {
 	smbAttributes      *uint32
 	smbPermissionsSddl *string
 	adlsPermissionsACL *string // TODO: Test owner and group; needs a good target though.
-	cpkInfo            *common.CpkInfo
-	cpkScopeInfo       *common.CpkScopeInfo
+	cpkInfo            *blob.CPKInfo
+	cpkScopeInfo       *blob.CPKScopeInfo
 }
 
 // returns op.size, if present, else defaultSize
