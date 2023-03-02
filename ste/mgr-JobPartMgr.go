@@ -3,6 +3,10 @@ package ste
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	azcoreruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"mime"
 	"net"
 	"net/http"
@@ -58,37 +62,12 @@ type IJobPartMgr interface {
 	getFolderCreationTracker() FolderCreationTracker
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 	FolderDeletionManager() common.FolderDeletionManager
-	CpkInfo() common.CpkInfo
-	CpkScopeInfo() common.CpkScopeInfo
+	CpkInfo() blob.CPKInfo
+	CpkScopeInfo() blob.CPKScopeInfo
 	IsSourceEncrypted() bool
 	/* Status Manager Updates */
 	SendXferDoneMsg(msg xferDoneMsg)
 	PropertiesToTransfer() common.SetPropertiesFlags
-}
-
-type serviceAPIVersionOverride struct{}
-
-// ServiceAPIVersionOverride is a global variable in package ste which is a key to Service Api Version Value set in the every Job's context.
-var ServiceAPIVersionOverride = serviceAPIVersionOverride{}
-
-// DefaultServiceApiVersion is the default value of service api version that is set as value to the ServiceAPIVersionOverride in every Job's context.
-var DefaultServiceApiVersion = common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.DefaultServiceApiVersion())
-
-// NewVersionPolicy creates a factory that can override the service version
-// set in the request header.
-// If the context has key overwrite-current-version set to false, then x-ms-version in
-// request is not overwritten else it will set x-ms-version to 207-04-17
-func NewVersionPolicyFactory() pipeline.Factory {
-	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
-		return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
-			// get the service api version value using the ServiceAPIVersionOverride set in the context.
-			if value := ctx.Value(ServiceAPIVersionOverride); value != nil {
-				request.Header.Set("x-ms-version", value.(string))
-			}
-			resp, err := next.Do(ctx, request)
-			return resp, err
-		}
-	})
 }
 
 // NewAzcopyHTTPClient creates a new HTTP client.
@@ -159,6 +138,26 @@ func newAzcopyHTTPClientFactory(pipelineHTTPClient *http.Client) pipeline.Factor
 	})
 }
 
+func NewBlobClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, statsAcc *PipelineNetworkStats) *blob.ClientOptions {
+	perCallPolicies := []policy.Policy{azcoreruntime.NewRequestIDPolicy()}
+	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
+	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newVersionPolicy(), newStatsPolicy(statsAcc)}
+	// TODO : What is method factory marker and is that relevant here?
+	return &blob.ClientOptions{
+		ClientOptions: azcore.ClientOptions{
+			//APIVersion: ,
+			//Cloud: ,
+			//Logging: ,
+			Retry:     retry,
+			Telemetry: telemetry,
+			//TracingProvider: ,
+			Transport:        transport,
+			PerCallPolicies:  perCallPolicies,
+			PerRetryPolicies: perRetryPolicies,
+		},
+	}
+}
+
 // NewBlobPipeline creates a Pipeline using the specified credentials and options.
 func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats) pipeline.Pipeline {
 	if c == nil {
@@ -166,10 +165,12 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 	}
 	// Closest to API goes first; closest to the wire goes last
 	f := []pipeline.Factory{
+		// per call
 		azblob.NewTelemetryPolicyFactory(o.Telemetry),
 		azblob.NewUniqueRequestIDPolicyFactory(),
-		NewBlobXferRetryPolicyFactory(r),    // actually retry the operation
-		newRetryNotificationPolicyFactory(), // record that a retry status was returned
+		NewBlobXferRetryPolicyFactory(r), // actually retry the operation
+		// per retry
+		newV1RetryNotificationPolicyFactory(), // record that a retry status was returned
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		// NewPacerPolicyFactory(p),
@@ -193,8 +194,8 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 	f := []pipeline.Factory{
 		azbfs.NewTelemetryPolicyFactory(o.Telemetry),
 		azbfs.NewUniqueRequestIDPolicyFactory(),
-		NewBFSXferRetryPolicyFactory(r),     // actually retry the operation
-		newRetryNotificationPolicyFactory(), // record that a retry status was returned
+		NewBFSXferRetryPolicyFactory(r),       // actually retry the operation
+		newV1RetryNotificationPolicyFactory(), // record that a retry status was returned
 	}
 
 	f = append(f, c)
@@ -219,8 +220,8 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 	f := []pipeline.Factory{
 		azfile.NewTelemetryPolicyFactory(o.Telemetry),
 		azfile.NewUniqueRequestIDPolicyFactory(),
-		azfile.NewRetryPolicyFactory(r),     // actually retry the operation
-		newRetryNotificationPolicyFactory(), // record that a retry status was returned
+		azfile.NewRetryPolicyFactory(r),       // actually retry the operation
+		newV1RetryNotificationPolicyFactory(), // record that a retry status was returned
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		NewVersionPolicyFactory(),
@@ -800,11 +801,11 @@ func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlob
 	return jpm.blockBlobTier, jpm.pageBlobTier
 }
 
-func (jpm *jobPartMgr) CpkInfo() common.CpkInfo {
+func (jpm *jobPartMgr) CpkInfo() blob.CPKInfo {
 	return common.GetCpkInfo(jpm.cpkOptions.CpkInfo)
 }
 
-func (jpm *jobPartMgr) CpkScopeInfo() common.CpkScopeInfo {
+func (jpm *jobPartMgr) CpkScopeInfo() blob.CPKScopeInfo {
 	return common.GetCpkScopeInfo(jpm.cpkOptions.CpkScopeInfo)
 }
 

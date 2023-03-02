@@ -1555,53 +1555,15 @@ func (p PreservePermissionsOption) IsTruthy() bool {
 
 ////////////////////////////////////////////////////////////////
 
-// CpkScopeInfo specifies the name of the encryption scope to use to encrypt the data provided in the request.
-// If not specified, encryption is performed with the default account encryption scope.
-// For more information, see Encryption at Rest for Azure Storage Services.
-type CpkScopeInfo struct {
-	EncryptionScope *string
-}
-
-func (csi CpkScopeInfo) Marshal() (string, error) {
-	result, err := json.Marshal(csi)
-	if err != nil {
-		return "", err
-	}
-	return string(result), nil
-}
-
-type CpkInfo struct {
-	// The algorithm used to produce the encryption key hash.
-	// Currently, the only accepted value is "AES256".
-	// Must be provided if the x-ms-encryption-key header is provided.
-	EncryptionAlgorithm *string
-
-	// Optional. Specifies the encryption key to use to encrypt the data provided in the request.
-	// If not specified, encryption is performed with the root account encryption key.
-	EncryptionKey *string
-
-	// The SHA-256 hash of the provided encryption key.
-	// Must be provided if the x-ms-encryption-key header is provided.
-	EncryptionKeySha256 *string
-}
-
-func (csi CpkInfo) Marshal() (string, error) {
-	result, err := json.Marshal(csi)
-	if err != nil {
-		return "", err
-	}
-	return string(result), nil
-}
-
-func ToClientProvidedKeyOptions(cpkInfo CpkInfo, cpkScopeInfo CpkScopeInfo) azblob.ClientProvidedKeyOptions {
-	if (cpkInfo.EncryptionKey == nil || cpkInfo.EncryptionKeySha256 == nil) && cpkScopeInfo.EncryptionScope == nil {
+func ToClientProvidedKeyOptions(cpkInfo blob.CPKInfo, cpkScopeInfo blob.CPKScopeInfo) azblob.ClientProvidedKeyOptions {
+	if (cpkInfo.EncryptionKey == nil || cpkInfo.EncryptionKeySHA256 == nil) && cpkScopeInfo.EncryptionScope == nil {
 		return azblob.ClientProvidedKeyOptions{}
 	}
 
 	return azblob.ClientProvidedKeyOptions{
 		EncryptionKey:       cpkInfo.EncryptionKey,
 		EncryptionAlgorithm: azblob.EncryptionAlgorithmAES256,
-		EncryptionKeySha256: cpkInfo.EncryptionKeySha256,
+		EncryptionKeySha256: cpkInfo.EncryptionKeySHA256,
 		EncryptionScope:     cpkScopeInfo.EncryptionScope,
 	}
 }

@@ -1320,7 +1320,17 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 3: start download
-	blobClient, err := common.CreateBlobClient(u.String(), credInfo)
+	//blobClient, err := common.CreateBlobClient(u.String(), credInfo, createBlobClientOptions(),
+	//	&common.CredentialOpOptions{LogError: glcm.Info,})
+	//if err != nil {
+	//	return fmt.Errorf("fatal: cannot create blob client due to error: %s", err.Error())
+	//}
+	//
+	//cpk := blob.CPKInfo{}
+	//cpkScope := blob.CPKScopeInfo{}
+	//if cca.CpkOptions.IsSourceEncrypted {
+	//
+	//}
 
 	blobURL := azblob.NewBlobURL(*u, p)
 	clientProvidedKey := azblob.ClientProvidedKeyOptions{}

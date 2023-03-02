@@ -120,7 +120,7 @@ func CreateBlobCredential(ctx context.Context, credInfo CredentialInfo, options 
 	return credential
 }
 
-func CreateBlobClient(blobURL string, credInfo CredentialInfo, options *blob.ClientOptions, credOpOptions CredentialOpOptions) (*blob.Client, error) {
+func CreateBlobClient(blobURL string, credInfo CredentialInfo, options *blob.ClientOptions, credOpOptions *CredentialOpOptions) (*blob.Client, error) {
 	switch credInfo.CredentialType {
 	// TODO (gapra) : Support OAuth
 	//case ECredentialType.OAuthToken():
@@ -374,37 +374,34 @@ func (f *GCPClientFactory) GetGCPClient(ctx context.Context, credInfo Credential
 	}
 }
 
-// Default Encryption Algorithm Supported
-const EncryptionAlgorithmAES256 string = "AES256"
-
-func GetCpkInfo(cpkInfo bool) CpkInfo {
+func GetCpkInfo(cpkInfo bool) blob.CPKInfo {
 	if !cpkInfo {
-		return CpkInfo{}
+		return blob.CPKInfo{}
 	}
 
 	// fetch EncryptionKey and EncryptionKeySHA256 from the environment variables
 	glcm := GetLifecycleMgr()
 	encryptionKey := glcm.GetEnvironmentVariable(EEnvironmentVariable.CPKEncryptionKey())
 	encryptionKeySHA256 := glcm.GetEnvironmentVariable(EEnvironmentVariable.CPKEncryptionKeySHA256())
-	encryptionAlgorithmAES256 := EncryptionAlgorithmAES256
+	encryptionAlgorithmAES256 := blob.EncryptionAlgorithmTypeAES256
 
 	if encryptionKey == "" || encryptionKeySHA256 == "" {
 		glcm.Error("fatal: failed to fetch cpk encryption key (" + EEnvironmentVariable.CPKEncryptionKey().Name +
 			") or hash (" + EEnvironmentVariable.CPKEncryptionKeySHA256().Name + ") from environment variables")
 	}
 
-	return CpkInfo{
+	return blob.CPKInfo{
 		EncryptionKey:       &encryptionKey,
-		EncryptionKeySha256: &encryptionKeySHA256,
+		EncryptionKeySHA256: &encryptionKeySHA256,
 		EncryptionAlgorithm: &encryptionAlgorithmAES256,
 	}
 }
 
-func GetCpkScopeInfo(cpkScopeInfo string) CpkScopeInfo {
+func GetCpkScopeInfo(cpkScopeInfo string) blob.CPKScopeInfo {
 	if cpkScopeInfo == "" {
-		return CpkScopeInfo{}
+		return blob.CPKScopeInfo{}
 	} else {
-		return CpkScopeInfo{
+		return blob.CPKScopeInfo{
 			EncryptionScope: &cpkScopeInfo,
 		}
 	}

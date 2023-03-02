@@ -26,7 +26,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -650,21 +649,20 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // pipeline factory methods
 // ==============================================================================================
 func createBlobClientOptions() *blob.ClientOptions {
-	return &blob.ClientOptions{
-		ClientOptions: azcore.ClientOptions{
-			APIVersion: ,
-			Cloud: ,
-			Logging: ,
-			Retry: ,
-			Telemetry: policy.TelemetryOptions{
-				ApplicationID: common.UserAgent,
-			},
-			TracingProvider: ,
-			Transport: ,
-			PerCallPolicies: ,
-			PerRetryPolicies: ,
+	// TODO : Discuss items without a 1:1 mapping like LogOptions
+	return ste.NewBlobClientOptions(
+		policy.RetryOptions{
+			MaxRetries:    ste.UploadMaxTries,
+			TryTimeout:    ste.UploadTryTimeout,
+			RetryDelay:    ste.UploadRetryDelay,
+			MaxRetryDelay: ste.UploadMaxRetryDelay,
 		},
-	}
+		policy.TelemetryOptions{
+			ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
+		},
+		ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost),
+		nil, // we don't gather network stats on the credential pipeline
+	)
 }
 func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
 	// are we getting dest token?
