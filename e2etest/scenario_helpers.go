@@ -28,6 +28,7 @@ import (
 	"crypto/md5"
 	"encoding/base64"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/google/uuid"
 	"io"
 	"net/url"
@@ -367,8 +368,8 @@ type generateFromListOptions struct {
 type generateBlobFromListOptions struct {
 	rawSASURL    url.URL
 	containerURL azblob.ContainerURL
-	cpkInfo      common.CpkInfo
-	cpkScopeInfo common.CpkScopeInfo
+	cpkInfo      blob.CPKInfo
+	cpkScopeInfo blob.CPKScopeInfo
 	accessTier   azblob.AccessTierType
 	generateFromListOptions
 }
@@ -541,8 +542,8 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 				nameValueMetadata:  md,
 				creationTime:       bp.CreationTime,
 				lastWriteTime:      &bp.LastModified,
-				cpkInfo:            &common.CpkInfo{EncryptionKeySha256: bp.CustomerProvidedKeySha256},
-				cpkScopeInfo:       &common.CpkScopeInfo{EncryptionScope: bp.EncryptionScope},
+				cpkInfo:            &blob.CPKInfo{EncryptionKeySHA256: bp.CustomerProvidedKeySha256},
+				cpkScopeInfo:       &blob.CPKScopeInfo{EncryptionScope: bp.EncryptionScope},
 				adlsPermissionsACL: bp.ACL,
 				// smbAttributes and smbPermissions don't exist in blob
 			}
