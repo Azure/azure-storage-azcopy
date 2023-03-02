@@ -405,7 +405,9 @@ func getEntityType(blobInfo azblob.Metadata) common.EntityType {
 func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, blobInfo azblob.BlobItemInternal, relativePath string, containerName string) StoredObject {
 	adapter := blobPropertiesAdapter{blobInfo.Properties}
 
-	azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("Blob %s entity type: %s", relativePath, getEntityType(blobInfo.Metadata)))
+	if azcopyScanningLogger != nil {
+		azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("Blob %s entity type: %s", relativePath, getEntityType(blobInfo.Metadata)))
+	}
 
 	object := newStoredObject(
 		preprocessor,
