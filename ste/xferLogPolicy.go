@@ -62,7 +62,6 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 				po.Log(pipeline.LogInfo, b.String())
 			}
 
-			// TODO : Why is this in the logging policy
 			// Set the time for this particular retry operation and then Do the operation.
 			// The time we gather here is a measure of service responsiveness, and as such it shouldn't
 			// include the time taken to transfer the body. For downloads, that's easy,

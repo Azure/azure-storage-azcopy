@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	azcoreruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"mime"
 	"net"
@@ -138,23 +138,20 @@ func newAzcopyHTTPClientFactory(pipelineHTTPClient *http.Client) pipeline.Factor
 	})
 }
 
-func NewBlobClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, statsAcc *PipelineNetworkStats) *blob.ClientOptions {
-	perCallPolicies := []policy.Policy{azcoreruntime.NewRequestIDPolicy()}
+func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, statsAcc *PipelineNetworkStats) azcore.ClientOptions {
+	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy()}
 	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
 	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newVersionPolicy(), newStatsPolicy(statsAcc)}
-	// TODO : What is method factory marker and is that relevant here?
-	return &blob.ClientOptions{
-		ClientOptions: azcore.ClientOptions{
-			//APIVersion: ,
-			//Cloud: ,
-			//Logging: ,
-			Retry:     retry,
-			Telemetry: telemetry,
-			//TracingProvider: ,
-			Transport:        transport,
-			PerCallPolicies:  perCallPolicies,
-			PerRetryPolicies: perRetryPolicies,
-		},
+	return azcore.ClientOptions{
+		//APIVersion: ,
+		//Cloud: ,
+		//Logging: ,
+		Retry:     retry,
+		Telemetry: telemetry,
+		//TracingProvider: ,
+		Transport:        transport,
+		PerCallPolicies:  perCallPolicies,
+		PerRetryPolicies: perRetryPolicies,
 	}
 }
 

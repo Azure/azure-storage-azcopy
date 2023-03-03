@@ -26,9 +26,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"io"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"math"
 	"net/url"
 	"os"
@@ -38,8 +38,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/spf13/cobra"
 
@@ -1307,46 +1305,28 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
 	}
 
-	// step 1: initialize pipeline
-	p, err := createBlobPipeline(ctx, credInfo, pipeline.LogNone)
-	if err != nil {
-		return err
-	}
-
-	// step 2: parse source url
+	// step 1: parse source url
 	u, err := blobResource.FullURL()
 	if err != nil {
 		return fmt.Errorf("fatal: cannot parse source blob URL due to error: %s", err.Error())
 	}
 
-	// step 3: start download
-	//blobClient, err := common.CreateBlobClient(u.String(), credInfo, createBlobClientOptions(),
-	//	&common.CredentialOpOptions{LogError: glcm.Info,})
-	//if err != nil {
-	//	return fmt.Errorf("fatal: cannot create blob client due to error: %s", err.Error())
-	//}
-	//
-	//cpk := blob.CPKInfo{}
-	//cpkScope := blob.CPKScopeInfo{}
-	//if cca.CpkOptions.IsSourceEncrypted {
-	//
-	//}
-
-	blobURL := azblob.NewBlobURL(*u, p)
-	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
-	if cca.CpkOptions.IsSourceEncrypted {
-		clientProvidedKey = common.GetClientProvidedKey(cca.CpkOptions)
-	}
-	blobStream, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, clientProvidedKey)
+	// step 2: create blob client
+	blobClient, err := common.CreateBlobClient(u.String(), credInfo, &blob.ClientOptions{ClientOptions: createClientOptions()},
+		&common.CredentialOpOptions{LogError: glcm.Info})
 	if err != nil {
-		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
+		return fmt.Errorf("fatal: cannot create blob client due to error: %s", err.Error())
 	}
 
-	blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: ste.MaxRetryPerDownloadBody, ClientProvidedKeyOptions: clientProvidedKey})
-	defer blobBody.Close()
+	// step 3: start download
+	cpk := blob.CPKInfo{}
+	cpkScope := blob.CPKScopeInfo{}
+	if cca.CpkOptions.IsSourceEncrypted {
+		cpk = common.GetCpkInfo(cca.CpkOptions.CpkInfo)
+		cpkScope = common.GetCpkScopeInfo(cca.CpkOptions.CpkScopeInfo)
+	}
 
-	// step 4: pipe everything into Stdout
-	_, err = io.Copy(os.Stdout, blobBody)
+	_, err = blobClient.DownloadFile(ctx, os.Stdout, &blob.DownloadFileOptions{CPKInfo: &cpk, CPKScopeInfo: &cpkScope})
 	if err != nil {
 		return fmt.Errorf("fatal: cannot download blob to Stdout due to error: %s", err.Error())
 	}
@@ -1366,13 +1346,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	credInfo, _, err := GetCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, false, cca.CpkOptions)
 
 	if err != nil {
-		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
-	}
-
-	// step 0: initialize pipeline
-	p, err := createBlobPipeline(ctx, credInfo, pipeline.LogNone)
-	if err != nil {
-		return err
+		return fmt.Errorf("fatal: cannot find auth on destination blob URL: %s", err.Error())
 	}
 
 	// step 1: parse destination url
@@ -1381,35 +1355,43 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 		return fmt.Errorf("fatal: cannot parse destination blob URL due to error: %s", err.Error())
 	}
 
-	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
-	blockBlobUrl := azblob.NewBlockBlobURL(*u, p)
+	// step 2: create blob client
+	blockBlobClient, err := common.CreateBlockBlobClient(u.String(), credInfo, &blockblob.ClientOptions{ClientOptions: createClientOptions()},
+		&common.CredentialOpOptions{LogError: glcm.Info})
+	if err != nil {
+		return fmt.Errorf("fatal: cannot create blob client due to error: %s", err.Error())
+	}
+
+	// step 3: leverage high-level call in Blob SDK to upload stdin in parallel
 	metadataString := cca.metadata
 	metadataMap := common.Metadata{}
 	if len(metadataString) > 0 {
 		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
 			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-			metadataMap[kv[0]] = kv[1]
+			metadataMap[kv[0]] = &kv[1]
 		}
 	}
-	blobTags := cca.blobTags
-	bbAccessTier := azblob.DefaultAccessTier
-	if cca.blockBlobTier != common.EBlockBlobTier.None() {
-		bbAccessTier = azblob.AccessTierType(cca.blockBlobTier.String())
+	cpk := blob.CPKInfo{}
+	cpkScope := blob.CPKScopeInfo{}
+	if cca.CpkOptions.IsSourceEncrypted {
+		cpk = common.GetCpkInfo(cca.CpkOptions.CpkInfo)
+		cpkScope = common.GetCpkScopeInfo(cca.CpkOptions.CpkScopeInfo)
 	}
-	_, err = azblob.UploadStreamToBlockBlob(ctx, os.Stdin, blockBlobUrl, azblob.UploadStreamToBlockBlobOptions{
-		BufferSize:  int(blockSize),
-		MaxBuffers:  pipingUploadParallelism,
-		Metadata:    metadataMap.ToAzBlobMetadata(),
-		BlobTagsMap: blobTags.ToAzBlobTagsMap(),
-		BlobHTTPHeaders: azblob.BlobHTTPHeaders{
-			ContentType:        cca.contentType,
-			ContentLanguage:    cca.contentLanguage,
-			ContentEncoding:    cca.contentEncoding,
-			ContentDisposition: cca.contentDisposition,
-			CacheControl:       cca.cacheControl,
+	_, err = blockBlobClient.UploadFile(ctx, os.Stdin, &blockblob.UploadFileOptions{
+		// BlockSize specifies the block size to use; the default (and maximum size) is MaxStageBlockBytes.
+		BlockSize: blockSize,
+		HTTPHeaders: &blob.HTTPHeaders{
+			BlobContentType:        &cca.contentType,
+			BlobContentLanguage:    &cca.contentLanguage,
+			BlobContentEncoding:    &cca.contentEncoding,
+			BlobContentDisposition: &cca.contentDisposition,
+			BlobCacheControl:       &cca.cacheControl,
 		},
-		BlobAccessTier:           bbAccessTier,
-		ClientProvidedKeyOptions: common.GetClientProvidedKey(cca.CpkOptions),
+		Metadata:     metadataMap,
+		Tags:         cca.blobTags,
+		CPKInfo:      &cpk,
+		CPKScopeInfo: &cpkScope,
+		Concurrency:  pipingUploadParallelism,
 	})
 
 	return err

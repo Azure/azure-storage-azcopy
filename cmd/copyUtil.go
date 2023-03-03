@@ -23,7 +23,9 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"net/url"
 	"os"
 	"strings"
@@ -31,7 +33,6 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
@@ -46,7 +47,11 @@ var gCopyUtil = copyHandlerUtil{}
 
 // checks if a given url points to a container or virtual directory, as opposed to a blob or prefix match
 func (util copyHandlerUtil) urlIsContainerOrVirtualDirectory(url *url.URL) bool {
-	if azblob.NewBlobURLParts(*url).IPEndpointStyleInfo.AccountName == "" {
+	blobURLParts, err := blob.ParseURL(url.String())
+	if err != nil {
+		return false
+	}
+	if blobURLParts.IPEndpointStyleInfo.AccountName == "" {
 		// Typical endpoint style
 		// If there's no slashes after the first, it's a container.
 		// If there's a slash on the end, it's a virtual directory/container.
