@@ -159,7 +159,7 @@ func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDisk
 		return nil, fmt.Errorf("failed to parse config") // Outputting the error may reveal semi-sensitive info like subscription ID
 	}
 
-	out.oauth, err = gim.GetOAuthCredential("https://management.core.windows.net/")
+	out.oauth, err = gim.GetOAuthCredential("https://management.core.windows.net/.default")
 	if err != nil {
 		return nil, fmt.Errorf("failed to refresh oauth token: %w", err)
 	}
