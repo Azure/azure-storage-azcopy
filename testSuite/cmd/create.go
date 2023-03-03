@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"strings"
@@ -277,11 +276,11 @@ func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobH
 		azblob.ClientProvidedKeyOptions{},
 		azblob.ImmutabilityPolicyOptions{})
 	if err != nil {
-		fmt.Println(fmt.Sprintf("error uploading the blob %v", err))
+		fmt.Printf("error uploading the blob %v\n", err)
 		os.Exit(1)
 	}
 	if putBlobResp.Response() != nil {
-		io.Copy(ioutil.Discard, putBlobResp.Response().Body)
+		_, _ = io.Copy(io.Discard, putBlobResp.Response().Body)
 		putBlobResp.Response().Body.Close()
 	}
 }
@@ -355,7 +354,7 @@ func createFile(fileURLStr string, fileSize uint32, metadata azfile.Metadata, fi
 		Metadata:        metadata,
 	})
 	if err != nil {
-		fmt.Println(fmt.Sprintf("error uploading the file %v", err))
+		fmt.Printf("error uploading the file %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -460,7 +459,7 @@ func createGCPObject(objectURLStr string, objectSize uint32, o gcpUtils.ObjectAt
 		os.Exit(1)
 	}
 
-	gcpClient, err := createGCPClientWithGCSSDK()
+	gcpClient, _ := createGCPClientWithGCSSDK()
 
 	randomString := createStringWithRandomChars(int(objectSize))
 	if o.ContentType == "" {
@@ -470,8 +469,8 @@ func createGCPObject(objectURLStr string, objectSize uint32, o gcpUtils.ObjectAt
 	obj := gcpClient.Bucket(gcpURLParts.BucketName).Object(gcpURLParts.ObjectKey)
 	wc := obj.NewWriter(context.Background())
 	reader := strings.NewReader(randomString)
-	_, err = io.Copy(wc, reader)
-	err = wc.Close()
+	_, _ = io.Copy(wc, reader)
+	_ = wc.Close()
 
 	_, err = obj.Update(context.Background(), o)
 	if err != nil {

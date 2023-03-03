@@ -29,6 +29,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -59,6 +61,30 @@ type UserOAuthTokenManager struct {
 func NewUserOAuthTokenManagerInstance(credCacheOptions CredCacheOptions) *UserOAuthTokenManager {
 	return &UserOAuthTokenManager{
 		credCache: NewCredCache(credCacheOptions),
+	}
+}
+
+func newAzcopyHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			Proxy: GlobalProxyLookup,
+			// We use Dial instead of DialContext as DialContext has been reported to cause slower performance.
+			Dial /*Context*/ : (&net.Dialer{
+				Timeout:   10 * time.Second,
+				KeepAlive: 10 * time.Second,
+				DualStack: true,
+			}).Dial,                   /*Context*/
+			MaxIdleConns:           0, // No limit
+			MaxIdleConnsPerHost:    1000,
+			IdleConnTimeout:        180 * time.Second,
+			TLSHandshakeTimeout:    10 * time.Second,
+			ExpectContinueTimeout:  1 * time.Second,
+			DisableKeepAlives:      false,
+			DisableCompression:     true,
+			MaxResponseHeaderBytes: 0,
+			// ResponseHeaderTimeout:  time.Duration{},
+			// ExpectContinueTimeout:  time.Duration{},
+		},
 	}
 }
 
@@ -152,7 +178,8 @@ func secretLoginNoUOTM(tenantID, activeDirectoryEndpoint, secret, applicationID,
 
 	spn, err := azidentity.NewClientSecretCredential(tenantID, applicationID, secret, &azidentity.ClientSecretCredentialOptions{
 		ClientOptions: azcore.ClientOptions{
-			Cloud: cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
+			Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
+			Transport: newAzcopyHTTPClient(),
 		},
 	})
 	if err != nil {
@@ -242,7 +269,8 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 
 	spt, err := azidentity.NewClientCertificateCredential(tenantID, applicationID, certs, key, &azidentity.ClientCertificateCredentialOptions{
 		ClientOptions: azcore.ClientOptions{
-			Cloud: cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
+			Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
+			Transport: newAzcopyHTTPClient(),
 		},
 	})
 	if err != nil {
@@ -324,7 +352,8 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 
 	dcc, err := azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{
 		ClientOptions: azcore.ClientOptions{
-			Cloud: cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
+			Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
+			Transport: newAzcopyHTTPClient(),
 		},
 		TenantID: tenantID,
 		ClientID: ApplicationID,
@@ -590,7 +619,6 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromTokenStore(ctx context.Context) (
 	if err != nil {
 		return nil, fmt.Errorf("get cached token failed in Token Store Mode(SE), %v", err)
 	}
-
 	return &(tokenInfo.AccessToken), nil
 }
 

@@ -33,7 +33,7 @@ func (cps *countPerSecond) Add(delta uint64) uint64 {
 
 func (cps *countPerSecond) LatestRate() float64 {
 	cps.nocopy.Check()
-	dur := time.Now().Sub(time.Unix(cps.start, 0))
+	dur := time.Since(time.Unix(cps.start, 0))
 	if dur <= 0 {
 		dur = 1
 	}

@@ -126,7 +126,7 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockIndex int32, adjustedChunkSize int64) chunkFunc {
 	return createSendToRemoteChunkFunc(c.jptm, id, func() {
 		// step 1: generate block ID
-		encodedBlockID := c.generateEncodedBlockID()
+		encodedBlockID := c.generateEncodedBlockID(blockIndex)
 
 		// step 2: save the block ID into the list of block IDs
 		c.setBlockID(blockIndex, encodedBlockID)

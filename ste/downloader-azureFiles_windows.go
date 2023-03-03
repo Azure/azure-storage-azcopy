@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 package ste
@@ -77,7 +78,8 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 
 		err = windows.SetFileTime(fd, &smbCreationFileTime, nil, pLastWriteTime)
 		if err != nil {
-			err = fmt.Errorf("attempted update file times: %w", err)
+			err = fmt.Errorf("attempted update file times: %w", err) //nolint:staticcheck,ineffassign
+			// TODO: return here on error? or ignore
 		}
 		return nil
 	}

@@ -9,11 +9,8 @@ import (
 
 // The JobID reserved variants.
 const (
-	reservedNCS       byte = 0x80
-	reservedRFC4122   byte = 0x40
-	reservedMicrosoft byte = 0x20
-	reservedFuture    byte = 0x00
-	guidFormat             = "%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x"
+	reservedRFC4122 byte = 0x40
+	guidFormat           = "%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x"
 )
 
 // A UUID representation compliant with specification in RFC 4122 document.

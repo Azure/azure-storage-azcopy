@@ -26,7 +26,6 @@ import (
 	"os"
 	"path"
 	"runtime"
-	"runtime/debug"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -67,7 +66,7 @@ func main() {
 	}
 
 	if err := os.MkdirAll(azcopyJobPlanFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
-		log.Fatalf("Problem making .azcopy directory. Try setting AZCOPY_PLAN_FILE_LOCATION env variable. %v", err)
+		log.Fatalf("Problem making .azcopy directory. Try setting AZCOPY_JOB_PLAN_LOCATION env variable. %v", err)
 	}
 
 	jobID := common.NewJobID()
@@ -78,7 +77,6 @@ func main() {
 	}
 
 	configureGoMaxProcs()
-	configureGC()
 
 	// Perform os specific initialization
 	maxFileAndSocketHandles, err := ProcessOSSpecificInitialization()
@@ -88,16 +86,6 @@ func main() {
 
 	cmd.Execute(azcopyLogPathFolder, azcopyJobPlanFolder, maxFileAndSocketHandles, jobID)
 	glcm.Exit(nil, common.EExitCode.Success())
-}
-
-// Golang's default behaviour is to GC when new objects = (100% of) total of objects surviving previous GC.
-// But our "survivors" add up to many GB, so its hard for users to be confident that we don't have
-// a memory leak (since with that default setting new GCs are very rare in our case). So configure them to be more frequent.
-func configureGC() {
-	go func() {
-		time.Sleep(20 * time.Second) // wait a little, so that our initial pool of buffers can get allocated without heaps of (unnecessary) GC activity
-		debug.SetGCPercent(20)       // activate more aggressive/frequent GC than the default
-	}()
 }
 
 // Ensure we always have more than 1 OS thread running goroutines, since there are issues with having just 1.

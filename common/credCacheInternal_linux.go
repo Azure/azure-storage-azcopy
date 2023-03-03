@@ -29,7 +29,6 @@ import (
 // CredCacheInternalIntegration manages credential caches with Gnome keyring.
 // Note: This should be only used for internal integration.
 type CredCacheInternalIntegration struct {
-	state       string
 	accountName string
 	serviceName string
 	keyName     string

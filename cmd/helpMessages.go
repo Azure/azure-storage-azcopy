@@ -379,7 +379,7 @@ Remove a single directory from a Blob Storage account that has a hierarchical na
 const syncCmdShortDescription = "Replicate source to the destination location"
 
 const syncCmdLongDescription = `
-The last modified times are used for comparison. The file is skipped if the last modified time in the destination is more recent. The supported pairs are:
+The last modified times are used for comparison. The file is skipped if the last modified time in the destination is more recent. Alternatively, you can use the --compare-hash flag to transfer only files which differ in their MD5 hash. The supported pairs are:
   
   - Local <-> Azure Blob / Azure File (either SAS or OAuth authentication can be used)
   - Azure Blob <-> Azure Blob (Source must include a SAS or is publicly accessible; either SAS or OAuth authentication can be used for destination)
@@ -404,7 +404,7 @@ The built-in lookup table is small but on Unix it is augmented by the local syst
 
 On Windows, MIME types are extracted from the registry.
 
-Please also note that sync works off of the last modified times exclusively. So in the case of Azure File <-> Azure File,
+By default, sync works off of the last modified times unless you override that default behavior by using the --compare-hash flag. So in the case of Azure File <-> Azure File,
 the header field Last-Modified is used instead of x-ms-file-change-time, which means that metadata changes at the source can also trigger a full copy.
 `
 

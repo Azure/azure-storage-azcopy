@@ -49,7 +49,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 
 	// Include-path is handled by ListOfFilesChannel.
 	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo,
-		nil, cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs,
+		common.ESymlinkHandlingType.Skip(), cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs,
 		cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false,
 		common.ESyncHashType.None(), azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil /* errorChannel */)
 
@@ -317,7 +317,7 @@ func removeSingleBfsResource(ctx context.Context, urlParts azbfs.BfsURLParts, p 
 
 			for _, v := range listResp.Paths {
 				entityType := "directory"
-				if v.IsDirectory == nil || *v.IsDirectory == false {
+				if v.IsDirectory == nil || !*v.IsDirectory {
 					entityType = "file"
 				}
 

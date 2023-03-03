@@ -470,7 +470,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, sourceBlobToken
 		if plan.FromTo.To().IsRemote() {
 			relDst, err = url.PathUnescape(relDst)
 		}
-		relDst = strings.TrimPrefix(relSrc, common.AZCOPY_PATH_SEPARATOR_STRING)
+		relDst = strings.TrimPrefix(relDst, common.AZCOPY_PATH_SEPARATOR_STRING)
 		common.PanicIfErr(err)
 
 		_, srcOk := DebugSkipFiles[relSrc]
@@ -525,15 +525,16 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
 		credInfo = jpm.jobMgr.getInMemoryTransitJobState().CredentialInfo
 	}
-	userAgent := common.UserAgent
+	var userAgent string
 	if fromTo.From() == common.ELocation.S3() {
 		userAgent = common.S3ImportUserAgent
 	} else if fromTo.From() == common.ELocation.GCP() {
 		userAgent = common.GCPImportUserAgent
 	} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
 		userAgent = common.BenchmarkUserAgent
+	} else {
+		userAgent = common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
 	}
-	userAgent = common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
 
 	credOption := common.CredentialOpOptions{
 		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
@@ -552,8 +553,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 
 	var statsAccForSip *PipelineNetworkStats = nil // we don't accumulate stats on the source info provider
 
-	// Create source info provider's pipeline for S2S copy.
-	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() {
+	// Create source info provider's pipeline for S2S copy or download (in some cases).
+	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() || fromTo == common.EFromTo.BlobLocal() {
 		var sourceCred azblob.Credential = azblob.NewAnonymousCredential()
 		jobState := jpm.jobMgr.getInMemoryTransitJobState()
 		if fromTo.To() == common.ELocation.Blob() && jobState.S2SSourceCredentialType.IsAzureOAuth() {

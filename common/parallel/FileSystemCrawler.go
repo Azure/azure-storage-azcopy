@@ -100,6 +100,7 @@ func Walk(appCtx context.Context, root string, parallelism int, parallelStat boo
 	defer reader.Close()
 
 	ctx, cancel = context.WithCancel(appCtx)
+	defer cancel()
 	ch := CrawlLocalDirectory(ctx, root, remainingParallelism, reader)
 	for crawlResult := range ch {
 		entry, err := crawlResult.Item()
@@ -116,7 +117,6 @@ func Walk(appCtx context.Context, root string, parallelism int, parallelStat boo
 			}
 		}
 		if err != nil {
-			cancel()
 			return
 		}
 	}

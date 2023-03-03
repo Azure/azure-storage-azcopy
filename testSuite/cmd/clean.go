@@ -363,7 +363,7 @@ func cleanBfsFile(fileURLStr string) {
 	fileURL := azbfs.NewFileURL(*u, createBlobFSPipeline(*u))
 	_, err = fileURL.Delete(ctx)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("error deleting the blob FS file, %v", err))
+		fmt.Printf("error deleting the blob FS file, %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -547,7 +547,7 @@ func deleteGCPBucket(client *gcpUtils.Client, bucketName string) {
 			break
 		}
 		if err == nil {
-			err = bucket.Object(attrs.Name).Delete(nil)
+			err = bucket.Object(attrs.Name).Delete(context.TODO())
 			if err != nil {
 				fmt.Println("Could not clear GCS Buckets.")
 				return

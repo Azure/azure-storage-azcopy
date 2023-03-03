@@ -90,12 +90,11 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 }
 
 func newListTraverser(parent common.ResourceString, parentType common.Location, credential *common.CredentialInfo,
-	ctx *context.Context, recursive, followSymlinks, getProperties bool, listChan chan string,
+	ctx *context.Context, recursive bool, handleSymlinks common.SymlinkHandlingType, getProperties bool, listChan chan string,
 	includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveBlobTags bool,
 	logLevel pipeline.LogLevel, cpkOptions common.CpkOptions) ResourceTraverser {
-	var traverserGenerator childTraverserGenerator
 
-	traverserGenerator = func(relativeChildPath string) (ResourceTraverser, error) {
+	traverserGenerator := func(relativeChildPath string) (ResourceTraverser, error) {
 		source := parent.Clone()
 		if parentType != common.ELocation.Local() {
 			// assume child path is not URL-encoded yet, this is consistent with the behavior of previous implementation
@@ -108,7 +107,7 @@ func newListTraverser(parent common.ResourceString, parentType common.Location, 
 		}
 
 		// Construct a traverser that goes through the child
-		traverser, err := InitResourceTraverser(source, parentType, ctx, credential, &followSymlinks,
+		traverser, err := InitResourceTraverser(source, parentType, ctx, credential, handleSymlinks,
 			nil, recursive, getProperties, includeDirectoryStubs, common.EPermanentDeleteOption.None(), incrementEnumerationCounter,
 			nil, s2sPreserveBlobTags, common.ESyncHashType.None(), logLevel, cpkOptions, nil /* errorChannel */)
 		if err != nil {

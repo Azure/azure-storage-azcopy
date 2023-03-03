@@ -1229,7 +1229,7 @@ func ToCommonBlobTagsMap(blobTagsString string) BlobTags {
 const metadataRenamedKeyPrefix = "rename_"
 const metadataKeyForRenamedOriginalKeyPrefix = "rename_key_"
 
-var metadataKeyInvalidCharRegex = regexp.MustCompile("\\W")
+var metadataKeyInvalidCharRegex = regexp.MustCompile(`\W`)
 var metadataKeyRenameErrStr = "failed to rename invalid metadata key %q"
 
 // ResolveInvalidKey resolves invalid metadata key with following steps:
@@ -1470,8 +1470,9 @@ var EEntityType = EntityType(0)
 
 type EntityType uint8
 
-func (EntityType) File() EntityType   { return EntityType(0) }
-func (EntityType) Folder() EntityType { return EntityType(1) }
+func (EntityType) File() EntityType    { return EntityType(0) }
+func (EntityType) Folder() EntityType  { return EntityType(1) }
+func (EntityType) Symlink() EntityType { return EntityType(2) }
 
 func (e EntityType) String() string {
 	return enum.StringInt(e, reflect.TypeOf(e))
@@ -1666,7 +1667,7 @@ func (rpt RehydratePriorityType) ToRehydratePriorityType() azblob.RehydratePrior
 	}
 }
 
-// //////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 type SyncHashType uint8
 
 var ESyncHashType SyncHashType = 0
@@ -1689,4 +1690,34 @@ func (ht *SyncHashType) Parse(s string) error {
 
 func (ht SyncHashType) String() string {
 	return enum.StringInt(ht, reflect.TypeOf(ht))
+}
+
+////////////////////////////////////////////////////////////////////////////////
+type SymlinkHandlingType uint8 // SymlinkHandlingType is only utilized internally to avoid having to carry around two contradictory flags. Thus, it doesn't have a parse method.
+
+// for reviewers: This is different than we usually implement enums, but it's something I've found to be more pleasant in personal projects, especially for bitflags. Should we change the pattern to match this in the future?
+
+type eSymlinkHandlingType uint8
+
+var ESymlinkHandlingType = eSymlinkHandlingType(0)
+
+func (eSymlinkHandlingType) Skip() SymlinkHandlingType     { return SymlinkHandlingType(0) }
+func (eSymlinkHandlingType) Follow() SymlinkHandlingType   { return SymlinkHandlingType(1) } // Upload what's on the other hand of the symlink
+func (eSymlinkHandlingType) Preserve() SymlinkHandlingType { return SymlinkHandlingType(2) } // Copy the link
+
+func (sht SymlinkHandlingType) None() bool     { return sht == 0 }
+func (sht SymlinkHandlingType) Follow() bool   { return sht == 1 }
+func (sht SymlinkHandlingType) Preserve() bool { return sht == 2 }
+
+func (sht *SymlinkHandlingType) Determine(Follow, Preserve bool) error {
+	switch {
+	case Follow && Preserve:
+		return errors.New("cannot both follow and preserve symlinks (--preserve-symlinks and --follow-symlinks contradict)")
+	case Preserve:
+		*sht = ESymlinkHandlingType.Preserve()
+	case Follow:
+		*sht = ESymlinkHandlingType.Follow()
+	}
+
+	return nil
 }

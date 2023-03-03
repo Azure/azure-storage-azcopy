@@ -93,7 +93,7 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 	totalKnownCount = summary.TotalTransfers
 
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
-	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
+	duration := time.Since(cca.jobStartTime) // report the total run time of the job
 
 	var computeThroughput = func() float64 {
 		// compute the average throughput for the last time interval
@@ -158,6 +158,7 @@ Job %s summary
 Elapsed Time (Minutes): %v
 Number of File Transfers: %v
 Number of Folder Property Transfers: %v
+Number of Symlink Transfers: %v
 Total Number Of Transfers: %v
 Number of File Transfers Completed: %v
 Number of Folder Transfers Completed: %v
@@ -172,6 +173,7 @@ Final Job Status: %v
 					jobsAdmin.ToFixed(duration.Minutes(), 4),
 					summary.FileTransfers,
 					summary.FolderPropertyTransfers,
+					summary.SymlinkTransfers,
 					summary.TotalTransfers,
 					summary.TransfersCompleted-summary.FoldersCompleted,
 					summary.FoldersCompleted,
