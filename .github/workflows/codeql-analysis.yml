@@ -13,9 +13,9 @@ name: "CodeQL"
 
 on:
   pull_request:
-    branches: [ main, dev ]
+    branches: [ main, dev, gapra/track2_azblob_migration ]
   push:
-    branches: [ main, dev ]
+    branches: [ main, dev, gapra/track2_azblob_migration ]
 
 jobs:
   analyze:
