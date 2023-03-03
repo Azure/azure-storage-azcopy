@@ -3,12 +3,14 @@ trigger:
     include:
       - dev
       - main
+      - gapra/track2_azblob_migration
 
 pr:
   branches:
     include:
       - dev
       - main
+      - gapra/track2_azblob_migration
 
 jobs:
 

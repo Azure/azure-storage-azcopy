@@ -7,10 +7,10 @@ name: trivy
 
 on:
   push:
-    branches: [ "main", "dev" ]
+    branches: [ "main", "dev", "gapra/track2_azblob_migration" ]
   pull_request:
     # The branches below must be a subset of the branches above
-    branches: [ "main", "dev" ]
+    branches: [ "main", "dev", "gapra/track2_azblob_migration" ]
   schedule:
     - cron: '31 19 * * 1'
 

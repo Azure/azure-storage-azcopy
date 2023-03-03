@@ -611,6 +611,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 
 	// user is not placing the source as a subdir
 	if object.isSourceRootFolder() && !asSubdir {
+		//nolint:ineffassign
 		relativePath = ""
 	}
 
