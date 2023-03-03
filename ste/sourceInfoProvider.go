@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"os"
 	"time"
@@ -28,8 +29,6 @@ import (
 	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // ISourceInfoProvider is the abstraction of generic source info provider which provides source's properties.
@@ -72,10 +71,10 @@ type IBlobSourceInfoProvider interface {
 	IRemoteSourceInfoProvider
 
 	// BlobTier returns source's blob tier.
-	BlobTier() azblob.AccessTierType
+	BlobTier() blob.AccessTier
 
 	// BlobType returns source's blob type.
-	BlobType() azblob.BlobType
+	BlobType() blob.BlobType
 }
 
 type TypedSMBPropertyHolder interface {

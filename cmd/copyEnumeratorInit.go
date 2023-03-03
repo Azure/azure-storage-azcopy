@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"log"
 	"net/url"
 	"os"
@@ -388,7 +389,7 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []ObjectFilter {
 	}
 
 	if len(cca.excludeBlobType) != 0 {
-		excludeSet := map[azblob.BlobType]bool{}
+		excludeSet := map[blob.BlobType]bool{}
 
 		for _, v := range cca.excludeBlobType {
 			excludeSet[v] = true
@@ -616,6 +617,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 
 	// user is not placing the source as a subdir
 	if object.isSourceRootFolder() && !asSubdir {
+		//nolint:ineffassign
 		relativePath = ""
 	}
 

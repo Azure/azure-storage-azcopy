@@ -7,10 +7,12 @@ on:
     branches:
       - dev
       - main
+      - gapra/track2_azblob_migration
   pull_request:
     branches:
       - dev
       - main
+      - gapra/track2_azblob_migration
 jobs:
   codespell:
     name: Check for spelling errors
@@ -20,5 +22,5 @@ jobs:
       - uses: codespell-project/actions-codespell@master
         with:
           check_filenames: true
-          skip: ./sddl/sddlPortable_test.go,./sddl/sddlHelper_linux.go
+          skip: ./sddl/sddlPortable_test.go,./sddl/sddlHelper_linux.go,./go.sum
           ignore_words_list: "resue,pase,cancl,cacl,froms"

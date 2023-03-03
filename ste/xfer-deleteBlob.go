@@ -2,6 +2,7 @@ package ste
 
 import (
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/http"
 	"net/url"
 	"strings"
@@ -61,10 +62,10 @@ func doDeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	// note: if deleteSnapshotsOption is 'only', which means deleting all the snapshots but keep the root blob
 	// we still count this delete operation as successful since we accomplished the desired outcome
 	err := error(nil)
-	if jptm.PermanentDeleteOption().ToPermanentDeleteOptionType() == azblob.BlobDeletePermanent {
-		_, err = srcBlobURL.PermanentDelete(jptm.Context(), jptm.DeleteSnapshotsOption().ToDeleteSnapshotsOptionType(), azblob.BlobAccessConditions{})
+	if jptm.PermanentDeleteOption().ToPermanentDeleteOptionType() == blob.DeleteTypePermanent {
+		_, err = srcBlobURL.PermanentDelete(jptm.Context(), azblob.DeleteSnapshotsOptionType(jptm.DeleteSnapshotsOption().ToDeleteSnapshotsOptionType()), azblob.BlobAccessConditions{})
 	} else {
-		_, err = srcBlobURL.Delete(jptm.Context(), jptm.DeleteSnapshotsOption().ToDeleteSnapshotsOptionType(), azblob.BlobAccessConditions{})
+		_, err = srcBlobURL.Delete(jptm.Context(), azblob.DeleteSnapshotsOptionType(jptm.DeleteSnapshotsOption().ToDeleteSnapshotsOptionType()), azblob.BlobAccessConditions{})
 	}
 	if err != nil {
 		if strErr, ok := err.(azblob.StorageError); ok {

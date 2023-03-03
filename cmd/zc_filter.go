@@ -22,12 +22,12 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"path"
 	"regexp"
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -39,7 +39,7 @@ Blob type exclusion is required as a part of the copy enumerators refactor. This
 This map is used effectively as a hash set. If an item exists in the set, it does not pass the filter.
 */
 type excludeBlobTypeFilter struct {
-	blobTypes map[azblob.BlobType]bool
+	blobTypes map[blob.BlobType]bool
 }
 
 func (f *excludeBlobTypeFilter) DoesSupportThisOS() (msg string, supported bool) {

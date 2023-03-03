@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"os"
 
@@ -67,7 +68,7 @@ func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipelin
 	bd.txInfo = jptm.Info()
 	bd.jptm = jptm
 
-	if jptm.Info().SrcBlobType == azblob.BlobPageBlob {
+	if jptm.Info().SrcBlobType == blob.BlobTypePageBlob {
 		// page blobs need a file-specific pacer
 		// See comments in uploader-pageBlob for the reasons, since the same reasons apply are are explained there
 		bd.filePacer = newPageBlobAutoPacer(pageBlobInitialBytesPerSecond, jptm.Info().BlockSize, false, jptm.(common.ILogger))

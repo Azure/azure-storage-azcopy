@@ -3,6 +3,7 @@ package ste
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"mime"
 	"net"
 	"net/http"
@@ -58,8 +59,8 @@ type IJobPartMgr interface {
 	getFolderCreationTracker() FolderCreationTracker
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 	FolderDeletionManager() common.FolderDeletionManager
-	CpkInfo() common.CpkInfo
-	CpkScopeInfo() common.CpkScopeInfo
+	CpkInfo() blob.CPKInfo
+	CpkScopeInfo() blob.CPKScopeInfo
 	IsSourceEncrypted() bool
 	/* Status Manager Updates */
 	SendXferDoneMsg(msg xferDoneMsg)
@@ -800,11 +801,11 @@ func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlob
 	return jpm.blockBlobTier, jpm.pageBlobTier
 }
 
-func (jpm *jobPartMgr) CpkInfo() common.CpkInfo {
+func (jpm *jobPartMgr) CpkInfo() blob.CPKInfo {
 	return common.GetCpkInfo(jpm.cpkOptions.CpkInfo)
 }
 
-func (jpm *jobPartMgr) CpkScopeInfo() common.CpkScopeInfo {
+func (jpm *jobPartMgr) CpkScopeInfo() blob.CPKScopeInfo {
 	return common.GetCpkScopeInfo(jpm.cpkOptions.CpkScopeInfo)
 }
 

@@ -22,6 +22,7 @@ package ste
 
 import (
 	"context"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"strings"
 
@@ -44,10 +45,10 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipe
 		return nil, err
 	}
 
-	destBlobTier := azblob.AccessTierNone
+	var destBlobTier blob.AccessTier
 	var pageRangeOptimizer *pageRangeOptimizer
 	if blobSrcInfoProvider, ok := srcInfoProvider.(IBlobSourceInfoProvider); ok {
-		if blobSrcInfoProvider.BlobType() == azblob.BlobPageBlob {
+		if blobSrcInfoProvider.BlobType() == blob.BlobTypePageBlob {
 			// if the source is page blob, preserve source's blob tier.
 			destBlobTier = blobSrcInfoProvider.BlobTier()
 

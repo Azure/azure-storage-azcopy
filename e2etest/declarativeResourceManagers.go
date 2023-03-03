@@ -21,6 +21,7 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"os"
 	"path"
@@ -46,8 +47,8 @@ type downloadContentOptions struct {
 
 type downloadBlobContentOptions struct {
 	containerURL azblob.ContainerURL
-	cpkInfo      common.CpkInfo
-	cpkScopeInfo common.CpkScopeInfo
+	cpkInfo      blob.CPKInfo
+	cpkScopeInfo blob.CPKScopeInfo
 }
 
 type downloadFileContentOptions struct {
