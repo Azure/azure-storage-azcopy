@@ -85,7 +85,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 		if len(metadataString) > 0 {
 			for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
 				kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-				metadataMap[kv[0]] = kv[1]
+				metadataMap[kv[0]] = &kv[1]
 			}
 		}
 		copyTransfer.Metadata = metadataMap

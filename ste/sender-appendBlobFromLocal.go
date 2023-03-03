@@ -37,7 +37,7 @@ func (u *appendBlobUploader) Prologue(ps common.PrologueState) (destinationModif
 	if u.jptm.Info().PreservePOSIXProperties {
 		if unixSIP, ok := u.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
 			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
-			u.metadataToApply = common.Metadata(u.metadataToApply).Clone().ToAzBlobMetadata()
+			u.metadataToApply = common.FromAzBlobMetadataToCommonMetadata(u.metadataToApply).Clone().ToAzBlobMetadata()
 
 			statAdapter, err := unixSIP.GetUNIXProperties()
 			if err != nil {
