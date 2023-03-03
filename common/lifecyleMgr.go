@@ -138,7 +138,7 @@ func (lcm *lifecycleMgr) watchInputs() {
 
 		var req LCMMsgReq
 		if lcm.allowCancelFromStdIn && strings.EqualFold(msg, "cancel") {
-			lcm.cancelChannel <- os.Interrupt
+			lcm.cancelhannel <- os.Interrupt
 		} else if lcm.e2eAllowAwaitContinue && strings.EqualFold(msg, "continue") {
 			close(lcm.e2eContinueChannel)
 		} else if lcm.e2eAllowAwaitOpen && strings.EqualFold(msg, "open") {
