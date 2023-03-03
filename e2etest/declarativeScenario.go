@@ -23,6 +23,7 @@ package e2etest
 import (
 	"crypto/md5"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"os"
 	"path"
@@ -535,7 +536,7 @@ func (s *scenario) validateADLSACLs(expected, actual *string) {
 	s.a.Assert(expected, equals(), actual, fmt.Sprintf("Expected Gen 2 ACL: %s but found: %s", *expected, *actual))
 }
 
-func (s *scenario) validateCPKByScope(expected, actual *common.CpkScopeInfo) {
+func (s *scenario) validateCPKByScope(expected, actual *blob.CPKScopeInfo) {
 	if expected == nil && actual == nil {
 		return
 	}
@@ -547,7 +548,7 @@ func (s *scenario) validateCPKByScope(expected, actual *common.CpkScopeInfo) {
 		fmt.Sprintf("Expected encryption scope is: '%v' but found: '%v'", expected.EncryptionScope, actual.EncryptionScope))
 }
 
-func (s *scenario) validateCPKByValue(expected, actual *common.CpkInfo) {
+func (s *scenario) validateCPKByValue(expected, actual *blob.CPKInfo) {
 	if expected == nil && actual == nil {
 		return
 	}
@@ -556,8 +557,8 @@ func (s *scenario) validateCPKByValue(expected, actual *common.CpkInfo) {
 		return
 	}
 
-	s.a.Assert(expected.EncryptionKeySha256, equals(), actual.EncryptionKeySha256,
-		fmt.Sprintf("Expected encryption scope is: '%v' but found: '%v'", expected.EncryptionKeySha256, actual.EncryptionKeySha256))
+	s.a.Assert(expected.EncryptionKeySHA256, equals(), actual.EncryptionKeySHA256,
+		fmt.Sprintf("Expected encryption scope is: '%v' but found: '%v'", expected.EncryptionKeySHA256, actual.EncryptionKeySHA256))
 }
 
 // Validate blob tags

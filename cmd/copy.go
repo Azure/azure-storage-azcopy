@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"io"
 	"math"
 	"net/url"
@@ -862,7 +863,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 			if err != nil {
 				return cooked, fmt.Errorf("error parsing the exclude-blob-type %s provided with exclude-blob-type flag ", blobType)
 			}
-			cooked.excludeBlobType = append(cooked.excludeBlobType, eBlobType.ToAzBlobType())
+			cooked.excludeBlobType = append(cooked.excludeBlobType, eBlobType.ToBlobType())
 		}
 	}
 
@@ -1143,7 +1144,7 @@ type CookedCopyCmdArgs struct {
 	// options from flags
 	blockSize int64
 	// list of blobTypes to exclude while enumerating the transfer
-	excludeBlobType []azblob.BlobType
+	excludeBlobType []blob.BlobType
 	blobType        common.BlobType
 	// Blob index tags categorize data in your storage account utilizing key-value tag attributes.
 	// These tags are automatically indexed and exposed as a queryable multi-dimensional index to easily find data.

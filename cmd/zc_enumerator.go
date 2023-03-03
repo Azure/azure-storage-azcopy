@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 	"net/url"
 	"path/filepath"
 	"runtime"
@@ -32,7 +33,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
@@ -53,7 +54,7 @@ type StoredObject struct {
 	smbLastModifiedTime time.Time
 	size                int64
 	md5                 []byte
-	blobType            azblob.BlobType // will be "None" when unknown or not applicable
+	blobType            blob.BlobType // will be "None" when unknown or not applicable
 
 	// all of these will be empty when unknown or not applicable.
 	contentDisposition string
@@ -77,8 +78,8 @@ type StoredObject struct {
 	// destination container name. Included in the processor after resolving container names.
 	DstContainerName string
 	// access tier, only included by blob traverser.
-	blobAccessTier azblob.AccessTierType
-	archiveStatus  azblob.ArchiveStatusType
+	blobAccessTier blob.AccessTier
+	archiveStatus  blob.ArchiveStatus
 	// metadata, included in S2S transfers
 	Metadata       common.Metadata
 	blobVersionID  string
@@ -87,9 +88,9 @@ type StoredObject struct {
 	blobDeleted    bool
 
 	// Lease information
-	leaseState    azblob.LeaseStateType
-	leaseStatus   azblob.LeaseStatusType
-	leaseDuration azblob.LeaseDurationType
+	leaseState    lease.StateType
+	leaseStatus   lease.StatusType
+	leaseDuration lease.DurationType
 }
 
 func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTime bool) bool {
@@ -139,7 +140,6 @@ func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyO
 		panic("undefined entity type")
 	}
 }
-
 
 // ErrorNoHashPresent , ErrorHashNoLongerValid, and ErrorHashNotCompatible indicate a hash is not present, not obtainable, and/or not usable.
 // For the sake of best-effort, when these errors are emitted, depending on the sync hash policy
@@ -230,12 +230,12 @@ type contentPropsProvider interface {
 	ContentMD5() []byte
 }
 type blobPropsProvider interface {
-	BlobType() azblob.BlobType
-	AccessTier() azblob.AccessTierType
-	LeaseStatus() azblob.LeaseStatusType
-	LeaseDuration() azblob.LeaseDurationType
-	LeaseState() azblob.LeaseStateType
-	ArchiveStatus() azblob.ArchiveStatusType
+	BlobType() blob.BlobType
+	AccessTier() blob.AccessTier
+	LeaseStatus() lease.StatusType
+	LeaseDuration() lease.DurationType
+	LeaseState() lease.StateType
+	ArchiveStatus() blob.ArchiveStatus
 }
 
 // a constructor is used so that in case the StoredObject has to change, the callers would get a compilation error
@@ -435,7 +435,10 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 			return nil, errors.New("a valid credential and context must be supplied to create a blob traverser")
 		}
 
-		burl := azblob.NewBlobURLParts(*resourceURL)
+		burl, err := blob.ParseURL(resourceURL.String())
+		if err != nil {
+			return nil, err
+		}
 
 		if burl.ContainerName == "" || strings.Contains(burl.ContainerName, "*") {
 

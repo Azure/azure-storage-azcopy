@@ -21,6 +21,8 @@
 package cmd
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
@@ -57,28 +59,28 @@ func (e emptyPropertiesAdapter) ContentMD5() []byte {
 	return make([]byte, 0)
 }
 
-func (e emptyPropertiesAdapter) BlobType() azblob.BlobType {
-	return azblob.BlobNone
+func (e emptyPropertiesAdapter) BlobType() blob.BlobType {
+	return ""
 }
 
-func (e emptyPropertiesAdapter) AccessTier() azblob.AccessTierType {
-	return azblob.AccessTierNone
+func (e emptyPropertiesAdapter) AccessTier() blob.AccessTier {
+	return ""
 }
 
-func (e emptyPropertiesAdapter) ArchiveStatus() azblob.ArchiveStatusType {
-	return azblob.ArchiveStatusNone
+func (e emptyPropertiesAdapter) ArchiveStatus() blob.ArchiveStatus {
+	return ""
 }
 
-func (e emptyPropertiesAdapter) LeaseDuration() azblob.LeaseDurationType {
-	return azblob.LeaseDurationNone
+func (e emptyPropertiesAdapter) LeaseDuration() lease.DurationType {
+	return ""
 }
 
-func (e emptyPropertiesAdapter) LeaseState() azblob.LeaseStateType {
-	return azblob.LeaseStateNone
+func (e emptyPropertiesAdapter) LeaseState() lease.StateType {
+	return ""
 }
 
-func (e emptyPropertiesAdapter) LeaseStatus() azblob.LeaseStatusType {
-	return azblob.LeaseStatusNone
+func (e emptyPropertiesAdapter) LeaseStatus() lease.StatusType {
+	return ""
 }
 
 // md5OnlyAdapter is like emptyProperties adapter, except for the ContentMD5
@@ -97,12 +99,31 @@ type blobPropertiesResponseAdapter struct {
 	*azblob.BlobGetPropertiesResponse
 }
 
-func (a blobPropertiesResponseAdapter) AccessTier() azblob.AccessTierType {
-	return azblob.AccessTierType(a.BlobGetPropertiesResponse.AccessTier())
+func (a blobPropertiesResponseAdapter) BlobType() blob.BlobType {
+	return blob.BlobType(a.BlobGetPropertiesResponse.BlobType())
 }
 
-func (a blobPropertiesResponseAdapter) ArchiveStatus() azblob.ArchiveStatusType {
-	return azblob.ArchiveStatusType(a.BlobGetPropertiesResponse.ArchiveStatus())
+func (a blobPropertiesResponseAdapter) AccessTier() blob.AccessTier {
+	return blob.AccessTier(a.BlobGetPropertiesResponse.AccessTier())
+}
+
+func (a blobPropertiesResponseAdapter) ArchiveStatus() blob.ArchiveStatus {
+	return blob.ArchiveStatus(a.BlobGetPropertiesResponse.ArchiveStatus())
+}
+
+// LeaseDuration returns the value for header x-ms-lease-duration.
+func (a blobPropertiesResponseAdapter) LeaseDuration() lease.DurationType {
+	return lease.DurationType(a.BlobGetPropertiesResponse.LeaseDuration())
+}
+
+// LeaseState returns the value for header x-ms-lease-state.
+func (a blobPropertiesResponseAdapter) LeaseState() lease.StateType {
+	return lease.StateType(a.BlobGetPropertiesResponse.LeaseState())
+}
+
+// LeaseStatus returns the value for header x-ms-lease-status.
+func (a blobPropertiesResponseAdapter) LeaseStatus() lease.StatusType {
+	return lease.StatusType(a.BlobGetPropertiesResponse.LeaseStatus())
 }
 
 // blobPropertiesAdapter adapts a BlobProperties object to both the
@@ -135,29 +156,29 @@ func (a blobPropertiesAdapter) ContentMD5() []byte {
 	return a.BlobProperties.ContentMD5
 }
 
-func (a blobPropertiesAdapter) BlobType() azblob.BlobType {
-	return a.BlobProperties.BlobType
+func (a blobPropertiesAdapter) BlobType() blob.BlobType {
+	return blob.BlobType(a.BlobProperties.BlobType)
 }
 
-func (a blobPropertiesAdapter) AccessTier() azblob.AccessTierType {
-	return a.BlobProperties.AccessTier
+func (a blobPropertiesAdapter) AccessTier() blob.AccessTier {
+	return blob.AccessTier(a.BlobProperties.AccessTier)
 }
 
 // LeaseDuration returns the value for header x-ms-lease-duration.
-func (a blobPropertiesAdapter) LeaseDuration() azblob.LeaseDurationType {
-	return a.BlobProperties.LeaseDuration
+func (a blobPropertiesAdapter) LeaseDuration() lease.DurationType {
+	return lease.DurationType(a.BlobProperties.LeaseDuration)
 }
 
 // LeaseState returns the value for header x-ms-lease-state.
-func (a blobPropertiesAdapter) LeaseState() azblob.LeaseStateType {
-	return a.BlobProperties.LeaseState
+func (a blobPropertiesAdapter) LeaseState() lease.StateType {
+	return lease.StateType(a.BlobProperties.LeaseState)
 }
 
 // LeaseStatus returns the value for header x-ms-lease-status.
-func (a blobPropertiesAdapter) LeaseStatus() azblob.LeaseStatusType {
-	return a.BlobProperties.LeaseStatus
+func (a blobPropertiesAdapter) LeaseStatus() lease.StatusType {
+	return lease.StatusType(a.BlobProperties.LeaseStatus)
 }
 
-func (a blobPropertiesAdapter) ArchiveStatus() azblob.ArchiveStatusType {
-	return a.BlobProperties.ArchiveStatus
+func (a blobPropertiesAdapter) ArchiveStatus() blob.ArchiveStatus {
+	return blob.ArchiveStatus(a.BlobProperties.ArchiveStatus)
 }

@@ -36,7 +36,7 @@ type pageBlobUploader struct {
 }
 
 func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	senderBase, err := newPageBlobSenderBase(jptm, destination, p, pacer, sip, azblob.AccessTierNone)
+	senderBase, err := newPageBlobSenderBase(jptm, destination, p, pacer, sip, "")
 	if err != nil {
 		return nil, err
 	}
@@ -127,8 +127,8 @@ func (u *pageBlobUploader) Epilogue() {
 	if jptm.IsLive() && !u.isInManagedDiskImportExportAccount() {
 		tryPutMd5Hash(jptm, u.md5Channel, func(md5Hash []byte) error {
 			epilogueHeaders := u.headersToApply
-			epilogueHeaders.ContentMD5 = md5Hash
-			_, err := u.destPageBlobURL.SetHTTPHeaders(jptm.Context(), epilogueHeaders, azblob.BlobAccessConditions{})
+			epilogueHeaders.BlobContentMD5 = md5Hash
+			_, err := u.destPageBlobURL.SetHTTPHeaders(jptm.Context(), common.ToAzBlobHTTPHeaders(epilogueHeaders), azblob.BlobAccessConditions{})
 			return err
 		})
 	}

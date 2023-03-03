@@ -22,6 +22,7 @@ package ste
 
 import (
 	"bytes"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"sync/atomic"
 
@@ -39,10 +40,10 @@ type urlToBlockBlobCopier struct {
 
 func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 	// Get blob tier, by default set none.
-	destBlobTier := azblob.AccessTierNone
+	var destBlobTier blob.AccessTier
 	// If the source is block blob, preserve source's blob tier.
 	if blobSrcInfoProvider, ok := srcInfoProvider.(IBlobSourceInfoProvider); ok {
-		if blobSrcInfoProvider.BlobType() == azblob.BlobBlockBlob {
+		if blobSrcInfoProvider.BlobType() == blob.BlobTypeBlockBlob {
 			destBlobTier = blobSrcInfoProvider.BlobTier()
 		}
 	}
@@ -92,7 +93,7 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 		// Create blob and finish.
 		if !ValidateTier(jptm, c.destBlobTier, c.destBlockBlobURL.BlobURL, c.jptm.Context(), false) {
-			c.destBlobTier = azblob.DefaultAccessTier
+			c.destBlobTier = ""
 		}
 
 		blobTags := c.blobTagsToApply
@@ -104,10 +105,10 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 		// TODO: Remove this snippet once service starts supporting CPK with blob tier
 		destBlobTier := c.destBlobTier
 		if c.cpkToApply.EncryptionScope != nil || (c.cpkToApply.EncryptionKey != nil && c.cpkToApply.EncryptionKeySha256 != nil) {
-			destBlobTier = azblob.AccessTierNone
+			destBlobTier = ""
 		}
 
-		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.headersToApply, c.metadataToApply, azblob.BlobAccessConditions{}, destBlobTier, blobTags, c.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
+		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), common.ToAzBlobHTTPHeaders(c.headersToApply), c.metadataToApply, azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags, c.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
 			jptm.FailActiveSend("Creating empty blob", err)
 			return
 		}
@@ -155,7 +156,7 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 
 		// Create blob and finish.
 		if !ValidateTier(c.jptm, c.destBlobTier, c.destBlockBlobURL.BlobURL, c.jptm.Context(), false) {
-			c.destBlobTier = azblob.DefaultAccessTier
+			c.destBlobTier = ""
 		}
 
 		blobTags := c.blobTagsToApply
@@ -167,15 +168,15 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 		// TODO: Remove this snippet once service starts supporting CPK with blob tier
 		destBlobTier := c.destBlobTier
 		if c.cpkToApply.EncryptionScope != nil || (c.cpkToApply.EncryptionKey != nil && c.cpkToApply.EncryptionKeySha256 != nil) {
-			destBlobTier = azblob.AccessTierNone
+			destBlobTier = ""
 		}
 
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
 
-		_, err := c.destBlockBlobURL.PutBlobFromURL(c.jptm.Context(), c.headersToApply, c.srcURL, c.metadataToApply,
-			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil, nil, destBlobTier, blobTags,
+		_, err := c.destBlockBlobURL.PutBlobFromURL(c.jptm.Context(), common.ToAzBlobHTTPHeaders(c.headersToApply), c.srcURL, c.metadataToApply,
+			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil, nil, azblob.AccessTierType(destBlobTier), blobTags,
 			c.cpkToApply, c.jptm.GetS2SSourceBlobTokenCredential())
 
 		if err != nil {

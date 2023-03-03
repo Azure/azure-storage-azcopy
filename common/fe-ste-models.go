@@ -25,6 +25,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"math"
 	"os"
 	"reflect"
@@ -36,7 +38,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/JeffreyRichter/enum/enum"
 )
@@ -140,12 +141,12 @@ func (d *DeleteSnapshotsOption) Parse(s string) error {
 	return err
 }
 
-func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() azblob.DeleteSnapshotsOptionType {
+func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() blob.DeleteSnapshotsOptionType {
 	if d == EDeleteSnapshotsOption.None() {
-		return azblob.DeleteSnapshotsOptionNone
+		return ""
 	}
 
-	return azblob.DeleteSnapshotsOptionType(strings.ToLower(d.String()))
+	return blob.DeleteSnapshotsOptionType(strings.ToLower(d.String()))
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -178,11 +179,11 @@ func (p PermanentDeleteOption) String() string {
 	return enum.StringInt(p, reflect.TypeOf(p))
 }
 
-func (p PermanentDeleteOption) ToPermanentDeleteOptionType() azblob.BlobDeleteType {
+func (p PermanentDeleteOption) ToPermanentDeleteOptionType() blob.DeleteType {
 	if p == EPermanentDeleteOption.None() {
-		return azblob.BlobDeleteNone
+		return ""
 	}
-	return azblob.BlobDeletePermanent
+	return blob.DeleteTypePermanent
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -249,11 +250,11 @@ var EOverwriteOption = OverwriteOption(0)
 
 type OverwriteOption uint8
 
-func (OverwriteOption) True() OverwriteOption          { return OverwriteOption(0) }
-func (OverwriteOption) False() OverwriteOption         { return OverwriteOption(1) }
-func (OverwriteOption) Prompt() OverwriteOption        { return OverwriteOption(2) }
-func (OverwriteOption) IfSourceNewer() OverwriteOption { return OverwriteOption(3) }
-func (OverwriteOption) PosixProperties() OverwriteOption {return OverwriteOption(4)}
+func (OverwriteOption) True() OverwriteOption            { return OverwriteOption(0) }
+func (OverwriteOption) False() OverwriteOption           { return OverwriteOption(1) }
+func (OverwriteOption) Prompt() OverwriteOption          { return OverwriteOption(2) }
+func (OverwriteOption) IfSourceNewer() OverwriteOption   { return OverwriteOption(3) }
+func (OverwriteOption) PosixProperties() OverwriteOption { return OverwriteOption(4) }
 
 func (o *OverwriteOption) Parse(s string) error {
 	val, err := enum.Parse(reflect.TypeOf(o), s, true)
@@ -640,31 +641,31 @@ func (bt *BlobType) Parse(s string) error {
 	return err
 }
 
-func FromAzBlobType(bt azblob.BlobType) BlobType {
+func FromBlobType(bt blob.BlobType) BlobType {
 	switch bt {
-	case azblob.BlobBlockBlob:
+	case blob.BlobTypeBlockBlob:
 		return EBlobType.BlockBlob()
-	case azblob.BlobPageBlob:
+	case blob.BlobTypePageBlob:
 		return EBlobType.PageBlob()
-	case azblob.BlobAppendBlob:
+	case blob.BlobTypeAppendBlob:
 		return EBlobType.AppendBlob()
 	default:
 		return EBlobType.Detect()
 	}
 }
 
-// ToAzBlobType returns the equivalent azblob.BlobType for given string.
-func (bt *BlobType) ToAzBlobType() azblob.BlobType {
+// ToBlobType returns the equivalent blob.BlobType for given string.
+func (bt *BlobType) ToBlobType() blob.BlobType {
 	blobType := bt.String()
 	switch blobType {
-	case string(azblob.BlobBlockBlob):
-		return azblob.BlobBlockBlob
-	case string(azblob.BlobPageBlob):
-		return azblob.BlobPageBlob
-	case string(azblob.BlobAppendBlob):
-		return azblob.BlobAppendBlob
+	case string(blob.BlobTypeBlockBlob):
+		return blob.BlobTypeBlockBlob
+	case string(blob.BlobTypePageBlob):
+		return blob.BlobTypePageBlob
+	case string(blob.BlobTypeAppendBlob):
+		return blob.BlobTypeAppendBlob
 	default:
-		return azblob.BlobNone
+		return ""
 	}
 }
 
@@ -772,8 +773,8 @@ func (bbt *BlockBlobTier) Parse(s string) error {
 	return err
 }
 
-func (bbt BlockBlobTier) ToAccessTierType() azblob.AccessTierType {
-	return azblob.AccessTierType(bbt.String())
+func (bbt BlockBlobTier) ToAccessTierType() blob.AccessTier {
+	return blob.AccessTier(bbt.String())
 }
 
 func (bbt BlockBlobTier) MarshalJSON() ([]byte, error) {
@@ -817,8 +818,8 @@ func (pbt *PageBlobTier) Parse(s string) error {
 	return err
 }
 
-func (pbt PageBlobTier) ToAccessTierType() azblob.AccessTierType {
-	return azblob.AccessTierType(pbt.String())
+func (pbt PageBlobTier) ToAccessTierType() blob.AccessTier {
+	return blob.AccessTier(pbt.String())
 }
 
 func (pbt PageBlobTier) MarshalJSON() ([]byte, error) {
@@ -1014,8 +1015,8 @@ type CopyTransfer struct {
 	Metadata           Metadata
 
 	// Properties for S2S blob copy
-	BlobType      azblob.BlobType
-	BlobTier      azblob.AccessTierType
+	BlobType      blob.BlobType
+	BlobTier      blob.AccessTier
 	BlobVersionID string
 	// Blob index tags categorize data in your storage account utilizing key-value tag attributes
 	BlobTags BlobTags
@@ -1296,14 +1297,26 @@ type ResourceHTTPHeaders struct {
 }
 
 // ToAzBlobHTTPHeaders converts ResourceHTTPHeaders to azblob's BlobHTTPHeaders.
-func (h ResourceHTTPHeaders) ToAzBlobHTTPHeaders() azblob.BlobHTTPHeaders {
+func (h ResourceHTTPHeaders) ToBlobHTTPHeaders() blob.HTTPHeaders {
+	return blob.HTTPHeaders{
+		BlobContentType:        &h.ContentType,
+		BlobContentMD5:         h.ContentMD5,
+		BlobContentEncoding:    &h.ContentEncoding,
+		BlobContentLanguage:    &h.ContentLanguage,
+		BlobContentDisposition: &h.ContentDisposition,
+		BlobCacheControl:       &h.CacheControl,
+	}
+}
+
+// ToAzBlobHTTPHeaders converts ResourceHTTPHeaders to azblob's BlobHTTPHeaders.
+func ToAzBlobHTTPHeaders(h blob.HTTPHeaders) azblob.BlobHTTPHeaders {
 	return azblob.BlobHTTPHeaders{
-		ContentType:        h.ContentType,
-		ContentMD5:         h.ContentMD5,
-		ContentEncoding:    h.ContentEncoding,
-		ContentLanguage:    h.ContentLanguage,
-		ContentDisposition: h.ContentDisposition,
-		CacheControl:       h.CacheControl,
+		ContentType:        *h.BlobContentType,
+		ContentMD5:         h.BlobContentMD5,
+		ContentEncoding:    *h.BlobContentEncoding,
+		ContentLanguage:    *h.BlobContentLanguage,
+		ContentDisposition: *h.BlobContentDisposition,
+		CacheControl:       *h.BlobCacheControl,
 	}
 }
 
@@ -1541,54 +1554,15 @@ func (p PreservePermissionsOption) IsTruthy() bool {
 }
 
 ////////////////////////////////////////////////////////////////
-
-// CpkScopeInfo specifies the name of the encryption scope to use to encrypt the data provided in the request.
-// If not specified, encryption is performed with the default account encryption scope.
-// For more information, see Encryption at Rest for Azure Storage Services.
-type CpkScopeInfo struct {
-	EncryptionScope *string
-}
-
-func (csi CpkScopeInfo) Marshal() (string, error) {
-	result, err := json.Marshal(csi)
-	if err != nil {
-		return "", err
-	}
-	return string(result), nil
-}
-
-type CpkInfo struct {
-	// The algorithm used to produce the encryption key hash.
-	// Currently, the only accepted value is "AES256".
-	// Must be provided if the x-ms-encryption-key header is provided.
-	EncryptionAlgorithm *string
-
-	// Optional. Specifies the encryption key to use to encrypt the data provided in the request.
-	// If not specified, encryption is performed with the root account encryption key.
-	EncryptionKey *string
-
-	// The SHA-256 hash of the provided encryption key.
-	// Must be provided if the x-ms-encryption-key header is provided.
-	EncryptionKeySha256 *string
-}
-
-func (csi CpkInfo) Marshal() (string, error) {
-	result, err := json.Marshal(csi)
-	if err != nil {
-		return "", err
-	}
-	return string(result), nil
-}
-
-func ToClientProvidedKeyOptions(cpkInfo CpkInfo, cpkScopeInfo CpkScopeInfo) azblob.ClientProvidedKeyOptions {
-	if (cpkInfo.EncryptionKey == nil || cpkInfo.EncryptionKeySha256 == nil) && cpkScopeInfo.EncryptionScope == nil {
+func ToClientProvidedKeyOptions(cpkInfo blob.CPKInfo, cpkScopeInfo blob.CPKScopeInfo) azblob.ClientProvidedKeyOptions {
+	if (cpkInfo.EncryptionKey == nil || cpkInfo.EncryptionKeySHA256 == nil) && cpkScopeInfo.EncryptionScope == nil {
 		return azblob.ClientProvidedKeyOptions{}
 	}
 
 	return azblob.ClientProvidedKeyOptions{
 		EncryptionKey:       cpkInfo.EncryptionKey,
 		EncryptionAlgorithm: azblob.EncryptionAlgorithmAES256,
-		EncryptionKeySha256: cpkInfo.EncryptionKeySha256,
+		EncryptionKeySha256: cpkInfo.EncryptionKeySHA256,
 		EncryptionScope:     cpkScopeInfo.EncryptionScope,
 	}
 }
@@ -1656,14 +1630,14 @@ func (rpt RehydratePriorityType) String() string {
 	return enum.StringInt(rpt, reflect.TypeOf(rpt))
 }
 
-func (rpt RehydratePriorityType) ToRehydratePriorityType() azblob.RehydratePriorityType {
+func (rpt RehydratePriorityType) ToRehydratePriorityType() blob.RehydratePriority {
 	switch rpt {
 	case ERehydratePriorityType.None(), ERehydratePriorityType.Standard():
-		return azblob.RehydratePriorityStandard
+		return blob.RehydratePriorityStandard
 	case ERehydratePriorityType.High():
-		return azblob.RehydratePriorityHigh
+		return blob.RehydratePriorityHigh
 	default:
-		return azblob.RehydratePriorityStandard
+		return blob.RehydratePriorityStandard
 	}
 }
 
