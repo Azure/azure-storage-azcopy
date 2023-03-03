@@ -266,6 +266,9 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 		return nil, err
 	}
 	certs, key, err := azidentity.ParseCertificates(certData, []byte(certPass))
+	if err != nil {
+		return nil, err
+	}
 
 	spt, err := azidentity.NewClientCertificateCredential(tenantID, applicationID, certs, key, &azidentity.ClientCertificateCredentialOptions{
 		ClientOptions: azcore.ClientOptions{
