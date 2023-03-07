@@ -103,8 +103,7 @@ func checkTagsEqual(c *chk.C, mapA map[string]string, mapB map[string]string) {
 func checkMetadataEqual(c *chk.C, mapA map[string]*string, mapB map[string]*string) {
 	c.Assert(len(mapA), chk.Equals, len(mapB))
 	for k, v := range mapA {
-		b_v := mapB[k]
-		c.Assert(&b_v, chk.Equals, &v)
+		c.Assert(*mapB[k], chk.Equals, *v)
 	}
 }
 
