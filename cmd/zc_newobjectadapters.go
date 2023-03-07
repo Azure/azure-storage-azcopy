@@ -96,34 +96,58 @@ func (m md5OnlyAdapter) ContentMD5() []byte {
 
 // blobPropertiesResponseAdapter adapts a BlobGetPropertiesResponse to the blobPropsProvider interface
 type blobPropertiesResponseAdapter struct {
-	*azblob.BlobGetPropertiesResponse
+	*blob.GetPropertiesResponse
+}
+
+func (a blobPropertiesResponseAdapter) CacheControl() string {
+	return *a.GetPropertiesResponse.CacheControl
+}
+
+func (a blobPropertiesResponseAdapter) ContentDisposition() string {
+	return *a.GetPropertiesResponse.ContentDisposition
+}
+
+func (a blobPropertiesResponseAdapter) ContentEncoding() string {
+	return *a.GetPropertiesResponse.ContentEncoding
+}
+
+func (a blobPropertiesResponseAdapter) ContentLanguage() string {
+	return *a.GetPropertiesResponse.ContentLanguage
+}
+
+func (a blobPropertiesResponseAdapter) ContentType() string {
+	return *a.GetPropertiesResponse.ContentType
+}
+
+func (a blobPropertiesResponseAdapter) ContentMD5() []byte {
+	return a.GetPropertiesResponse.ContentMD5
 }
 
 func (a blobPropertiesResponseAdapter) BlobType() blob.BlobType {
-	return blob.BlobType(a.BlobGetPropertiesResponse.BlobType())
+	return *a.GetPropertiesResponse.BlobType
 }
 
 func (a blobPropertiesResponseAdapter) AccessTier() blob.AccessTier {
-	return blob.AccessTier(a.BlobGetPropertiesResponse.AccessTier())
+	return blob.AccessTier(*a.GetPropertiesResponse.AccessTier)
 }
 
 func (a blobPropertiesResponseAdapter) ArchiveStatus() blob.ArchiveStatus {
-	return blob.ArchiveStatus(a.BlobGetPropertiesResponse.ArchiveStatus())
+	return blob.ArchiveStatus(*a.GetPropertiesResponse.ArchiveStatus)
 }
 
 // LeaseDuration returns the value for header x-ms-lease-duration.
 func (a blobPropertiesResponseAdapter) LeaseDuration() lease.DurationType {
-	return lease.DurationType(a.BlobGetPropertiesResponse.LeaseDuration())
+	return *a.GetPropertiesResponse.LeaseDuration
 }
 
 // LeaseState returns the value for header x-ms-lease-state.
 func (a blobPropertiesResponseAdapter) LeaseState() lease.StateType {
-	return lease.StateType(a.BlobGetPropertiesResponse.LeaseState())
+	return *a.GetPropertiesResponse.LeaseState
 }
 
 // LeaseStatus returns the value for header x-ms-lease-status.
 func (a blobPropertiesResponseAdapter) LeaseStatus() lease.StatusType {
-	return lease.StatusType(a.BlobGetPropertiesResponse.LeaseStatus())
+	return *a.GetPropertiesResponse.LeaseStatus
 }
 
 // blobPropertiesAdapter adapts a BlobProperties object to both the

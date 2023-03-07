@@ -24,6 +24,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"net/url"
 	"strings"
 
@@ -38,8 +40,7 @@ import (
 
 // allow us to iterate through a path pointing to the blob endpoint
 type blobTraverser struct {
-	rawURL    *url.URL
-	p         pipeline.Pipeline
+	rawURL    string
 	ctx       context.Context
 	recursive bool
 
@@ -75,22 +76,29 @@ func (t *blobTraverser) IsDirectory(isSource bool) (bool, error) {
 
 	_, _, isDirStub, blobErr := t.getPropertiesIfSingleBlob()
 
-	if stgErr, ok := blobErr.(azblob.StorageError); ok {
-		// We know for sure this is a single blob still, let it walk on through to the traverser.
-		if stgErr.ServiceCode() == common.CPK_ERROR_SERVICE_CODE {
-			return false, nil
-		}
+	// We know for sure this is a single blob still, let it walk on through to the traverser.
+	if bloberror.HasCode(blobErr, bloberror.BlobUsesCustomerSpecifiedEncryption) {
+		return false, nil
 	}
 
 	if blobErr == nil {
 		return isDirStub, nil
 	}
 
-	blobURLParts := azblob.NewBlobURLParts(*t.rawURL)
-	containerRawURL := copyHandlerUtil{}.getContainerUrl(blobURLParts)
-	containerURL := azblob.NewContainerURL(containerRawURL, t.p)
+	blobURLParts, err := blob.ParseURL(t.rawURL)
+	if err != nil {
+		return false, err
+	}
+	//containerRawURL := copyHandlerUtil{}.getContainerUrl(blobURLParts)
+	var containerClient *container.Client
+	//containerClient, err := container.NewClient(containerRawURL)
+	//if err != nil {
+	//	return false, err
+	//}
 	searchPrefix := strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING) + common.AZCOPY_PATH_SEPARATOR_STRING
-	resp, err := containerURL.ListBlobsFlatSegment(t.ctx, azblob.Marker{}, azblob.ListBlobsSegmentOptions{Prefix: searchPrefix, MaxResults: 1})
+	maxResults := int32(1)
+	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{Prefix: &searchPrefix, MaxResults: &maxResults})
+	resp, err := pager.NextPage(t.ctx)
 	if err != nil {
 		if azcopyScanningLogger != nil {
 			msg := fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err)
@@ -100,12 +108,10 @@ func (t *blobTraverser) IsDirectory(isSource bool) (bool, error) {
 	}
 
 	if len(resp.Segment.BlobItems) == 0 {
-		//Not a directory
-		if stgErr, ok := blobErr.(azblob.StorageError); ok {
-			// if the blob is not found return the error to throw
-			if stgErr.ServiceCode() == common.BLOB_NOT_FOUND {
-				return false, errors.New(common.FILE_NOT_FOUND)
-			}
+		// Not a directory
+		// If the blob is not found return the error to throw
+		if bloberror.HasCode(blobErr, bloberror.BlobNotFound) {
+			return false, errors.New(common.FILE_NOT_FOUND)
 		}
 		return false, blobErr
 	}
@@ -488,10 +494,9 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 	return nil
 }
 
-func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool) (t *blobTraverser) {
+func newBlobTraverser(rawURL string, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool) (t *blobTraverser) {
 	t = &blobTraverser{
 		rawURL:                      rawURL,
-		p:                           p,
 		ctx:                         ctx,
 		recursive:                   recursive,
 		includeDirectoryStubs:       includeDirectoryStubs,

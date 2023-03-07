@@ -23,17 +23,13 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"net/url"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // Enumerates an entire blob account, looking into each matching container as it goes
 type blobAccountTraverser struct {
-	accountURL            azblob.ServiceURL
-	p                     pipeline.Pipeline
+	serviceClient         *service.Client
 	ctx                   context.Context
 	containerPattern      string
 	cachedContainers      []string
@@ -54,20 +50,17 @@ func (t *blobAccountTraverser) IsDirectory(_ bool) (bool, error) {
 func (t *blobAccountTraverser) listContainers() ([]string, error) {
 	// a nil list also returns 0
 	if len(t.cachedContainers) == 0 {
-		marker := azblob.Marker{}
 		cList := make([]string, 0)
-
-		for marker.NotDone() {
-			resp, err := t.accountURL.ListContainersSegment(t.ctx, marker, azblob.ListContainersSegmentOptions{})
-
+		pager := t.serviceClient.NewListContainersPager(nil)
+		for pager.More() {
+			resp, err := pager.NextPage(t.ctx)
 			if err != nil {
 				return nil, err
 			}
-
 			for _, v := range resp.ContainerItems {
 				// Match a pattern for the container name and the container name only.
 				if t.containerPattern != "" {
-					if ok, err := containerNameMatchesPattern(v.Name, t.containerPattern); err != nil {
+					if ok, err := containerNameMatchesPattern(*v.Name, t.containerPattern); err != nil {
 						// Break if the pattern is invalid
 						return nil, err
 					} else if !ok {
@@ -76,10 +69,8 @@ func (t *blobAccountTraverser) listContainers() ([]string, error) {
 					}
 				}
 
-				cList = append(cList, v.Name)
+				cList = append(cList, *v.Name)
 			}
-
-			marker = resp.NextMarker
 		}
 
 		t.cachedContainers = cList
@@ -99,8 +90,8 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	}
 
 	for _, v := range cList {
-		containerURL := t.accountURL.NewContainerURL(v).URL()
-		containerTraverser := newBlobTraverser(&containerURL, t.p, t.ctx, true, t.includeDirectoryStubs, t.incrementEnumerationCounter, t.s2sPreserveSourceTags, t.cpkOptions, false, false, false)
+		containerURL := t.serviceClient.NewContainerClient(v).URL()
+		containerTraverser := newBlobTraverser(containerURL, t.ctx, true, t.includeDirectoryStubs, t.incrementEnumerationCounter, t.s2sPreserveSourceTags, t.cpkOptions, false, false, false)
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
@@ -115,21 +106,13 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions) (t *blobAccountTraverser) {
-	bURLParts := azblob.NewBlobURLParts(*rawURL)
-	cPattern := bURLParts.ContainerName
-
-	// Strip the container name away and treat it as a pattern
-	if bURLParts.ContainerName != "" {
-		bURLParts.ContainerName = ""
-	}
-
+// TODO : Should this take in a URL string and client options instead?
+func newBlobAccountTraverser(serviceClient *service.Client, container string, ctx context.Context, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions) (t *blobAccountTraverser) {
 	t = &blobAccountTraverser{
-		p:                           p,
 		ctx:                         ctx,
 		incrementEnumerationCounter: incrementEnumerationCounter,
-		accountURL:                  azblob.NewServiceURL(bURLParts.URL(), p),
-		containerPattern:            cPattern,
+		serviceClient:               serviceClient,
+		containerPattern:            container,
 		includeDirectoryStubs:       includeDirectoryStubs,
 		s2sPreserveSourceTags:       s2sPreserveSourceTags,
 		cpkOptions:                  cpkOptions,

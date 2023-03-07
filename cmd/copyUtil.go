@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"net/url"
 	"os"
@@ -45,23 +46,31 @@ type copyHandlerUtil struct{}
 var gCopyUtil = copyHandlerUtil{}
 
 // checks if a given url points to a container or virtual directory, as opposed to a blob or prefix match
-func (util copyHandlerUtil) urlIsContainerOrVirtualDirectory(url *url.URL) bool {
-	if azblob.NewBlobURLParts(*url).IPEndpointStyleInfo.AccountName == "" {
+func (util copyHandlerUtil) urlIsContainerOrVirtualDirectory(rawURL string) bool {
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	parts, err := blob.ParseURL(rawURL)
+	if err != nil {
+		return false
+	}
+	if parts.IPEndpointStyleInfo.AccountName == "" {
 		// Typical endpoint style
 		// If there's no slashes after the first, it's a container.
 		// If there's a slash on the end, it's a virtual directory/container.
 		// Otherwise, it's just a blob.
-		if len(url.Path) == 0 {
+		if len(parsedURL.Path) == 0 {
 			return true // We know for SURE that it's a account level URL
 		}
 
-		return strings.HasSuffix(url.Path, "/") || strings.Count(url.Path[1:], "/") == 0
+		return strings.HasSuffix(parsedURL.Path, "/") || strings.Count(parsedURL.Path[1:], "/") == 0
 	} else {
 		// IP endpoint style: https://IP:port/accountname/container
 		// If there's 2 or less slashes after the first, it's a container.
 		// OR If there's a slash on the end, it's a virtual directory/container.
 		// Otherwise, it's just a blob.
-		return strings.HasSuffix(url.Path, "/") || strings.Count(url.Path[1:], "/") <= 1
+		return strings.HasSuffix(parsedURL.Path, "/") || strings.Count(parsedURL.Path[1:], "/") <= 1
 	}
 }
 
@@ -120,7 +129,7 @@ func (util copyHandlerUtil) ConstructCommandStringFromArgs() string {
 }
 
 func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, url *url.URL, p pipeline.Pipeline) bool {
-	if util.urlIsContainerOrVirtualDirectory(url) {
+	if util.urlIsContainerOrVirtualDirectory(url.String()) {
 
 		return true
 	}
@@ -139,7 +148,7 @@ func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, u
 
 func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *url.URL, p pipeline.Pipeline) bool {
 	// Azure file share case
-	if util.urlIsContainerOrVirtualDirectory(url) {
+	if util.urlIsContainerOrVirtualDirectory(url.String()) {
 		return true
 	}
 
@@ -157,9 +166,9 @@ func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *ur
 	return true
 }
 
-func (util copyHandlerUtil) getContainerUrl(blobParts azblob.BlobURLParts) url.URL {
-	blobParts.BlobName = ""
-	return blobParts.URL()
+func (util copyHandlerUtil) getContainerUrl(blobURLParts blob.URLParts) string {
+	blobURLParts.BlobName = ""
+	return blobURLParts.String()
 }
 
 // doesBlobRepresentAFolder verifies whether blob is valid or not.
