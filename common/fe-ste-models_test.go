@@ -91,35 +91,44 @@ func (s *feSteModelsTestSuite) TestIsJobDone(c *chk.C) {
 }
 
 func getInvalidMetadataSample() common.Metadata {
-	m := make(map[string]string)
+	temp := make(map[string]string)
 
 	// number could not be first char for azure metadata key.
-	m["1abc"] = "v:1abc"
+	temp["1abc"] = "v:1abc"
 
 	// special char
-	m["a!@#"] = "v:a!@#"
-	m["a-metadata-samplE"] = "v:a-metadata-samplE"
+	temp["a!@#"] = "v:a!@#"
+	temp["a-metadata-samplE"] = "v:a-metadata-samplE"
 
 	// valid metadata
-	m["abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRUSTUVWXYZ1234567890_"] = "v:abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRUSTUVWXYZ1234567890_"
-	m["Am"] = "v:Am"
-	m["_123"] = "v:_123"
+	temp["abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRUSTUVWXYZ1234567890_"] = "v:abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRUSTUVWXYZ1234567890_"
+	temp["Am"] = "v:Am"
+	temp["_123"] = "v:_123"
 
-	return m
+	return toCommonMetadata(temp)
 }
 
 func getValidMetadataSample() common.Metadata {
-	m := make(map[string]string)
-	m["Key"] = "value"
+	m := make(map[string]*string)
+	v := "value"
+	m["Key"] = &v
 
 	return m
 }
 
-func validateMapEqual(c *chk.C, m1 map[string]string, m2 map[string]string) {
+func toCommonMetadata(temp map[string]string) common.Metadata {
+	m := make(map[string]*string)
+	for k, v := range temp {
+		m[k] = &v
+	}
+	return m
+}
+
+func validateMapEqual(c *chk.C, m1 map[string]*string, m2 map[string]string) {
 	c.Assert(len(m1), chk.Equals, len(m2))
 
 	for k1, v1 := range m1 {
-		c.Assert(m2[k1], chk.Equals, v1)
+		c.Assert(m2[k1], chk.Equals, &v1)
 	}
 }
 
@@ -160,9 +169,9 @@ func (s *feSteModelsTestSuite) TestMetadataResolveInvalidKey(c *chk.C) {
 
 // In this phase we keep the resolve logic easy, and whenever there is key resolving collision found, error reported.
 func (s *feSteModelsTestSuite) TestMetadataResolveInvalidKeyNegative(c *chk.C) {
-	mNegative1 := common.Metadata(map[string]string{"!": "!", "*": "*"})
-	mNegative2 := common.Metadata(map[string]string{"!": "!", "rename__": "rename__"})
-	mNegative3 := common.Metadata(map[string]string{"!": "!", "rename_key__": "rename_key__"})
+	mNegative1 := toCommonMetadata(map[string]string{"!": "!", "*": "*"})
+	mNegative2 := toCommonMetadata(map[string]string{"!": "!", "rename__": "rename__"})
+	mNegative3 := toCommonMetadata(map[string]string{"!": "!", "rename_key__": "rename_key__"})
 
 	_, err := mNegative1.ResolveInvalidKey()
 	c.Assert(err, chk.NotNil)
