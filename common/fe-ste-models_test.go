@@ -119,7 +119,8 @@ func getValidMetadataSample() common.Metadata {
 func toCommonMetadata(temp map[string]string) common.Metadata {
 	m := make(map[string]*string)
 	for k, v := range temp {
-		m[k] = &v
+		value := v
+		m[k] = &value
 	}
 	return m
 }
@@ -128,7 +129,7 @@ func validateMapEqual(c *chk.C, m1 map[string]*string, m2 map[string]string) {
 	c.Assert(len(m1), chk.Equals, len(m2))
 
 	for k1, v1 := range m1 {
-		c.Assert(m2[k1], chk.Equals, &v1)
+		c.Assert(m2[k1], chk.Equals, *v1)
 	}
 }
 

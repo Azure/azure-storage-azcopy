@@ -1068,7 +1068,8 @@ func FromAzBlobMetadataToCommonMetadata(m azblob.Metadata) Metadata {
 	out := make(Metadata)
 
 	for k, v := range m {
-		out[k] = &v
+		value := v
+		out[k] = &value
 	}
 
 	return out
@@ -1079,7 +1080,8 @@ func FromAzFileMetadataToCommonMetadata(m azfile.Metadata) Metadata {
 	out := make(Metadata)
 
 	for k, v := range m {
-		out[k] = &v
+		value := v
+		out[k] = &value
 	}
 
 	return out
