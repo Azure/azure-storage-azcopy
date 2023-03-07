@@ -1143,7 +1143,8 @@ func StringToMetadata(metadataString string) (Metadata, error) {
 						return Metadata{}, errors.New("metadata names must conform to C# naming rules (https://learn.microsoft.com/en-us/rest/api/storageservices/naming-and-referencing-containers--blobs--and-metadata#metadata-names)")
 					}
 
-					metadataMap[cKey] = &cVal
+					finalValue := cVal
+					metadataMap[cKey] = &finalValue
 					cKey = ""
 					cVal = ""
 					keySet = false
@@ -1159,7 +1160,8 @@ func StringToMetadata(metadataString string) (Metadata, error) {
 		}
 
 		if cKey != "" {
-			metadataMap[cKey] = &cVal
+			finalValue := cVal
+			metadataMap[cKey] = &finalValue
 		}
 	}
 	return metadataMap, nil
