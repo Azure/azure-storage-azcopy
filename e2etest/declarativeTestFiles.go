@@ -181,7 +181,10 @@ func (o *objectUnixStatContainer) AddToMetadata(metadata map[string]string) {
 		return
 	}
 
+	mask := uint32(0)
+
 	if o.mode != nil { // always overwrite; perhaps it got changed in one of the hooks.
+		mask |= common.STATX_MODE
 		metadata[common.POSIXModeMeta] = strconv.FormatUint(uint64(*o.mode), 10)
 
 		delete(metadata, common.POSIXFIFOMeta)
@@ -195,12 +198,16 @@ func (o *objectUnixStatContainer) AddToMetadata(metadata map[string]string) {
 	}
 
 	if o.accessTime != nil {
+		mask |= common.STATX_ATIME
 		metadata[common.POSIXATimeMeta] = strconv.FormatInt(o.accessTime.UnixNano(), 10)
 	}
 
 	if o.modTime != nil {
+		mask |= common.STATX_MTIME
 		metadata[common.POSIXModTimeMeta] = strconv.FormatInt(o.accessTime.UnixNano(), 10)
 	}
+
+	metadata[common.LINUXStatxMaskMeta] = strconv.FormatUint(uint64(mask), 10)
 }
 
 // returns op.size, if present, else defaultSize
