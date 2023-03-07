@@ -43,7 +43,8 @@ func (gie *GCPObjectInfoExtension) NewCommonMetadata() Metadata {
 	for k, v := range gie.ObjectInfo.Metadata {
 		if len(k) > gcpMetadataPrefixLen {
 			if prefix := k[0:gcpMetadataPrefixLen]; strings.EqualFold(prefix, gcpMetadataPrefix) {
-				md[k[gcpMetadataPrefixLen:]] = &v
+				value := v
+				md[k[gcpMetadataPrefixLen:]] = &value
 			}
 		}
 	}
