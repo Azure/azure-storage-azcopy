@@ -1280,18 +1280,22 @@ func (m Metadata) ResolveInvalidKey() (resolvedMetadata Metadata, err error) {
 	}
 
 	for k, v := range m {
+		value := v
+		valueString := &value
+		key := k
+		keyString := &key
 		if !isValidMetadataKey(k) {
 			validKey := metadataKeyInvalidCharRegex.ReplaceAllString(k, "_")
 			renamedKey := metadataRenamedKeyPrefix + validKey
 			keyForRenamedOriginalKey := metadataKeyForRenamedOriginalKeyPrefix + validKey
 			if hasCollision(renamedKey) || hasCollision(keyForRenamedOriginalKey) {
-				return nil, fmt.Errorf(metadataKeyRenameErrStr, k)
+				return nil, fmt.Errorf(metadataKeyRenameErrStr, *keyString)
 			}
 
-			resolvedMetadata[renamedKey] = v
-			resolvedMetadata[keyForRenamedOriginalKey] = &k
+			resolvedMetadata[renamedKey] = *valueString
+			resolvedMetadata[keyForRenamedOriginalKey] = keyString
 		} else {
-			resolvedMetadata[k] = v
+			resolvedMetadata[k] = *valueString
 		}
 	}
 
