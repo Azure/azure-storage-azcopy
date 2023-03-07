@@ -1029,7 +1029,7 @@ type CopyTransfer struct {
 // Metadata used in AzCopy.
 const MetadataAndBlobTagsClearFlag = "clear" // clear flag used for metadata and tags
 
-type Metadata map[string]string
+type Metadata map[string]*string
 
 func (m Metadata) Clone() Metadata {
 	out := make(Metadata)
@@ -1043,22 +1043,46 @@ func (m Metadata) Clone() Metadata {
 
 // ToAzBlobMetadata converts metadata to azblob's metadata.
 func (m Metadata) ToAzBlobMetadata() azblob.Metadata {
-	return azblob.Metadata(m)
+	out := make(azblob.Metadata)
+
+	for k, v := range m {
+		out[k] = *v
+	}
+
+	return out
 }
 
 // ToAzFileMetadata converts metadata to azfile's metadata.
 func (m Metadata) ToAzFileMetadata() azfile.Metadata {
-	return azfile.Metadata(m)
+	out := make(azfile.Metadata)
+
+	for k, v := range m {
+		out[k] = *v
+	}
+
+	return out
 }
 
 // FromAzBlobMetadataToCommonMetadata converts azblob's metadata to common metadata.
 func FromAzBlobMetadataToCommonMetadata(m azblob.Metadata) Metadata {
-	return Metadata(m)
+	out := make(Metadata)
+
+	for k, v := range m {
+		out[k] = &v
+	}
+
+	return out
 }
 
 // FromAzFileMetadataToCommonMetadata converts azfile's metadata to common metadata.
 func FromAzFileMetadataToCommonMetadata(m azfile.Metadata) Metadata {
-	return Metadata(m)
+	out := make(Metadata)
+
+	for k, v := range m {
+		out[k] = &v
+	}
+
+	return out
 }
 
 // Marshal marshals metadata to string.
@@ -1117,7 +1141,7 @@ func StringToMetadata(metadataString string) (Metadata, error) {
 						return Metadata{}, errors.New("metadata names must conform to C# naming rules (https://learn.microsoft.com/en-us/rest/api/storageservices/naming-and-referencing-containers--blobs--and-metadata#metadata-names)")
 					}
 
-					metadataMap[cKey] = cVal
+					metadataMap[cKey] = &cVal
 					cKey = ""
 					cVal = ""
 					keySet = false
@@ -1133,7 +1157,7 @@ func StringToMetadata(metadataString string) (Metadata, error) {
 		}
 
 		if cKey != "" {
-			metadataMap[cKey] = cVal
+			metadataMap[cKey] = &cVal
 		}
 	}
 	return metadataMap, nil
@@ -1176,8 +1200,8 @@ func isValidMetadataKeyFirstChar(c byte) bool {
 }
 
 func (m Metadata) ExcludeInvalidKey() (retainedMetadata Metadata, excludedMetadata Metadata, invalidKeyExists bool) {
-	retainedMetadata = make(map[string]string)
-	excludedMetadata = make(map[string]string)
+	retainedMetadata = make(map[string]*string)
+	excludedMetadata = make(map[string]*string)
 	for k, v := range m {
 		if isValidMetadataKey(k) {
 			retainedMetadata[k] = v
@@ -1244,7 +1268,7 @@ var metadataKeyRenameErrStr = "failed to rename invalid metadata key %q"
 // Note: To keep first version simple, whenever collision is found during key resolving, error will be returned.
 // This can be further improved once any user feedback get.
 func (m Metadata) ResolveInvalidKey() (resolvedMetadata Metadata, err error) {
-	resolvedMetadata = make(map[string]string)
+	resolvedMetadata = make(map[string]*string)
 
 	hasCollision := func(name string) bool {
 		_, hasCollisionToOrgNames := m[name]
@@ -1263,7 +1287,7 @@ func (m Metadata) ResolveInvalidKey() (resolvedMetadata Metadata, err error) {
 			}
 
 			resolvedMetadata[renamedKey] = v
-			resolvedMetadata[keyForRenamedOriginalKey] = k
+			resolvedMetadata[keyForRenamedOriginalKey] = &k
 		} else {
 			resolvedMetadata[k] = v
 		}
