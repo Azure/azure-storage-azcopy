@@ -100,7 +100,7 @@ class Command(object):
     def execute_testsuite_upload(self):
         return verify_operation(self.string())
 
-# processes oauth command according to swtiches
+# processes oauth command according to switches
 def process_oauth_command(
     cmd,
     fromTo=""):
