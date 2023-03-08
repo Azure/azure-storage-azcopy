@@ -98,6 +98,12 @@ type IUNIXPropertyBearingSourceInfoProvider interface {
 	HasUNIXProperties() bool
 }
 
+type ISymlinkBearingSourceInfoProvider interface {
+	ISourceInfoProvider
+
+	ReadLink() (string, error)
+}
+
 type ICustomLocalOpener interface {
 	ISourceInfoProvider
 	Open(path string) (*os.File, error)

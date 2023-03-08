@@ -30,6 +30,7 @@ const IncludeBeforeFlagName = "include-before"
 const IncludeAfterFlagName = "include-after"
 const BackupModeFlagName = "backup" // original name, backup mode, matches the name used for the same thing in Robocopy
 const PreserveOwnerFlagName = "preserve-owner"
+const PreserveSymlinkFlagName = "preserve-symlinks"
 const PreserveOwnerDefault = true
 
 // The regex doesn't require a / on the ending, it just requires something similar to the following
@@ -59,7 +60,7 @@ func CreateDirectoryIfNotExist(directory string, tracker FolderCreationTracker) 
 		// stat errors can be present in write-only scenarios, when the directory isn't present, etc.
 		// as a result, we care more about the mkdir error than the stat error, because that's the tell.
 		// first make sure the parent directory exists but we ignore any error that comes back
-		CreateParentDirectoryIfNotExist(directory, tracker)
+		_ = CreateParentDirectoryIfNotExist(directory, tracker)
 
 		// then create the directory
 		mkDirErr := tracker.CreateFolder(directory, func() error {

@@ -6,7 +6,8 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"golang.org/x/oauth2/google"
-	"io/ioutil"
+	"os"
+
 	"net/url"
 	"time"
 )
@@ -52,7 +53,7 @@ func newGCPSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, er
 		return nil, err
 	}
 	glcm := common.GetLifecycleMgr()
-	jsonKey, err = ioutil.ReadFile(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleAppCredentials()))
+	jsonKey, err = os.ReadFile(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleAppCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("Cannot read JSON key file. Please verify you have correctly set GOOGLE_APPLICATION_CREDENTIALS environment variable")
 	}

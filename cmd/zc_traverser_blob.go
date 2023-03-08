@@ -61,8 +61,6 @@ type blobTraverser struct {
 	includeSnapshot bool
 
 	includeVersion bool
-
-	stripTopDir bool
 }
 
 func (t *blobTraverser) IsDirectory(isSource bool) (bool, error) {
@@ -205,7 +203,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			preprocessor,
 			getObjectNameOnly(strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
 			"",
-			common.EntityType(common.IffUint8(isBlob, uint8(common.EEntityType.File()), uint8(common.EEntityType.Folder()))),
+			getEntityType(blobProperties.NewMetadata()),
 			blobProperties.LastModified(),
 			blobProperties.ContentLength(),
 			blobProperties,
@@ -370,12 +368,12 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 
 	// initiate parallel scanning, starting at the root path
 	workerContext, cancelWorkers := context.WithCancel(t.ctx)
+	defer cancelWorkers()
 	cCrawled := parallel.Crawl(workerContext, searchPrefix+extraSearchPrefix, enumerateOneDir, EnumerationParallelism)
 
 	for x := range cCrawled {
 		item, workerError := x.Item()
 		if workerError != nil {
-			cancelWorkers()
 			return workerError
 		}
 
@@ -387,23 +385,30 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 		processErr := processIfPassedFilters(filters, object, processor)
 		_, processErr = getProcessingError(processErr)
 		if processErr != nil {
-			cancelWorkers()
 			return processErr
 		}
 	}
 
 	return nil
 }
+func getEntityType(blobInfo azblob.Metadata) common.EntityType {
+	if _, isfolder := blobInfo["hdi_isfolder"]; isfolder {
+		return common.EEntityType.Folder()
+	} else if _, isSymlink := blobInfo["is_symlink"]; isSymlink {
+		return common.EEntityType.Symlink()
+	}
+
+	return common.EEntityType.File()
+}
 
 func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, blobInfo azblob.BlobItemInternal, relativePath string, containerName string) StoredObject {
 	adapter := blobPropertiesAdapter{blobInfo.Properties}
 
-	_, isFolder := blobInfo.Metadata["hdi_isfolder"]
 	object := newStoredObject(
 		preprocessor,
 		getObjectNameOnly(blobInfo.Name),
 		relativePath,
-		common.EntityType(common.IffUint8(isFolder, uint8(common.EEntityType.Folder()), uint8(common.EEntityType.File()))),
+		getEntityType(blobInfo.Metadata),
 		blobInfo.Properties.LastModified,
 		*blobInfo.Properties.ContentLength,
 		adapter,
