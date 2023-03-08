@@ -22,9 +22,9 @@ package cmd
 
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 var noContentProps = emptyPropertiesAdapter{}
@@ -153,7 +153,7 @@ func (a blobPropertiesResponseAdapter) LeaseStatus() lease.StatusType {
 // blobPropertiesAdapter adapts a BlobProperties object to both the
 // contentPropsProvider and blobPropsProvider interfaces
 type blobPropertiesAdapter struct {
-	BlobProperties azblob.BlobPropertiesInternal
+	BlobProperties *container.BlobProperties
 }
 
 func (a blobPropertiesAdapter) CacheControl() string {
@@ -181,28 +181,28 @@ func (a blobPropertiesAdapter) ContentMD5() []byte {
 }
 
 func (a blobPropertiesAdapter) BlobType() blob.BlobType {
-	return blob.BlobType(a.BlobProperties.BlobType)
+	return *a.BlobProperties.BlobType
 }
 
 func (a blobPropertiesAdapter) AccessTier() blob.AccessTier {
-	return blob.AccessTier(a.BlobProperties.AccessTier)
+	return *a.BlobProperties.AccessTier
 }
 
 // LeaseDuration returns the value for header x-ms-lease-duration.
 func (a blobPropertiesAdapter) LeaseDuration() lease.DurationType {
-	return lease.DurationType(a.BlobProperties.LeaseDuration)
+	return *a.BlobProperties.LeaseDuration
 }
 
 // LeaseState returns the value for header x-ms-lease-state.
 func (a blobPropertiesAdapter) LeaseState() lease.StateType {
-	return lease.StateType(a.BlobProperties.LeaseState)
+	return *a.BlobProperties.LeaseState
 }
 
 // LeaseStatus returns the value for header x-ms-lease-status.
 func (a blobPropertiesAdapter) LeaseStatus() lease.StatusType {
-	return lease.StatusType(a.BlobProperties.LeaseStatus)
+	return *a.BlobProperties.LeaseStatus
 }
 
 func (a blobPropertiesAdapter) ArchiveStatus() blob.ArchiveStatus {
-	return blob.ArchiveStatus(a.BlobProperties.ArchiveStatus)
+	return *a.BlobProperties.ArchiveStatus
 }

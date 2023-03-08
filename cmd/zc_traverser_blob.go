@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
@@ -32,7 +33,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/pkg/errors"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -119,75 +119,89 @@ func (t *blobTraverser) IsDirectory(isSource bool) (bool, error) {
 	return true, nil
 }
 
-func (t *blobTraverser) getPropertiesIfSingleBlob() (props *azblob.BlobGetPropertiesResponse, isBlob bool, isDirStub bool, err error) {
+func (t *blobTraverser) getPropertiesIfSingleBlob() (response *blob.GetPropertiesResponse, isBlob bool, isDirStub bool, err error) {
 	// trim away the trailing slash before we check whether it's a single blob
 	// so that we can detect the directory stub in case there is one
-	blobUrlParts := azblob.NewBlobURLParts(*t.rawURL)
-	blobUrlParts.BlobName = strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)
+	blobURLParts, err := blob.ParseURL(t.rawURL)
+	if err != nil {
+		return nil, false, false, err
+	}
+	blobURLParts.BlobName = strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)
 
-	if blobUrlParts.BlobName == "" {
+	if blobURLParts.BlobName == "" {
 		// This is a container, which needs to be given a proper listing.
 		return nil, false, false, nil
 	}
 
-	// perform the check
-	blobURL := azblob.NewBlobURL(blobUrlParts.URL(), t.p)
-	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
+	var blobClient *blob.Client
+	//blobClient, err := blob.NewClient(containerRawURL)
+	//if err != nil {
+	//	return false, err
+	//}
+	cpk := blob.CPKInfo{}
 	if t.cpkOptions.IsSourceEncrypted {
-		clientProvidedKey = common.GetClientProvidedKey(t.cpkOptions)
+		cpk = common.GetCpkInfo(t.cpkOptions.CpkInfo)
 	}
-	props, err = blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, clientProvidedKey)
+	props, err := blobClient.GetProperties(t.ctx, &blob.GetPropertiesOptions{CPKInfo: &cpk})
 
 	// if there was no problem getting the properties, it means that we are looking at a single blob
 	if err == nil {
-		if gCopyUtil.doesBlobRepresentAFolder(props.NewMetadata()) {
-			return props, false, true, nil
+		if gCopyUtil.doesBlobRepresentAFolder(props.Metadata) {
+			return &props, false, true, nil
 		}
 
-		return props, true, false, err
+		return &props, true, false, err
 	}
 
 	return nil, false, false, err
 }
 
 func (t *blobTraverser) getBlobTags() (common.BlobTags, error) {
-	blobUrlParts := azblob.NewBlobURLParts(*t.rawURL)
-	blobUrlParts.BlobName = strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)
+	blobURLParts, err := blob.ParseURL(t.rawURL)
+	if err != nil {
+		return nil, err
+	}
+	blobURLParts.BlobName = strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 	// perform the check
-	blobURL := azblob.NewBlobURL(blobUrlParts.URL(), t.p)
+	var blobClient *blob.Client
+	//blobClient, err := blob.NewClient(containerRawURL)
+	//if err != nil {
+	//	return false, err
+	//}
 	blobTagsMap := make(common.BlobTags)
-	blobGetTagsResp, err := blobURL.GetTags(t.ctx, nil)
+	blobGetTagsResp, err := blobClient.GetTags(t.ctx, nil)
 	if err != nil {
 		return blobTagsMap, err
 	}
 
 	for _, blobTag := range blobGetTagsResp.BlobTagSet {
-		blobTagsMap[url.QueryEscape(blobTag.Key)] = url.QueryEscape(blobTag.Value)
+		blobTagsMap[url.QueryEscape(*blobTag.Key)] = url.QueryEscape(*blobTag.Value)
 	}
 	return blobTagsMap, nil
 }
 
 func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
-	blobUrlParts := azblob.NewBlobURLParts(*t.rawURL)
+	blobURLParts, err := blob.ParseURL(t.rawURL)
+	if err != nil {
+		return err
+	}
 
 	// check if the url points to a single blob
-	blobProperties, isBlob, isDirStub, propErr := t.getPropertiesIfSingleBlob()
+	blobProperties, isBlob, isDirStub, err := t.getPropertiesIfSingleBlob()
 
-	if stgErr, ok := propErr.(azblob.StorageError); ok {
+	var respErr *azcore.ResponseError
+	if errors.As(err, &respErr) {
 		// Don't error out unless it's a CPK error just yet
 		// If it's a CPK error, we know it's a single blob and that we can't get the properties on it anyway.
-		if stgErr.ServiceCode() == common.CPK_ERROR_SERVICE_CODE {
+		if respErr.ErrorCode == string(bloberror.BlobUsesCustomerSpecifiedEncryption) {
 			return errors.New("this blob uses customer provided encryption keys (CPK). At the moment, AzCopy does not support CPK-encrypted blobs. " +
 				"If you wish to make use of this blob, we recommend using one of the Azure Storage SDKs")
 		}
-
-		if resp := stgErr.Response(); resp == nil {
-			return fmt.Errorf("cannot list files due to reason %s", stgErr)
-		} else {
-			if resp.StatusCode == 403 { // Some nature of auth error-- Whatever the user is pointing at, they don't have access to, regardless of whether it's a file or a dir stub.
-				return fmt.Errorf("cannot list files due to reason %s", stgErr)
-			}
+		if respErr.RawResponse == nil {
+			return fmt.Errorf("cannot list files due to reason %s", respErr)
+		} else if respErr.StatusCode == 403 { // Some nature of auth error-- Whatever the user is pointing at, they don't have access to, regardless of whether it's a file or a dir stub.
+			return fmt.Errorf("cannot list files due to reason %s", respErr)
 		}
 	}
 
@@ -195,7 +209,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	// 	1. either we are targeting a single blob and the URL wasn't explicitly pointed to a virtual dir
 	//	2. either we are scanning recursively with includeDirectoryStubs set to true,
 	//	   then we add the stub blob that represents the directory
-	if (isBlob && !strings.HasSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)) ||
+	if (isBlob && !strings.HasSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)) ||
 		(t.includeDirectoryStubs && isDirStub && t.recursive) {
 		// sanity checking so highlighting doesn't highlight things we're not worried about.
 		if blobProperties == nil {
@@ -208,15 +222,15 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 		storedObject := newStoredObject(
 			preprocessor,
-			getObjectNameOnly(strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
+			getObjectNameOnly(strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
 			"",
-			getEntityType(blobProperties.NewMetadata()),
-			blobProperties.LastModified(),
-			blobProperties.ContentLength(),
-			blobProperties,
+			getEntityType(blobProperties.Metadata),
+			*blobProperties.LastModified,
+			*blobProperties.ContentLength,
 			blobPropertiesResponseAdapter{blobProperties},
-			common.FromAzBlobMetadataToCommonMetadata(blobProperties.NewMetadata()), // .NewMetadata() seems odd to call, but it does actually retrieve the metadata from the blob properties.
-			blobUrlParts.ContainerName,
+			blobPropertiesResponseAdapter{blobProperties},
+			blobProperties.Metadata,
+			blobURLParts.ContainerName,
 		)
 
 		if t.s2sPreserveSourceTags {
@@ -242,13 +256,13 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	}
 
 	// get the container URL so that we can list the blobs
-	containerRawURL := copyHandlerUtil{}.getContainerUrl(blobUrlParts)
-	containerURL := azblob.NewContainerURL(containerRawURL, t.p)
+	//containerRawURL := copyHandlerUtil{}.getContainerUrl(blobURLParts)
+	var containerClient *container.Client
 
 	// get the search prefix to aid in the listing
 	// example: for a url like https://test.blob.core.windows.net/test/foo/bar/bla
 	// the search prefix would be foo/bar/bla
-	searchPrefix := blobUrlParts.BlobName
+	searchPrefix := blobURLParts.BlobName
 
 	// append a slash if it is not already present
 	// example: foo/bar/bla becomes foo/bar/bla/ so that we only list children of the virtual directory
@@ -260,63 +274,64 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	extraSearchPrefix := FilterSet(filters).GetEnumerationPreFilter(t.recursive)
 
 	if t.parallelListing {
-		return t.parallelList(containerURL, blobUrlParts.ContainerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters)
+		return t.parallelList(containerClient, blobURLParts.ContainerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters)
 	}
 
-	return t.serialList(containerURL, blobUrlParts.ContainerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters)
+	return t.serialList(containerClient, blobURLParts.ContainerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters)
 }
 
-func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, containerName string, searchPrefix string,
+func (t *blobTraverser) parallelList(containerClient *container.Client, containerName string, searchPrefix string,
 	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 	// Define how to enumerate its contents
 	// This func must be thread safe/goroutine safe
 	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
 		currentDirPath := dir.(string)
 
-		for marker := (azblob.Marker{}); marker.NotDone(); {
-			lResp, err := containerURL.ListBlobsHierarchySegment(t.ctx, marker, "/", azblob.ListBlobsSegmentOptions{Prefix: currentDirPath,
-				Details: azblob.BlobListingDetails{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion}})
+		pager := containerClient.NewListBlobsHierarchyPager("/", &container.ListBlobsHierarchyOptions{
+			Prefix:  &currentDirPath,
+			Include: container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion},
+		})
+		var marker *string
+		for pager.More() {
+			lResp, err := pager.NextPage(t.ctx)
 			if err != nil {
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
-
 			// queue up the sub virtual directories if recursive is true
 			if t.recursive {
 				for _, virtualDir := range lResp.Segment.BlobPrefixes {
 					enqueueDir(virtualDir.Name)
 					if azcopyScanningLogger != nil {
-						azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", virtualDir.Name))
+						azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", *virtualDir.Name))
 					}
 
 					if t.includeDirectoryStubs {
 						// try to get properties on the directory itself, since it's not listed in BlobItems
-						fblobURL := containerURL.NewBlobURL(strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING))
-						resp, err := fblobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
-						folderRelativePath := strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
+						blobClient := containerClient.NewBlobClient(strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING))
+						pResp, err := blobClient.GetProperties(t.ctx, nil)
+						folderRelativePath := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
 						folderRelativePath = strings.TrimPrefix(folderRelativePath, searchPrefix)
 						if err == nil {
 							storedObject := newStoredObject(
 								preprocessor,
-								getObjectNameOnly(strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)),
+								getObjectNameOnly(strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)),
 								folderRelativePath,
 								common.EEntityType.Folder(),
-								resp.LastModified(),
-								resp.ContentLength(),
-								resp,
-								blobPropertiesResponseAdapter{resp},
-								common.FromAzBlobMetadataToCommonMetadata(resp.NewMetadata()),
+								*pResp.LastModified,
+								*pResp.ContentLength,
+								blobPropertiesResponseAdapter{&pResp},
+								blobPropertiesResponseAdapter{&pResp},
+								pResp.Metadata,
 								containerName,
 							)
-							storedObject.archiveStatus = blob.ArchiveStatus(resp.ArchiveStatus())
 
 							if t.s2sPreserveSourceTags {
-								var BlobTags *azblob.BlobTags
-								BlobTags, err = fblobURL.GetTags(t.ctx, nil)
+								tResp, err := blobClient.GetTags(t.ctx, nil)
 
 								if err == nil {
 									blobTagsMap := common.BlobTags{}
-									for _, blobTag := range BlobTags.BlobTagSet {
-										blobTagsMap[url.QueryEscape(blobTag.Key)] = url.QueryEscape(blobTag.Value)
+									for _, blobTag := range tResp.BlobTagSet {
+										blobTagsMap[url.QueryEscape(*blobTag.Key)] = url.QueryEscape(*blobTag.Value)
 									}
 									storedObject.blobTags = blobTagsMap
 								}
@@ -335,12 +350,12 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 					continue
 				}
 
-				storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, strings.TrimPrefix(blobInfo.Name, searchPrefix), containerName)
+				storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, strings.TrimPrefix(*blobInfo.Name, searchPrefix), containerName)
 
 				if t.s2sPreserveSourceTags && blobInfo.BlobTags != nil {
 					blobTagsMap := common.BlobTags{}
 					for _, blobTag := range blobInfo.BlobTags.BlobTagSet {
-						blobTagsMap[url.QueryEscape(blobTag.Key)] = url.QueryEscape(blobTag.Value)
+						blobTagsMap[url.QueryEscape(*blobTag.Key)] = url.QueryEscape(*blobTag.Value)
 					}
 					storedObject.blobTags = blobTagsMap
 				}
@@ -351,8 +366,8 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 			// if debug mode is on, note down the result, this is not going to be fast
 			if azcopyScanningLogger != nil && azcopyScanningLogger.ShouldLog(pipeline.LogDebug) {
 				tokenValue := "NONE"
-				if marker.Val != nil {
-					tokenValue = *marker.Val
+				if marker != nil {
+					tokenValue = *marker
 				}
 
 				var vdirListBuilder strings.Builder
@@ -367,7 +382,6 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 					tokenValue, vdirListBuilder.String(), fileListBuilder.String())
 				azcopyScanningLogger.Log(pipeline.LogDebug, msg)
 			}
-
 			marker = lResp.NextMarker
 		}
 		return nil
@@ -398,7 +412,8 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 
 	return nil
 }
-func getEntityType(blobInfo azblob.Metadata) common.EntityType {
+func getEntityType(blobInfo map[string]*string) common.EntityType {
+	// Note: We are just checking keys here, not their corresponding values. Is that safe?
 	if _, isfolder := blobInfo["hdi_isfolder"]; isfolder {
 		return common.EEntityType.Folder()
 	} else if _, isSymlink := blobInfo["is_symlink"]; isSymlink {
@@ -408,59 +423,59 @@ func getEntityType(blobInfo azblob.Metadata) common.EntityType {
 	return common.EEntityType.File()
 }
 
-func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, blobInfo azblob.BlobItemInternal, relativePath string, containerName string) StoredObject {
+func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, blobInfo *container.BlobItem, relativePath string, containerName string) StoredObject {
 	adapter := blobPropertiesAdapter{blobInfo.Properties}
 
 	object := newStoredObject(
 		preprocessor,
-		getObjectNameOnly(blobInfo.Name),
+		getObjectNameOnly(*blobInfo.Name),
 		relativePath,
 		getEntityType(blobInfo.Metadata),
-		blobInfo.Properties.LastModified,
+		*blobInfo.Properties.LastModified,
 		*blobInfo.Properties.ContentLength,
 		adapter,
 		adapter, // adapter satisfies both interfaces
-		common.FromAzBlobMetadataToCommonMetadata(blobInfo.Metadata),
+		blobInfo.Metadata,
 		containerName,
 	)
 
-	object.blobDeleted = blobInfo.Deleted
+	object.blobDeleted = *blobInfo.Deleted
 	if t.includeDeleted && t.includeSnapshot {
-		object.blobSnapshotID = blobInfo.Snapshot
+		object.blobSnapshotID = *blobInfo.Snapshot
 	} else if t.includeDeleted && t.includeVersion && blobInfo.VersionID != nil {
 		object.blobVersionID = *blobInfo.VersionID
 	}
 	return object
 }
 
-func (t *blobTraverser) doesBlobRepresentAFolder(metadata azblob.Metadata) bool {
+func (t *blobTraverser) doesBlobRepresentAFolder(metadata map[string]*string) bool {
 	util := copyHandlerUtil{}
 	return util.doesBlobRepresentAFolder(metadata) && !(t.includeDirectoryStubs && t.recursive)
 }
 
-func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerName string, searchPrefix string,
+func (t *blobTraverser) serialList(containerClient *container.Client, containerName string, searchPrefix string,
 	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 
-	for marker := (azblob.Marker{}); marker.NotDone(); {
-		// see the TO DO in GetEnumerationPreFilter if/when we make this more directory-aware
-
-		// look for all blobs that start with the prefix
-		// Passing tags = true in the list call will save additional GetTags call
-		// TODO optimize for the case where recursive is off
-		listBlob, err := containerURL.ListBlobsFlatSegment(t.ctx, marker,
-			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix + extraSearchPrefix, Details: azblob.BlobListingDetails{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion}})
+	// see the TO DO in GetEnumerationPreFilter if/when we make this more directory-aware
+	// TODO optimize for the case where recursive is off
+	prefix := searchPrefix + extraSearchPrefix
+	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
+		Prefix:  &prefix,
+		Include: container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion},
+	})
+	for pager.More() {
+		resp, err := pager.NextPage(t.ctx)
 		if err != nil {
 			return fmt.Errorf("cannot list blobs. Failed with error %s", err.Error())
 		}
-
 		// process the blobs returned in this result segment
-		for _, blobInfo := range listBlob.Segment.BlobItems {
+		for _, blobInfo := range resp.Segment.BlobItems {
 			// if the blob represents a hdi folder, then skip it
 			if t.doesBlobRepresentAFolder(blobInfo.Metadata) {
 				continue
 			}
 
-			relativePath := strings.TrimPrefix(blobInfo.Name, searchPrefix)
+			relativePath := strings.TrimPrefix(*blobInfo.Name, searchPrefix)
 			// if recursive
 			if !t.recursive && strings.Contains(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING) {
 				continue
@@ -472,7 +487,7 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 			if t.s2sPreserveSourceTags && blobInfo.BlobTags != nil {
 				blobTagsMap := common.BlobTags{}
 				for _, blobTag := range blobInfo.BlobTags.BlobTagSet {
-					blobTagsMap[url.QueryEscape(blobTag.Key)] = url.QueryEscape(blobTag.Value)
+					blobTagsMap[url.QueryEscape(*blobTag.Key)] = url.QueryEscape(*blobTag.Value)
 				}
 				storedObject.blobTags = blobTagsMap
 			}
@@ -487,8 +502,6 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 				return processErr
 			}
 		}
-
-		marker = listBlob.NextMarker
 	}
 
 	return nil

@@ -32,7 +32,6 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
@@ -173,12 +172,12 @@ func (util copyHandlerUtil) getContainerUrl(blobURLParts blob.URLParts) string {
 
 // doesBlobRepresentAFolder verifies whether blob is valid or not.
 // Used to handle special scenarios or conditions.
-func (util copyHandlerUtil) doesBlobRepresentAFolder(metadata azblob.Metadata) bool {
+func (util copyHandlerUtil) doesBlobRepresentAFolder(metadata map[string]*string) bool {
 	// this condition is to handle the WASB V1 directory structure.
 	// HDFS driver creates a blob for the empty directories (let’s call it ‘myfolder’)
 	// and names all the blobs under ‘myfolder’ as such: ‘myfolder/myblob’
 	// The empty directory has meta-data 'hdi_isfolder = true'
-	return metadata["hdi_isfolder"] == "true"
+	return metadata["hdi_isfolder"] != nil && *metadata["hdi_isfolder"] == "true"
 }
 
 func startsWith(s string, t string) bool {
