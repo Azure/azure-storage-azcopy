@@ -170,6 +170,16 @@ func (util copyHandlerUtil) getContainerUrl(blobURLParts blob.URLParts) string {
 	return blobURLParts.String()
 }
 
+func (util copyHandlerUtil) getAccountUrl(resourceURL string) (string, error) {
+	blobURLParts, err := blob.ParseURL(resourceURL)
+	if err != nil {
+		return "", err
+	}
+	blobURLParts.BlobName = ""
+	blobURLParts.ContainerName = ""
+	return blobURLParts.String(), nil
+}
+
 // doesBlobRepresentAFolder verifies whether blob is valid or not.
 // Used to handle special scenarios or conditions.
 func (util copyHandlerUtil) doesBlobRepresentAFolder(metadata map[string]*string) bool {

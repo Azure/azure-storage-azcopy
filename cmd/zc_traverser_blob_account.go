@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -106,8 +107,9 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-// TODO : Should this take in a URL string and client options instead?
-func newBlobAccountTraverser(serviceClient *service.Client, container string, ctx context.Context, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions) (t *blobAccountTraverser) {
+func newBlobAccountTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions) (t *blobAccountTraverser) {
+	blobURLParts, _ := blob.ParseURL(rawURL)
+	container := blobURLParts.ContainerName
 	t = &blobAccountTraverser{
 		ctx:                         ctx,
 		incrementEnumerationCounter: incrementEnumerationCounter,

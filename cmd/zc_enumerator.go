@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"net/url"
 	"path/filepath"
 	"runtime"
@@ -434,23 +435,34 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		if ctx == nil || p == nil {
 			return nil, errors.New("a valid credential and context must be supplied to create a blob traverser")
 		}
+		r := resourceURL.String()
 
-		burl, err := blob.ParseURL(resourceURL.String())
+		burl, err := blob.ParseURL(r)
+		if err != nil {
+			return nil, err
+		}
+
+		// make r a service url
+		serviceURL, err := gCopyUtil.getAccountUrl(r)
+		if err != nil {
+			return nil, err
+		}
+		bsc, err := common.CreateBlobServiceClient(serviceURL, credential, &blobservice.ClientOptions{ClientOptions: createClientOptions()},
+			&common.CredentialOpOptions{LogError: glcm.Info})
 		if err != nil {
 			return nil, err
 		}
 
 		if burl.ContainerName == "" || strings.Contains(burl.ContainerName, "*") {
-
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output = newBlobAccountTraverser(resourceURL, *p, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions)
+			output = newBlobAccountTraverser(r, bsc, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions)
 		} else if listOfVersionIds != nil {
-			output = newBlobVersionsTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
+			output = newBlobVersionsTraverser(r, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
-			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion)
+			output = newBlobTraverser(r, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion)
 		}
 	case common.ELocation.File():
 		resourceURL, err := resource.FullURL()
