@@ -614,11 +614,6 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 		return pathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
 	}
 
-	// user is not placing the source as a subdir
-	if object.isSourceRootFolder() && !asSubdir {
-		relativePath = ""
-	}
-
 	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true
 	if object.isSourceRootFolder() {
 		relativePath = "" // otherwise we get "/" from the line below, and that breaks some clients, e.g. blobFS
