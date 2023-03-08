@@ -257,7 +257,7 @@ func (s *scenario) runAzCopy(logDirectory string) {
 	result, wasClean, err := r.ExecuteAzCopyCommand(
 		s.operation,
 		s.state.source.getParam(s.stripTopDir, needsSAS(s.credTypes[0]), tf.objectTarget),
-    s.state.dest.getParam(false, needsSAS(s.credTypes[1]), common.IffString(tf.destTarget != "", tf.destTarget, tf.objectTarget)),
+		s.state.dest.getParam(false, needsSAS(s.credTypes[1]), common.IffString(tf.destTarget != "", tf.destTarget, tf.objectTarget)),
 		s.credTypes[0] == common.ECredentialType.OAuthToken() || s.credTypes[1] == common.ECredentialType.OAuthToken(), // needsOAuth
 		afterStart, s.chToStdin, logDirectory)
 
@@ -356,7 +356,7 @@ func (s *scenario) validateTransferStates(azcopyDir string) {
 		actualTransfers, err := s.state.result.GetTransferList(statusToTest, azcopyDir)
 		s.a.AssertNoErr(err)
 
-		Validator{}.ValidateCopyTransfersAreScheduled(s.a, isSrcEncoded, isDstEncoded, srcRoot, dstRoot, expectedTransfers, actualTransfers, statusToTest, s.FromTo(), s.srcAccountType, s.destAccountType)
+		Validator{}.ValidateCopyTransfersAreScheduled(s.a, isSrcEncoded, isDstEncoded, srcRoot, dstRoot, expectedTransfers, actualTransfers, statusToTest, expectFolders)
 		// TODO: how are we going to validate folder transfers????
 	}
 
@@ -381,7 +381,8 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 	expectFolders = (s.fromTo.From().IsFolderAware() &&
 		s.fromTo.To().IsFolderAware() &&
 		s.p.allowsFolderTransfers()) ||
-		(s.p.preserveSMBPermissions && s.FromTo() == common.EFromTo.BlobBlob())
+		(s.p.preserveSMBPermissions && s.FromTo() == common.EFromTo.BlobBlob()) ||
+		(s.p.preservePOSIXProperties && (s.FromTo() == common.EFromTo.LocalBlob() || s.FromTo() == common.EFromTo.BlobBlob() || s.FromTo() == common.EFromTo.BlobLocal()))
 	expectRootFolder := expectFolders
 
 	// compute dest, taking into account our stripToDir rules
@@ -457,7 +458,7 @@ func (s *scenario) validateProperties() {
 		}
 
 		// validate all the different things
-		s.validateMetadata(expected.nameValueMetadata, actual.nameValueMetadata, expected.isFolder)
+		s.validateMetadata(expected.nameValueMetadata, actual.nameValueMetadata, expected.entityType == common.EEntityType.Folder()) // todo: entity type
 		s.validateBlobTags(expected.blobTags, actual.blobTags)
 		s.validateContentHeaders(expected.contentHeaders, actual.contentHeaders)
 		s.validateCreateTime(expected.creationTime, actual.creationTime)
@@ -494,7 +495,7 @@ func (s *scenario) validateContent() {
 		if f.creationProperties.contentHeaders == nil {
 			s.a.Failed()
 		}
-		if !f.isFolder() {
+		if f.hasContentToValidate() {
 			expectedContentMD5 := f.creationProperties.contentHeaders.contentMD5
 			resourceRelPath := fixSlashes(path.Join(addedDirAtDest, f.name), s.fromTo.To())
 			actualContent := s.state.dest.downloadContent(s.a, downloadContentOptions{
@@ -635,7 +636,6 @@ func (s *scenario) validateLastWriteTime(expected, actual *time.Time) {
 		expected, actual))
 }
 
-// nolint
 func (s *scenario) validateSMBAttrs(expected, actual *uint32) {
 	if expected == nil {
 		// These properties were not explicitly stated for verification

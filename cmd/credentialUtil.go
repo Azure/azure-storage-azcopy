@@ -342,7 +342,7 @@ func oAuthTokenExists() (oauthTokenExists bool) {
 
 	if hasCachedToken, err := uotm.HasCachedToken(); hasCachedToken {
 		oauthTokenExists = true
-	} else if err != nil {
+	} else if err != nil { //nolint:staticcheck
 		// Log the error if fail to get cached token, as these are unhandled errors, and should not influence the logic flow.
 		// Uncomment for debugging.
 		// glcm.Info(fmt.Sprintf("No cached token found, %v", err))
@@ -356,10 +356,6 @@ func getAzureFileCredentialType() (common.CredentialType, error) {
 	// Azure file only support anonymous credential currently.
 	return common.ECredentialType.Anonymous(), nil
 }
-
-// envVarCredentialType used for passing credential type into AzCopy through environment variable.
-// Note: This is only used for internal integration, and not encouraged to be used directly.
-const envVarCredentialType = "AZCOPY_CRED_TYPE"
 
 var stashedEnvCredType = ""
 
@@ -490,10 +486,9 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 			return fmt.Errorf("Google Application Credentials to %s is not valid", resourceType.String())
 		}
 
-		host := "<unparsable url>"
 		u, err := url.Parse(resource)
 		if err == nil {
-			host = u.Host
+			host := u.Host
 			_, err := common.NewGCPURLParts(*u)
 			if err != nil {
 				return fmt.Errorf("GCP authentication to %s is not currently supported", host)
@@ -614,9 +609,6 @@ func GetCredentialInfoForLocation(ctx context.Context, location common.Location,
 		} else {
 			credInfo.OAuthTokenInfo = *tokenInfo
 		}
-	} else if credInfo.CredentialType == common.ECredentialType.S3AccessKey() || credInfo.CredentialType == common.ECredentialType.S3PublicBucket() {
-		// nothing to do here. The extra fields for S3 are fleshed out at the time
-		// we make the S3Client
 	}
 
 	return

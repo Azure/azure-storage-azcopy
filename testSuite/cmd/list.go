@@ -107,7 +107,7 @@ func listContainer(resourceUrl string, numberOfresource int64) {
 		listBlob, err := containerUrl.ListBlobsFlatSegment(context.TODO(), marker,
 			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
 		if err != nil {
-			fmt.Println(fmt.Sprintf("cannot list blobs for download. Failed with error %s", err.Error()))
+			fmt.Printf("cannot list blobs for download. Failed with error %s\n", err.Error())
 			os.Exit(1)
 		}
 
@@ -116,7 +116,7 @@ func listContainer(resourceUrl string, numberOfresource int64) {
 			blobName := blobInfo.Name
 			if len(searchPrefix) > 0 {
 				// strip away search prefix from the blob name.
-				blobName = strings.Replace(blobName, searchPrefix, "", 1)
+				blobName = strings.Replace(blobName, searchPrefix, "", 1) //nolint:ineffassign,staticcheck
 			}
 			numberOfblobs++
 		}
@@ -124,7 +124,7 @@ func listContainer(resourceUrl string, numberOfresource int64) {
 	}
 
 	if numberOfblobs != numberOfresource {
-		fmt.Println(fmt.Sprintf("expected number of blobs / file %d inside the resource does not match the actual %d", numberOfresource, numberOfblobs))
+		fmt.Printf("expected number of blobs / file %d inside the resource does not match the actual %d\n", numberOfresource, numberOfblobs)
 		os.Exit(1)
 	}
 }

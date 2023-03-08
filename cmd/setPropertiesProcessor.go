@@ -26,13 +26,14 @@ import (
 
 func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption) *copyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
-		JobID:           cca.jobID,
-		CommandString:   cca.commandString,
-		FromTo:          cca.FromTo,
-		Fpo:             fpo,
-		SourceRoot:      cca.Source.CloneWithConsolidatedSeparators(),
-		CredentialInfo:  cca.credentialInfo,
-		ForceIfReadOnly: cca.ForceIfReadOnly,
+		JobID:               cca.jobID,
+		CommandString:       cca.commandString,
+		FromTo:              cca.FromTo,
+		Fpo:                 fpo,
+		SymlinkHandlingType: common.ESymlinkHandlingType.Preserve(), // we want to set properties on symlink blobs
+		SourceRoot:          cca.Source.CloneWithConsolidatedSeparators(),
+		CredentialInfo:      cca.credentialInfo,
+		ForceIfReadOnly:     cca.ForceIfReadOnly,
 
 		// flags
 		LogLevel: azcopyLogVerbosity,

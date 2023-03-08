@@ -61,7 +61,7 @@ func init() {
 			if err == nil {
 				if withStatus == common.EJobStatus.All() {
 					glcm.Exit(func(format common.OutputFormat) string {
-						return fmt.Sprintf("Successfully removed all jobs.")
+						return "Successfully removed all jobs."
 					}, common.EExitCode.Success())
 				} else {
 					glcm.Exit(func(format common.OutputFormat) string {

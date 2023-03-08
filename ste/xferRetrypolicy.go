@@ -3,7 +3,6 @@ package ste
 import (
 	"context"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
@@ -192,7 +191,7 @@ func NewBFSXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 				// Set the server-side timeout query parameter "timeout=[seconds]"
 				timeout := int32(o.TryTimeout.Seconds()) // Max seconds per try
 				if deadline, ok := ctx.Deadline(); ok {  // If user's ctx has a deadline, make the timeout the smaller of the two
-					t := int32(deadline.Sub(time.Now()).Seconds()) // Duration from now until user's ctx reaches its deadline
+					t := int32(time.Until(deadline).Seconds()) // Duration from now until user's ctx reaches its deadline
 					logf("MaxTryTimeout=%d secs, TimeTilDeadline=%d sec\n", timeout, t)
 					if t < timeout {
 						timeout = t
@@ -282,8 +281,8 @@ func NewBFSXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 					break // Don't retry
 				}
 				if response.Response() != nil {
-					// If we're going to retry and we got a previous response, then flush its body to avoid leaking its TCP connection
-					io.Copy(ioutil.Discard, response.Response().Body)
+					// If we're going to retry, and we got a previous response, then flush its body to avoid leaking its TCP connection
+					_, _ = io.Copy(io.Discard, response.Response().Body)
 					response.Response().Body.Close()
 				}
 				// If retrying, cancel the current per-try timeout context
@@ -363,7 +362,7 @@ func NewBlobXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 				// Set the server-side timeout query parameter "timeout=[seconds]"
 				timeout := int32(o.TryTimeout.Seconds()) // Max seconds per try
 				if deadline, ok := ctx.Deadline(); ok {  // If user's ctx has a deadline, make the timeout the smaller of the two
-					t := int32(deadline.Sub(time.Now()).Seconds()) // Duration from now until user's ctx reaches its deadline
+					t := int32(time.Until(deadline).Seconds()) // Duration from now until user's ctx reaches its deadline
 					logf("MaxTryTimeout=%d secs, TimeTilDeadline=%d sec\n", timeout, t)
 					if t < timeout {
 						timeout = t
@@ -455,7 +454,7 @@ func NewBlobXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 				}
 				if response.Response() != nil {
 					// If we're going to retry and we got a previous response, then flush its body to avoid leaking its TCP connection
-					io.Copy(ioutil.Discard, response.Response().Body)
+					_, _ = io.Copy(io.Discard, response.Response().Body)
 					response.Response().Body.Close()
 				}
 				// If retrying, cancel the current per-try timeout context

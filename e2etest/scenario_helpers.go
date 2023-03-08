@@ -52,7 +52,6 @@ const defaultStringFileSize = "1k"
 
 type scenarioHelper struct{}
 
-// nolint
 var specialNames = []string{
 	"打麻将.txt",
 	"wow such space so much space",
@@ -68,7 +67,6 @@ var specialNames = []string{
 }
 
 // note: this is to emulate the list-of-files flag
-// nolint
 func (scenarioHelper) generateListOfFiles(c asserter, fileList []string) (path string) {
 	parentDirName, err := os.MkdirTemp("", "AzCopyLocalTest")
 	c.AssertNoErr(err)
@@ -85,7 +83,6 @@ func (scenarioHelper) generateListOfFiles(c asserter, fileList []string) (path s
 	return
 }
 
-// nolint
 func (scenarioHelper) generateLocalDirectory(c asserter) (dstDirName string) {
 	dstDirName, err := os.MkdirTemp("", "AzCopyLocalTest")
 	c.AssertNoErr(err)
@@ -131,7 +128,7 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 			if file.creationProperties.lastWriteTime != nil {
 				c.AssertNoErr(os.Chtimes(filepath.Join(options.dirPath, file.name), time.Now(), *file.creationProperties.lastWriteTime), "set times")
 			}
-		} else {
+		} else if file.creationProperties.entityType == common.EEntityType.File() {
 			sourceData, err := s.generateLocalFile(
 				filepath.Join(options.dirPath, file.name),
 				file.creationProperties.sizeBytes(c, options.defaultSize), file.body)
@@ -155,6 +152,11 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 			if file.creationProperties.lastWriteTime != nil {
 				c.AssertNoErr(os.Chtimes(filepath.Join(options.dirPath, file.name), time.Now(), *file.creationProperties.lastWriteTime), "set times")
 			}
+		} else if file.creationProperties.entityType == common.EEntityType.Symlink() {
+			c.Assert(file.creationProperties.symlinkTarget, notEquals(), nil)
+			oldName := filepath.Join(options.dirPath, *file.creationProperties.symlinkTarget)
+			newName := filepath.Join(options.dirPath, file.name)
+			c.AssertNoErr(os.Symlink(oldName, newName))
 		}
 	}
 
@@ -188,8 +190,15 @@ func (s scenarioHelper) enumerateLocalProperties(a asserter, dirpath string) map
 			pSmbAttributes = osScenarioHelper{}.getFileAttrs(a, fullpath)
 			pSmbPermissionsSddl = osScenarioHelper{}.getFileSDDLString(a, fullpath)
 		}
+		entityType := common.EEntityType.File()
+		if info.IsDir() {
+			entityType = common.EEntityType.Folder()
+		} else if info.Mode()&os.ModeSymlink == os.ModeSymlink {
+			entityType = common.EEntityType.Symlink()
+		}
+
 		props := objectProperties{
-			isFolder:           info.IsDir(),
+			entityType:         entityType,
 			size:               &size,
 			creationTime:       pCreationTime,
 			lastWriteTime:      &lastWriteTime,
@@ -206,7 +215,6 @@ func (s scenarioHelper) enumerateLocalProperties(a asserter, dirpath string) map
 	return result
 }
 
-// nolint
 func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c asserter, dirPath string, prefix string) (fileList []string) {
 	fileList = make([]string, 50)
 	for i := 0; i < 10; i++ {
@@ -230,7 +238,6 @@ func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c asserter, dirPath
 	return
 }
 
-// nolint
 func (scenarioHelper) generateCommonRemoteScenarioForBlob(c asserter, containerURL azblob.ContainerURL, prefix string) (blobList []string) {
 	// make 50 blobs with random names
 	// 10 of them at the top level
@@ -259,7 +266,6 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlob(c asserter, containerU
 	return
 }
 
-// nolint
 func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(c asserter, filesystemURL azbfs.FileSystemURL, prefix string) (pathList []string) {
 	pathList = make([]string, 50)
 
@@ -282,7 +288,6 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(c asserter, filesyst
 	return
 }
 
-// nolint
 func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c asserter, shareURL azfile.ShareURL, prefix string) (fileList []string) {
 	fileList = make([]string, 50)
 
@@ -305,7 +310,6 @@ func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c asserter, share
 	return
 }
 
-// nolint
 func (s scenarioHelper) generateBlobContainersAndBlobsFromLists(c asserter, serviceURL azblob.ServiceURL, containerList []string, blobList []*testObject) {
 	for _, containerName := range containerList {
 		curl := serviceURL.NewContainerURL(containerName)
@@ -321,7 +325,6 @@ func (s scenarioHelper) generateBlobContainersAndBlobsFromLists(c asserter, serv
 	}
 }
 
-// nolint
 func (s scenarioHelper) generateFileSharesAndFilesFromLists(c asserter, serviceURL azfile.ServiceURL, shareList []string, fileList []*testObject) {
 	for _, shareName := range shareList {
 		sURL := serviceURL.NewShareURL(shareName)
@@ -336,7 +339,6 @@ func (s scenarioHelper) generateFileSharesAndFilesFromLists(c asserter, serviceU
 	}
 }
 
-// nolint
 func (s scenarioHelper) generateFilesystemsAndFilesFromLists(c asserter, serviceURL azbfs.ServiceURL, fsList []string, fileList []string, data string) {
 	for _, filesystemName := range fsList {
 		fsURL := serviceURL.NewFileSystemURL(filesystemName)
@@ -347,7 +349,6 @@ func (s scenarioHelper) generateFilesystemsAndFilesFromLists(c asserter, service
 	}
 }
 
-// nolint
 func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c asserter, s3Client *minio.Client, bucketList []string, objectList []string, data string) {
 	for _, bucketName := range bucketList {
 		err := s3Client.MakeBucket(bucketName, "")
@@ -375,7 +376,7 @@ type generateBlobFromListOptions struct {
 // create the demanded blobs
 func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFromListOptions) {
 	for _, b := range options.fs {
-		if b.isFolder() {
+		if b.isFolder() { // todo entityType
 			continue // no real folders in blob
 		}
 		ad := blobResourceAdapter{b}
@@ -534,7 +535,7 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 			md := map[string]string(blobInfo.Metadata)
 
 			props := objectProperties{
-				isFolder:           false, // no folders in Blob
+				entityType:         common.EEntityType.File(), // todo: posix properties includes folders
 				size:               bp.ContentLength,
 				contentHeaders:     &h,
 				nameValueMetadata:  md,
@@ -579,7 +580,6 @@ func (s scenarioHelper) downloadBlobContent(a asserter, options downloadContentO
 	return destData[:]
 }
 
-// nolint
 func (scenarioHelper) generatePageBlobsFromList(c asserter, containerURL azblob.ContainerURL, blobList []string, data string) {
 	for _, blobName := range blobList {
 		// Create the blob (PUT blob)
@@ -616,7 +616,6 @@ func (scenarioHelper) generatePageBlobsFromList(c asserter, containerURL azblob.
 	time.Sleep(time.Millisecond * 1050)
 }
 
-// nolint
 func (scenarioHelper) generateAppendBlobsFromList(c asserter, containerURL azblob.ContainerURL, blobList []string, data string) {
 	for _, blobName := range blobList {
 		// Create the blob (PUT blob)
@@ -647,7 +646,6 @@ func (scenarioHelper) generateAppendBlobsFromList(c asserter, containerURL azblo
 	time.Sleep(time.Millisecond * 1050)
 }
 
-// nolint
 func (scenarioHelper) generateBlockBlobWithAccessTier(c asserter, containerURL azblob.ContainerURL, blobName string, accessTier azblob.AccessTierType) {
 	blob := containerURL.NewBlockBlobURL(blobName)
 	cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
@@ -657,7 +655,6 @@ func (scenarioHelper) generateBlockBlobWithAccessTier(c asserter, containerURL a
 }
 
 // create the demanded objects
-// nolint
 func (scenarioHelper) generateObjects(c asserter, client *minio.Client, bucketName string, objectList []string) {
 	size := int64(len(objectDefaultData))
 	for _, objectName := range objectList {
@@ -668,7 +665,6 @@ func (scenarioHelper) generateObjects(c asserter, client *minio.Client, bucketNa
 }
 
 // create the demanded files
-// nolint
 func (scenarioHelper) generateFlatFiles(c asserter, shareURL azfile.ShareURL, fileList []string) {
 	for _, fileName := range fileList {
 		file := shareURL.NewRootDirectoryURL().NewFileURL(fileName)
@@ -680,7 +676,6 @@ func (scenarioHelper) generateFlatFiles(c asserter, shareURL azfile.ShareURL, fi
 	time.Sleep(time.Millisecond * 1050)
 }
 
-// nolint
 func (scenarioHelper) generateCommonRemoteScenarioForS3(c asserter, client *minio.Client, bucketName string, prefix string, returnObjectListWithBucketName bool) (objectList []string) {
 	// make 50 objects with random names
 	// 10 of them at the top level
@@ -768,7 +763,7 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 
 			// TODO: I'm pretty sure we don't prserve lastWritetime or contentProperties (headers) for folders, so the above if statement doesn't test those
 			//    Is that the correct decision?
-		} else {
+		} else if f.creationProperties.entityType == common.EEntityType.File() {
 			file := options.shareURL.NewRootDirectoryURL().NewFileURL(f.name)
 
 			// create parents first
@@ -781,8 +776,10 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			if f.body != nil {
 				contentR = bytes.NewReader(f.body)
 				contentD = f.body
+				fileSize = contentR.Size()
 			} else {
 				contentR, contentD = getRandomDataAndReader(int(fileSize))
+				f.body = contentD
 			}
 			if f.creationProperties.contentHeaders == nil {
 				f.creationProperties.contentHeaders = &contentHeaders{}
@@ -834,6 +831,8 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			}
 
 			// TODO: do we want to put some random content into it?
+		} else {
+			panic(fmt.Sprintf("file %s unsupported entity type %s", f.name, f.creationProperties.entityType.String()))
 		}
 	}
 
@@ -886,7 +885,7 @@ func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile
 				}
 
 				props := objectProperties{
-					isFolder:           false, // no folders in Blob
+					entityType:         common.EEntityType.File(), // only enumerating files in list call
 					size:               &fileSize,
 					nameValueMetadata:  fProps.NewMetadata(),
 					contentHeaders:     &h,
@@ -927,7 +926,7 @@ func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile
 
 				// Set up properties
 				props := objectProperties{
-					isFolder:           true,
+					entityType:         common.EEntityType.Folder(), // Only enumerating directories in list call
 					nameValueMetadata:  dProps.NewMetadata(),
 					creationTime:       &creationTime,
 					lastWriteTime:      &lastWriteTime,
@@ -965,7 +964,6 @@ func (s scenarioHelper) downloadFileContent(a asserter, options downloadContentO
 	return destData
 }
 
-// nolint
 func (scenarioHelper) generateBFSPathsFromList(c asserter, filesystemURL azbfs.FileSystemURL, fileList []string) {
 	for _, bfsPath := range fileList {
 		file := filesystemURL.NewRootDirectoryURL().NewFileURL(bfsPath)
@@ -997,7 +995,6 @@ func (scenarioHelper) convertListToMap(list []*testObject, converter func(*testO
 	return lookupMap
 }
 
-// nolint
 func (scenarioHelper) shaveOffPrefix(list []string, prefix string) []string {
 	cleanList := make([]string, len(list))
 	for i, item := range list {
@@ -1006,7 +1003,6 @@ func (scenarioHelper) shaveOffPrefix(list []string, prefix string) []string {
 	return cleanList
 }
 
-// nolint
 func (scenarioHelper) addPrefix(list []string, prefix string) []string {
 	modifiedList := make([]string, len(list))
 	for i, item := range list {
@@ -1015,7 +1011,6 @@ func (scenarioHelper) addPrefix(list []string, prefix string) []string {
 	return modifiedList
 }
 
-// nolint
 func (scenarioHelper) getRawContainerURLWithSAS(c asserter, containerName string) url.URL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
@@ -1024,7 +1019,6 @@ func (scenarioHelper) getRawContainerURLWithSAS(c asserter, containerName string
 	return containerURLWithSAS.URL()
 }
 
-// nolint
 func (scenarioHelper) getRawBlobURLWithSAS(c asserter, containerName string, blobName string) url.URL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
@@ -1034,7 +1028,6 @@ func (scenarioHelper) getRawBlobURLWithSAS(c asserter, containerName string, blo
 	return blobURLWithSAS.URL()
 }
 
-// nolint
 func (scenarioHelper) getRawBlobServiceURLWithSAS(c asserter) url.URL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
@@ -1043,7 +1036,6 @@ func (scenarioHelper) getRawBlobServiceURLWithSAS(c asserter) url.URL {
 	return getBlobServiceURLWithSAS(c, *credential).URL()
 }
 
-// nolint
 func (scenarioHelper) getRawFileServiceURLWithSAS(c asserter) url.URL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
@@ -1052,7 +1044,6 @@ func (scenarioHelper) getRawFileServiceURLWithSAS(c asserter) url.URL {
 	return getFileServiceURLWithSAS(c, *credential).URL()
 }
 
-// nolint
 func (scenarioHelper) getRawAdlsServiceURLWithSAS(c asserter) azbfs.ServiceURL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential := azbfs.NewSharedKeyCredential(accountName, accountKey)
@@ -1060,7 +1051,6 @@ func (scenarioHelper) getRawAdlsServiceURLWithSAS(c asserter) azbfs.ServiceURL {
 	return getAdlsServiceURLWithSAS(c, *credential)
 }
 
-// nolint
 func (scenarioHelper) getBlobServiceURL(c asserter) azblob.ServiceURL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
@@ -1074,7 +1064,6 @@ func (scenarioHelper) getBlobServiceURL(c asserter) azblob.ServiceURL {
 	return azblob.NewServiceURL(*fullURL, azblob.NewPipeline(credential, azblob.PipelineOptions{}))
 }
 
-// nolint
 func (s scenarioHelper) getContainerURL(c asserter, containerName string) azblob.ContainerURL {
 	serviceURL := s.getBlobServiceURL(c)
 	containerURL := serviceURL.NewContainerURL(containerName)
@@ -1082,7 +1071,6 @@ func (s scenarioHelper) getContainerURL(c asserter, containerName string) azblob
 	return containerURL
 }
 
-// nolint
 func (scenarioHelper) getRawS3AccountURL(c asserter, region string) url.URL {
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com", common.IffString(region == "", "", "-"+region))
 
@@ -1093,7 +1081,6 @@ func (scenarioHelper) getRawS3AccountURL(c asserter, region string) url.URL {
 }
 
 // TODO: Possibly add virtual-hosted-style and dual stack support. Currently use path style for testing.
-// nolint
 func (scenarioHelper) getRawS3BucketURL(c asserter, region string, bucketName string) url.URL {
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s", common.IffString(region == "", "", "-"+region), bucketName)
 
@@ -1103,7 +1090,6 @@ func (scenarioHelper) getRawS3BucketURL(c asserter, region string, bucketName st
 	return *fullURL
 }
 
-// nolint
 func (scenarioHelper) getRawS3ObjectURL(c asserter, region string, bucketName string, objectName string) url.URL {
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s/%s", common.IffString(region == "", "", "-"+region), bucketName, objectName)
 
@@ -1113,7 +1099,6 @@ func (scenarioHelper) getRawS3ObjectURL(c asserter, region string, bucketName st
 	return *fullURL
 }
 
-// nolint
 func (scenarioHelper) getRawFileURLWithSAS(c asserter, shareName string, fileName string) url.URL {
 	credential, err := getGenericCredentialForFile("")
 	c.AssertNoErr(err)
@@ -1122,7 +1107,6 @@ func (scenarioHelper) getRawFileURLWithSAS(c asserter, shareName string, fileNam
 	return fileURLWithSAS.URL()
 }
 
-// nolint
 func (scenarioHelper) getRawShareURLWithSAS(c asserter, shareName string) url.URL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)

@@ -3,7 +3,6 @@ package azbfs
 import (
 	"context"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
@@ -134,7 +133,7 @@ func (o RetryOptions) calcDelay(try int32) time.Duration { // try is >=1; never 
 // Note: forked from the standard package url.go
 // The content is exactly the same but the spaces are encoded as %20 instead of +
 // TODO: remove after the service fix
-// Encode encodes the values into ``URL encoded'' form
+// Encode encodes the values into “URL encoded” form
 // ("bar=baz&foo=quux") sorted by key.
 func alternativeEncode(v url.Values) string {
 	if v == nil {
@@ -217,7 +216,7 @@ func NewRetryPolicyFactory(o RetryOptions) pipeline.Factory {
 				// Set the server-side timeout query parameter "timeout=[seconds]"
 				timeout := int32(o.TryTimeout.Seconds()) // Max seconds per try
 				if deadline, ok := ctx.Deadline(); ok {  // If user's ctx has a deadline, make the timeout the smaller of the two
-					t := int32(deadline.Sub(time.Now()).Seconds()) // Duration from now until user's ctx reaches its deadline
+					t := int32(time.Until(deadline).Seconds()) // Duration from now until user's ctx reaches its deadline
 					logf("MaxTryTimeout=%d secs, TimeTilDeadline=%d sec\n", timeout, t)
 					if t < timeout {
 						timeout = t
@@ -254,7 +253,7 @@ func NewRetryPolicyFactory(o RetryOptions) pipeline.Factory {
 					action = "Retry: Secondary URL returned 404"
 				case err != nil:
 					// NOTE: Protocol Responder returns non-nil if REST API returns invalid status code for the invoked operation
-					if netErr, ok := err.(net.Error); ok && (netErr.Temporary() || netErr.Timeout()) {
+					if netErr, ok := err.(net.Error); ok && (netErr.Temporary() || netErr.Timeout()) { //nolint:staticcheck
 						action = "Retry: net.Error and Temporary() or Timeout()"
 					} else if err == io.ErrUnexpectedEOF {
 						// Some of our methods under the zz_ files do use io.Copy and other related methods that can throw an unexpectedEOF.
@@ -284,7 +283,7 @@ func NewRetryPolicyFactory(o RetryOptions) pipeline.Factory {
 				}
 				if response != nil && response.Response() != nil {
 					// If we're going to retry and we got a previous response, then flush its body to avoid leaking its TCP connection
-					io.Copy(ioutil.Discard, response.Response().Body)
+					_, _ = io.Copy(io.Discard, response.Response().Body)
 					response.Response().Body.Close()
 				}
 				// If retrying, cancel the current per-try timeout context

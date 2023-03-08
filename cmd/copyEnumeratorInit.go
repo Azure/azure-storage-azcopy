@@ -62,14 +62,14 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		(cca.FromTo.From() == common.ELocation.File() && !cca.FromTo.To().IsRemote()) || // If it's a download, we still need LMT and MD5 from files.
 		(cca.FromTo.From() == common.ELocation.File() && cca.FromTo.To().IsRemote() && (cca.s2sSourceChangeValidation || cca.IncludeAfter != nil || cca.IncludeBefore != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise, if we are using includeAfter or includeBefore, which require LMTs.
 		(cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() && cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
-	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
+	jobPartOrder.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && !getRemoteProperties && cca.s2sGetPropertiesInBackend     // Infer GetProperties if GetPropertiesInBackend is enabled.
 	jobPartOrder.S2SSourceChangeValidation = cca.s2sSourceChangeValidation
 	jobPartOrder.DestLengthValidation = cca.CheckLength
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
 	jobPartOrder.S2SPreserveBlobTags = cca.S2sPreserveBlobTags
 
 	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo,
-		&cca.FollowSymlinks, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties,
+		cca.SymlinkHandling, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties,
 		cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs,
 		cca.S2sPreserveBlobTags, common.ESyncHashType.None(), cca.preservePermissions, azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil /* errorChannel */)
 
@@ -265,12 +265,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		srcRelPath := cca.MakeEscapedRelativePath(true, isDestDir, cca.asSubdir, object)
 		dstRelPath := cca.MakeEscapedRelativePath(false, isDestDir, cca.asSubdir, object)
 
-		transfer, shouldSendToSte := object.ToNewCopyTransfer(
-			cca.autoDecompress && cca.FromTo.IsDownload(),
-			srcRelPath, dstRelPath,
-			cca.s2sPreserveAccessTier,
-			jobPartOrder.Fpo,
-		)
+		transfer, shouldSendToSte := object.ToNewCopyTransfer(cca.autoDecompress && cca.FromTo.IsDownload(), srcRelPath, dstRelPath, cca.s2sPreserveAccessTier, jobPartOrder.Fpo, cca.SymlinkHandling)
 		if !cca.S2sPreserveBlobTags {
 			transfer.BlobTags = cca.blobTags
 		}
@@ -341,7 +336,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, nil,
+	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, common.ESymlinkHandlingType.Skip(),
 		nil, false, false, false, common.EPermanentDeleteOption.None(),
 		func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), cca.preservePermissions, pipeline.LogNone, cca.CpkOptions, nil /* errorChannel */)
 
@@ -435,10 +430,11 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	}
 	existingContainers[containerName] = true
 
-	dstCredInfo := common.CredentialInfo{}
+	var dstCredInfo common.CredentialInfo
 
 	// 3minutes is enough time to list properties of a container, and create new if it does not exist.
-	ctx, _ := context.WithTimeout(parentCtx, time.Minute*3)
+	ctx, cancel := context.WithTimeout(parentCtx, time.Minute*3)
+	defer cancel()
 	if dstCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.To(), cca.Destination.Value, cca.Destination.SAS, false, cca.CpkOptions); err != nil {
 		return err
 	}
@@ -520,7 +516,6 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	default:
 		panic(fmt.Sprintf("cannot create a destination container at location %s.", cca.FromTo.To()))
 	}
-
 	return
 }
 
@@ -550,7 +545,7 @@ var reverseEncodedChars = map[string]rune{
 }
 
 func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool, source bool) string {
-	loc := common.ELocation.Unknown()
+	var loc common.Location
 
 	if source {
 		loc = fromTo.From()
@@ -617,11 +612,6 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 		}
 
 		return pathEncodeRules(relativePath, cca.FromTo, cca.disableAutoDecoding, source)
-	}
-
-	// user is not placing the source as a subdir
-	if object.isSourceRootFolder() && !asSubdir {
-		relativePath = ""
 	}
 
 	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true

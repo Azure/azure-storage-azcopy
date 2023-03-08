@@ -52,7 +52,6 @@ func equals() comparison {
 	return comparison{true}
 }
 
-// nolint
 func notEquals() comparison {
 	return comparison{false}
 }
@@ -172,6 +171,7 @@ type params struct {
 	accessTier                azblob.AccessTierType
 	checkMd5                  common.HashValidationOption
 	compareHash               common.SyncHashType
+	symlinkHandling           common.SymlinkHandlingType
 
 	destNull bool
 

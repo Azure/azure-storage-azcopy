@@ -39,13 +39,14 @@ import (
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
 func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption) *copyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
-		JobID:           cca.jobID,
-		CommandString:   cca.commandString,
-		FromTo:          cca.fromTo,
-		Fpo:             fpo,
-		SourceRoot:      cca.source.CloneWithConsolidatedSeparators(),
-		DestinationRoot: cca.destination.CloneWithConsolidatedSeparators(),
-		CredentialInfo:  cca.credentialInfo,
+		JobID:               cca.jobID,
+		CommandString:       cca.commandString,
+		FromTo:              cca.fromTo,
+		Fpo:                 fpo,
+		SymlinkHandlingType: cca.symlinkHandling,
+		SourceRoot:          cca.source.CloneWithConsolidatedSeparators(),
+		DestinationRoot:     cca.destination.CloneWithConsolidatedSeparators(),
+		CredentialInfo:      cca.credentialInfo,
 
 		// flags
 		BlobAttributes: common.BlobTransferAttributes{

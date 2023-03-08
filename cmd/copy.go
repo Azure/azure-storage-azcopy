@@ -86,6 +86,9 @@ type rawCopyCmdArgs struct {
 	legacyExclude         string // used only for warnings
 	listOfVersionIDs      string
 
+	// Indicates the user wants to upload the symlink itself, not the file on the other end
+	preserveSymlinks bool
+
 	// filters from flags
 	listOfFilesToCopy string
 	recursive         bool
@@ -332,9 +335,16 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	cooked.FromTo = fromTo
 	cooked.Recursive = raw.recursive
-	cooked.FollowSymlinks = raw.followSymlinks
 	cooked.ForceIfReadOnly = raw.forceIfReadOnly
 	if err = validateForceIfReadOnly(cooked.ForceIfReadOnly, cooked.FromTo); err != nil {
+		return cooked, err
+	}
+
+	if err = cooked.SymlinkHandling.Determine(raw.followSymlinks, raw.preserveSymlinks); err != nil {
+		return cooked, err
+	}
+
+	if err = validateSymlinkHandlingMode(cooked.SymlinkHandling, cooked.FromTo); err != nil {
 		return cooked, err
 	}
 
@@ -687,7 +697,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	cooked.IncludeDirectoryStubs = raw.includeDirectoryStubs || (cooked.isHNStoHNS && cooked.preservePermissions.IsTruthy())
 
-	if err = crossValidateSymlinksAndPermissions(cooked.FollowSymlinks, cooked.preservePermissions.IsTruthy()); err != nil {
+	if err = crossValidateSymlinksAndPermissions(cooked.SymlinkHandling, cooked.preservePermissions.IsTruthy()); err != nil {
 		return cooked, err
 	}
 
@@ -774,7 +784,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	case common.EFromTo.BlobLocal(),
 		common.EFromTo.FileLocal(),
 		common.EFromTo.BlobFSLocal():
-		if cooked.FollowSymlinks {
+		if cooked.SymlinkHandling.Follow() {
 			return cooked, fmt.Errorf("follow-symlinks flag is not supported while downloading")
 		}
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
@@ -808,7 +818,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while copying from service to service")
 		}
-		if cooked.FollowSymlinks {
+		if cooked.SymlinkHandling.Follow() {
 			return cooked, fmt.Errorf("follow-symlinks flag is not supported while copying from service to service")
 		}
 		// blob type is not supported if destination is not blob
@@ -977,9 +987,24 @@ func validatePreserveOwner(preserve bool, fromTo common.FromTo) error {
 	return nil
 }
 
-func crossValidateSymlinksAndPermissions(followSymlinks, preservePermissions bool) error {
-	if followSymlinks && preservePermissions {
-		return errors.New("cannot follow symlinks when preserving permissions (since the correct permission inheritance behaviour for symlink targets is undefined)")
+func validateSymlinkHandlingMode(symlinkHandling common.SymlinkHandlingType, fromTo common.FromTo) error {
+	if symlinkHandling.Preserve() {
+		switch fromTo {
+		case common.EFromTo.LocalBlob(), common.EFromTo.BlobLocal():
+			return nil // Fine on all OSes that support symlink via the OS package. (Win, MacOS, and Linux do, and that's what we officially support.)
+		case common.EFromTo.BlobBlob():
+			return nil // Blob->Blob doesn't involve any local requirements
+		default:
+			return fmt.Errorf("flag --%s can only be used on Blob<->Blob or Local<->Blob", common.PreserveSymlinkFlagName)
+		}
+	}
+
+	return nil // other older symlink handling modes can work on all OSes
+}
+
+func crossValidateSymlinksAndPermissions(symlinkHandling common.SymlinkHandlingType, preservePermissions bool) error {
+	if symlinkHandling != common.ESymlinkHandlingType.Skip() && preservePermissions {
+		return errors.New("cannot handle symlinks when preserving permissions (since the correct permission inheritance behaviour for symlink targets is undefined)")
 	}
 	return nil
 }
@@ -1070,7 +1095,7 @@ func validateMetadataString(metadata string) error {
 	if err != nil {
 		return err
 	}
-	for k, _ := range metadataMap {
+	for k := range metadataMap {
 		if strings.ContainsAny(k, " !#$%^&*,<>{}|\\:.()+'\"?/") {
 			return fmt.Errorf("invalid metadata key value '%s': can't have spaces or special characters", k)
 		}
@@ -1108,7 +1133,7 @@ type CookedCopyCmdArgs struct {
 	ListOfFilesChannel chan string // Channels are nullable.
 	Recursive          bool
 	StripTopDir        bool
-	FollowSymlinks     bool
+	SymlinkHandling    common.SymlinkHandlingType
 	ForceWrite         common.OverwriteOption // says whether we should try to overwrite
 	ForceIfReadOnly    bool                   // says whether we should _force_ any overwrites (triggered by forceWrite) to work on Azure Files objects that are set to read-only
 	IsSourceDir        bool
@@ -1379,11 +1404,9 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 
 // get source credential - if there is a token it will be used to get passed along our pipeline
 func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.CopyJobPartOrderRequest) (common.CredentialInfo, error) {
-	srcCredInfo := common.CredentialInfo{}
-	var err error
-	var isPublic bool
 
-	if srcCredInfo, isPublic, err = GetCredentialInfoForLocation(ctx, cca.FromTo.From(), cca.Source.Value, cca.Source.SAS, true, cca.CpkOptions); err != nil {
+	srcCredInfo, isPublic, err := GetCredentialInfoForLocation(ctx, cca.FromTo.From(), cca.Source.Value, cca.Source.SAS, true, cca.CpkOptions)
+	if err != nil {
 		return srcCredInfo, err
 		// If S2S and source takes OAuthToken as its cred type (OR) source takes anonymous as its cred type, but it's not public and there's no SAS
 	} else if cca.FromTo.IsS2S() &&
@@ -1393,7 +1416,7 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 	}
 
 	if cca.Source.SAS != "" && cca.FromTo.IsS2S() && jpo.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		//glcm.Info("Authentication: If the source and destination accounts are in the same AAD tenant & the user/spn/msi has appropriate permissions on both, the source SAS token is not required and OAuth can be used round-trip.")
+		glcm.Info("Authentication: If the source and destination accounts are in the same AAD tenant & the user/spn/msi has appropriate permissions on both, the source SAS token is not required and OAuth can be used round-trip.")
 	}
 
 	if cca.FromTo.IsS2S() {
@@ -1461,14 +1484,15 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// initialize the fields that are constant across all job part orders,
 	// and for which we have sufficient info now to set them
 	jobPartOrder := common.CopyJobPartOrderRequest{
-		JobID:           cca.jobID,
-		FromTo:          cca.FromTo,
-		ForceWrite:      cca.ForceWrite,
-		ForceIfReadOnly: cca.ForceIfReadOnly,
-		AutoDecompress:  cca.autoDecompress,
-		Priority:        common.EJobPriority.Normal(),
-		LogLevel:        azcopyLogVerbosity,
-		ExcludeBlobType: cca.excludeBlobType,
+		JobID:               cca.jobID,
+		FromTo:              cca.FromTo,
+		ForceWrite:          cca.ForceWrite,
+		ForceIfReadOnly:     cca.ForceIfReadOnly,
+		AutoDecompress:      cca.autoDecompress,
+		Priority:            common.EJobPriority.Normal(),
+		LogLevel:            azcopyLogVerbosity,
+		ExcludeBlobType:     cca.excludeBlobType,
+		SymlinkHandlingType: cca.SymlinkHandling,
 		BlobAttributes: common.BlobTransferAttributes{
 			BlobType:                 cca.blobType,
 			BlockSizeInBytes:         cca.blockSize,
@@ -1675,7 +1699,7 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	totalKnownCount = summary.TotalTransfers
 
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
-	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
+	duration := time.Since(cca.jobStartTime) // report the total run time of the job
 
 	var computeThroughput = func() float64 {
 		// compute the average throughput for the last time interval
@@ -1746,6 +1770,7 @@ Job %s summary
 Elapsed Time (Minutes): %v
 Number of File Transfers: %v
 Number of Folder Property Transfers: %v
+Number of Symlink Transfers: %v
 Total Number of Transfers: %v
 Number of File Transfers Completed: %v
 Number of Folder Transfers Completed: %v
@@ -1760,6 +1785,7 @@ Final Job Status: %v%s%s
 					jobsAdmin.ToFixed(duration.Minutes(), 4),
 					summary.FileTransfers,
 					summary.FolderPropertyTransfers,
+					summary.SymlinkTransfers,
 					summary.TotalTransfers,
 					summary.TransfersCompleted-summary.FoldersCompleted,
 					summary.FoldersCompleted,
@@ -1907,7 +1933,7 @@ func init() {
 				if userFromTo == common.EFromTo.PipeBlob() {
 					// Case 1: PipeBlob. Check for the std input pipe
 					stdinPipeIn, err := isStdinPipeIn()
-					if stdinPipeIn == false || err != nil {
+					if !stdinPipeIn || err != nil {
 						return fmt.Errorf("fatal: failed to read from Stdin due to error: %s", err)
 					}
 					raw.src = pipeLocation
@@ -1994,6 +2020,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault, "Only has an effect in downloads, and only when --preserve-smb-permissions is used. If true (the default), the file Owner and Group are preserved in downloads. If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group will be based on the user running AzCopy")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). On windows, this flag will be set to true by default. If the source or destination is a volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false, "'Preserves' property info gleaned from stat or statx into object metadata.")
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveSymlinks, common.PreserveSymlinkFlagName, false, "If enabled, symlink destinations are preserved as the blob content, rather than uploading the file/folder on the other end of the symlink")
 	cpCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
 	cpCmd.PersistentFlags().BoolVar(&raw.backupMode, common.BackupModeFlagName, false, "Activates Windows' SeBackupPrivilege for uploads, or SeRestorePrivilege for downloads, to allow AzCopy to see read all files, regardless of their file system permissions, and to restore all permissions. Requires that the account running AzCopy already has these permissions (e.g. has Administrator rights or is a member of the 'Backup Operators' group). All this flag does is activate privileges that the account already has")
 	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob or file. (By default the hash is NOT created.) Only available when uploading.")
@@ -2033,20 +2060,20 @@ func init() {
 
 	// permanently hidden
 	// Hide the list-of-files flag since it is implemented only for Storage Explorer.
-	cpCmd.PersistentFlags().MarkHidden("list-of-files")
-	cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
+	_ = cpCmd.PersistentFlags().MarkHidden("list-of-files")
+	_ = cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
 
 	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
 	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")
 	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "Legacy exclude param. DO NOT USE")
-	cpCmd.PersistentFlags().MarkHidden("include")
-	cpCmd.PersistentFlags().MarkHidden("exclude")
+	_ = cpCmd.PersistentFlags().MarkHidden("include")
+	_ = cpCmd.PersistentFlags().MarkHidden("exclude")
 
 	// Hide the flush-threshold flag since it is implemented only for CI.
 	cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on accounts that have a hierarchical namespace.")
-	cpCmd.PersistentFlags().MarkHidden("flush-threshold")
+	_ = cpCmd.PersistentFlags().MarkHidden("flush-threshold")
 
 	// Deprecate the old persist-smb-permissions flag
-	cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
+	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
 	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files, or ADLS Gen 2 to ADLS Gen 2). For Hierarchical Namespace accounts, you will need a container SAS or OAuth token with Modify Ownership and Modify Permissions permissions. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 }

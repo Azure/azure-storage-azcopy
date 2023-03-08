@@ -79,10 +79,9 @@ func init() {
 // handles the list command
 // dispatches the list order to the transfer engine
 func HandleShowCommand(listRequest common.ListRequest) error {
-	rpcCmd := common.ERpcCmd.None()
 	if listRequest.OfStatus == "" {
 		resp := common.ListJobSummaryResponse{}
-		rpcCmd = common.ERpcCmd.ListJobSummary()
+		rpcCmd := common.ERpcCmd.ListJobSummary()
 		Rpc(rpcCmd, &listRequest.JobID, &resp)
 		PrintJobProgressSummary(resp)
 	} else {
@@ -95,7 +94,7 @@ func HandleShowCommand(listRequest common.ListRequest) error {
 			return fmt.Errorf("cannot parse the given Transfer Status %s", listRequest.OfStatus)
 		}
 		resp := common.ListJobTransfersResponse{}
-		rpcCmd = common.ERpcCmd.ListJobTransfers()
+		rpcCmd := common.ERpcCmd.ListJobTransfers()
 		Rpc(rpcCmd, lsRequest, &resp)
 		PrintJobTransfers(resp)
 	}
@@ -151,6 +150,7 @@ func PrintJobProgressSummary(summary common.ListJobSummaryResponse) {
 Job %s summary
 Number of File Transfers: %v
 Number of Folder Property Transfers: %v
+Number of Symlink Transfers: %v
 Total Number Of Transfers: %v
 Number of File Transfers Completed: %v
 Number of Folder Transfers Completed: %v
@@ -164,6 +164,7 @@ Final Job Status: %v
 			summary.JobID.String(),
 			summary.FileTransfers,
 			summary.FolderPropertyTransfers,
+			summary.SymlinkTransfers,
 			summary.TotalTransfers,
 			summary.TransfersCompleted-summary.FoldersCompleted,
 			summary.FoldersCompleted,

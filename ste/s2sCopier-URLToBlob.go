@@ -21,7 +21,6 @@
 package ste
 
 import (
-	"errors"
 	"fmt"
 	"net/url"
 
@@ -56,7 +55,7 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 
 			// I don't think it would ever reach here if the source URL failed to parse, but this is a sanity check.
 			if err != nil {
-				return nil, errors.New(fmt.Sprintf("Failed to parse URL %s in scheduler. Check sanity.", jptm.Info().Source))
+				return nil, fmt.Errorf("Failed to parse URL %s in scheduler. Check sanity.", jptm.Info().Source)
 			}
 
 			fileName := srcURL.Path
@@ -79,6 +78,8 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 
 	if jptm.Info().IsFolderPropertiesTransfer() {
 		return newBlobFolderSender(jptm, destination, p, pacer, srcInfoProvider)
+	} else if jptm.Info().EntityType == common.EEntityType.Symlink() {
+		return newBlobSymlinkSender(jptm, destination, p, pacer, srcInfoProvider)
 	}
 
 	switch targetBlobType {
