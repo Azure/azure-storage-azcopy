@@ -144,7 +144,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		destBlobTier = blockBlobTierOverride.ToAccessTierType()
 	}
 
-	if props.SrcMetadata["hdi_isfolder"] == "true" {
+	if props.SrcMetadata["hdi_isfolder"] != nil && *props.SrcMetadata["hdi_isfolder"] == "true" {
 		destBlobTier = ""
 	}
 
@@ -295,7 +295,7 @@ func (s *blockBlobSenderBase) GenerateCopyMetadata(id common.ChunkID) chunkFunc 
 	return createChunkFunc(true, s.jptm, id, func() {
 		if unixSIP, ok := s.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
 			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
-			s.metadataToApply = common.Metadata(s.metadataToApply).Clone().ToAzBlobMetadata()
+			s.metadataToApply = common.FromAzBlobMetadataToCommonMetadata(s.metadataToApply).Clone().ToAzBlobMetadata()
 
 			statAdapter, err := unixSIP.GetUNIXProperties()
 			if err != nil {

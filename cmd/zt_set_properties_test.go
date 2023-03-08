@@ -93,10 +93,17 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlobWithAccessTier(c *chk.C
 	return
 }
 
-func checkMapsEqual(c *chk.C, mapA map[string]string, mapB map[string]string) {
+func checkTagsEqual(c *chk.C, mapA map[string]string, mapB map[string]string) {
 	c.Assert(len(mapA), chk.Equals, len(mapB))
 	for k, v := range mapA {
 		c.Assert(mapB[k], chk.Equals, v)
+	}
+}
+
+func checkMetadataEqual(c *chk.C, mapA map[string]*string, mapB map[string]*string) {
+	c.Assert(len(mapA), chk.Equals, len(mapB))
+	for k, v := range mapA {
+		c.Assert(*mapB[k], chk.Equals, *v)
 	}
 }
 
@@ -110,8 +117,8 @@ func validateSetPropertiesTransfersAreScheduled(c *chk.C, isSrcEncoded bool, exp
 	for _, transfer := range mockedRPC.transfers {
 		srcRelativeFilePath := transfer.Source
 		c.Assert(transfer.BlobTier, chk.Equals, transferParams.blockBlobTier.ToAccessTierType())
-		checkMapsEqual(c, transfer.Metadata, transferParams.getMetadata())
-		checkMapsEqual(c, transfer.BlobTags, transferParams.blobTags)
+		checkMetadataEqual(c, transfer.Metadata, transferParams.getMetadata())
+		checkTagsEqual(c, transfer.BlobTags, transferParams.blobTags)
 
 		if isSrcEncoded {
 			srcRelativeFilePath, _ = url.PathUnescape(srcRelativeFilePath)
