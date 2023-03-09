@@ -71,7 +71,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo,
 		cca.SymlinkHandling, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties,
 		cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs,
-		cca.S2sPreserveBlobTags, common.ESyncHashType.None(), azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil /* errorChannel */)
+		cca.S2sPreserveBlobTags, common.ESyncHashType.None(), cca.preservePermissions, azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil /* errorChannel */)
 
 	if err != nil {
 		return nil, err
@@ -117,8 +117,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, errors.New("cannot use --as-subdir=false with a service level destination")
 	}
 
-	// When copying a container directly to a container, strip the top directory
-	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Container() && cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() {
+	// When copying a container directly to a container, strip the top directory, unless we're attempting to persist permissions.
+	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Container() && cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() && !cca.preservePermissions.IsTruthy() {
 		cca.StripTopDir = true
 	}
 
@@ -338,7 +338,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 
 	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, common.ESymlinkHandlingType.Skip(),
 		nil, false, false, false, common.EPermanentDeleteOption.None(),
-		func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), pipeline.LogNone, cca.CpkOptions, nil /* errorChannel */)
+		func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), cca.preservePermissions, pipeline.LogNone, cca.CpkOptions, nil /* errorChannel */)
 
 	if err != nil {
 		return false

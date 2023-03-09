@@ -51,7 +51,7 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 		common.ESymlinkHandlingType.Preserve(), // preserve because we want to index all blobs, including symlink blobs
 		cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs,
 		cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false,
-		common.ESyncHashType.None(), azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil /* errorChannel */)
+		common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil /* errorChannel */)
 
 	// report failure to create traverser
 	if err != nil {
