@@ -379,7 +379,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 			}
 		}
 
-		output = newListTraverser(resource, location, credential, ctx, recursive, toFollow, getProperties,
+		output = newListTraverser(resource, location, credential, ctx, recursive, symlinkHandling, getProperties,
 			listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions, syncHashType, preservePermissions)
 		return output, nil
 	}
@@ -407,7 +407,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 			}()
 
 			baseResource := resource.CloneWithValue(cleanLocalPath(basePath))
-			output = newListTraverser(baseResource, location, nil, nil, recursive, toFollow, getProperties,
+			output = newListTraverser(baseResource, location, nil, nil, recursive, symlinkHandling, getProperties,
 				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions, syncHashType, preservePermissions)
 		} else {
 			if ctx != nil {

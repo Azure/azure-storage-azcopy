@@ -93,8 +93,6 @@ func newListTraverser(parent common.ResourceString, parentType common.Location, 
 	ctx *context.Context, recursive bool, handleSymlinks common.SymlinkHandlingType, getProperties bool, listChan chan string,
 	includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveBlobTags bool,
 	logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, syncHashType common.SyncHashType, preservePermissions common.PreservePermissionsOption) ResourceTraverser {
-	var traverserGenerator childTraverserGenerator
-
 	traverserGenerator := func(relativeChildPath string) (ResourceTraverser, error) {
 		source := parent.Clone()
 		if parentType != common.ELocation.Local() {
