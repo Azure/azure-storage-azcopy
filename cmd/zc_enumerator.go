@@ -229,6 +229,15 @@ type contentPropsProvider interface {
 	ContentType() string
 	ContentMD5() []byte
 }
+
+type defaultContentPropsProvider struct {}
+func(defaultContentPropsProvider) CacheControl()       string {return ""}
+func(defaultContentPropsProvider) ContentDisposition() string {return ""}
+func(defaultContentPropsProvider) ContentEncoding()    string {return ""}
+func(defaultContentPropsProvider) ContentLanguage()    string {return ""}
+func(defaultContentPropsProvider) ContentType()        string {return ""}
+func(defaultContentPropsProvider) ContentMD5()         []byte {return nil}
+
 type blobPropsProvider interface {
 	BlobType() azblob.BlobType
 	AccessTier() azblob.AccessTierType
@@ -237,6 +246,14 @@ type blobPropsProvider interface {
 	LeaseState() azblob.LeaseStateType
 	ArchiveStatus() azblob.ArchiveStatusType
 }
+
+type defaultBlobPropsProvider struct {}
+func (defaultBlobPropsProvider) BlobType() azblob.BlobType {return azblob.BlobBlockBlob}
+func (defaultBlobPropsProvider) AccessTier() azblob.AccessTierType {return azblob.AccessTierNone}
+func (defaultBlobPropsProvider) LeaseStatus() azblob.LeaseStatusType {return azblob.LeaseStatusNone}
+func (defaultBlobPropsProvider) LeaseDuration() azblob.LeaseDurationType {return azblob.LeaseDurationNone}
+func (defaultBlobPropsProvider) LeaseState() azblob.LeaseStateType {return azblob.LeaseStateNone}
+func (defaultBlobPropsProvider) ArchiveStatus() azblob.ArchiveStatusType {return azblob.ArchiveStatusNone}
 
 // a constructor is used so that in case the StoredObject has to change, the callers would get a compilation error
 // and it forces all necessary properties to be always supplied and not forgotten

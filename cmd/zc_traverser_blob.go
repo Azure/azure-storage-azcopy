@@ -23,9 +23,9 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 
@@ -282,37 +282,43 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 						azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", virtualDir.Name))
 					}
 
-					if t.includeDirectoryStubs {
-						// Dont queue if the stub already exists. We queue it when we list BlobItems
-						fblobURL := containerURL.NewBlobURL(strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING))
-						resp, err := fblobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
-						if resp.Response().StatusCode != http.StatusNotFound {
-							// Either the stub exists or we failed to query.
-							if err != nil && azcopyScanningLogger != nil {
-								azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("Failed to check if  stub for %s exists: + %s",
-								fblobURL.URL().Path, err.Error()))
-							}
-							continue
-						}
-
-						folderRelativePath := strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
-						folderRelativePath = strings.TrimPrefix(folderRelativePath, searchPrefix)
-						if err == nil {
-							storedObject := newStoredObject(
-								preprocessor,
-								getObjectNameOnly(strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)),
-								folderRelativePath,
-								common.EEntityType.Folder(),
-								resp.LastModified(),
-								resp.ContentLength(),
-								resp,
-								blobPropertiesResponseAdapter{resp},
-								common.FromAzBlobMetadataToCommonMetadata(resp.NewMetadata()),
-								containerName,
-							)
-							enqueueOutput(storedObject, err)
-						}
+					if !t.includeDirectoryStubs {
+						continue
 					}
+						
+					// Dont queue if the stub already exists. We queue it when we list BlobItems
+					fblobURL := containerURL.NewBlobURL(strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING))
+					_, err := fblobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+
+					if err == nil {
+						// Nothing to do. It'll be taken care when we list blobItems
+						continue
+					} else if e, ok := err.(azblob.StorageError); ok && e.ServiceCode() != azblob.ServiceCodeBlobNotFound {
+						// someother eror listing the blob. Log and continue
+						if azcopyScanningLogger != nil {
+							azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("Failed to check if stub for %s exists: + %s",
+							fblobURL.URL().Path, err.Error()))
+						}
+						continue
+					}
+
+					// If we we didnt find the stub, queue for transfer
+					folderRelativePath := strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
+					folderRelativePath = strings.TrimPrefix(folderRelativePath, searchPrefix)
+					storedObject := newStoredObject(
+						preprocessor,
+						getObjectNameOnly(strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)),
+						folderRelativePath,
+						common.EEntityType.Folder(),
+						time.Now(),
+						int64(0),
+						defaultContentPropsProvider{},
+						defaultBlobPropsProvider{},
+						common.Metadata{},
+						containerName,
+					)
+					enqueueOutput(storedObject, err)
+					
 				}
 			}
 
