@@ -260,6 +260,9 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 		err := processIfPassedFilters(filters, storedObject, processor)
 		_, err = getProcessingError(err)
+		if err != nil {
+			return err
+		}
 	}
 
 	// get the container URL so that we can list the blobs
