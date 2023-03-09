@@ -24,7 +24,6 @@ import (
 	"context"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
 )
 
@@ -44,11 +43,11 @@ func (s *traverserBlobSuite) TestIsSourceDirWithStub(c *chk.C) {
 	createNewDirectoryStub(c, containerURL, dirName)
 	// set up to create blob traverser
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dirName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(c, containerName, dirName).URL()
+	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(c, rawBlobURLWithSAS)
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	c.Assert(isDir, chk.Equals, true)
@@ -65,11 +64,11 @@ func (s *traverserBlobSuite) TestIsSourceDirWithNoStub(c *chk.C) {
 
 	dirName := "source_dir/"
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dirName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(c, containerName, dirName).URL()
+	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(c, rawBlobURLWithSAS)
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	c.Assert(isDir, chk.Equals, true)
@@ -88,11 +87,11 @@ func (s *traverserBlobSuite) TestIsSourceFileExists(c *chk.C) {
 	_, fileName = createNewBlockBlob(c, containerURL, fileName)
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, fileName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(c, containerName, fileName).URL()
+	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(c, rawBlobURLWithSAS)
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	c.Assert(isDir, chk.Equals, false)
@@ -109,11 +108,11 @@ func (s *traverserBlobSuite) TestIsSourceFileDoesNotExist(c *chk.C) {
 
 	fileName := "file_does_not_exist"
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, fileName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(c, containerName, fileName).URL()
+	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(c, rawBlobURLWithSAS)
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	c.Assert(isDir, chk.Equals, false)

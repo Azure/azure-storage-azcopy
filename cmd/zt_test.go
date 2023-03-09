@@ -25,6 +25,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"io"
 	"math/rand"
 	"net/url"
@@ -803,6 +807,23 @@ func getContainerURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential, con
 	return azblob.NewContainerURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
 }
 
+func getContainerClientWithSAS(c *chk.C, credential *blob.SharedKeyCredential, containerName string) *container.Client {
+	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/%s",
+		credential.AccountName(), containerName)
+	client, err := container.NewClientWithSharedKeyCredential(rawURL, credential, nil)
+
+	sasURL, err := client.GetSASURL(
+		sas.ContainerPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true}, // TODO : Add tag permissions when SDK supports it
+		time.Now().Add(48*time.Hour),
+		nil)
+	c.Assert(err, chk.IsNil)
+
+	client, err = container.NewClientWithNoCredential(sasURL, nil)
+	c.Assert(err, chk.IsNil)
+
+	return client
+}
+
 func getBlobServiceURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential) azblob.ServiceURL {
 	sasQueryParams, err := azblob.AccountSASSignatureValues{
 		Protocol:      azblob.SASProtocolHTTPS,
@@ -823,6 +844,24 @@ func getBlobServiceURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential) a
 	c.Assert(err, chk.IsNil)
 
 	return azblob.NewServiceURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
+}
+
+func getBlobServiceClientWithSAS(c *chk.C, credential *blob.SharedKeyCredential) *blobservice.Client {
+	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/",
+		credential.AccountName())
+	client, err := blobservice.NewClientWithSharedKeyCredential(rawURL, credential, nil)
+
+	sasURL, err := client.GetSASURL(
+		sas.AccountResourceTypes{Service: true, Container: true, Object: true},
+		sas.AccountPermissions{Read: true, List: true, Write: true, Delete: true, DeletePreviousVersion: true, Add: true, Create: true, Update: true, Process: true, Tag: true},
+		time.Now().Add(48*time.Hour),
+		nil)
+	c.Assert(err, chk.IsNil)
+
+	client, err = blobservice.NewClientWithNoCredential(sasURL, nil)
+	c.Assert(err, chk.IsNil)
+
+	return client
 }
 
 func getFileServiceURLWithSAS(c *chk.C, credential azfile.SharedKeyCredential) azfile.ServiceURL {

@@ -366,11 +366,11 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 
 				var vdirListBuilder strings.Builder
 				for _, virtualDir := range lResp.Segment.BlobPrefixes {
-					fmt.Fprintf(&vdirListBuilder, " %s,", virtualDir.Name)
+					fmt.Fprintf(&vdirListBuilder, " %s,", *virtualDir.Name)
 				}
 				var fileListBuilder strings.Builder
 				for _, blobInfo := range lResp.Segment.BlobItems {
-					fmt.Fprintf(&fileListBuilder, " %s,", blobInfo.Name)
+					fmt.Fprintf(&fileListBuilder, " %s,", *blobInfo.Name)
 				}
 				msg := fmt.Sprintf("Enumerating %s with token %s. Sub-dirs:%s Files:%s", currentDirPath,
 					tokenValue, vdirListBuilder.String(), fileListBuilder.String())

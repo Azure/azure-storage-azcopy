@@ -24,7 +24,6 @@ import (
 	"context"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
 )
 
@@ -45,11 +44,11 @@ func (ce *copyEnumeratorSuite) TestValidateSourceDirThatExists(c *chk.C) {
 	createNewDirectoryStub(c, containerURL, dirName)
 	// set up to create blob traverser
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dirName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(c, containerName, dirName).URL()
+	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(c, rawBlobURLWithSAS)
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 	// dir but recursive flag not set - fail
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
@@ -74,11 +73,11 @@ func (ce *copyEnumeratorSuite) TestValidateSourceDirDoesNotExist(c *chk.C) {
 	dirName := "source_dir/"
 	// set up to create blob traverser
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dirName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(c, containerName, dirName).URL()
+	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(c, rawBlobURLWithSAS)
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 	// dir but recursive flag not set - fail
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
@@ -104,11 +103,11 @@ func (ce *copyEnumeratorSuite) TestValidateSourceFileExists(c *chk.C) {
 	_, fileName = createNewBlockBlob(c, containerURL, fileName)
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, fileName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(c, containerName, fileName).URL()
+	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(c, rawBlobURLWithSAS)
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
 	err := cca.validateSourceDir(blobTraverser)
@@ -127,11 +126,11 @@ func (ce *copyEnumeratorSuite) TestValidateSourceFileDoesNotExist(c *chk.C) {
 	fileName := "source_file"
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, fileName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(c, containerName, fileName).URL()
+	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(c, rawBlobURLWithSAS)
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
 	err := cca.validateSourceDir(blobTraverser)
@@ -150,11 +149,11 @@ func (ce *copyEnumeratorSuite) TestValidateSourceWithWildCard(c *chk.C) {
 	dirName := "source_dir_does_not_exist"
 	// set up to create blob traverser
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dirName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(c, containerName, dirName).URL()
+	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(c, rawBlobURLWithSAS)
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
 
 	// dir but recursive flag not set - fail
 	cca := CookedCopyCmdArgs{StripTopDir: true, Recursive: false}
