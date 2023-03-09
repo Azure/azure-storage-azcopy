@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 
@@ -282,9 +283,18 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 					}
 
 					if t.includeDirectoryStubs {
-						// try to get properties on the directory itself, since it's not listed in BlobItems
+						// Dont queue if the stub already exists. We queue it when we list BlobItems
 						fblobURL := containerURL.NewBlobURL(strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING))
 						resp, err := fblobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+						if resp.Response().StatusCode != http.StatusNotFound {
+							// Either the stub exists or we failed to query.
+							if err != nil && azcopyScanningLogger != nil {
+								azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("Failed to check if  stub for %s exists: + %s",
+								fblobURL.URL().Path, err.Error()))
+							}
+							continue
+						}
+
 						folderRelativePath := strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
 						folderRelativePath = strings.TrimPrefix(folderRelativePath, searchPrefix)
 						if err == nil {
@@ -300,21 +310,6 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 								common.FromAzBlobMetadataToCommonMetadata(resp.NewMetadata()),
 								containerName,
 							)
-							storedObject.archiveStatus = azblob.ArchiveStatusType(resp.ArchiveStatus())
-
-							if t.s2sPreserveSourceTags {
-								var BlobTags *azblob.BlobTags
-								BlobTags, err = fblobURL.GetTags(t.ctx, nil)
-
-								if err == nil {
-									blobTagsMap := common.BlobTags{}
-									for _, blobTag := range BlobTags.BlobTagSet {
-										blobTagsMap[url.QueryEscape(blobTag.Key)] = url.QueryEscape(blobTag.Value)
-									}
-									storedObject.blobTags = blobTagsMap
-								}
-							}
-
 							enqueueOutput(storedObject, err)
 						}
 					}
