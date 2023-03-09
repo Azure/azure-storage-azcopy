@@ -27,6 +27,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"net/url"
 	"strings"
 
@@ -40,9 +41,10 @@ import (
 
 // allow us to iterate through a path pointing to the blob endpoint
 type blobTraverser struct {
-	rawURL    string
-	ctx       context.Context
-	recursive bool
+	rawURL        string
+	serviceClient *service.Client
+	ctx           context.Context
+	recursive     bool
 
 	// parallel listing employs the hierarchical listing API which is more expensive
 	// cx should have the option to disable this optimization in the name of saving costs
@@ -89,12 +91,7 @@ func (t *blobTraverser) IsDirectory(isSource bool) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	//containerRawURL := copyHandlerUtil{}.getContainerUrl(blobURLParts)
-	var containerClient *container.Client
-	//containerClient, err := container.NewClient(containerRawURL)
-	//if err != nil {
-	//	return false, err
-	//}
+	containerClient := t.serviceClient.NewContainerClient(blobURLParts.ContainerName)
 	searchPrefix := strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING) + common.AZCOPY_PATH_SEPARATOR_STRING
 	maxResults := int32(1)
 	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{Prefix: &searchPrefix, MaxResults: &maxResults})
@@ -133,11 +130,10 @@ func (t *blobTraverser) getPropertiesIfSingleBlob() (response *blob.GetPropertie
 		return nil, false, false, nil
 	}
 
-	var blobClient *blob.Client
-	//blobClient, err := blob.NewClient(containerRawURL)
-	//if err != nil {
-	//	return false, err
-	//}
+	blobClient, err := common.CreateBlobClientFromServiceClient(blobURLParts, t.serviceClient)
+	if err != nil {
+		return nil, false, false, err
+	}
 	cpk := blob.CPKInfo{}
 	if t.cpkOptions.IsSourceEncrypted {
 		cpk = common.GetCpkInfo(t.cpkOptions.CpkInfo)
@@ -164,11 +160,10 @@ func (t *blobTraverser) getBlobTags() (common.BlobTags, error) {
 	blobURLParts.BlobName = strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 	// perform the check
-	var blobClient *blob.Client
-	//blobClient, err := blob.NewClient(containerRawURL)
-	//if err != nil {
-	//	return false, err
-	//}
+	blobClient, err := common.CreateBlobClientFromServiceClient(blobURLParts, t.serviceClient)
+	if err != nil {
+		return nil, err
+	}
 	blobTagsMap := make(common.BlobTags)
 	blobGetTagsResp, err := blobClient.GetTags(t.ctx, nil)
 	if err != nil {
@@ -256,8 +251,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	}
 
 	// get the container URL so that we can list the blobs
-	//containerRawURL := copyHandlerUtil{}.getContainerUrl(blobURLParts)
-	var containerClient *container.Client
+	containerClient := t.serviceClient.NewContainerClient(blobURLParts.ContainerName)
 
 	// get the search prefix to aid in the listing
 	// example: for a url like https://test.blob.core.windows.net/test/foo/bar/bla
@@ -300,7 +294,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 			// queue up the sub virtual directories if recursive is true
 			if t.recursive {
 				for _, virtualDir := range lResp.Segment.BlobPrefixes {
-					enqueueDir(virtualDir.Name)
+					enqueueDir(*virtualDir.Name)
 					if azcopyScanningLogger != nil {
 						azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", *virtualDir.Name))
 					}
@@ -439,11 +433,11 @@ func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 		containerName,
 	)
 
-	object.blobDeleted = *blobInfo.Deleted
+	object.blobDeleted = common.IffBoolNotNil(blobInfo.Deleted, false)
 	if t.includeDeleted && t.includeSnapshot {
-		object.blobSnapshotID = *blobInfo.Snapshot
+		object.blobSnapshotID = common.IffStringNotNil(blobInfo.Snapshot, "")
 	} else if t.includeDeleted && t.includeVersion && blobInfo.VersionID != nil {
-		object.blobVersionID = *blobInfo.VersionID
+		object.blobVersionID = common.IffStringNotNil(blobInfo.VersionID, "")
 	}
 	return object
 }
@@ -507,9 +501,10 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 	return nil
 }
 
-func newBlobTraverser(rawURL string, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool) (t *blobTraverser) {
+func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool) (t *blobTraverser) {
 	t = &blobTraverser{
 		rawURL:                      rawURL,
+		serviceClient:               serviceClient,
 		ctx:                         ctx,
 		recursive:                   recursive,
 		includeDirectoryStubs:       includeDirectoryStubs,

@@ -100,23 +100,23 @@ type blobPropertiesResponseAdapter struct {
 }
 
 func (a blobPropertiesResponseAdapter) CacheControl() string {
-	return *a.GetPropertiesResponse.CacheControl
+	return common.IffStringNotNil(a.GetPropertiesResponse.CacheControl, "")
 }
 
 func (a blobPropertiesResponseAdapter) ContentDisposition() string {
-	return *a.GetPropertiesResponse.ContentDisposition
+	return common.IffStringNotNil(a.GetPropertiesResponse.ContentDisposition, "")
 }
 
 func (a blobPropertiesResponseAdapter) ContentEncoding() string {
-	return *a.GetPropertiesResponse.ContentEncoding
+	return common.IffStringNotNil(a.GetPropertiesResponse.ContentEncoding, "")
 }
 
 func (a blobPropertiesResponseAdapter) ContentLanguage() string {
-	return *a.GetPropertiesResponse.ContentLanguage
+	return common.IffStringNotNil(a.GetPropertiesResponse.ContentLanguage, "")
 }
 
 func (a blobPropertiesResponseAdapter) ContentType() string {
-	return *a.GetPropertiesResponse.ContentType
+	return common.IffStringNotNil(a.GetPropertiesResponse.ContentType, "")
 }
 
 func (a blobPropertiesResponseAdapter) ContentMD5() []byte {
@@ -124,29 +124,47 @@ func (a blobPropertiesResponseAdapter) ContentMD5() []byte {
 }
 
 func (a blobPropertiesResponseAdapter) BlobType() blob.BlobType {
+	if a.GetPropertiesResponse.BlobType == nil {
+		return ""
+	}
 	return *a.GetPropertiesResponse.BlobType
 }
 
 func (a blobPropertiesResponseAdapter) AccessTier() blob.AccessTier {
+	if a.GetPropertiesResponse.AccessTier == nil {
+		return ""
+	}
 	return blob.AccessTier(*a.GetPropertiesResponse.AccessTier)
 }
 
 func (a blobPropertiesResponseAdapter) ArchiveStatus() blob.ArchiveStatus {
+	if a.GetPropertiesResponse.ArchiveStatus == nil {
+		return ""
+	}
 	return blob.ArchiveStatus(*a.GetPropertiesResponse.ArchiveStatus)
 }
 
 // LeaseDuration returns the value for header x-ms-lease-duration.
 func (a blobPropertiesResponseAdapter) LeaseDuration() lease.DurationType {
+	if a.GetPropertiesResponse.LeaseDuration == nil {
+		return ""
+	}
 	return *a.GetPropertiesResponse.LeaseDuration
 }
 
 // LeaseState returns the value for header x-ms-lease-state.
 func (a blobPropertiesResponseAdapter) LeaseState() lease.StateType {
+	if a.GetPropertiesResponse.LeaseState == nil {
+		return ""
+	}
 	return *a.GetPropertiesResponse.LeaseState
 }
 
 // LeaseStatus returns the value for header x-ms-lease-status.
 func (a blobPropertiesResponseAdapter) LeaseStatus() lease.StatusType {
+	if a.GetPropertiesResponse.LeaseStatus == nil {
+		return ""
+	}
 	return *a.GetPropertiesResponse.LeaseStatus
 }
 
@@ -181,28 +199,46 @@ func (a blobPropertiesAdapter) ContentMD5() []byte {
 }
 
 func (a blobPropertiesAdapter) BlobType() blob.BlobType {
+	if a.BlobProperties.BlobType == nil {
+		return ""
+	}
 	return *a.BlobProperties.BlobType
 }
 
 func (a blobPropertiesAdapter) AccessTier() blob.AccessTier {
+	if a.BlobProperties.AccessTier == nil {
+		return ""
+	}
 	return *a.BlobProperties.AccessTier
 }
 
 // LeaseDuration returns the value for header x-ms-lease-duration.
 func (a blobPropertiesAdapter) LeaseDuration() lease.DurationType {
+	if a.BlobProperties.LeaseDuration == nil {
+		return ""
+	}
 	return *a.BlobProperties.LeaseDuration
 }
 
 // LeaseState returns the value for header x-ms-lease-state.
 func (a blobPropertiesAdapter) LeaseState() lease.StateType {
+	if a.BlobProperties.LeaseState == nil {
+		return ""
+	}
 	return *a.BlobProperties.LeaseState
 }
 
 // LeaseStatus returns the value for header x-ms-lease-status.
 func (a blobPropertiesAdapter) LeaseStatus() lease.StatusType {
+	if a.BlobProperties.LeaseStatus == nil {
+		return ""
+	}
 	return *a.BlobProperties.LeaseStatus
 }
 
 func (a blobPropertiesAdapter) ArchiveStatus() blob.ArchiveStatus {
+	if a.BlobProperties.ArchiveStatus == nil {
+		return ""
+	}
 	return *a.BlobProperties.ArchiveStatus
 }

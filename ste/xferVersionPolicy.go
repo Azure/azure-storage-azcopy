@@ -63,7 +63,7 @@ func newVersionPolicy() policy.Policy {
 func (v *versionPolicy) Do(req *policy.Request) (*http.Response, error) {
 	// get the service api version value using the ServiceAPIVersionOverride set in the context.
 	if value := req.Raw().Context().Value(ServiceAPIVersionOverride); value != nil {
-		req.Raw().Header.Set("x-ms-version", value.(string))
+		req.Raw().Header.Set("X-Ms-Version", value.(string))
 	}
 	return req.Next()
 }

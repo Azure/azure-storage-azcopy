@@ -113,3 +113,11 @@ func IffStringNotNil(wanted *string, instead string) string {
 
 	return *wanted
 }
+
+func IffBoolNotNil(wanted *bool, instead bool) bool {
+	if wanted == nil {
+		return instead
+	}
+
+	return *wanted
+}

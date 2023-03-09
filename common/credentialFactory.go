@@ -123,12 +123,15 @@ func CreateBlobCredential(ctx context.Context, credInfo CredentialInfo, options 
 
 func CreateBlobServiceClient(blobURL string, credInfo *CredentialInfo, options *blobservice.ClientOptions, credOpOptions *CredentialOpOptions) (*blobservice.Client, error) {
 	switch credInfo.CredentialType {
-	// TODO (gapra) : Support OAuth
-	//case ECredentialType.OAuthToken():
-	//	if credInfo.OAuthTokenInfo.IsEmpty() {
-	//		credOpOptions.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
-	//	}
-	//	return blobservice.NewClient(blobURL, XXX, options)
+	case ECredentialType.OAuthToken():
+		if credInfo.OAuthTokenInfo.IsEmpty() {
+			credOpOptions.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
+		}
+		tc, err := credInfo.OAuthTokenInfo.GetTokenCredential()
+		if err != nil {
+			credOpOptions.panicError(fmt.Errorf("unable to get token credential due to reason (%s)", err.Error()))
+		}
+		return blobservice.NewClient(blobURL, tc, options)
 	case ECredentialType.SharedKey():
 		// Get the Account Name and Key variables from environment
 		name := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountName())
@@ -149,6 +152,18 @@ func CreateBlobServiceClient(blobURL string, credInfo *CredentialInfo, options *
 		credOpOptions.panicError(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
 		return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
 	}
+}
+
+func CreateBlobClientFromServiceClient(blobURLParts blob.URLParts, client *blobservice.Client) (*blob.Client, error) {
+	containerClient := client.NewContainerClient(blobURLParts.ContainerName)
+	blobClient := containerClient.NewBlobClient(blobURLParts.BlobName)
+	if blobURLParts.Snapshot != "" {
+		return blobClient.WithSnapshot(blobURLParts.Snapshot)
+	}
+	if blobURLParts.VersionID != "" {
+		return blobClient.WithVersionID(blobURLParts.VersionID)
+	}
+	return blobClient, nil
 }
 
 // refreshPolicyHalfOfExpiryWithin is used for calculating next refresh time,

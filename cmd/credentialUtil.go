@@ -648,7 +648,14 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
-func createClientOptions() azcore.ClientOptions {
+func createClientOptions(logLevel pipeline.LogLevel) azcore.ClientOptions {
+	logOptions := ste.LogOptions{}
+	if azcopyScanningLogger != nil {
+		logOptions.LogOptions = pipeline.LogOptions{
+			Log:       azcopyScanningLogger.Log,
+			ShouldLog: func(level pipeline.LogLevel) bool { return level <= logLevel },
+		}
+	}
 	return ste.NewClientOptions(policy.RetryOptions{
 		MaxRetries:    ste.UploadMaxTries,
 		TryTimeout:    ste.UploadTryTimeout,
@@ -660,6 +667,7 @@ func createClientOptions() azcore.ClientOptions {
 		},
 		ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost),
 		nil, // we don't gather network stats on the credential pipeline
+		logOptions,
 	)
 }
 

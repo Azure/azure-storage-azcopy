@@ -138,12 +138,15 @@ func newAzcopyHTTPClientFactory(pipelineHTTPClient *http.Client) pipeline.Factor
 	})
 }
 
-func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, statsAcc *PipelineNetworkStats) azcore.ClientOptions {
+func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter,
+	statsAcc *PipelineNetworkStats, log LogOptions) azcore.ClientOptions {
 	// Pipeline will look like
 	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
+	// TODO : Who does this happen here?
+	log.RequestLogOptions.SyslogDisabled = common.IsForceLoggingDisabled()
 	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy()}
 	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
-	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newVersionPolicy(), /* TODO : AzCopy Log Policy here*/ newStatsPolicy(statsAcc)}
+	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), /*newVersionPolicy(), */ newLogPolicy(log), newStatsPolicy(statsAcc)}
 
 	return azcore.ClientOptions{
 		//APIVersion: ,

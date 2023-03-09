@@ -441,28 +441,28 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		if err != nil {
 			return nil, err
 		}
-
-		// make r a service url
-		serviceURL, err := gCopyUtil.getAccountUrl(r)
-		if err != nil {
-			return nil, err
-		}
-		bsc, err := common.CreateBlobServiceClient(serviceURL, credential, &blobservice.ClientOptions{ClientOptions: createClientOptions()},
+		containerName := burl.ContainerName
+		// Strip any non-service related things away
+		burl.ContainerName = ""
+		burl.BlobName = ""
+		burl.Snapshot = ""
+		burl.VersionID = ""
+		bsc, err := common.CreateBlobServiceClient(burl.String(), credential,
+			&blobservice.ClientOptions{ClientOptions: createClientOptions(logLevel)},
 			&common.CredentialOpOptions{LogError: glcm.Info})
 		if err != nil {
 			return nil, err
 		}
 
-		if burl.ContainerName == "" || strings.Contains(burl.ContainerName, "*") {
+		if containerName == "" || strings.Contains(containerName, "*") {
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-
-			output = newBlobAccountTraverser(r, bsc, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions)
+			output = newBlobAccountTraverser(bsc, containerName, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions)
 		} else if listOfVersionIds != nil {
-			output = newBlobVersionsTraverser(r, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
+			output = newBlobVersionsTraverser(r, bsc, *ctx, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
-			output = newBlobTraverser(r, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion)
+			output = newBlobTraverser(r, bsc, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion)
 		}
 	case common.ELocation.File():
 		resourceURL, err := resource.FullURL()

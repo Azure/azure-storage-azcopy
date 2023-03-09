@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -30,6 +31,7 @@ import (
 
 type blobVersionsTraverser struct {
 	rawURL                      string
+	serviceClient               *service.Client
 	ctx                         context.Context
 	includeDirectoryStubs       bool
 	incrementEnumerationCounter enumerationCounterFunc
@@ -60,11 +62,11 @@ func (t *blobVersionsTraverser) getBlobProperties(versionID string) (*blob.GetPr
 		blobURLParts.VersionID = versionID
 	}
 
-	var blobClient *blob.Client
-	//blobClient, err := blob.NewClient()
-	//if err != nil {
-	//	return nil, err
-	//}
+	blobClient, err := common.CreateBlobClientFromServiceClient(blobURLParts, t.serviceClient)
+	if err != nil {
+		return nil, err
+	}
+
 	cpk := blob.CPKInfo{}
 	if t.cpkOptions.IsSourceEncrypted {
 		cpk = common.GetCpkInfo(t.cpkOptions.CpkInfo)
@@ -117,12 +119,13 @@ func (t *blobVersionsTraverser) Traverse(preprocessor objectMorpher, processor o
 	return nil
 }
 
-func newBlobVersionsTraverser(rawURL string, ctx context.Context,
+func newBlobVersionsTraverser(rawURL string, serviceClient *service.Client, ctx context.Context,
 	includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc,
 	listOfVersionIds chan string, cpkOptions common.CpkOptions) (t *blobVersionsTraverser) {
 
 	return &blobVersionsTraverser{
 		rawURL:                      rawURL,
+		serviceClient:               serviceClient,
 		ctx:                         ctx,
 		includeDirectoryStubs:       includeDirectoryStubs,
 		incrementEnumerationCounter: incrementEnumerationCounter,
