@@ -136,3 +136,13 @@ func (osScenarioHelper) setFileSDDLString(c asserter, filepath string, sddldata 
 	err = windows.SetNamedSecurityInfo(filepath, windows.SE_FILE_OBJECT, secInfo, o, g, d, nil)
 	c.AssertNoErr(err)
 }
+
+//nolint
+func (osScenarioHelper) Mknod(c asserter, path string, mode uint32, dev int) {
+	panic("should never be called")
+}
+
+//nolint
+func (osScenarioHelper) GetUnixStatAdapterForFile(c asserter, filepath string) common.UnixStatAdapter {
+	panic("should never be called")
+}

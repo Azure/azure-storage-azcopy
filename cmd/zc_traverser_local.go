@@ -239,17 +239,8 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				computedRelativePath = ""
 			}
 
-			// TODO: Later we might want to transfer these special files as such.
-			unsupportedFileTypes := (os.ModeSocket | os.ModeNamedPipe | os.ModeIrregular | os.ModeDevice)
-
 			if fileInfo == nil {
 				err := fmt.Errorf("fileInfo is nil for file %s", filePath)
-				WarnStdoutAndScanningLog(err.Error())
-				return nil
-			}
-
-			if (fileInfo.Mode() & unsupportedFileTypes) != 0 {
-				err := fmt.Errorf("Unsupported file type %s: %v", filePath, fileInfo.Mode())
 				WarnStdoutAndScanningLog(err.Error())
 				return nil
 			}
