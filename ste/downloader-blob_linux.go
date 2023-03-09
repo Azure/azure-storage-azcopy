@@ -17,9 +17,16 @@ import (
 func (bd *blobDownloader) CreateFile(jptm IJobPartTransferMgr, destination string, size int64, writeThrough bool, t FolderCreationTracker) (file io.WriteCloser, needChunks bool, err error) {
 	var sip ISourceInfoProvider
 	sip, err = newBlobSourceInfoProvider(jptm)
+	if err != nil {
+		return
+	}
+
 	unixSIP := sip.(IUNIXPropertyBearingSourceInfoProvider) // Blob may have unix properties.
 
 	err = common.CreateParentDirectoryIfNotExist(destination, t)
+	if err != nil {
+		return
+	}
 
 	// try to remove the file before we create something else over it
 	_ = os.Remove(destination)
@@ -95,8 +102,7 @@ func (bd *blobDownloader) ApplyUnixProperties(adapter common.UnixStatAdapter) (s
 
 	// At this point, mode has already been applied. Let's work out what we need to apply, and apply the rest.
 	if adapter.Extended() {
-		var stat *syscall.Stat_t
-		stat = fi.Sys().(*syscall.Stat_t)
+		stat := fi.Sys().(*syscall.Stat_t)
 		mask := adapter.StatxMask()
 
 		// stx_attributes is not persisted.
