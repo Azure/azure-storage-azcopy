@@ -85,7 +85,7 @@ func (s *genericTraverserSuite) TestLocalWildcardOverlap(c *chk.C) {
 		common.ELocation.Local(),
 		nil,
 		nil,
-		nil,
+		common.ESymlinkHandlingType.Follow(),
 		nil,
 		true,
 		false,
