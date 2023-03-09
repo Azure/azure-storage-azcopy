@@ -1572,6 +1572,10 @@ type CpkInfo struct {
 	EncryptionKeySha256 *string
 }
 
+func (csi CpkInfo) Empty() bool {
+	return csi.EncryptionKey == nil || csi.EncryptionKeySha256 == nil
+}
+
 func (csi CpkInfo) Marshal() (string, error) {
 	result, err := json.Marshal(csi)
 	if err != nil {
@@ -1581,7 +1585,7 @@ func (csi CpkInfo) Marshal() (string, error) {
 }
 
 func ToClientProvidedKeyOptions(cpkInfo CpkInfo, cpkScopeInfo CpkScopeInfo) azblob.ClientProvidedKeyOptions {
-	if (cpkInfo.EncryptionKey == nil || cpkInfo.EncryptionKeySha256 == nil) && cpkScopeInfo.EncryptionScope == nil {
+	if cpkInfo.Empty() && cpkScopeInfo.EncryptionScope == nil {
 		return azblob.ClientProvidedKeyOptions{}
 	}
 

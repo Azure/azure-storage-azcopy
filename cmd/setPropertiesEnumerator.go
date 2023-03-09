@@ -51,7 +51,8 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 		common.ESymlinkHandlingType.Preserve(), // preserve because we want to index all blobs, including symlink blobs
 		cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs,
 		cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false,
-		common.ESyncHashType.None(), azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil /* errorChannel */, cca.StripTopDir)
+		common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), azcopyLogVerbosity.ToPipelineLogLevel(),
+        cca.CpkOptions, nil /* errorChannel */, cca.StripTopDir)
 
 	// report failure to create traverser
 	if err != nil {
@@ -68,7 +69,7 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 	filters = append(filters, excludePathFilters...)
 	filters = append(filters, includeSoftDelete...)
 
-	fpo, message := newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, cca.isHNStoHNS, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
+	fpo, message := NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, cca.isHNStoHNS, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
 	// do not print Info message if in dry run mode
 	if !cca.dryrunMode {
 		glcm.Info(message)

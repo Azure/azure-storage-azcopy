@@ -71,8 +71,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo,
 		cca.SymlinkHandling, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties,
 		cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs,
-		cca.S2sPreserveBlobTags, common.ESyncHashType.None(), azcopyLogVerbosity.ToPipelineLogLevel(),
-		cca.CpkOptions, nil /* errorChannel */, cca.StripTopDir)
+		cca.S2sPreserveBlobTags, common.ESyncHashType.None(), cca.preservePermissions, azcopyLogVerbosity.ToPipelineLogLevel(), 
+        cca.CpkOptions, nil /* errorChannel */, cca.StripTopDir)
 
 	if err != nil {
 		return nil, err
@@ -118,8 +118,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, errors.New("cannot use --as-subdir=false with a service level destination")
 	}
 
-	// When copying a container directly to a container, strip the top directory
-	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Container() && cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() {
+	// When copying a container directly to a container, strip the top directory, unless we're attempting to persist permissions.
+	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Container() && cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() && !cca.preservePermissions.IsTruthy() {
 		cca.StripTopDir = true
 	}
 
@@ -224,7 +224,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, cca.isHNStoHNS, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
+	jobPartOrder.Fpo, message = NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, cca.isHNStoHNS, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
@@ -339,8 +339,8 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 
 	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, common.ESymlinkHandlingType.Skip(),
 		nil, false, false, false, common.EPermanentDeleteOption.None(),
-		func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), pipeline.LogNone,
-		cca.CpkOptions, nil /* errorChannel */, cca.StripTopDir)
+		func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), cca.preservePermissions, pipeline.LogNone, 
+        cca.CpkOptions, nil /* errorChannel */, cca.StripTopDir)
 
 	if err != nil {
 		return false
@@ -658,7 +658,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 }
 
 // we assume that preserveSmbPermissions and preserveSmbInfo have already been validated, such that they are only true if both resource types support them
-func newFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preserveSmbPermissions, preservePosixProperties, isDfsDfs, isDstNull, includeDirectoryStubs bool) (common.FolderPropertyOption, string) {
+func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preserveSmbPermissions, preservePosixProperties, isDfsDfs, isDstNull, includeDirectoryStubs bool) (common.FolderPropertyOption, string) {
 
 	getSuffix := func(willProcess bool) string {
 		willProcessString := common.IffString(willProcess, "will be processed", "will not be processed")

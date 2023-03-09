@@ -27,6 +27,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -367,6 +368,15 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 	srcRoot = s.state.source.getParam(false, false, "")
 	dstRoot = s.state.dest.getParam(false, false, "")
 
+	srcBase := filepath.Base(srcRoot)
+	srcRootURL, err := url.Parse(srcRoot)
+	if err == nil {
+		snapshotID := srcRootURL.Query().Get("sharesnapshot")
+		if snapshotID != "" {
+			srcBase = filepath.Base(strings.TrimSuffix(srcRoot, "?sharesnapshot="+snapshotID))
+		}
+	}
+
 	// do we expect folder transfers
 	expectFolders = (s.fromTo.From().IsFolderAware() &&
 		s.fromTo.To().IsFolderAware() &&
@@ -377,7 +387,7 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 
 	// compute dest, taking into account our stripToDir rules
 	addedDirAtDest = ""
-	areBothContainerLike := s.state.source.isContainerLike() && s.state.dest.isContainerLike()
+	areBothContainerLike := s.state.source.isContainerLike() && s.state.dest.isContainerLike() && !s.p.preserveSMBPermissions // There are no permission-compatible sources and destinations that do not feature support for root folder perms anymore*
 
 	tf := s.GetTestFiles()
 	if s.stripTopDir || s.operation == eOperation.Sync() || areBothContainerLike {
@@ -386,16 +396,25 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 		// Yes, this is arguably inconsistent. But its the way its always been, and it does seem to match user expectations for copies
 		// of that kind.
 		expectRootFolder = false
+	} else if expectRootFolder && s.fromTo == common.EFromTo.BlobLocal() && s.destAccountType != EAccountType.HierarchicalNamespaceEnabled() && tf.objectTarget == "" {
+		expectRootFolder = false // we can only persist the root folder if it's a subfolder of the container on Blob.
+
+		if tf.objectTarget == "" && tf.destTarget == "" {
+			addedDirAtDest = path.Base(srcRoot)
+		} else if tf.destTarget != "" {
+			addedDirAtDest = tf.destTarget
+		}
+		dstRoot = fmt.Sprintf("%s/%s", dstRoot, addedDirAtDest)
 	} else if s.fromTo.From().IsLocal() {
 		if tf.objectTarget == "" && tf.destTarget == "" {
-			addedDirAtDest = filepath.Base(srcRoot)
+			addedDirAtDest = srcBase
 		} else if tf.destTarget != "" {
 			addedDirAtDest = tf.destTarget
 		}
 		dstRoot = fmt.Sprintf("%s%c%s", dstRoot, os.PathSeparator, addedDirAtDest)
 	} else {
 		if tf.objectTarget == "" && tf.destTarget == "" {
-			addedDirAtDest = path.Base(srcRoot)
+			addedDirAtDest = srcBase
 		} else if tf.destTarget != "" {
 			addedDirAtDest = tf.destTarget
 		}
@@ -448,7 +467,9 @@ func (s *scenario) validateProperties() {
 		}
 
 		// validate all the different things
-		s.validateMetadata(expected.nameValueMetadata, actual.nameValueMetadata, expected.entityType == common.EEntityType.Folder()) // todo: entity type
+		s.validatePOSIXProperties(f, actual.nameValueMetadata)
+		s.validateSymlink(f, actual.nameValueMetadata)
+		s.validateMetadata(expected.nameValueMetadata, actual.nameValueMetadata)
 		s.validateBlobTags(expected.blobTags, actual.blobTags)
 		s.validateContentHeaders(expected.contentHeaders, actual.contentHeaders)
 		s.validateCreateTime(expected.creationTime, actual.creationTime)
@@ -504,15 +525,91 @@ func (s *scenario) validateContent() {
 	}
 }
 
-// // Individual property validation routines
-
-func (s *scenario) validateMetadata(expected, actual map[string]string, isFolder bool) {
-	if isFolder { // hdi_isfolder is service-relevant metadata, not something we'd be testing for. This can pop up when specifying a folder() on blob.
-		delete(expected, "hdi_isfolder")
-		delete(actual, "hdi_isfolder")
+func (s *scenario) validatePOSIXProperties(f *testObject, metadata map[string]string) {
+	if !s.p.preservePOSIXProperties {
+		return
 	}
 
-	s.a.Assert(len(expected), equals(), len(actual), "Both should have same number of metadata entries")
+	_, _, _, _, addedDirAtDest := s.getTransferInfo()
+
+	var adapter common.UnixStatAdapter
+	switch s.fromTo.To() {
+	case common.ELocation.Local():
+		adapter = osScenarioHelper{}.GetUnixStatAdapterForFile(s.a, filepath.Join(s.state.dest.(*resourceLocal).dirPath, addedDirAtDest, f.name))
+	case common.ELocation.Blob():
+		var err error
+		adapter, err = common.ReadStatFromMetadata(metadata, 0)
+		s.a.AssertNoErr(err, "reading stat from metadata")
+	}
+
+	s.a.Assert(f.verificationProperties.posixProperties.EquivalentToStatAdapter(adapter), equals(), "", "POSIX properties were mismatched")
+}
+
+func (s *scenario) validateSymlink(f *testObject, metadata map[string]string) {
+	c := s.GetAsserter()
+
+	prepareSymlinkForComparison := func(oldName string) string {
+		switch s.fromTo {
+		case common.EFromTo.LocalBlob():
+			source := s.state.source.(*resourceLocal)
+
+			return strings.TrimPrefix(oldName, source.dirPath + common.OS_PATH_SEPARATOR)
+		case common.EFromTo.BlobLocal():
+			dest := s.state.dest.(*resourceLocal)
+			_, _, _, _, addedDirAtDest := s.getTransferInfo()
+
+			return strings.TrimPrefix(oldName, path.Join(dest.dirPath, addedDirAtDest) + common.OS_PATH_SEPARATOR)
+		case common.EFromTo.BlobBlob():
+			return oldName // no adjustment necessary
+		default:
+			c.Error("Symlink persistence is only available on Local<->Blob->Blob")
+			return ""
+		}
+	}
+
+	if f.verificationProperties.entityType == common.EEntityType.Symlink() {
+		c.Assert(s.p.symlinkHandling, equals(), common.ESymlinkHandlingType.Preserve()) // we should only be doing this if we're persisting symlinks
+
+		dest := s.GetDestination()
+		_, _, _, _, addedDirAtDest := s.getTransferInfo()
+		switch s.fromTo.To() {
+		case common.ELocation.Local():
+			symlinkDest := path.Join(dest.(*resourceLocal).dirPath, addedDirAtDest, f.name)
+			stat, err := os.Lstat(symlinkDest)
+			c.AssertNoErr(err)
+			c.Assert(stat.Mode() & os.ModeSymlink, equals(), os.ModeSymlink, "the file is not a symlink")
+
+			oldName, err := os.Readlink(symlinkDest)
+			c.AssertNoErr(err)
+			c.Assert(prepareSymlinkForComparison(oldName), equals(), *f.verificationProperties.symlinkTarget)
+		case common.ELocation.Blob():
+			val, ok := metadata[common.POSIXSymlinkMeta]
+			c.Assert(ok, equals(), true)
+			c.Assert(val, equals(), "true")
+
+			content := dest.downloadContent(c, downloadContentOptions{
+				resourceRelPath: fixSlashes(path.Join(addedDirAtDest, f.name), common.ELocation.Blob()),
+				downloadBlobContentOptions: downloadBlobContentOptions{
+					cpkInfo:      common.GetCpkInfo(s.p.cpkByValue),
+					cpkScopeInfo: common.GetCpkScopeInfo(s.p.cpkByName),
+				},
+			})
+
+			c.Assert(prepareSymlinkForComparison(string(content)), equals(), *f.verificationProperties.symlinkTarget)
+		default:
+			c.Error("Cannot validate symlink from endpoint other than local/blob")
+		}
+	}
+}
+
+// // Individual property validation routines
+func (s *scenario) validateMetadata(expected, actual map[string]string) {
+	for _,v := range common.AllLinuxProperties { // properties are evaluated elsewhere
+		delete(expected, v)
+		delete(actual, v)
+	}
+
+	s.a.Assert(len(actual), equals(), len(expected), "Both should have same number of metadata entries")
 	for key := range expected {
 		exValue := expected[key]
 		actualValue, ok := actual[key]
