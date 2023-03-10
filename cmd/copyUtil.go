@@ -172,7 +172,7 @@ func (util copyHandlerUtil) doesBlobRepresentAFolder(metadata map[string]*string
 	// HDFS driver creates a blob for the empty directories (let’s call it ‘myfolder’)
 	// and names all the blobs under ‘myfolder’ as such: ‘myfolder/myblob’
 	// The empty directory has meta-data 'hdi_isfolder = true'
-	return metadata["hdi_isfolder"] != nil && *metadata["hdi_isfolder"] == "true"
+	return (metadata["hdi_isfolder"] != nil && strings.ToLower(*metadata["hdi_isfolder"]) == "true") || (metadata["Hdi_isfolder"] != nil && strings.ToLower(*metadata["Hdi_isfolder"]) == "true")
 }
 
 func startsWith(s string, t string) bool {
