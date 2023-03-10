@@ -134,10 +134,7 @@ func (t *blobTraverser) getPropertiesIfSingleBlob() (response *blob.GetPropertie
 	if err != nil {
 		return nil, false, false, err
 	}
-	cpk := blob.CPKInfo{}
-	if t.cpkOptions.IsSourceEncrypted {
-		cpk = common.GetCpkInfo(t.cpkOptions.CpkInfo)
-	}
+	cpk := t.cpkOptions.GetCPKInfo()
 	props, err := blobClient.GetProperties(t.ctx, &blob.GetPropertiesOptions{CPKInfo: &cpk})
 
 	// if there was no problem getting the properties, it means that we are looking at a single blob

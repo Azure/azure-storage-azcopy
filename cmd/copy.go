@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"io"
 	"math"
 	"net/url"
@@ -40,7 +41,6 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -1290,6 +1290,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionCopy() error {
 
 func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.ResourceString) error {
 
+	fmt.Println("In process redirection download")
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// step 0: check the Stdout before uploading
@@ -1307,11 +1308,8 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
 	}
 
-	// step 1: initialize pipeline
-	p, err := createBlobPipeline(ctx, credInfo, pipeline.LogNone)
-	if err != nil {
-		return err
-	}
+	// step 1: create client options
+	options := createClientOptions(pipeline.LogNone)
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -1320,17 +1318,21 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 3: start download
-	blobURL := azblob.NewBlobURL(*u, p)
-	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
-	if cca.CpkOptions.IsSourceEncrypted {
-		clientProvidedKey = common.GetClientProvidedKey(cca.CpkOptions)
-	}
-	blobStream, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, clientProvidedKey)
+	blobClient, err := common.CreateBlobClient(u.String(), &credInfo,
+		&blob.ClientOptions{ClientOptions: options},
+		nil)
+
+	cpk := cca.CpkOptions.GetCPKInfo()
+	cpkScope := cca.CpkOptions.GetCPKScopeInfo()
+	blobStream, err := blobClient.DownloadStream(ctx, &blob.DownloadStreamOptions{
+		CPKInfo:      &cpk,
+		CPKScopeInfo: &cpkScope,
+	})
 	if err != nil {
 		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
 	}
 
-	blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: ste.MaxRetryPerDownloadBody, ClientProvidedKeyOptions: clientProvidedKey})
+	blobBody := blobStream.NewRetryReader(ctx, &blob.RetryReaderOptions{MaxRetries: ste.MaxRetryPerDownloadBody})
 	defer blobBody.Close()
 
 	// step 4: pipe everything into Stdout
@@ -1358,10 +1360,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 0: initialize pipeline
-	p, err := createBlobPipeline(ctx, credInfo, pipeline.LogNone)
-	if err != nil {
-		return err
-	}
+	options := createClientOptions(pipeline.LogNone)
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()
@@ -1370,7 +1369,9 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
-	blockBlobUrl := azblob.NewBlockBlobURL(*u, p)
+	blockBlobClient, err := common.CreateBlockBlobClient(u.String(), &credInfo,
+		&blockblob.ClientOptions{ClientOptions: options},
+		nil)
 	metadataString := cca.metadata
 	metadataMap := common.Metadata{}
 	if len(metadataString) > 0 {
@@ -1380,24 +1381,27 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 		}
 	}
 	blobTags := cca.blobTags
-	bbAccessTier := azblob.DefaultAccessTier
+	bbAccessTier := blob.AccessTier("")
 	if cca.blockBlobTier != common.EBlockBlobTier.None() {
-		bbAccessTier = azblob.AccessTierType(cca.blockBlobTier.String())
+		bbAccessTier = blob.AccessTier(cca.blockBlobTier.String())
 	}
-	_, err = azblob.UploadStreamToBlockBlob(ctx, os.Stdin, blockBlobUrl, azblob.UploadStreamToBlockBlobOptions{
-		BufferSize:  int(blockSize),
-		MaxBuffers:  pipingUploadParallelism,
-		Metadata:    metadataMap.ToAzBlobMetadata(),
-		BlobTagsMap: blobTags.ToAzBlobTagsMap(),
-		BlobHTTPHeaders: azblob.BlobHTTPHeaders{
-			ContentType:        cca.contentType,
-			ContentLanguage:    cca.contentLanguage,
-			ContentEncoding:    cca.contentEncoding,
-			ContentDisposition: cca.contentDisposition,
-			CacheControl:       cca.cacheControl,
+	cpk := cca.CpkOptions.GetCPKInfo()
+	cpkScope := cca.CpkOptions.GetCPKScopeInfo()
+	_, err = blockBlobClient.UploadStream(ctx, os.Stdin, &blockblob.UploadStreamOptions{
+		BlockSize:   blockSize,
+		Concurrency: pipingUploadParallelism,
+		Metadata:    metadataMap,
+		Tags:        blobTags,
+		HTTPHeaders: &blob.HTTPHeaders{
+			BlobContentType:        &cca.contentType,
+			BlobContentLanguage:    &cca.contentLanguage,
+			BlobContentEncoding:    &cca.contentEncoding,
+			BlobContentDisposition: &cca.contentDisposition,
+			BlobCacheControl:       &cca.cacheControl,
 		},
-		BlobAccessTier:           bbAccessTier,
-		ClientProvidedKeyOptions: common.GetClientProvidedKey(cca.CpkOptions),
+		AccessTier:   &bbAccessTier,
+		CPKInfo:      &cpk,
+		CPKScopeInfo: &cpkScope,
 	})
 
 	return err

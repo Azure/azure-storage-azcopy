@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"log"
 	"net/url"
 	"os"
@@ -19,7 +21,6 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -439,6 +440,8 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	if dstCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.To(), cca.Destination.Value, cca.Destination.SAS, false, cca.CpkOptions); err != nil {
 		return err
 	}
+
+	options := createClientOptions(logLevel.ToPipelineLogLevel())
 	// TODO: we can pass cred here as well
 	dstPipeline, err := InitPipeline(ctx, cca.FromTo.To(), dstCredInfo, logLevel.ToPipelineLogLevel())
 	if err != nil {
@@ -458,29 +461,25 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 			return err
 		}
 
-		dstURL, err := url.Parse(accountRoot)
-
+		bsc, err := common.CreateBlobServiceClient(accountRoot, &dstCredInfo,
+			&blobservice.ClientOptions{ClientOptions: options},
+			nil)
 		if err != nil {
 			return err
 		}
+		bcc := bsc.NewContainerClient(containerName)
 
-		bsu := azblob.NewServiceURL(*dstURL, dstPipeline)
-		bcu := bsu.NewContainerURL(containerName)
-		_, err = bcu.GetProperties(ctx, azblob.LeaseAccessConditions{})
+		_, err = bcc.GetProperties(ctx, nil)
 
 		if err == nil {
 			return err // Container already exists, return gracefully
 		}
 
-		_, err = bcu.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
-
-		if stgErr, ok := err.(azblob.StorageError); ok {
-			if stgErr.ServiceCode() != azblob.ServiceCodeContainerAlreadyExists {
-				return err
-			}
-		} else {
-			return err
+		_, err = bcc.Create(ctx, nil)
+		if bloberror.HasCode(err, bloberror.ContainerAlreadyExists) {
+			return nil
 		}
+		return err
 	case common.ELocation.File():
 		// Grab the account root and parse it as a URL
 		accountRoot, err := GetAccountRoot(dstWithSAS, cca.FromTo.To())

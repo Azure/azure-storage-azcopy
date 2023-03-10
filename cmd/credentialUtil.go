@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"net/http"
 	"net/url"
@@ -156,7 +157,11 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 		resourceURL.RawQuery = standaloneSAS
 	}
 
-	sas := azblob.NewBlobURLParts(*resourceURL).SAS
+	blobURLParts, err := blob.ParseURL(resourceURL.String())
+	if err != nil {
+		return common.ECredentialType.Unknown(), false, errors.New("provided blob resource string was not able to be parsed")
+	}
+	sas := blobURLParts.SAS
 	isMDAccount := strings.HasPrefix(resourceURL.Host, "md-")
 	canBePublic = canBePublic && !isMDAccount // MD accounts cannot be public.
 

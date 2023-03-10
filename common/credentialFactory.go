@@ -26,6 +26,8 @@ import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"math"
 	"strings"
@@ -122,6 +124,11 @@ func CreateBlobCredential(ctx context.Context, credInfo CredentialInfo, options 
 }
 
 func CreateBlobServiceClient(blobURL string, credInfo *CredentialInfo, options *blobservice.ClientOptions, credOpOptions *CredentialOpOptions) (*blobservice.Client, error) {
+	if credOpOptions == nil {
+		credOpOptions = &CredentialOpOptions{
+			LogError: GetLifecycleMgr().Info,
+		}
+	}
 	switch credInfo.CredentialType {
 	case ECredentialType.OAuthToken():
 		if credInfo.OAuthTokenInfo.IsEmpty() {
@@ -164,6 +171,120 @@ func CreateBlobClientFromServiceClient(blobURLParts blob.URLParts, client *blobs
 		return blobClient.WithVersionID(blobURLParts.VersionID)
 	}
 	return blobClient, nil
+}
+
+func CreateContainerClient(blobURL string, credInfo *CredentialInfo, options *container.ClientOptions, credOpOptions *CredentialOpOptions) (*container.Client, error) {
+	if credOpOptions == nil {
+		credOpOptions = &CredentialOpOptions{
+			LogError: GetLifecycleMgr().Info,
+		}
+	}
+	switch credInfo.CredentialType {
+	case ECredentialType.OAuthToken():
+		if credInfo.OAuthTokenInfo.IsEmpty() {
+			credOpOptions.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
+		}
+		tc, err := credInfo.OAuthTokenInfo.GetTokenCredential()
+		if err != nil {
+			credOpOptions.panicError(fmt.Errorf("unable to get token credential due to reason (%s)", err.Error()))
+		}
+		return container.NewClient(blobURL, tc, options)
+	case ECredentialType.SharedKey():
+		// Get the Account Name and Key variables from environment
+		name := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountName())
+		key := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountKey())
+		// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
+		if name == "" || key == "" {
+			credOpOptions.panicError(errors.New("ACCOUNT_NAME and ACCOUNT_KEY environment variables must be set before creating the blob SharedKey credential"))
+		}
+		// create the shared key credentials
+		sharedKey, err := blob.NewSharedKeyCredential(name, key)
+		if err != nil {
+			credOpOptions.panicError(errors.New("failed to create the blob SharedKey credential"))
+		}
+		return container.NewClientWithSharedKeyCredential(blobURL, sharedKey, options)
+	case ECredentialType.Anonymous():
+		return container.NewClientWithNoCredential(blobURL, options)
+	default:
+		credOpOptions.panicError(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
+		return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
+	}
+}
+
+func CreateBlobClient(blobURL string, credInfo *CredentialInfo, options *blob.ClientOptions, credOpOptions *CredentialOpOptions) (*blob.Client, error) {
+	if credOpOptions == nil {
+		credOpOptions = &CredentialOpOptions{
+			LogError: GetLifecycleMgr().Info,
+		}
+	}
+	switch credInfo.CredentialType {
+	case ECredentialType.OAuthToken():
+		if credInfo.OAuthTokenInfo.IsEmpty() {
+			credOpOptions.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
+		}
+		tc, err := credInfo.OAuthTokenInfo.GetTokenCredential()
+		if err != nil {
+			credOpOptions.panicError(fmt.Errorf("unable to get token credential due to reason (%s)", err.Error()))
+		}
+		return blob.NewClient(blobURL, tc, options)
+	case ECredentialType.SharedKey():
+		// Get the Account Name and Key variables from environment
+		name := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountName())
+		key := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountKey())
+		// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
+		if name == "" || key == "" {
+			credOpOptions.panicError(errors.New("ACCOUNT_NAME and ACCOUNT_KEY environment variables must be set before creating the blob SharedKey credential"))
+		}
+		// create the shared key credentials
+		sharedKey, err := blob.NewSharedKeyCredential(name, key)
+		if err != nil {
+			credOpOptions.panicError(errors.New("failed to create the blob SharedKey credential"))
+		}
+		return blob.NewClientWithSharedKeyCredential(blobURL, sharedKey, options)
+	case ECredentialType.Anonymous():
+		return blob.NewClientWithNoCredential(blobURL, options)
+	default:
+		credOpOptions.panicError(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
+		return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
+	}
+}
+
+func CreateBlockBlobClient(blobURL string, credInfo *CredentialInfo, options *blockblob.ClientOptions, credOpOptions *CredentialOpOptions) (*blockblob.Client, error) {
+	if credOpOptions == nil {
+		credOpOptions = &CredentialOpOptions{
+			LogError: GetLifecycleMgr().Info,
+		}
+	}
+	switch credInfo.CredentialType {
+	case ECredentialType.OAuthToken():
+		if credInfo.OAuthTokenInfo.IsEmpty() {
+			credOpOptions.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
+		}
+		tc, err := credInfo.OAuthTokenInfo.GetTokenCredential()
+		if err != nil {
+			credOpOptions.panicError(fmt.Errorf("unable to get token credential due to reason (%s)", err.Error()))
+		}
+		return blockblob.NewClient(blobURL, tc, options)
+	case ECredentialType.SharedKey():
+		// Get the Account Name and Key variables from environment
+		name := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountName())
+		key := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountKey())
+		// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
+		if name == "" || key == "" {
+			credOpOptions.panicError(errors.New("ACCOUNT_NAME and ACCOUNT_KEY environment variables must be set before creating the blob SharedKey credential"))
+		}
+		// create the shared key credentials
+		sharedKey, err := blob.NewSharedKeyCredential(name, key)
+		if err != nil {
+			credOpOptions.panicError(errors.New("failed to create the blob SharedKey credential"))
+		}
+		return blockblob.NewClientWithSharedKeyCredential(blobURL, sharedKey, options)
+	case ECredentialType.Anonymous():
+		return blockblob.NewClientWithNoCredential(blobURL, options)
+	default:
+		credOpOptions.panicError(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
+		return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
+	}
 }
 
 // refreshPolicyHalfOfExpiryWithin is used for calculating next refresh time,
