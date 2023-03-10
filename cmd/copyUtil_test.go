@@ -31,24 +31,24 @@ var _ = chk.Suite(&copyUtilTestSuite{})
 func (s *copyUtilTestSuite) TestUrlIsContainerOrBlob(c *chk.C) {
 	util := copyHandlerUtil{}
 
-	testUrl := "fakeaccount.core.windows.net/container/dir1"
+	testUrl := "https://fakeaccount.core.windows.net/container/dir1"
 	isContainer := util.urlIsContainerOrVirtualDirectory(testUrl)
 	c.Assert(isContainer, chk.Equals, false)
 
-	testUrl = "fakeaccount.core.windows.net/container/dir1/dir2"
+	testUrl = "https://fakeaccount.core.windows.net/container/dir1/dir2"
 	isContainer = util.urlIsContainerOrVirtualDirectory(testUrl)
 	c.Assert(isContainer, chk.Equals, false)
 
-	testUrl = "fakeaccount.core.windows.net/container/"
+	testUrl = "https://fakeaccount.core.windows.net/container/"
 	isContainer = util.urlIsContainerOrVirtualDirectory(testUrl)
 	c.Assert(isContainer, chk.Equals, true)
 
-	testUrl = "fakeaccount.core.windows.net/container"
+	testUrl = "https://fakeaccount.core.windows.net/container"
 	isContainer = util.urlIsContainerOrVirtualDirectory(testUrl)
 	c.Assert(isContainer, chk.Equals, true)
 
 	// root container
-	testUrl = "fakeaccount.core.windows.net/"
+	testUrl = "https://fakeaccount.core.windows.net/"
 	isContainer = util.urlIsContainerOrVirtualDirectory(testUrl)
 	c.Assert(isContainer, chk.Equals, true)
 }
@@ -56,22 +56,22 @@ func (s *copyUtilTestSuite) TestUrlIsContainerOrBlob(c *chk.C) {
 func (s *copyUtilTestSuite) TestIPIsContainerOrBlob(c *chk.C) {
 	util := copyHandlerUtil{}
 
-	testIP := "127.0.0.1:8256/account/container"
-	testURL := "fakeaccount.core.windows.net/account/container"
+	testIP := "https://127.0.0.1:8256/account/container"
+	testURL := "https://fakeaccount.core.windows.net/account/container"
 	isContainerIP := util.urlIsContainerOrVirtualDirectory(testIP)
 	isContainerURL := util.urlIsContainerOrVirtualDirectory(testURL)
 	c.Assert(isContainerIP, chk.Equals, true)   // IP endpoints contain the account in the path, making the container the second entry
 	c.Assert(isContainerURL, chk.Equals, false) // URL endpoints do not contain the account in the path, making the container the first entry.
 
-	testIP = "127.0.0.1:8256/account/container/folder"
-	testURL = "fakeaccount.core.windows.net/account/container/folder"
+	testIP = "https://127.0.0.1:8256/account/container/folder"
+	testURL = "https://fakeaccount.core.windows.net/account/container/folder"
 	isContainerIP = util.urlIsContainerOrVirtualDirectory(testIP)
 	isContainerURL = util.urlIsContainerOrVirtualDirectory(testURL)
 	c.Assert(isContainerIP, chk.Equals, false)  // IP endpoints contain the account in the path, making the container the second entry
 	c.Assert(isContainerURL, chk.Equals, false) // URL endpoints do not contain the account in the path, making the container the first entry.
 
-	testIP = "127.0.0.1:8256/account/container/folder/"
-	testURL = "fakeaccount.core.windows.net/account/container/folder/"
+	testIP = "https://127.0.0.1:8256/account/container/folder/"
+	testURL = "https://fakeaccount.core.windows.net/account/container/folder/"
 	isContainerIP = util.urlIsContainerOrVirtualDirectory(testIP)
 	isContainerURL = util.urlIsContainerOrVirtualDirectory(testURL)
 	c.Assert(isContainerIP, chk.Equals, true)  // IP endpoints contain the account in the path, making the container the second entry

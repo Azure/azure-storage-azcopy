@@ -366,7 +366,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 
 	// construct a blob account traverser
 	rawBSU := scenarioHelper{}.getBlobServiceClientWithSAS(c)
-	container := "/objectmatch*" // set the container name to contain a wildcard
+	container := "objectmatch*" // set the container name to contain a wildcard
 	blobAccountTraverser := newBlobAccountTraverser(rawBSU, container, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{})
 
 	// invoke the blob account traversal with a dummy processor
