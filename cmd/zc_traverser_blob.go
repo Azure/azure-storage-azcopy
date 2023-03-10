@@ -317,7 +317,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 						common.Metadata{},
 						containerName,
 					)
-					enqueueOutput(storedObject, err)
+					enqueueOutput(storedObject, nil)
 					
 				}
 			}
