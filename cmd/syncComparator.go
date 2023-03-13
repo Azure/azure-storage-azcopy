@@ -88,7 +88,7 @@ func newSyncDestinationComparator(i *folderIndexer, possiblyRenamedMap *possibly
 		lastSyncTime:            lastSyncTime,
 		scannerLogger:           scannerLogger,
 		incrementNotTransferred: incrementNotTransferred,
-		metaDataOnlySync:   metaDataOnlySync,
+		metaDataOnlySync:        metaDataOnlySync,
 	}
 }
 

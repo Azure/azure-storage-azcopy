@@ -189,6 +189,10 @@ func (i *folderIndexer) filesChangedInDirectory(relativePath string, lastSyncTim
 		lcRelativePath = relativePath
 	}
 
+	if lcRelativePath == "" {
+		lcRelativePath = "."
+	}
+
 	i.lock.RLock()
 	defer i.lock.RUnlock()
 
