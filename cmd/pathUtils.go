@@ -236,7 +236,8 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 	//       It's not a breaking change to the way SAS tokens work, but a pretty major addition.
 	// TODO: Find a clever way to reduce code duplication in here. Especially the URL parsing.
 	case common.ELocation.Blob():
-		bURLParts, err := blob.ParseURL(resource)
+		var bURLParts sas.URLParts
+		bURLParts, err = blob.ParseURL(resource)
 		if err != nil {
 			return resource, "", err
 		}
