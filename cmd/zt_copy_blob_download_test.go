@@ -22,7 +22,6 @@ package cmd
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -210,7 +209,6 @@ func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
 
 	// Create a unique container to be targeted.
 	cname := generateName("blah-unique-blah", 63)
-	fmt.Println(cname)
 	curl := bsu.NewContainerURL(cname)
 	_, err := curl.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
 	c.Assert(err, chk.IsNil)
@@ -226,7 +224,6 @@ func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
 	processor := func(object StoredObject) error {
 		// Append the container name to the relative path
 		relPath := "/" + object.ContainerName + "/" + object.relativePath
-		fmt.Println(relPath)
 		relPaths = append(relPaths, relPath)
 		return nil
 	}
