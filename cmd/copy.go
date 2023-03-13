@@ -1290,7 +1290,6 @@ func (cca *CookedCopyCmdArgs) processRedirectionCopy() error {
 
 func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.ResourceString) error {
 
-	fmt.Println("In process redirection download")
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// step 0: check the Stdout before uploading
