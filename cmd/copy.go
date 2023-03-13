@@ -1321,6 +1321,9 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	blobClient, err := common.CreateBlobClient(u.String(), &credInfo,
 		&blob.ClientOptions{ClientOptions: options},
 		nil)
+	if err != nil {
+		return fmt.Errorf("fatal: cannot create blob client due to error: %s", err.Error())
+	}
 
 	cpk := cca.CpkOptions.GetCPKInfo()
 	cpkScope := cca.CpkOptions.GetCPKScopeInfo()
@@ -1356,7 +1359,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	credInfo, _, err := GetCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, false, cca.CpkOptions)
 
 	if err != nil {
-		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
+		return fmt.Errorf("fatal: cannot find auth on destination blob URL: %s", err.Error())
 	}
 
 	// step 0: initialize pipeline
@@ -1372,6 +1375,9 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	blockBlobClient, err := common.CreateBlockBlobClient(u.String(), &credInfo,
 		&blockblob.ClientOptions{ClientOptions: options},
 		nil)
+	if err != nil {
+		return fmt.Errorf("fatal: cannot create block blob client due to error: %s", err.Error())
+	}
 	metadataString := cca.metadata
 	metadataMap := common.Metadata{}
 	if len(metadataString) > 0 {
