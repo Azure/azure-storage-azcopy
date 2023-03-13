@@ -37,6 +37,7 @@ import (
 func (s *cmdIntegrationSuite) TestInferredStripTopDirDownload(c *chk.C) {
 	bsu := getBSU()
 	cURL, cName := createNewContainer(c, bsu)
+	defer deleteContainer(c, cURL)
 
 	blobNames := []string{
 		"*", // File name that we want to retain compatibility with
@@ -167,6 +168,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
 
 	// Just in case there are no existing containers...
 	curl, name := createNewContainer(c, bsu)
+	defer deleteContainer(c, curl)
 	scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, curl, "")
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
@@ -210,6 +212,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
 	curl := bsu.NewContainerURL(cname)
 	_, err := curl.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
 	c.Assert(err, chk.IsNil)
+	defer deleteContainer(c, curl)
 	scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, curl, "")
 
 	// update the raw BSU to match the unique container name
