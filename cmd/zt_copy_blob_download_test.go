@@ -213,7 +213,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
 	scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, curl, "")
 
 	// update the raw BSU to match the unique container name
-	container := "blah-unique-blah*"
+	container := cname[0:40] + "*"
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
