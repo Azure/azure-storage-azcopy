@@ -650,19 +650,19 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
 
-	cooked.preserveSMBInfo = raw.preserveSMBInfo && areBothLocationsSMBAware(cooked.FromTo)
+	cooked.PreserveSMBInfo = raw.preserveSMBInfo && areBothLocationsSMBAware(cooked.FromTo)
 
 	cooked.PreservePOSIXProperties = raw.preservePOSIXProperties
 	if cooked.PreservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.FromTo) {
 		return cooked, fmt.Errorf("in order to use --preserve-posix-properties, both the source and destination must be POSIX-aware (Linux->Blob, Blob->Linux, Blob->Blob)")
 	}
 
-	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.FromTo, &cooked.ForceWrite, "preserve-smb-info"); err != nil {
+	if err = validatePreserveSMBPropertyOption(cooked.PreserveSMBInfo, cooked.FromTo, &cooked.ForceWrite, "preserve-smb-info"); err != nil {
 		return cooked, err
 	}
 
 	isUserPersistingPermissions := raw.preservePermissions || raw.preserveSMBPermissions
-	if cooked.preserveSMBInfo && !isUserPersistingPermissions {
+	if cooked.PreserveSMBInfo && !isUserPersistingPermissions {
 		glcm.Info("Please note: the preserve-permissions flag is set to false, thus AzCopy will not copy SMB ACLs between the source and destination. To learn more: https://aka.ms/AzCopyandAzureFiles.")
 	}
 
@@ -672,17 +672,17 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	if err = validatePreserveOwner(raw.preserveOwner, cooked.FromTo); err != nil {
 		return cooked, err
 	}
-	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions, raw.preserveOwner, cooked.FromTo)
-	if cooked.FromTo == common.EFromTo.BlobBlob() && cooked.preservePermissions.IsTruthy() {
+	cooked.PreservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions, raw.preserveOwner, cooked.FromTo)
+	if cooked.FromTo == common.EFromTo.BlobBlob() && cooked.PreservePermissions.IsTruthy() {
 		cooked.isHNStoHNS = true // override HNS settings, since if a user is tx'ing blob->blob and copying permissions, it's DEFINITELY going to be HNS (since perms don't exist w/o HNS).
 	}
 
 	// --as-subdir is OK on all sources and destinations, but additional verification has to be done down the line. (e.g. https://account.blob.core.windows.net is not a valid root)
 	cooked.AsSubdir = raw.asSubdir
 
-	cooked.IncludeDirectoryStubs = raw.includeDirectoryStubs || (cooked.isHNStoHNS && cooked.preservePermissions.IsTruthy())
+	cooked.IncludeDirectoryStubs = raw.includeDirectoryStubs || (cooked.isHNStoHNS && cooked.PreservePermissions.IsTruthy())
 
-	if err = crossValidateSymlinksAndPermissions(cooked.FollowSymlinks, cooked.preservePermissions.IsTruthy()); err != nil {
+	if err = crossValidateSymlinksAndPermissions(cooked.FollowSymlinks, cooked.PreservePermissions.IsTruthy()); err != nil {
 		return cooked, err
 	}
 
@@ -712,7 +712,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
 			return cooked, fmt.Errorf("blob-tier is not supported while uploading to ADLS Gen 2")
 		}
-		if cooked.preservePermissions.IsTruthy() {
+		if cooked.PreservePermissions.IsTruthy() {
 			return cooked, fmt.Errorf("preserve-smb-permissions is not supported while uploading to ADLS Gen 2")
 		}
 		if cooked.s2sPreserveProperties {
@@ -1157,9 +1157,9 @@ type CookedCopyCmdArgs struct {
 	isEnumerationComplete bool
 
 	// Whether the user wants to preserve the SMB ACLs assigned to their files when moving between resources that are SMB ACL aware.
-	preservePermissions common.PreservePermissionsOption
+	PreservePermissions common.PreservePermissionsOption
 	// Whether the user wants to preserve the SMB properties ...
-	preserveSMBInfo bool
+	PreserveSMBInfo bool
 	// Whether the user wants to preserve the POSIX properties ...
 	PreservePOSIXProperties bool
 
