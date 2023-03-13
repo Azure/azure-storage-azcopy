@@ -38,6 +38,7 @@ import (
 func (s *cmdIntegrationSuite) TestInferredStripTopDirDownload(c *chk.C) {
 	bsu := getBSU()
 	cURL, cName := createNewContainer(c, bsu)
+	defer deleteContainer(c, cURL)
 
 	blobNames := []string{
 		"*", // File name that we want to retain compatibility with
@@ -168,6 +169,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
 
 	// Just in case there are no existing containers...
 	curl, name := createNewContainer(c, bsu)
+	defer deleteContainer(c, curl)
 	scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, curl, "")
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
