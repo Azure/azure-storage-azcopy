@@ -210,10 +210,11 @@ func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
 	curl := bsu.NewContainerURL(cname)
 	_, err := curl.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
 	c.Assert(err, chk.IsNil)
+	defer deleteContainer(c, curl)
 	scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, curl, "")
 
 	// update the raw BSU to match the unique container name
-	container := cname + "*"
+	container := "blah-unique-blah*"
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
