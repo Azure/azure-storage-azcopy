@@ -1317,9 +1317,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 3: start download
-	blobClient, err := common.CreateBlobClient(u.String(), &credInfo,
-		&blob.ClientOptions{ClientOptions: options},
-		nil)
+	blobClient, err := common.CreateBlobClient(u.String(), &credInfo, options, nil)
 	if err != nil {
 		return fmt.Errorf("fatal: cannot create blob client due to error: %s", err.Error())
 	}
@@ -1371,9 +1369,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
-	blockBlobClient, err := common.CreateBlockBlobClient(u.String(), &credInfo,
-		&blockblob.ClientOptions{ClientOptions: options},
-		nil)
+	blockBlobClient, err := common.CreateBlockBlobClient(u.String(), &credInfo, options, nil)
 	if err != nil {
 		return fmt.Errorf("fatal: cannot create block blob client due to error: %s", err.Error())
 	}

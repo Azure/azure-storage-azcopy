@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
-	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"log"
 	"net/url"
 	"os"
@@ -461,9 +460,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 			return err
 		}
 
-		bsc, err := common.CreateBlobServiceClient(accountRoot, &dstCredInfo,
-			&blobservice.ClientOptions{ClientOptions: options},
-			nil)
+		bsc, err := common.CreateBlobServiceClient(accountRoot, &dstCredInfo, options, nil)
 		if err != nil {
 			return err
 		}

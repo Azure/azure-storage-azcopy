@@ -62,7 +62,7 @@ func (t *blobVersionsTraverser) getBlobProperties(versionID string) (*blob.GetPr
 		blobURLParts.VersionID = versionID
 	}
 
-	blobClient, err := common.CreateBlobClientFromServiceClient(blobURLParts, t.serviceClient)
+	blobClient, err := createBlobClientFromServiceClient(blobURLParts, t.serviceClient)
 	if err != nil {
 		return nil, err
 	}

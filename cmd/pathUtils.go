@@ -347,6 +347,8 @@ func GetAccountRoot(resource common.ResourceString, location common.Location) (s
 
 		bURLParts.ContainerName = ""
 		bURLParts.BlobName = ""
+		bURLParts.Snapshot = ""
+		bURLParts.VersionID = ""
 
 		return bURLParts.String(), nil
 	default:

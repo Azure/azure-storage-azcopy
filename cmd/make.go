@@ -25,7 +25,6 @@ import (
 	"fmt"
 	pipeline2 "github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"net/url"
 	"strings"
 
@@ -107,9 +106,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 	case common.ELocation.Blob():
 		options := createClientOptions(pipeline2.LogNone)
 		// TODO : Ensure it is a container URL here and fail early?
-		containerClient, err := common.CreateContainerClient(cookedArgs.resourceURL.String(), &credentialInfo,
-			&container.ClientOptions{ClientOptions: options},
-			nil)
+		containerClient, err := common.CreateContainerClient(cookedArgs.resourceURL.String(), &credentialInfo, options, nil)
 		if err != nil {
 			return err
 		}
