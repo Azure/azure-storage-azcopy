@@ -25,9 +25,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"net/url"
 	"os"
@@ -138,7 +139,7 @@ func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err
 				jsonOutput, err := json.Marshal(newDeleteTransfer(object))
 				common.PanicIfErr(err)
 				return string(jsonOutput)
-			} else { // remove for sync
+			} else {                                       // remove for sync
 				if d.objectTypeToDisplay == "local file" { // removing from local src
 					dryrunValue := fmt.Sprintf("DRYRUN: remove %v", common.ToShortPath(d.objectLocationToDisplay))
 					if runtime.GOOS == "windows" {
@@ -272,22 +273,27 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor
 	if err != nil {
 		return nil, err
 	}
+	clientOptions := createClientOptions(azcopyLogVerbosity.ToPipelineLogLevel())
 
-	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, p, ctx, cca.fromTo.To()).delete,
+	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, p, cca.credentialInfo, clientOptions, ctx, cca.fromTo.To()).delete,
 		cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount, cca.dryrunMode), nil
 }
 
 type remoteResourceDeleter struct {
 	rootURL        *url.URL
 	p              pipeline.Pipeline
+	credInfo       common.CredentialInfo
+	clientOptions  azcore.ClientOptions
 	ctx            context.Context
 	targetLocation common.Location
 }
 
-func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx context.Context, targetLocation common.Location) *remoteResourceDeleter {
+func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, credInfo common.CredentialInfo, clientOptions azcore.ClientOptions, ctx context.Context, targetLocation common.Location) *remoteResourceDeleter {
 	return &remoteResourceDeleter{
 		rootURL:        rawRootURL,
 		p:              p,
+		credInfo:       credInfo,
+		clientOptions:  clientOptions,
 		ctx:            ctx,
 		targetLocation: targetLocation,
 	}
@@ -303,10 +309,17 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		}
 		switch b.targetLocation {
 		case common.ELocation.Blob():
-			blobURLParts := azblob.NewBlobURLParts(*b.rootURL)
+			blobURLParts, err := blob.ParseURL(b.rootURL.String())
+			if err != nil {
+				return err
+			}
 			blobURLParts.BlobName = path.Join(blobURLParts.BlobName, object.relativePath)
-			blobURL := azblob.NewBlobURL(blobURLParts.URL(), b.p)
-			_, err := blobURL.Delete(b.ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
+
+			blobClient, err := common.CreateBlobClient(blobURLParts.String(), &b.credInfo, b.clientOptions, nil)
+			if err != nil {
+				return err
+			}
+			_, err = blobClient.Delete(b.ctx, nil)
 			return err
 		case common.ELocation.File():
 			fileURLParts := azfile.NewFileURLParts(*b.rootURL)
