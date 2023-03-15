@@ -187,26 +187,34 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	blobProperties, isBlob, isDirStub, propErr := t.getPropertiesIfSingleBlob()
 
 	if stgErr, ok := propErr.(azblob.StorageError); ok {
-		if t.errorChannel != nil {
-			ErrorFileInfo := ErrorFileInfo{
-				FilePath: blobUrlParts.BlobName,
-				ErrorMsg: stgErr,
+		writeToErrorChannel := func(err error) {
+			if t.errorChannel != nil {
+				ErrorFileInfo := ErrorFileInfo{
+					FilePath: blobUrlParts.BlobName,
+					ErrorMsg: err,
+				}
+				t.errorChannel <- ErrorFileInfo
 			}
-			t.errorChannel <- ErrorFileInfo
 		}
 
 		// Don't error out unless it's a CPK error just yet
 		// If it's a CPK error, we know it's a single blob and that we can't get the properties on it anyway.
 		if stgErr.ServiceCode() == common.CPK_ERROR_SERVICE_CODE {
-			return errors.New("this blob uses customer provided encryption keys (CPK). At the moment, AzCopy does not support CPK-encrypted blobs. " +
+			err := errors.New("this blob uses customer provided encryption keys (CPK). At the moment, AzCopy does not support CPK-encrypted blobs. " +
 				"If you wish to make use of this blob, we recommend using one of the Azure Storage SDKs")
+			writeToErrorChannel(err)
+			return err
 		}
 
 		if resp := stgErr.Response(); resp == nil {
-			return fmt.Errorf("cannot list files due to reason %s", stgErr)
+			err := fmt.Errorf("cannot list files due to reason %s", stgErr)
+			writeToErrorChannel(err)
+			return err
 		} else {
 			if resp.StatusCode == 403 { // Some nature of auth error-- Whatever the user is pointing at, they don't have access to, regardless of whether it's a file or a dir stub.
-				return fmt.Errorf("cannot list files due to reason %s", stgErr)
+				err := fmt.Errorf("cannot list files due to reason %s", stgErr)
+				writeToErrorChannel(err)
+				return err
 			}
 		}
 	}
