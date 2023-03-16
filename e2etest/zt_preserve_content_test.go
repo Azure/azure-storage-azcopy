@@ -21,8 +21,9 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // Purpose: Tests for preserving the content of transferred files. (Including use of MD5 hashes to allow error detection)
@@ -31,8 +32,7 @@ import (
 // TODO; inpclude account-to-account copy
 
 func TestContent_AtBlobStorage(t *testing.T) {
-
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "4M",
@@ -44,7 +44,7 @@ func TestContent_AtBlobStorage(t *testing.T) {
 }
 
 func TestContent_AtFileShare(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalFile()), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "4M",
@@ -57,7 +57,7 @@ func TestContent_AtFileShare(t *testing.T) {
 }
 
 func TestContent_BlobToBlob(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "8M",

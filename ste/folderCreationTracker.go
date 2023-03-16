@@ -37,8 +37,9 @@ func NewFolderCreationTracker(fpo common.FolderPropertyOption, plan *JobPartPlan
 
 type nullFolderTracker struct{}
 
-func (f *nullFolderTracker) RecordCreation(folder string) {
+func (f *nullFolderTracker) CreateFolder(folder string, doCreation func() error) error {
 	// no-op (the null tracker doesn't track anything)
+	return doCreation()
 }
 
 func (f *nullFolderTracker) ShouldSetProperties(folder string, overwrite common.OverwriteOption, prompter common.Prompter) bool {
@@ -62,6 +63,10 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIn
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if folder == common.Dev_Null {
+		return // Never persist to dev-null
+	}
+
 	f.contents[folder] = transferIndex
 
 	// We created it before it was enumerated-- Let's register that now.
@@ -72,9 +77,18 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIn
 	}
 }
 
-func (f *jpptFolderTracker) RecordCreation(folder string) {
+func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	if folder == common.Dev_Null {
+		return nil // Never persist to dev-null
+	}
+
+	err := doCreation()
+	if err != nil {
+		return err
+	}
 
 	if idx, ok := f.contents[folder]; ok {
 		// overwrite it's transfer status
@@ -84,9 +98,15 @@ func (f *jpptFolderTracker) RecordCreation(folder string) {
 		// Recording it in memory is OK, because we *cannot* resume a job that hasn't finished traversal.
 		f.unregisteredButCreated[folder] = struct{}{}
 	}
+
+	return nil
 }
 
 func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.OverwriteOption, prompter common.Prompter) bool {
+	if folder == common.Dev_Null {
+		return false // Never persist to dev-null
+	}
+
 	switch overwrite {
 	case common.EOverwriteOption.True():
 		return true
@@ -133,6 +153,10 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 func (f *jpptFolderTracker) StopTracking(folder string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	if folder == common.Dev_Null {
+		return // Not possible to track this
+	}
 
 	// no-op, because tracking is now handled by jppt, anyway.
 	if _, ok := f.contents[folder]; ok {

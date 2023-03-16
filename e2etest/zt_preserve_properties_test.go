@@ -30,7 +30,7 @@ import (
 //   and those specified on the command line
 
 func TestProperties_NameValueMetadataIsPreservedS2S(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1K",
@@ -42,11 +42,10 @@ func TestProperties_NameValueMetadataIsPreservedS2S(t *testing.T) {
 }
 
 func TestProperties_NameValueMetadataCanBeUploaded(t *testing.T) {
-	expectedMap := map[string]string{"foo": "abc", "bar": "def"}
-
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllUploads(), eValidate.Auto(), params{
+	expectedMap := map[string]string{"foo": "abc", "bar": "def", "baz": "state=a;b"}
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllUploads(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
-		metadata:  "foo=abc;bar=def",
+		metadata:  "foo=abc;bar=def;baz=state=a\\;b",
 	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
@@ -57,7 +56,7 @@ func TestProperties_NameValueMetadataCanBeUploaded(t *testing.T) {
 }
 
 func TestProperties_HNSACLs(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:              true,
 		preserveSMBPermissions: true, // this flag is deprecated, but still held over to avoid breaking.
 	}, nil, testFiles{

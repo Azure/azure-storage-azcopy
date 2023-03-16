@@ -52,7 +52,7 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipe
 			destBlobTier = blobSrcInfoProvider.BlobTier()
 
 			// capture the necessary info so that we can perform optimizations later
-			pageRangeOptimizer = newPageRangeOptimizer(azblob.NewPageBlobURL(*srcURL, p), jptm.Context())
+			pageRangeOptimizer = newPageRangeOptimizer(azblob.NewPageBlobURL(*srcURL, jptm.SourceProviderPipeline()), jptm.Context())
 		}
 	}
 
@@ -122,7 +122,7 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		}
 		_, err := c.destPageBlobURL.UploadPagesFromURL(
 			enrichedContext, c.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize, nil,
-			azblob.PageBlobAccessConditions{}, azblob.ModifiedAccessConditions{}, c.cpkToApply)
+			azblob.PageBlobAccessConditions{}, azblob.ModifiedAccessConditions{}, c.cpkToApply, c.jptm.GetS2SSourceBlobTokenCredential())
 		if err != nil {
 			c.jptm.FailActiveS2SCopy("Uploading page from URL", err)
 			return

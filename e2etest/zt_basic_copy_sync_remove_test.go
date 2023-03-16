@@ -21,14 +21,14 @@
 package e2etest
 
 import (
-	"testing"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"testing"
+	"time"
 )
 
 // ================================  Copy And Sync: Upload, Download, and S2S  =========================================
 func TestBasic_CopyUploadSingleBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), anonymousAuthOnly, allCredentialTypes, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1K",
@@ -40,7 +40,7 @@ func TestBasic_CopyUploadSingleBlob(t *testing.T) {
 }
 
 func TestBasic_CopyUploadEmptyBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "0K",
@@ -52,7 +52,7 @@ func TestBasic_CopyUploadEmptyBlob(t *testing.T) {
 }
 
 func TestBasic_CopyUploadLargeBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, &hooks{
 		beforeTestRun: func(h hookHelper) {
@@ -68,7 +68,7 @@ func TestBasic_CopyUploadLargeBlob(t *testing.T) {
 }
 
 func TestBasic_CopyDownloadSingleBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), allCredentialTypes, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1K",
@@ -80,7 +80,7 @@ func TestBasic_CopyDownloadSingleBlob(t *testing.T) {
 }
 
 func TestBasic_CopyDownloadEmptyBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "0K",
@@ -92,7 +92,7 @@ func TestBasic_CopyDownloadEmptyBlob(t *testing.T) {
 }
 
 func TestBasic_CopyDownloadLargeBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, &hooks{
 		beforeTestRun: func(h hookHelper) {
@@ -108,7 +108,8 @@ func TestBasic_CopyDownloadLargeBlob(t *testing.T) {
 }
 
 func TestBasic_CopyS2SSingleBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), params{
+	// AllCredentialTypes on both sides allows us to test OAuth-OAuth
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), allCredentialTypes, allCredentialTypes, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1K",
@@ -119,7 +120,7 @@ func TestBasic_CopyS2SSingleBlob(t *testing.T) {
 }
 
 func TestBasic_CopyS2SEmptyBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "0K",
@@ -130,7 +131,7 @@ func TestBasic_CopyS2SEmptyBlob(t *testing.T) {
 }
 
 func TestBasic_CopyS2SLargeBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, &hooks{
 		beforeTestRun: func(h hookHelper) {
@@ -145,7 +146,7 @@ func TestBasic_CopyS2SLargeBlob(t *testing.T) {
 }
 
 func TestBasic_CopyUploadDir(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1M",
@@ -163,7 +164,7 @@ func TestBasic_CopyUploadDir(t *testing.T) {
 }
 
 func TestBasic_CopyDownloadDir(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1M",
@@ -181,7 +182,7 @@ func TestBasic_CopyDownloadDir(t *testing.T) {
 }
 
 func TestBasic_CopyS2SDir(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1M",
@@ -200,8 +201,7 @@ func TestBasic_CopyS2SDir(t *testing.T) {
 
 // ================================  Remove: File, Folder, and Container  ==============================================
 func TestBasic_CopyRemoveFile(t *testing.T) {
-
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), allCredentialTypes, anonymousAuthOnly, params{
 		relativeSourcePath: "file2.txt",
 	}, nil, testFiles{
 		defaultSize: "1K",
@@ -215,7 +215,7 @@ func TestBasic_CopyRemoveFile(t *testing.T) {
 }
 
 func TestBasic_CopyRemoveLargeFile(t *testing.T) {
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		relativeSourcePath: "file2.txt",
 	}, &hooks{
 		beforeTestRun: func(h hookHelper) {
@@ -234,7 +234,7 @@ func TestBasic_CopyRemoveLargeFile(t *testing.T) {
 
 func TestBasic_CopyRemoveFolder(t *testing.T) {
 
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:          true,
 		relativeSourcePath: "folder2/",
 	}, nil, testFiles{
@@ -253,7 +253,7 @@ func TestBasic_CopyRemoveFolder(t *testing.T) {
 
 func TestBasic_CopyRemoveContainer(t *testing.T) {
 
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:          true,
 		relativeSourcePath: "",
 	}, nil, testFiles{
@@ -279,7 +279,7 @@ func TestBasic_CopyToWrongBlobType(t *testing.T) {
 				continue
 			}
 
-			RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob(), common.EFromTo.LocalBlob()), eValidate.Auto(), params{
+			RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob(), common.EFromTo.LocalBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 				recursive:              true,
 				blobType:               src.String(),
 				stripTopDir:            true,
@@ -313,6 +313,8 @@ func TestBasic_CopyWithShareRoot(t *testing.T) {
 		eOperation.Copy(), // Sync already shares the root by default.
 		eTestFromTo.AllUploads(),
 		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
 		params{
 			recursive:        true,
 			invertedAsSubdir: true,
@@ -328,6 +330,282 @@ func TestBasic_CopyWithShareRoot(t *testing.T) {
 				folder("a"),
 				f("a/asdf.txt"),
 			},
+		},
+		EAccountType.Standard(),
+		EAccountType.Standard(),
+		"",
+	)
+}
+
+// TestBasic_HashBasedSync_Folders validates that folders appropriately use LMT when hash based sync is enabled
+func TestBasic_HashBasedSync_Folders(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.FileFile(), common.EFromTo.FileLocal()), // test both dest and source comparators
+    eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+recursive:   true,
+			compareHash: common.ESyncHashType.MD5(),
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) { // set up source to overwrite dest
+				newFiles := testFiles{
+					defaultSize: "1K",
+					shouldTransfer: []interface{}{
+						folder(""),
+						folder("overwrite me"),
+						folder("not duplicate"),
+					},
+					shouldSkip: []interface{}{
+						folder("do not overwrite me"),
+					},
+				}
+
+				h.SetTestFiles(newFiles)
+
+				target := newFiles.shouldTransfer[1].(*testObject) // overwrite me
+
+				h.CreateFile(target, false) // create destination before source to prefer overwrite
+				time.Sleep(5 * time.Second)
+				h.CreateFile(target, true)
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				folder("not duplicate"),
+			},
+			shouldSkip: []interface{}{
+				folder("do not overwrite me"),
+			},
+		},
+		EAccountType.Standard(),
+		EAccountType.Standard(),
+		"",
+	)
+}
+
+func TestBasic_HashBasedSync_S2S(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.BlobBlob()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive:   true,
+			compareHash: common.ESyncHashType.MD5(),
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				h.CreateFile(f("overwriteme.txt"), false) // will have a different hash, and get overwritten.
+
+				existingBody := []byte("foobar")
+				existingObject := f("skipme-exists.txt")
+				existingObject.body = existingBody
+
+				h.CreateFile(existingObject, true)
+				h.CreateFile(existingObject, false)
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("asdf.txt"),
+				f("overwriteme.txt"), // create at destination with different hash
+			},
+			shouldSkip: []interface{}{
+				f("skipme-exists.txt"), // create at destination
+			},
+		},
+		EAccountType.Standard(),
+		EAccountType.Standard(),
+		"",
+	)
+}
+
+func TestBasic_HashBasedSync_UploadDownload(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.BlobLocal(), common.EFromTo.FileLocal()), // no need to run every endpoint again
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive:   true,
+			compareHash: common.ESyncHashType.MD5(),
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				h.CreateFile(f("overwriteme.txt"), false) // will have a different hash, and get overwritten.
+
+				existingBody := []byte("foobar")
+				existingObject := f("skipme-exists.txt")
+				existingObject.body = existingBody
+
+				h.CreateFile(existingObject, true)
+				h.CreateFile(existingObject, false)
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("asdf.txt"),
+				f("overwriteme.txt"), // create at destination with different hash
+			},
+			shouldSkip: []interface{}{
+				f("skipme-exists.txt"), // create at destination
+			},
+		},
+		EAccountType.Standard(),
+		EAccountType.Standard(),
+		"",
+	)
+}
+
+func TestBasic_OverwriteHNSDirWithChildren(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.LocalBlobFS()),
+    eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+      recursive: true,
+			preserveSMBPermissions: true,
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				h.CreateFiles(
+					testFiles{
+						defaultSize: "1K",
+						shouldSkip: []interface{}{
+							folder("overwrite"), //create folder to overwrite, with no perms so it can be correctly detected later.
+							f("overwrite/a"), // place file under folder to re-create conditions
+						},
+					},
+					false, // create dest
+					false, // do not set test files
+					false, // create only shouldSkip here
+				)
+       },
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+        // overwrite with an ACL to ensure overwrite worked
+				folder("overwrite", with{adlsPermissionsACL: "user::rwx,group::rwx,other::-w-"}),
+			},
+		},
+		EAccountType.HierarchicalNamespaceEnabled(),
+		EAccountType.HierarchicalNamespaceEnabled(),
+		"",
+	)
+}
+
+func TestBasic_SyncLMTSwitch_PreferServiceLMT(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.FileFile()),
+    eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+      preserveSMBInfo: BoolPointer(false),
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				// re-create dotransfer on the destination before the source to allow an overwrite.
+				// create the files endpoint with an LMT in the future.
+				fromTo := h.FromTo()
+				if fromTo.To() == common.ELocation.File() {
+					// if we're ignoring the SMB LMT, then the service LMT will still indicate the file is old, rather than new.
+					h.CreateFile(f("dotransfer", with{lastWriteTime: time.Now().Add(time.Second * 60)}), false)
+				} else {
+					h.CreateFile(f("dotransfer"), false)
+				}
+				time.Sleep(time.Second * 5)
+				if fromTo.From() == common.ELocation.File() {
+					// if we're ignoring the SMB LMT, then the service LMT will indicate the destination is older, not newer.
+					h.CreateFile(f("dotransfer", with{lastWriteTime: time.Now().Add(-time.Second * 60)}), true)
+				} else {
+					h.CreateFile(f("dotransfer"), true)
+				}
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+        f("dotransfer"),
+			},
+			shouldSkip: []interface{}{
+				f("donottransfer"), // "real"/service LMT should be out of date
+			},
+		},
+		EAccountType.Standard(),
+		EAccountType.Standard(),
+		"",
+		)
+}
+
+func TestBasic_SyncLMTSwitch_PreferSMBLMT(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.FileFile()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			// enforce for Linux/MacOS tests
+			preserveSMBInfo: BoolPointer(true),
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				/*
+				In a typical scenario, the source is written before the destination.
+				This way, the destination is always skipped in the case of overwrite on Sync.
+
+				In this case, because we distinctly DO NOT want to test the service LMT, we'll create the destination before the source.
+				But, we'll create those files with an SMB LMT that would lead to a skipped file.
+				 */
+
+				newTestFiles := testFiles{
+					defaultSize: "1K",
+					shouldTransfer: []interface{}{
+						folder(""),
+						f("do overwrite"),
+					},
+					shouldSkip: []interface{}{
+						f("do not overwrite"),
+					},
+				}
+
+				// create do not overwrite in the future, so that it does not get overwritten
+				h.CreateFile(f("do not overwrite", with{lastWriteTime: time.Now().Add(time.Second * 60)}), false)
+				// create do overwrite in the past, so that it does get overwritten
+				h.CreateFile(f("do overwrite", with{lastWriteTime: time.Now().Add(-time.Second * 60)}), false)
+				time.Sleep(time.Second * 5)
+				h.CreateFiles(newTestFiles, true, true, false)
+        },
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+      },
 		},
 		EAccountType.Standard(),
 		EAccountType.Standard(),

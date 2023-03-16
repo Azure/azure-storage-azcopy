@@ -66,10 +66,12 @@ func TestProperties_SMBPermissionsSDDLPreserved(t *testing.T) {
 		common.EFromTo.LocalFile(),
 		common.EFromTo.FileLocal(),
 		common.EFromTo.FileFile(),
-	), eValidate.Auto(), params{
+	), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:              true,
-		preserveSMBInfo:        true,
 		preserveSMBPermissions: true,
+
+		// default, but present for clarity
+		//preserveSMBInfo:        BoolPointer(true),
 	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
@@ -83,12 +85,14 @@ func TestProperties_SMBPermissionsSDDLPreserved(t *testing.T) {
 }
 
 // TODO: add some tests (or modify the above) to make assertions about case preservation (or not) in metadata
-//    See https://github.com/Azure/azure-storage-azcopy/issues/113 (which incidentally, I'm not observing in the tests above, for reasons unknown)
 //
+//	See https://github.com/Azure/azure-storage-azcopy/issues/113 (which incidentally, I'm not observing in the tests above, for reasons unknown)
 func TestProperties_SMBDates(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileLocal()), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:       true,
-		preserveSMBInfo: true,
+
+		// default, but present for clarity
+		//preserveSMBInfo:        BoolPointer(true),
 	}, &hooks{
 		beforeRunJob: func(h hookHelper) {
 			// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
@@ -116,9 +120,11 @@ func TestProperties_SMBDates(t *testing.T) {
 }
 
 func TestProperties_SMBFlags(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileFile(), common.EFromTo.FileLocal()), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileFile(), common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:       true,
-		preserveSMBInfo: true,
+
+		// default, but present for clarity
+		//preserveSMBInfo:        BoolPointer(true),
 	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
@@ -141,9 +147,11 @@ func TestProperties_SMBPermsAndFlagsWithIncludeAfter(t *testing.T) {
 		f("fold1/fileb", with{smbAttributes: 2}),
 	}
 
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.FileLocal()), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:       true,
-		preserveSMBInfo: true, // this wasn't compatible with time-sensitive filtering prior.
+
+		// default, but present for clarity
+		//preserveSMBInfo:        BoolPointer(true),
 		// includeAfter: SET LATER
 	}, &hooks{
 		beforeRunJob: func(h hookHelper) {
@@ -188,9 +196,11 @@ func TestProperties_SMBPermsAndFlagsWithSync(t *testing.T) {
 		f("fold1/fileb", with{smbAttributes: 2}),
 	}
 
-	RunScenarios(t, eOperation.Sync(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileLocal()), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.Sync(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:       true,
-		preserveSMBInfo: true, // this wasn't compatible with time-sensitive filtering prior.
+
+		// default, but present for clarity
+		//preserveSMBInfo:        BoolPointer(true),
 	}, &hooks{
 		beforeRunJob: func(h hookHelper) {
 			// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
@@ -238,11 +248,15 @@ func TestProperties_SMBWithCopyWithShareRoot(t *testing.T) {
 		eOperation.Copy(), // Sync already shares the root by default.
 		eTestFromTo.Other(common.EFromTo.LocalFile()),
 		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
 		params{
 			recursive:              true,
 			invertedAsSubdir:       true,
 			preserveSMBPermissions: true,
-			preserveSMBInfo:        true,
+
+			// default, but present for clarity
+			//preserveSMBInfo:        BoolPointer(true),
 		},
 		nil,
 		testFiles{
@@ -256,6 +270,35 @@ func TestProperties_SMBWithCopyWithShareRoot(t *testing.T) {
 				f("a/asdf.txt", with{smbAttributes: 2, smbPermissionsSddl: fileSDDL}),
 				folder("a/b", with{smbAttributes: 2, smbPermissionsSddl: folderSDDL}),
 				f("a/b/asdf.txt", with{smbAttributes: 2, smbPermissionsSddl: fileSDDL}),
+			},
+		},
+		EAccountType.Standard(),
+		EAccountType.Standard(),
+		"",
+	)
+}
+
+func TestProperties_SMBTimes(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.FileLocal()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive:       true,
+
+			// default, but present for clarity
+			//preserveSMBInfo:        BoolPointer(true),
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+
+			shouldSkip: []interface{}{
+				folder("", with{lastWriteTime: time.Now().Add(-time.Hour)}),    // If the fix worked, these should not be overwritten.
+				f("asdf.txt", with{lastWriteTime: time.Now().Add(-time.Hour)}), // If the fix did not work, we'll be relying upon the service's "real" LMT, which is not what we persisted, and an hour ahead of our files.
 			},
 		},
 		EAccountType.Standard(),

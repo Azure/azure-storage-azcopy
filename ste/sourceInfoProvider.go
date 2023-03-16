@@ -91,6 +91,13 @@ type ISMBPropertyBearingSourceInfoProvider interface {
 	GetSMBProperties() (TypedSMBPropertyHolder, error)
 }
 
+type IUNIXPropertyBearingSourceInfoProvider interface {
+	ISourceInfoProvider
+
+	GetUNIXProperties() (common.UnixStatAdapter, error)
+	HasUNIXProperties() bool
+}
+
 type ICustomLocalOpener interface {
 	ISourceInfoProvider
 	Open(path string) (*os.File, error)
@@ -98,7 +105,7 @@ type ICustomLocalOpener interface {
 
 type sourceInfoProviderFactory func(jptm IJobPartTransferMgr) (ISourceInfoProvider, error)
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////
 // Default copy remote source info provider which provides info sourced from transferInfo.
 // It implements all methods of ISourceInfoProvider except for GetFreshLastModifiedTime.
 // It's never correct to implement that based on the transfer info, because the whole point is that it should

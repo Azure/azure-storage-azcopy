@@ -38,7 +38,7 @@ import (
 func TestClient_ProvidedScopeUpload(t *testing.T) {
 	cpkByName := "blobgokeytestscope"
 	verifyOnlyProps := verifyOnly{with{cpkByName: cpkByName}}
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFile()), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 		cpkByName: cpkByName,
 	}, nil, testFiles{
@@ -60,7 +60,7 @@ func TestClient_ProvidedScopeUpload(t *testing.T) {
 func TestClient_ProvidedScopeS2S(t *testing.T) {
 	cpkByName := "blobgokeytestscope"
 	verifyOnlyProps := verifyOnly{with{cpkByName: cpkByName}}
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileBlob()), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 		cpkByName: cpkByName,
 	}, nil, testFiles{
@@ -81,7 +81,7 @@ func TestClient_ProvidedScopeS2S(t *testing.T) {
 func TestClient_ProvidedScopeDownload(t *testing.T) {
 	cpkByName := "blobgokeytestscope"
 	verifyOnlyProps := verifyOnly{with{cpkByName: cpkByName}}
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.BlobLocal()), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.BlobLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 		cpkByName: cpkByName,
 	}, nil, testFiles{
@@ -95,7 +95,7 @@ func TestClient_ProvidedScopeDownload(t *testing.T) {
 
 func TestClient_ProvidedKeyUpload(t *testing.T) {
 	verifyOnlyProps := verifyOnly{with{cpkByValue: true}}
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:  true,
 		cpkByValue: true,
 	}, nil, testFiles{
@@ -116,7 +116,7 @@ func TestClient_ProvidedKeyUpload(t *testing.T) {
 
 func TestClient_ProvidedKeyS2S(t *testing.T) {
 	verifyOnlyProps := verifyOnly{with{cpkByValue: true}}
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileBlob()), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:  true,
 		cpkByValue: true,
 	}, nil, testFiles{
@@ -136,7 +136,7 @@ func TestClient_ProvidedKeyS2S(t *testing.T) {
 
 func TestClient_ProvidedKeyDownload(t *testing.T) {
 	verifyOnlyProps := verifyOnly{with{cpkByValue: true}}
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobLocal()), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:  true,
 		cpkByValue: true,
 	}, nil, testFiles{

@@ -47,8 +47,8 @@ type blobAccountTraverser struct {
 	cpkOptions common.CpkOptions
 }
 
-func (t *blobAccountTraverser) IsDirectory(_ bool) bool {
-	return true // Returns true as account traversal is inherently folder-oriented and recursive.
+func (t *blobAccountTraverser) IsDirectory(_ bool) (bool, error) {
+	return true, nil // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
 func (t *blobAccountTraverser) listContainers() ([]string, error) {
@@ -115,9 +115,7 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
-	includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc,
-	s2sPreserveSourceTags bool, cpkOptions common.CpkOptions) (t *blobAccountTraverser) {
+func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions) (t *blobAccountTraverser) {
 	bURLParts := azblob.NewBlobURLParts(*rawURL)
 	cPattern := bURLParts.ContainerName
 

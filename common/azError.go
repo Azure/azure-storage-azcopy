@@ -27,7 +27,7 @@ type AzError struct {
 	additonalInfo string
 }
 
-// NewAzError composes an AzError with given code and messgae
+// NewAzError composes an AzError with given code and message
 func NewAzError(base AzError, additionalInfo string) AzError {
 	base.additonalInfo = additionalInfo
 	return base
@@ -52,5 +52,5 @@ func (err AzError) LoginCredMissing() AzError {
 }
 
 func (err AzError) InvalidBlobName() AzError {
-	return AzError {uint64(2), "Invalid Blob Name.", ""}
+	return AzError{uint64(2), "Invalid Blob Name.", ""}
 }

@@ -23,6 +23,7 @@ package e2etest
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"runtime"
 	"strings"
 
@@ -54,7 +55,7 @@ func (Validator) ValidateRemoveTransfer(c asserter, isSrcEncoded bool, isDstEnco
 	// TODO: Think of how to validate files in case of remove
 }
 func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool, isDstEncoded bool,
-	sourcePrefix string, destinationPrefix string, expectedTransfers []*testObject, actualTransfers []common.TransferDetail, statusToTest common.TransferStatus, fromTo common.FromTo) {
+	sourcePrefix string, destinationPrefix string, expectedTransfers []*testObject, actualTransfers []common.TransferDetail, statusToTest common.TransferStatus, fromTo common.FromTo, srcAccountType, dstAccountType AccountType) {
 
 	sourcePrefix = makeSlashesComparable(sourcePrefix)
 	destinationPrefix = makeSlashesComparable(destinationPrefix)
@@ -82,12 +83,13 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 		return s + "/"
 	}
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers, func(to *testObject) string {
-		if to.isFolder() && fromTo != common.EFromTo.BlobBlob() { // Blob has no concept of folders, except in ADLSG2. However, internally, they're treated as blobs anyway.
+		if to.isFolder() && (fromTo.To() != common.ELocation.Blob() || dstAccountType == EAccountType.HierarchicalNamespaceEnabled()) {
 			return addFolderSuffix(to.name)
 		} else {
 			return to.name
 		}
 	})
+
 	for _, transfer := range actualTransfers {
 		if snapshotID != "" {
 			c.Assert(strings.Contains(transfer.Src, snapshotID), equals(), true)
@@ -119,8 +121,10 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 			dstRelativeFilePath, _ = url.PathUnescape(dstRelativeFilePath)
 		}
 
-		// the relative paths should be equal
-		c.Assert(srcRelativeFilePath, equals(), dstRelativeFilePath)
+		if transfer.Dst != os.DevNull { // Don't check if the destination is NUL-- It won't be correct.
+			// the relative paths should be equal
+			c.Assert(srcRelativeFilePath, equals(), dstRelativeFilePath)
+		}
 
 		// look up the path from the expected transfers, make sure it exists
 		folderMessage := ""

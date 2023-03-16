@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"context"
+
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	chk "gopkg.in/check.v1"
@@ -56,7 +58,7 @@ func (s *genericTraverserSuite) TestBlobFSServiceTraverserWithManyObjects(c *chk
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, objectList)
 
 	// Create a local traversal
-	localTraverser := newLocalTraverser(dstDirName, true, true, func(common.EntityType) {})
+	localTraverser := newLocalTraverser(context.TODO(), dstDirName, true, true, common.ESyncHashType.None(), func(common.EntityType) {}, nil)
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
@@ -172,7 +174,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, objectList)
 
 	// Create a local traversal
-	localTraverser := newLocalTraverser(dstDirName, true, true, func(common.EntityType) {})
+	localTraverser := newLocalTraverser(context.TODO(), dstDirName, true, true, common.ESyncHashType.None(), func(common.EntityType) {}, nil)
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
@@ -182,8 +184,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 	// construct a blob account traverser
 	blobPipeline := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 	rawBSU := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
-	blobAccountTraverser := newBlobAccountTraverser(&rawBSU, blobPipeline, ctx, false,
-		func(common.EntityType) {}, false, common.CpkOptions{})
+	blobAccountTraverser := newBlobAccountTraverser(&rawBSU, blobPipeline, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{})
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}
@@ -357,7 +358,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, objectList)
 
 	// Create a local traversal
-	localTraverser := newLocalTraverser(dstDirName, true, true, func(common.EntityType) {})
+	localTraverser := newLocalTraverser(context.TODO(), dstDirName, true, true, common.ESyncHashType.None(), func(common.EntityType) {}, nil)
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
@@ -368,8 +369,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	blobPipeline := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 	rawBSU := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
 	rawBSU.Path = "/objectmatch*" // set the container name to contain a wildcard
-	blobAccountTraverser := newBlobAccountTraverser(&rawBSU, blobPipeline, ctx, false,
-		func(common.EntityType) {}, false, common.CpkOptions{})
+	blobAccountTraverser := newBlobAccountTraverser(&rawBSU, blobPipeline, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{})
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}

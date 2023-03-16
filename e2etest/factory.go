@@ -23,9 +23,9 @@ package e2etest
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
-	"path/filepath"
+	"os"
+	"path"
 	"runtime"
 	"strings"
 	"testing"
@@ -184,7 +184,7 @@ func (TestResourceFactory) CreateNewFileShareSnapshot(c asserter, fileShare azfi
 }
 
 func (TestResourceFactory) CreateLocalDirectory(c asserter) (dstDirName string) {
-	dstDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
+	dstDirName, err := os.MkdirTemp("","AzCopyLocalTest")
 	c.AssertNoErr(err)
 	return
 }
@@ -228,20 +228,28 @@ func getTestName(t *testing.T) (pseudoSuite, test string) {
 	uscorePos := strings.Index(testName, "_")
 	if uscorePos >= 0 && uscorePos < len(testName)-1 {
 		beforeUnderscore := strings.ToLower(testName[:uscorePos])
-		fileWords := strings.Split(strings.Replace(strings.ToLower(filepath.Base(fileName)), "_test.go", "", -1), "_")
-		for _, w := range fileWords {
-			if beforeUnderscore == w {
-				pseudoSuite = beforeUnderscore
-				testName = testName[uscorePos+1:]
-				break
-			}
+
+		fileWords := strings.ReplaceAll(
+			strings.TrimSuffix(strings.TrimPrefix(path.Base(fileName), "zt_"), "_test.go"), "_", "")
+
+		if strings.Contains(fileWords, beforeUnderscore) {
+			pseudoSuite = beforeUnderscore
+			testName = testName[uscorePos+1:]
 		}
+		// fileWords := strings.Split(strings.Replace(strings.ToLower(filepath.Base(fileName)), "_test.go", "", -1), "_")
+		// for _, w := range fileWords {
+		// 	if beforeUnderscore == w {
+		// 		pseudoSuite = beforeUnderscore
+		// 		testName = testName[uscorePos+1:]
+		// 		break
+		// 	}
+		// }
 	}
 
 	return pseudoSuite, removeUnderscores(testName)
 }
 
-//nolint
+// nolint
 // This function generates an entity name by concatenating the passed prefix,
 // the name of the test requesting the entity name, and the minute, second, and nanoseconds of the call.
 // This should make it easy to associate the entities with their test, uniquely identify
@@ -252,10 +260,10 @@ func generateName(c asserter, prefix string, maxLen int) string {
 	name := c.CompactScenarioName() // don't want to just use test name here, because each test contains multiple scenarios with the declarative runner
 
 	textualPortion := fmt.Sprintf("%s-%s", prefix, strings.ToLower(name))
-	currentTime := time.Now()
-	numericSuffix := fmt.Sprintf("%02d%02d%d", currentTime.Minute(), currentTime.Second(), currentTime.Nanosecond())
+	// GUIDs are less prone to overlap than times.
+	guidSuffix := uuid.New().String()
 	if maxLen > 0 {
-		maxTextLen := maxLen - len(numericSuffix)
+		maxTextLen := maxLen - len(guidSuffix)
 		if maxTextLen < 1 {
 			panic("max len too short")
 		}
@@ -263,7 +271,7 @@ func generateName(c asserter, prefix string, maxLen int) string {
 			textualPortion = textualPortion[:maxTextLen]
 		}
 	}
-	name = textualPortion + numericSuffix
+	name = textualPortion + guidSuffix
 	return name
 }
 
@@ -272,7 +280,7 @@ func (TestResourceNameGenerator) GenerateContainerName(c asserter) string {
 	return uuid.New().String()
 }
 
-//nolint
+// nolint
 func (TestResourceNameGenerator) generateBlobName(c asserter) string {
 	return generateName(c, blobPrefix, 0)
 }

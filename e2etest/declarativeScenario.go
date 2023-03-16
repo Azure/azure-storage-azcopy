@@ -46,6 +46,7 @@ type scenario struct {
 	operation           Operation
 	validate            Validate
 	fromTo              common.FromTo
+	credTypes           [2]common.CredentialType
 	p                   params
 	hs                  hooks
 	fs                  testFiles
@@ -53,11 +54,10 @@ type scenario struct {
 	stripTopDir bool // TODO: figure out how we'll control and use this
 
 	// internal declarative runner state
-	a           asserter
-	state       scenarioState // TODO: does this really need to be a separate struct?
-	needResume  bool
-	chToStdin   chan string
-	isSourceAcc bool
+	a          asserter
+	state      scenarioState // TODO: does this really need to be a separate struct?
+	needResume bool
+	chToStdin  chan string
 }
 
 type scenarioState struct {
@@ -69,6 +69,42 @@ type scenarioState struct {
 // Run runs one test scenario
 func (s *scenario) Run() {
 	defer s.cleanup()
+
+	// setup runner
+	azcopyDir, err := os.MkdirTemp("", "")
+	if err != nil {
+		s.a.Error(err.Error())
+		return
+	}
+	azcopyRan := false
+	defer func() {
+		if os.Getenv("AZCOPY_E2E_LOG_OUTPUT") == "" {
+			s.a.Assert(os.RemoveAll(azcopyDir), equals(), nil)
+			return // no need, just delete logdir
+		}
+
+		err := os.MkdirAll(os.Getenv("AZCOPY_E2E_LOG_OUTPUT"), os.ModePerm|os.ModeDir)
+		if err != nil {
+			s.a.Assert(err, equals(), nil)
+			return
+		}
+		if azcopyRan && s.a.Failed() {
+			s.uploadLogs(azcopyDir)
+			s.a.(*testingAsserter).t.Log("uploaded logs for job " + s.state.result.jobID.String() + " as an artifact")
+		}
+	}()
+
+	// setup scenario
+	// First, validate the accounts make sense for the source/dests
+	if s.srcAccountType.IsBlobOnly() {
+		s.a.Assert(s.fromTo.From(), equals(), common.ELocation.Blob())
+	}
+
+	if s.destAccountType.IsBlobOnly() {
+		s.a.Assert(s.destAccountType, notEquals(), EAccountType.StdManagedDisk(), "Upload is not supported in MD testing yet")
+		s.a.Assert(s.destAccountType, notEquals(), EAccountType.OAuthManagedDisk(), "Upload is not supported in MD testing yet")
+		s.a.Assert(s.fromTo.To(), equals(), common.ELocation.Blob())
+	}
 
 	// setup
 	s.assignSourceAndDest() // what/where are they
@@ -86,14 +122,15 @@ func (s *scenario) Run() {
 	}
 
 	// execute
-	s.runAzCopy()
+	azcopyRan = true
+	s.runAzCopy(azcopyDir)
 	if s.a.Failed() {
 		return // execution failed. No point in running validation
 	}
 
 	// resume if needed
 	if s.needResume {
-		tx, err := s.state.result.GetTransferList(common.ETransferStatus.Cancelled())
+		tx, err := s.state.result.GetTransferList(common.ETransferStatus.Cancelled(), azcopyDir)
 		s.a.AssertNoErr(err, "Failed to get transfer list for Cancelled")
 		s.a.Assert(len(tx), equals(), len(s.p.debugSkipFiles), "Job cancel didn't completely work")
 
@@ -101,31 +138,42 @@ func (s *scenario) Run() {
 			return
 		}
 
-		s.resumeAzCopy()
+		s.resumeAzCopy(azcopyDir)
 	}
 	if s.a.Failed() {
 		return // resume failed. No point in running validation
 	}
 
 	// check
-	s.validateTransferStates()
+	s.validateTransferStates(azcopyDir)
 	if s.a.Failed() {
 		return // no point in doing more validation
 	}
-	s.validateProperties()
-	if s.a.Failed() {
-		return // no point in doing more validation
-	}
-	if s.validate&eValidate.AutoPlusContent() != 0 {
-		s.validateContent()
+
+	if !s.p.destNull {
+		s.validateProperties()
+		if s.a.Failed() {
+			return // no point in doing more validation
+		}
+
+		if s.validate&eValidate.AutoPlusContent() != 0 {
+			s.validateContent()
+		}
 	}
 
 	s.runHook(s.hs.afterValidation)
 }
 
+func (s *scenario) uploadLogs(logDir string) {
+	if s.state.result == nil || os.Getenv("AZCOPY_E2E_LOG_OUTPUT") == "" {
+		return // nothing to upload
+	}
+	s.a.Assert(os.Rename(logDir, filepath.Join(os.Getenv("AZCOPY_E2E_LOG_OUTPUT"), s.state.result.jobID.String())), equals(), nil)
+}
+
 func (s *scenario) runHook(h hookFunc) bool {
 	if h == nil {
-		return true //nothing to do. So "successful"
+		return true // nothing to do. So "successful"
 	}
 
 	// run the hook, passing ourself in as the implementation of hookHelper interface
@@ -136,25 +184,38 @@ func (s *scenario) runHook(h hookFunc) bool {
 
 func (s *scenario) assignSourceAndDest() {
 	createTestResource := func(loc common.Location, isSourceAcc bool) resourceManager {
+		var accType AccountType
+		if isSourceAcc {
+			accType = s.srcAccountType
+		} else {
+			accType = s.destAccountType
+		}
+
 		// TODO: handle account to account (multi-container) scenarios
 		switch loc {
 		case common.ELocation.Local():
-			return &resourceLocal{}
+			return &resourceLocal{common.IffString(s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
 		case common.ELocation.File():
 			return &resourceAzureFileShare{accountType: s.srcAccountType}
 		case common.ELocation.Blob():
 			// TODO: handle the multi-container (whole account) scenario
 			// TODO: handle wider variety of account types
+			if accType.IsManagedDisk() {
+				mdCfg, err := GlobalInputManager{}.GetMDConfig(accType)
+				s.a.AssertNoErr(err)
+				return &resourceManagedDisk{config: *mdCfg}
+			}
+
 			if isSourceAcc {
 				return &resourceBlobContainer{accountType: s.srcAccountType}
 			} else {
 				return &resourceBlobContainer{accountType: s.destAccountType}
 			}
 		case common.ELocation.BlobFS():
-			s.a.Error("Not implementd yet for blob FS")
+			s.a.Error("Not implemented yet for blob FS")
 			return &resourceDummy{}
 		case common.ELocation.S3():
-			s.a.Error("Not implementd yet for S3")
+			s.a.Error("Not implemented yet for S3")
 			return &resourceDummy{}
 		case common.ELocation.Unknown():
 			return &resourceDummy{}
@@ -164,10 +225,10 @@ func (s *scenario) assignSourceAndDest() {
 	}
 
 	s.state.source = createTestResource(s.fromTo.From(), true)
-	s.state.dest = createTestResource(s.fromTo.To(), s.isSourceAcc)
+	s.state.dest = createTestResource(s.fromTo.To(), false)
 }
 
-func (s *scenario) runAzCopy() {
+func (s *scenario) runAzCopy(logDirectory string) {
 	s.chToStdin = make(chan string) // unubuffered seems the most predictable for our usages
 	defer close(s.chToStdin)
 
@@ -186,25 +247,36 @@ func (s *scenario) runAzCopy() {
 		}
 	}
 
-	// run AzCopy
-	const useSas = true // TODO: support other auth options (see params of RunTest)
+	needsSAS := func(credType common.CredentialType) bool {
+		return credType == common.ECredentialType.Anonymous() || credType == common.ECredentialType.MDOAuthToken()
+	}
+
 	tf := s.GetTestFiles()
-	var srcUseSas = tf.sourcePublic == azblob.PublicAccessNone
+	// run AzCopy
 	result, wasClean, err := r.ExecuteAzCopyCommand(
 		s.operation,
-		s.state.source.getParam(s.stripTopDir, srcUseSas, tf.objectTarget),
-		// Prefer the destination target over the object target itself.
-		s.state.dest.getParam(false, useSas, common.IffString(tf.destTarget != "", tf.destTarget, tf.objectTarget)),
-		afterStart, s.chToStdin)
+		s.state.source.getParam(s.stripTopDir, needsSAS(s.credTypes[0]), tf.objectTarget),
+    s.state.dest.getParam(false, needsSAS(s.credTypes[1]), common.IffString(tf.destTarget != "", tf.destTarget, tf.objectTarget)),
+		s.credTypes[0] == common.ECredentialType.OAuthToken() || s.credTypes[1] == common.ECredentialType.OAuthToken(), // needsOAuth
+		afterStart, s.chToStdin, logDirectory)
 
 	if !wasClean {
 		s.a.AssertNoErr(err, "running AzCopy")
 	}
 
+	// Generally, a cancellation is done when auth fails.
+	if result.finalStatus.JobStatus == common.EJobStatus.Cancelled() {
+		for _, v := range result.finalStatus.FailedTransfers {
+			if v.ErrorCode == 403 {
+				s.a.Error("Job " + result.jobID.String() + " authorization failed, perhaps SPN auth or the SAS token is bad?")
+			}
+		}
+	}
+
 	s.state.result = &result
 }
 
-func (s *scenario) resumeAzCopy() {
+func (s *scenario) resumeAzCopy(logDir string) {
 	s.chToStdin = make(chan string) // unubuffered seems the most predictable for our usages
 	defer close(s.chToStdin)
 
@@ -232,8 +304,10 @@ func (s *scenario) resumeAzCopy() {
 		eOperation.Resume(),
 		s.state.result.jobID.String(),
 		"",
+		false,
 		afterStart,
 		s.chToStdin,
+		logDir,
 	)
 
 	if !wasClean {
@@ -255,7 +329,7 @@ func (s *scenario) validateRemove() {
 		}
 	}
 }
-func (s *scenario) validateTransferStates() {
+func (s *scenario) validateTransferStates(azcopyDir string) {
 	if s.operation == eOperation.Remove() {
 		s.validateRemove()
 		return
@@ -278,10 +352,10 @@ func (s *scenario) validateTransferStates() {
 		//       Is that OK? (Not sure what to do if it's not, because azcopy jobs show, apparently doesn't offer us a way to get the skipped list)
 	} {
 		expectedTransfers := s.fs.getForStatus(statusToTest, expectFolders, expectRootFolder)
-		actualTransfers, err := s.state.result.GetTransferList(statusToTest)
+		actualTransfers, err := s.state.result.GetTransferList(statusToTest, azcopyDir)
 		s.a.AssertNoErr(err)
 
-		Validator{}.ValidateCopyTransfersAreScheduled(s.a, isSrcEncoded, isDstEncoded, srcRoot, dstRoot, expectedTransfers, actualTransfers, statusToTest, s.FromTo())
+		Validator{}.ValidateCopyTransfersAreScheduled(s.a, isSrcEncoded, isDstEncoded, srcRoot, dstRoot, expectedTransfers, actualTransfers, statusToTest, s.FromTo(), s.srcAccountType, s.destAccountType)
 		// TODO: how are we going to validate folder transfers????
 	}
 
@@ -429,7 +503,7 @@ func (s *scenario) validateContent() {
 	}
 }
 
-//// Individual property validation routines
+// // Individual property validation routines
 
 func (s *scenario) validateMetadata(expected, actual map[string]string, isFolder bool) {
 	if isFolder { // hdi_isfolder is service-relevant metadata, not something we'd be testing for. This can pop up when specifying a folder() on blob.
@@ -551,7 +625,7 @@ func (s *scenario) validateLastWriteTime(expected, actual *time.Time) {
 		expected, actual))
 }
 
-//nolint
+// nolint
 func (s *scenario) validateSMBAttrs(expected, actual *uint32) {
 	if expected == nil {
 		// These properties were not explicitly stated for verification
@@ -575,7 +649,7 @@ func (s *scenario) cleanup() {
 	}
 }
 
-/// support the hookHelper functions. These are use by our hooks to modify the state, or resources, of the running test
+// / support the hookHelper functions. These are use by our hooks to modify the state, or resources, of the running test
 
 func (s *scenario) FromTo() common.FromTo {
 	return s.fromTo
@@ -591,6 +665,10 @@ func (s *scenario) GetModifiableParameters() *params {
 
 func (s *scenario) GetTestFiles() testFiles {
 	return s.fs
+}
+
+func (s *scenario) SetTestFiles(fs testFiles) {
+	s.fs = fs
 }
 
 func (s *scenario) CreateFiles(fs testFiles, atSource bool, setTestFiles bool, createSourceFilesAtDest bool) {

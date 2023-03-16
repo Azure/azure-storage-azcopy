@@ -28,7 +28,7 @@ import (
 
 func TestTier_V2ToClassicAccount(t *testing.T) {
 
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:             true,
 		s2sPreserveAccessTier: true,
 		accessTier:            azblob.AccessTierHot,
@@ -43,7 +43,7 @@ func TestTier_V2ToClassicAccount(t *testing.T) {
 
 func TestTier_V2ToClassicAccountNoPreserve(t *testing.T) {
 
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:             true,
 		s2sPreserveAccessTier: false,
 		accessTier:            azblob.AccessTierHot,
@@ -58,7 +58,7 @@ func TestTier_V2ToClassicAccountNoPreserve(t *testing.T) {
 
 func TestTier_V2ToClassicAccountCool(t *testing.T) {
 
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:             true,
 		s2sPreserveAccessTier: true,
 		accessTier:            azblob.AccessTierCool,
@@ -73,7 +73,7 @@ func TestTier_V2ToClassicAccountCool(t *testing.T) {
 
 func TestTier_V2ToClassicAccountNoPreserveCool(t *testing.T) {
 
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:             true,
 		s2sPreserveAccessTier: false,
 		accessTier:            azblob.AccessTierCool,

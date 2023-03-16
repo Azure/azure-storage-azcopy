@@ -8,12 +8,14 @@ import (
 
 func TestResume_FolderState(t *testing.T) {
 	// Create a child file before the folder itself, then persist the properties of the folder upon resume, knowing that we created the folder.
-	RunScenarios(t, eOperation.CopyAndSync()|eOperation.Resume(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileFile(), common.EFromTo.FileLocal()), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.CopyAndSync()|eOperation.Resume(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileFile(), common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:       true,
-		preserveSMBInfo: true,
 		debugSkipFiles: []string{
 			"a",
 		},
+
+		// default, but present for clarity
+		//preserveSMBInfo:        BoolPointer(true),
 	}, nil, testFiles{
 		defaultSize: "1K",
 
@@ -27,13 +29,15 @@ func TestResume_FolderState(t *testing.T) {
 
 func TestResume_NoCreateFolder(t *testing.T) {
 	// Don't create the folder "ourselves", and let AzCopy find that out on a resume.
-	RunScenarios(t, eOperation.Copy()|eOperation.Resume(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileFile(), common.EFromTo.FileLocal()), eValidate.Auto(), params{
+	RunScenarios(t, eOperation.Copy()|eOperation.Resume(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileFile(), common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:       true,
-		preserveSMBInfo: true,
 		debugSkipFiles: []string{
 			"a",
 			"a/b",
 		},
+
+		// default, but present for clarity
+		//preserveSMBInfo:        BoolPointer(true),
 	}, &hooks{
 		beforeResumeHook: func(h hookHelper) {
 			// Create the folder in the middle of the transfer

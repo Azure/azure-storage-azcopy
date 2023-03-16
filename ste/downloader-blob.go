@@ -37,16 +37,25 @@ type blobDownloader struct {
 
 	// used to avoid downloading zero ranges of page blobs
 	pageRangeOptimizer *pageRangeOptimizer
+
+	// used to avoid re-setting file mode
+	setMode bool
+
+	jptm     IJobPartTransferMgr
+	txInfo   TransferInfo
+	fileMode uint32
 }
 
 func newBlobDownloader() downloader {
 	return &blobDownloader{
-		filePacer: newNullAutoPacer(), // defer creation of real one, if needed, to Prologue
+		filePacer: NewNullAutoPacer(), // defer creation of real one, if needed, to Prologue
 	}
-
 }
 
 func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
+	bd.txInfo = jptm.Info()
+	bd.jptm = jptm
+
 	if jptm.Info().SrcBlobType == azblob.BlobPageBlob {
 		// page blobs need a file-specific pacer
 		// See comments in uploader-pageBlob for the reasons, since the same reasons apply are are explained there
@@ -126,8 +135,9 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 		// The retryReader encapsulates any retries that may be necessary while downloading the body
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		retryReader := get.Body(azblob.RetryReaderOptions{
-			MaxRetryRequests: destWriter.MaxRetryPerDownloadBody(),
-			NotifyFailedRead: common.NewReadLogFunc(jptm, u),
+			MaxRetryRequests:         destWriter.MaxRetryPerDownloadBody(),
+			NotifyFailedRead:         common.NewReadLogFunc(jptm, u),
+			ClientProvidedKeyOptions: clientProvidedKey,
 		})
 		defer retryReader.Close()
 		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newPacedResponseBody(jptm.Context(), retryReader, pacer), true)

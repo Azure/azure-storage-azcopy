@@ -24,7 +24,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
@@ -62,27 +61,57 @@ type blobTraverser struct {
 	includeSnapshot bool
 
 	includeVersion bool
+
+	stripTopDir bool
 }
 
-func (t *blobTraverser) IsDirectory(isSource bool) bool {
+func (t *blobTraverser) IsDirectory(isSource bool) (bool, error) {
 	isDirDirect := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(t.rawURL)
 
 	// Skip the single blob check if we're checking a destination.
 	// This is an individual exception for blob because blob supports virtual directories and blobs sharing the same name.
 	if isDirDirect || !isSource {
-		return isDirDirect
+		return isDirDirect, nil
 	}
 
-	_, isSingleBlob, _, err := t.getPropertiesIfSingleBlob()
+	_, _, isDirStub, blobErr := t.getPropertiesIfSingleBlob()
 
-	if stgErr, ok := err.(azblob.StorageError); ok {
+	if stgErr, ok := blobErr.(azblob.StorageError); ok {
 		// We know for sure this is a single blob still, let it walk on through to the traverser.
 		if stgErr.ServiceCode() == common.CPK_ERROR_SERVICE_CODE {
-			return false
+			return false, nil
 		}
 	}
 
-	return !isSingleBlob
+	if blobErr == nil {
+		return isDirStub, nil
+	}
+
+	blobURLParts := azblob.NewBlobURLParts(*t.rawURL)
+	containerRawURL := copyHandlerUtil{}.getContainerUrl(blobURLParts)
+	containerURL := azblob.NewContainerURL(containerRawURL, t.p)
+	searchPrefix := strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING) + common.AZCOPY_PATH_SEPARATOR_STRING
+	resp, err := containerURL.ListBlobsFlatSegment(t.ctx, azblob.Marker{}, azblob.ListBlobsSegmentOptions{Prefix: searchPrefix, MaxResults: 1})
+	if err != nil {
+		if azcopyScanningLogger != nil {
+			msg := fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err)
+			azcopyScanningLogger.Log(pipeline.LogError, msg)
+		}
+		return false, nil
+	}
+
+	if len(resp.Segment.BlobItems) == 0 {
+		//Not a directory
+		if stgErr, ok := blobErr.(azblob.StorageError); ok {
+			// if the blob is not found return the error to throw
+			if stgErr.ServiceCode() == common.BLOB_NOT_FOUND {
+				return false, errors.New(common.FILE_NOT_FOUND)
+			}
+		}
+		return false, blobErr
+	}
+
+	return true, nil
 }
 
 func (t *blobTraverser) getPropertiesIfSingleBlob() (props *azblob.BlobGetPropertiesResponse, isBlob bool, isDirStub bool, err error) {
@@ -176,7 +205,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			preprocessor,
 			getObjectNameOnly(strings.TrimSuffix(blobUrlParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
 			"",
-			common.EEntityType.File(),
+			common.EntityType(common.IffUint8(isBlob, uint8(common.EEntityType.File()), uint8(common.EEntityType.Folder()))),
 			blobProperties.LastModified(),
 			blobProperties.ContentLength(),
 			blobProperties,
@@ -250,17 +279,22 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 			if t.recursive {
 				for _, virtualDir := range lResp.Segment.BlobPrefixes {
 					enqueueDir(virtualDir.Name)
+					if azcopyScanningLogger != nil {
+						azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", virtualDir.Name))
+					}
 
 					if t.includeDirectoryStubs {
 						// try to get properties on the directory itself, since it's not listed in BlobItems
 						fblobURL := containerURL.NewBlobURL(strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING))
 						resp, err := fblobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+						folderRelativePath := strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
+						folderRelativePath = strings.TrimPrefix(folderRelativePath, searchPrefix)
 						if err == nil {
 							storedObject := newStoredObject(
 								preprocessor,
 								getObjectNameOnly(strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)),
-								strings.TrimSuffix(virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING),
-								common.EEntityType.File(), // folder stubs are treated like files in in the serial lister as well
+								folderRelativePath,
+								common.EEntityType.Folder(),
 								resp.LastModified(),
 								resp.ContentLength(),
 								resp,
@@ -268,6 +302,7 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 								common.FromAzBlobMetadataToCommonMetadata(resp.NewMetadata()),
 								containerName,
 							)
+							storedObject.archiveStatus = azblob.ArchiveStatusType(resp.ArchiveStatus())
 
 							if t.s2sPreserveSourceTags {
 								var BlobTags *azblob.BlobTags
@@ -362,11 +397,13 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 
 func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, blobInfo azblob.BlobItemInternal, relativePath string, containerName string) StoredObject {
 	adapter := blobPropertiesAdapter{blobInfo.Properties}
+
+	_, isFolder := blobInfo.Metadata["hdi_isfolder"]
 	object := newStoredObject(
 		preprocessor,
 		getObjectNameOnly(blobInfo.Name),
 		relativePath,
-		common.EEntityType.File(),
+		common.EntityType(common.IffUint8(isFolder, uint8(common.EEntityType.Folder()), uint8(common.EEntityType.File()))),
 		blobInfo.Properties.LastModified,
 		*blobInfo.Properties.ContentLength,
 		adapter,
@@ -375,9 +412,10 @@ func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 		containerName,
 	)
 
-	object.blobSnapshotID = blobInfo.Snapshot
 	object.blobDeleted = blobInfo.Deleted
-	if blobInfo.VersionID != nil {
+	if t.includeDeleted && t.includeSnapshot {
+		object.blobSnapshotID = blobInfo.Snapshot
+	} else if t.includeDeleted && t.includeVersion && blobInfo.VersionID != nil {
 		object.blobVersionID = *blobInfo.VersionID
 	}
 	return object
@@ -445,11 +483,6 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 }
 
 func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool) (t *blobTraverser) {
-	if strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning())) == "false" &&
-		includeDeleted && (includeSnapshot || includeVersion) {
-		os.Setenv("AZCOPY_DISABLE_HIERARCHICAL_SCAN", "true")
-		fmt.Println("AZCOPY_DISABLE_HIERARCHICAL_SCAN has been set to true to permanently delete soft-deleted snapshots/versions.")
-	}
 	t = &blobTraverser{
 		rawURL:                      rawURL,
 		p:                           p,
@@ -465,7 +498,15 @@ func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 		includeVersion:              includeVersion,
 	}
 
-	if strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning())) == "true" {
+	disableHierarchicalScanning := strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))
+
+	// disableHierarchicalScanning should be true for permanent delete
+	if (disableHierarchicalScanning == "false" || disableHierarchicalScanning == "") && includeDeleted && (includeSnapshot || includeVersion) {
+		t.parallelListing = false
+		fmt.Println("AZCOPY_DISABLE_HIERARCHICAL_SCAN has been set to true to permanently delete soft-deleted snapshots/versions.")
+	}
+
+	if disableHierarchicalScanning == "true" {
 		// TODO log to frontend log that parallel listing was disabled, once the frontend log PR is merged
 		t.parallelListing = false
 	}

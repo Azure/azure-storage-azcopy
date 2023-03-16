@@ -34,6 +34,8 @@ type pacer interface {
 	// RequestTrafficAllocation blocks until the caller is allowed to process byteCount bytes.
 	RequestTrafficAllocation(ctx context.Context, byteCount int64) error
 
+	UpdateTargetBytesPerSecond(newTarget int64)
+
 	// UndoRequest reverses a previous request to process n bytes.  Is used when
 	// the caller did not need all of the allocation they previously requested
 	// e.g. when they asked for enough for a big buffer, but never filled it, they would
@@ -43,7 +45,7 @@ type pacer interface {
 	Close() error
 }
 
-type pacerAdmin interface {
+type PacerAdmin interface {
 	pacer
 
 	// GetTotalTraffic returns the cumulative count of all traffic that has been processed
@@ -69,14 +71,16 @@ type tokenBucketPacer struct {
 	atomicGrandTotal           int64
 	atomicWaitCount            int64
 	expectedBytesPerRequest    int64
+	newTargetBytesPerSecond    chan int64
 	done                       chan struct{}
 }
 
-func newTokenBucketPacer(bytesPerSecond int64, expectedBytesPerCoarseRequest int64) *tokenBucketPacer {
+func NewTokenBucketPacer(bytesPerSecond int64, expectedBytesPerCoarseRequest int64) *tokenBucketPacer {
 	p := &tokenBucketPacer{atomicTokenBucket: bytesPerSecond / 4, // seed it immediately with part-of-a-second's worth, to avoid a sluggish start
 		atomicTargetBytesPerSecond: bytesPerSecond,
 		expectedBytesPerRequest:    int64(expectedBytesPerCoarseRequest),
 		done:                       make(chan struct{}),
+		newTargetBytesPerSecond:    make(chan int64),
 	}
 
 	go p.pacerBody()
@@ -87,6 +91,11 @@ func newTokenBucketPacer(bytesPerSecond int64, expectedBytesPerCoarseRequest int
 // RequestTrafficAllocation function is called by goroutines to request right to send a certain amount of bytes.
 // It controls their rate by blocking until they are allowed to proceed
 func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCount int64) error {
+	//if targetBytesIsZero, we have a null pacer, we just track GrandTotal
+	if p.targetBytesPerSecond() == 0 {
+		atomic.AddInt64(&p.atomicGrandTotal, byteCount)
+		return nil
+	}
 
 	// block until tokens are available
 	for atomic.AddInt64(&p.atomicTokenBucket, -byteCount) < 0 {
@@ -106,6 +115,13 @@ func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCou
 		case <-time.After(modifiedSleepDuration):
 			// keep looping
 		}
+		
+		// If we've updated target to a NULL pacer, we'll return immediately
+		if p.targetBytesPerSecond() == 0 {
+			atomic.AddInt64(&p.atomicGrandTotal, byteCount)
+			return nil
+		}
+
 	}
 
 	// record what we issued
@@ -129,12 +145,22 @@ func (p *tokenBucketPacer) Close() error {
 
 func (p *tokenBucketPacer) pacerBody() {
 	lastTime := time.Now()
+
+	lastTargetUpdateTime := time.Now()
+	newTarget := p.targetBytesPerSecond()
 	for {
 
 		select {
 		case <-p.done:
 			return
+		case newTarget = <- p.newTargetBytesPerSecond:
 		default:
+		}
+
+		/*check if we have to update target rate */
+		if newTarget != p.targetBytesPerSecond() && time.Since(lastTargetUpdateTime) >= deadBandDuration {
+			p.setTargetBytesPerSecond(newTarget)
+			lastTargetUpdateTime = time.Now()
 		}
 
 		currentTarget := atomic.LoadInt64(&p.atomicTargetBytesPerSecond)
@@ -169,6 +195,10 @@ func (p *tokenBucketPacer) targetBytesPerSecond() int64 {
 
 func (p *tokenBucketPacer) setTargetBytesPerSecond(value int64) {
 	atomic.StoreInt64(&p.atomicTargetBytesPerSecond, value)
+}
+
+func (p *tokenBucketPacer) UpdateTargetBytesPerSecond(value int64) {
+	p.newTargetBytesPerSecond <- value
 }
 
 func (p *tokenBucketPacer) GetTotalTraffic() int64 {

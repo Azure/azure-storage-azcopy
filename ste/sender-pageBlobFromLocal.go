@@ -32,6 +32,7 @@ type pageBlobUploader struct {
 	pageBlobSenderBase
 
 	md5Channel chan []byte
+	sip        ISourceInfoProvider
 }
 
 func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
@@ -40,7 +41,25 @@ func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipelin
 		return nil, err
 	}
 
-	return &pageBlobUploader{pageBlobSenderBase: *senderBase, md5Channel: newMd5Channel()}, nil
+	return &pageBlobUploader{pageBlobSenderBase: *senderBase, md5Channel: newMd5Channel(), sip: sip}, nil
+}
+
+func (u *pageBlobUploader) Prologue(ps common.PrologueState) (destinationModified bool) {
+	if u.jptm.Info().PreservePOSIXProperties {
+		if unixSIP, ok := u.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
+			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
+			u.metadataToApply = common.Metadata(u.metadataToApply).Clone().ToAzBlobMetadata()
+
+			statAdapter, err := unixSIP.GetUNIXProperties()
+			if err != nil {
+				u.jptm.FailActiveSend("GetUNIXProperties", err)
+			}
+
+			common.AddStatToBlobMetadata(statAdapter, u.metadataToApply)
+		}
+	}
+
+	return u.pageBlobSenderBase.Prologue(ps)
 }
 
 func (u *pageBlobUploader) Md5Channel() chan<- []byte {

@@ -167,7 +167,7 @@ func (s *folderDeletionManagerSuite) TestGetParent(c *chk.C) {
 			c.Assert(ok, chk.Equals, false)
 		} else {
 			c.Assert(ok, chk.Equals, true)
-			c.Assert(p, chk.Equals, expectedParent)
+			c.Assert(p.String(), chk.Equals, expectedParent)
 		}
 	}
 

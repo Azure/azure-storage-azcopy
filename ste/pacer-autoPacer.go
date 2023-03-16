@@ -86,7 +86,7 @@ func newPageBlobAutoPacer(bytesPerSecond int64, expectedBytesPerRequest int64, i
 	if shouldPacePageBlobs {
 		return newAutoPacer(bytesPerSecond, expectedBytesPerRequest, isFair, logger, pageBlobThroughputTunerString)
 	}
-	return newNullAutoPacer()
+	return NewNullAutoPacer()
 }
 
 func newAutoPacer(bytesPerSecond int64, expectedBytesPerRequest int64, isFair bool, logger common.ILogger, logPrefix string) autopacer {
@@ -102,7 +102,7 @@ func newAutoPacer(bytesPerSecond int64, expectedBytesPerRequest int64, isFair bo
 	}
 
 	a := &autoTokenBucketPacer{
-		tokenBucketPacer:       newTokenBucketPacer(bytesPerSecond, expectedBytesPerRequest),
+		tokenBucketPacer:       NewTokenBucketPacer(bytesPerSecond, expectedBytesPerRequest),
 		lastPeakBytesPerSecond: float32(bytesPerSecond),
 		done:                   make(chan struct{}),
 		logger:                 logger,

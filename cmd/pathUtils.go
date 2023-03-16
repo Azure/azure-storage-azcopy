@@ -221,7 +221,8 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 	case common.ELocation.GCP():
 		return resource, "", nil
 	case common.ELocation.Benchmark(), // cover for benchmark as we generate data for that
-		common.ELocation.Unknown(): // cover for unknown as we treat that as garbage
+		common.ELocation.Unknown(), // cover for unknown as we treat that as garbage
+		common.ELocation.None():
 		// Local and S3 don't feature URL-embedded tokens
 		return resource, "", nil
 
@@ -296,7 +297,7 @@ func splitQueryFromSaslessResource(resource string, loc common.Location) (mainUr
 	if u, err := url.Parse(resource); err == nil && u.Query().Get("sig") != "" {
 		panic("this routine can only be called after the SAS has been removed")
 		// because, for security reasons, we don't want SASs returned in queryAndFragment, since
-		// we wil persist that (but we don't want to persist SAS's)
+		// we will persist that (but we don't want to persist SAS's)
 	}
 
 	// Work directly with a string-based format, so that we get both snapshot identifiers AND any other unparsed params

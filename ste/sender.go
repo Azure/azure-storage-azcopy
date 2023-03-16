@@ -66,6 +66,17 @@ type sender interface {
 	GetDestinationLength() (int64, error)
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////
+// propertiesSender is a sender that can copy properties like metadata/tags/tier alone to
+// to destination instead of full copy
+//
+
+type propertiesSender interface {
+	sender
+
+	GenerateCopyMetadata(id common.ChunkID) chunkFunc
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 // folderSender is a sender that also knows how to send folder property information
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -73,6 +84,20 @@ type folderSender interface {
 	EnsureFolderExists() error
 	SetFolderProperties() error
 	DirUrlToString() string // This is only used in folder tracking, so this should trim the SAS token.
+}
+
+// We wrote properties at creation time.
+type folderPropertiesSetInCreation struct{}
+
+func (f folderPropertiesSetInCreation) Error() string {
+	panic("Not a real error")
+}
+
+// ShouldSetProperties was called in creation and we got back a no.
+type folderPropertiesNotOverwroteInCreation struct{}
+
+func (f folderPropertiesNotOverwroteInCreation) Error() string {
+	panic("Not a real error")
 }
 
 type senderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error)
@@ -93,9 +118,9 @@ type s2sCopier interface {
 
 type s2sCopierFactory func(jptm IJobPartTransferMgr, srcInfoProvider IRemoteSourceInfoProvider, destination string, p pipeline.Pipeline, pacer pacer) (s2sCopier, error)
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////
 // Abstraction of the methods needed to upload one file to a remote location
-/////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////
 type uploader interface {
 	sender
 
@@ -191,6 +216,10 @@ func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pi
 		// jptm.LogTransferInfo(fmt.Sprintf("Autodetected %s blob type as %s.", jptm.Info().Source , intendedType))
 		// TODO: Log these? @JohnRusk and @zezha-msft this creates quite a bit of spam in the logs but is important info.
 		// TODO: Perhaps we should log it only if it isn't a block blob?
+	}
+
+	if jptm.Info().IsFolderPropertiesTransfer() {
+		return newBlobFolderSender(jptm, destination, p, pacer, sip)
 	}
 
 	switch intendedType {

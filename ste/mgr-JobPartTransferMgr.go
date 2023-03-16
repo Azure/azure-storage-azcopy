@@ -28,7 +28,7 @@ type IJobPartTransferMgr interface {
 	BlobTypeOverride() common.BlobType
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	JobHasLowFileCount() bool
-	//ScheduleChunk(chunkFunc chunkFunc)
+	// ScheduleChunk(chunkFunc chunkFunc)
 	Context() context.Context
 	SlicePool() common.ByteSlicePooler
 	CacheLimiter() common.CacheLimiter
@@ -60,6 +60,7 @@ type IJobPartTransferMgr interface {
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
 	SourceProviderPipeline() pipeline.Pipeline
+	SourceCredential() pipeline.Factory
 	FailActiveUpload(where string, err error)
 	FailActiveDownload(where string, err error)
 	FailActiveUploadWithStatus(where string, err error, failureStatus common.TransferStatus)
@@ -91,17 +92,22 @@ type IJobPartTransferMgr interface {
 	CpkInfo() common.CpkInfo
 	CpkScopeInfo() common.CpkScopeInfo
 	IsSourceEncrypted() bool
+	GetS2SSourceBlobTokenCredential() azblob.TokenCredential
+	PropertiesToTransfer() common.SetPropertiesFlags
+	ResetSourceSize() // sets source size to 0 (made to be used by setProperties command to make number of bytes transferred = 0)
+	SuccessfulBytesTransferred() int64
 }
 
 type TransferInfo struct {
-	JobID                  common.JobID
-	BlockSize              int64
-	Source                 string
-	SourceSize             int64
-	Destination            string
-	EntityType             common.EntityType
-	PreserveSMBPermissions common.PreservePermissionsOption
-	PreserveSMBInfo        bool
+	JobID                   common.JobID
+	BlockSize               int64
+	Source                  string
+	SourceSize              int64
+	Destination             string
+	EntityType              common.EntityType
+	PreserveSMBPermissions  common.PreservePermissionsOption
+	PreserveSMBInfo         bool
+	PreservePOSIXProperties bool
 
 	// Transfer info for S2S copy
 	SrcProperties
@@ -116,7 +122,8 @@ type TransferInfo struct {
 
 	// NumChunks is the number of chunks in which transfer will be split into while uploading the transfer.
 	// NumChunks is not used in case of AppendBlob transfer.
-	NumChunks uint16
+	NumChunks         uint16
+	RehydratePriority azblob.RehydratePriorityType
 }
 
 func (i TransferInfo) IsFolderPropertiesTransfer() bool {
@@ -127,7 +134,7 @@ func (i TransferInfo) IsFolderPropertiesTransfer() bool {
 // The main reason is that preserving folder LMTs at download time is very difficult, because it requires us to keep track of when the
 // last file has been saved in each folder OR just do all the folders at the very end.
 // This is because if we modify the contents of a folder after setting its LMT, then the LMT will change because Windows and Linux
-//(and presumably MacOS) automatically update the folder LMT when the contents are changed.
+// (and presumably MacOS) automatically update the folder LMT when the contents are changed.
 // The possible solutions to this problem may become difficult on very large jobs (e.g. 10s or hundreds of millions of files,
 // with millions of directories).
 // The secondary reason is that folder LMT's don't actually tell the user anything particularly useful. Specifically,
@@ -154,7 +161,7 @@ type SrcProperties struct {
 	SrcBlobTags    common.BlobTags
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 type chunkFunc func(int)
 
@@ -198,6 +205,20 @@ type jobPartTransferMgr struct {
 		@Parteek removed 3/23 morning, as jeff ad equivalent
 		// transfer chunks are put into this channel and execution engine takes chunk out of this channel.
 		chunkChannel chan<- ChunkMsg*/
+}
+
+func (jptm *jobPartTransferMgr) GetS2SSourceBlobTokenCredential() azblob.TokenCredential {
+	cred := jptm.SourceCredential()
+
+	if cred == nil {
+		return nil
+	} else {
+		if tc, ok := cred.(azblob.TokenCredential); ok {
+			return tc
+		} else {
+			return nil
+		}
+	}
 }
 
 func (jptm *jobPartTransferMgr) GetOverwritePrompter() *overwritePrompter {
@@ -320,14 +341,18 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	// does not exceeds 50000 (max number of block per blob)
 	if blockSize == 0 {
 		blockSize = common.DefaultBlockBlobBlockSize
-		for ; uint32(sourceSize/blockSize) > common.MaxNumberOfBlocksPerBlob; blockSize = 2 * blockSize {
+		for ; sourceSize >= common.MaxNumberOfBlocksPerBlob * blockSize; blockSize = 2 * blockSize {
 			if blockSize > common.BlockSizeThreshold {
 				/*
 				 * For a RAM usage of 0.5G/core, we would have 4G memory on typical 8 core device, meaning at a blockSize of 256M,
 				 * we can have 4 blocks in core, waiting for a disk or n/w operation. Any higher block size would *sort of*
 				 * serialize n/w and disk operations, and is better avoided.
 				 */
-				blockSize = sourceSize / common.MaxNumberOfBlocksPerBlob
+				if sourceSize%common.MaxNumberOfBlocksPerBlob == 0 {
+					blockSize = sourceSize / common.MaxNumberOfBlocksPerBlob
+				} else {
+					blockSize = sourceSize/common.MaxNumberOfBlocksPerBlob + 1
+				}
 				break
 			}
 		}
@@ -353,6 +378,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		EntityType:                     entityType,
 		PreserveSMBPermissions:         plan.PreservePermissions,
 		PreserveSMBInfo:                plan.PreserveSMBInfo,
+		PreservePOSIXProperties:        plan.PreservePOSIXProperties,
 		S2SGetPropertiesInBackend:      s2sGetPropertiesInBackend,
 		S2SSourceChangeValidation:      s2sSourceChangeValidation,
 		S2SInvalidMetadataHandleOption: s2sInvalidMetadataHandleOption,
@@ -362,8 +388,9 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 			SrcMetadata:    srcMetadata,
 			SrcBlobTags:    srcBlobTags,
 		},
-		SrcBlobType:    srcBlobType,
-		S2SSrcBlobTier: srcBlobTier,
+		SrcBlobType:       srcBlobType,
+		S2SSrcBlobTier:    srcBlobTier,
+		RehydratePriority: plan.RehydratePriority.ToRehydratePriorityType(),
 	}
 
 	return *jptm.transferInfo
@@ -406,9 +433,9 @@ func (jptm *jobPartTransferMgr) FileCountLimiter() common.CacheLimiter {
 // As at Oct 2019, cases where we mutate destination names are
 // (i)  when destination is Windows or Azure Files, and source contains characters unsupported at the destination
 // (ii) when downloading with --decompress and there are two files that differ only in an extension that will will strip
-//      e.g. foo.txt and foo.txt.gz (if we decompress the latter, we'll strip the extension and the names will collide)
+//e.g. foo.txt and foo.txt.gz (if we decompress the latter, we'll strip the extension and the names will collide)
 // (iii) For completeness, there's also bucket->container name resolution when copying from S3, but that is not expected to ever
-//      create collisions, since it already takes steps to prevent them.
+//create collisions, since it already takes steps to prevent them.
 func (jptm *jobPartTransferMgr) WaitUntilLockDestination(ctx context.Context) error {
 	if strings.EqualFold(jptm.Info().Destination, common.Dev_Null) {
 		return nil // nothing to lock
@@ -516,6 +543,14 @@ func (jptm *jobPartTransferMgr) IsSourceEncrypted() bool {
 	return jptm.jobPartMgr.IsSourceEncrypted()
 }
 
+func (jptm *jobPartTransferMgr) PropertiesToTransfer() common.SetPropertiesFlags {
+	return jptm.jobPartMgr.PropertiesToTransfer()
+}
+
+func (jptm *jobPartTransferMgr) ResetSourceSize() {
+	jptm.transferInfo.SourceSize = 0
+}
+
 // JobHasLowFileCount returns an estimate of whether we only have a very small number of files in the overall job
 // (An "estimate" because it actually only looks at the current job part)
 func (jptm *jobPartTransferMgr) JobHasLowFileCount() bool {
@@ -547,7 +582,7 @@ func (jptm *jobPartTransferMgr) ReportChunkDone(id common.ChunkID) (lastChunk bo
 	// track progress
 	if jptm.IsLive() {
 		atomic.AddInt64(&jptm.atomicSuccessfulBytes, id.Length())
-		JobsAdmin.AddSuccessfulBytesInActiveFiles(id.Length())
+		jptm.jobPartMgr.(*jobPartMgr).jobMgr.AddSuccessfulBytesInActiveFiles(id.Length())
 	}
 
 	// Do our actual processing
@@ -555,7 +590,8 @@ func (jptm *jobPartTransferMgr) ReportChunkDone(id common.ChunkID) (lastChunk bo
 	lastChunk = chunksDone == jptm.numChunks
 	if lastChunk {
 		jptm.runActionAfterLastChunk()
-		JobsAdmin.AddSuccessfulBytesInActiveFiles(-atomic.LoadInt64(&jptm.atomicSuccessfulBytes)) // subtract our bytes from the active files bytes, because we are done now
+		jptm.jobPartMgr.(*jobPartMgr).jobMgr.AddSuccessfulBytesInActiveFiles(-atomic.LoadInt64(&jptm.atomicSuccessfulBytes))
+		// subtract our bytes from the active files bytes, because we are done now
 	}
 	return lastChunk, chunksDone
 }
@@ -761,13 +797,13 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 		jptm.SetErrorCode(int32(status)) // TODO: what are the rules about when this needs to be set, and doesn't need to be (e.g. for earlier failures)?
 		// If the status code was 403, it means there was an authentication error and we exit.
 		// User can resume the job if completely ordered with a new sas.
-		if status == http.StatusForbidden {
+		if status == http.StatusForbidden &&
+			!jptm.jobPartMgr.(*jobPartMgr).jobMgr.IsDaemon() {
 			// quit right away, since without proper authentication no work can be done
 			// display a clear message
 			common.GetLifecycleMgr().Info(fmt.Sprintf("Authentication failed, it is either not correct, or expired, or does not have the correct permission %s", err.Error()))
 			// and use the normal cancelling mechanism so that we can exit in a clean and controlled way
-			jobId := jptm.jobPartMgr.Plan().JobID
-			CancelPauseJobOrder(jobId, common.EJobStatus.Cancelling())
+			jptm.jobPartMgr.(*jobPartMgr).jobMgr.CancelPauseJobOrder(common.EJobStatus.Cancelling())
 			// TODO: this results in the final job output line being: Final Job Status: Cancelled
 			//     That's not ideal, because it would be better if it said Final Job Status: Failed
 			//     However, we don't have any way to distinguish "user cancelled after some failed files" from
@@ -899,7 +935,7 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 		panic("cannot report the same transfer done twice")
 	}
 
-	//Update Status Manager
+	// Update Status Manager
 	jptm.jobPartMgr.SendXferDoneMsg(xferDoneMsg{Src: jptm.Info().Source,
 		Dst:                jptm.Info().Destination,
 		IsFolderProperties: jptm.Info().IsFolderPropertiesTransfer(),
@@ -913,6 +949,10 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 
 func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {
 	return jptm.jobPartMgr.SourceProviderPipeline()
+}
+
+func (jptm *jobPartTransferMgr) SourceCredential() pipeline.Factory {
+	return jptm.jobPartMgr.SourceCredential()
 }
 
 func (jptm *jobPartTransferMgr) SecurityInfoPersistenceManager() *securityInfoPersistenceManager {
@@ -933,4 +973,8 @@ func (jptm *jobPartTransferMgr) ShouldInferContentType() bool {
 	// For local files, even if the file size is 0B, we try to infer the content based on file extension
 	fromTo := jptm.FromTo()
 	return fromTo.From() == common.ELocation.Local()
+}
+
+func (jptm *jobPartTransferMgr) SuccessfulBytesTransferred() int64 {
+	return atomic.LoadInt64(&jptm.atomicSuccessfulBytes)
 }

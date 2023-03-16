@@ -49,21 +49,24 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 
 		// flags
 		BlobAttributes: common.BlobTransferAttributes{
-			PreserveLastModifiedTime: true, // must be true for sync so that future syncs have this information available
+			PreserveLastModifiedTime: cca.preserveSMBInfo, // true by default for sync so that future syncs have this information available
 			PutMd5:                   cca.putMd5,
 			MD5ValidationOption:      cca.md5ValidationOption,
 			BlockSizeInBytes:         cca.blockSize},
 		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
 		ForceIfReadOnly:                cca.forceIfReadOnly,
-		LogLevel:                       cca.logVerbosity,
+		LogLevel:                       azcopyLogVerbosity,
 		PreserveSMBPermissions:         cca.preservePermissions,
 		PreserveSMBInfo:                cca.preserveSMBInfo,
+		PreservePOSIXProperties:        cca.preservePOSIXProperties,
 		S2SSourceChangeValidation:      true,
 		DestLengthValidation:           true,
 		S2SGetPropertiesInBackend:      true,
 		S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
 		CpkOptions:                     cca.cpkOptions,
 		S2SPreserveBlobTags:            cca.s2sPreserveBlobTags,
+
+		S2SSourceCredentialType: cca.s2sSourceCredentialType,
 	}
 
 	reportFirstPart := func(jobStarted bool) { cca.setFirstPartOrdered() } // for compatibility with the way sync has always worked, we don't check jobStarted here
@@ -97,7 +100,7 @@ type interactiveDeleteProcessor struct {
 	// count the deletions that happened
 	incrementDeletionCount func()
 
-	//dryrunMode
+	// dryrunMode
 	dryrunMode bool
 }
 
@@ -135,11 +138,11 @@ func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else { // remove for sync
-				if d.objectTypeToDisplay == "local file" { //removing from local src
+				if d.objectTypeToDisplay == "local file" { // removing from local src
 					dryrunValue := fmt.Sprintf("DRYRUN: remove %v", common.ToShortPath(d.objectLocationToDisplay))
 					if runtime.GOOS == "windows" {
 						dryrunValue += "\\" + strings.ReplaceAll(object.relativePath, "/", "\\")
-					} else { //linux and mac
+					} else { // linux and mac
 						dryrunValue += "/" + object.relativePath
 					}
 					return dryrunValue
@@ -154,7 +157,11 @@ func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err
 
 	err = d.deleter(object)
 	if err != nil {
-		glcm.Info(fmt.Sprintf("error %s deleting the object %s", err.Error(), object.relativePath))
+		msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.relativePath)
+		glcm.Info(msg)
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(pipeline.LogInfo, msg)
+		}
 	}
 
 	if d.incrementDeletionCount != nil {
@@ -223,14 +230,15 @@ type localFileDeleter struct {
 // As at version 10.4.0, we intentionally don't delete directories in sync,
 // even if our folder properties option suggests we should.
 // Why? The key difficulties are as follows, and its the third one that we don't currently have a solution for.
-// 1. Timing (solvable in theory with FolderDeletionManager)
-// 2. Identifying which should be removed when source does not have concept of folders (e.g. BLob)
-//    Probably solution is to just respect the folder properties option setting (which we already do in our delete processors)
-// 3. In Azure Files case (and to a lesser extent on local disks) users may have ACLS or other properties
-//    set on the directories, and wish to retain those even tho the directories are empty. (Perhaps less of an issue
-//    when syncing from folder-aware sources that DOES NOT HAVE the directory. But still an issue when syncing from
-//    blob. E.g. we delete a folder because there's nothing in it right now, but really user wanted it there,
-//    and have set up custom ACLs on it for future use.  If we delete, they lose the custom ACL setup.
+//  1. Timing (solvable in theory with FolderDeletionManager)
+//  2. Identifying which should be removed when source does not have concept of folders (e.g. BLob)
+//     Probably solution is to just respect the folder properties option setting (which we already do in our delete processors)
+//  3. In Azure Files case (and to a lesser extent on local disks) users may have ACLS or other properties
+//     set on the directories, and wish to retain those even tho the directories are empty. (Perhaps less of an issue
+//     when syncing from folder-aware sources that DOES NOT HAVE the directory. But still an issue when syncing from
+//     blob. E.g. we delete a folder because there's nothing in it right now, but really user wanted it there,
+//     and have set up custom ACLs on it for future use.  If we delete, they lose the custom ACL setup.
+//
 // TODO: shall we add folder deletion support at some stage? (In cases where folderPropertiesOption says that folders should be processed)
 func shouldSyncRemoveFolders() bool {
 	return false
@@ -238,7 +246,11 @@ func shouldSyncRemoveFolders() bool {
 
 func (l *localFileDeleter) deleteFile(object StoredObject) error {
 	if object.entityType == common.EEntityType.File() {
-		glcm.Info("Deleting extra file: " + object.relativePath)
+		msg := "Deleting extra file: " + object.relativePath
+		glcm.Info(msg)
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(pipeline.LogInfo, msg)
+		}
 		return os.Remove(common.GenerateFullPath(l.rootPath, object.relativePath))
 	}
 	if shouldSyncRemoveFolders() {
@@ -255,7 +267,7 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	p, err := InitPipeline(ctx, cca.fromTo.To(), cca.credentialInfo, cca.logVerbosity.ToPipelineLogLevel())
+	p, err := InitPipeline(ctx, cca.fromTo.To(), cca.credentialInfo, azcopyLogVerbosity.ToPipelineLogLevel())
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +295,11 @@ func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx cont
 func (b *remoteResourceDeleter) delete(object StoredObject) error {
 	if object.entityType == common.EEntityType.File() {
 		// TODO: use b.targetLocation.String() in the next line, instead of "object", if we can make it come out as string
-		glcm.Info("Deleting extra object: " + object.relativePath)
+		msg := "Deleting extra object: " + object.relativePath
+		glcm.Info(msg)
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(pipeline.LogInfo, msg)
+		}
 		switch b.targetLocation {
 		case common.ELocation.Blob():
 			blobURLParts := azblob.NewBlobURLParts(*b.rootURL)

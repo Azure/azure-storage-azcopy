@@ -31,7 +31,7 @@ type nullAutoPacer struct {
 	atomicGrandTotal int64
 }
 
-func newNullAutoPacer() *nullAutoPacer {
+func NewNullAutoPacer() *nullAutoPacer {
 	return &nullAutoPacer{}
 }
 
@@ -54,4 +54,8 @@ func (a *nullAutoPacer) UndoRequest(byteCount int64) {
 
 func (a *nullAutoPacer) GetTotalTraffic() int64 {
 	return atomic.LoadInt64(&a.atomicGrandTotal)
+}
+
+func (a *nullAutoPacer) UpdateTargetBytesPerSecond(_ int64) {
+	
 }
