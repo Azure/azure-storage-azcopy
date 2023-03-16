@@ -350,7 +350,7 @@ func (s *blockBlobSenderBase) buildCommittedBlockMap() {
 	// 1. We find chunks by a different actor
 	// 2. Chunk size differs
 	for _, block := range blockList.UncommittedBlocks {
-		if len(block.Name) != common.AZCOPY_BLOCKNAME_LENTGH {
+		if len(block.Name) != common.AZCOPY_BLOCKNAME_LENGTH {
 			s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, invalidAzCopyBlockNameMsg)
 			return
 		}
