@@ -130,7 +130,7 @@ Download all the versions of a blob from Azure Storage to local directory. Ensur
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[containername]/[blobname]" "/path/to/dir" --list-of-versions="/another/path/to/dir/[versionidsFile]"
 
-Copy a subset of files within a container by using a wildcard symbol (*) in the container name without listing all files in the container.
+Copy a subset of files within a flat container by using a wildcard symbol (*) in the container name without listing all files in the container.
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[containername]/*" "/path/to/dir" --include-pattern="1*"
 
