@@ -44,7 +44,12 @@ var RootShareRegex = regexp.MustCompile(`(^\/\/[^\/]*\/?$)`)
 
 func CreateParentDirectoryIfNotExist(destinationPath string, tracker FolderCreationTracker) error {
 	// find the parent directory
-	directory := destinationPath[:strings.LastIndex(destinationPath, DeterminePathSeparator(destinationPath))]
+	lastIndex := strings.LastIndex(destinationPath, DeterminePathSeparator(destinationPath))
+	if lastIndex == -1 {
+		// This would be root. We dont have to create it.
+		return nil
+	}
+	directory := destinationPath[:lastIndex]
 	return CreateDirectoryIfNotExist(directory, tracker)
 }
 
